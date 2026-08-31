@@ -260,6 +260,7 @@ def import_my_activity_streaming(
         SSE-formatted strings (``data: {...}\\n\\n``).
     """
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.location.queryset import quantize_coordinate
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
     from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
     from urbanlens.dashboard.services.visits.visits import create_visit_suggestion, find_nearest_pin, visit_logging_allowed
@@ -321,7 +322,10 @@ def import_my_activity_streaming(
             else:
                 skipped += 1
         else:
-            location = Location.objects.get_for_point(entry["latitude"], entry["longitude"])
+            location = Location.objects.filter(
+                latitude=quantize_coordinate(entry["latitude"], "latitude"),
+                longitude=quantize_coordinate(entry["longitude"], "longitude"),
+            ).first()
             # create_visit_suggestion only dedupes against an already-accepted visit -
             # a pending suggestion for the same place+date needs its own check here,
             # or re-uploading the same export before the user responds would raise a

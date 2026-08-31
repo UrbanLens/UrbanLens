@@ -37,7 +37,7 @@ from urbanlens.dashboard.models.trips.signals import queue_calendar_push
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.core.text_limits import MAX_TRIP_ACTIVITY_NOTES_LENGTH, text_length_error
 from urbanlens.dashboard.services.trips.trip_access import has_joined, is_organizer, require_joined, require_perform
-from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripQuotaError, TripValidationError
+from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripPermissionError, TripQuotaError, TripValidationError
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords
 from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
 from urbanlens.dashboard.services.visits.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited, visit_logging_allowed
@@ -376,8 +376,9 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
         ``index``, ``vote_up``/``vote_down``/``user_vote``, ``rsvp``/
         ``rsvp_is_override``/``trip_rsvp``, ``can_manage``,
         ``effective_location_hidden``, ``display_title``/``display_location_name``/
-        ``display_location_ref`` (already masked for this viewer - templates must
-        use these, never ``act.location`` or ``act.effective_title``),
+        ``display_location_ref``/``display_child_trip_name``/``display_child_trip_uuid``
+        (already masked for this viewer - templates must use these, never
+        ``act.location``, ``act.effective_title``, or ``act.child_trip``),
         ``pin_slug``, ``has_coords`` and ``leg``.
     """
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
@@ -461,6 +462,12 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
             "display_title": _masked_activity_title(act, hidden=act.location_hidden or (act.id in viewer_hidden)),
             "display_location_name": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.display_name if act.location else ""),
             "display_location_ref": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.slug if act.location else ""),
+            # A linked child trip's name/uuid are exactly the kind of
+            # identifying information a hidden location is trying to
+            # withhold, so they follow the same mask - never read
+            # act.child_trip directly in a template.
+            "display_child_trip_name": "" if (act.location_hidden or act.id in viewer_hidden) else (act.child_trip.name if act.child_trip else ""),
+            "display_child_trip_uuid": "" if (act.location_hidden or act.id in viewer_hidden) else (str(act.child_trip.uuid) if act.child_trip else ""),
             # Tested on the loaded relation rather than ``pin_id`` so the
             # ownership check below is provably reached with a real Pin.
             "pin_slug": act.pin.slug if (act.pin is not None and act.pin.profile_id == viewer.id) else None,
@@ -859,11 +866,19 @@ def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed
         The saved activity.
 
     Raises:
-        TripPermissionError: The actor has not joined the trip.
+        TripPermissionError: The actor has not joined the trip, or the
+            activity's location is hidden from them.
         TripNotFoundError: No such activity on this trip.
     """
     require_perform(actor, trip, Trip.PERM_EVERYONE, CONTRIBUTE_DENIED)
     activity = get_activity(trip, activity_id)
+
+    # Completing materializes the activity's *real* coordinates into the
+    # actor's own Pin/Visit below - a viewer this location is hidden from
+    # (location_hidden, or the adder's own trip_pin_location_visibility
+    # setting) must not be able to bypass that by completing it instead.
+    if viewer_hidden_activity_ids([activity], actor):
+        raise TripPermissionError("You can't complete an activity whose location is hidden from you.")
 
     already_completed = activity.status == TripActivity.STATUS_COMPLETED
     today = timezone.localdate()

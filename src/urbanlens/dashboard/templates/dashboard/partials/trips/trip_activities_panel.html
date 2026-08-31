@@ -67,8 +67,8 @@
                 data-act-end-time="{% if act.scheduled_end %}{% with t=act.scheduled_end|time:'H:i' %}{% if t != '00:00' %}{{ t }}{% endif %}{% endwith %}{% endif %}"
                 data-act-location-ref="{{ item.display_location_ref }}"
                 data-act-location-name="{{ item.display_location_name }}"
-                data-act-child-trip-uuid="{{ act.child_trip.uuid|default:'' }}"
-                data-act-child-trip-name="{{ act.child_trip.name|default:'' }}"
+                data-act-child-trip-uuid="{{ item.display_child_trip_uuid }}"
+                data-act-child-trip-name="{{ item.display_child_trip_name }}"
                 data-act-status="{{ act.status }}"
                 data-act-location-hidden="{{ item.effective_location_hidden|yesno:'true,false' }}"
                 data-act-can-manage="{{ item.can_manage|yesno:'true,false' }}"
@@ -131,9 +131,9 @@
                         {% endif %}
                     </span>
                     {% endif %}
-                    {% if act.child_trip %}
+                    {% if item.display_child_trip_name %}
                     <span class="trip-activity-child-trip">
-                        <i class="material-symbols-outlined">link</i> {{ act.child_trip.name }}
+                        <i class="material-symbols-outlined">link</i> {{ item.display_child_trip_name }}
                     </span>
                     {% endif %}
                     {% if act.notes %}

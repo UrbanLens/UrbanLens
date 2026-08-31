@@ -580,10 +580,20 @@ def create_group_message(
     from urbanlens.dashboard.services.security.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
 
     # Idempotent replay - see create_direct_message for why this precedes both
-    # validation and the membership check.
+    # validation and the membership check. The uniqueness is per sender, not
+    # per (sender, group) - see db_gmsg_unique_client_uuid_per_sender - so a
+    # client_uuid found here can belong to a *different* group than the one
+    # requested. That must never be handed back silently (the caller's own
+    # fan-out - e.g. share_pin_in_group_message - would then wire the
+    # requested group's real recipients to another group's message) nor
+    # allowed to fall through to the create() below (it would just violate
+    # the same constraint). Reject it outright instead: a well-behaved client
+    # never reuses one idempotency key for two different sends.
     if client_uuid is not None:
         replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first()
         if replayed is not None:
+            if replayed.group_id != group.pk:
+                raise GroupChatValidationError("This client_uuid was already used for a message in a different group.")
             return replayed
 
     membership = group.membership_for(sender)
@@ -617,9 +627,14 @@ def create_group_message(
                 client_uuid=client_uuid,
             )
     except IntegrityError:
+        # A concurrent request for the same (sender, client_uuid) won the
+        # race - same cross-group check as the pre-check above, since that
+        # race could equally be against a message in a different group.
         replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
         if replayed is None:
             raise
+        if replayed.group_id != group.pk:
+            raise GroupChatValidationError("This client_uuid was already used for a message in a different group.") from None
         return replayed
     # Sending is reading: the sender's own read mark advances with their message.
     GroupMessage.objects.mark_read(membership)

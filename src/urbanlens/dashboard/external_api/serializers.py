@@ -2887,9 +2887,14 @@ class TripActivitySerializer(serializers.Serializer):
         return coords[1] if coords else None
 
     def get_child_trip_uuid(self, row) -> str | None:
-        """The uuid of the trip nested under this activity, if any."""
-        child = row["activity"].child_trip
-        return str(child.uuid) if child else None
+        """The uuid of the trip nested under this activity, or None when absent or hidden.
+
+        Reads the row's already-masked ``display_child_trip_uuid`` rather than
+        ``row["activity"].child_trip`` directly - the raw relation has no
+        location_hidden/viewer-privacy awareness, the same class of leak
+        ``effective_title`` above exists to avoid for the activity's own name.
+        """
+        return row["display_child_trip_uuid"] or None
 
 
 class TripMapPointSerializer(serializers.Serializer):

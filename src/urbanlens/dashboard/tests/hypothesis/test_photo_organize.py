@@ -210,13 +210,12 @@ class CreatePinAndLogVisitTests(TestCase):
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
     @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_reuses_existing_pin_instead_of_colliding(self, _mock_enqueue, _mock_resolve_name):
-        # Simulates the staging bug: a second, unrelated photo resolves to the
-        # same Location as one that already has a pin (e.g. a stale "create a
-        # pin" card the resuggestion path didn't reach, or two photos just
-        # happening to land on the same spot) - it must reuse that pin rather
-        # than violate db_pin_unique_location_per_profile. Created only after
-        # the first call completes so it isn't itself swept up by that call's
-        # own resuggestion pass (covered separately above).
+        # Simulates the staging bug: a second photo at the same coordinate
+        # resolves to the same Location as one that already has a pin (e.g. a
+        # stale "create a pin" card the resuggestion path didn't reach). It
+        # must reuse that pin rather than violate db_pin_unique_location_per_profile.
+        # Created only after the first call completes so it isn't itself swept
+        # up by that call's own resuggestion pass (covered separately above).
         first_pin, first_visit = create_pin_and_log_visit(self.profile, self.photo)
 
         second_photo = baker.make(
@@ -224,10 +223,8 @@ class CreatePinAndLogVisitTests(TestCase):
             profile=self.profile,
             pin=None,
             wiki=None,
-            # Close enough that Location.objects.get_for_point() resolves to the
-            # same Location (50 m proximity fallback) as the first photo.
-            latitude=Decimal(str(_LAT + 0.0001)),
-            longitude=Decimal(str(_LNG + 0.0001)),
+            latitude=Decimal(str(_LAT)),
+            longitude=Decimal(str(_LNG)),
             taken_at=self.taken_at,
         )
         second_pin, second_visit = create_pin_and_log_visit(self.profile, second_photo)
@@ -247,8 +244,8 @@ class CreatePinAndLogVisitTests(TestCase):
             profile=self.profile,
             pin=None,
             wiki=None,
-            latitude=Decimal(str(_LAT + 0.0001)),
-            longitude=Decimal(str(_LNG + 0.0001)),
+            latitude=Decimal(str(_LAT)),
+            longitude=Decimal(str(_LNG)),
             taken_at=self.taken_at,
         )
         second_pin, _visit = create_pin_and_log_visit(self.profile, second_photo, name="Different Name")

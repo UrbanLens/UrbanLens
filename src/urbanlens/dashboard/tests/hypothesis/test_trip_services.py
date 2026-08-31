@@ -26,11 +26,12 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.trips.trip_access import can_perform, get_trip_for_viewer, has_joined, is_organizer
-from urbanlens.dashboard.services.trips.trip_activities import compute_activity_index_map
-from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError
+from urbanlens.dashboard.services.trips.trip_activities import build_activity_rows, complete_activity, compute_activity_index_map
+from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripPermissionError
 from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
 from urbanlens.dashboard.services.trips.trip_membership import resolve_trip_member
 
@@ -364,3 +365,132 @@ class BuildTripMapPointsInvariantTests(TestCase):
         self.assertIsNone(ghosts[0]["activity_id"])
         self.assertFalse(ghosts[0]["draggable"])
         self.assertIn("Side quest", ghosts[0]["label"])
+
+
+class BuildActivityRowsChildTripMaskingTests(TestCase):
+    """build_activity_rows must mask a linked child trip's name/uuid exactly like it masks location.
+
+    Regression: the row dict never carried a masked child-trip field at all,
+    so the template read act.child_trip.name/.uuid directly and unconditionally
+    - even for an activity whose location this viewer can't see. Revealing
+    "this points at trip X" (and X's real name) defeats the point of hiding
+    the location, since the child trip's name alone is often exactly the
+    identifying information the hide was protecting.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.adder = Profile.objects.get(user=baker.make(User, username="adder"))
+        self.viewer = Profile.objects.get(user=baker.make(User, username="viewer"))
+        self.trip = Trip.objects.create(creator=self.adder, name="Parent")
+        TripMembership.objects.create(trip=self.trip, profile=self.adder, status=TripMembership.STATUS_JOINED)
+        TripMembership.objects.create(trip=self.trip, profile=self.viewer, status=TripMembership.STATUS_JOINED)
+        self.child_trip = Trip.objects.create(creator=self.adder, name="Secret Getaway")
+
+    def _row_for(self, *, location_hidden: bool, location: Location | None = None) -> dict:
+        TripActivity.objects.create(
+            trip=self.trip,
+            added_by=self.adder,
+            title="Linked stop",
+            child_trip=self.child_trip,
+            location=location,
+            location_hidden=location_hidden,
+        )
+        rows = build_activity_rows(self.trip, self.viewer)
+        return rows[0]
+
+    def test_child_trip_name_and_uuid_are_blanked_when_location_is_hidden(self) -> None:
+        row = self._row_for(location_hidden=True)
+        self.assertEqual(row["display_child_trip_name"], "")
+        self.assertEqual(row["display_child_trip_uuid"], "")
+
+    def test_child_trip_name_and_uuid_are_shown_when_location_is_visible(self) -> None:
+        row = self._row_for(location_hidden=False)
+        self.assertEqual(row["display_child_trip_name"], "Secret Getaway")
+        self.assertEqual(row["display_child_trip_uuid"], str(self.child_trip.uuid))
+
+    def test_child_trip_is_also_blanked_when_hidden_only_by_the_adders_privacy_setting(self) -> None:
+        """Must reuse the same effective_location_hidden gate as the location fields,
+        not just the raw location_hidden flag.
+
+        viewer_hidden_activity_ids' privacy-setting bucket only ever applies to
+        an activity that actually carries a location (there is no place fact to
+        withhold otherwise), so this needs a real Location - unlike the two
+        tests above, which only exercise the raw location_hidden flag.
+        """
+        Profile.objects.filter(pk=self.adder.pk).update(trip_pin_location_visibility=VisibilityChoice.NO_ONE)
+        location = Location.objects.create(latitude=41.0, longitude=-82.0, official_name="Hidden Spot")
+        row = self._row_for(location_hidden=False, location=location)
+        self.assertEqual(row["display_child_trip_name"], "")
+        self.assertEqual(row["display_child_trip_uuid"], "")
+
+
+class CompleteActivityVisibilityTests(TestCase):
+    """complete_activity must refuse to complete an activity whose location a viewer can't see.
+
+    Regression: completing only required trip-contribute permission, with no
+    check against the activity's own effective location-hidden state - so any
+    trip member could "complete" an activity someone else hid from them, and
+    create_visit_entries_for_completed_activity would materialize its real
+    coordinates into their own Pin/Visit anyway (plus suggest visits to other
+    members with a "yes" RSVP), defeating the hide entirely.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.adder = Profile.objects.get(user=baker.make(User, username="adder"))
+        self.viewer = Profile.objects.get(user=baker.make(User, username="viewer"))
+        self.trip = Trip.objects.create(creator=self.adder, name="Trip")
+        TripMembership.objects.create(trip=self.trip, profile=self.adder, status=TripMembership.STATUS_JOINED)
+        TripMembership.objects.create(trip=self.trip, profile=self.viewer, status=TripMembership.STATUS_JOINED)
+        self.location = Location.objects.create(latitude=42.0, longitude=-83.0, official_name="Hidden Spot")
+
+    def test_viewer_cannot_complete_an_activity_whose_location_is_hidden_from_them(self) -> None:
+        activity = TripActivity.objects.create(
+            trip=self.trip,
+            added_by=self.adder,
+            title="Secret stop",
+            location=self.location,
+            location_hidden=True,
+        )
+
+        with self.assertRaises(TripPermissionError):
+            complete_activity(self.trip, self.viewer, activity.id)
+
+        activity.refresh_from_db()
+        self.assertNotEqual(activity.status, TripActivity.STATUS_COMPLETED)
+        self.assertFalse(PinVisit.objects.filter(pin__profile=self.viewer).exists())
+
+    def test_adder_can_still_complete_an_activity_hidden_from_others_only_by_their_own_privacy_setting(self) -> None:
+        """Must not overcorrect: viewer_hidden_activity_ids already exempts the
+        adder from their own trip_pin_location_visibility setting (it only
+        ever withholds an activity from *other* viewers), and this gate must
+        preserve that - unlike the explicit location_hidden flag (tested
+        above), which applies uniformly to everyone, adder included, matching
+        how build_activity_rows's effective_location_hidden already treats it.
+        """
+        Profile.objects.filter(pk=self.adder.pk).update(trip_pin_location_visibility=VisibilityChoice.NO_ONE)
+        activity = TripActivity.objects.create(
+            trip=self.trip,
+            added_by=self.adder,
+            title="Private-by-default stop",
+            location=self.location,
+            location_hidden=False,
+        )
+
+        completed = complete_activity(self.trip, self.adder, activity.id)
+
+        self.assertEqual(completed.status, TripActivity.STATUS_COMPLETED)
+
+    def test_viewer_can_complete_a_visible_activity(self) -> None:
+        activity = TripActivity.objects.create(
+            trip=self.trip,
+            added_by=self.adder,
+            title="Open stop",
+            location=self.location,
+            location_hidden=False,
+        )
+
+        completed = complete_activity(self.trip, self.viewer, activity.id)
+
+        self.assertEqual(completed.status, TripActivity.STATUS_COMPLETED)
