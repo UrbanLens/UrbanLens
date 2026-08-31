@@ -207,6 +207,26 @@ $album-gutter: 1rem;
     }
 }
 
+// Placeholder shown while an album panel loads over HTMX - see
+// pages/vault/photos.html's #vault-albums-panel / #vault-pin-albums-panel.
+.albums-panel-skeleton {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: .85rem;
+    padding: .25rem $album-gutter 1rem;
+}
+
+.album-card--skeleton {
+    aspect-ratio: 4 / 3.9;
+    background: var(--ul-grey-2);
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+
+    &:hover {
+        transform: none;
+        box-shadow: var(--ul-shadow-sm);
+    }
+}
+
 .album-card-link {
     display: flex;
     flex-direction: column;

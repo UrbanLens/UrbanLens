@@ -29,10 +29,12 @@ Expects (from controllers.albums._photos_context):
       <span>Albums</span>
       {% if album_rows %}<span class="albums-count">{{ album_rows|length }}</span>{% endif %}
     </h3>
+    {% if context_type != 'vault' %}
     <button type="button" class="gallery-import-photos-btn" id="albums-select-btn"
             data-album-select-toggle title="Select photos">
       <i class="material-symbols-outlined">checklist</i>
     </button>
+    {% endif %}
     <button type="button" class="btn btn--primary albums-create-btn"
             data-album-create-toggle aria-expanded="false" aria-controls="album-create-form">
       <i class="material-symbols-outlined">add</i>
@@ -82,8 +84,13 @@ Expects (from controllers.albums._photos_context):
   The loose section is the "everything else" bucket, so it only earns its
   heading once something is in it. With no albums at all it is simply the
   photo list, and says so.
+
+  Suppressed entirely for the Vault: that page already has its own full
+  gallery grid (with sort and off-screen pruning - see
+  pages/vault/photos.html) covering every photo, filed or not, so a second,
+  plainer grid here would just be the same photos twice.
   {% endcomment %}
-  {% if loose_count %}
+  {% if loose_count and context_type != 'vault' %}
   <section class="albums-loose">
     <h3 class="albums-toolbar-title">
       <i class="material-symbols-outlined">photo</i>
@@ -100,7 +107,7 @@ Expects (from controllers.albums._photos_context):
       {% endfor %}
     </ul>
   </section>
-  {% elif not album_rows %}
+  {% elif not album_rows and context_type != 'vault' %}
   <p class="albums-empty settings-help">
     No photos on this {{ context_type }} yet. Upload some from the Photos panel, then group them into albums here.
   </p>

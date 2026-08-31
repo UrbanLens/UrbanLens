@@ -1,0 +1,51 @@
+{% comment %}
+Read-only listing of the profile's albums from across all of their pins,
+shown behind the "Show your pin albums" toggle on Vault > Photos. Each card
+is a plain link to the album's own page on its pin - full navigation, not an
+HTMX swap - since that pin's own Photos tab is what actually manages the
+album; this is a discovery surface, not a second copy of that UI.
+
+Context:
+  album_rows - one dict per album (see controllers.albums._album_row and
+               VaultPinAlbumsView.get), each carrying owner_pin_name and
+               pin_page_url - the pin's own detail page (Photos tab, album
+               pre-opened), not detail_url, which is the AJAX-only partial
+               endpoint the pin's own interactive album cards hx-get instead
+{% endcomment %}
+{% if album_rows %}
+<ul class="albums-grid vault-pin-albums-grid">
+    {% for row in album_rows %}
+    <li class="album-card album-card--readonly">
+        <a class="album-card-link" href="{{ row.pin_page_url }}">
+            <span class="album-card-cover">
+                {% if row.cover %}
+                <img src="{{ row.cover.thumb_url }}" alt="" class="album-card-cover-img" loading="lazy" decoding="async">
+                {% else %}
+                <span class="album-card-cover-empty">
+                    <i class="material-symbols-outlined">photo_library</i>
+                </span>
+                {% endif %}
+                {% if row.album.spec.badge %}
+                <span class="album-card-kind" data-tooltip="{{ row.album.spec.label }} album" data-tooltip-pos="top">
+                    <i class="material-symbols-outlined">{{ row.album.spec.icon }}</i>
+                    <span>{{ row.album.spec.label }}</span>
+                </span>
+                {% endif %}
+            </span>
+            <span class="album-card-body">
+                <span class="album-card-name">{{ row.album.name }}</span>
+                <span class="album-card-meta">
+                    <span class="album-card-pin">{{ row.owner_pin_name }}</span>
+                    <span class="album-card-count">{{ row.photo_count }} photo{{ row.photo_count|pluralize }}</span>
+                    {% include "dashboard/partials/albums/_album_date_range.html" with date_start=row.date_start date_end=row.date_end %}
+                </span>
+            </span>
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="albums-empty settings-help">
+    None of your pins have albums yet. Create one from a pin's Photos tab and it'll show up here too.
+</p>
+{% endif %}

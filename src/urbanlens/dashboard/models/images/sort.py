@@ -41,8 +41,12 @@ class GallerySortSpec:
     label: str
     order_by: tuple
 
-    def apply(self, queryset: QuerySet) -> QuerySet:
+    def apply[QS: QuerySet](self, queryset: QS) -> QS:
         """Return *queryset* ordered by this method.
+
+        Generic over the queryset's own type, matching ``AlbumSortSpec.apply``
+        - a caller chaining an ``ImageQuerySet`` method after this one keeps
+        that type instead of widening to the plain ``QuerySet`` base.
 
         Args:
             queryset: An ``Image`` queryset.

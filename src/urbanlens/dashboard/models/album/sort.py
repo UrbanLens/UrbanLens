@@ -48,8 +48,13 @@ class AlbumSortSpec:
     label: str
     order_by: tuple
 
-    def apply(self, queryset: QuerySet) -> QuerySet:
+    def apply[QS: QuerySet](self, queryset: QS) -> QS:
         """Return *queryset* ordered by this method.
+
+        Generic over the queryset's own type (rather than the plain
+        ``QuerySet`` base) so a caller chaining a custom queryset's own
+        methods after this one - e.g. ``AlbumItemQuerySet.in_display_order``
+        - doesn't lose that type.
 
         Args:
             queryset: ``AlbumItem`` rows, typically already scoped to one album.

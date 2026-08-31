@@ -469,6 +469,23 @@ $memories-type-colors: (
     }
 }
 
+// The sort control rides at the far right of the gallery header; the <select>
+// itself is unstyled here on purpose - it already gets the site's standard
+// form-control skin from _reset.scss.
+.photos-sort-label {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    margin-left: auto;
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+        color: var(--ul-grey-6);
+    }
+}
+
 .photos-attention-scroll {
     display: flex;
     gap: .85rem;
@@ -777,6 +794,35 @@ $memories-type-colors: (
 
 .photos-gallery {
     margin-bottom: 2rem;
+}
+
+.photos-albums-section {
+    margin-bottom: 2rem;
+}
+
+// The <details>/<summary> disclosure for "Show your pin albums" - a native
+// toggle (see pages/vault/photos.html's hx-trigger="toggle once") rather than
+// a hand-rolled one, so opening/closing needs no JS of its own.
+.vault-pin-albums-toggle-wrap {
+    margin-top: .75rem;
+}
+
+.vault-pin-albums-toggle {
+    // <summary> has its own default disclosure triangle and display:
+    // list-item; both are replaced so it reads as an ordinary .btn instead.
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    cursor: pointer;
+    list-style: none;
+
+    &::-webkit-details-marker {
+        display: none;
+    }
+}
+
+.vault-pin-albums-panel {
+    margin-top: .75rem;
 }
 
 .photos-grid {

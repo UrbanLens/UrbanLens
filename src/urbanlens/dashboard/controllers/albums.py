@@ -114,25 +114,32 @@ def _children_query(include_children: bool) -> str:
     return "?children=1" if include_children else ""
 
 
-def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None) -> tuple[Pin | Wiki, QuerySet[Album]]:
-    """Resolve the Album owner (Pin or Wiki) from URL kwargs.
+def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None, *, vault: bool = False) -> tuple[Pin | Wiki | Profile, QuerySet[Album]]:
+    """Resolve the Album owner (Pin, Wiki, or the requesting profile's Vault) from URL kwargs.
 
     Same permission split as ``custom_layers._resolve_layer_owner``: pin-scoped
     requires ownership, wiki-scoped goes through ``resolve_visible_wiki`` (any
     signed-in user who has earned access to the wiki may curate its albums,
-    matching the shared wiki-editing model).
+    matching the shared wiki-editing model). A Vault route carries no owner
+    slug at all - there is exactly one Vault per profile, resolved from the
+    request itself rather than a URL segment.
 
     Args:
         request: The current HttpRequest (used for the ownership checks).
         pin_slug: Slug of the parent pin, if this is a personal-album route.
         location_slug: Slug of the parent location, if this is a community-album route.
+        vault: True for a Vault (Profile-owned) album route; *pin_slug* and
+            *location_slug* are ignored when set.
 
     Returns:
         Tuple of (owner, album queryset already filtered to that owner).
 
     Raises:
-        Http404: Neither slug was supplied.
+        Http404: Neither a slug nor ``vault`` was supplied.
     """
+    if vault:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return profile, Album.objects.for_profile(profile)
     if pin_slug is not None:
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         return pin, Album.objects.for_pin(pin)
@@ -149,7 +156,7 @@ def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_sl
     return wiki, visible_rows(Album.objects.for_wiki(wiki), wiki, profile)
 
 
-def _get_album(request: HttpRequest, pin_slug: str | None, location_slug: str | None, album_slug: str) -> tuple[Pin | Wiki, QuerySet[Album], Album]:
+def _get_album(request: HttpRequest, pin_slug: str | None, location_slug: str | None, album_slug: str, *, vault: bool = False) -> tuple[Pin | Wiki | Profile, QuerySet[Album], Album]:
     """Resolve a single owner-scoped Album, 404ing if it belongs to someone else.
 
     Args:
@@ -157,11 +164,12 @@ def _get_album(request: HttpRequest, pin_slug: str | None, location_slug: str | 
         pin_slug: Slug of the parent pin (personal-album route).
         location_slug: Slug of the parent location (community-album route).
         album_slug: Slug of the album to resolve.
+        vault: True for a Vault (Profile-owned) album route.
 
     Returns:
         Tuple of (owner, owner-scoped queryset, the resolved album).
     """
-    owner, qs = _resolve_album_owner(request, pin_slug, location_slug)
+    owner, qs = _resolve_album_owner(request, pin_slug, location_slug, vault=vault)
     return owner, qs, get_object_or_404(qs, slug=album_slug)
 
 
@@ -430,7 +438,7 @@ def _photos_context(owner: Pin | Wiki | Profile, viewer: Profile | None, *, incl
     return ctx
 
 
-def _render_photos_panel(request: HttpRequest, owner: Pin | Wiki, viewer: Profile | None) -> HttpResponse:
+def _render_photos_panel(request: HttpRequest, owner: Pin | Wiki | Profile, viewer: Profile | None) -> HttpResponse:
     """Re-render the whole Photos panel, for HTMX swaps after any mutation."""
     viewing = _panel_owner(request, owner)
     return render(
@@ -544,6 +552,7 @@ class AlbumPhotosView(LoginRequiredMixin, View):
 
     GET /map/pin/<pin_slug>/albums/
     GET /location/<location_slug>/wiki/albums/
+    GET /vault/photos/albums/
     POST (same URLs) creates an album.
 
     ``?album=<slug>`` renders that album's own view instead of the list, which
@@ -552,7 +561,7 @@ class AlbumPhotosView(LoginRequiredMixin, View):
     that query string when an album is opened (see ``shared/album-items.ts``).
     """
 
-    def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
+    def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
         """Render the Photos panel, or one album when ``?album=`` is given.
 
         An ``album`` slug that doesn't resolve falls back to the list rather
@@ -563,11 +572,12 @@ class AlbumPhotosView(LoginRequiredMixin, View):
             request: HttpRequest.
             pin_slug: Slug of the parent pin (personal route).
             location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
 
         Returns:
             The rendered ``_albums_panel.html`` or ``_album_detail.html`` partial.
         """
-        owner, qs = _resolve_album_owner(request, pin_slug, location_slug)
+        owner, qs = _resolve_album_owner(request, pin_slug, location_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         include_children = _include_children(request, owner)
         listing = _listing_owners(owner, include_children)
@@ -609,18 +619,19 @@ class AlbumPhotosView(LoginRequiredMixin, View):
                 return render(request, "dashboard/partials/albums/_album_detail.html", ctx)
         return _render_photos_panel(request, owner, profile)
 
-    def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
-        """Create a new album for this pin or wiki.
+    def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
+        """Create a new album for this pin, wiki, or Vault.
 
         Args:
             request: HttpRequest, with ``name``/``description``/``kind`` fields.
             pin_slug: Slug of the parent pin (personal route).
             location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
 
         Returns:
             The re-rendered Photos panel, or a 400 for an invalid name/description.
         """
-        owner, _qs = _resolve_album_owner(request, pin_slug, location_slug)
+        owner, _qs = _resolve_album_owner(request, pin_slug, location_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         name = (request.POST.get("name") or "").strip()[:_MAX_ALBUM_NAME_LENGTH]
@@ -649,9 +660,10 @@ class AlbumDetailView(LoginRequiredMixin, View):
 
     GET /map/pin/<pin_slug>/albums/<album_slug>/
     GET /location/<location_slug>/wiki/albums/<album_slug>/
+    GET /vault/photos/albums/<album_slug>/
     """
 
-    def get(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
+    def get(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
         """Render one album's contents.
 
         Args:
@@ -659,11 +671,12 @@ class AlbumDetailView(LoginRequiredMixin, View):
             album_slug: Slug of the album to show.
             pin_slug: Slug of the parent pin (personal route).
             location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
 
         Returns:
             The rendered ``_album_detail.html`` partial.
         """
-        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         ctx = _album_detail_context(owner, album, profile)
         back = _safe_back_url(request.GET.get("back"))
@@ -684,9 +697,10 @@ class AlbumEditView(LoginRequiredMixin, View):
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/edit/
     POST /location/<location_slug>/wiki/albums/<album_slug>/edit/
+    POST /vault/photos/albums/<album_slug>/edit/
     """
 
-    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
+    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
         """Apply an album edit.
 
         Only fields actually present in the POST (or JSON body) are touched,
@@ -698,11 +712,12 @@ class AlbumEditView(LoginRequiredMixin, View):
             album_slug: Slug of the album to edit.
             pin_slug: Slug of the parent pin (personal route).
             location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
 
         Returns:
             The re-rendered Photos panel, JSON for a JSON request, or a 400.
         """
-        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         wants_json = "application/json" in (request.content_type or "")
         data = _parse_body(request) if wants_json else request.POST
@@ -744,9 +759,10 @@ class AlbumDeleteView(LoginRequiredMixin, View):
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/delete/
     POST /location/<location_slug>/wiki/albums/<album_slug>/delete/
+    POST /vault/photos/albums/<album_slug>/delete/
     """
 
-    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
+    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
         """Delete the album.
 
         Args:
@@ -754,11 +770,12 @@ class AlbumDeleteView(LoginRequiredMixin, View):
             album_slug: Slug of the album to delete.
             pin_slug: Slug of the parent pin (personal route).
             location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
 
         Returns:
             The re-rendered Photos panel.
         """
-        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         album.delete()
         return _render_photos_panel(request, owner, profile)
@@ -769,6 +786,7 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/add/
     POST /location/<location_slug>/wiki/albums/<album_slug>/add/
+    POST /vault/photos/albums/<album_slug>/add/
 
     Body is JSON. ``image_ids`` adds existing local photos. ``media`` adds an
     external Media-gallery item, which additionally counts as a "relevant"
@@ -776,7 +794,7 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
     *not* relevant, in which case their vote stands and nothing is added.
     """
 
-    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
+    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
         """Add photos to the album.
 
         Args:
@@ -784,12 +802,13 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
             album_slug: Slug of the album to add to.
             pin_slug: Slug of the parent pin (personal route).
             location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
 
         Returns:
             JSON with how many photos were added, plus ``declined``/``error``
             when an external item was skipped or failed to download.
         """
-        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         body = _parse_body(request)
 
@@ -797,8 +816,11 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
 
         image_ids = _int_ids(body.get("image_ids"))
         if image_ids:
-            # Re-scope through eligible_images_for so an id from another place
-            # (or one this viewer can't see) can't be filed into this album.
+            # Re-scope through eligible_images_for so an id belonging to another
+            # owner entirely (a different pin/wiki/profile, or one this viewer
+            # can't see) can't be filed into this album. For a vault owner this
+            # deliberately still includes the profile's own pin/wiki-filed
+            # photos - see owner_kwargs_to_image_scope's docstring.
             images = list(eligible_images_for(owner, profile).filter(pk__in=image_ids))
             added = add_images_to_album(album, images, profile)
             response["added"] += added
@@ -816,8 +838,14 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
 
         media = body.get("media")
         if isinstance(media, dict) and media.get("url"):
-            result = self._add_external(owner, album, profile, media)
-            response.update(result)
+            # The external Media-gallery search is place-scoped (it materializes
+            # against a Location) - a Vault album has none, so this is refused
+            # outright rather than reaching _add_external's owner.location access.
+            if isinstance(owner, Profile):
+                response["error"] = "Vault albums can only hold your own uploaded photos, not external media."
+            else:
+                result = self._add_external(owner, album, profile, media)
+                response.update(result)
 
         return JsonResponse(response)
 
@@ -888,6 +916,7 @@ class AlbumUploadView(LoginRequiredMixin, View):
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/upload/
     POST /location/<location_slug>/wiki/albums/<album_slug>/upload/
+    POST /vault/photos/albums/<album_slug>/upload/
 
     Multipart, one ``image`` file per request - same contract as the pin and
     wiki galleries, whose response body the client reuses to render the new
@@ -895,7 +924,7 @@ class AlbumUploadView(LoginRequiredMixin, View):
     the owner's gallery too; filing it in the album is the extra step.
     """
 
-    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
+    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
         """Store the uploaded photo and file it in this album.
 
         Args:
@@ -903,12 +932,13 @@ class AlbumUploadView(LoginRequiredMixin, View):
             album_slug: Slug of the album to upload into.
             pin_slug: Slug of the parent pin (personal route).
             location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
 
         Returns:
             201 with the gallery JSON for the new photo, or the rejection's
             own status (400/409/413/415) with an ``error`` message.
         """
-        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         image, response = create_uploaded_photo(request, owner, profile, album=album)
@@ -944,9 +974,10 @@ class AlbumRemovePhotosView(LoginRequiredMixin, View):
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/remove/
     POST /location/<location_slug>/wiki/albums/<album_slug>/remove/
+    POST /vault/photos/albums/<album_slug>/remove/
     """
 
-    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
+    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
         """Remove photos from the album.
 
         Args:
@@ -954,11 +985,12 @@ class AlbumRemovePhotosView(LoginRequiredMixin, View):
             album_slug: Slug of the album to remove from.
             pin_slug: Slug of the parent pin (personal route).
             location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
 
         Returns:
             JSON with how many membership rows were removed.
         """
-        _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_ids = _int_ids(_parse_body(request).get("image_ids"))
         removed = remove_images_from_album(album, image_ids)
@@ -974,9 +1006,10 @@ class AlbumItemsView(LoginRequiredMixin, View):
 
     GET /map/pin/<pin_slug>/albums/<album_slug>/items/
     GET /location/<location_slug>/wiki/albums/<album_slug>/items/
+    GET /vault/photos/albums/<album_slug>/items/
     """
 
-    def get(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
+    def get(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
         """Return one page of this album's viewer-visible photos.
 
         Args:
@@ -984,11 +1017,12 @@ class AlbumItemsView(LoginRequiredMixin, View):
             album_slug: Slug of the album to page.
             pin_slug: Slug of the parent pin (personal route).
             location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
 
         Returns:
             JSON ``{items, total, offset, limit}``.
         """
-        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         offset, limit = _page_args(request)
         images, total = album_images_page(album, profile, owner, offset=offset, limit=limit)
@@ -1007,11 +1041,12 @@ class AlbumReorderView(LoginRequiredMixin, View):
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/reorder/
     POST /location/<location_slug>/wiki/albums/<album_slug>/reorder/
+    POST /vault/photos/albums/<album_slug>/reorder/
 
     Body: ``{"items": [<AlbumItem id>, ...]}`` in the new display order.
     """
 
-    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
+    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
         """Apply the new item order.
 
         Args:
@@ -1019,11 +1054,12 @@ class AlbumReorderView(LoginRequiredMixin, View):
             album_slug: Slug of the album being reordered.
             pin_slug: Slug of the parent pin (personal route).
             location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
 
         Returns:
             JSON with how many items were renumbered.
         """
-        _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         item_ids = _int_ids(_parse_body(request).get("items"))
         reordered = reorder_album_items(album, item_ids)
         return JsonResponse({"reordered": reordered})

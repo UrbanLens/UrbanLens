@@ -41,21 +41,22 @@ def _wiki_for_location(location: Location | None) -> Wiki | None:
 
 def create_uploaded_photo(
     request: HttpRequest,
-    owner: Pin | Wiki,
+    owner: Pin | Wiki | Profile,
     profile: Profile,
     *,
     album=None,
 ) -> tuple[Image | None, JsonResponse]:
     """Store the request's uploaded photo against *owner*.
 
-    Shared by the pin gallery, the wiki gallery, and an album's upload button so
-    all three answer with the same body and the same status codes - the client
-    code that renders an uploaded tile is shared too, and would otherwise have
-    to special-case whichever surface drifted.
+    Shared by the pin gallery, the wiki gallery, and an album's upload button
+    (pin, wiki, or Vault) so all of them answer with the same body and the
+    same status codes - the client code that renders an uploaded tile is
+    shared too, and would otherwise have to special-case whichever surface
+    drifted.
 
     Args:
         request: The upload request; reads the ``image`` file and ``caption``.
-        owner: The Pin or Wiki to attach the photo to.
+        owner: The Pin, Wiki, or Profile (Vault) to attach the photo to.
         profile: The uploading profile.
 
     Returns:
@@ -87,12 +88,12 @@ def create_uploaded_photo(
     return result, JsonResponse(image_to_gallery_json(result, request, profile), status=201)
 
 
-def store_uploaded_photo(request: HttpRequest, owner: Pin | Wiki, profile: Profile) -> JsonResponse:
+def store_uploaded_photo(request: HttpRequest, owner: Pin | Wiki | Profile, profile: Profile) -> JsonResponse:
     """Store the request's uploaded photo against *owner* and return the gallery JSON.
 
     Args:
         request: The upload request; reads the ``image`` file and ``caption``.
-        owner: The Pin or Wiki to attach the photo to.
+        owner: The Pin, Wiki, or Profile (Vault) to attach the photo to.
         profile: The uploading profile.
 
     Returns:

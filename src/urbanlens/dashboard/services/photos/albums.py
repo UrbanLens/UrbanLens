@@ -73,8 +73,13 @@ def owner_kwargs_to_image_scope(owner: Pin | Wiki | Profile) -> dict:
     """Return the ``Image`` filter kwargs (``pin``/``wiki``/``profile``) scoping *owner*'s photos.
 
     Distinct from :func:`owner_kwargs` (which names the ``Album`` FK, not the
-    ``Image`` one) - a vault owner's photos are its uploads (``Image.profile``),
-    not photos filed to a place.
+    ``Image`` one). For a vault (``Profile``) owner this is deliberately *every*
+    photo the profile has ever uploaded (``Image.profile``), filed or not -
+    matching what Vault Photos' own gallery shows, and letting a vault album
+    reference a photo that's also filed to one of the profile's pins/wikis.
+    This is a different, wider question than "is this a duplicate upload,"
+    which stays scoped to unfiled photos only - see
+    :func:`urbanlens.dashboard.services.photos.uploads._duplicate_scope`.
 
     Args:
         owner: The Pin, Wiki, or Profile (Vault) whose photos to scope to.

@@ -9,6 +9,7 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.album.model import Album
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
@@ -36,6 +37,17 @@ class AlbumQuerySet(abstract.PublicDashboardQuerySet):
             Matching albums, in the model's default order.
         """
         return self.filter(parent_wiki=wiki)
+
+    def for_profile(self, profile: Profile | int) -> AlbumQuerySet:
+        """Vault albums belonging to one profile directly (not via a pin or wiki).
+
+        Args:
+            profile: The owning profile (accepts a Profile instance or a raw pk).
+
+        Returns:
+            Matching albums, in the model's default order.
+        """
+        return self.filter(parent_profile=profile)
 
 
 class AlbumManager(abstract.PublicDashboardManager.from_queryset(AlbumQuerySet)):

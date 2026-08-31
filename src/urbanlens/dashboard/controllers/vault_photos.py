@@ -12,6 +12,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoMetadataConflict, PhotoUploadFailure
@@ -189,6 +190,49 @@ class VaultPhotosView(LoginRequiredMixin, View):
                 "gallery_sort_specs": list(GALLERY_SORT_SPECS.values()),
             },
         )
+
+
+class VaultPinAlbumsView(LoginRequiredMixin, View):
+    """Read-only listing of the profile's albums from across all of their pins.
+
+    GET /vault/photos/pin-albums/
+
+    Shown behind a toggle alongside the Vault's own albums, so a user can see
+    everything they've organized into albums in one place without leaving the
+    Vault - each card links out to the album's own page on its pin, which
+    still owns creating/renaming/deleting it. Lazily loaded (see
+    pages/vault/photos.html) rather than computed on every Vault Photos page
+    load, since most visits never open the toggle.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render one card per album across every pin this profile owns.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            The rendered pin-albums partial.
+        """
+        from urbanlens.dashboard.controllers.albums import _album_row
+        from urbanlens.dashboard.services.photos.albums import albums_listing
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pins = list(Pin.objects.filter(profile=profile).select_related("location"))
+        rows = []
+        for entry in albums_listing(pins, profile):
+            pin = entry.album.parent_pin
+            if pin is None:
+                continue
+            row = _album_row(pin, entry.album, cover=entry.cover, photo_count=entry.photo_count, date_start=entry.date_start, date_end=entry.date_end)
+            row["owner_pin_name"] = pin.effective_name
+            # detail_url is the AJAX-only album-detail partial (no page chrome) -
+            # this card is a plain, non-htmx navigation, so it needs the pin's
+            # actual detail page with the Photos tab pre-selected and this
+            # album pre-opened instead.
+            row["pin_page_url"] = f"{reverse('pin.details', args=[pin.slug])}?album={entry.album.slug}#tab-photos"
+            rows.append(row)
+        return render(request, "dashboard/partials/vault/_pin_albums_panel.html", {"album_rows": rows})
 
 
 class PhotoQueueView(LoginRequiredMixin, View):

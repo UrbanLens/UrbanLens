@@ -1,11 +1,11 @@
-"""Creating a photo from a browser upload, for a Pin or a Wiki.
+"""Creating a photo from a browser upload, for a Pin, a Wiki, or a Vault.
 
-Three surfaces turn an uploaded file into an :class:`Image`: the pin gallery,
-the wiki gallery, and an album's own upload button. They must agree on every
-gate an upload passes - file-type/malware validation, the per-uploader
-duplicate check, and the storage quota - so those gates live here rather than
-being restated per view. A surface that skips one would let a file in that the
-others reject.
+Four surfaces turn an uploaded file into an :class:`Image`: the pin gallery,
+the wiki gallery, an album's own upload button (pin, wiki, or Vault), and the
+Vault Photos page's own dropzone. They must agree on every gate an upload
+passes - file-type/malware validation, the per-uploader duplicate check, and
+the storage quota - so those gates live here rather than being restated per
+view. A surface that skips one would let a file in that the others reject.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models.images.model import Image, MediaKind, QuotaExemption
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
 from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
@@ -23,7 +24,6 @@ if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
 
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
@@ -40,7 +40,7 @@ class UploadRejection:
     status: int
 
 
-def _owner_fields(owner: Pin | Wiki) -> dict:
+def _owner_fields(owner: Pin | Wiki | Profile) -> dict:
     """Return the Image ownership FKs for *owner*.
 
     A pin photo belongs to the pin and to its location. It is **not** attached to
@@ -52,21 +52,25 @@ def _owner_fields(owner: Pin | Wiki) -> dict:
     it (``photo_upload_visibility`` defaults to "anything in common", and having a
     pin at the same place is a thing in common); it did not make it deliberate.
 
-    A wiki photo has no pin.
+    A wiki photo has no pin. A Vault (Profile-owned album) upload has neither -
+    it's unfiled, exactly like any other photo uploaded straight to the Vault
+    gallery rather than to a place.
 
     Args:
-        owner: The Pin or Wiki the photo is being uploaded to.
+        owner: The Pin, Wiki, or Profile (Vault) the photo is being uploaded to.
 
     Returns:
         Kwargs for ``Image.objects.create``.
     """
     if isinstance(owner, Pin):
         return {"pin": owner, "location": owner.location}
+    if isinstance(owner, Profile):
+        return {}
     return {"wiki": owner, "location": owner.location}
 
 
 def existing_photo_for_upload(
-    owner: Pin | Wiki,
+    owner: Pin | Wiki | Profile,
     profile: Profile,
     image_file: UploadedFile | None = None,
     *,
@@ -79,7 +83,7 @@ def existing_photo_for_upload(
     row instead of treating a 409 as a hard failure.
 
     Args:
-        owner: The Pin or Wiki the upload was aimed at.
+        owner: The Pin, Wiki, or Profile (Vault) the upload was aimed at.
         profile: The uploading profile.
         image_file: The uploaded file, hashed when *checksum* is omitted.
         checksum: Pre-computed SHA-256 hex digest of *image_file*.
@@ -152,7 +156,7 @@ def _queue_metadata_conflict(existing: Image, new_row: Image, incoming_caption: 
     )
 
 
-def attach_deduped_copy(existing: Image, owner: Pin | Wiki, profile: Profile, caption: str) -> Image:
+def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: Profile, caption: str) -> Image:
     """Create a new Image row that reuses *existing*'s stored file.
 
     Does not copy the bytes, does not charge quota, and does not re-run
@@ -162,7 +166,7 @@ def attach_deduped_copy(existing: Image, owner: Pin | Wiki, profile: Profile, ca
 
     Args:
         existing: The earlier row with the same checksum.
-        owner: The Pin or Wiki this upload is aimed at.
+        owner: The Pin, Wiki, or Profile (Vault) this upload is aimed at.
         profile: The uploading profile.
         caption: Caption from this upload, if any.
 
@@ -265,20 +269,28 @@ def resolve_photo_metadata_conflict(conflict, choices: dict[str, int]) -> int:
     return count
 
 
-def _duplicate_scope(owner: Pin | Wiki) -> tuple[dict, str]:
+def _duplicate_scope(owner: Pin | Wiki | Profile) -> tuple[dict, str]:
     """Return the filter isolating *owner*'s photos, and the noun for the error.
 
+    A Vault (Profile) owner's "own photos" are its unfiled ones - the same
+    bytes already filed to a pin or wiki are a different, legitimate copy to
+    also keep unfiled in the Vault, not a duplicate of it.
+
     Args:
-        owner: The Pin or Wiki being uploaded to.
+        owner: The Pin, Wiki, or Profile (Vault) being uploaded to.
 
     Returns:
         Tuple of (queryset filter kwargs, the word to use in "already uploaded
         this photo to this <noun>").
     """
-    return ({"pin": owner}, "pin") if isinstance(owner, Pin) else ({"wiki": owner}, "wiki")
+    if isinstance(owner, Pin):
+        return {"pin": owner}, "pin"
+    if isinstance(owner, Profile):
+        return {"pin__isnull": True, "wiki__isnull": True}, "vault"
+    return {"wiki": owner}, "wiki"
 
 
-def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: UploadedFile, caption: str = "") -> Image | UploadRejection:
+def upload_photo_for_owner(owner: Pin | Wiki | Profile, profile: Profile, image_file: UploadedFile, caption: str = "") -> Image | UploadRejection:
     """Validate and store one uploaded photo against *owner*.
 
     The duplicate check is per (owner, uploader, checksum): two people may each
@@ -292,7 +304,7 @@ def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: Uplo
     and jointly exceed the profile's quota.
 
     Args:
-        owner: The Pin or Wiki to attach the photo to.
+        owner: The Pin, Wiki, or Profile (Vault) to attach the photo to.
         profile: The uploading profile.
         image_file: The uploaded file.
         caption: Optional caption; blank becomes None.

@@ -2015,6 +2015,7 @@ urlpatterns = [
             [
                 path("photos/", vault_photos.VaultPhotosView.as_view(), name="vault.photos"),
                 path("photos/queue/", vault_photos.PhotoQueueView.as_view(), name="vault.photos.queue"),
+                path("photos/pin-albums/", vault_photos.VaultPinAlbumsView.as_view(), name="vault.photos.pin_albums"),
                 path("photos/items/", vault_photos.PhotoItemsView.as_view(), name="vault.photos.items"),
                 path("photos/upload/", vault_photos.PhotoUploadView.as_view(), name="vault.photos.upload"),
                 path("photos/failures/", vault_photos.PhotoUploadFailureCreateView.as_view(), name="vault.photos.failures"),
@@ -2024,6 +2025,23 @@ urlpatterns = [
                 path("photos/pin-search/", vault_photos.PhotoPinSearchView.as_view(), name="vault.photos.pin_search"),
                 path("photos/<int:image_id>/confirm-pin/", vault_photos.PhotoPinConfirmView.as_view(), name="vault.photos.pin_confirm"),
                 path("photos/<int:image_id>/<str:action>/", vault_photos.PhotoActionView.as_view(), name="vault.photos.action"),
+                # Vault (Profile-owned) albums: same view classes as pin/wiki
+                # albums (controllers.albums), with no owner-slug segment -
+                # there is exactly one Vault per profile, resolved from the
+                # request itself. The literal "albums/" collection route and
+                # every per-album action are registered before the
+                # <slug:album_slug> detail route, same reasoning as the pin
+                # routes: a literal segment can't be swallowed by the slug
+                # converter. No move/ route - a Vault album has nowhere to move to.
+                path("photos/albums/", albums.AlbumPhotosView.as_view(), name="vault.photos.albums", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/edit/", albums.AlbumEditView.as_view(), name="vault.photos.albums.edit", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/delete/", albums.AlbumDeleteView.as_view(), name="vault.photos.albums.delete", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/add/", albums.AlbumAddPhotosView.as_view(), name="vault.photos.albums.add", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/remove/", albums.AlbumRemovePhotosView.as_view(), name="vault.photos.albums.remove", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/reorder/", albums.AlbumReorderView.as_view(), name="vault.photos.albums.reorder", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/upload/", albums.AlbumUploadView.as_view(), name="vault.photos.albums.upload", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/items/", albums.AlbumItemsView.as_view(), name="vault.photos.albums.items", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/", albums.AlbumDetailView.as_view(), name="vault.photos.albums.detail", kwargs={"vault": True}),
             ],
         ),
     ),

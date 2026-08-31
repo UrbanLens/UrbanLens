@@ -3,10 +3,12 @@
 {% load static %}
 
 {% block header %}
-{# Leaflet powers the "confirm where this pin goes" dialog's placement map. #}
+{# Leaflet powers the placement map and the Vault album detail view's photo map. #}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
 <script type="module" src="{% static 'dashboard/js/vault-photos.js' %}"></script>
+{# Same album-panel module the pin/wiki Photos tab uses (location/index.html). #}
+<script type="module" src="{% static 'dashboard/js/albums.js' %}"></script>
 {% endblock %}
 
 {% block title %}Photos{% endblock %}
@@ -44,6 +46,39 @@
              hx-swap="innerHTML">
             {% include "dashboard/partials/vault/_photo_attention.html" %}
         </div>
+
+        {# -- Albums (this Vault's own, plus a toggle for albums across your pins) -- #}
+        {# ?album= is carried through so a deep link (or a Back navigation) loads #}
+        {# that album directly instead of the list. See controllers.albums.       #}
+        <section class="photos-albums-section" aria-label="Albums">
+            <div id="vault-albums-panel"
+                 hx-get="{% url 'vault.photos.albums' %}{% if request.GET.album %}?album={{ request.GET.album|urlencode }}{% endif %}"
+                 hx-trigger="load"
+                 hx-swap="innerHTML">
+                <div class="albums-panel-skeleton" aria-hidden="true">
+                    <div class="album-card album-card--skeleton"></div>
+                    <div class="album-card album-card--skeleton"></div>
+                    <div class="album-card album-card--skeleton"></div>
+                </div>
+            </div>
+
+            <details class="vault-pin-albums-toggle-wrap"
+                      hx-get="{% url 'vault.photos.pin_albums' %}"
+                      hx-trigger="toggle once"
+                      hx-target="#vault-pin-albums-panel"
+                      hx-swap="innerHTML">
+                <summary class="btn btn--ghost vault-pin-albums-toggle">
+                    <i class="material-symbols-outlined">photo_library</i>
+                    <span>Show your pin albums</span>
+                </summary>
+                <div id="vault-pin-albums-panel" class="vault-pin-albums-panel">
+                    <div class="albums-panel-skeleton" aria-hidden="true">
+                        <div class="album-card album-card--skeleton"></div>
+                        <div class="album-card album-card--skeleton"></div>
+                    </div>
+                </div>
+            </details>
+        </section>
 
         {# -- Full gallery ---------------------------------------------------- #}
         <section class="photos-gallery" aria-label="All photos">
