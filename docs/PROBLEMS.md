@@ -4130,6 +4130,29 @@ non-optional `Profile`. Same class of issue as the already-logged
 either narrowing the type at the call site or the parameter, rather than a `cast`, per the
 project's mypy policy).
 
+## OPEN 2026-08-31: A photo's grid tile can 404/500 for a few seconds right after upload while async processing renames its file
+
+Found live-verifying Batch 4 (lightbox pin/wiki/album associations) against the `ae97b86` dev
+environment - pre-existing (Batch 2's upload/grid work), unrelated to Batch 4 itself, and not a
+Batch 4 regression. `tasks.process_image_upload` (the Celery task queued after every upload) can
+re-encode the stored file and change its path (observed: `.jpg` -> `.webp`), deleting the original
+once the new one is written (see `downscale_stored_image` in `services/media/images.py`, its
+`stale_names` cleanup). A grid tile rendered from the upload response, or from a page load that
+lands between the delete-old and any client-side refresh, points at the old path - a request for it
+404s (`django.views.static.serve` before the delete completes, or racing it) or in one observed case
+500s (`FileNotFoundError` mid-request, presumably the file disappearing between the storage
+existence check and the actual read). Reproduced directly: `manage.py shell` confirmed a freshly
+uploaded, not-yet-processed row's `image.url` serves 200 immediately, but the exact same URL for an
+*older* row whose processing had by then completed and renamed the file returned a Django 500 with
+`FileNotFoundError: ... lightbox-associations.jpg`. This is a narrow window (observed on the order of
+single-digit seconds, worse when the Celery worker has a backlog - this shared dev environment's
+worker was visibly behind after repeated test runs, logging one `Downscaled image N` line every few
+seconds) but is a real, if minor, UX gap: a user who opens their own gallery moments after uploading
+can see a broken image icon on their own new tile until the next refresh. Worth either having the
+client not render/link an image URL until processing is confirmed done, or having the server keep the
+old file (or redirect) until any in-flight requests for it would reasonably have completed, rather
+than deleting eagerly.
+
 ## OPEN 2026-08-31: `vault-photos.spec.ts`'s "changing sort re-fetches the grid in the new order" test flakes on a persistent dev DB
 
 Found running the Vault Photos/albums Playwright specs against the `ae97b86` ephemeral dev
