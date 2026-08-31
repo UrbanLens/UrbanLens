@@ -4376,3 +4376,35 @@ never loads its content.
 Unrelated to the Vault (the string appears in no Vault or album template) - surfaced only because a
 Vault album spec navigates to a pin detail page. Worth guarding the trigger expression
 (`window.ulSectionCollapsed && !window.ulSectionCollapsed(...)`) or asserting load order.
+
+## OPEN 2026-08-31: the integration suite's login setup fails after a *successful* sign-in
+
+Cost most of an hour during the Vault review, and the error message actively misleads. `auth.setup.ts`
+reported `Sign-in as "e2e-primary" did not happen`, but the attached diagnosis contradicts itself:
+
+```
+The page is at https://ae97b86.dev.urbanlens.org/dashboard/map/?lat=41.361607&lng=-74.056177&zoom=13
+and no longer shows the sign-in form.
+page.waitForURL: Timeout 30000ms exceeded.
+  navigated to "https://ae97b86.dev.urbanlens.org/dashboard/map/"
+  "networkidle" event fired
+```
+
+The sign-in worked - the browser is on the map, authenticated. What timed out is
+`submitCredentials`' `waitForURL((url) => !url.pathname.startsWith("/accounts/login"))`
+(`lib/pages/login-page.ts:47`), raced inside a `Promise.all` against the click. The post-login map
+page then rewrites its own URL client-side to append `?lat=&lng=&zoom=` (a `history` replace, not a
+navigation), so under load the predicate can be evaluated either side of a state the wait never
+observes. The first attempt failed differently again - `locator.allInnerTexts: Execution context was
+destroyed, most likely because of a navigation` from `diagnose()` at `:99`, i.e. the *error reporter*
+itself throwing while the page navigated under it, hiding the real cause.
+
+Two separate things to fix: make the wait robust (assert on an authenticated marker in the DOM, or
+`waitForURL` outside the `Promise.all` with the click awaited first), and make `diagnose()` tolerate a
+navigating page so the reported reason is the real one.
+
+Worth noting for anyone debugging this: it reproduces only when the host is loaded, and this box is
+shared - load averages of 100-290 with no single hot process (heavy `kworker/kblockd` I/O wait) were
+routine during this session, turning 3-second tests into 8-minute ones. Check `/proc/loadavg` before
+concluding a browser failure is a code regression; a direct `curl` of the same page returning in ~1s
+while Playwright times out at 30s is the tell.
