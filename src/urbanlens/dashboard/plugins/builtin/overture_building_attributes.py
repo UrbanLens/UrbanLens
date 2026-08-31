@@ -52,7 +52,9 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
     def fetch(self, pin: Pin) -> None:
         """Look up the pinned building's Overture attributes and cache the result."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, PlaceExternalTag
         from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
+        from urbanlens.dashboard.services.locations.external_tags import extract_overture_tags
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
@@ -60,6 +62,10 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
 
         started = time.monotonic()
         attributes = gateway.get_building_attributes(lat, lng) or {}
+
+        target_place = pin.location.place
+        if attributes and target_place is not None and not PlaceExternalTag.is_fresh_for(target_place, ExternalTagSource.OVERTURE):
+            PlaceExternalTag.sync_for_source(target_place, ExternalTagSource.OVERTURE, extract_overture_tags(attributes))
 
         nearby_places: list = []
         elapsed = time.monotonic() - started

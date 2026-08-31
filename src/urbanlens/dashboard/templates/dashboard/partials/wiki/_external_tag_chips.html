@@ -1,0 +1,30 @@
+{% load dashboard_tags %}
+{% comment %}
+External category/tag chips - read-only classification data captured from
+OpenStreetMap/Overture Maps, strictly separate from the user-editable Label
+system (see _label_chips.html for that one).
+
+Context:
+  tags - PlaceExternalTag queryset/list for wiki.place, ordered primary-first
+
+Deliberately has no remove button, no HTMX membership form, and no edit
+affordance of any kind - this is provider data, not something a user assigns.
+Renders nothing at all (no card, no empty state) when tags is empty, so the
+caller only needs to guard on wiki.place existing, not on this partial's own
+content.
+{% endcomment %}
+{% if tags %}
+<div class="card wiki-card" id="wiki-external-tags-card" data-collapse-scope="wiki" data-collapse-section="external_tags">
+    <div class="card-header">
+        <i class="material-symbols-outlined">sell</i>
+        <h2>Categories</h2>
+    </div>
+    <div class="tag-chips-row card__body">
+        {% for tag in tags %}
+        <span class="tag-chip tag-chip--{{ tag.source }}" title="{{ tag.key }}">
+            <span class="tag-chip-name">{{ tag.value|humanize_tag_value }}</span>
+        </span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

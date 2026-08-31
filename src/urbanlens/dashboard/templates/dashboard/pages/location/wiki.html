@@ -183,7 +183,9 @@
             {% include "dashboard/partials/layout/_temporal_imagery_slider.html" %}
         </div>
 
-        {# Labels/categories hidden: global categories no longer exist #}
+        {% if wiki.place %}
+        {% include "dashboard/partials/wiki/_external_tag_chips.html" with tags=wiki.place.external_tags.all %}
+        {% endif %}
 
         {# -- Aliases / Photos / Comments / Edit history: half-width on wide screens #}
         <div class="wiki-body-secondary">

@@ -633,6 +633,32 @@ parent/child picker are separate, bespoke implementations that predate those fac
 them (the organize page's picker) doesn't even share the `@mixin tad-tabs` styling, by its own
 code comment ("underline style, not pill buttons").
 
+## External Category/Tag Data
+
+`PlaceExternalTag` (`models/place/external_tag.py`) captures raw classification data external
+providers report about a `Place` - **strictly separate** from the `Label` system above; a Label
+is a user-curated organizational concept (including its own `kind=category`), this is unedited
+provider vocabulary. Currently captured, per `Place`, with zero dedicated API calls (both piggyback
+on data panels already fetch for their own purposes):
+
+- **OpenStreetMap** — via the existing Nominatim reverse-geocode panel/enrichment source: its
+  primary `category`/`type` tag pair (e.g. `amenity`/`restaurant`), plus `building`/`amenity`/
+  `tourism`/`historic` when they add information beyond that pair.
+- **Overture Maps** — via the existing "Building Characteristics" panel: a building's `subtype`
+  and `class_`. Deliberately excludes that panel's "nearby places" data, which describes other
+  points of interest near the coordinate, not the building itself.
+
+Stored per-`Place` (not per-`Location`/pin) so every `Location` resolving onto the same building
+shares one tag set rather than each re-deriving and storing its own near-duplicate copy; a
+`Location` with no resolved `Place` yet simply isn't captured until one resolves.
+`PlaceExternalTag.is_fresh_for()` further skips re-deriving tags a nearby Location already synced
+recently. Shown read-only on the wiki page as chips visually matching the Label chip style
+(`_external_tag_chips.html`, reusing the `.tag-chip` CSS with no edit/remove affordance).
+
+**Not yet built, by design**: automatically suggesting Labels from this data, choosing pin icons
+from it, or feeding it into search. This only captures and displays the raw data - a deliberate
+first step, not a promise those are coming next.
+
 ## Notifications
 
 - In-app notification center (bell dropdown), mark read/unread, per-type delivery preferences

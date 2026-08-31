@@ -231,3 +231,24 @@ class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAcces
         if profile is None or profile.pk is None or place is None or place.pk is None:
             return
         self.get_or_create(profile=profile, place=place, defaults={"reason": GrantReason.GRANDFATHERED_ENGAGEMENT})
+
+
+class PlaceExternalTagQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for PlaceExternalTag - raw provider classification data."""
+
+    def for_place(self, place) -> Self:
+        """Tags belonging to one place."""
+        return self.filter(place=place)
+
+    def for_source(self, source: str) -> Self:
+        """Tags reported by one provider."""
+        return self.filter(source=source)
+
+    def matching(self, key: str, value: str | None = None) -> Self:
+        """Tags with a given key, optionally narrowed to one value."""
+        qs = self.filter(key=key)
+        return qs.filter(value=value) if value is not None else qs
+
+
+class PlaceExternalTagManager(abstract.DashboardManager.from_queryset(PlaceExternalTagQuerySet)):
+    """Manager for PlaceExternalTag rows."""

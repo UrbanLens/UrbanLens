@@ -113,7 +113,9 @@ class NominatimPanelSource(LocationCachePanelSource):
         so the name is refreshed here rather than left stuck on a placeholder.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, PlaceExternalTag
         from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+        from urbanlens.dashboard.services.locations.external_tags import extract_nominatim_tags
         from urbanlens.dashboard.services.locations.naming import (
             is_address_derived_name,
             is_meaningful_name,
@@ -124,6 +126,10 @@ class NominatimPanelSource(LocationCachePanelSource):
         lng = float(pin.effective_longitude or 0)
         place = NominatimGateway().reverse_geocode(lat, lng)
         LocationCache.set(pin.location, self.cache_source, place or {}, query_key=f"{lat},{lng}")
+
+        target_place = pin.location.place
+        if target_place is not None and not PlaceExternalTag.is_fresh_for(target_place, ExternalTagSource.OSM):
+            PlaceExternalTag.sync_for_source(target_place, ExternalTagSource.OSM, extract_nominatim_tags(place or {}))
 
         location = pin.location
         current_name = location.official_name
@@ -223,6 +229,26 @@ class NominatimEnrichmentSource(LocationCacheEnrichmentSource):
         lng = float(location.longitude or 0)
         place = NominatimGateway().reverse_geocode(lat, lng)
         return place, f"{lat},{lng}"
+
+    def enrich(self, location: Location) -> bool:
+        """Reverse-geocode via the base implementation, then sync OSM tags onto the Location's Place.
+
+        A separate step from :meth:`fetch` because tag storage needs
+        ``location.place`` (unavailable from ``fetch``'s
+        location-in/payload-out contract) and reads back the row
+        :meth:`fetch` just wrote rather than re-deriving it.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, PlaceExternalTag
+        from urbanlens.dashboard.services.locations.external_tags import extract_nominatim_tags
+
+        result = super().enrich(location)
+        target_place = location.place
+        if target_place is not None and not PlaceExternalTag.is_fresh_for(target_place, ExternalTagSource.OSM):
+            cached = LocationCache.get_fresh(location, self.cache_source)
+            if cached and cached.data:
+                PlaceExternalTag.sync_for_source(target_place, ExternalTagSource.OSM, extract_nominatim_tags(cached.data))
+        return result
 
 
 class NominatimPlugin(UrbanLensPlugin):

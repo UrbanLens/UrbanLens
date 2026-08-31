@@ -9,6 +9,7 @@ from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+from urbanlens.dashboard.services.locations.external_tags import humanize_tag_value
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ _OSM_TYPE_PREFIX_PATTERN = re.compile(r"^(node|way|relation)\s*:\s*", re.IGNOREC
 # hours, operator) already broken out individually. Ordered by roughly how
 # often they're useful across the amenity/tourism/historic/shop types this
 # panel sees. Value is the human label; boolean-ish values are humanized
-# separately by ``_humanize_osm_value``.
+# separately by ``humanize_tag_value``.
 _EXTRA_DETAIL_FIELDS: tuple[tuple[str, str], ...] = (
     ("cuisine", "Cuisine"),
     ("religion", "Religion"),
@@ -55,36 +56,6 @@ _EXTRA_DETAIL_FIELDS: tuple[tuple[str, str], ...] = (
     ("operator:type", "Operator Type"),
     ("gnis:feature_id", "GNIS Feature ID"),
 )
-
-_BOOLISH_VALUE_LABELS: dict[str, str] = {
-    "yes": "Yes",
-    "no": "No",
-    "limited": "Limited",
-    "designated": "Designated",
-    "permissive": "Permissive",
-    "private": "Private",
-    "public": "Public",
-    "customers": "Customers only",
-    "only": "Only",
-}
-
-
-def _humanize_osm_value(value: str) -> str:
-    """Turn a raw OSM tag value into a display-friendly string.
-
-    Args:
-        value: Raw tag value, e.g. ``"limited"`` or ``"fine_dining;regional"``.
-
-    Returns:
-        A humanized value: known boolean-ish tokens are mapped to friendly
-        labels, and remaining underscore/semicolon-separated values are
-        turned into a comma-separated, space-joined string.
-    """
-    cleaned = value.strip()
-    mapped = _BOOLISH_VALUE_LABELS.get(cleaned.lower())
-    if mapped:
-        return mapped
-    return ", ".join(part.strip().replace("_", " ") for part in cleaned.split(";") if part.strip())
 
 
 def _humanize_osm_key(value: str) -> str:
@@ -292,7 +263,7 @@ class NominatimGateway(Gateway):
             if address.get(key) and not (key == "suburb" and address.get("neighbourhood") == address.get("suburb"))
         ]
 
-        extra_details = address_details + [{"key": key, "label": label, "value": _humanize_osm_value(str(extra[key]))} for key, label in _EXTRA_DETAIL_FIELDS if extra.get(key)]
+        extra_details = address_details + [{"key": key, "label": label, "value": humanize_tag_value(str(extra[key]))} for key, label in _EXTRA_DETAIL_FIELDS if extra.get(key)]
 
         return {
             "name": name,

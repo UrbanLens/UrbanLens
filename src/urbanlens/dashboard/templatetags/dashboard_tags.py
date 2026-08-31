@@ -31,6 +31,17 @@ def in_list(value: Any, collection: Collection[Any]) -> bool:
 
 
 @register.filter
+def humanize_tag_value(value: str) -> str:
+    """Display-friendly version of a raw PlaceExternalTag value.
+
+    Usage: {{ tag.value|humanize_tag_value }}
+    """
+    from urbanlens.dashboard.services.locations.external_tags import humanize_tag_value as _humanize
+
+    return _humanize(value)
+
+
+@register.filter
 def label_map_url(label_id: int) -> str:
     """Return the main map URL, pre-filtered to pins carrying this one label.
 
