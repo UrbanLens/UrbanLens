@@ -362,5 +362,10 @@ def local_images_for_gallery_items(location: Location, source: str, urls: Iterab
     keys_by_item_key = {media_item_key(url): url for url in urls}
     if not keys_by_item_key:
         return {}
-    rows = Image.objects.filter(location=location, media_source_key=source, media_item_key__in=keys_by_item_key.keys())
+    # pending_scan rows excluded: the gallery template prefers `local_url` over
+    # the provider's own thumbnail, so offering a copy that authorize_image will
+    # refuse replaces a working tile with a broken one. Absent is the right
+    # answer until it clears - the caller falls back to the provider URL, which
+    # is exactly what it did before the item was materialized.
+    rows = Image.objects.filter(location=location, media_source_key=source, media_item_key__in=keys_by_item_key.keys(), pending_scan=False)
     return {keys_by_item_key[row.media_item_key]: row for row in rows}

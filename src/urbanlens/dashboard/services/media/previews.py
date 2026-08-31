@@ -33,8 +33,11 @@ from __future__ import annotations
 
 from io import BytesIO
 import logging
+from pathlib import Path
 import posixpath
+import time
 from urllib.parse import urlencode, urlsplit
+from uuid import uuid4
 
 from django.core.cache import cache
 from django.core.signing import Signer
@@ -348,14 +351,119 @@ RENDER_QUEUED = "queued"
 #: worker that died mid-render does not wedge the tile for the whole day.
 RENDER_QUEUED_TTL = 120
 
+#: Where a source file waits between the web process staging it and the sandbox
+#: worker decoding it. Under MEDIA_ROOT because that is the one writable volume
+#: both containers mount; nothing serves it, because every media URL resolves
+#: through an ``Image`` row and these files have none.
+PREVIEW_SOURCE_DIR = "preview_sources"
+
+#: How long a staged source survives an un-run render before the sweep removes
+#: it. Must outlive a queue backlog; anything older is an orphan whose task
+#: never ran (a broker outage at enqueue time).
+PREVIEW_SOURCE_MAX_AGE = 3600
+
+
+def _preview_source_root() -> Path:
+    """The directory staged sources live in, created if it does not exist."""
+    from django.conf import settings
+
+    root = Path(settings.MEDIA_ROOT) / PREVIEW_SOURCE_DIR
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def stage_preview_source(digest: str, raw: bytes, content_type: str) -> dict[str, str]:
+    """Write a source file where the sandbox worker can read it.
+
+    Not through the cache, and not through the broker. The source cap is 60MB
+    (:data:`MAX_PREVIEW_SOURCE_BYTES`) and both of those are the same 512MB
+    Valkey that holds the Celery broker, sessions and Channels groups - one
+    gallery page of large scanned PDFs would evict all of it under
+    ``volatile-lru``, including (self-defeatingly) the staged sources
+    themselves. The media volume is mounted by both containers and is where
+    large files belong.
+
+    Args:
+        digest: A stable hash of the source URL, used as the filename.
+        raw: The file's bytes.
+        content_type: The provider-declared content type, passed through to the
+            renderer as a hint.
+
+    Returns:
+        A small descriptor to put in the cache - filename plus content type,
+        not bytes - for :func:`load_preview_source` to resolve.
+    """
+    root = _preview_source_root()
+    target = root / f"{digest}.bin"
+    # Written beside and renamed, so a worker never reads a half-written file.
+    scratch = root / f"{digest}.{uuid4().hex}.part"
+    scratch.write_bytes(raw)
+    scratch.replace(target)
+    return {"name": target.name, "content_type": content_type}
+
+
+def load_preview_source(descriptor: dict[str, str]) -> tuple[bytes, str] | None:
+    """Read back what :func:`stage_preview_source` wrote.
+
+    Args:
+        descriptor: The value :func:`stage_preview_source` returned.
+
+    Returns:
+        ``(bytes, content_type)``, or None when the file is gone - swept as an
+        orphan, or already consumed by an earlier render.
+    """
+    target = _preview_source_root() / Path(descriptor.get("name", "")).name
+    try:
+        return target.read_bytes(), descriptor.get("content_type", "")
+    except OSError:
+        return None
+
+
+def discard_preview_source(descriptor: dict[str, str]) -> None:
+    """Remove a staged source once its render is done with it.
+
+    Args:
+        descriptor: The value :func:`stage_preview_source` returned.
+    """
+    target = _preview_source_root() / Path(descriptor.get("name", "")).name
+    target.unlink(missing_ok=True)
+
+
+def sweep_preview_sources(max_age: int = PREVIEW_SOURCE_MAX_AGE) -> int:
+    """Delete staged sources whose render never ran.
+
+    ``render_media_preview`` removes its own source, so anything left is from
+    an enqueue that failed (the broker was down) - which leaves a file on the
+    media volume that nothing will ever read.
+
+    Args:
+        max_age: Age in seconds past which a staged file is an orphan.
+
+    Returns:
+        How many files were removed.
+    """
+    cutoff = time.time() - max_age
+    removed = 0
+    try:
+        entries = list(_preview_source_root().iterdir())
+    except OSError:
+        logger.warning("Could not list the staged preview-source directory", exc_info=True)
+        return 0
+    for entry in entries:
+        try:
+            if entry.is_file() and entry.stat().st_mtime < cutoff:
+                entry.unlink(missing_ok=True)
+                removed += 1
+        except OSError:
+            logger.warning("Could not remove staged preview source %s", entry, exc_info=True)
+    return removed
+
 
 def request_sandbox_render(source_cache_key: str, preview_cache_key: str, *, ttl: int, failure_ttl: int) -> None:
     """Queue a preview render in the sandbox worker, at most once per key.
 
     :func:`render_preview` reaches Pillow and poppler, so it must not run in a
-    web process - see :mod:`urbanlens.dashboard.services.sandbox.guard`. The
-    bytes travel through the cache rather than through the broker: the source
-    cap is 60MB and a Celery message that size is a bad idea.
+    web process - see :mod:`urbanlens.dashboard.services.sandbox.guard`.
 
     Deliberately fire-and-forget. Waiting on the result would keep the endpoint's
     old contract ("one GET returns the preview"), but it also means every tile
@@ -367,7 +475,9 @@ def request_sandbox_render(source_cache_key: str, preview_cache_key: str, *, ttl
     being waited for is a decorative thumbnail.
 
     Args:
-        source_cache_key: Cache key holding ``(bytes, content_type)`` to decode.
+        source_cache_key: Cache key holding what the worker needs to find the
+            source - a :func:`stage_preview_source` descriptor, or (for a caller
+            that already had the bytes cached) a ``(bytes, content_type)`` pair.
             Must already be populated by the caller.
         preview_cache_key: Cache key the rendered preview is written to.
         ttl: Seconds to cache a successful render.

@@ -32,7 +32,7 @@ from django.views import View
 import requests
 
 from urbanlens.dashboard.controllers.media_auth import mark_private_media
-from urbanlens.dashboard.services.media.previews import MAX_PREVIEW_SOURCE_BYTES, UNPREVIEWABLE, cached_preview, request_sandbox_render, signature_is_valid
+from urbanlens.dashboard.services.media.previews import MAX_PREVIEW_SOURCE_BYTES, UNPREVIEWABLE, cached_preview, request_sandbox_render, signature_is_valid, stage_preview_source
 from urbanlens.dashboard.services.security.redact import redact_text
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
 
@@ -47,10 +47,10 @@ _PREVIEW_CACHE_TTL = 24 * 3600
 #: unconvertible file are indistinguishable from here. The sentinel value itself
 #: is shared with the render task, which is what writes it now.
 _FAILED_CACHE_TTL = 3600
-#: How long the fetched source stays cached for the render task to pick up. Only
-#: has to outlive one broker round-trip, but a few minutes lets a retry of the
-#: same tile skip the refetch.
-_SOURCE_CACHE_TTL = 300
+#: How long the staged source's descriptor stays cached. Longer than
+#: RENDER_QUEUED_TTL on purpose: when that marker expires and the next request
+#: re-queues, the source is still on disk and does not have to be re-downloaded.
+_SOURCE_CACHE_TTL = 1800
 _MAX_REDIRECTS = 5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
@@ -120,15 +120,21 @@ class MediaPreviewView(View):
             # should re-fetch the source.
             return HttpResponse(status=404)
 
-        fetched = _fetch_source(url)
-        if fetched is None:
-            cache.set(cache_key, UNPREVIEWABLE, _FAILED_CACHE_TTL)
-            return HttpResponse(status=404)
-
-        # The fetch stays here - a network call, not a decode, made by the process
-        # holding the signed URL. Only the decode moves to the sandbox worker, and
-        # it goes via the cache rather than the broker (60MB source cap).
+        # A source staged by an earlier request that has not been rendered yet -
+        # its RENDER_QUEUED marker expired, so this request re-queues it. Without
+        # this check that re-queue would re-download up to 60MB from the provider
+        # every couple of minutes for as long as the sandbox is behind.
         source_key = f"ul_media_preview_src_{digest}"
-        cache.set(source_key, fetched, _SOURCE_CACHE_TTL)
+        if cache.get(source_key) is None:
+            fetched = _fetch_source(url)
+            if fetched is None:
+                cache.set(cache_key, UNPREVIEWABLE, _FAILED_CACHE_TTL)
+                return HttpResponse(status=404)
+            # The fetch stays here - a network call, not a decode, made by the
+            # process holding the signed URL. Only the decode moves to the
+            # sandbox worker, and the bytes go to the shared media volume rather
+            # than through the broker or the cache (60MB source cap).
+            cache.set(source_key, stage_preview_source(digest, *fetched), _SOURCE_CACHE_TTL)
+
         request_sandbox_render(source_key, cache_key, ttl=_PREVIEW_CACHE_TTL, failure_ttl=_FAILED_CACHE_TTL)
         return HttpResponse(status=404)

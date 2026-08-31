@@ -191,8 +191,10 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
             except (PhotoNotFoundError, GatewayRequestError, requests.exceptions.RequestException) as exc:
                 logger.info("Place photo %s unavailable for location=%s: %s", photo_name, location.pk, exc)
                 continue
-            image = _save_enriched_image(location, content, source=ImageSource.GOOGLE_MAPS, source_url=page_url, max_dimension=_PLACE_PHOTO_MAX_DIMENSION)
-            queue_photo_submission(image)
+            # No queue_photo_submission here: _save_enriched_image hands the row
+            # to process_image_upload, whose tail submits it - after the
+            # downscale, so REData is offered the file that will be served.
+            _save_enriched_image(location, content, source=ImageSource.GOOGLE_MAPS, source_url=page_url, max_dimension=_PLACE_PHOTO_MAX_DIMENSION)
             created += 1
 
         LocationCache.set(location, self.marker_source, {"created": created, "found": len(photo_names)})

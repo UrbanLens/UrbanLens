@@ -31,6 +31,64 @@ were both generated against `0037`, leaving the graph with two leaf nodes and br
 models in the same window: `makemigrations` numbers from what is on disk, so a second 0038 is
 silently produced rather than refused, and nothing complains until something runs `migrate`.
 
+## RESOLVED 2026-08-31: nine defects an adversarial review found in the async-scan work
+
+Each of these was in the two commits that moved the malware scan off the request, found by a
+review pass over that diff rather than by a test. Recorded because the *pattern* is the useful
+part: making `pending_scan` load-bearing turned a field almost nothing read into one that several
+long-standing queries needed to and did not.
+
+1. **The `OSError` branch published an unscanned document or video.** `_scan_pending_upload`
+   returned True ("continue") when the stored file could not be opened, with a comment saying the
+   media-type branch below owns the retry-then-reject policy for that. Only the *photo* branch has
+   one: `_process_document_upload` catches its own `OSError` and `extract_pdf_text` swallows
+   everything, so a document always produces a result, always reached the shared tail, and always
+   cleared `pending_scan` - publishing bytes clamd had never seen and never would, since nothing
+   re-enqueues. Same for a video when `ffmpeg_available()` is False. Now retried and then rejected,
+   because an unreadable file is exactly "not scanned".
+2. **SpotGuessr picked `pending_scan` photos.** `_eligible_photo_filter` was `Q(wiki__isnull=False)`
+   with no scan gate, and enrichment photos are profile-less, so a pending one is servable to *no
+   one* - the round rendered a broken image with no fallback, permanently if the enqueue was lost.
+3. **The Media gallery preferred an unservable local copy over a working provider thumbnail.**
+   `local_images_for_gallery_items` did not filter, and the template's `{% firstof entry.local_url
+   ... item.thumb_url %}` puts `local_url` first. A materialized-but-pending row therefore replaced
+   a tile that worked with one that 404s.
+4. **Nothing recovered a lost enqueue.** `safely_enqueue_task` returns None rather than raising when
+   the broker is unreachable, and every call site ignores it. Before this work a photo lost that way
+   was merely un-downscaled; after it, the row is invisible to everyone but its uploader forever.
+   Now swept hourly by `requeue_stalled_pending_uploads` (rows pending for more than an hour - past
+   the task's own ~30-minute retry ladder, so it cannot re-queue underneath a run still working).
+5. **The staged preview source was written but never read.** The view cached it for 5 minutes but
+   only ever consulted the *preview* key, so once `RENDER_QUEUED` expired at 2 minutes the next
+   request re-downloaded up to 60MB and queued a duplicate render - repeatedly, for as long as the
+   sandbox was behind, competing with the backlog that caused the delay.
+6. **60MB blobs through a 512MB Valkey.** The preview hand-off used the Django cache, which is the
+   same instance as the Celery broker, sessions and Channels, with `--maxmemory-policy volatile-lru`.
+   One gallery page of large scanned PDFs could write over a gigabyte of TTL-bearing keys, evicting
+   sessions, `LocationCache`, and - self-defeatingly - the very sources the workers were about to
+   read. Now staged on the media volume with only a descriptor in the cache.
+7. **Routing enrichment photos through `process_image_upload` added per-photo AI spend.** Its tail
+   reads `if image.profile is None or image.profile.generate_photo_keywords`, a branch only ever
+   exercised by rows that *had* a profile - so every hourly Street View and satellite image would
+   have started a vision pass. It also submits to REData, which `materialize_media_item` and the
+   Places enrichment branch were doing themselves, so both submitted twice. Keyword generation now
+   requires an uploader; the two duplicate submissions are gone (the task's is the better one - it
+   runs after the downscale, so REData is offered the file that will actually be served).
+8. **Making the entrypoint chown non-fatal removed a loud signal.** The fix for the crash-looping
+   sandbox worker (`cap_drop: ALL` removes CAP_CHOWN) made every chown best-effort - including for
+   the root containers, where a failing chown means the app dies later and *silently*, in the
+   file-log-handler failure already recorded in this file. Now tolerated only when already
+   unprivileged.
+9. **`services/pins/pin_suggestions.attach_suggestion_photos`** created `Image` rows from bytes at a
+   url an external caller submitted, with no `pending_scan` and no processing task - the sixth
+   provider path, missed because the structural test walks only `tasks.py` and the call-site test
+   only inspects `image_upload_error` callers.
+
+All nine have regression tests (`tests/hypothesis/test_async_malware_scan.py`). The review also
+confirmed what was already right: all nine `skip_malware_scan=True` sites do quarantine and enqueue,
+the four synchronous ones genuinely have no task behind them, `attach_deduped_copy` is sound,
+`SafetyContactPhotoView` does filter, and the sentinels cannot collide with a real cached value.
+
 ## RESOLVED 2026-08-31: media-worker never started - `cap_drop: ALL` killed the entrypoint
 
 The whole sandbox tier was inert. `docker-entrypoint.sh` chowns three volume-mounted directories

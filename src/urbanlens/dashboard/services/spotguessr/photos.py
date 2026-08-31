@@ -46,7 +46,11 @@ def _eligible_photo_filter(solo_profile: Profile | None) -> Q:
     photo_filter = Q(wiki__isnull=False)
     if solo_profile is not None:
         photo_filter |= Q(pin__profile=solo_profile)
-    return photo_filter
+    # A pending row is not servable to anyone (authorize_image refuses it, and
+    # an enrichment photo has no profile to be its own exception), so a round
+    # built on one renders a broken image with no fallback. AND, not OR: this
+    # narrows every branch above, it is not another way in.
+    return photo_filter & Q(pending_scan=False)
 
 
 def candidate_image_for_location(

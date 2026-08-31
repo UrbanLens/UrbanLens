@@ -10,8 +10,10 @@ No real network access occurs - the endpoint's own fetch is patched.
 from __future__ import annotations
 
 from io import BytesIO
+import tempfile
 from unittest.mock import patch
 
+from django.test import override_settings
 from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 
@@ -32,6 +34,11 @@ def _image_bytes(fmt: str, *, size: tuple[int, int] = (40, 30), mode: str = "RGB
     buffer = BytesIO()
     PILImage.new(mode, size, "red").save(buffer, format=fmt)
     return buffer.getvalue()
+
+
+#: The staged-source hand-off writes real files under MEDIA_ROOT (see
+#: previews.stage_preview_source), so the view tests need a throwaway one.
+_MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-preview-src-")
 
 
 class FormatDecisionTests(SimpleTestCase):
@@ -147,6 +154,7 @@ class RenderPreviewTests(SimpleTestCase):
         self.assertIn(result[1], ("image/jpeg", "image/png"))
 
 
+@override_settings(MEDIA_ROOT=_MEDIA_ROOT)
 class MediaPreviewViewTests(TestCase):
     """The endpoint fetches a client-supplied URL, so the signature is what
     stops it being an open image-fetching relay."""

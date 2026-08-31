@@ -480,6 +480,19 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.backfill_image_thumbnails",
         "schedule": crontab(minute=4),
     },
+    # Recovers uploads whose process_image_upload never ran - a broker blip at
+    # enqueue time leaves the row pending_scan, which means invisible to
+    # everyone but its uploader, permanently, with nothing else to notice.
+    "requeue-stalled-pending-uploads": {
+        "task": "urbanlens.dashboard.tasks.requeue_stalled_pending_uploads",
+        "schedule": crontab(minute=19),
+    },
+    # Preview sources staged on the media volume whose render task never ran -
+    # render_media_preview removes its own, so these are from a failed enqueue.
+    "sweep-stale-preview-sources": {
+        "task": "urbanlens.dashboard.tasks.sweep_stale_preview_sources",
+        "schedule": crontab(minute=34),
+    },
     # Same shape as image-thumbnail-backfill, for the tiny map-marker preview.
     # Offset by half an hour so the two sweeps don't compete for the same tick.
     "image-marker-thumbnail-backfill": {

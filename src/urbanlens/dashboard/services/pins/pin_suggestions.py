@@ -673,10 +673,13 @@ def attach_suggestion_photos(suggestion: PinSuggestion, photo_urls: list[str], p
         profile: The suggestion's owner - pays the download's storage-quota cost.
 
     Returns:
-        The newly-created candidate ``Image`` rows (may be shorter than
-        ``photo_urls`` - unreachable, oversized, or over-quota urls are
-        skipped rather than failing the whole batch).
+        The newly-created candidate ``Image`` rows, still ``pending_scan``
+        (may be shorter than ``photo_urls`` - unreachable, oversized, or
+        over-quota urls are skipped rather than failing the whole batch).
     """
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import process_image_upload
+
     room = MAX_SUGGESTION_PHOTOS - Image.objects.filter(pin_suggestion=suggestion).count()
     created: list[Image] = []
     for url in photo_urls:
@@ -706,7 +709,13 @@ def attach_suggestion_photos(suggestion: PinSuggestion, photo_urls: list[str], p
                 checksum=checksum,
                 file_size=len(content),
                 pin_suggestion=suggestion,
+                # Bytes from a url an external caller submitted - the same
+                # untrusted-provider case as media_materialize and the import
+                # tasks. Quarantined on create; process_image_upload scans,
+                # strips and normalises before anyone but the owner sees it.
+                pending_scan=True,
             )
+        safely_enqueue_task(process_image_upload, image.pk)
         created.append(image)
         room -= 1
     return created

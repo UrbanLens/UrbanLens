@@ -233,13 +233,25 @@ remote URL, `controllers/pin.RedataMediaProxyMixin` for an in-app proxy route)
 follow the same three steps:
 
 1. Serve it if `previews.cached_preview` has it.
-2. Otherwise put the source bytes in the cache and call
+2. Otherwise stage the source (`previews.stage_preview_source`) and call
    `previews.request_sandbox_render`, which queues `tasks.render_media_preview`
    at most once per key (`cache.add` of a `RENDER_QUEUED` marker).
 3. Answer **404** either way.
 
-The bytes travel through the Django cache rather than through the broker: the
-source cap is 60MB.
+The source travels on the **media volume**, not through the broker and not
+through the cache - only a small `{name, content_type}` descriptor goes in the
+cache. The cap is 60MB (`MAX_PREVIEW_SOURCE_BYTES`), and Valkey is a single
+512MB instance shared with the Celery broker, sessions and Channels: one gallery
+page of large scanned PDFs would evict all of it under `volatile-lru`, including
+the staged sources themselves. Staged files live under
+`MEDIA_ROOT/preview_sources/`, which nothing serves - every media URL resolves
+through an `Image` row and these have none, so `authorize_media` refuses the
+path family outright. `render_media_preview` deletes its own source;
+`sweep_stale_preview_sources` (hourly) clears orphans from a failed enqueue.
+
+The descriptor outlives `RENDER_QUEUED` deliberately (30 min vs 2 min), so when
+the marker expires and the next request re-queues, the source is still on disk
+and is not re-downloaded.
 
 That 404 is the part worth understanding. The endpoint used to block until the
 render finished, and keeping that would have meant waiting on a Celery result

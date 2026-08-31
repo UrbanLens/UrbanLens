@@ -296,10 +296,14 @@ def materialize_media_item(
     # Same post-storage pipeline an ordinary upload gets. Without it a
     # materialized item kept its provider EXIF (location included), was never
     # downscaled or thumbnailed, and was served exactly as fetched, forever.
+    #
+    # That pipeline ends in queue_photo_submission, which is why this no longer
+    # calls it itself - doing both submitted every materialized photo to REData
+    # twice. Submitting from the task is also the more correct of the two: it
+    # runs after the downscale, so what is offered is the file that will be
+    # served rather than the provider's original.
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-    from urbanlens.dashboard.services.photos.redata_relevance import queue_photo_submission
     from urbanlens.dashboard.tasks import process_image_upload
 
     safely_enqueue_task(process_image_upload, image.pk)
-    queue_photo_submission(image)
     return image

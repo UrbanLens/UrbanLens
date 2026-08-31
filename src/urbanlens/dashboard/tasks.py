@@ -959,11 +959,19 @@ def _scan_pending_upload(task, image: Image) -> bool:
         logger.exception("Malware scan permanently unavailable for image %s after %s retries", image.pk, task.request.retries)
         _reject_image_upload(image, "Our antivirus scanner was unavailable, so this upload could not be checked and was removed. Please try again.")
         return False
-    except OSError:
-        # The stored file could not be read at all. Left to the media-type
-        # branch below, which owns the retry-then-reject policy for that.
-        logger.warning("Could not open image %s to scan it; leaving it to the processing step", image.pk, exc_info=True)
-        return True
+    except OSError as exc:
+        # The stored file could not be opened at all. This used to fall through
+        # to the media-type branch on the theory that it owns the retry-then-
+        # reject policy - but only the *photo* branch has one. A document or a
+        # video always produces a result (their converters swallow their own
+        # failures), so falling through cleared pending_scan and published a
+        # file clamd had never seen. Treated as a scan failure instead, which is
+        # what it is: not scanned.
+        if task.request.retries < task.max_retries:
+            raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
+        logger.exception("Could not open image %s to scan it, after %s retries", image.pk, task.request.retries)
+        _reject_image_upload(image, "We couldn't read this file to check it, so it was removed. You can try uploading it again.")
+        return False
 
     if malware_error:
         _reject_image_upload(image, malware_error)
@@ -1197,7 +1205,14 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
     if image.media_type == MediaKind.PHOTO:
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task as _enqueue
 
-        if image.profile is None or image.profile.generate_photo_keywords:
+        # A profile-less row (location enrichment, provider photos) has no
+        # uploader who opted into keyword generation, and no gallery of their
+        # own for the keywords to be searched from - so it does not get the
+        # (plugin-dependent, possibly billed) vision pass. Before enrichment was
+        # routed through this task the condition read `profile is None or ...`,
+        # which was only ever exercised by rows that had a profile anyway; left
+        # as-is it would have started an AI call per hourly Street View tile.
+        if image.profile is not None and image.profile.generate_photo_keywords:
             _enqueue(generate_image_keywords, image_id)
 
         from urbanlens.dashboard.services.photos.redata_relevance import queue_photo_submission
@@ -1219,13 +1234,20 @@ def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int
     process. Those are provider bytes, not the app's, and a decoder bug in
     them is the whole reason this queue exists.
 
-    Reads and writes the cache rather than taking or returning bytes: the
-    source cap is 60MB (``MAX_PREVIEW_SOURCE_BYTES``) and a broker message
-    that size is a bad idea. No retry - a preview is disposable, and the
-    caller falls back to an icon tile.
+    Neither takes nor returns bytes. The source cap is 60MB
+    (``MAX_PREVIEW_SOURCE_BYTES``), which is too big for a broker message *and*
+    too big for the cache - that is the same 512MB Valkey the broker, sessions
+    and Channels share. It travels on the media volume instead
+    (``previews.stage_preview_source``), with only a small descriptor in the
+    cache. A caller that already had its source cached passes the pair
+    directly; both shapes are accepted.
+
+    No retry - a preview is disposable, and the caller falls back to an icon
+    tile.
 
     Args:
-        source_cache_key: Key holding ``(bytes, content_type)`` to decode.
+        source_cache_key: Key holding a staged-source descriptor, or a
+            ``(bytes, content_type)`` pair.
         preview_cache_key: Key to write the result (or the failure sentinel) to.
         ttl: Seconds to cache a successful render.
         failure_ttl: Seconds to cache the failure sentinel.
@@ -1235,16 +1257,30 @@ def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int
     """
     from django.core.cache import cache
 
-    from urbanlens.dashboard.services.media.previews import UNPREVIEWABLE, render_preview
+    from urbanlens.dashboard.services.media.previews import UNPREVIEWABLE, discard_preview_source, load_preview_source, render_preview
 
-    source = cache.get(source_cache_key)
-    if source is None:
-        # The source expired between the caller writing it and this running.
-        # Nothing to cache either way - a retry would only re-read the same miss.
+    descriptor = cache.get(source_cache_key)
+    if descriptor is None:
+        # Expired between the caller writing it and this running. Nothing is
+        # cached either way: a retry would only re-read the same miss, and
+        # marking it UNPREVIEWABLE would blacklist a perfectly good document.
         logger.info("Preview source %s was gone before it could be rendered", source_cache_key)
         return False
 
-    preview = render_preview(*source)
+    try:
+        source = load_preview_source(descriptor) if isinstance(descriptor, dict) else descriptor
+        if source is None:
+            logger.info("Staged preview source for %s was gone before it could be read", source_cache_key)
+            return False
+
+        preview = render_preview(*source)
+    finally:
+        # The staged file exists only for this hand-off; leaving it would grow
+        # the media volume by one copy of every previewed document.
+        if isinstance(descriptor, dict):
+            discard_preview_source(descriptor)
+            cache.delete(source_cache_key)
+
     if preview is None:
         cache.set(preview_cache_key, UNPREVIEWABLE, failure_ttl)
         return False
@@ -1288,6 +1324,78 @@ def generate_image_thumbnails(image_ids: list[int]) -> int:
 _THUMBNAIL_BACKFILL_CURSOR_KEY = "image-thumbnail-backfill-cursor"
 #: Long enough that a beat outage does not restart a half-finished walk at pk 0.
 _THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
+
+
+#: How long a row may sit ``pending_scan`` before the sweep assumes its task
+#: was lost rather than merely slow. process_image_upload's own retry ladder
+#: tops out around half an hour (4 attempts, 900s max backoff), so this is
+#: comfortably past a run that is still working.
+STALLED_UPLOAD_AGE = timedelta(hours=1)
+
+#: Bound on one sweep, so a large backlog is drained over several ticks rather
+#: than dumped onto the sandbox worker at once.
+STALLED_UPLOAD_BATCH = 100
+
+
+@shared_task
+def sweep_stale_preview_sources() -> int:
+    """Remove staged preview sources whose render never ran.
+
+    ``render_media_preview`` deletes its own source, so anything this finds is
+    from an enqueue that failed - the broker was down when a tile was requested
+    - leaving a file on the media volume nothing will ever read.
+
+    Returns:
+        How many files were removed.
+    """
+    from urbanlens.dashboard.services.media.previews import sweep_preview_sources
+
+    removed = sweep_preview_sources()
+    if removed:
+        logger.info("Removed %s orphaned preview source file(s)", removed)
+    return removed
+
+
+@shared_task
+def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
+    """Re-enqueue uploads whose processing task never ran.
+
+    ``safely_enqueue_task`` returns None rather than raising when the broker is
+    unreachable, and every upload path treats that as "nothing more to do" - so
+    a few seconds of Valkey trouble used to cost a photo its downscale. Now it
+    costs the row its *visibility*: ``pending_scan`` stays set, and nobody but
+    the uploader can see it. Without a sweep that is permanent, and the uploader
+    sees an upload that succeeded and then never appeared to anyone.
+
+    Deliberately not on the sandbox queue - it enqueues, it does not parse.
+
+    Args:
+        limit: Override the batch size. Beat does not pass this; tests do.
+
+    Returns:
+        How many rows were re-enqueued.
+    """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    cutoff = timezone.now() - STALLED_UPLOAD_AGE
+    batch = STALLED_UPLOAD_BATCH if limit is None else max(1, limit)
+    # Oldest first: a row that has been invisible longest is the one whose
+    # uploader has been waiting longest.
+    stalled = list(Image.objects.filter(pending_scan=True, created__lt=cutoff).order_by("created").values_list("pk", flat=True)[:batch])
+    if not stalled:
+        return 0
+
+    # No max_dimension is passed even for the profile-less enrichment rows that
+    # normally get one: this path has no way to recover which cap that row was
+    # created with. Such a row recovers scanned and visible but at the
+    # provider's own size, which is the right trade against staying invisible.
+    for image_id in stalled:
+        safely_enqueue_task(process_image_upload, image_id)
+    logger.info("Re-enqueued %s upload(s) still pending after %s", len(stalled), STALLED_UPLOAD_AGE)
+    return len(stalled)
 
 
 @shared_task
