@@ -495,11 +495,16 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   Uploading the same bytes to a different pin of yours reuses the stored file (no second quota
   charge); caption/GPS conflicts surface on Vault → Photos to pick. Failed or broken uploads
   toast and can be retried from Vault → Photos. Removing a photo from an album updates the grid
-  immediately. Small grid thumbnails are generated in the background after upload (and backfilled
-  on a schedule for photos that predate that); album grids load further pages as you scroll,
-  unloading off-screen bitmaps so large albums stay usable on a phone. Photo map markers can be
-  right-clicked to hide a photo from the map without clearing its stored GPS; the lightbox offers
-  "show this photo on the map" to put it back.
+  immediately. Small grid thumbnails and a tiny (~44px) WebP map-marker thumbnail are generated in
+  the background after upload (and backfilled on a schedule for photos that predate that); album
+  grids load further pages as you scroll, unloading off-screen bitmaps so large albums stay usable
+  on a phone. Photo map markers can be right-clicked to hide a photo from the map without clearing
+  its stored GPS; the lightbox offers "show this photo on the map" to put it back. A stored
+  photo's filename is always an opaque, year-prefixed-when-known token (never the uploaded file's
+  own name, which can encode anything from a capture timestamp to a location) - the true filename
+  is kept only on the row (`Image.original_filename`, encrypted), and a date parsed from a
+  camera-app filename convention (e.g. `PXL_20260709_...`) is tracked separately
+  (`filename_taken_at`) from EXIF-confirmed `taken_at`.
 - The lightbox lets you browse, search, and create+apply a media label in one step.
 
 ## Memories

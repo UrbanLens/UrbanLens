@@ -2079,7 +2079,7 @@ function init(): void {
 
     window._galleryAddMarker = (img) => {
         if (!photoPanelItems.find((p) => p.id === img.id)) photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true });
-        if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.url, img.latitude, img.longitude);
+        if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.marker_thumb_url || img.url, img.latitude, img.longitude);
         buildPhotoPanel();
         refreshPanelHeader();
     };
@@ -2384,7 +2384,7 @@ function init(): void {
             photoPanelItems = [];
             (data.images || []).forEach((img: any) => {
                 photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: img.is_mine });
-                if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.url, img.latitude, img.longitude, img.child_pin_name);
+                if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.marker_thumb_url || img.url, img.latitude, img.longitude, img.child_pin_name);
             });
             buildPhotoPanel();
             refreshPanelHeader();
@@ -3213,6 +3213,8 @@ if (document.readyState === "loading") {
 interface GalleryImage {
     id: number;
     url: string;
+    /** Tiny map-marker preview; absent for a row that hasn't been generated one yet. */
+    marker_thumb_url?: string;
     latitude: number | null;
     longitude: number | null;
 }

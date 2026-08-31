@@ -301,6 +301,11 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
                 direction=image.direction,
                 checksum=image.checksum,
                 taken_at=image.taken_at,
+                # A date, like taken_at above - not the filename it was parsed
+                # from (original_filename is deliberately absent from this
+                # list; see this function's docstring comment on what does and
+                # does not travel with a shared photo).
+                filename_taken_at=image.filename_taken_at,
                 file_size=image.file_size,
             )
             for image in shared_images

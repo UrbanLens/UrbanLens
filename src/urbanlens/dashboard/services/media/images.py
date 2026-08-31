@@ -447,6 +447,60 @@ def extract_source_url(image_file: IO[bytes]) -> str | None:
     return None
 
 
+# Common camera/phone-app filename timestamp conventions: PXL_ (Pixel),
+# IMG_/IMG- (Android/iPhone, incl. WhatsApp's IMG-YYYYMMDD-WAxxxx), MVIMG_
+# (Google motion photo stills), VID_ (video counterpart to IMG_), DSC_
+# (some point-and-shoot cameras that do timestamp their files, unlike the
+# sequence-numbered DSCN/DSC forms _CAMERA_FILENAME_RE also matches),
+# Screenshot_ (Android), and signal-YYYY-MM-DD- (Signal Messenger's own
+# save format, the one common convention that uses dashes inside the date).
+# Deliberately narrower than _CAMERA_FILENAME_RE above: that one only needs to
+# rule out a clearly-descriptive name for author attribution, whereas trusting
+# eight digits as an actual date is worth restricting to prefixes known to put
+# a real timestamp there, so an arbitrary numbered filename (IMG_4821.jpg, a
+# vendor camera's frame counter) is never misread as a date.
+_FILENAME_TIMESTAMP_RE = re.compile(
+    r"^(?:pxl|img|mvimg|vid|dsc|screenshot|signal)[_-]{1,2}(\d{4})-?(\d{2})-?(\d{2})(?:[_-]?(\d{2})(\d{2})(\d{2}))?",
+    re.IGNORECASE,
+)
+
+# Sanity bound for a parsed filename year - not a date format Y2038 concern,
+# just ruling out a coincidental 8-digit run that happens to match the pattern
+# but obviously isn't a calendar date (e.g. a sequence number).
+_FILENAME_DATE_MIN_YEAR = 1995
+
+
+def extract_filename_taken_at(filename: str) -> datetime | None:
+    """Return a capture date/time parsed from a camera/phone-app filename convention, or None.
+
+    Used as a fallback source for ``Image.filename_taken_at`` when a photo
+    carries no EXIF ``DateTimeOriginal`` - many modern devices encode the
+    capture date (and often the time) directly in the filename they generate,
+    even though that filename itself is never stored (see
+    ``models.images.model.pin_image_upload_path``).
+
+    Args:
+        filename: The original upload filename (path or bare name).
+
+    Returns:
+        A timezone-aware datetime (midnight when no time component matched),
+        or None when the name doesn't match a known convention or the parsed
+        value isn't a plausible calendar date.
+    """
+    stem = posixpath.splitext(posixpath.basename(filename))[0]
+    match = _FILENAME_TIMESTAMP_RE.match(stem)
+    if not match:
+        return None
+    year, month, day, hour, minute, second = match.groups()
+    try:
+        naive = datetime(int(year), int(month), int(day), int(hour or 0), int(minute or 0), int(second or 0))  # noqa: DTZ001 - made aware just below
+    except ValueError:
+        return None
+    if not (_FILENAME_DATE_MIN_YEAR <= naive.year <= timezone.now().year + 1):
+        return None
+    return timezone.make_aware(naive) if timezone.is_naive(naive) else naive
+
+
 def is_camera_generated_filename(filename: str) -> bool:
     """Return True when a filename matches common phone/camera auto-naming conventions.
 
@@ -766,12 +820,106 @@ def write_image_thumbnail(image: Image, *, max_dimension: int = THUMBNAIL_MAX_DI
 
     from django.core.files.base import ContentFile
 
+    # The original's own (already-anonymized) stem, so a thumbnail's filename
+    # both stays opaque and visibly pairs with the photo it previews - see
+    # anonymized_media_stem. Not re-anonymized here: doing so would spend a
+    # second random token indicating the exact same "this is a smaller
+    # version of that other file" fact the shared stem already gives away for
+    # free, once directory randomness is what actually protects it.
     stem = posixpath.splitext(posixpath.basename(old_name))[0]
     previous = image.thumbnail.name if image.thumbnail else ""
-    image.thumbnail.save(f"{stem}.webp", ContentFile(buffer.getvalue()), save=False)
+    image.thumbnail.save(f"{stem}-thumb.webp", ContentFile(buffer.getvalue()), save=False)
     if previous and previous != image.thumbnail.name and not file_still_referenced("thumbnail", previous, exclude_pks=[image.pk]):
         with contextlib.suppress(OSError):
             image.thumbnail.storage.delete(previous)
+    return True
+
+
+#: Longest edge of the tiny map-marker thumbnail written by
+#: :func:`write_image_marker_thumbnail`. Twice the marker's base on-screen
+#: size (see PHOTO_MARKER_BASE_SIZE in photo-map.ts) for a sharp result on a
+#: 2x display, while staying far smaller than the 400px grid thumbnail.
+MARKER_THUMBNAIL_MAX_DIMENSION = 88
+
+#: Aggressive relative to the grid thumbnail's quality=75: a marker this small
+#: hides WebP's compression artifacts almost entirely, so the extra fidelity
+#: buys nothing but bytes on a tile every map page loads dozens of.
+_MARKER_THUMBNAIL_QUALITY = 45
+
+
+def photos_missing_marker_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKFILL_BATCH) -> list[int]:
+    """Primary keys of photos that still need a map-marker thumbnail.
+
+    Same shape as :func:`photos_missing_thumbnails` - new uploads get one
+    inside ``process_image_upload``; this is for the periodic backfill.
+
+    Args:
+        after_pk: Exclusive lower bound, so a sweep can walk the table in
+            batches without retrying the same unprocessable rows every tick.
+        limit: Maximum ids to return.
+
+    Returns:
+        Image primary keys, ascending.
+    """
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+    qs = Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(marker_thumbnail="") | Q(marker_thumbnail__isnull=True)).order_by("pk")
+    if after_pk:
+        qs = qs.filter(pk__gt=after_pk)
+    return list(qs.values_list("pk", flat=True)[:limit])
+
+
+def write_image_marker_thumbnail(image: Image, *, max_dimension: int = MARKER_THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
+    """Write a tiny WebP preview into ``image.marker_thumbnail`` for map markers.
+
+    Leaves the stored original and the grid thumbnail alone. The caller
+    persists the row.
+
+    Args:
+        image: The Image row whose original to preview.
+        max_dimension: Longest-edge cap in pixels.
+        force: Replace an existing marker thumbnail. Default skips rows that
+            already have one, so a retry of the upload-processing task is a
+            no-op.
+
+    Returns:
+        True when a marker thumbnail was written.
+
+    Raises:
+        OSError: When the original cannot be read from or the thumbnail
+            written to storage.
+    """
+    from urbanlens.dashboard.models.images.model import MediaKind
+
+    if image.media_type != MediaKind.PHOTO:
+        return False
+    if image.marker_thumbnail and not force:
+        return False
+    old_name = image.image.name if image.image else ""
+    if not old_name:
+        return False
+    with image.image.open("rb") as stored_file:
+        img: PILImage.Image = PILImage.open(stored_file)
+        img.load()
+        img = ImageOps.exif_transpose(img) or img
+
+    img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGBA" if "A" in img.mode or img.mode == "P" else "RGB")
+
+    buffer = io.BytesIO()
+    img.save(buffer, format="WEBP", quality=_MARKER_THUMBNAIL_QUALITY, method=6)
+
+    from django.core.files.base import ContentFile
+
+    stem = posixpath.splitext(posixpath.basename(old_name))[0]
+    previous = image.marker_thumbnail.name if image.marker_thumbnail else ""
+    image.marker_thumbnail.save(f"{stem}-marker.webp", ContentFile(buffer.getvalue()), save=False)
+    if previous and previous != image.marker_thumbnail.name and not file_still_referenced("marker_thumbnail", previous, exclude_pks=[image.pk]):
+        with contextlib.suppress(OSError):
+            image.marker_thumbnail.storage.delete(previous)
     return True
 
 
@@ -914,11 +1062,14 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
     from urbanlens.dashboard.models.images.model import ImageSource, MediaKind
 
     thumb = img.thumb_url
+    marker_thumb = img.marker_thumb_url
+    effective_taken_at = img.effective_taken_at
     return {
         "id": img.pk,
         "uuid": str(img.uuid),
         "url": request.build_absolute_uri(img.image.url) if img.image else (img.source_url or ""),
         "thumb_url": request.build_absolute_uri(thumb) if thumb else "",
+        "marker_thumb_url": request.build_absolute_uri(marker_thumb) if marker_thumb else "",
         "caption": img.caption or "",
         "latitude": float(img.latitude) if img.latitude is not None else None,
         "longitude": float(img.longitude) if img.longitude is not None else None,
@@ -927,7 +1078,7 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         "author": img.author or "",
         "source_url": img.source_url or "",
         "copyright": img.copyright or "",
-        "taken_at": img.taken_at.isoformat() if img.taken_at else None,
+        "taken_at": effective_taken_at.isoformat() if effective_taken_at else None,
         # What the pin gallery's delete prompt needs to know: whether removing
         # this photo from a pin would also take it off a community wiki, and
         # whether withdrawing it from there is even the owner's to do.
@@ -1047,12 +1198,13 @@ def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bo
         return False
 
     image.image.delete(save=False)
-    thumbnail = getattr(image, "thumbnail", None)
     # Checked separately from the original: they are shared together today, but
-    # nothing enforces that, and a thumbnail is just as easy to orphan.
-    if thumbnail and thumbnail.name and not file_still_referenced("thumbnail", thumbnail.name, exclude_pks=[image.pk, *also_deleting]):
-        with contextlib.suppress(OSError):
-            thumbnail.delete(save=False)
+    # nothing enforces that, and either is just as easy to orphan.
+    for field_name in ("thumbnail", "marker_thumbnail"):
+        derived = getattr(image, field_name, None)
+        if derived and derived.name and not file_still_referenced(field_name, derived.name, exclude_pks=[image.pk, *also_deleting]):
+            with contextlib.suppress(OSError):
+                derived.delete(save=False)
     return True
 
 

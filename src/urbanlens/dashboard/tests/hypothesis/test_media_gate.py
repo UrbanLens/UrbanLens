@@ -291,6 +291,31 @@ class MediaGateTests(TestCase):
         denied = self.client.get("/media/pin_images/dm-thumb.webp")
         self.assertEqual(denied.status_code, 404, "a non-participant must not fetch a DM attachment's preview")
 
+    # -- Marker thumbnails --------------------------------------------------------
+    #
+    # A third stored file in a third column, same failure mode as the grid
+    # thumbnail above if `authorize_image` ever stops searching it.
+
+    def test_owner_fetches_own_marker_thumbnail(self):
+        self._write_media("pin_images/markers/owned-marker.webp")
+        Image.objects.filter(pk=self.image.pk).update(marker_thumbnail="pin_images/markers/owned-marker.webp")
+        self.client.force_login(self.owner_user)
+
+        response = self.client.get("/media/pin_images/markers/owned-marker.webp")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._get_bytes(response), _IMAGE_BYTES)
+
+    def test_unrelated_user_is_denied_a_marker_thumbnail(self):
+        self._write_media("pin_images/markers/owned-marker.webp")
+        Image.objects.filter(pk=self.image.pk).update(marker_thumbnail="pin_images/markers/owned-marker.webp")
+        stranger = _new_user()
+        self.client.force_login(stranger)
+
+        response = self.client.get("/media/pin_images/markers/owned-marker.webp")
+
+        self.assertEqual(response.status_code, 404, "a stranger denied the photo must be denied its marker preview too")
+
     # -- Files backed by more than one row ---------------------------------------
 
     def test_a_share_recipient_reaches_a_photo_they_were_given(self):

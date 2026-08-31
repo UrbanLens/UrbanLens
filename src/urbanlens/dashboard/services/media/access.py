@@ -25,12 +25,13 @@ orphan except by guessing one.
 
 Authorizers answer about a *stored path*, not a model instance, because a media
 URL carries nothing else. They must therefore resolve the owning row from every
-field that can hold that path, which for ``Image`` means both ``image`` and
-``thumbnail``.
+field that can hold that path, which for ``Image`` means ``image``,
+``thumbnail``, and ``marker_thumbnail``.
 
 Guessing a path is separately useless: the upload-path callables in
 :mod:`urbanlens.dashboard.models.images.model` file each upload under a random
-directory, so a photo's URL cannot be derived from its filename. That is
+directory *and* an opaque filename, so a photo's URL cannot be derived from
+either its storage location or the name it was uploaded under. That is
 defence in depth, not the control - this module is the control.
 
 Two subtrees of ``MEDIA_ROOT`` hold no model's files and so appear in no
@@ -150,10 +151,11 @@ def authorize_image(profile: Profile, rel_path: str) -> bool:
     gallery photos, memories uploads, safety check-in photos) follows the same
     ``Image.objects.visible_to`` filtering the gallery views apply.
 
-    Both file columns are searched. A thumbnail is a separate stored file in a
-    separate column that nothing else authorizes, so matching only ``image``
-    left every preview unowned - and therefore, under the old permissive
-    orphan fallback, readable by anyone with an account.
+    All three file columns are searched. A thumbnail (or marker thumbnail) is
+    a separate stored file in a separate column that nothing else authorizes,
+    so matching only ``image`` left every preview unowned - and therefore,
+    under the old permissive orphan fallback, readable by anyone with an
+    account.
 
     Several rows can point at one stored file: accepting a pin share gives the
     recipient their own row over the sender's bytes rather than a second copy,
@@ -173,7 +175,13 @@ def authorize_image(profile: Profile, rel_path: str) -> bool:
 
     from urbanlens.dashboard.models.images.model import Image
 
-    image = Image.objects.filter(Q(image=rel_path) | Q(thumbnail=rel_path)).annotate(requesters_own=Case(When(profile=profile, then=0), default=1, output_field=IntegerField())).select_related("direct_message").order_by("requesters_own").first()
+    image = (
+        Image.objects.filter(Q(image=rel_path) | Q(thumbnail=rel_path) | Q(marker_thumbnail=rel_path))
+        .annotate(requesters_own=Case(When(profile=profile, then=0), default=1, output_field=IntegerField()))
+        .select_related("direct_message")
+        .order_by("requesters_own")
+        .first()
+    )
     if image is None:
         return False
     if image.profile_id == profile.pk:
