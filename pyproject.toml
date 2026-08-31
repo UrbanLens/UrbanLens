@@ -17,7 +17,7 @@ dependencies = [
     "django-cors-headers~=4.9.0",
     "django-csp~=4.0",
     "django-dirtyfields~=1.9.9",
-    "django-filter~=25.2",
+    "django-filter>=25.2,<27.0",
     "django-pandas~=0.6.7",
     "django-picklefield~=3.4.0",
     "django-postgres-extra~=2.0.4",
@@ -25,8 +25,8 @@ dependencies = [
     "djangorestframework~=3.17.1",
     "fastkml~=1.4.0",
     "geopandas~=1.1.3",
-    "geopy~=2.4.1",
-    "gevent~=26.5.0",
+    "geopy>=2.4.1,<2.6.0",
+    "gevent>=26.5,<26.8",
     "gpxpy~=1.6.2",
     "gunicorn~=26.0.0",
     "humanize>=4.15,<4.17",
@@ -37,7 +37,7 @@ dependencies = [
     "mdit-py-plugins~=0.6.1",
     "defusedxml~=0.7.1",
     "nh3~=0.3.5",
-    "openai>=2.43,<2.45",
+    "openai>=2.43,<2.49",
     "orjson~=3.11.9",
     "pandas~=3.0.3",
     "pdf2image~=1.17.0",
@@ -52,7 +52,7 @@ dependencies = [
     "psycopg2-binary~=2.9.12",
     "pydantic~=2.13.4",
     "pydantic-settings~=2.14.1",
-    "pypdf~=6.2.0",
+    "pypdf>=6.2,<6.15",
     "pytesseract~=0.3.13",
     "python-dateutil~=2.9.0",
     "python-docx~=1.2.0",
@@ -855,7 +855,7 @@ convention = "google"
 [dependency-groups]
 # Dev-only additions on top of [project.dependencies] - `uv sync` installs both by default.
 dev = [
-    "bandit~=1.8.6",
+    "bandit>=1.8.6,<1.10.0",
     "coverage>=7.14.1,<7.16.0",
     # Coverage of the lines a branch actually changed, rather than a whole-tree
     # percentage that moves too slowly to mean anything on any one commit.
@@ -870,8 +870,8 @@ dev = [
     "django-perf-rec~=4.31.0",
     "django-stubs~=6.0.5",
     "django-stubs-ext~=6.0.5",
-    "faker>=40.23,<40.29",
-    "hypothesis[django]>=6.155.5,<6.157.0",
+    "faker>=40.23,<40.37",
+    "hypothesis[django]>=6.155.5,<6.162.0",
     "icecream~=2.2.0",
     "kombu~=5.6.2",
     "libcst~=1.8.6",
@@ -893,7 +893,7 @@ dev = [
     # Postgres has been observed to fall over under exactly this load. Use it in
     # the container, via `bin/run_tests.sh --parallel`.
     "pytest-xdist~=3.8.0",
-    "ruff~=0.15.20",
+    "ruff>=0.15.20,<0.17.0",
     # Property-based conformance testing against the published OpenAPI document.
     # The schema is a deployed artefact with generated clients depending on it,
     # and nothing else checks that a response matches what it advertises.
@@ -902,7 +902,7 @@ dev = [
     "setuptools>=82.0.1,<83.1.0",
     "sphinx~=9.1.0",
     "sphinx-rtd-theme~=3.1.0",
-    "tqdm~=4.68.3",
+    "tqdm>=4.68.3,<4.70.0",
     "types-requests~=2.33.0.20260518",
     "types-requests-oauthlib~=2.0.0.20260610",
     "uv~=0.11.22",
