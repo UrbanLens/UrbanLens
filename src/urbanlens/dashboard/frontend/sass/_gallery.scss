@@ -429,6 +429,46 @@
   }
 }
 
+// Vault > Documents' lightbox mode (item.mediaType === 'document') - an
+// <iframe> preview (every document eventually converts to PDF) plus an
+// always-visible open-in-new-tab escape hatch, since an iframe's onerror
+// doesn't fire for a wrong content-type or blocked embed.
+.lightbox-document-view {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 90vh;
+
+  @media (max-width: 720px) {
+    height: 60vh;
+  }
+}
+
+.lightbox-document-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  border: 0;
+  background: #fff;
+  border-radius: 4px;
+}
+
+.lightbox-document-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .5rem .25rem 0;
+}
+
+.lightbox-document-name {
+  margin: 0;
+  color: rgba(255, 255, 255, .85);
+  font-size: .85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .lightbox-fallback-note {
   position: absolute;
   left: 50%;

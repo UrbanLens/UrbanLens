@@ -254,6 +254,7 @@ def add_feature_access(request: HttpRequest) -> dict[str, bool]:
             "show_places_layer": user_has_feature(request.user, SiteFeature.PLACES),
             "can_use_web_search": user_has_feature(request.user, SiteFeature.SEARCH),
             "can_upload_videos": user_has_feature(request.user, SiteFeature.VIDEO_UPLOADS),
+            "can_upload_documents": user_has_feature(request.user, SiteFeature.DOCUMENT_UPLOADS),
             "show_games_nav": user_has_feature(request.user, SiteFeature.ALPHA_FEATURES),
             "has_beta_features": user_has_feature(request.user, SiteFeature.BETA_FEATURES),
         }

@@ -268,6 +268,18 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         """
         return self.filter(profile=profile).order_by("-created")
 
+    def photos(self) -> Self:
+        """Filter to photos only - Vault Photos' scope, excluding videos/documents."""
+        from urbanlens.dashboard.models.images.model import MediaKind
+
+        return self.filter(media_type=MediaKind.PHOTO)
+
+    def documents(self) -> Self:
+        """Filter to documents only - Vault Documents' scope."""
+        from urbanlens.dashboard.models.images.model import MediaKind
+
+        return self.filter(media_type=MediaKind.DOCUMENT)
+
     def needs_attention(self, profile: Profile) -> Self:
         """Filter to a profile's unfiled photos awaiting organization.
 

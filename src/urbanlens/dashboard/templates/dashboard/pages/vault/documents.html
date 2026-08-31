@@ -1,0 +1,259 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block header %}
+<script type="module" src="{% static 'dashboard/js/vault-documents.js' %}"></script>
+{% endblock %}
+
+{% block title %}Documents{% endblock %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="folder_copy" title="Documents" subtitle="Deeds, permits, reports - any file worth keeping with a place." modifier="top" %}
+{% endblock %}
+
+{% block content %}
+{% include "dashboard/partials/vault/_vault_subnav.html" with active_tab="documents" %}
+<div id="documents-page" class="memories-tab-page"
+     data-upload-url="{% url 'vault.documents.upload' %}"
+     data-action-base="{% url 'vault.photos' %}"
+     data-storage-used="{{ storage_used_bytes }}"
+     data-storage-quota="{{ storage_quota_bytes|default_if_none:'' }}"
+     data-max-file-size="{{ max_upload_file_size_bytes }}">
+
+    <div class="page-inner">
+        {% if can_upload_documents %}
+        <input type="file" id="documents-file-input" accept=".pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.odp" multiple hidden
+               onchange="documentsHandleFiles(this.files); this.value='';">
+
+        {# -- Upload dropzone ------------------------------------------------- #}
+        <label for="documents-file-input" class="photos-dropzone" id="documents-dropzone">
+            <i class="material-symbols-outlined">cloud_upload</i>
+            <span class="photos-dropzone-title">Drag documents here, or click to upload</span>
+            <span class="photos-dropzone-sub">PDF, Word, Excel, PowerPoint, and plain text.</span>
+            <div class="photos-upload-progress" id="documents-upload-progress" hidden>
+                <div class="photos-upload-bar" id="documents-upload-bar"></div>
+            </div>
+        </label>
+        {% else %}
+        <div class="photos-empty">
+            <i class="material-symbols-outlined">lock</i>
+            <p>Document uploads aren't enabled for your account yet.</p>
+        </div>
+        {% endif %}
+
+        {# -- Full gallery ---------------------------------------------------- #}
+        <section class="photos-gallery" aria-label="All documents">
+            <div class="photos-gallery-head">
+                <h2><i class="material-symbols-outlined">grid_view</i> All documents</h2>
+                {% if document_count %}<span class="badge">{{ document_count }}</span>{% endif %}
+                {% if documents %}
+                <label class="photos-sort-label" for="vault-documents-sort">
+                    <i class="material-symbols-outlined">sort</i>
+                    <select id="vault-documents-sort" class="photos-sort-select" aria-label="Sort documents">
+                        {% for spec in gallery_sort_specs %}
+                        <option value="{{ spec.sort }}" {% if spec.sort == sort %}selected{% endif %}>{{ spec.label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                {% endif %}
+            </div>
+            {% if documents %}
+            <ul class="photos-grid document-grid" id="document-grid"
+                data-items-url="{% url 'vault.documents.items' %}"
+                data-photo-count="{{ document_count }}"
+                data-grid-page-size="{{ grid_page_size }}">
+                {% include "dashboard/partials/vault/_document_grid.html" %}
+            </ul>
+            {% else %}
+            <div class="photos-empty">
+                <i class="material-symbols-outlined">folder_off</i>
+                <p>No documents yet.{% if can_upload_documents %} Upload some above to get started.{% endif %}</p>
+            </div>
+            {% endif %}
+        </section>
+    </div>
+</div>
+
+{# -- Lightbox (shared component - same as Vault Photos, in document mode) -- #}
+{% include "dashboard/partials/_photo_lightbox.html" %}
+
+{# -- Full-page drag overlay -------------------------------------------------- #}
+{% if can_upload_documents %}
+<div id="documents-drop-overlay" class="gallery-drop-overlay" hidden
+     ondragover="event.preventDefault()" ondrop="_documentsOverlayDrop(event)">
+    <div class="gallery-drop-overlay-inner">
+        <i class="material-symbols-outlined">cloud_upload</i>
+        <p>Drop documents to upload</p>
+    </div>
+</div>
+{% endif %}
+
+<script>
+(function () {
+    var root = document.getElementById('documents-page');
+    var UPLOAD_URL = root.dataset.uploadUrl;
+    var ACTION_BASE = root.dataset.actionBase;
+    var CSRF = window.csrftoken || '{{ csrf_token }}';
+
+    var MAX_FILE_SIZE = Number.parseInt(root.dataset.maxFileSize, 10) || 0;
+    var STORAGE_USED = Number.parseInt(root.dataset.storageUsed, 10) || 0;
+    var STORAGE_QUOTA = root.dataset.storageQuota ? Number.parseInt(root.dataset.storageQuota, 10) : null;
+
+    function _formatBytes(bytes) {
+        var units = ['bytes', 'KB', 'MB', 'GB', 'TB'];
+        var i = 0;
+        var n = bytes;
+        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+        return (i === 0 ? n : n.toFixed(1)) + ' ' + units[i];
+    }
+
+    function _precheckError(file, committed) {
+        if (MAX_FILE_SIZE && file.size > MAX_FILE_SIZE) {
+            return 'That file is too large (' + _formatBytes(file.size) + '). The maximum upload size is ' + _formatBytes(MAX_FILE_SIZE) + '.';
+        }
+        if (STORAGE_QUOTA !== null && STORAGE_USED + committed + file.size > STORAGE_QUOTA) {
+            return 'This upload would exceed your storage quota (' + _formatBytes(STORAGE_USED + committed) + ' of ' + _formatBytes(STORAGE_QUOTA) + ' used). Delete some files or lower your image size in Settings → Storage.';
+        }
+        return null;
+    }
+
+    // -- Drag-to-upload detection (depth-counted, page-wide) --------------------
+    var _dragDepth = 0;
+    var _overlay = document.getElementById('documents-drop-overlay');
+    var _internalDrag = false;
+    document.addEventListener('dragstart', function () { _internalDrag = true; });
+    document.addEventListener('dragend', function () { _internalDrag = false; });
+    function _isFilesDrag(e) { return !_internalDrag && e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'); }
+    document.addEventListener('dragenter', function (e) { if (!_isFilesDrag(e)) return; _dragDepth++; if (_overlay) _overlay.hidden = false; });
+    document.addEventListener('dragleave', function (e) { if (!_isFilesDrag(e) && _dragDepth === 0) return; _dragDepth = Math.max(0, _dragDepth - 1); if (_dragDepth === 0 && _overlay) _overlay.hidden = true; });
+    document.addEventListener('drop', function () { _dragDepth = 0; _internalDrag = false; if (_overlay) _overlay.hidden = true; });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && _overlay && !_overlay.hidden) { _dragDepth = 0; _overlay.hidden = true; } });
+    window._documentsOverlayDrop = function (e) {
+        e.preventDefault(); e.stopPropagation(); _dragDepth = 0;
+        if (_overlay) _overlay.hidden = true;
+        if (_internalDrag) { _internalDrag = false; return; }
+        documentsHandleFiles(e.dataTransfer.files);
+    };
+
+    // -- Upload (one request per file) ------------------------------------------
+    window.documentsHandleFiles = function (files) {
+        files = Array.from(files || []);
+        if (!files.length) return;
+
+        var committed = 0;
+        var accepted = [];
+        files.forEach(function (file) {
+            var error = _precheckError(file, committed);
+            if (error) {
+                if (window.toastr) toastr.error(file.name + ': ' + error);
+                return;
+            }
+            committed += file.size;
+            accepted.push(file);
+        });
+        files = accepted;
+        if (!files.length) return;
+
+        var progress = document.getElementById('documents-upload-progress');
+        var bar = document.getElementById('documents-upload-bar');
+        if (progress) progress.hidden = false;
+        var total = files.length, done = 0, ok = 0;
+
+        files.forEach(function (file) {
+            var fd = new FormData();
+            fd.append('document', file);
+            fd.append('csrfmiddlewaretoken', CSRF);
+            fetch(UPLOAD_URL, { method: 'POST', body: fd, headers: { 'X-CSRFToken': CSRF } })
+                .then(function (r) {
+                    return r.json().catch(function () { return {}; }).then(function (data) {
+                        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+                        return data;
+                    });
+                })
+                .then(function (doc) { ok++; STORAGE_USED += file.size; _prependTile(doc); })
+                .catch(function (err) {
+                    if (window.toastr) toastr.error(file.name + ': ' + (err.message || 'upload failed'));
+                })
+                .finally(function () {
+                    done++;
+                    if (bar) bar.style.width = Math.round(done / total * 100) + '%';
+                    if (done === total) _finishUpload(ok);
+                });
+        });
+    };
+
+    function _activeSort() {
+        var select = document.getElementById('vault-documents-sort');
+        return select ? select.value : 'recent';
+    }
+
+    function _finishUpload(ok) {
+        var progress = document.getElementById('documents-upload-progress');
+        var bar = document.getElementById('documents-upload-bar');
+        setTimeout(function () { if (progress) progress.hidden = true; if (bar) bar.style.width = '0'; }, 700);
+        if (ok && window.toastr) toastr.success(ok + (ok === 1 ? ' document uploaded.' : ' documents uploaded.'));
+        if (ok && _activeSort() !== 'recent' && window.refreshVaultDocumentGrid) window.refreshVaultDocumentGrid();
+    }
+
+    function _updateDocumentCountLabel(delta) {
+        var grid = document.getElementById('document-grid');
+        if (grid) grid.dataset.photoCount = String(Math.max(0, (Number.parseInt(grid.dataset.photoCount, 10) || 0) + delta));
+        var head = document.querySelector('.photos-gallery-head');
+        if (!head) return;
+        var badge = head.querySelector('.badge');
+        var next = Math.max(0, (badge ? Number.parseInt(badge.textContent, 10) || 0 : 0) + delta);
+        if (next === 0) {
+            if (badge) badge.remove();
+            return;
+        }
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'badge';
+            head.appendChild(badge);
+        }
+        badge.textContent = next;
+    }
+
+    function _prependTile(doc) {
+        var grid = document.getElementById('document-grid');
+        if (!grid) { window.location.reload(); return; }
+        _updateDocumentCountLabel(1);
+        if (_activeSort() !== 'recent') return;
+        if (!window.renderVaultDocumentTile) { window.location.reload(); return; }
+        var li = window.renderVaultDocumentTile(doc);
+        if (!li) return;
+        grid.insertBefore(li, grid.firstChild);
+    }
+
+    // -- Delete (reuses vault.photos.action's media-type-agnostic handler) -----
+    window.documentsDelete = function (id) {
+        if (!confirm('Delete this document? This cannot be undone.')) return;
+        fetch(ACTION_BASE + id + '/delete/', { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+            .then(function (r) {
+                if (!r.ok) {
+                    if (window.toastr) toastr.error('Could not delete that document.');
+                    return;
+                }
+                var el = document.getElementById('document-tile-' + id);
+                if (el) { el.remove(); _updateDocumentCountLabel(-1); }
+                if (window.toastr) toastr.info('Document deleted.');
+            })
+            .catch(function () {
+                if (window.toastr) toastr.error('Could not delete that document.');
+            });
+    };
+
+    // -- Lightbox (document mode - see partials/_photo_lightbox.html) ----------
+    window.documentsOpenLightbox = function (id) {
+        var items = Array.prototype.map.call(document.querySelectorAll('.document-tile'), function (el) {
+            return {
+                url: el.dataset.url, caption: el.dataset.caption || '',
+                imageId: parseInt(el.dataset.id, 10), mediaType: 'document',
+            };
+        });
+        var idx = items.findIndex(function (i) { return i.imageId === id; });
+        window.galleryOpenLightboxItem(items, Math.max(idx, 0));
+    };
+}());
+</script>
+{% endblock %}

@@ -342,7 +342,7 @@ def _compute_hero_stats(profile: Profile) -> tuple[dict[str, object], bool]:
     total_distance_km = total_travel_distance_km(profile)
     units = profile.effective_distance_units
     places_visited = PinVisit.objects.filter(pin__profile=profile).values("pin_id").distinct().count()
-    photo_count = Image.objects.filter(profile=profile).count()
+    photo_count = Image.objects.filter(profile=profile).photos().count()
     trip_count = TripMembership.objects.trip_ids_for(profile).distinct().count()
     has_memory_data = any((route_count, places_visited, photo_count, trip_count))
 

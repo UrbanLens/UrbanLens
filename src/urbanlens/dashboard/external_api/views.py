@@ -1197,6 +1197,13 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
         params = serializer.validated_data
         profile = request.user.profile
 
+        # Deliberately NOT .photos(): PhotoSerializer/build_photo_payload return
+        # media_type for exactly this reason - this endpoint (and its POST,
+        # which already runs the same media-type-agnostic upload_photo()) is a
+        # general media library, "photos" being the API's noun for it rather
+        # than a literal restriction. Narrowing this to actual photos would be
+        # a real regression for any client listing their videos/documents.
+        #
         # profile__user: Profile.username reads self.user.username.
         # pin__location(__wiki): pin_name -> Pin.effective_name -> Location.display_name,
         # which reads the location's Wiki. Both are per-row queries without these.

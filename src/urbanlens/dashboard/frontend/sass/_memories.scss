@@ -935,6 +935,96 @@ $memories-type-colors: (
     }
 }
 
+// Vault > Documents: same grid engine as .photos-grid (shared/photo-virtual-grid.ts
+// doesn't care about tile shape), but a document has a filename to show, not a
+// thumbnail to crop square - wider, shorter cards instead of aspect-ratio tiles.
+.document-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.document-tile {
+    position: relative;
+    aspect-ratio: auto;
+    height: 108px;
+    border-radius: .5rem;
+    overflow: hidden;
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
+
+    &:hover .document-tile-del {
+        opacity: 1;
+    }
+}
+
+.document-tile-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
+    width: 100%;
+    height: 100%;
+    padding: .5rem;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    text-align: center;
+}
+
+.document-tile-icon {
+    font-size: 2rem;
+    color: $color-deep-purple-500;
+}
+
+.document-tile-name {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: .78rem;
+    color: var(--ul-grey-8);
+    word-break: break-word;
+    line-height: 1.2;
+}
+
+.document-tile--skeleton {
+    background: var(--ul-grey-2);
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.document-tile-del {
+    position: absolute;
+    top: .3rem;
+    right: .3rem;
+    display: inline-flex;
+    padding: .2rem;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, .55);
+    color: #fff;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .15s ease;
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+    }
+}
+
+@media (hover: none) {
+    .document-tile-del {
+        opacity: .85;
+    }
+}
+
+.vault-subnav {
+    margin-bottom: 1rem;
+
+    a.ul-subnav-tab {
+        text-decoration: none;
+    }
+}
+
 .photos-empty {
     text-align: center;
     padding: 2.5rem 1rem;

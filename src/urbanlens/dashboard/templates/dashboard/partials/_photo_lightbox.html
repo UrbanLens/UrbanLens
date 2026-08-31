@@ -1,11 +1,12 @@
 {% comment %}
 Shared photo lightbox - single source of truth for every full-size photo
 viewer on the site (pin detail / location wiki / safety check-in galleries,
-Vault > Photos, the user profile page). Include once per page; open it via
-`window.galleryOpenLightboxItem(list, idx)`, where `list` is an array of
-normalized items:
+Vault > Photos, Vault > Documents, the user profile page). Include once per
+page; open it via `window.galleryOpenLightboxItem(list, idx)`, where `list`
+is an array of normalized items:
   {url, thumbUrl, caption, author, copyright, sourceUrl, sourceName, takenAt,
-   imageId, canRelevance, relevant, mediaSource, mediaKey, latitude, longitude}
+   imageId, canRelevance, relevant, mediaSource, mediaKey, latitude, longitude,
+   mediaType}
 `latitude`/`longitude` (numbers, or omitted/null) draw the small location map
 in the side panel - see #lightbox-location below. The marker is draggable
 (and drags persist via `window.galleryRepositionImage`, reusing whichever
@@ -13,6 +14,11 @@ gallery context - pin/wiki/safety - is on the page) only when both `imageId`
 and that function are present; otherwise the map renders read-only.
 `thumbUrl` is optional - a browser-safe fallback shown in place of `url` if
 the full-resolution file fails to load (e.g. a Wikimedia .tif result).
+`mediaType` is optional and only meaningful as `'document'` - every other
+value (including omitted) renders the normal <img> path. Vault > Documents'
+own lightbox items are the only current source of it (see
+window.documentsOpenLightbox in pages/vault/documents.html) - a page whose
+items are all one media type doesn't need to set it per-item elsewhere.
 
 Context:
   lightbox_id            - DOM id for the <dialog> (default "gallery-lightbox").
@@ -64,6 +70,22 @@ Context:
       <span id="lightbox-fallback-note" class="lightbox-fallback-note" hidden>
         <i class="material-symbols-outlined">image</i> Showing a smaller preview - the full-size file isn't viewable in this browser
       </span>
+      {# Document mode (item.mediaType === 'document') - an <iframe> preview   #}
+      {# for a file the browser can render inline (a PDF, which every         #}
+      {# document is eventually converted to - see services.media.documents). #}
+      {# An iframe's onerror only fires for network-level failures, not a     #}
+      {# wrong content-type or blocked embed, so the open-in-new-tab link is  #}
+      {# always shown alongside it rather than gated on a load/error signal   #}
+      {# this element can't reliably give.                                   #}
+      <div id="lightbox-document-view" class="lightbox-document-view" hidden>
+        <iframe id="lightbox-document-frame" class="lightbox-document-frame" title="Document preview"></iframe>
+        <div class="lightbox-document-bar">
+          <p id="lightbox-document-name" class="lightbox-document-name"></p>
+          <a id="lightbox-document-open" class="btn btn--sm btn--ghost" target="_blank" rel="noopener noreferrer">
+            <i class="material-symbols-outlined">open_in_new</i> Open in new tab
+          </a>
+        </div>
+      </div>
       <button type="button" id="lightbox-next-btn" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)" aria-label="Next">
         <i class="material-symbols-outlined">chevron_right</i>
       </button>
@@ -246,7 +268,12 @@ Context:
   function _showLightbox() {
     var item = _lightboxList[_lightboxIdx];
     if (!item) return;
-    _setLightboxImage(item);
+    if (item.mediaType === 'document') {
+      _setLightboxDocument(item);
+    } else {
+      _setLightboxDocumentHidden();
+      _setLightboxImage(item);
+    }
     var caption = item.caption;
     if (!caption && item.imageId) {
       var el = document.getElementById('gallery-item-' + item.imageId);
@@ -269,6 +296,38 @@ Context:
     if (nextBtn) nextBtn.hidden = !multi;
   }
 
+  // Document mode: try an <iframe> preview first - every document is
+  // eventually converted to PDF (services.media.documents), which every
+  // browser this app supports renders inline - falling back to a plain
+  // "Open document" link for a file mid-conversion or of a type no browser
+  // previews (see vault-document-grid.ts's ICONS_BY_EXTENSION for the same
+  // extension set, duplicated here since this partial has no bundled JS to
+  // import it from).
+  function _setLightboxDocument(item) {
+    _setLightboxImageHidden();
+    var view = document.getElementById('lightbox-document-view');
+    var frame = document.getElementById('lightbox-document-frame');
+    var nameEl = document.getElementById('lightbox-document-name');
+    var openEl = document.getElementById('lightbox-document-open');
+    if (!view || !frame) return;
+    view.hidden = false;
+    frame.src = item.url;
+    if (nameEl) nameEl.textContent = item.caption || 'Untitled document';
+    if (openEl) openEl.href = item.url;
+  }
+
+  function _setLightboxDocumentHidden() {
+    var view = document.getElementById('lightbox-document-view');
+    var frame = document.getElementById('lightbox-document-frame');
+    if (view) view.hidden = true;
+    if (frame) frame.src = 'about:blank';
+  }
+
+  function _setLightboxImageHidden() {
+    var img = document.getElementById('lightbox-img');
+    if (img) { img.removeAttribute('src'); img.hidden = true; }
+  }
+
   // Prefer the full-resolution URL, but fall back to item.thumbUrl if it
   // fails to load - most commonly a Wikimedia result whose full-size file is
   // a .tif, which practically no browser renders in an <img> tag (Safari has
@@ -279,6 +338,7 @@ Context:
   function _setLightboxImage(item) {
     var img = document.getElementById('lightbox-img');
     var note = document.getElementById('lightbox-fallback-note');
+    img.hidden = false;
     img.classList.remove('lightbox-img--fallback');
     if (note) note.hidden = true;
     img.onerror = function () {

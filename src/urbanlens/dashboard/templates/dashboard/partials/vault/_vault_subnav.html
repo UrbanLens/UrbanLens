@@ -1,0 +1,16 @@
+{% comment %}
+Vault > Photos / Documents cross-page nav - plain links (not the client-side
+page-tabs.js pattern; these are two separate pages), reusing the same
+.ul-subnav-tabs/.ul-subnav-tab classes for a consistent look.
+
+Context:
+  active_tab - "photos" or "documents"
+{% endcomment %}
+<nav class="ul-subnav-tabs vault-subnav" aria-label="Vault sections">
+    <a class="ul-subnav-tab{% if active_tab == 'photos' %} is-active{% endif %}" href="{% url 'vault.photos' %}">
+        <i class="material-symbols-outlined">photo_library</i> Photos
+    </a>
+    <a class="ul-subnav-tab{% if active_tab == 'documents' %} is-active{% endif %}" href="{% url 'vault.documents' %}">
+        <i class="material-symbols-outlined">folder_copy</i> Documents
+    </a>
+</nav>

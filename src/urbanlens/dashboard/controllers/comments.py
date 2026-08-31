@@ -150,14 +150,21 @@ def attach_existing_comment_image(comment: Comment, existing_image_id: str, prof
     Silently no-ops on a bad/foreign id rather than failing the whole post -
     it only ever comes from a picker listing the poster's own photos, so a
     mismatch means stale client state, not something worth a hard error.
+    Scoped to ``MediaKind.PHOTO`` explicitly, matching the picker's own scope -
+    ``comment.image`` is always rendered as an ``<img>`` (see
+    partials/comments/_comment_body.html), and the skipped ``comment_image_error``
+    re-check above only holds for a row that was actually validated as a photo
+    on upload; a Vault document's bytes never were (see
+    services/media/images.image_upload_error's ``declared_media_type ==
+    MediaKind.PHOTO`` branch).
     """
     import os
 
     from django.core.files.base import ContentFile
 
-    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
 
-    source = Image.objects.uploaded_by(profile).filter(pk=existing_image_id).first()
+    source = Image.objects.uploaded_by(profile).filter(pk=existing_image_id, media_type=MediaKind.PHOTO).first()
     if not source:
         return
     comment.image.save(os.path.basename(source.image.name), ContentFile(source.image.read()), save=True)

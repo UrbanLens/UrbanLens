@@ -4153,6 +4153,22 @@ client not render/link an image URL until processing is confirmed done, or havin
 old file (or redirect) until any in-flight requests for it would reasonably have completed, rather
 than deleting eagerly.
 
+## OPEN 2026-08-31: opening the lightbox mid-scroll can inject a broken skeleton-placeholder item
+
+Found reviewing Batch 5 (Vault Documents) - pre-existing in Vault Photos since Batch 2, unrelated to
+Batch 5, which faithfully reproduces the identical pattern rather than introducing a new instance.
+`window.photosOpenLightbox`/`window.documentsOpenLightbox` (pages/vault/photos.html,
+pages/vault/documents.html) build the lightbox's item list from every `.photo-tile`/`.document-tile`
+currently in the DOM, with no guard against an in-flight skeleton placeholder - `renderVaultSkeletonTile`/
+`renderVaultDocumentSkeletonTile` (shared/vault-photo-grid.ts, shared/vault-document-grid.ts) give a
+skeleton tile the *same* base class (`photo-tile photo-tile--skeleton` / `document-tile
+document-tile--skeleton`) as a real one, distinguished only by the modifier class and the absence of
+`data-id`. Opening the lightbox while a page fetch is in flight (a plausible click during
+infinite-scroll) includes the skeleton(s) in the built item array with `imageId: NaN` (from
+`parseInt(undefined, 10)`) and empty url/caption, producing a broken, empty lightbox entry reachable
+via prev/next navigation. Worth filtering the tile query to `:not(.photo-tile--skeleton)` (and the
+document equivalent) in both open functions.
+
 ## OPEN 2026-08-31: `vault-photos.spec.ts`'s "changing sort re-fetches the grid in the new order" test flakes on a persistent dev DB
 
 Found running the Vault Photos/albums Playwright specs against the `ae97b86` ephemeral dev

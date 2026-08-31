@@ -87,6 +87,12 @@ declare global {
         // Called after an upload batch under any sort but "recent", where a new
         // photo's position can't be spliced in client-side.
         refreshVaultPhotoGrid?: () => void;
+        // Vault Documents' equivalents of the four above - see
+        // pages/vault/documents.html and shared/vault-document-grid.ts.
+        documentsOpenLightbox?: (imageId: number) => void;
+        documentsDelete?: (imageId: number) => void;
+        renderVaultDocumentTile?: (raw: Record<string, unknown>) => HTMLElement | null;
+        refreshVaultDocumentGrid?: () => void;
         gallerySetPhotoMapHidden?: (imgId: number, hidden: boolean, onRejected?: () => void) => void;
         _galleryRemoveMarker?: (imgId: number) => void;
         _albumSyncMapHidden?: (imgId: number, hidden: boolean) => void;

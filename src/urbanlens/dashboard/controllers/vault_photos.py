@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoMetadataConflict, PhotoUploadFailure
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.images.sort import GALLERY_SORT_SPECS, GallerySort, gallery_sort_spec
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -45,7 +45,7 @@ def _sorted_gallery(profile: Profile, request: HttpRequest):
     Returns:
         The gallery queryset, ordered.
     """
-    gallery = Image.objects.uploaded_by(profile).select_related("pin", "wiki")
+    gallery = Image.objects.uploaded_by(profile).photos().select_related("pin", "wiki")
     sort = gallery_sort_spec(request.GET.get("sort") or GallerySort.RECENT)
     return sort.apply(gallery)
 
@@ -71,7 +71,7 @@ def _attention_cards(profile: Profile) -> list[dict]:
         capped at ``_ATTENTION_LIMIT``. Only actionable states are included
         (``filed`` photos are dropped).
     """
-    images = list(Image.objects.needs_attention(profile).select_related("location")[:_ATTENTION_LIMIT])
+    images = list(Image.objects.needs_attention(profile).photos().select_related("location")[:_ATTENTION_LIMIT])
     pending = {
         s.origin_image_id: s
         for s in VisitSuggestion.objects.filter(
@@ -333,10 +333,19 @@ class PhotoUploadView(LoginRequiredMixin, View):
 
 
 class PhotoActionView(LoginRequiredMixin, View):
-    """Organize actions on a single photo, each returning an HTMX card-removing response.
+    """Organize/lightbox actions on a single Image, each returning an HTMX card-removing response.
 
     POST /vault/photos/<image_id>/<action>/
-    where action is one of accept, reject, create-pin, log-visit, dismiss, delete.
+    where action is one of accept, reject, create-pin, log-visit, dismiss, delete, send-to-wiki, share.
+
+    ``_get_image`` only enforces ownership - it does not restrict ``media_type``,
+    since ``delete``/``share`` are legitimately generic and ``accept``/``reject``/
+    ``dismiss`` are naturally unreachable for a document (nothing ever creates a
+    ``VisitSuggestion`` from one). ``create-pin``/``log-visit``/``send-to-wiki``
+    each refuse a document explicitly instead, rather than widening this shared
+    lookup - those three are the ones that would otherwise let a document
+    acquire a ``pin``/``wiki`` FK and start appearing in that place's Photos
+    gallery, which has no document rendering of its own.
     """
 
     def _get_image(self, request: HttpRequest, image_id: int) -> tuple[Image, Profile]:
@@ -372,6 +381,8 @@ class PhotoActionView(LoginRequiredMixin, View):
         and an optional ``name``. When those are absent - e.g. a legacy one-click
         request - the photo's own coordinates are used.
         """
+        if image.media_type == MediaKind.DOCUMENT:
+            return _toast("Documents can't be filed to a pin.", "error")
         if image.pin_id:
             # Another card's create-pin/log-visit call can retroactively file this
             # photo out from under a queue the client hasn't refreshed yet (see
@@ -393,6 +404,8 @@ class PhotoActionView(LoginRequiredMixin, View):
 
     def log_visit(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Log a visit on the pin the user chose in the manual search."""
+        if image.media_type == MediaKind.DOCUMENT:
+            return _toast("Documents can't be filed to a pin.", "error")
         pin_slug = request.POST.get("pin_slug") or ""
         # The shared location-search engine identifies pins by slug, falling back to
         # the uuid when a pin has no slug (see AutocompleteResult.pin_slug) - accept
@@ -431,6 +444,8 @@ class PhotoActionView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
         from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
 
+        if image.media_type == MediaKind.DOCUMENT:
+            return _toast("Documents can't be sent to a wiki.", "error")
         location_slug = (request.POST.get("location_slug") or "").strip()
         wiki = Wiki.objects.filter(location__slug=location_slug, location_id__in=visible_wiki_location_ids_cached(profile)).select_related("location").first()
         if wiki is None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import posixpath
 import secrets
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
 from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, FloatField, ForeignKey, ImageField, Index, JSONField, ManyToManyField, PositiveIntegerField, TextField, URLField, UUIDField
@@ -471,6 +471,34 @@ class Image(abstract.FrontendDashboardModel):
         if self.thumbnail:
             return self.thumbnail.url
         return self.display_url
+
+    #: Extension -> Material Symbols icon name, for a document tile with no
+    #: thumbnail to show. Kept in sync with vault-document-grid.ts's
+    #: ICONS_BY_EXTENSION (that copy drives the client-fetched pages of the
+    #: grid; this one drives the server-rendered first page) - no shared
+    #: source between Python and this bundled TS module today.
+    _DOCUMENT_ICONS_BY_EXTENSION: ClassVar[dict[str, str]] = {
+        "pdf": "picture_as_pdf",
+        "doc": "description",
+        "docx": "description",
+        "odt": "description",
+        "rtf": "article",
+        "txt": "article",
+        "xls": "table_chart",
+        "xlsx": "table_chart",
+        "ods": "table_chart",
+        "csv": "table_chart",
+        "ppt": "slideshow",
+        "pptx": "slideshow",
+        "odp": "slideshow",
+    }
+
+    @property
+    def document_icon(self) -> str:
+        """Material Symbols icon name for this document's tile, from its filename's extension."""
+        name = self.caption or (self.image.name or "" if self.image else "")
+        extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        return self._DOCUMENT_ICONS_BY_EXTENSION.get(extension, "insert_drive_file")
 
     @property
     def effective_latitude(self) -> Decimal | None:

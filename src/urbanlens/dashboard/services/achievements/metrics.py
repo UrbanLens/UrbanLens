@@ -251,14 +251,15 @@ def _photos_uploaded(profile: Profile) -> int:
     from urbanlens.dashboard.models.images.model import Image, ImageSource
 
     # Only genuine uploads: rows materialised from Yelp/Wikimedia/etc. are
-    # someone else's photo that this profile merely attached.
-    return Image.objects.filter(profile=profile, source=ImageSource.UPLOAD).count()
+    # someone else's photo that this profile merely attached. .photos()
+    # excludes documents/videos - this metric's own label is "Photos uploaded".
+    return Image.objects.filter(profile=profile, source=ImageSource.UPLOAD).photos().count()
 
 
 def _photos_uploaded_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
     from urbanlens.dashboard.models.images.model import Image, ImageSource
 
-    return _grouped_count(Image.objects.filter(profile_id__in=profile_ids, source=ImageSource.UPLOAD), "profile_id")
+    return _grouped_count(Image.objects.filter(profile_id__in=profile_ids, source=ImageSource.UPLOAD).photos(), "profile_id")
 
 
 def _places_visited(profile: Profile) -> int:

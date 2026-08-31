@@ -18,6 +18,7 @@
 {% endblock %}
 
 {% block content %}
+{% include "dashboard/partials/vault/_vault_subnav.html" with active_tab="photos" %}
 <div id="photos-page" class="memories-tab-page"
      data-upload-url="{% url 'vault.photos.upload' %}"
      data-action-base="{% url 'vault.photos' %}"

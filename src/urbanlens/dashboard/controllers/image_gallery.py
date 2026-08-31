@@ -130,7 +130,12 @@ def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
         images = Image.objects.filter(pin__in=subtree).select_related("profile", "pin", "pin__location", "pin__location__wiki")
     else:
         images = Image.objects.filter(pin=pin).select_related("profile")
-    return images.visible_to(profile), include_children
+    # .photos() is defense-in-depth, not the primary guard: PhotoActionView's
+    # create-pin/log-visit refuse a document outright, so nothing should ever
+    # actually set Image.pin on one - but this gallery has no document
+    # rendering (see partials/pins/_photo_gallery.html), so a row that
+    # somehow got here anyway should still not show as a broken tile.
+    return images.photos().visible_to(profile), include_children
 
 
 def _wiki_gallery_images(request: HttpRequest, wiki: Wiki, profile: Profile):
@@ -153,7 +158,8 @@ def _wiki_gallery_images(request: HttpRequest, wiki: Wiki, profile: Profile):
         images = Image.objects.filter(wiki__in=subtree).select_related("profile", "wiki", "wiki__location")
     else:
         images = Image.objects.filter(wiki=wiki).select_related("profile")
-    return images.visible_to(profile), include_children
+    # .photos() - see the matching comment in _pin_gallery_images.
+    return images.photos().visible_to(profile), include_children
 
 
 class PinGalleryView(LoginRequiredMixin, View):

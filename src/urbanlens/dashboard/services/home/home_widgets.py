@@ -144,7 +144,7 @@ def home_dashboard_context(profile: Profile) -> dict[str, Any]:
     home_stats: list[dict[str, Any]] = []
     if "stats" in enabled:
         maps_count = MarkupMap.objects.for_profile(profile).count()
-        photos_count = Image.objects.filter(profile=profile).count()
+        photos_count = Image.objects.filter(profile=profile).photos().count()
         comments_count = Comment.objects.filter(profile=profile).count() + TripComment.objects.filter(author=profile).count()
         safety_checkins_count = SafetyCheckin.objects.filter(profile=profile).count() + UndoAction.objects.filter(profile=profile, model_label="safety_checkin").count()
         trips_created_count = Trip.objects.filter(creator=profile).count()
@@ -162,7 +162,7 @@ def home_dashboard_context(profile: Profile) -> dict[str, Any]:
 
     return {
         "home_stats": home_stats,
-        "home_recent_photos": Image.objects.uploaded_by(profile)[:8],
+        "home_recent_photos": Image.objects.uploaded_by(profile).photos()[:8],
         "home_recent_pins": Pin.objects.filter(profile=profile).select_related("location").order_by("-created")[:6],
         "home_recent_markup_maps": MarkupMap.objects.for_profile(profile).prefetch_related("items").order_by("-created")[:6],
         "home_priority_unvisited_pins": (
