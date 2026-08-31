@@ -35,6 +35,7 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
+from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -109,7 +110,7 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
     # ── User A: held the undivided parcel before the split ──────────────────
 
     def test_user_a_gains_the_whole_family_from_a_single_pre_split_pin(self) -> None:
-        self.assertEqual(self._sees(self.user_a), {"m"})  # before the split, only M exists
+        self.assertTrue(location_visible_to(self.wiki_m.location, self.user_a))  # before the split, only M exists
         self._split()
         self.assertEqual(self._sees(self.user_a), {"m", "n", "o", "p"})
 
@@ -164,7 +165,9 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         self.assertEqual(Pin.objects.filter(profile=self.user_b).count(), 0)
         self.assertEqual(self._sees(self.user_b), {"m", "n", "o", "p"}, "zero pins left anywhere in the family - still permanent")
 
-        pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.019)
+        # A distinct coordinate: pin_n.delete() removed the Pin, not the
+        # underlying (latitude, longitude)-unique Location row.
+        pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.0191)
         self.assertEqual(self._sees(self.user_b), {"m", "n", "o", "p"})
 
     def test_the_grants_are_actually_recorded_with_the_split_reason(self) -> None:
@@ -216,7 +219,7 @@ class WikiEngagementGrandfatheringTests(TestCase):
         self.assertTrue(location_visible_to(self.wiki_x.location, self.viewer))
 
         self.client.force_login(self.viewer.user)
-        response = self.client.get(f"/map/location/{self.wiki_x.location.slug}/wiki/")
+        response = self.client.get(reverse("location.wiki", args=[self.wiki_x.location.slug]))
         self.assertEqual(response.status_code, 200)
         self.assertTrue(PlaceAccessGrant.objects.filter(profile=self.viewer, place=self.place_x, reason=GrantReason.GRANDFATHERED_ENGAGEMENT).exists())
 
@@ -252,6 +255,6 @@ class WikiEngagementGrandfatheringTests(TestCase):
         """resolve_visible_wiki 404s before the engagement hook is ever reached."""
         stranger = baker.make(User).profile
         self.client.force_login(stranger.user)
-        response = self.client.get(f"/map/location/{self.wiki_x.location.slug}/wiki/")
+        response = self.client.get(reverse("location.wiki", args=[self.wiki_x.location.slug]))
         self.assertEqual(response.status_code, 404)
         self.assertFalse(PlaceAccessGrant.objects.filter(profile=stranger, place=self.place_x).exists())
