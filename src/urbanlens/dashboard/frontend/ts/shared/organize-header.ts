@@ -280,6 +280,71 @@ export function installOrgTabSwitching(): void {
     });
 }
 
+// ── Tab content prewarming -------------------------------------------------
+// Every `.organize-panel` (the 5 label-kind tabs plus Display Order) carries
+// hx-get+hx-trigger="revealed" whenever it still needs a real fetch - either
+// because its rows were deferred at first paint (see organize.py's
+// build_organize_page_context) or, for the active tab, because it still needs
+// its pin-count stats backfilled. "revealed" only fires once a panel is
+// actually unhidden by a tab click, so switching tabs always shows a loading
+// placeholder first. This warms every *other* tab's content in the background
+// so a later tab click usually finds it already there - sequential, one
+// request at a time, and only starting once the active tab's own load has
+// finished, so it never competes with the content the user is actually
+// looking at for bandwidth or server time.
+function isRenderedVisible(el: HTMLElement): boolean {
+    return el.offsetParent !== null;
+}
+
+function prewarmOrgPanel(panels: HTMLElement[], index: number): void {
+    if (index >= panels.length) return;
+    const panel = panels[index];
+    const url = panel?.getAttribute("hx-get");
+    const targetSel = panel?.getAttribute("hx-target");
+    // Cleared before firing, not after: a click on this tab while the prewarm
+    // request is in flight must not also fire htmx's own "revealed" fetch and
+    // race it, and a click after this queue moves on must find nothing left
+    // to trigger (the content is either already here or on its way).
+    panel?.removeAttribute("hx-trigger");
+    panel?.removeAttribute("hx-get");
+    panel?.removeAttribute("hx-target");
+    panel?.removeAttribute("hx-swap");
+
+    const advance = () => prewarmOrgPanel(panels, index + 1);
+    if (!url || !targetSel) {
+        advance();
+        return;
+    }
+    const targetEl = document.querySelector<HTMLElement>(targetSel);
+    if (!targetEl) {
+        advance();
+        return;
+    }
+    targetEl.addEventListener("htmx:afterSwap", advance, { once: true });
+    targetEl.addEventListener("htmx:responseError", advance, { once: true });
+    window.htmx?.ajax("GET", url, { target: targetSel, swap: "innerHTML" });
+}
+
+export function installOrgTabPrewarm(): void {
+    const panels = Array.from(document.querySelectorAll<HTMLElement>(".organize-panel[hx-get]"));
+    if (!panels.length) return;
+    const activePanel = panels.find((p) => !p.hidden && isRenderedVisible(p));
+    const toPrewarm = panels.filter((p) => p !== activePanel);
+    if (!toPrewarm.length) return;
+
+    const start = () => prewarmOrgPanel(toPrewarm, 0);
+    const activeTargetSel = activePanel?.getAttribute("hx-target");
+    const activeTarget = activeTargetSel ? document.querySelector<HTMLElement>(activeTargetSel) : null;
+    if (!activeTarget) {
+        // Nothing else is loading right now (e.g. Display Order is the active
+        // tab, which never defers) - safe to start immediately.
+        start();
+        return;
+    }
+    activeTarget.addEventListener("htmx:afterSwap", start, { once: true });
+    activeTarget.addEventListener("htmx:responseError", start, { once: true });
+}
+
 // ── Section switching (Labels | Lists | Filters) --------------------------
 // A second, independent tab tier above `.organize-tab`/`.organize-panel`:
 // switches between the three top-level sections of the Organize page. Lists
