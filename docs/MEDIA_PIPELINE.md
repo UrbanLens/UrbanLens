@@ -32,18 +32,20 @@ conflating them overstates what is actually enforced:
 
 | Parser | Reached by | Runs in | Guarded? |
 |---|---|---|---|
-| Pillow (+ pillow-heif) | photos | sandbox | yes |
+| Pillow (+ pillow-heif) | photos, media previews | sandbox | yes |
 | ffmpeg / ffprobe | video | sandbox | yes |
 | LibreOffice (`soffice`) | doc/spreadsheet conversion | sandbox | yes |
-| poppler + tesseract | PDF text/OCR | sandbox | yes |
-| `zipfile` / `tarfile` | data import (routed), **import preview (request)** | mixed | no |
-| lxml / fastkml / gpxpy | KML, GPX, OSM XML | routed via `run_user_data_import` | no |
-| GDAL / GeoPandas / Shapely | shapefile, WKT/WKB | routed via `run_user_data_import` | no |
-| clamd | everything | its own container | n/a |
+| poppler + tesseract | PDF text/OCR, preview render | sandbox | yes |
+| `zipfile` / `tarfile` | data import (routed), **import preview (request)** | mixed | yes |
+| python-docx | AI document import, **import preview (request)** | mixed | yes |
+| lxml / fastkml / gpxpy | KML, GPX, OSM XML | routed via `run_user_data_import` | yes |
+| GDAL / GeoPandas / Shapely | shapefile, WKT/WKB | routed via `run_user_data_import` | yes |
+| clamd | everything | sandbox (its own container for the daemon) | n/a |
 
-The unguarded rows are the honest gap: decorating them is the remaining work,
-and until it is done `controllers/pin.parse_for_preview` reaches `zipfile`,
-`tarfile` and `python-docx` directly from a web request. See `docs/PROBLEMS.md`.
+Every parser is now guarded, so `warn` logs a complete worklist rather than a
+partial one. Two rows still say **request**: `controllers/pin.parse_for_preview`
+is the last thing standing between here and `UL_UNTRUSTED_PARSE_POLICY=deny`.
+See `docs/PROBLEMS.md`.
 
 ## The tiers
 
@@ -211,10 +213,43 @@ about to parse an upload:
 - `allow` disables the check. What the test settings use, because the suite
   calls the parsers directly.
 
-Not yet at `deny`. `prepare_photo_upload` no longer decodes anything, but
-`controllers/pin.parse_for_preview` still reaches `zipfile`/`tarfile`/
-`python-docx` from a web request, and `render_preview` has two request-path
-callers that would 500 under `deny`. Tracked in `docs/PROBLEMS.md`.
+One thing left before `deny`: `controllers/pin.parse_for_preview` still parses
+archives, KML/GPX/shapefiles and `.docx` inside the request. Everything else has
+moved - `prepare_photo_upload` no longer decodes, the two `render_preview`
+callers go through `tasks.render_media_preview`, enrichment photos go through
+`process_image_upload`, and the one legitimate exemption
+(`strip_exif_from_stored_photos`, a backfill over already-scanned files) is
+written down as an `allow_untrusted_parse` block rather than left implicit.
+Tracked in `docs/PROBLEMS.md`.
+
+## Media previews
+
+A gallery tile for something a browser cannot render (a PDF, a TIFF, a HEIC)
+is a server-side render, and `render_preview` reaches Pillow and poppler - so
+it runs on the sandbox queue like every other decode, not in the view.
+
+Both endpoints (`controllers/media_preview.MediaPreviewView` for a signed
+remote URL, `controllers/pin.RedataMediaProxyMixin` for an in-app proxy route)
+follow the same three steps:
+
+1. Serve it if `previews.cached_preview` has it.
+2. Otherwise put the source bytes in the cache and call
+   `previews.request_sandbox_render`, which queues `tasks.render_media_preview`
+   at most once per key (`cache.add` of a `RENDER_QUEUED` marker).
+3. Answer **404** either way.
+
+The bytes travel through the Django cache rather than through the broker: the
+source cap is 60MB.
+
+That 404 is the part worth understanding. The endpoint used to block until the
+render finished, and keeping that would have meant waiting on a Celery result
+inside a web request - one pinned worker per tile, twenty tiles per gallery
+page, for as long as `media-worker` is behind. So a miss returns 404, the
+gallery's `onerror` (`urbanlensMediaThumbFallback` in `themes/base.html`) shows
+its icon tile, and that handler retries a preview URL twice (2s, 4s, with a
+cache-busting `_r=` because the browser has already negatively cached the
+first URL) before settling on the icon. A tile that misses all three still
+fills in on the next page load.
 
 ## Adding a parser
 

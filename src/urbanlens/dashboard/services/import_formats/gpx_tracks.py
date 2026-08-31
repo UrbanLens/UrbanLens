@@ -17,6 +17,7 @@ import gpxpy.gpx
 
 from urbanlens.dashboard.models.routes.model import Route, RouteSource
 from urbanlens.dashboard.services.import_formats.route_geometry import simplify_and_measure
+from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -121,6 +122,7 @@ def _build_route(
     return ParsedRoute(route=route, raw_points=points)
 
 
+@untrusted_parse("geo.gpx")
 def gpx_tracks_to_routes(file_contents: bytes, user_profile: Profile, source_filename: str) -> list[ParsedRoute]:
     """Parse every ``<trk>`` and ``<rte>`` in a GPX file into unsaved Route instances.
 

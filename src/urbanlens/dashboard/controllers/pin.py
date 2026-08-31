@@ -2128,11 +2128,11 @@ class RedataMediaProxyMixin:
             or the preview couldn't be rendered.
         """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
-        from urbanlens.dashboard.services.media.previews import is_web_safe, render_preview
+        from urbanlens.dashboard.services.media.previews import cached_preview, is_web_safe, request_sandbox_render
 
         wants_preview = request.GET.get("preview") == "1"
         serve_key = f"{cache_key}_preview" if wants_preview else cache_key
-        cached = cache.get(serve_key)
+        cached = cached_preview(serve_key) if wants_preview else cache.get(serve_key)
         if cached is not None:
             content, content_type = cached
             return HttpResponse(content, content_type=content_type)
@@ -2152,12 +2152,14 @@ class RedataMediaProxyMixin:
         if not wants_preview or is_web_safe(request.path, content_type):
             return HttpResponse(content, content_type=content_type)
 
-        preview = render_preview(content, content_type)
-        if preview is None:
-            return HttpResponse(status=404)
-        cache.set(serve_key, preview, _REDATA_MEDIA_CACHE_TTL)
-        content, content_type = preview
-        return HttpResponse(content, content_type=content_type)
+        # The decode runs in the sandbox worker, not here - these are a third
+        # party's document bytes and render_preview reaches Pillow and poppler.
+        # The source is already cached under cache_key, which is how the worker
+        # gets at it without a 60MB broker message. 404 until it lands: the
+        # gallery falls back to its icon tile, the same as for a file that can't
+        # be converted at all, and the tile fills in on the next load.
+        request_sandbox_render(cache_key, serve_key, ttl=_REDATA_MEDIA_CACHE_TTL, failure_ttl=_REDATA_MEDIA_CACHE_TTL)
+        return HttpResponse(status=404)
 
 
 class PinLoopnetPhotoView(RedataMediaProxyMixin, View):

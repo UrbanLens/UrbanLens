@@ -12,6 +12,7 @@ from typing import NamedTuple
 import zipfile
 
 from urbanlens.dashboard.services.import_formats.heuristics import DEFAULT_LATITUDE_KEYS, DEFAULT_LONGITUDE_KEYS, normalize_header_key
+from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 logger = logging.getLogger(__name__)
 
@@ -316,6 +317,7 @@ def _extension(filename: str) -> str:
     return filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
 
+@untrusted_parse("archive.extract")
 def _extract_zip(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
     """Extract supported files from a ZIP archive, drawing on *budget*."""
     results: list[ExtractedFile] = []
@@ -371,6 +373,7 @@ def _extract_zip(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
     return results
 
 
+@untrusted_parse("archive.extract")
 def _extract_tgz(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
     """Extract supported files from a GZIP-compressed TAR archive, drawing on *budget*."""
     results: list[ExtractedFile] = []

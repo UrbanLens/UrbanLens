@@ -21,6 +21,7 @@ from PIL import UnidentifiedImageError
 
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.services.media.images import downscale_stored_image, extract_exif_data
+from urbanlens.dashboard.services.sandbox import allow_untrusted_parse
 
 
 class Command(BaseCommand):
@@ -45,21 +46,27 @@ class Command(BaseCommand):
         skipped = 0
         failed = 0
 
-        for index, image in enumerate(queryset.iterator()):
-            if limit is not None and index >= limit:
-                break
-            try:
-                changed, recorded_here = self._scrub(image, dry_run=dry_run)
-            except (OSError, ValueError, UnidentifiedImageError, DatabaseError) as exc:
-                self.stderr.write(f"  [pk={image.pk}] {type(exc).__name__}: {exc}")
-                failed += 1
-                continue
-            if changed:
-                stripped += 1
-            else:
-                skipped += 1
-            if recorded_here:
-                recorded += 1
+        # A management command has no UL_PROCESS_ROLE, so the sandbox guard sees
+        # 'unspecified' and would refuse the very decode this command exists to
+        # perform. The exemption is narrow and honest: these are files already in
+        # storage, already scanned, already served - not a fresh upload arriving
+        # from a stranger. Scoped to the loop so nothing else inherits it.
+        with allow_untrusted_parse("strip_exif_from_stored_photos: already-stored, already-scanned files"):
+            for index, image in enumerate(queryset.iterator()):
+                if limit is not None and index >= limit:
+                    break
+                try:
+                    changed, recorded_here = self._scrub(image, dry_run=dry_run)
+                except (OSError, ValueError, UnidentifiedImageError, DatabaseError) as exc:
+                    self.stderr.write(f"  [pk={image.pk}] {type(exc).__name__}: {exc}")
+                    failed += 1
+                    continue
+                if changed:
+                    stripped += 1
+                else:
+                    skipped += 1
+                if recorded_here:
+                    recorded += 1
 
         verb = "Would strip" if dry_run else "Stripped"
         self.stdout.write(f"Done. {verb} {stripped}, already clean {skipped}, exif_data recorded {recorded}, failed {failed}.")

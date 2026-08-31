@@ -187,31 +187,54 @@ briefly servable" window through access control instead. Left in place: it has i
 decode-free so it stays outside the sandbox boundary if some future in-request use wants it, and
 removing a working, harmless module is a separate decision from this one.
 
-Still open - the full list of what blocks `UL_UNTRUSTED_PARSE_POLICY=deny`, which is longer than
-an earlier version of this entry claimed (it named only the first):
+Four things blocked `UL_UNTRUSTED_PARSE_POLICY=deny`. Three are now closed; the first is not.
 
-1. **`controllers/pin.parse_for_preview`** runs `extract_archive` (zipfile/tarfile) and
-   `extract_pins_from_document` (python-docx) in the request path. It has real limits already
-   (`archive_extractor.ExtractionBudget`), but limits bound resource use, not a parser bug.
-   Note those functions are not decorated either, so `deny` would not actually stop them -
-   they need both the decorator and a move off the request path.
-2. **`render_preview` has two request-path callers** - `controllers/media_preview.py` and
-   `controllers/pin.py`. It *is* decorated, so `deny` turns both endpoints into 500s and `warn`
-   logs a warning on every preview request. This is the one that makes `deny` actively unsafe
-   to flip today.
-3. **`manage.py strip_exif_from_stored_photos`** calls `downscale_stored_image` directly. A
-   management command runs with no `UL_PROCESS_ROLE`, so it resolves to `unspecified` and `deny`
-   would refuse to run the very tool whose job is stripping EXIF. It needs either an
-   `allow_untrusted_parse` block (the bytes are already-stored, already-scanned files, not a
-   fresh upload) or `UL_PROCESS_ROLE=sandbox` in its invocation.
-4. **`services/photos/photo_enrichment.py`** calls `downscale_stored_image` on provider-fetched
-   bytes, reached from the Google Places/Maps plugins. Same shape as (3): a legitimate
-   exemption that has never been written down as one. `allow_untrusted_parse` exists for
-   exactly this and currently has zero production call sites.
+1. **`controllers/pin.parse_for_preview` - STILL OPEN, and now the only blocker.** It runs
+   `extract_archive` (zipfile/tarfile), `GoogleMapsGateway.parse_for_preview`
+   (fastkml/lxml/gpxpy/GDAL/Shapely) and `extract_text` (python-docx) in the request path. All
+   of those are decorated now, so `deny` *would* stop them - which is exactly why flipping the
+   policy still breaks this endpoint.
 
-`warn` logs each violation with a stack the first time it sees each operation, so the log is
-the worklist - but note (2) means the log will be noisy on a normal request path, not just on
-rare ones.
+   It resisted the treatment the other three got, and the reason is worth writing down:
+   `GoogleMapsGateway.parse_for_preview` is **not a pure parse**. Its CSV branch
+   (`_csv_row_iter`) geocodes, and `_preview_pins` resolves places - both outbound calls, in a
+   container that deliberately has neither internet nor API keys. Moving the method wholesale
+   into the sandbox would break CSV import; moving only the file parsers means splitting parse
+   from resolve inside the gateway first. `extract_pins_from_document` has the same shape one
+   level up - its parse half (`extract_text`) can be sandboxed, its AI half cannot - which is
+   why the decorator sits on `extract_text` rather than on the outer function.
+
+   Fix shape: split the gateway's per-format parsing (pure, sandboxable) from its
+   geocode/place-resolution pass (needs the network), route the first half to a sandbox task
+   with the uploaded bytes staged in the cache rather than the broker (the pattern
+   `previews.render_preview_via_sandbox` now establishes), and do the second half in the web
+   process on the parsed dicts. The frontend already shows a "Reading files..." step, so a
+   longer round-trip needs no UI change.
+2. ~~**`render_preview` has two request-path callers**~~ - fixed. `tasks.render_media_preview`
+   does the decode on the sandbox queue; `previews.render_preview_via_sandbox` enqueues it and
+   waits a bounded 8s. The bytes travel through the Django cache, not the broker - the source
+   cap is 60MB. On a timeout, a broker outage, or an unconvertible file, all three callers get
+   the same None and fall back to the icon tile, which is what an unconvertible file already
+   did. The task keeps running past the timeout, so a slow first render warms the cache for the
+   reload.
+3. ~~**`manage.py strip_exif_from_stored_photos`**~~ - fixed, with the exemption written down
+   rather than implied: an `allow_untrusted_parse` block scoped to the loop, whose reason string
+   says why it is legitimate (already-stored, already-scanned files; a scrub, not an ingest).
+   This is `allow_untrusted_parse`'s first production call site.
+4. ~~**`services/photos/photo_enrichment.py`**~~ - fixed, and *not* with an exemption, which is
+   what an earlier version of this entry proposed. An exemption would have left a Pillow decode
+   of provider bytes running in the container that holds every third-party API key - the exact
+   process the sandbox tier exists to keep decoders out of. `_save_enriched_image` now creates
+   the row `pending_scan=True` and enqueues `process_image_upload`, which needed one new
+   parameter: these rows are profile-less, so the task had no subscriber plan to read a
+   downscale policy from and had been skipping them entirely.
+
+Also closed alongside these: every parser that had no decorator now has one - `_extract_zip`/
+`_extract_tgz`, `takeout_kml_to_dict`, `gpx_to_dict`, `gpx_tracks_to_routes`, `osm_xml_to_dict`,
+`wkt_to_dict`/`wkb_to_dict`, `shapefile_to_dict`, `extract_text`. `warn` therefore logs a
+complete worklist now rather than a partial one, which it did not before: an undecorated parser
+is invisible to the guard, so "no warnings" meant "nothing decorated is misplaced", not "nothing
+is misplaced".
 
 ## RESOLVED 2026-08-31: ClamAV scanned synchronously in the upload request
 

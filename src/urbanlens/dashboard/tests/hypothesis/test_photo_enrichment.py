@@ -1,6 +1,6 @@
 """Tests for services.photos.photo_enrichment - background photo/Street View/satellite caching.
 
-Covers _save_enriched_image (wiki-attach + resize/WebP), each of the three
+Covers _save_enriched_image (wiki-attach + quarantine + hand-off), each of the three
 EnrichmentSource subclasses' gate/missing_filter/enrich contracts (never
 retried once attempted, a single bad download never aborts the rest), and
 GoogleMapsGateway.get_satellite_image_bytes's data-URI decoding. The network
@@ -48,7 +48,21 @@ def _make_location() -> Location:
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
 class SaveEnrichedImageTests(TestCase):
-    """_save_enriched_image - the shared wiki-attach + resize/WebP helper."""
+    """_save_enriched_image - the shared wiki-attach + quarantine + hand-off helper.
+
+    The resize used to happen inline, here, in whichever enrichment task called
+    this - a process holding every third-party API key. It is now
+    ``tasks.process_image_upload``'s job, on the sandbox queue, which is why
+    these assertions run the task explicitly and re-read the row.
+    """
+
+    def _process(self, image: Image) -> Image:
+        """Run the hand-off the enrichment path enqueues, and return the fresh row."""
+        from urbanlens.dashboard.tasks import process_image_upload
+
+        process_image_upload(image.pk, 800)
+        image.refresh_from_db()
+        return image
 
     def test_creates_wiki_attached_profile_less_image(self) -> None:
         location = _make_location()
@@ -58,6 +72,22 @@ class SaveEnrichedImageTests(TestCase):
         self.assertIsNone(image.profile_id)
         self.assertIsNone(image.pin_id)
         self.assertEqual(image.source, ImageSource.GOOGLE_MAPS)
+
+    def test_the_row_is_quarantined_until_the_task_has_run(self) -> None:
+        # Provider bytes, undecoded. Nothing may show them until they have been
+        # scanned and re-encoded - and a profile-less row has no owner to be
+        # visible to in the meantime, so this hides it from everyone.
+        location = _make_location()
+        image = photo_enrichment._save_enriched_image(location, _jpeg_bytes(1200, 900), source=ImageSource.GOOGLE_MAPS, max_dimension=800)
+        self.assertTrue(image.pending_scan)
+        self.assertFalse(self._process(image).pending_scan)
+
+    def test_the_task_applies_the_per_source_downscale_cap(self) -> None:
+        # The cap travels as an argument because these rows have no profile and
+        # therefore no plan policy - without it the task skipped them entirely
+        # and the provider's full-size original stayed on disk.
+        location = _make_location()
+        image = self._process(photo_enrichment._save_enriched_image(location, _jpeg_bytes(1200, 900), source=ImageSource.GOOGLE_MAPS, max_dimension=800))
         self.assertTrue(image.image.name.endswith(".webp"))
         with image.image.open("rb") as fh:
             pil = PILImage.open(fh)

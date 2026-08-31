@@ -32,7 +32,7 @@ from django.views import View
 import requests
 
 from urbanlens.dashboard.controllers.media_auth import mark_private_media
-from urbanlens.dashboard.services.media.previews import MAX_PREVIEW_SOURCE_BYTES, render_preview, signature_is_valid
+from urbanlens.dashboard.services.media.previews import MAX_PREVIEW_SOURCE_BYTES, UNPREVIEWABLE, cached_preview, request_sandbox_render, signature_is_valid
 from urbanlens.dashboard.services.security.redact import redact_text
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
 
@@ -43,12 +43,14 @@ logger = logging.getLogger(__name__)
 
 _FETCH_TIMEOUT = 20
 _PREVIEW_CACHE_TTL = 24 * 3600
-#: Cache sentinel for "this source was fetched and could not be previewed",
-#: so a provider serving something unconvertible isn't re-fetched per tile
-#: render. Shorter than the success TTL - a transient upstream error and a
-#: genuinely unconvertible file are indistinguishable from here.
-_FAILED_SENTINEL = "unpreviewable"
+#: Shorter than the success TTL - a transient upstream error and a genuinely
+#: unconvertible file are indistinguishable from here. The sentinel value itself
+#: is shared with the render task, which is what writes it now.
 _FAILED_CACHE_TTL = 3600
+#: How long the fetched source stays cached for the render task to pick up. Only
+#: has to outlive one broker round-trip, but a few minutes lets a retry of the
+#: same tile skip the refetch.
+_SOURCE_CACHE_TTL = 300
 _MAX_REDIRECTS = 5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
@@ -107,20 +109,26 @@ class MediaPreviewView(View):
         if not signature_is_valid(url, request.GET.get("sig", "")):
             return HttpResponse(status=404)
 
-        cache_key = f"ul_media_preview_{hashlib.sha256(url.encode()).hexdigest()}"
-        cached = cache.get(cache_key)
-        if cached == _FAILED_SENTINEL:
-            return HttpResponse(status=404)
-        if cached is not None:
-            content, content_type = cached
+        digest = hashlib.sha256(url.encode()).hexdigest()
+        cache_key = f"ul_media_preview_{digest}"
+        if (preview := cached_preview(cache_key)) is not None:
+            content, content_type = preview
             return mark_private_media(HttpResponse(content, content_type=content_type))
+        if cache.get(cache_key) is not None:
+            # Either unconvertible or already queued. Both are "not yet, maybe
+            # never" - the gallery's onerror shows the icon tile - and neither
+            # should re-fetch the source.
+            return HttpResponse(status=404)
 
         fetched = _fetch_source(url)
-        preview = render_preview(*fetched) if fetched else None
-        if preview is None:
-            cache.set(cache_key, _FAILED_SENTINEL, _FAILED_CACHE_TTL)
+        if fetched is None:
+            cache.set(cache_key, UNPREVIEWABLE, _FAILED_CACHE_TTL)
             return HttpResponse(status=404)
 
-        cache.set(cache_key, preview, _PREVIEW_CACHE_TTL)
-        content, content_type = preview
-        return mark_private_media(HttpResponse(content, content_type=content_type))
+        # The fetch stays here - a network call, not a decode, made by the process
+        # holding the signed URL. Only the decode moves to the sandbox worker, and
+        # it goes via the cache rather than the broker (60MB source cap).
+        source_key = f"ul_media_preview_src_{digest}"
+        cache.set(source_key, fetched, _SOURCE_CACHE_TTL)
+        request_sandbox_render(source_key, cache_key, ttl=_PREVIEW_CACHE_TTL, failure_ttl=_FAILED_CACHE_TTL)
+        return HttpResponse(status=404)

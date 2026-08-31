@@ -45,6 +45,7 @@ from urbanlens.dashboard.services.import_formats.heuristics import (
 )
 from urbanlens.dashboard.services.import_formats.html_description import extract_image_urls, extract_link_urls, strip_html
 from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_style
+from urbanlens.dashboard.services.sandbox import untrusted_parse
 from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -1323,6 +1324,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     # just an empty pin list. Normalize to `http://` before parsing.
     _KML_NAMESPACE_RE = re.compile(rb"https://((?:www\.)?(?:opengis\.net|google\.com/kml|w3\.org)/)")
 
+    @untrusted_parse("geo.kml")
     def takeout_kml_to_dict(self, file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
         try:
             # lxml refuses to parse a `str` containing an `<?xml ... encoding=...?>`

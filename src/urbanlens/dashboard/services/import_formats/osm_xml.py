@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from defusedxml.ElementTree import ParseError, fromstring as parse_xml
 
 from urbanlens.dashboard.services.import_formats.heuristics import pick_name_and_description
+from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
     # Only used for type checking
@@ -48,6 +49,7 @@ def _pin_from_tags(tags: dict[str, str], lat: float, lon: float, fallback_name: 
     }
 
 
+@untrusted_parse("geo.osm_xml")
 def osm_xml_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
     """Convert tagged OSM XML nodes and ways into pin dicts.
 

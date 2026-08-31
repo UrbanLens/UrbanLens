@@ -15,6 +15,8 @@ import shapely.errors
 import shapely.wkb
 import shapely.wkt
 
+from urbanlens.dashboard.services.sandbox import untrusted_parse
+
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
 
@@ -41,6 +43,7 @@ def _pin_from_geometry(geometry: BaseGeometry, index: int, source_label: str, us
     }
 
 
+@untrusted_parse("geo.wkt")
 def wkt_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
     """Convert a WKT file (one geometry per line) into pin dicts.
 
@@ -76,6 +79,7 @@ def wkt_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, A
     return pins
 
 
+@untrusted_parse("geo.wkb")
 def wkb_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
     """Convert a WKB file into pin dicts.
 

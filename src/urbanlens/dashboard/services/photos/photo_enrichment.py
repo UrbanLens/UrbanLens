@@ -70,13 +70,18 @@ def _save_enriched_image(location: Location, content: bytes, *, source: str, sou
         max_dimension: Longest-edge cap passed to ``downscale_stored_image``.
 
     Returns:
-        The persisted Image row (already resized/WebP-converted where possible).
+        The persisted Image row, still ``pending_scan`` and still at the
+        provider's own dimensions - ``tasks.process_image_upload`` scans,
+        strips and resizes it. Callers that need the finished row must
+        ``refresh_from_db``.
     """
     from django.core.files.base import ContentFile
 
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.wiki.model import Wiki
-    from urbanlens.dashboard.services.media.images import compute_checksum, downscale_stored_image
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.images import compute_checksum
+    from urbanlens.dashboard.tasks import process_image_upload
 
     # Deliberate, not a "lazy side effect of viewing/editing content" (the case
     # Wiki.objects.get_or_create_for_location's docstring warns against) - making this photo
@@ -96,24 +101,18 @@ def _save_enriched_image(location: Location, content: bytes, *, source: str, sou
         caption=caption.strip() or None,
         checksum=checksum,
         file_size=len(content),
+        # Provider bytes, decoded nowhere yet. This function runs inside the
+        # enrichment tasks, which hold every third-party API key - exactly the
+        # process a decoder bug must not be reachable from. The decode happens
+        # in the sandbox worker instead, and pending_scan keeps the row out of
+        # every gallery until it has.
+        pending_scan=True,
     )
-    from PIL.Image import DecompressionBombError as PILDecompressionBombError
 
-    try:
-        new_size = downscale_stored_image(image, max_dimension=max_dimension, convert_webp=True)
-    except (OSError, ValueError, PILDecompressionBombError) as exc:
-        # DecompressionBombError inherits straight from Exception rather than
-        # from OSError/ValueError like the rest of Pillow's failures, so it
-        # escapes a two-tuple handler. `tasks.py`'s call to this same function
-        # already carries that fix and the comment explaining it; this second
-        # call site was left behind, and an over-89MP photo from an external
-        # source took the enrichment run down instead of degrading to the
-        # logged warning every other unprocessable image gets.
-        logger.warning("Downscaling failed for enriched image %s: %s", image.pk, exc, exc_info=True)
-        return image
-    if new_size is not None:
-        image.file_size = new_size
-        image.save(update_fields=["image", "file_size", "updated"])
+    # max_dimension has to be passed explicitly: these rows are profile-less, so
+    # process_image_upload has no subscriber plan to read a downscale policy from
+    # and would otherwise leave the provider's full-size original in place.
+    safely_enqueue_task(process_image_upload, image.pk, max_dimension)
     return image
 
 

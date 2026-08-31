@@ -15,12 +15,15 @@ from defusedxml.ElementTree import ParseError as XMLParseError, fromstring as pa
 import gpxpy
 import gpxpy.gpx
 
+from urbanlens.dashboard.services.sandbox import untrusted_parse
+
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile import Profile
 
 logger = logging.getLogger(__name__)
 
 
+@untrusted_parse("geo.gpx")
 def gpx_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
     """Convert a GPX file's waypoints into pin dicts.
 

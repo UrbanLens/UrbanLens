@@ -26,6 +26,7 @@ import geopandas
 import pyogrio.errors
 
 from urbanlens.dashboard.services.import_formats.heuristics import pick_name_and_description
+from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile import Profile
@@ -90,6 +91,7 @@ def extract_shapefile_bundles(files: list[tuple[str, bytes]]) -> tuple[list[Shap
     return bundles, remaining
 
 
+@untrusted_parse("geo.shapefile")
 def shapefile_to_dict(bundle: ShapefileBundle, user_profile: Profile) -> list[dict[str, Any]]:
     """Convert one Shapefile bundle into pin dicts.
 

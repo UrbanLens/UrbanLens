@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 import zipfile
 
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -124,6 +125,7 @@ def _reject_oversized_docx(filename: str, data: bytes) -> None:
         )
 
 
+@untrusted_parse("document.parse")
 def extract_text(filename: str, data: bytes) -> str | None:
     """Extract plain text from an uploaded ``.txt`` or ``.docx`` file.
 

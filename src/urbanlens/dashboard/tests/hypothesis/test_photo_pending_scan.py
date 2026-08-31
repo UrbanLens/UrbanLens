@@ -202,11 +202,11 @@ class PendingScanUploadFlowTests(TestCase):
         image = self._upload()
         attempts = []
 
-        def _fail_once_then_succeed(image_arg, image_id_arg, strip_location_arg):
+        def _fail_once_then_succeed(*args, **kwargs):
             attempts.append(1)
             if len(attempts) == 1:
                 return None
-            return real_process_photo_upload(image_arg, image_id_arg, strip_location_arg)
+            return real_process_photo_upload(*args, **kwargs)
 
         with patch("urbanlens.dashboard.tasks._process_photo_upload", side_effect=_fail_once_then_succeed):
             result = process_image_upload.apply(args=(image.pk,))

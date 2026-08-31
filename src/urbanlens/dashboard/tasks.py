@@ -661,11 +661,19 @@ class _UploadProcessResult:
     new_stored_size: int | None = None
 
 
-def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> _UploadProcessResult | None:
+def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max_dimension_override: int | None = None) -> _UploadProcessResult | None:
     """Photo-specific metadata extraction and downscaling.
 
-    Returns None on unrecoverable read failure (the caller treats that as a
-    failed task run).
+    Args:
+        image: The row to process.
+        image_id: Its pk, for log lines that must survive a deleted row.
+        strip_location: Whether to discard the coordinates rather than record them.
+        max_dimension_override: Longest-edge cap for a row with no profile to
+            derive a plan policy from - see :func:`process_image_upload`.
+
+    Returns:
+        The fields to write back, or None on unrecoverable read failure (the
+        caller treats that as a failed task run).
     """
     from decimal import Decimal
 
@@ -757,7 +765,16 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
 
     new_stored_size: int | None = None
     if image.profile is not None:
-        max_dimension, convert_webp = get_downscale_policy(image.profile)
+        downscale_policy: tuple[int | None, bool] | None = get_downscale_policy(image.profile)
+    elif max_dimension_override is not None:
+        # A profile-less row (location enrichment) has no plan to read a policy
+        # from; its caller passes the cap instead. WebP conversion is not
+        # optional there - these are provider photos kept as gallery thumbnails.
+        downscale_policy = (max_dimension_override, True)
+    else:
+        downscale_policy = None
+    if downscale_policy is not None:
+        max_dimension, convert_webp = downscale_policy
         # Called unconditionally. It used to be gated on there being a resize, a
         # conversion, a location opt-out or a HEIC to transcode - reasonable while
         # this function existed to resize, but it is also what removes EXIF now,
@@ -1024,7 +1041,7 @@ def _reject_image_upload(image: Image, reason: str) -> None:
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
-def process_image_upload(self, image_id: int) -> bool:
+def process_image_upload(self, image_id: int, max_dimension: int | None = None) -> bool:
     """Extract metadata after an upload and update the Image row.
 
     Dispatches to media-type-specific extraction/downscaling (photo: EXIF +
@@ -1044,6 +1061,19 @@ def process_image_upload(self, image_id: int) -> bool:
     ``Image.latitude``/``longitude`` or the ``exif_data`` snapshot, the stored
     file's own embedded GPS tag is stripped where supported, and no visit
     suggestion is raised.
+
+    Args:
+        image_id: PK of the row to process.
+        max_dimension: Longest-edge cap to downscale to when the row has **no
+            profile** - a location-enrichment photo fetched from a provider
+            (``photos.photo_enrichment``), which has no subscriber plan to read
+            a policy from. Ignored for an ordinary upload, whose uploader's plan
+            decides. Without it such a row is stored at whatever size the
+            provider returned and keeps the provider's EXIF.
+
+    Returns:
+        True when the row was processed. False when it no longer exists, has no
+        file, or was rejected (scan or unrecoverable processing failure).
     """
     from decimal import Decimal
 
@@ -1076,7 +1106,7 @@ def process_image_upload(self, image_id: int) -> bool:
     elif image.media_type == MediaKind.DOCUMENT:
         result = _process_document_upload(image, image_id)
     else:
-        photo_result = _process_photo_upload(image, image_id, strip_location)
+        photo_result = _process_photo_upload(image, image_id, strip_location, max_dimension)
         if photo_result is None:
             if not image.pending_scan:
                 # Reprocessing an already-cleared row (a backfill sweep, a
@@ -1175,6 +1205,50 @@ def process_image_upload(self, image_id: int) -> bool:
         queue_photo_submission(image)
 
     update_task_progress(self, current=1, total=1, message="Upload metadata processed")
+    return True
+
+
+@shared_task(queue=SANDBOX_QUEUE)
+def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int, failure_ttl: int) -> bool:
+    """Decode one cached provider file into a browser-renderable preview.
+
+    The decode half of the two media-preview endpoints
+    (``controllers/media_preview.MediaPreviewView`` and
+    ``controllers/pin.RedataMediaProxyMixin``), which used to run
+    ``render_preview`` - Pillow, and poppler for a PDF - inside the web
+    process. Those are provider bytes, not the app's, and a decoder bug in
+    them is the whole reason this queue exists.
+
+    Reads and writes the cache rather than taking or returning bytes: the
+    source cap is 60MB (``MAX_PREVIEW_SOURCE_BYTES``) and a broker message
+    that size is a bad idea. No retry - a preview is disposable, and the
+    caller falls back to an icon tile.
+
+    Args:
+        source_cache_key: Key holding ``(bytes, content_type)`` to decode.
+        preview_cache_key: Key to write the result (or the failure sentinel) to.
+        ttl: Seconds to cache a successful render.
+        failure_ttl: Seconds to cache the failure sentinel.
+
+    Returns:
+        True when a preview was produced and cached.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.media.previews import UNPREVIEWABLE, render_preview
+
+    source = cache.get(source_cache_key)
+    if source is None:
+        # The source expired between the caller writing it and this running.
+        # Nothing to cache either way - a retry would only re-read the same miss.
+        logger.info("Preview source %s was gone before it could be rendered", source_cache_key)
+        return False
+
+    preview = render_preview(*source)
+    if preview is None:
+        cache.set(preview_cache_key, UNPREVIEWABLE, failure_ttl)
+        return False
+    cache.set(preview_cache_key, preview, ttl)
     return True
 
 

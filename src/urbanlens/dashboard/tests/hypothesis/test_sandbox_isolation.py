@@ -43,6 +43,7 @@ EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
         "process_image_upload",
         "generate_image_thumbnails",
         "generate_image_marker_thumbnails",
+        "render_media_preview",
         "scan_comment_image",
         "scan_trip_comment_image",
     },
@@ -189,6 +190,55 @@ class DecoratedParserTests(SimpleTestCase):
         for func in (convert_to_pdf, extract_pdf_text):
             with self.subTest(func=func.__name__), self.assertRaises(UnsandboxedParseError):
                 func(object())  # type: ignore[arg-type]
+
+    def test_archive_extraction_is_guarded(self) -> None:
+        # Both branches, because a ZIP and a .tar.gz reach different stdlib
+        # parsers and only one of them was ever the obvious one.
+        from urbanlens.dashboard.services.import_export.archive_extractor import ExtractionBudget, _extract_tgz, _extract_zip
+
+        for func in (_extract_zip, _extract_tgz):
+            with self.subTest(func=func.__name__), self.assertRaises(UnsandboxedParseError):
+                func(b"", ExtractionBudget())
+
+    def test_geo_format_parsers_are_guarded(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+        from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
+        from urbanlens.dashboard.services.import_formats.gpx_tracks import gpx_tracks_to_routes
+        from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
+        from urbanlens.dashboard.services.import_formats.shapefile import shapefile_to_dict
+        from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
+
+        for func in (gpx_to_dict, osm_xml_to_dict, wkt_to_dict, wkb_to_dict):
+            with self.subTest(func=func.__name__), self.assertRaises(UnsandboxedParseError):
+                func(b"", object())  # type: ignore[arg-type]
+        with self.assertRaises(UnsandboxedParseError):
+            gpx_tracks_to_routes(b"", object(), "t.gpx")  # type: ignore[arg-type]
+        with self.assertRaises(UnsandboxedParseError):
+            shapefile_to_dict(object(), object())  # type: ignore[arg-type]
+        with self.assertRaises(UnsandboxedParseError):
+            GoogleMapsGateway.takeout_kml_to_dict(object(), b"", object())  # type: ignore[arg-type]
+
+    def test_document_text_extraction_is_guarded(self) -> None:
+        # The decorator sits on extract_text, not on extract_pins_from_document
+        # around it: the parse can move to the sandbox, the AI call it feeds
+        # cannot (no keys, no route out).
+        from urbanlens.dashboard.services.ai.document_import import extract_text
+
+        with self.assertRaises(UnsandboxedParseError):
+            extract_text("notes.docx", b"")
+
+    def test_an_exemption_is_what_lets_the_exif_backfill_command_run(self) -> None:
+        # The command decodes already-stored, already-scanned files, and runs
+        # with no UL_PROCESS_ROLE at all - so without its allow_untrusted_parse
+        # block `deny` would refuse the very tool whose job is stripping EXIF.
+        from urbanlens.dashboard.services.media.images import downscale_stored_image
+
+        with self.assertRaises(UnsandboxedParseError):
+            downscale_stored_image(object(), None, False)  # type: ignore[arg-type]
+        with allow_untrusted_parse("the backfill command's own reason"), self.assertRaises(AttributeError):
+            # Past the guard now, so it fails on the bogus argument instead -
+            # which is the proof the guard is what stopped it above.
+            downscale_stored_image(object(), None, False)  # type: ignore[arg-type]
 
     def test_byte_level_metadata_strip_is_not_guarded(self) -> None:
         # The deliberate exception, and the reason it exists: strip_metadata

@@ -178,9 +178,25 @@ class MediaPreviewViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
         mock_fetch.assert_not_called()
 
-    def test_a_signed_request_serves_a_converted_image(self) -> None:
-        with patch("urbanlens.dashboard.controllers.media_preview._fetch_source", return_value=(_image_bytes("TIFF"), "image/tiff")):
-            response = self.client.get(self.url, {"u": self.source, "sig": sign_source_url(self.source)})
+    def test_a_signed_request_queues_the_render_and_serves_it_once_it_lands(self) -> None:
+        # Two requests, because the decode now happens between them: the view
+        # fetches and queues, tasks.render_media_preview decodes in the sandbox
+        # worker, and the second request is the one that serves a preview. The
+        # first 404 is what the gallery's onerror retry is for.
+        from urbanlens.dashboard.tasks import render_media_preview
+
+        signed = {"u": self.source, "sig": sign_source_url(self.source)}
+        with (
+            patch("urbanlens.dashboard.controllers.media_preview._fetch_source", return_value=(_image_bytes("TIFF"), "image/tiff")),
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+        ):
+            self.assertEqual(self.client.get(self.url, signed).status_code, 404)
+
+        self.assertEqual(enqueue.call_count, 1)
+        _task, source_key, preview_key, ttl, failure_ttl = enqueue.call_args.args
+        render_media_preview(source_key, preview_key, ttl, failure_ttl)
+
+        response = self.client.get(self.url, signed)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "image/jpeg")
 
@@ -190,8 +206,30 @@ class MediaPreviewViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_an_unconvertible_source_is_not_refetched(self) -> None:
+        from urbanlens.dashboard.tasks import render_media_preview
+
         signed = {"u": self.source, "sig": sign_source_url(self.source)}
-        with patch("urbanlens.dashboard.controllers.media_preview._fetch_source", return_value=(b"junk", "image/tiff")) as mock_fetch:
+        with (
+            patch("urbanlens.dashboard.controllers.media_preview._fetch_source", return_value=(b"junk", "image/tiff")) as mock_fetch,
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+        ):
             self.assertEqual(self.client.get(self.url, signed).status_code, 404)
+            _task, source_key, preview_key, ttl, failure_ttl = enqueue.call_args.args
+            render_media_preview(source_key, preview_key, ttl, failure_ttl)
             self.assertEqual(self.client.get(self.url, signed).status_code, 404)
+
         self.assertEqual(mock_fetch.call_count, 1, "a failed conversion must be cached, not retried per tile render")
+
+    def test_a_queued_render_does_not_refetch_the_source_either(self) -> None:
+        # The in-flight window: between queueing and the worker finishing, every
+        # other tile request for the same item must be a cheap 404, not another
+        # 60MB download.
+        signed = {"u": self.source, "sig": sign_source_url(self.source)}
+        with (
+            patch("urbanlens.dashboard.controllers.media_preview._fetch_source", return_value=(_image_bytes("TIFF"), "image/tiff")) as mock_fetch,
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
+        ):
+            for _ in range(3):
+                self.assertEqual(self.client.get(self.url, signed).status_code, 404)
+
+        self.assertEqual(mock_fetch.call_count, 1)

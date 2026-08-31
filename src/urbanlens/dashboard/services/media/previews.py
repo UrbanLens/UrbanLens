@@ -36,6 +36,7 @@ import logging
 import posixpath
 from urllib.parse import urlencode, urlsplit
 
+from django.core.cache import cache
 from django.core.signing import Signer
 
 from urbanlens.dashboard.services.sandbox import untrusted_parse
@@ -330,3 +331,73 @@ def render_preview(raw: bytes, content_type: str = "", *, max_dimension: int = P
         logger.warning("Preview encoding failed (declared %r)", declared, exc_info=True)
         return None
     return buffer.getvalue(), "image/jpeg"
+
+
+#: Cache sentinel for "this source was decoded and could not be previewed".
+#: Shared by both preview endpoints and by the task that writes it, so a
+#: provider serving something unconvertible is not re-decoded per tile.
+UNPREVIEWABLE = "unpreviewable"
+
+#: Cache sentinel for "a render is already queued for this key". A gallery page
+#: fires one request per tile at once; without it, twenty tiles for the same
+#: uncached item would queue twenty identical renders.
+RENDER_QUEUED = "queued"
+
+#: How long :data:`RENDER_QUEUED` stands before another request will re-queue.
+#: Long enough to cover a render plus the queue behind it, short enough that a
+#: worker that died mid-render does not wedge the tile for the whole day.
+RENDER_QUEUED_TTL = 120
+
+
+def request_sandbox_render(source_cache_key: str, preview_cache_key: str, *, ttl: int, failure_ttl: int) -> None:
+    """Queue a preview render in the sandbox worker, at most once per key.
+
+    :func:`render_preview` reaches Pillow and poppler, so it must not run in a
+    web process - see :mod:`urbanlens.dashboard.services.sandbox.guard`. The
+    bytes travel through the cache rather than through the broker: the source
+    cap is 60MB and a Celery message that size is a bad idea.
+
+    Deliberately fire-and-forget. Waiting on the result would keep the endpoint's
+    old contract ("one GET returns the preview"), but it also means every tile
+    request pins a web worker for as long as the sandbox is behind - twenty tiles
+    on one gallery page, times the wait, whenever ``media-worker`` is down. A
+    caller that finds nothing cached serves its icon tile, exactly as it already
+    does for a file that cannot be converted at all, and the tile fills in on the
+    next load. Self-healing beats synchronously correct here, because the thing
+    being waited for is a decorative thumbnail.
+
+    Args:
+        source_cache_key: Cache key holding ``(bytes, content_type)`` to decode.
+            Must already be populated by the caller.
+        preview_cache_key: Cache key the rendered preview is written to.
+        ttl: Seconds to cache a successful render.
+        failure_ttl: Seconds to cache the :data:`UNPREVIEWABLE` sentinel.
+    """
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import render_media_preview
+
+    # add() is atomic in both the Redis and locmem backends, so concurrent tile
+    # requests race here rather than at the queue.
+    if not cache.add(preview_cache_key, RENDER_QUEUED, RENDER_QUEUED_TTL):
+        return
+    if safely_enqueue_task(render_media_preview, source_cache_key, preview_cache_key, ttl, failure_ttl) is None:
+        # Broker unreachable. Drop the marker so the next request retries rather
+        # than waiting out RENDER_QUEUED_TTL against a queue nothing was put on.
+        cache.delete(preview_cache_key)
+
+
+def cached_preview(preview_cache_key: str) -> tuple[bytes, str] | None:
+    """Read a previously rendered preview, treating both sentinels as "no preview".
+
+    Args:
+        preview_cache_key: The key :func:`request_sandbox_render` was given.
+
+    Returns:
+        ``(image_bytes, content_type)``, or None when the render has not
+        finished, was never queued, or produced nothing. All three mean the same
+        thing to a caller: serve the icon tile.
+    """
+    cached = cache.get(preview_cache_key)
+    if cached is None or cached in (UNPREVIEWABLE, RENDER_QUEUED):
+        return None
+    return cached

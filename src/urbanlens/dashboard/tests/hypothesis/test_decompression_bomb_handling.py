@@ -119,22 +119,31 @@ class EnrichmentPathBombHandlingTests(TestCase):
         self.assertFalse(issubclass(PILImage.DecompressionBombError, ValueError))
 
     def test_the_enrichment_path_degrades_instead_of_raising(self) -> None:
+        # The enrichment downscale moved into tasks.process_image_upload (the
+        # decode belongs in the sandbox worker, not in the API-key-holding
+        # enrichment task), so this is where the bomb now lands - and it must
+        # still degrade to a logged warning rather than take the task down.
         from urbanlens.dashboard.services.photos.photo_enrichment import _save_enriched_image
+        from urbanlens.dashboard.tasks import process_image_upload
 
         location = baker.make("dashboard.Location", latitude=44.5, longitude=-73.2)
+        saved = _save_enriched_image(location, _jpeg(), source="wikimedia", max_dimension=800)
 
-        with patch.object(PILImage, "MAX_IMAGE_PIXELS", 16), self.assertLogs("urbanlens.dashboard.services.photos.photo_enrichment", level="WARNING") as logs:
-            saved = _save_enriched_image(location, _jpeg(), source="wikimedia", max_dimension=800)
+        with patch.object(PILImage, "MAX_IMAGE_PIXELS", 16), self.assertLogs("urbanlens.dashboard.tasks", level="WARNING") as logs:
+            process_image_upload(saved.pk, 800)
 
-        self.assertIsNotNone(saved, "the enrichment path should keep the stored image, not abort")
+        self.assertTrue(Image.objects.filter(pk=saved.pk).exists(), "the enrichment path should keep the stored image, not abort")
         self.assertTrue(any("Downscaling failed" in line for line in logs.output), logs.output)
 
     def test_an_ordinary_enriched_image_is_unaffected(self) -> None:
         """The guard must not change the normal path."""
         from urbanlens.dashboard.services.photos.photo_enrichment import _save_enriched_image
+        from urbanlens.dashboard.tasks import process_image_upload
 
         location = baker.make("dashboard.Location", latitude=44.6, longitude=-73.3)
 
         saved = _save_enriched_image(location, _jpeg(), source="wikimedia", max_dimension=800)
+        process_image_upload(saved.pk, 800)
+        saved.refresh_from_db()
 
-        self.assertIsNotNone(saved)
+        self.assertFalse(saved.pending_scan)
