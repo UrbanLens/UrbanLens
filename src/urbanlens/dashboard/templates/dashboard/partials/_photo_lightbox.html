@@ -219,7 +219,7 @@ Context:
 
   // The side panel's small location map - a single Leaflet instance torn down
   // and recreated per photo shown (see _setLightboxLocation), same pattern as
-  // memories/photos.html's confirm-pin map. Also torn down when the dialog
+  // vault/photos.html's confirm-pin map. Also torn down when the dialog
   // itself closes, so a stale Leaflet instance never lingers bound to a
   // detached container.
   var _lightboxMap = null;
@@ -487,7 +487,7 @@ Context:
   // Small "where was this taken" map in the side panel. Torn down and
   // recreated for every photo shown (a single Leaflet instance can't just
   // re-center - the container may not even be visible yet, see the
-  // invalidateSize() note below) - mirrors memories/photos.html's confirm-pin
+  // invalidateSize() note below) - mirrors vault/photos.html's confirm-pin
   // map. Hidden entirely for a photo with no coordinates. The marker is only
   // draggable when this photo is a real, owned Image AND the page has wired
   // up a reposition endpoint (window.galleryRepositionImage - set by

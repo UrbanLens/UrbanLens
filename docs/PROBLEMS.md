@@ -4224,3 +4224,31 @@ same dead `{% block title %}` also sits, unfixed, in: `memories/sharing.html`, `
 `map_share/detail.html`, `messages/index.html`. Fixing those is a one-line rename each
 (`s/{% block title %}/{% block page_title %}/`) but touches unrelated pages/features, out of scope
 for this PR - worth a dedicated small pass.
+
+## OPEN 2026-08-31: 11 pre-existing mypy errors outside the Vault feature, surfaced by the first full-tree run this session
+
+Batch 7's cleanup step ran `mypy /app/src/urbanlens` (880 files) for the first time this session -
+every earlier check was scoped to individual touched files. 13 errors total; 2 were already known
+and logged separately (`PhotoMetadataConflictResolveView`'s `int()` call, `apply_image_map_update`'s
+`stash_photo_fields` call, both above). None of the remaining 11 are in any file this session's
+Vault work touched (`tasks.py`, `services/undo/*`, `checks.py`) - confirmed pre-existing, not a
+regression, but not investigated further (out of scope for this PR):
+
+- `tasks.py:3791` (`cache_media_item_into_album`) - `wiki=None if isinstance(owner, Pin) else owner`
+  passes `Wiki | Profile | None` where `materialize_media_item` expects `Wiki | None`; `owner` is
+  typed wider than this call site actually handles.
+- `services/undo/handlers/label_membership.py:37` (`_target`) - returns `Pin | Wiki | Image | None`
+  where the signature promises non-`None`; `:44` also carries a stale `type: ignore` that mypy now
+  flags unused.
+- `services/undo/handlers/pin_mutation.py:25`, `photo_mutation.py:27,74,97`, `wiki_mutation.py:26` -
+  five more stale `type: ignore[return-value]` comments mypy now flags as unused (whatever error
+  they were suppressing no longer reproduces, likely from an upstream type-narrowing fix elsewhere
+  in the undo service).
+- `services/undo/service.py:73` (`_repr_limit`) - `UndoAction._meta.get_field("object_repr").max_length`
+  is `int | None` per Django's stubs; the function's return type claims plain `int`.
+- `checks.py:44` (`_declared_family`) - `upload_to.__qualname__` on a `_UploadToCallable[Any]` isn't
+  guaranteed by that type's stub, even though every real `upload_to` in this codebase is a plain
+  function.
+
+Worth a dedicated mypy-hygiene pass; the `type: ignore` cleanups in particular are likely quick once
+someone confirms what the now-passing code path actually is.

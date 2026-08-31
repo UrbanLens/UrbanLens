@@ -439,8 +439,41 @@ panels, satellite/street-view providers, place-name providers, and lifecycle hoo
 discoverable from bundled modules, an env-var module list, or pip entry points, and can be
 enabled/disabled per-install or per-service without a restart. Inventory at `/site-admin/plugins/`.
 
-## Photos & Memories
+## Vault (Photos, Documents & Albums)
 
+- **Vault** is the top-level nav section for a user's personal media library - `/vault/`. It
+  replaced the old Memories → Photos page (bookmarked `/memories/photos/*` links permanently
+  redirect to their `/vault/photos/*` equivalents) and added a parallel Documents page, a
+  personal (pin/wiki-independent) album space, and a landing page, none of which existed before.
+- **Vault home** (`/vault/`) — quick-link tiles into Photos/Documents/Albums with live counts, a
+  storage usage summary (used/quota/remaining, shared with the Settings → Storage section), and a
+  recent-uploads strip mixing the most recently added photos and documents.
+- **Vault → Photos** (`/vault/photos/`) — the site-wide photo library: matches unfiled photos (by
+  GPS + timestamp) to existing pins and proposes **visit suggestions** for confirmation; an
+  organize queue surfaces photos that still need a pin, a location, or suggestion review, plus
+  pending upload failures and caption/GPS metadata conflicts to pick between. The grid is a
+  windowed/virtualized infinite scroll (skeleton tiles while the first page loads, off-screen
+  thumbnails pruned via IntersectionObserver as you scroll so memory stays bounded on a library of
+  hundreds of photos) with a sort control (Recent / Oldest / Taken / Name).
+- **Vault → Documents** (`/vault/documents/`) — a parallel page for non-photo files (PDF, Word,
+  Excel, PowerPoint, plain text), sharing Photos' grid/skeleton/pruning/sort infrastructure with
+  document-appropriate tiles (a type icon + filename) and a lightbox that swaps the image viewer
+  for an inline `<iframe>` preview. Gated behind the `document_uploads` subscription feature/site
+  default; the page itself always renders, just without the upload dropzone when the viewer lacks
+  the feature.
+- **Vault albums** — a personal, pin/wiki-independent album space (create/rename/delete, add/
+  remove/reorder photos) using the same `Album`/`AlbumItem` infrastructure as pin/wiki albums
+  below, with a toggle to also surface your existing pin albums from across all your pins
+  alongside them. No owner-slug segment (one Vault per profile), no move-to-another-pin or
+  floorplan-overlay actions, and no cover-hero banner - those stay pin/wiki-specific.
+- **Lightbox associations** (Vault Photos/Documents) — the shared lightbox shows a photo's pin/
+  wiki filing (or "unfiled") and its pin/wiki album memberships, plus actions to **file it to a
+  pin** (autocomplete search, only offered while unfiled - an already-filed photo links to its pin
+  instead of silently reassigning it), **send it to a wiki** (wiki search/picker, attaches the
+  photo the same way the pin gallery's bulk "Send to wiki" action does - a photo can carry both a
+  pin and a wiki simultaneously), and **share it with a friend** (a lightweight single-photo DM
+  share, distinct from a whole-pin share - repeatable shares of an already-shared photo create a
+  quota-exempt duplicate copy rather than reusing the original DM attachment).
 - Photo galleries on pins and wikis: drag-drop upload, reordering, lightbox, EXIF/GPS extraction,
   checksum-based duplicate detection. On a private pin, the lightbox's more-actions menu offers
   **Use as floorplan overlay**, which adds the photo as a georeferenced blueprint and opens the
@@ -460,21 +493,24 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   the Photos tab lists albums and unfiled photos from descendant pins as well. Dropping a file
   that's already been uploaded into an album files the existing photo rather than erroring.
   Uploading the same bytes to a different pin of yours reuses the stored file (no second quota
-  charge); caption/GPS conflicts surface on Memories → Photos to pick. Failed or broken uploads
-  toast and can be retried from Memories. Removing a photo from an album updates the grid
+  charge); caption/GPS conflicts surface on Vault → Photos to pick. Failed or broken uploads
+  toast and can be retried from Vault → Photos. Removing a photo from an album updates the grid
   immediately. Small grid thumbnails are generated in the background after upload (and backfilled
   on a schedule for photos that predate that); album grids load further pages as you scroll,
   unloading off-screen bitmaps so large albums stay usable on a phone. Photo map markers can be
   right-clicked to hide a photo from the map without clearing its stored GPS; the lightbox offers
   "show this photo on the map" to put it back.
 - The lightbox lets you browse, search, and create+apply a media label in one step.
-- Site-wide photo library (Memories → Photos) that matches unfiled photos (by GPS + timestamp) to
-  existing pins and proposes **visit suggestions** for confirmation
+
+## Memories
+
 - **Memories** page — aggregated timeline/map view of routes, trips, visits, and photos, including
   an "on this day" retrospective and a prompt to log visits for pins already marked visited; tabs
-  for Timeline, Photos, Maps, Sharing, Journal, and Visits; date range filter with presets
+  for Timeline, Maps, Sharing, Journal, Visits (hidden when there's nothing unlogged), and
+  Locations (hidden when there are no pending pin suggestions); date range filter with presets
   (Last 90 days / Last year / All time); "Import routes & history" for importing GPS tracks and
-  location history (separate from the map's pin import flow)
+  location history (separate from the map's pin import flow). Its own Photos tab moved to
+  **Vault → Photos** (see above).
 - **Pin suggestions** — batch photo-location ingestion (a client-side local-folder scanner on
   the Tools page, or a full Immich library sweep) matches photo GPS against existing pins and
   clusters the rest into suggested new pins, reviewed on a multi-select map with bulk accept,
