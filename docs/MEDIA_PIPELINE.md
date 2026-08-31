@@ -21,16 +21,29 @@ cannot be per-format detection. It is **placement**: decode somewhere an
 exploit gains nothing, and **normalisation**: never serve back the bytes that
 were uploaded.
 
-| Parser | Reached by | Runs in |
-|---|---|---|
-| Pillow (+ pillow-heif) | photos | sandbox |
-| ffmpeg / ffprobe | video | sandbox |
-| LibreOffice (`soffice`) | doc/spreadsheet conversion | sandbox |
-| poppler + tesseract | PDF text/OCR | sandbox |
-| `zipfile` / `tarfile` | data import, KMZ, archives | sandbox |
-| lxml / fastkml / gpxpy | KML, GPX, OSM XML | sandbox |
-| GDAL / GeoPandas / Shapely | shapefile, WKT/WKB | sandbox |
-| clamd | everything | its own container |
+Two different things are worth distinguishing in the table below, because
+conflating them overstates what is actually enforced:
+
+- **Guarded** — the entry point carries `@untrusted_parse`, so running it
+  outside the sandbox raises (under `deny`) or logs (under `warn`).
+- **Routed** — the *task* that reaches it declares `queue=SANDBOX_QUEUE`, so it
+  executes in the isolated container. Real isolation, but nothing stops a
+  future caller reaching it from somewhere else.
+
+| Parser | Reached by | Runs in | Guarded? |
+|---|---|---|---|
+| Pillow (+ pillow-heif) | photos | sandbox | yes |
+| ffmpeg / ffprobe | video | sandbox | yes |
+| LibreOffice (`soffice`) | doc/spreadsheet conversion | sandbox | yes |
+| poppler + tesseract | PDF text/OCR | sandbox | yes |
+| `zipfile` / `tarfile` | data import (routed), **import preview (request)** | mixed | no |
+| lxml / fastkml / gpxpy | KML, GPX, OSM XML | routed via `run_user_data_import` | no |
+| GDAL / GeoPandas / Shapely | shapefile, WKT/WKB | routed via `run_user_data_import` | no |
+| clamd | everything | its own container | n/a |
+
+The unguarded rows are the honest gap: decorating them is the remaining work,
+and until it is done `controllers/pin.parse_for_preview` reaches `zipfile`,
+`tarfile` and `python-docx` directly from a web request. See `docs/PROBLEMS.md`.
 
 ## The tiers
 
@@ -70,6 +83,13 @@ stripped/downscaled copy. Until then, `services/media/access.py::authorize_image
 and `ImageQuerySet.visible_to` restrict the row to its uploader; everyone else
 gets the same "not found" a deleted file would produce. See `Image.pending_scan`
 and the resolved entry in `docs/PROBLEMS.md` for the full reasoning.
+
+Two limits on that sentence, both tracked in `docs/PROBLEMS.md`: it covers
+**photos only** (a video or document never goes through `prepare_photo_upload`,
+so it stays visible while it transcodes — a longer window than the one this
+closed), and `SafetyContactPhotoView` deliberately serves a pending check-in
+photo to a token-bearing emergency contact. The second is safe only while the
+malware scan is synchronous, and is a blocker on making it async.
 
 A stored file that cannot be opened at all is not treated as "safe to publish
 unprocessed" - nothing has ever validated it, so a still-pending row that fails

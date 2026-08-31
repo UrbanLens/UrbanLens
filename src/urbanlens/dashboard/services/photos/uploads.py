@@ -222,7 +222,7 @@ def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: P
         source=existing.source,
         media_type=existing.media_type,
         map_hidden=existing.map_hidden,
-        pending_scan=existing.pending_scan,
+        pending_scan=pending_scan,
         **_owner_fields(owner),
     )
     row.save()

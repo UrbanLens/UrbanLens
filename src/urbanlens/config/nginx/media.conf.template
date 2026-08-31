@@ -34,19 +34,40 @@ server {
     # can occupy a worker.
     client_max_body_size 64k;
 
-    # Belt and braces with the same headers the gate sets in Django
-    # (services/media/origin.py). Duplicated here because they are the difference
-    # between "an uploaded file is inert" and "an uploaded file is a page", and
-    # that should not depend on the response having come back through the whole
-    # middleware stack. `always` so they are attached to error responses too.
+    # nginx owns these headers, not Django - and that is not belt-and-braces,
+    # it is the only thing that works. An authorized media response is an
+    # X-Accel-Redirect (settings.MEDIA_X_ACCEL, on for every non-dev
+    # deployment), and nginx forwards only a small allow-list of upstream
+    # headers when it follows one. Measured, on this exact image:
     #
-    # Content-Security-Policy is deliberately NOT set here: the gate computes it
-    # per response (it needs frame-ancestors for the app origin), and an
-    # add_header here would be silently dropped anyway the moment nginx sees the
-    # upstream's own.
+    #   survives : Cache-Control, Content-Type, Content-Disposition,
+    #              ETag, Last-Modified, Accept-Ranges
+    #   dropped  : Content-Security-Policy, X-Frame-Options,
+    #              X-Content-Type-Options, Referrer-Policy
+    #
+    # So every header services/media/origin.py sets vanishes before the browser
+    # sees it, on exactly the responses that carry the bytes. A server-level
+    # `add_header ... always` here does survive, which is why the whole set
+    # lives here. Django still sets them for the FileResponse path (local dev,
+    # no nginx), where they are what actually applies.
+    #
+    # This file is a *template*: the official nginx entrypoint runs envsubst
+    # over /etc/nginx/templates/*.template, substituting only names that exist
+    # in the environment - so ${MEDIA_FRAME_ANCESTORS} is filled from compose
+    # while nginx's own $host/$scheme/$remote_addr are left alone.
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "no-referrer" always;
     add_header Cross-Origin-Resource-Policy "same-site" always;
+    # default-src 'none': an upload the browser decides to treat as a document
+    # can then load nothing at all - no script, no fetch, no beacon - so even a
+    # file that executes has no second stage. Costs the images, video and PDFs
+    # this actually serves nothing; none of them fetch subresources.
+    #
+    # frame-ancestors names the app origin because the Vault document lightbox
+    # frames a PDF from here, which is now a cross-origin frame. It defaults to
+    # 'none' when UL_SITE_URL is unset, so a misconfigured deployment refuses
+    # framing rather than allowing it from anywhere.
+    add_header Content-Security-Policy "default-src 'none'; frame-ancestors ${MEDIA_FRAME_ANCESTORS}" always;
 
     location /media/ {
         proxy_read_timeout 120s;

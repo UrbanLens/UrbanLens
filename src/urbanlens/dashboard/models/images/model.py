@@ -452,6 +452,16 @@ class Image(abstract.FrontendDashboardModel):
     # it until this clears - which is what makes the raw-bytes window safe rather
     # than a regression of the leak metadata_strip.py was written to close.
     #
+    # One deliberate exception: controllers.safety.SafetyContactPhotoView serves
+    # a check-in photo to a token-bearing emergency contact without consulting
+    # this flag, because withholding it would show a broken image during exactly
+    # the minutes the feature exists for. Safe only while the malware scan is
+    # still synchronous; see docs/PROBLEMS.md before making that scan async.
+    #
+    # Photos only: a video or document upload never goes through
+    # prepare_photo_upload, so it carries no pending_scan and is visible while
+    # it transcodes. Also docs/PROBLEMS.md.
+    #
     # Named to match Comment.pending_scan/TripComment.pending_scan rather than
     # something like `processing`: those two clear it on an async malware scan,
     # and folding the same scan in here (see docs/PROBLEMS.md) will make this

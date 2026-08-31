@@ -22,13 +22,73 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
-## OPEN 2026-08-31: `PlaceAccessGrant.reason` has an unmigrated field alteration
+## RESOLVED 2026-08-31: `PlaceAccessGrant.reason` had an unmigrated field alteration
 
-`manage.py makemigrations dashboard --check --dry-run` on a clean `main` (verified before any
-of this session's own changes) reports one pending migration: `Alter field reason on
-placeaccessgrant`. Not investigated - noticed only because it also appears in the dry-run
-output while checking this session's own `pending_scan` migration, and confirmed independent
-by stashing this session's changes and re-running against bare `HEAD`.
+Noticed while checking this session's own migration; fixed independently by
+`0038_sync_placeaccessgrant_reason_choices`. Note that migration and `0038_image_pending_scan`
+were both generated against `0037`, leaving the graph with two leaf nodes and breaking every
+`migrate` on the branch - `0040_merge_...` rejoins them. Worth knowing when two people touch
+models in the same window: `makemigrations` numbers from what is on disk, so a second 0038 is
+silently produced rather than refused, and nothing complains until something runs `migrate`.
+
+## OPEN 2026-08-31: media-nginx adds a second unrotated access log
+
+`media-nginx` inherits `access_log /tmp/nginx-requests.log` from the shared `nginx.conf`, so
+the media origin now writes its own copy in its own container - and media requests are the
+highest-volume request class on the site. Same unrotated-file problem the main nginx's log
+already has (flagged in docker-compose.yml's nginx service), now in two places rather than one,
+and `media-nginx` declares no tmpfs so it grows on the overlay filesystem. Turning it off is
+not the fix - after the split these requests are logged nowhere else - rotation is.
+
+## OPEN 2026-08-31: a long data import can stall all media processing on the sandbox queue
+
+`run_user_data_import` was routed to the `sandbox` queue alongside photo/video/document
+processing, and `media-worker` runs `--concurrency=2`. That task accepts ZIPs up to 500MB, has
+no per-profile concurrency guard, and inherits `CELERY_TASK_TIME_LIMIT = 3600` - so two
+simultaneous imports occupy both slots and every upload on the site waits behind them, for up
+to an hour. Before the split it held 1 of `celery-worker`'s 4 slots, sharing them with
+unrelated housekeeping rather than with the live upload path.
+
+The routing itself is right - an import archive is exactly the untrusted-parse workload the
+container exists for. What is wrong is that a minutes-to-an-hour batch job and a
+sub-second interactive one share a two-slot pool. Give imports their own queue (drained by a
+second worker on the same isolated network, or by the same container with `-Q sandbox,import`
+and more slots), so a photo upload is never queued behind an archive walk.
+
+Worth knowing while sizing that: ETA-delayed retries do *not* hold a slot despite
+`CELERY_WORKER_PREFETCH_MULTIPLIER = 1` (Celery calls `qos.increment_eventually()` when it
+defers an ETA message), so `process_image_upload`'s retry backoff is not itself a contributor.
+
+## OPEN 2026-08-31: `pending_scan` is photo-only, and one serving surface bypasses it
+
+Found reviewing the `pending_scan` work itself. Neither is a regression - both are places the
+new gate simply does not reach - but both are one-line-ish to close with machinery that now
+exists, and the second becomes a real hole the moment the ClamAV entry above is done.
+
+1. **Video and document uploads never get `pending_scan`.** `services/photos/photo_upload.py`
+   calls `prepare_photo_upload` only `if media_type == MediaKind.PHOTO`, so a video or document
+   is stored raw and immediately visible while `process_image_upload` transcodes/converts it -
+   exactly the window that was just closed for photos, except *longer*, since an ffmpeg
+   transcode takes minutes where a photo decode takes milliseconds. Videos do carry location
+   metadata (`process_uploaded_video` strips the container's location tags, in the task), so
+   the GPS exposure is real. Both `_process_video_upload` and `_process_document_upload` always
+   return a result (never `None`), so they cannot hit the reject branch - setting
+   `pending_scan=True` for them is safe and the shared tail already clears it.
+
+2. **`controllers/safety.py::SafetyContactPhotoView` bypasses the gate.** It authenticates by
+   magic-link token (an emergency contact usually has no account) and calls `resolve_media_path`
+   + `serve_media_file` directly, never `authorize_image` - so it serves a still-pending photo.
+   Today that is defensible and arguably correct: the audience is a contact the uploader named,
+   showing them the location *is* the feature, and blocking the photo would show a broken image
+   during exactly the minutes that matter most. It is also currently harmless because ClamAV
+   still runs synchronously before the row exists, so those bytes are scanned.
+
+   **That stops being true the moment the malware scan moves async.** At that point this view
+   would hand an unscanned upload to an emergency contact. Treat it as a blocker on that work,
+   not a follow-up to it.
+
+Note the docstrings on `Image.pending_scan` and in `docs/MEDIA_PIPELINE.md` say a pending row is
+restricted to its uploader; that is true of every path except this one, and they say so now.
 
 ## OPEN 2026-08-31: several Image-creating paths bypass `pending_scan` and/or never process at all
 
@@ -79,11 +139,31 @@ briefly servable" window through access control instead. Left in place: it has i
 decode-free so it stays outside the sandbox boundary if some future in-request use wants it, and
 removing a working, harmless module is a separate decision from this one.
 
-Still open, from the original two: **`controllers/pin.parse_for_preview`** runs `extract_archive`
-(zipfile/tarfile) and `extract_pins_from_document` (python-docx) in the request path. It has real
-limits already (`archive_extractor.ExtractionBudget`), but limits bound resource use, not a
-parser bug. This is the remaining reason `UL_UNTRUSTED_PARSE_POLICY` cannot go to `deny` yet -
-`warn` logs it with a stack, so the log is the worklist.
+Still open - the full list of what blocks `UL_UNTRUSTED_PARSE_POLICY=deny`, which is longer than
+an earlier version of this entry claimed (it named only the first):
+
+1. **`controllers/pin.parse_for_preview`** runs `extract_archive` (zipfile/tarfile) and
+   `extract_pins_from_document` (python-docx) in the request path. It has real limits already
+   (`archive_extractor.ExtractionBudget`), but limits bound resource use, not a parser bug.
+   Note those functions are not decorated either, so `deny` would not actually stop them -
+   they need both the decorator and a move off the request path.
+2. **`render_preview` has two request-path callers** - `controllers/media_preview.py` and
+   `controllers/pin.py`. It *is* decorated, so `deny` turns both endpoints into 500s and `warn`
+   logs a warning on every preview request. This is the one that makes `deny` actively unsafe
+   to flip today.
+3. **`manage.py strip_exif_from_stored_photos`** calls `downscale_stored_image` directly. A
+   management command runs with no `UL_PROCESS_ROLE`, so it resolves to `unspecified` and `deny`
+   would refuse to run the very tool whose job is stripping EXIF. It needs either an
+   `allow_untrusted_parse` block (the bytes are already-stored, already-scanned files, not a
+   fresh upload) or `UL_PROCESS_ROLE=sandbox` in its invocation.
+4. **`services/photos/photo_enrichment.py`** calls `downscale_stored_image` on provider-fetched
+   bytes, reached from the Google Places/Maps plugins. Same shape as (3): a legitimate
+   exemption that has never been written down as one. `allow_untrusted_parse` exists for
+   exactly this and currently has zero production call sites.
+
+`warn` logs each violation with a stack the first time it sees each operation, so the log is
+the worklist - but note (2) means the log will be noisy on a normal request path, not just on
+rare ones.
 
 ## OPEN 2026-08-31: ClamAV still scans synchronously in the upload request
 

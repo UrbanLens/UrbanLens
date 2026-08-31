@@ -27,6 +27,7 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase as DjangoTestCase, override_settings
+from django.urls import reverse
 from model_bakery import baker
 from PIL import Image as PILImage
 
@@ -335,3 +336,52 @@ class LegacyRowsDefaultToNotPendingTests(DjangoTestCase):
     def test_baker_default_is_not_pending(self) -> None:
         image = baker.make(Image)
         self.assertFalse(image.pending_scan)
+
+
+class SafetyContactPortalRespectsPendingScanTests(TestCase):
+    """The one Image-serving surface that does not go through ``authorize_image``.
+
+    ``SafetyContactPhotoView`` authenticates an emergency contact by magic-link
+    token - they usually have no account - and streams the file directly. Before
+    this session's change that was harmless: the request-time strip meant the
+    stored file was already scrubbed. Now the stored file is the raw upload until
+    the sandboxed task runs, so serving a pending row here hands a contact the
+    uploader's precise GPS - including for an uploader whose visit-tracking
+    opt-out means those coordinates were never meant to be recorded at all
+    (``strip_location`` is only applied inside that task).
+    """
+
+    def setUp(self) -> None:
+        from pathlib import Path
+
+        from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
+
+        # Real files under a throwaway MEDIA_ROOT: resolve_media_path 404s on a
+        # missing file, so without this both tests below would "pass" for the
+        # wrong reason - the blocked case indistinguishable from the served one.
+        self._media_root = tempfile.mkdtemp(prefix="ul_safety_pending_")
+        self.addCleanup(shutil.rmtree, self._media_root, ignore_errors=True)
+        overrides = override_settings(MEDIA_ROOT=self._media_root, MEDIA_X_ACCEL=False)
+        overrides.enable()
+        self.addCleanup(overrides.disable)
+        for name in ("pin_images/raw.jpg", "pin_images/done.jpg"):
+            target = Path(self._media_root) / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"bytes")
+
+        self.user = baker.make(User)
+        self.owner: Profile = self.user.profile
+        self.checkin = baker.make(SafetyCheckin, profile=self.owner)
+        # exactly one of contact_profile/email must be set (db_safety_checkin_contact_exactly_one_target)
+        self.contact = baker.make(SafetyCheckinContact, checkin=self.checkin, email="contact@example.com", contact_profile=None)
+        self.pending = baker.make(Image, safety_checkin=self.checkin, profile=self.owner, image="pin_images/raw.jpg", pending_scan=True)
+        self.ready = baker.make(Image, safety_checkin=self.checkin, profile=self.owner, image="pin_images/done.jpg", pending_scan=False)
+
+    def test_a_pending_photo_is_not_served_to_a_contact(self) -> None:
+        response = self.client.get(reverse("safety.contact.photo", kwargs={"token": self.contact.token, "image_id": self.pending.pk}))
+        self.assertEqual(response.status_code, 404, "a contact was served the raw, unstripped upload")
+
+    def test_a_processed_photo_is_still_served(self) -> None:
+        # The gate must not break the feature it is guarding.
+        response = self.client.get(reverse("safety.contact.photo", kwargs={"token": self.contact.token, "image_id": self.ready.pk}))
+        self.assertNotEqual(response.status_code, 404, "the portal must still serve processed check-in photos")

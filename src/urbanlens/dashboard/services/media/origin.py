@@ -67,6 +67,36 @@ MEDIA_COOKIE_MAX_AGE_SECONDS = 12 * 60 * 60
 #: "time to refresh", which is why there is no separate timestamp in the payload.
 MEDIA_COOKIE_REFRESH_AFTER_SECONDS = MEDIA_COOKIE_MAX_AGE_SECONDS // 2
 
+#: Multi-part public suffixes :func:`cookie_domain` must never hand back. Not a
+#: complete list - the complete one is the Public Suffix List, a dependency this
+#: project does not carry - just the ones a deployment of this app might
+#: plausibly sit under. See :func:`cookie_domain` for what goes wrong without it.
+PUBLIC_SUFFIXES = frozenset(
+    {
+        "co.uk",
+        "org.uk",
+        "me.uk",
+        "ac.uk",
+        "gov.uk",
+        "com.au",
+        "net.au",
+        "org.au",
+        "co.nz",
+        "co.za",
+        "com.br",
+        "co.jp",
+        "co.in",
+        "co.kr",
+        "github.io",
+        "gitlab.io",
+        "pages.dev",
+        "workers.dev",
+        "vercel.app",
+        "netlify.app",
+        "web.app",
+    },
+)
+
 
 def media_origin() -> str:
     """The configured media origin, e.g. ``https://media.urbanlens.org``.
@@ -103,6 +133,32 @@ def is_media_origin_request(request: HttpRequest) -> bool:
     return bool(host) and request.get_host().split(":")[0].lower() == host
 
 
+def shared_suffix(media_host: str, app_host: str) -> str:
+    """The deepest domain two hosts share, with no safety filtering applied.
+
+    Split out from :func:`cookie_domain` so
+    ``dashboard.checks.check_media_origin_cookie_domain`` can tell an operator
+    *why* no cookie domain was derived - "these hosts share nothing" and "these
+    hosts share only a public suffix" need different fixes, and
+    :func:`cookie_domain` deliberately collapses both to ``""``.
+
+    Args:
+        media_host: Hostname of the media origin.
+        app_host: Hostname of the app origin.
+
+    Returns:
+        The shared suffix, e.g. ``"urbanlens.org"`` - which may be a public
+        suffix, or a single label, or empty. Not safe to use as a cookie domain
+        without the checks :func:`cookie_domain` applies.
+    """
+    shared: list[str] = []
+    for media_label, app_label in zip(reversed(media_host.lower().split(".")), reversed(app_host.lower().split(".")), strict=False):
+        if media_label != app_label:
+            break
+        shared.append(media_label)
+    return ".".join(reversed(shared))
+
+
 def cookie_domain() -> str:
     """The ``Domain`` attribute the media cookie must carry, or ``""``.
 
@@ -125,25 +181,34 @@ def cookie_domain() -> str:
         return explicit
 
     media_host = media_origin_host()
-    app_host = urlsplit(str(getattr(settings, "UL_SITE_URL", "") or "")).hostname or ""
+    # settings.SITE_URL, not UL_SITE_URL: the env var is spelled UL_SITE_URL but
+    # settings/base.py exposes it as SITE_URL. Reading the env-var spelling off
+    # `settings` silently yields "" - no exception, no log - which made this
+    # function return "" for every real deployment and turned set_media_cookie
+    # into a no-op, i.e. the whole media origin 404ing with nothing to explain it.
+    app_host = urlsplit(str(getattr(settings, "SITE_URL", "") or "")).hostname or ""
     if not media_host or not app_host:
         return ""
 
-    media_labels = media_host.lower().split(".")
-    app_labels = app_host.lower().split(".")
-    shared: list[str] = []
-    for media_label, app_label in zip(reversed(media_labels), reversed(app_labels), strict=False):
-        if media_label != app_label:
-            break
-        shared.append(media_label)
+    shared = shared_suffix(media_host, app_host).split(".") if shared_suffix(media_host, app_host) else []
 
-    # Two labels is the floor: a single shared label is a public suffix ("org"),
-    # which no browser will accept as a cookie domain and which would be a
-    # catastrophic scope if one did.
-    if len(shared) < 2:
-        logger.warning("Media origin %s and site host %s share no usable cookie domain; media cookie disabled", media_host, app_host)
+    # Two labels is a floor, not the answer: a single shared label is always a
+    # public suffix ("org"), but so are plenty of two-label ones ("co.uk",
+    # "pages.dev"), which this would otherwise hand back for two unrelated hosts
+    # that happen to sit under the same registry. A PSL-aware browser rejects a
+    # cookie scoped to one - the media origin then 404s with nothing to explain
+    # it - and a client that is *not* PSL-aware attaches the credential to every
+    # host under that suffix, which is the failure worth actually preventing.
+    #
+    # Deriving this properly needs the Public Suffix List, which this project
+    # does not carry; refusing the handful a deployment might plausibly land on
+    # is the honest approximation. dashboard.checks.check_media_origin_cookie_domain
+    # turns the same condition into a startup error rather than a silent one.
+    domain = ".".join(shared)
+    if len(shared) < 2 or domain in PUBLIC_SUFFIXES:
+        logger.warning("Media origin %s and site host %s share no usable cookie domain (%r); media cookie disabled", media_host, app_host, domain)
         return ""
-    return ".".join(reversed(shared))
+    return domain
 
 
 def mint_media_token(user_id: int) -> str:
@@ -239,9 +304,19 @@ def set_media_cookie(response: HttpResponse, user_id: int) -> HttpResponse:
     return response
 
 
-#: Content-Security-Policy applied to every response the media gate produces on
-#: the media origin, minus its ``frame-ancestors``, which is appended at runtime
-#: from the app's own origin.
+#: Content-Security-Policy for a media response produced *by Django* - which,
+#: behind nginx, is only the local-development path.
+#:
+#: ``settings.MEDIA_X_ACCEL`` is on for every non-dev deployment, and an
+#: X-Accel-Redirect response is not the one the browser receives: nginx follows
+#: the redirect and builds its own, forwarding only a small allow-list of
+#: upstream headers. Measured on the deployed image, ``Cache-Control`` survives
+#: and ``Content-Security-Policy``/``X-Frame-Options``/``X-Content-Type-Options``/
+#: ``Referrer-Policy`` are all dropped. So in production these headers come from
+#: server-level ``add_header`` directives in ``config/nginx/media.conf.template``,
+#: and this constant governs the ``FileResponse`` path only. Both are kept
+#: deliberately: a dev server with no nginx in front of it needs the same policy,
+#: and the two must not drift - change them together.
 #:
 #: ``default-src 'none'`` is the whole policy: an uploaded file that a browser
 #: decides to treat as a document - an HTML file that sniffed as something else,
@@ -258,6 +333,14 @@ MEDIA_ORIGIN_CSP = "default-src 'none'"
 
 def apply_media_response_headers[ResponseT: HttpResponseBase](request: HttpRequest, response: ResponseT) -> ResponseT:
     """Set the framing and hardening headers for one media response.
+
+    **Behind nginx, only the ``FileResponse`` (development) path actually
+    delivers these** - see :data:`MEDIA_ORIGIN_CSP`. In production nginx drops
+    every one of them while following the X-Accel-Redirect, and
+    ``config/nginx/media.conf.template`` sets the same policy at the server
+    level instead. This function is still the right place for the dev path and
+    for keeping the ``xframe_options_exempt`` bookkeeping correct, but do not
+    read it as the enforcement point.
 
     Owns framing for *both* origins, rather than leaving the same-origin case to
     a ``xframe_options_sameorigin`` decorator on the view. Splitting it that way
@@ -299,7 +382,7 @@ def apply_media_response_headers[ResponseT: HttpResponseBase](request: HttpReque
         response.setdefault("X-Frame-Options", "SAMEORIGIN")
         return response
 
-    app_origin = str(getattr(settings, "UL_SITE_URL", "") or "").rstrip("/")
+    app_origin = str(getattr(settings, "SITE_URL", "") or "").rstrip("/")
     policy = str(getattr(settings, "UL_MEDIA_CSP", "") or MEDIA_ORIGIN_CSP)
     frame_ancestors = f"frame-ancestors {app_origin}" if app_origin else "frame-ancestors 'none'"
     response["Content-Security-Policy"] = f"{policy}; {frame_ancestors}"

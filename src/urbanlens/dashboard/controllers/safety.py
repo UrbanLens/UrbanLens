@@ -705,10 +705,19 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 "contact_picker_locked": checkin.notifications_locked or viewer_is_partner,
                 "connections": get_connections(owner),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
-                # No visibility filtering: reaching the check-in is the whole
+                # No *visibility* filtering: reaching the check-in is the whole
                 # gate here, and a contact identified only by email has no
                 # profile for a visibility setting to be evaluated against.
-                "photos": Image.objects.filter(safety_checkin=checkin).exclude(image="").order_by("-created"),
+                #
+                # pending_scan is a different question and is filtered: until
+                # tasks.process_image_upload runs, the stored file is the
+                # uploader's raw bytes with EXIF and GPS intact - including for
+                # an uploader who turned visit tracking off, whose coordinates
+                # are only ever dropped inside that task. Showing it here would
+                # hand a contact the precise capture location of somebody who
+                # opted out of recording it. The wait is seconds; the leak is
+                # permanent.
+                "photos": Image.objects.filter(safety_checkin=checkin, pending_scan=False).exclude(image="").order_by("-created"),
                 "destination_wiki": destination_wiki,
                 "last_wiki_edit": last_wiki_edit,
                 "wiki_editor_count": wiki_editor_count,
@@ -1548,10 +1557,19 @@ class SafetyContactPortalView(View):
                 "contact": contact,
                 "other_contacts": checkin.contacts.exclude(pk=contact.pk),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
-                # No visibility filtering: reaching the check-in is the whole
+                # No *visibility* filtering: reaching the check-in is the whole
                 # gate here, and a contact identified only by email has no
                 # profile for a visibility setting to be evaluated against.
-                "photos": Image.objects.filter(safety_checkin=checkin).exclude(image="").order_by("-created"),
+                #
+                # pending_scan is a different question and is filtered: until
+                # tasks.process_image_upload runs, the stored file is the
+                # uploader's raw bytes with EXIF and GPS intact - including for
+                # an uploader who turned visit tracking off, whose coordinates
+                # are only ever dropped inside that task. Showing it here would
+                # hand a contact the precise capture location of somebody who
+                # opted out of recording it. The wait is seconds; the leak is
+                # permanent.
+                "photos": Image.objects.filter(safety_checkin=checkin, pending_scan=False).exclude(image="").order_by("-created"),
                 "map_attribution": _MAP_ATTRIBUTION,
                 "is_archived": is_archived,
                 "can_unlock": False,
@@ -1594,7 +1612,13 @@ class SafetyContactPhotoView(View):
         from urbanlens.dashboard.controllers.media import resolve_media_path, serve_media_file
 
         contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin").by_token(token))
-        image = get_object_or_404(Image.objects.filter(pk=image_id, safety_checkin=contact.checkin).exclude(image=""))
+        # pending_scan=False, for the reason spelled out on the photo listings:
+        # a still-pending file is the raw upload, GPS and all, and the uploader
+        # may have opted out of ever recording those coordinates. This is the
+        # one Image-serving surface that does not go through authorize_image
+        # (an emergency contact has no account to authorize), so the gate has to
+        # be restated here rather than inherited.
+        image = get_object_or_404(Image.objects.filter(pk=image_id, safety_checkin=contact.checkin, pending_scan=False).exclude(image=""))
         rel_path, full_path = resolve_media_path(image.image.name)
         return serve_media_file(rel_path, full_path)
 

@@ -207,6 +207,8 @@ class CredentialOrSessionMediaMixin:
         the session cookie is host-only for the app's hostname and never sent
         there. See :mod:`urbanlens.dashboard.services.media.origin`.
 
+        Accepted **only** on the media origin, never on the app's own hostname.
+
         It is checked *after* the session rather than before so that a request on
         the app's own origin is still served as its session's account. Both
         cookies travel together there (the media cookie carries an explicit
@@ -223,9 +225,17 @@ class CredentialOrSessionMediaMixin:
         from django.contrib.auth import get_user_model
 
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.media.origin import MEDIA_COOKIE_NAME, media_origin, user_id_from_token
+        from urbanlens.dashboard.services.media.origin import MEDIA_COOKIE_NAME, is_media_origin_request, user_id_from_token
 
-        if not media_origin():
+        # Only on the media origin. The cookie carries an explicit Domain (it has
+        # to, or it would never reach that host), so it is also sent back to the
+        # app origin - where accepting it would quietly make it a second, longer-
+        # lived session: it outlives the real one by up to its own 12 hours, and
+        # every CredentialOrSessionMediaMixin view would take it, including the
+        # panel image proxy, whose upstream fetches are billed. Restricting it to
+        # the host it was minted for is what makes "strictly weaker than the
+        # session cookie" true rather than aspirational.
+        if not is_media_origin_request(request):
             return None
         user_id = user_id_from_token(request.COOKIES.get(MEDIA_COOKIE_NAME, ""))
         if user_id is None:

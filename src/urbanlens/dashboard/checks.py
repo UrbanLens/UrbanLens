@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.apps import apps
+from django.conf import settings
 from django.core.checks import Error, register
 from django.db.models import FileField
 
@@ -106,3 +107,72 @@ def check_media_authorizers(app_configs: Sequence[AppConfig] | None = None, **kw
                 )
 
     return errors
+
+
+@register()
+def check_media_origin_cookie_domain(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """Verify a configured media origin can actually issue its credential.
+
+    Serving uploads from their own hostname (``UL_MEDIA_BASE_URL``) only works
+    if the browser will send the media cookie there, and that hinges entirely
+    on the ``Domain`` attribute
+    :func:`~urbanlens.dashboard.services.media.origin.cookie_domain` derives
+    from ``SITE_URL`` and the media host. When it cannot derive one, every
+    ``set_media_cookie`` call becomes a no-op and the media origin answers 404
+    for every request - with no exception, no log line, and a working-looking
+    app whose images have all silently vanished.
+
+    That is not hypothetical: this check exists because the first version of
+    that function read ``settings.UL_SITE_URL`` (the *environment variable's*
+    spelling; the setting is ``SITE_URL``), got ``""`` on every real
+    deployment, and would have shipped exactly that outage. A test suite that
+    ``override_settings``-es a name into existence cannot catch that class of
+    mistake, because the override invents the very setting production lacks -
+    so the guard has to run against the real settings, which is what a system
+    check is.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        One error when a media origin is configured but unusable.
+    """
+    from urllib.parse import urlsplit
+
+    from urbanlens.dashboard.services.media.origin import PUBLIC_SUFFIXES, cookie_domain, media_origin, media_origin_host, shared_suffix
+
+    if not media_origin():
+        return []
+
+    if not media_origin_host():
+        return [
+            Error(
+                f"UL_MEDIA_BASE_URL is set to {media_origin()!r}, which has no hostname. It must be a full origin, e.g. https://media.urbanlens.org.",
+                id="dashboard.E003",
+            ),
+        ]
+
+    domain = cookie_domain()
+    if not domain:
+        raw = shared_suffix(media_origin_host(), urlsplit(str(settings.SITE_URL or "")).hostname or "")
+        if raw and raw.lower() in PUBLIC_SUFFIXES:
+            return [
+                Error(
+                    f"SITE_URL and UL_MEDIA_BASE_URL share only {raw!r}, which is a public suffix - a cookie cannot be "
+                    f"scoped to one, so the media origin would 404 for every viewer. Point them at hosts under a common "
+                    f"registrable domain, or set UL_MEDIA_COOKIE_DOMAIN explicitly.",
+                    id="dashboard.E005",
+                ),
+            ]
+        return [
+            Error(
+                f"UL_MEDIA_BASE_URL is set ({media_origin_host()!r}), but no cookie domain can be derived from it and "
+                f"SITE_URL ({str(settings.SITE_URL)!r}). The media cookie would never be set, so every media URL would "
+                f"404 for every viewer. Either point the two at hosts that share a registrable domain "
+                f"(urbanlens.org + media.urbanlens.org), or set UL_MEDIA_COOKIE_DOMAIN explicitly.",
+                id="dashboard.E004",
+            ),
+        ]
+
+    return []

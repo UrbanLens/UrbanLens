@@ -306,9 +306,19 @@ services:
       # write one.
       - media_volume:/app/src/urbanlens/media:ro
       - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./src/urbanlens/config/nginx/media.conf:/etc/nginx/conf.d/media.conf:ro
+      # A *template*, not a conf: the nginx entrypoint runs envsubst over
+      # /etc/nginx/templates/*.template into /etc/nginx/conf.d/, which is how
+      # MEDIA_FRAME_ANCESTORS below reaches the CSP. envsubst only substitutes
+      # names present in the environment, so nginx's own $host/$scheme survive.
+      - ./src/urbanlens/config/nginx/media.conf.template:/etc/nginx/templates/media.conf.template:ro
       # django.conf is deliberately NOT mounted here.
       - /dev/null:/etc/nginx/conf.d/default.conf:ro
+    environment:
+      # Who may frame a document served from this origin - the app origin, so
+      # the Vault lightbox's cross-origin <iframe> works. 'none' when UL_SITE_URL
+      # is unset: a misconfigured deployment should refuse framing, not allow it
+      # from anywhere.
+      MEDIA_FRAME_ANCESTORS: ${UL_SITE_URL:-'none'}
     ports:
       - "${UL_MEDIA_PORT:-21801}:8080"
     depends_on:
@@ -545,20 +555,33 @@ services:
     pids_limit: 512
     tmpfs:
       # Decoders stage temp files here (ffmpeg's transcode scratch, soffice's
-      # profile dir). Sized for the largest upload the site accepts plus a
-      # re-encode of it, and noexec/nosuid so a dropped payload cannot be run
-      # from the one directory this container writes freely.
-      - /tmp:size=2g,mode=1777,noexec,nosuid,nodev
+      # profile dir), and noexec/nosuid means a payload dropped in the one
+      # directory this container writes freely cannot be executed from it.
+      #
+      # A Docker tmpfs is RAM, and it is charged to this service's own
+      # mem_limit - not to disk, as the sizing here originally assumed. So
+      # `size=` and `mem_limit` are one budget, split: 1g of scratch against
+      # 3g total leaves ~2g for the two prefork children and their ffmpeg /
+      # soffice subprocesses. Sizing the tmpfs at the full mem_limit (which
+      # this did) means a single large transcode can claim the entire budget
+      # and OOM-kill the worker that is writing it.
+      #
+      # 1g covers one 200MB upload (nginx client_max_body_size) copied in plus
+      # its re-encode, with room for the second slot to be mid-sized. Two
+      # simultaneous maximal videos will not fit - that is deliberate: failing
+      # one transcode is better than the OOM killer taking the container.
+      - /tmp:size=1g,mode=1777,noexec,nosuid,nodev
     logging:
       driver: "json-file"
       options:
         max-size: "200k"
         max-file: "10"
     # Two prefork children each decoding a full-resolution photo, plus the
-    # resident GDAL/Pillow/Django imports. Deliberately below celery-worker's
-    # ceiling: this container should be the first thing the OOM killer takes.
+    # resident GDAL/Pillow/Django imports, plus the tmpfs above - which is RAM
+    # and comes out of this same number, so this is ~2g of processes and 1g of
+    # scratch rather than 3g of processes.
     cpus: ${CPU_LIMIT__MEDIA_WORKER:-${CPU_LIMIT:-2}}
-    mem_limit: ${MEM_LIMIT__MEDIA_WORKER:-${MEM_LIMIT:-2g}}
+    mem_limit: ${MEM_LIMIT__MEDIA_WORKER:-3g}
 
   celery-beat:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_beat
@@ -797,6 +820,9 @@ volumes:
 networks:
   app_network:
     driver: bridge
+    # Docker defaults new bridge networks to dual-stack.
+    # Disable IPv6 here so only the working A record is ever returned.
+    enable_ipv6: false
 
   # `internal: true` is the isolation. Docker creates no gateway for an internal
   # network, so a container attached only to this one cannot reach the internet,
@@ -807,6 +833,3 @@ networks:
   sandbox_network:
     driver: bridge
     internal: true
-    # Docker defaults new bridge networks to dual-stack.
-    # Disable IPv6 here so only the working A record is ever returned.
-    enable_ipv6: false
