@@ -133,6 +133,18 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             release=self.release,
             connect_timeout=self.connect_timeout,
             request_timeout=self.request_timeout,
+            # overturemaps-py defaults this to False, which skips the small
+            # STAC-geoparquet index that resolves a bbox to the handful of S3
+            # files that actually intersect it - without it, every lookup
+            # (however small the bbox) opens a pyarrow dataset over the
+            # *entire* global theme (hundreds of multi-gigabyte partition
+            # files per theme) and depends on filter pushdown alone to prune
+            # it while scanning. Verified against the 2026-08-19.0 release: a
+            # ~111m bbox resolves to 1 intersecting file via STAC vs. 512
+            # files in the unfiltered dataset. This was driving Celery worker
+            # RSS into the multiple-gigabytes range per call and triggering
+            # the kernel OOM killer - see docs/PROBLEMS.md.
+            stac=True,
         )
 
     # -- Building / property boundary relevant themes ------------------------

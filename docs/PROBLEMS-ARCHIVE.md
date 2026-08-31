@@ -11,6 +11,46 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-08-31: `OvertureMapsGateway` scanned the entire planet's buildings dataset per lookup, OOM-killing Celery workers
+
+Found investigating a host-wide (`chiron`) out-of-memory emergency: `celeryd` prefork children in
+two independent dev sandboxes (`urbanlens_agent_aa4df6e`, `urbanlens_agent_ae97b86` - unrelated
+checkouts of this same repo) had each grown to 4.5-5.4GB RSS, repeatedly triggering the kernel OOM
+killer (confirmed via `dmesg`/`journalctl -k`: `Out of memory: Killed process ... ([celeryd: celer)`,
+one victim every few minutes), with the host down to ~500MB free and swap fully exhausted. This
+starved every other project sharing the host, not just UrbanLens.
+
+Root cause: `OvertureMapsGateway._fetch()` (`services/apis/locations/boundaries/overture_maps.py`)
+called `overturemaps.geodataframe()` without `stac=True`. That parameter gates whether the official
+Overture client first resolves a bbox against Overture's small STAC-geoparquet index to the handful
+of S3 partition files that actually intersect it; without it, `pyarrow.dataset.dataset()` opens the
+*entire* theme (every partition file in the release) and relies on filter pushdown alone while
+scanning. Verified live against the `2026-08-19.0` release: a ~111m lookup bbox
+(`BOUNDARY_LOOKUP_BBOX_DEGREES = 0.001`, the actual size every caller here uses) resolves to **1**
+intersecting file via STAC vs. **512** files in the unfiltered dataset - global buildings-theme
+partitions run into the multiple gigabytes each. This is called from `auto_nest_building_pins`,
+`classify_detail_marker`, boundary generation, and the `OvertureBuildingAttributesPanelSource`
+pin-detail panel - all frequent, small-bbox, single-building lookups that should each read a few MB,
+not scan the whole planet. `test_overture_building_attributes_budget.py`'s docstring already had a
+second, independent symptom on record ("observed in production taking ~50s+ each back-to-back") that
+nobody had connected to this until now.
+
+Compounding factor, not the root cause: `CELERY_WORKER_MAX_TASKS_PER_CHILD`/
+`CELERY_WORKER_MAX_MEMORY_PER_CHILD` were both unset, so a prefork child that hit this once never
+recycled - its bloat was permanent for the life of the process, and with no bound on the pool it
+took several such hits (spread across the pool by chance) to exhaust the host rather than one.
+
+**Resolved 2026-08-31.** `_fetch()` now passes `stac=True`; regression guard in
+`test_overture_maps_stac_narrowing.py` asserts it. `CELERY_WORKER_MAX_TASKS_PER_CHILD=200` and
+`CELERY_WORKER_MAX_MEMORY_PER_CHILD=512MB` (`settings/base.py`, both env-overridable) now recycle a
+child that balloons for any reason - defense in depth, not a fix for this specific leak, since
+imports/allocator fragmentation in a long-lived prefork worker only ever grow and nothing else
+returns that memory to the OS. Immediate relief: the two OOM-cycling worker containers (plus their
+sibling app/panels/beat/app-ws containers, so no process kept the pre-fix module cached in memory)
+were restarted, reclaiming ~19GB back to the host (500MB free -> 20GB free, swap 4.0/4.0GB used ->
+dropping) within seconds - confirming the fix rather than the restart was what mattered, since the
+same containers stayed flat afterward instead of re-climbing.
+
 ## RESOLVED 2026-08-29: the external API leaks a full Django debug page on any `Accept: text/html` request
 
 Found calibrating the new sqlmap integration (`bin/run_sqlmap_scan.sh`) against a real dev container -

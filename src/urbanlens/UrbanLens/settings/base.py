@@ -320,6 +320,16 @@ CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_SOFT_TIME_LIMIT", "2700"))
 CELERY_TASK_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_TIME_LIMIT", "3600"))
+# Defense-in-depth, not a fix for any specific task: a long-lived prefork worker only ever grows -
+# every C-extension a task lazily imports (GDAL/GeoPandas/Shapely/Pillow/...) stays resident for
+# the process's life, and neither Python's allocator nor glibc reliably returns freed arenas to the
+# OS. A worker that happens to run a wide task mix, or hits one unusually large payload, ratchets up
+# permanently with nothing to bring it back down. Recycling after either bound is hit replaces the
+# child with a fresh fork at the next task boundary - cheap, since imports come back via each task's
+# own lazy `import`, and the only real defense once a specific leak (see the OvertureMapsGateway fix
+# in docs/PROBLEMS.md) isn't the last one this worker ever hits.
+CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_TASKS_PER_CHILD", "200"))
+CELERY_WORKER_MAX_MEMORY_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_MEMORY_PER_CHILD", str(512 * 1024)))  # KiB
 # Backup defaults. Site admins can override these values in the database-backed settings UI.
 UL_BACKUP_ENABLED = os.getenv("UL_BACKUP_ENABLED", "True").lower() in {"true", "1", "yes"}
 UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
