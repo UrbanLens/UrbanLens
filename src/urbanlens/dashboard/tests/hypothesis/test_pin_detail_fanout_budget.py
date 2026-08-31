@@ -34,17 +34,24 @@ from urbanlens.dashboard.models.pin.model import Pin
 
 #: The most load-triggered HTMX requests the pin detail page may fire.
 #:
-#: Set to the count at the time of writing - **53** - which is a ratchet, not an
-#: endorsement. That number is already more than the dev deployment's Postgres
-#: could serve concurrently; the budget exists to stop it growing while the real
-#: fix is decided, not to say the current value is fine.
+#: Was 53 at the time of writing; lowered to **48** when the Visits/Photos/
+#: Article/Notes/Edit-History subnav tabs switched from `hx-trigger="load"` to
+#: `"revealed"` - those five panels sit inside a client-side-hidden
+#: `<section data-tab-panel>` that only the tab switch ever unhides (the same
+#: eager-hidden-tab defect independently found and fixed on the Organize page),
+#: so `load` was firing them on every page view regardless of which tab was
+#: open. This is still a ratchet, not an endorsement: the remaining 48 are
+#: already more than the dev deployment's Postgres could serve concurrently;
+#: the budget exists to stop it growing while the real fix - loading panels in
+#: waves, or behind one request - is decided.
 #:
-#: Not all 53 fire on every load: some carry a filter
+#: Not all 48 fire on every load: some carry a filter
 #: (`load[!window.ulSectionCollapsed(...)]`) and stay quiet for a collapsed
 #: section, which is why the deployment showed around thirty concurrent requests
-#: rather than 53. The static count is still the right thing to bound, because
-#: it is the ceiling a user with everything expanded actually reaches.
-MAX_LOAD_TRIGGERED_REQUESTS = 53
+#: rather than the static count. The static count is still the right thing to
+#: bound, because it is the ceiling a user with everything expanded actually
+#: reaches.
+MAX_LOAD_TRIGGERED_REQUESTS = 48
 
 #: An element that fetches as soon as the page loads. `load` may carry a filter
 #: (`load[!window.ulSectionCollapsed(...)]`) or sit alongside other triggers, so

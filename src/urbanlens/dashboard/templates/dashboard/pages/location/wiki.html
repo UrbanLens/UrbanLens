@@ -336,7 +336,7 @@
             <div class="card__body">
                 <div id="article-panel"
                      hx-get="{% url 'location.wiki.article' location.slug %}"
-                     hx-trigger="load"
+                     hx-trigger="revealed"
                      hx-swap="outerHTML">
                     <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading article...</div>
                 </div>
@@ -350,7 +350,7 @@
         {# ?album= is carried through so a deep link (or a Back navigation) loads that album directly. #}
         <div id="albums-panel"
              hx-get="{% url 'location.wiki.albums' location.slug %}?{% if include_children %}children=1{% endif %}{% if include_children and request.GET.album %}&{% endif %}{% if request.GET.album %}album={{ request.GET.album|urlencode }}{% endif %}"
-             hx-trigger="load"
+             hx-trigger="revealed"
              hx-swap="outerHTML"
              class="albums-panel card wiki-card">
             <div class="card-header">
@@ -364,7 +364,7 @@
     <section class="page-tab-panel" data-tab-panel="comments" hidden>
         <div id="comment-panel"
              hx-get="{% url 'location.wiki.comments' location.slug %}{% if include_children %}?children=1{% endif %}"
-             hx-trigger="load"
+             hx-trigger="revealed"
              hx-swap="outerHTML"
              class="card wiki-card">
             <div class="card-header">
@@ -386,7 +386,7 @@
                 <div id="wiki-tab-content"
                      class="card__body wiki-tab-content"
                      hx-get="{% url 'location.wiki.history' location.slug %}"
-                     hx-trigger="load"
+                     hx-trigger="revealed"
                      hx-swap="innerHTML">
                     <div class="wiki-loading">
                         <i class="material-icons spin">autorenew</i> Loading...
@@ -401,7 +401,7 @@
                 <div class="card__body">
                     <div id="article-history-panel"
                          hx-get="{% url 'location.wiki.article.history' location.slug %}"
-                         hx-trigger="load"
+                         hx-trigger="revealed"
                          hx-swap="outerHTML">
                         <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
                     </div>
