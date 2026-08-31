@@ -4116,3 +4116,19 @@ called on a POST field value that mypy infers as `str | list[object]`. The surro
 hygiene gap rather than a live bug - but worth a real fix (narrow `body`'s type properly, or read
 `request.POST` through a helper that always returns `str`) rather than a `cast`, per the project's
 mypy policy.
+
+## OPEN 2026-08-31: `vault-photos.spec.ts`'s "changing sort re-fetches the grid in the new order" test flakes on a persistent dev DB
+
+Found running the Vault Photos/albums Playwright specs against the `ae97b86` ephemeral dev
+environment after a Batch 3 (Vault albums) fix pass - pre-existing (Batch 2), unrelated to that
+batch's changes. The test asserts the grid's first tile differs between "recent uploads" and "name"
+sort, on the assumption that 30+ randomly captioned seed photos won't coincidentally sort the same
+way both times. Against this environment's `e2e-primary` account (71 accumulated photos from
+repeated suite runs against the same persistent database, not a fresh seed), the same photo landed
+first under both orderings and the test failed on both the initial attempt and the retry. Matches
+the same class of problem noted in this file previously for accumulated E2E test data breaking
+scroll/prune assertions - reseeding a clean, modest photo set for `e2e-primary` before this spec
+runs would fix it; a sturdier version of the test would also pick two captions guaranteed not to
+tie (e.g. by explicitly seeding one photo with a caption that sorts alphabetically first and a
+different, more recent one) rather than relying on randomness against an unbounded, growing dataset.
+mypy policy.

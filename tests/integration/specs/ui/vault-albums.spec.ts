@@ -62,8 +62,12 @@ test.describe("vault albums", () => {
 
         await details.locator("summary").click();
         await expect(details).toHaveAttribute("open", "");
-        await expect(pinAlbumsPanel.locator(".album-card-name", { hasText: pinAlbumName })).toBeVisible({ timeout: 10000 });
-        await expect(pinAlbumsPanel.locator(".album-card-pin")).toContainText(pinName);
+        // Scoped to this test's own card - this dev DB persists across runs
+        // and other tests here, so an unscoped .album-card-pin lookup can
+        // resolve to more than one card and fail on Playwright's strict mode.
+        const card = pinAlbumsPanel.locator(".album-card", { has: page.locator(".album-card-name", { hasText: pinAlbumName }) });
+        await expect(card).toBeVisible({ timeout: 10000 });
+        await expect(card.locator(".album-card-pin")).toContainText(pinName);
 
         // Closing and reopening doesn't refetch (hx-trigger="toggle once") -
         // assert on the actual request count, not just on DOM state that a
