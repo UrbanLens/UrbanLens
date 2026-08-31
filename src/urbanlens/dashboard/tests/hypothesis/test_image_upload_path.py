@@ -3,12 +3,15 @@
 Covers the SuspiciousFileOperation regression: an uploaded filename longer
 than the field's old default max_length (100) - real-world archival/scan
 filenames routinely are - overflowed Storage.get_available_name's truncation
-math and crashed the upload outright instead of storing the file.
+math and crashed the upload outright instead of storing the file. Now doubly
+moot for length purposes (the stored stem is a fixed-length opaque token,
+never the uploaded name), but still worth proving nothing regresses for an
+extreme filename.
 
 Every generated path now carries a random ``<bucket>/<token>/`` directory
-ahead of the filename (see ``pin_image_upload_path``'s docstring - it is what
-stops a filename from being a guessable URL), so assertions here match on the
-filename's own segment rather than the exact path.
+ahead of an opaque filename (see ``pin_image_upload_path``'s docstring - the
+directory is what stops a filename from being a guessable URL; the opaque
+name is what stops the URL from spelling out the uploaded file's own name).
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ def _filename_segment(path: str) -> str:
     assert match, f"{path!r} does not look like pin_images/<bucket>/<token>/<filename>"
     return match.group(1)
 
+
 _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 
 # The filename that triggered the production crash: a real archival-photo
@@ -52,37 +56,46 @@ def _jpeg_bytes() -> bytes:
 
 
 class PinImageUploadPathTests(SimpleTestCase):
-    """pin_image_upload_path() keeps every generated path well under the field's max_length."""
+    """pin_image_upload_path() never leaks the uploaded filename and stays well under max_length."""
 
-    def test_short_name_passes_through(self):
-        path = pin_image_upload_path(None, "photo.jpg")
+    def test_short_name_produces_an_opaque_filename(self):
+        path = pin_image_upload_path(Image(), "photo.jpg")
         self.assertTrue(_RANDOM_DIR_RE.match(path), path)
-        self.assertEqual(_filename_segment(path), "photo.jpg")
-
-    def test_two_uploads_of_the_same_name_get_different_directories(self):
-        first = pin_image_upload_path(None, "photo.jpg")
-        second = pin_image_upload_path(None, "photo.jpg")
-        self.assertNotEqual(first, second, "the random directory must differ per upload, or the path is guessable")
-
-    def test_overlong_name_is_trimmed(self):
-        path = pin_image_upload_path(None, _OVERLONG_FILENAME)
-        # Not the field's old 100-char default this fixture was chosen to
-        # overflow - the random directory now sits ahead of the trimmed stem
-        # too, so the bound to check is the field's actual max_length.
-        self.assertLessEqual(len(path), Image._meta.get_field("image").max_length)
-        self.assertTrue(_filename_segment(path).startswith("POS-0005"))
+        self.assertNotIn("photo", _filename_segment(path))
         self.assertTrue(path.endswith(".jpg"))
 
-    def test_camera_prefix_survives_trimming(self):
-        # is_camera_generated_filename() matches on the *stored* name's
-        # prefix - a long camera-named file must still start with it.
+    def test_two_uploads_of_the_same_name_get_different_directories_and_filenames(self):
+        first = pin_image_upload_path(Image(), "photo.jpg")
+        second = pin_image_upload_path(Image(), "photo.jpg")
+        self.assertNotEqual(first, second, "both the directory and the filename must differ per upload, or the path is guessable")
+
+    def test_overlong_name_never_reaches_storage(self):
+        path = pin_image_upload_path(Image(), _OVERLONG_FILENAME)
+        self.assertLessEqual(len(path), Image._meta.get_field("image").max_length)
+        self.assertNotIn("POS-0005", path)
+        self.assertTrue(path.endswith(".jpg"))
+
+    def test_camera_prefix_never_reaches_storage(self):
+        # is_camera_generated_filename() used to match on the *stored* name's
+        # prefix; it now reads Image.original_filename instead (see
+        # test_image_attribution.py), specifically so nothing recognisable
+        # from the upload has to survive into the stored path at all.
         long_camera_name = "PXL_20260709_123456" + ("_extra" * 20) + ".jpg"
-        path = pin_image_upload_path(None, long_camera_name)
-        self.assertTrue(_filename_segment(path).startswith("PXL_20260709_123456"))
+        path = pin_image_upload_path(Image(), long_camera_name)
+        self.assertNotIn("PXL_20260709_123456", path)
+
+    def test_capture_year_is_embedded_when_known(self):
+        from datetime import datetime
+
+        from django.utils import timezone
+
+        instance = Image(taken_at=timezone.make_aware(datetime(2026, 7, 9)))
+        path = pin_image_upload_path(instance, "photo.jpg")
+        self.assertTrue(_filename_segment(path).startswith("2026-"), path)
 
     @given(st.text(min_size=1, max_size=300), st.sampled_from([".jpg", ".png", ".jpeg", ".heic", ""]))
     def test_generated_path_always_fits_field_max_length(self, stem, ext):
-        path = pin_image_upload_path(None, f"{stem}{ext}")
+        path = pin_image_upload_path(Image(), f"{stem}{ext}")
         self.assertLessEqual(len(path), Image._meta.get_field("image").max_length)
 
 
@@ -92,4 +105,5 @@ class ImageUploadOverlongFilenameTests(TestCase):
 
     def test_overlong_filename_upload_succeeds(self):
         image = Image.objects.create(image=SimpleUploadedFile(_OVERLONG_FILENAME, _jpeg_bytes(), content_type="image/jpeg"))
-        self.assertTrue(_filename_segment(image.image.name).startswith("POS-0005"), image.image.name)
+        self.assertNotIn("POS-0005", image.image.name)
+        self.assertEqual(image.original_filename, _OVERLONG_FILENAME)

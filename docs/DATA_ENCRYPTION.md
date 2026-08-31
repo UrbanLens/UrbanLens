@@ -191,6 +191,7 @@ entirely, operation order relative to the `AlterField` in the same migration doe
 | `EmergencyContactDefault` | `label` | Names a third party who never consented to being in this database; its sibling `email` was already encrypted | 2026-08-15 |
 | `FriendInvitation` | `message` | The inviter's free-text note to someone who does not yet have an account. `email` stays plaintext — see below | 2026-08-15 |
 | `Image` | `exif_data` | The EXIF snapshot from an upload — camera make/model/serial, lens, timestamps, and GPS unless the uploader opted out of location. **The only copy**, see below | 2026-08-24 |
+| `Image` | `original_filename` | The upload's true filename, which a device/app can auto-generate from a capture timestamp or a user can type freely. Kept off the stored path/URL (see `models.images.model.pin_image_upload_path`) so it never reaches anyone the photo is shared with; retained only for the author-attribution heuristic and "download this photo" affordances | 2026-08-31 |
 
 ### `Image.exif_data`: the only copy, and the first `EncryptedJSONField`
 

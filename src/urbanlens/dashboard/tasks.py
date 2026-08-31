@@ -664,6 +664,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         extract_source_url,
         extract_taken_at,
         is_camera_generated_filename,
+        write_image_marker_thumbnail,
         write_image_thumbnail,
     )
     from urbanlens.dashboard.services.media.storage import get_downscale_policy
@@ -729,7 +730,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         image.source_url = source_url
         update_fields["source_url"] = source_url
 
-    if image.profile is not None and not (image.author or image.source_url or image.caption or image.copyright) and is_camera_generated_filename(image.image.name or ""):
+    if image.profile is not None and not (image.author or image.source_url or image.caption or image.copyright) and is_camera_generated_filename(image.original_filename or ""):
         uploader_name = image.profile.full_name or image.profile.username
         if uploader_name:
             image.author = uploader_name
@@ -768,6 +769,13 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
     except (OSError, ValueError, PILDecompressionBombError) as exc:
         # A miss here is retried by the hourly backfill_image_thumbnails sweep
         logger.warning("Thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
+
+    try:
+        if write_image_marker_thumbnail(image):
+            update_fields["marker_thumbnail"] = image.marker_thumbnail.name
+    except (OSError, ValueError, PILDecompressionBombError) as exc:
+        # A miss here is retried by the hourly backfill_image_marker_thumbnails sweep
+        logger.warning("Marker thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
 
     return _UploadProcessResult(update_fields, coords, new_stored_size)
 
@@ -847,6 +855,7 @@ def _sync_deduped_siblings(image: Image) -> None:
         "exif_data": image.exif_data,
         "file_size": image.file_size,
         "thumbnail": image.thumbnail.name if image.thumbnail else "",
+        "marker_thumbnail": image.marker_thumbnail.name if image.marker_thumbnail else "",
     }
     if processed_name:
         payload["image"] = processed_name
@@ -1050,6 +1059,76 @@ def backfill_image_thumbnails(limit: int | None = None) -> int:
     cache.set(_THUMBNAIL_BACKFILL_CURSOR_KEY, ids[-1], _THUMBNAIL_BACKFILL_CURSOR_TTL)
     safely_enqueue_task(generate_image_thumbnails, ids)
     logger.info("Thumbnail backfill queued %d photo(s) after pk %s", len(ids), cursor)
+    return len(ids)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def generate_image_marker_thumbnails(image_ids: list[int]) -> int:
+    """Fill in missing map-marker thumbnails for already-stored photos.
+
+    The marker-thumbnail mirror of :func:`generate_image_thumbnails` - see
+    its docstring for why this exists alongside upload-time generation.
+
+    Args:
+        image_ids: Primary keys of :class:`~urbanlens.dashboard.models.images.model.Image` rows.
+
+    Returns:
+        How many marker thumbnails were written.
+    """
+    from PIL.Image import DecompressionBombError as PILDecompressionBombError
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.media.images import write_image_marker_thumbnail
+
+    written = 0
+    for image in Image.objects.filter(pk__in=image_ids, media_type=MediaKind.PHOTO):
+        try:
+            if write_image_marker_thumbnail(image):
+                image.save(update_fields=["marker_thumbnail", "updated"])
+                written += 1
+        except (OSError, ValueError, PILDecompressionBombError) as exc:
+            logger.warning("Marker thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
+    return written
+
+
+#: Cache key for the exclusive pk cursor :func:`backfill_image_marker_thumbnails` walks.
+_MARKER_THUMBNAIL_BACKFILL_CURSOR_KEY = "image-marker-thumbnail-backfill-cursor"
+#: Same rationale as _THUMBNAIL_BACKFILL_CURSOR_TTL.
+_MARKER_THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
+
+
+@shared_task
+def backfill_image_marker_thumbnails(limit: int | None = None) -> int:
+    """Enqueue a bounded batch of photos that still lack a map-marker thumbnail.
+
+    The marker-thumbnail mirror of :func:`backfill_image_thumbnails` - see its
+    docstring for the walk/cursor behaviour, which this copies exactly.
+
+    Args:
+        limit: Override the default batch size. Beat does not pass this;
+            tests do.
+
+    Returns:
+        How many image ids were queued (0 when the library is caught up, or
+        this tick only reset the cursor).
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.images import THUMBNAIL_BACKFILL_BATCH, photos_missing_marker_thumbnails
+
+    batch = THUMBNAIL_BACKFILL_BATCH if limit is None else max(1, limit)
+    cursor = int(cache.get(_MARKER_THUMBNAIL_BACKFILL_CURSOR_KEY) or 0)
+    ids = photos_missing_marker_thumbnails(after_pk=cursor, limit=batch)
+    if not ids:
+        if cursor:
+            cache.delete(_MARKER_THUMBNAIL_BACKFILL_CURSOR_KEY)
+            logger.info("Marker thumbnail backfill wrapped; next tick resumes from the start")
+        return 0
+
+    cache.set(_MARKER_THUMBNAIL_BACKFILL_CURSOR_KEY, ids[-1], _MARKER_THUMBNAIL_BACKFILL_CURSOR_TTL)
+    safely_enqueue_task(generate_image_marker_thumbnails, ids)
+    logger.info("Marker thumbnail backfill queued %d photo(s) after pk %s", len(ids), cursor)
     return len(ids)
 
 

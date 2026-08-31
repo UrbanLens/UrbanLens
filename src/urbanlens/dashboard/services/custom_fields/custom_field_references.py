@@ -14,7 +14,6 @@ from the feature request - a user can only reference what they can already see:
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import Q
@@ -134,7 +133,9 @@ def reference_label(kind: str, target: Any) -> str:
     if kind == "trip":
         return target.name or "Unnamed trip"
     if kind == "photo":
-        return target.caption or Path(target.image.name).name or f"Photo {target.pk}"
+        # Not the stored filename: it's an opaque anonymized token, not a
+        # human-readable name (see models.images.model.pin_image_upload_path).
+        return target.caption or f"Photo {target.pk}"
     if kind == "list":
         return target.name or "Unnamed list"
     if kind == "profile":

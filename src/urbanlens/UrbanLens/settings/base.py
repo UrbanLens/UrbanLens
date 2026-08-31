@@ -457,6 +457,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.backfill_image_thumbnails",
         "schedule": crontab(minute=4),
     },
+    # Same shape as image-thumbnail-backfill, for the tiny map-marker preview.
+    # Offset by half an hour so the two sweeps don't compete for the same tick.
+    "image-marker-thumbnail-backfill": {
+        "task": "urbanlens.dashboard.tasks.backfill_image_marker_thumbnails",
+        "schedule": crontab(minute=34),
+    },
     # Daily is plenty: retention is measured in hundreds of days
     # (services.pins.pin_sync.TOMBSTONE_RETENTION), and the pins/deleted/ feed's 410
     # full-resync signal guards clients against any pruning-induced gap.

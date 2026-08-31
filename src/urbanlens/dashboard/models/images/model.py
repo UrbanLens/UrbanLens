@@ -11,26 +11,19 @@ from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, C
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
-from urbanlens.dashboard.models.fields import EncryptedJSONField
+from urbanlens.dashboard.models.fields import EncryptedJSONField, EncryptedTextField
 from urbanlens.dashboard.models.images.queryset import ImageManager
 from urbanlens.dashboard.services.media.access import declares_media_family
 
 if TYPE_CHECKING:
+    from datetime import datetime
     from decimal import Decimal
 
-# Room for "pin_images/", the random directory below, and the ~8-character
-# suffix Storage.get_available_name appends on a filename collision,
-# comfortably inside the field's max_length. Uploaded filenames are arbitrary
-# and unbounded - a browser drag-drop, a device-scan import, or a Media-gallery
-# URL can each hand over a name well past 100 characters, which overflowed
-# the field's old default max_length (100) outright and raised
-# SuspiciousFileOperation instead of storing the file.
-_UPLOAD_STEM_LIMIT = 80
 _UPLOAD_EXT_LIMIT = 12
 
 # Bytes of randomness in each upload's directory name. 12 bytes is 96 bits,
 # rendered as 16 URL-safe characters - far past any feasible number of guesses
-# against a rate-limited endpoint, and short enough to leave the stem room.
+# against a rate-limited endpoint.
 _UPLOAD_TOKEN_BYTES = 12
 
 # Leading characters of the token used as a fan-out bucket, so MEDIA_ROOT does
@@ -48,9 +41,36 @@ def _random_upload_dir() -> str:
     return f"{token[:_UPLOAD_BUCKET_CHARS]}/{token[_UPLOAD_BUCKET_CHARS:]}"
 
 
+def anonymized_media_stem(instance: Image | None) -> str:
+    """A privacy-safe filename stem: a random token, year-prefixed when a capture date is known.
+
+    The uploaded file's own name never reaches storage - see
+    :func:`pin_image_upload_path` - because a device/app's auto-generated name
+    (``PXL_20260709_123456.jpg``) or a user's own descriptive one can carry
+    whatever the uploader typed or wherever their phone was, and that name used
+    to ride along verbatim as the last segment of an otherwise-unguessable URL,
+    spelled out to anyone the photo was legitimately shared with. Only the
+    *year* survives into the stem - not the full date - since that is the one
+    piece of "when was this taken" worth keeping in a downloaded file's name;
+    anything more precise re-approaches the granularity of the name this
+    replaces. The real date lives on the row (``taken_at``/``filename_taken_at``),
+    governed by the app's own visibility rules.
+
+    Args:
+        instance: The Image being saved, or None/a bare instance for a
+            standalone call (tests, or a migration's historical model).
+
+    Returns:
+        ``"<year>-<uuid4 hex>"`` when a capture year is known, else the bare token.
+    """
+    taken = getattr(instance, "taken_at", None) or getattr(instance, "filename_taken_at", None)
+    token = uuid4().hex
+    return f"{taken.year}-{token}" if taken is not None else token
+
+
 @declares_media_family("pin_images")
 def pin_image_upload_path(instance: Image, filename: str) -> str:
-    """Storage path for an uploaded Image file, under a random directory.
+    """Storage path for an uploaded Image file, under a random directory and an opaque name.
 
     Not underscore-prefixed despite being an internal helper - Django
     migrations serialize a callable ``upload_to`` by importable reference, so
@@ -62,14 +82,14 @@ def pin_image_upload_path(instance: Image, filename: str) -> str:
     read the file - see ``services.media.access`` - this only removes the
     ability to *name* a file you were never shown.
 
-    The filename itself is kept as the last segment, and only its stem is
-    trimmed, always from the end: the *prefix* must survive into storage for
-    ``services.media.images.is_camera_generated_filename`` to keep recognizing
-    camera-named uploads (e.g. ``PXL_20260709_123456.jpg``) for its
-    author-attribution heuristic, which reads the stored name.
+    The filename itself is never kept: only its extension survives, alongside
+    :func:`anonymized_media_stem`. The true uploaded name is captured
+    separately on ``Image.original_filename`` (see ``Image.save``) before this
+    runs, so ``services.media.images.is_camera_generated_filename`` reads
+    that field rather than the stored name.
     """
-    stem, ext = posixpath.splitext(filename)
-    return f"pin_images/{_random_upload_dir()}/{stem[:_UPLOAD_STEM_LIMIT]}{ext[:_UPLOAD_EXT_LIMIT]}"
+    ext = posixpath.splitext(filename)[1]
+    return f"pin_images/{_random_upload_dir()}/{anonymized_media_stem(instance)}{ext[:_UPLOAD_EXT_LIMIT]}"
 
 
 @declares_media_family("pin_images")
@@ -77,13 +97,28 @@ def pin_image_thumbnail_path(instance: Image, filename: str) -> str:
     """Storage path for an Image's small grid thumbnail.
 
     Same rules as :func:`pin_image_upload_path`, under a ``thumbs/`` prefix so
-    a thumbnail can never collide with the original file when both are derived
-    from the same upload name. It gets its own random directory rather than
-    reusing the original's: deriving one path from the other would make the
-    preview guessable from the full-size URL and vice versa.
+    a thumbnail can never collide with the original file. It gets its own
+    random directory rather than reusing the original's: deriving one path
+    from the other would make the preview guessable from the full-size URL
+    and vice versa. The incoming *filename* is already one
+    ``write_image_thumbnail`` built from the original's own (already
+    anonymized) stem plus a ``-thumb`` marker, so it is only trimmed here, not
+    re-anonymized.
     """
     stem, ext = posixpath.splitext(filename)
-    return f"pin_images/thumbs/{_random_upload_dir()}/{stem[:_UPLOAD_STEM_LIMIT]}{ext[:_UPLOAD_EXT_LIMIT]}"
+    return f"pin_images/thumbs/{_random_upload_dir()}/{stem[:100]}{ext[:_UPLOAD_EXT_LIMIT]}"
+
+
+@declares_media_family("pin_images")
+def pin_image_marker_thumbnail_path(instance: Image, filename: str) -> str:
+    """Storage path for an Image's tiny (~44px) map-marker thumbnail.
+
+    Same rules as :func:`pin_image_thumbnail_path`, under a ``markers/``
+    prefix. See :func:`urbanlens.dashboard.services.media.images.write_image_marker_thumbnail`
+    for where *filename* (``<stem>-marker.webp``) comes from.
+    """
+    stem, ext = posixpath.splitext(filename)
+    return f"pin_images/markers/{_random_upload_dir()}/{stem[:100]}{ext[:_UPLOAD_EXT_LIMIT]}"
 
 
 class ImageSource(TextChoices):
@@ -176,6 +211,31 @@ class Image(abstract.FrontendDashboardModel):
     # Written by process_image_upload; older rows are backfilled by a beat task.
     # Empty until then; :attr:`thumb_url` falls back to the original.
     thumbnail = ImageField(upload_to=pin_image_thumbnail_path, max_length=255, null=True, blank=True)
+    # Tiny (~44px) WebP preview for map markers - loading the full original (or
+    # even the 400px grid thumbnail) just to shrink it to a marker icon in CSS
+    # wasted bandwidth on every photo a map page rendered. Same lazy-backfill
+    # shape as `thumbnail`; :attr:`marker_thumb_url` falls back through it.
+    marker_thumbnail = ImageField(upload_to=pin_image_marker_thumbnail_path, max_length=255, null=True, blank=True)
+    # The upload's true filename (e.g. "PXL_20260709_123456.jpg" or a scan's own
+    # title), captured in `save()` before the stored file is renamed to an
+    # opaque token - see `pin_image_upload_path`. A device/app auto-generated
+    # name encodes a capture timestamp; a user-typed one can encode anything at
+    # all, which is exactly why it never reaches the served URL. Encrypted for
+    # the same reason `exif_data` is: this is a record of something the stored
+    # file itself no longer carries. Kept (rather than discarded) only because
+    # `is_camera_generated_filename`'s author-attribution heuristic and a few
+    # "download this photo" affordances need *some* human-readable name.
+    original_filename = EncryptedTextField(blank=True, default="", fail_soft=True)
+    # A capture date parsed from `original_filename` (e.g. the "20260709" in
+    # "PXL_20260709_123456.jpg") when EXIF carried no DateTimeOriginal - see
+    # `services.media.images.extract_filename_taken_at`. Deliberately a
+    # separate column from `taken_at` rather than a shared fallback value
+    # written into it: `taken_at` is EXIF-only elsewhere in this codebase
+    # (sorting, memories, reputation), and blending an inferred date into that
+    # would make "the camera reported this" and "we guessed this from a
+    # filename" indistinguishable after the fact. `effective_taken_at` is the
+    # combined read.
+    filename_taken_at = DateTimeField(null=True, blank=True)
     media_type = CharField(max_length=10, choices=MediaKind.choices, default=MediaKind.PHOTO, db_index=True)
     # Provenance for the Media gallery's per-source tabs (see ImageSource). Only
     # meaningful once a row exists; almost every Image row is a plain upload.
@@ -420,6 +480,27 @@ class Image(abstract.FrontendDashboardModel):
 
     objects = ImageManager()
 
+    def save(self, *args, **kwargs) -> None:
+        """Persist the row, capturing the upload's true filename before storage anonymizes it.
+
+        ``self.image.name`` still holds the caller-supplied name here for any
+        newly attached, not-yet-stored file - ``FieldFile._committed`` is
+        False until Django's own save machinery renames it via
+        ``pin_image_upload_path``, which runs later, inside ``super().save()``.
+        The ``original_filename``/``not self.image._committed`` guard also
+        means a later re-save that reattaches an already-committed file (the
+        downscale or thumbnail pass rewriting ``image``/``thumbnail`` in
+        place) leaves a filename already captured alone.
+        """
+        incoming_name = self.image.name if self.image else None
+        if incoming_name and not self.image._committed and not self.original_filename:  # type: ignore[attr-defined]  # noqa: SLF001
+            self.original_filename = incoming_name
+            if self.filename_taken_at is None:
+                from urbanlens.dashboard.services.media.images import extract_filename_taken_at
+
+                self.filename_taken_at = extract_filename_taken_at(incoming_name)
+        super().save(*args, **kwargs)
+
     @property
     def attribution_url(self) -> str:
         """Where to send a person to see this photo in its original context.
@@ -471,6 +552,40 @@ class Image(abstract.FrontendDashboardModel):
         if self.thumbnail:
             return self.thumbnail.url
         return self.display_url
+
+    @property
+    def marker_thumb_url(self) -> str:
+        """The URL to render this photo from as a tiny map marker.
+
+        Map pages should load this instead of :attr:`thumb_url`/:attr:`display_url`
+        so a page of dozens of markers does not each decode a 400px-or-larger
+        image just to shrink it to ~44px in CSS. Falls back the same way
+        :attr:`thumb_url` does, through progressively larger images, when the
+        marker thumbnail has not been generated yet.
+
+        Returns:
+            The marker thumbnail's URL, then the grid thumbnail's, then the
+            original's, or "".
+        """
+        if self.marker_thumbnail:
+            return self.marker_thumbnail.url
+        return self.thumb_url
+
+    @property
+    def effective_taken_at(self) -> datetime | None:
+        """The best-known capture time for this photo.
+
+        Prefers real EXIF ``DateTimeOriginal``; falls back to a date parsed
+        from the original filename (``filename_taken_at``) when EXIF carried
+        none. Consumers that display "when was this taken" to a user should
+        read this rather than ``taken_at`` directly; consumers that need to
+        know the value is EXIF-confirmed (scoring, streaks) should keep
+        reading ``taken_at``.
+
+        Returns:
+            The capture time, or None when neither source has one.
+        """
+        return self.taken_at or self.filename_taken_at
 
     #: Extension -> Material Symbols icon name, for a document tile with no
     #: thumbnail to show. Kept in sync with vault-document-grid.ts's

@@ -188,9 +188,9 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
 
     def test_a_shared_photo_keeps_where_and_when_but_not_the_caption(self) -> None:
         """Dates and coordinates place the photo; the caption is what the sharer
-        wrote about it, and exif_data is the file behind it."""
+        wrote about it, and exif_data/original_filename are the file behind it."""
         photo = Image.objects.create(
-            image=SimpleUploadedFile("shot.jpg", b"not-a-real-jpeg", content_type="image/jpeg"),
+            image=SimpleUploadedFile("PXL_20260709_123456.jpg", b"not-a-real-jpeg", content_type="image/jpeg"),
             profile=self.sender,
             pin=self.pin,
             location=self.location,
@@ -211,8 +211,13 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
 
         self.assertNotIn("zzq-what-i-thought-of-it", copy.caption or "")
         self.assertFalse(copy.exif_data, "the recipient received the sender's photo metadata")
+        self.assertFalse(copy.original_filename, "the recipient received the sender's original filename")
         self.assertEqual(float(copy.latitude), 41.7361)
         self.assertEqual(copy.direction, 270)
+        # filename_taken_at is a date, like taken_at/latitude/longitude above -
+        # it travels even though the filename it was parsed from does not.
+        self.assertEqual(copy.filename_taken_at, photo.filename_taken_at)
+        self.assertIsNotNone(copy.filename_taken_at)
         self.assertIn(self.sender.username, copy.author or "", "an unattributed photo should say who shared it")
 
     def test_the_senders_ratings_of_the_place_do_not_travel(self) -> None:

@@ -177,6 +177,7 @@ def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: P
     row = Image(
         image=existing.image.name,
         thumbnail=existing.thumbnail.name if existing.thumbnail and existing.thumbnail.name else None,
+        marker_thumbnail=existing.marker_thumbnail.name if existing.marker_thumbnail and existing.marker_thumbnail.name else None,
         profile=profile,
         caption=incoming or existing.caption,
         checksum=existing.checksum,
@@ -186,6 +187,8 @@ def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: P
         source_url=existing.source_url,
         copyright=existing.copyright,
         taken_at=existing.taken_at,
+        original_filename=existing.original_filename,
+        filename_taken_at=existing.filename_taken_at,
         latitude=existing.latitude,
         longitude=existing.longitude,
         direction=existing.direction,

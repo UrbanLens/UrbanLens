@@ -107,33 +107,31 @@ class UnguessableUploadPathTests(SimpleTestCase):
         thumbnail_dir = thumbnail.split("/", 4)[2:4]
         self.assertNotEqual(original_dir, thumbnail_dir)
 
-    # Every prefix _CAMERA_FILENAME_RE recognises. A bare timestamp
-    # (`20260709_101112.jpg`, Samsung's convention) is deliberately absent - the
-    # heuristic does not claim it, and asserting it here would test the regex
-    # rather than whether the stem survives into storage.
-    @given(filename=st.sampled_from(["PXL_20260709_123456.jpg", "IMG_4821.JPG", "MVIMG_20260709_1.jpg", "DSCN0042.jpeg", "DSC00042.jpeg", "DCIM_1234.jpg"]))
-    def test_a_camera_filename_survives_into_storage(self, filename: str):
-        """The attribution heuristic reads the stored name, so the stem stays last.
+    @given(filename=st.sampled_from(["PXL_20260709_123456.jpg", "IMG_4821.JPG", "MVIMG_20260709_1.jpg", "DSCN0042.jpeg", "DSC00042.jpeg", "DCIM_1234.jpg", "abandoned-hospital-stairwell.jpg"]))
+    def test_a_camera_filename_never_survives_into_storage(self, filename: str):
+        """The uploaded name - camera-generated or not - never reaches the stored path.
 
-        ``services.media.images.is_camera_generated_filename`` anchors its match
-        at the start of the basename; prefixing the random token onto the
-        filename instead of putting it in a directory would silently stop every
-        camera-named upload from being attributed to its uploader.
+        The attribution heuristic used to read the stored name, which is why a
+        camera-named upload's stem used to be kept intact through storage. It
+        now reads ``Image.original_filename`` instead (captured off to the
+        side before this runs - see ``Image.save``), specifically so this
+        function no longer has to leak anything recognisable into the URL a
+        photo's stored path becomes.
         """
         from urbanlens.dashboard.services.media.images import is_camera_generated_filename
 
         stored = pin_image_upload_path(Image(), filename)
 
-        self.assertTrue(is_camera_generated_filename(stored), stored)
+        self.assertFalse(is_camera_generated_filename(stored), stored)
 
     def test_an_overlong_name_still_fits_the_column(self):
-        """Random directory plus trimmed stem stays inside ``max_length``."""
+        """Random directory plus an opaque, fixed-length stem stays inside ``max_length``."""
         max_length = Image._meta.get_field("image").max_length
         # Room for the ~8-character suffix Storage.get_available_name appends
         # when a name collides.
         headroom = 8
 
-        stored = pin_image_thumbnail_path(Image(), "x" * 500 + ".jpeg")
+        stored = pin_image_thumbnail_path(Image(), "x" * 500 + "-thumb.webp")
 
         self.assertLessEqual(len(stored) + headroom, max_length)
 

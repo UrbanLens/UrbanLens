@@ -308,7 +308,7 @@ def _photo_map_payload(images: list, viewer: Profile | None) -> list[dict]:
         payload.append(
             {
                 "id": image.pk,
-                "url": image.thumb_url,
+                "url": image.marker_thumb_url,
                 "lat": float(latitude),
                 "lng": float(longitude),
                 "placed": image.latitude is not None and image.longitude is not None,
