@@ -39,7 +39,9 @@ from urllib.parse import quote
 
 from django.conf import settings
 from django.http import FileResponse, Http404, HttpResponse
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError, mark_private_media
 from urbanlens.dashboard.services.media.access import authorize_media
@@ -84,8 +86,17 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
     that a particular file exists but belongs to someone else.
     """
 
+    @method_decorator(xframe_options_sameorigin)
     def get(self, request: HttpRequest, path: str) -> HttpResponseBase:
         """Serve (or hand off to nginx) one media file the requester may see.
+
+        Overrides the site-wide ``X-Frame-Options: DENY`` default with
+        ``SAMEORIGIN`` - the Vault document lightbox (:mod:`partials._photo_lightbox`)
+        previews a document in an ``<iframe>`` on this same site, and DENY blocks
+        even that same-origin case. ``CONTENT_SECURITY_POLICY``'s
+        ``frame-ancestors 'self'`` (settings/base.py) would cover this once
+        ``UL_CSP_ENFORCE`` is on, but XFO is enforced unconditionally, so a
+        deployment running CSP report-only still needs this to work.
 
         Args:
             request: The current request, carrying either a session or an

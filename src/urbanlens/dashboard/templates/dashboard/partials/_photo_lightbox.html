@@ -303,6 +303,27 @@ Context:
   // previews (see vault-document-grid.ts's ICONS_BY_EXTENSION for the same
   // extension set, duplicated here since this partial has no bundled JS to
   // import it from).
+  // A same-host URL is reduced to just its path (+query/hash) before it's
+  // ever handed to the <iframe>. image_to_gallery_json builds `item.url` via
+  // request.build_absolute_uri(), which inherits whatever scheme the request
+  // resolved to (X-Forwarded-Proto-dependent behind a proxy) - an http://
+  // result on an https page is passive/ignorable for an <img>, but browsers
+  // hard-block it as active mixed content for an <iframe src>. Comparing by
+  // host rather than origin is deliberate: origin includes the scheme, which
+  // is exactly the part that can't be trusted here - a scheme-mismatched but
+  // same-host URL is still this page's own media, just mislabeled. A relative
+  // path sidesteps the scheme question entirely by always resolving against
+  // the page's own (correct) origin. A genuinely cross-host URL (item.url
+  // falling back to Image.source_url for a document with no local file) is
+  // left untouched.
+  function _samePagePath(url) {
+    try {
+      var parsed = new URL(url, window.location.href);
+      if (parsed.host === window.location.host) return parsed.pathname + parsed.search + parsed.hash;
+    } catch (e) { /* relative already, or unparseable - use as-is */ }
+    return url;
+  }
+
   function _setLightboxDocument(item) {
     _setLightboxImageHidden();
     var view = document.getElementById('lightbox-document-view');
@@ -311,9 +332,10 @@ Context:
     var openEl = document.getElementById('lightbox-document-open');
     if (!view || !frame) return;
     view.hidden = false;
-    frame.src = item.url;
+    var url = _samePagePath(item.url);
+    frame.src = url;
     if (nameEl) nameEl.textContent = item.caption || 'Untitled document';
-    if (openEl) openEl.href = item.url;
+    if (openEl) openEl.href = url;
   }
 
   function _setLightboxDocumentHidden() {

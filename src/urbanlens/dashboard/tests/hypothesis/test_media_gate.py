@@ -94,6 +94,17 @@ class MediaGateTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._get_bytes(response), _IMAGE_BYTES)
 
+    def test_response_allows_same_origin_framing(self):
+        """The Vault document lightbox previews a document in an <iframe> on this
+        same site; the project-wide X-Frame-Options: DENY default (settings.base)
+        would block even that same-origin case, so this view must override it to
+        SAMEORIGIN rather than inherit the default.
+        """
+        self.client.force_login(self.owner_user)
+        response = self.client.get("/media/pin_images/owned.png")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("X-Frame-Options"), "SAMEORIGIN")
+
     def test_unrelated_user_is_denied(self):
         # Default photo_upload_visibility is ANYTHING_IN_COMMON; a stranger with
         # no friendship/pin/trip overlap fails it and must get an opaque 404.

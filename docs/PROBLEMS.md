@@ -4153,6 +4153,30 @@ client not render/link an image URL until processing is confirmed done, or havin
 old file (or redirect) until any in-flight requests for it would reasonably have completed, rather
 than deleting eagerly.
 
+**Addendum 2026-08-31**: also hits Vault Documents' lightbox preview (`<iframe>`, Batch 5's
+`_setLightboxDocument`) - same race, same root cause (`upload_photo()` queues the identical
+`process_image_upload` task regardless of media type), scoped out live-verifying Batch 5 the same
+way (`guard.allow()` in `tests/integration/specs/ui/vault-documents.spec.ts`). Not a new instance to
+fix separately; the eventual fix above covers both.
+
+## OPEN 2026-08-31: a specific `ae97b86` dev-account thumbnail (`lightbox-associations.webp`) is durably broken, not just racing
+
+Found live-verifying Batch 5's regression run of the pre-existing `vault-photos.spec.ts` pruning
+test (`scrolling loads further pages and prunes off-screen thumbnails`) - unrelated to Batch 5's
+own changes (this test predates it, and nothing touched this session runs anywhere near
+`photo-virtual-grid.ts`'s pruning/restore path). The grid's first tile after scroll-to-top
+consistently fails to restore its `<img src>`, always pointing at
+`.../pin_images/thumbs/5v/S76SWO1keJAXdV/lightbox-associations.webp` - the same filename pattern as
+the async-rename race documented above, but this one reproduces identically across two fully
+isolated `--grep`-scoped runs (not just within a single flaky window), and no `Image` row's stored
+`image` field matches that path (`Image.objects.filter(image__icontains="S76SWO1keJAXdV")` returns
+zero rows), so this looks less like the few-second rename race and more like a thumbnail job that
+started, got a path assigned, and never completed or got cleaned up - or a stale reference cached
+somewhere between the DB and what's served. Didn't chase further (out of scope for Batch 5, and the
+`e2e-primary` account on this ephemeral dev slot is disposable), but worth a look if `vault-photos.spec.ts`
+keeps failing on this specific test: check for an orphaned/stuck row in this account's photo library,
+or a thumbnail-generation task that errored silently.
+
 ## OPEN 2026-08-31: opening the lightbox mid-scroll can inject a broken skeleton-placeholder item
 
 Found reviewing Batch 5 (Vault Documents) - pre-existing in Vault Photos since Batch 2, unrelated to
