@@ -20,7 +20,14 @@ export interface HotkeyDefault {
     description: string;
 }
 
-export const DEFAULT_HOTKEYS: Record<string, HotkeyDefault> = {
+// No type annotation here, deliberately: leaving the literal object to infer
+// its own type keeps `DEFAULT_HOTKEYS.redo` (etc.) known-present to callers
+// like the contract test, rather than widening every key to `T | undefined`.
+// matchesHotkey/loadHotkeys below only ever iterate it generically
+// (Object.entries) or index into their own already-generic return values, so
+// they don't need the wider Record<string, HotkeyDefault> shape - only a
+// dynamic `DEFAULT_HOTKEYS[someString]` lookup would, and nothing does that.
+export const DEFAULT_HOTKEYS = {
     undo: {
         keys: ["ctrl+z"],
         label: "Undo",

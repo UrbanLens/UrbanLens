@@ -30,7 +30,9 @@ describe("Settings > Shortcuts contract with hotkeys.ts", () => {
 
         for (const [actionId, def] of Object.entries(DEFAULT_HOTKEYS)) {
             const entry = block?.match(new RegExp(`${actionId}:\\s*\\{([\\s\\S]*?)\\}`))?.[1];
-            expect(entry, `${actionId} missing from the template's HOTKEY_DEFAULTS`).toBeDefined();
+            if (entry === undefined) {
+                throw new Error(`${actionId} missing from the template's HOTKEY_DEFAULTS`);
+            }
 
             const keys = [...(entry ?? "").matchAll(/'([^']+)'/g)].map((m) => m[1]);
             // keys, then label, then description are each single-quoted in turn -
