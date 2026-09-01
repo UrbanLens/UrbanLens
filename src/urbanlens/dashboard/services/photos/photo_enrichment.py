@@ -72,11 +72,15 @@ def enriched_max_dimension(source: str) -> int:
     Returns:
         The longest-edge cap in pixels.
     """
-    return {
+    # dict[str, int], not dict[ImageSource, int]: ImageSource members are str
+    # subclasses (TextChoices) but a distinct type to mypy, and source (a raw
+    # values_list() column, not an ImageSource instance) is looked up as one.
+    sizes: dict[str, int] = {
         ImageSource.GOOGLE_MAPS: _PLACE_PHOTO_MAX_DIMENSION,
         ImageSource.GOOGLE_STREET_VIEW: _STATIC_IMAGE_MAX_DIMENSION,
         ImageSource.GOOGLE_SATELLITE: _STATIC_IMAGE_MAX_DIMENSION,
-    }.get(source, DEFAULT_ENRICHED_MAX_DIMENSION)
+    }
+    return sizes.get(source, DEFAULT_ENRICHED_MAX_DIMENSION)
 
 
 #: Shared with plugins.builtin.google_places.GoogleMapsPhotosPanelSource.cache_source - reusing

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn
 
 from urbanlens.dashboard.models.aliases.model import WikiAlias
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
@@ -13,7 +13,7 @@ from urbanlens.dashboard.services.undo.base import MutationUndoHandler, register
 MODEL_LABEL = "wiki_mutation"
 
 
-def _expired(message: str) -> None:
+def _expired(message: str) -> NoReturn:
     from urbanlens.dashboard.services.undo.service import UndoExpiredError
 
     raise UndoExpiredError(message)
@@ -23,7 +23,7 @@ def _wiki(wiki_id: int) -> Wiki:
     wiki = Wiki.objects.filter(pk=wiki_id).select_related("location").first()
     if wiki is None:
         _expired("This wiki no longer exists.")
-    return wiki  # type: ignore[return-value]
+    return wiki
 
 
 def _move(wiki: Wiki, latitude: float, longitude: float) -> None:

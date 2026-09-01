@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn
 
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
@@ -12,7 +12,7 @@ from urbanlens.dashboard.services.undo.base import MutationUndoHandler, register
 MODEL_LABEL = "pin_mutation"
 
 
-def _expired(message: str) -> None:
+def _expired(message: str) -> NoReturn:
     from urbanlens.dashboard.services.undo.service import UndoExpiredError
 
     raise UndoExpiredError(message)
@@ -22,7 +22,7 @@ def _pin(pin_id: int) -> Pin:
     pin = Pin.objects.filter(pk=pin_id).select_related("location", "profile").first()
     if pin is None:
         _expired("This pin no longer exists.")
-    return pin  # type: ignore[return-value]
+    return pin
 
 
 def _move(pin: Pin, latitude: float, longitude: float) -> None:

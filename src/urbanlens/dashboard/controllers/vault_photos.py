@@ -748,10 +748,10 @@ class PhotoMetadataConflictResolveView(LoginRequiredMixin, View):
                     continue
         else:
             for key, value in request.POST.items():
-                if key.startswith("field_"):
+                if key.startswith("field_") and isinstance(value, str):
                     try:
                         choices[key.removeprefix("field_")] = int(value)
-                    except (TypeError, ValueError):
+                    except ValueError:
                         continue
         resolve_photo_metadata_conflict(conflict, choices)
         return _toast("Photo details updated.", refresh_queue=True)

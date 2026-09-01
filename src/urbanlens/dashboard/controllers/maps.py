@@ -1197,7 +1197,7 @@ def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: 
     )
     canonical_name = "Unnamed Location"
     if is_meaningful_name(place_name):
-        canonical_name = place_name.strip()  # type: ignore[union-attr]
+        canonical_name = place_name.strip()
     elif is_meaningful_name(google_place.cached_place_name):
         canonical_name = (google_place.cached_place_name or canonical_name).strip()
 

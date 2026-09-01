@@ -4873,7 +4873,7 @@ permission gate (author or trip creator), but no test file anywhere in the suite
 `TripCommentDeleteView` or `delete_comment` at all - not the basic delete, the permission gate, or
 image cleanup. Would need a full TripComment/Trip fixture setup, not a surgical addition.
 
-## OPEN 2026-08-30: `PhotoMetadataConflictResolveView.post`'s manual-POST branch mistypes form values as possibly a list
+## RESOLVED 2026-09-01: `PhotoMetadataConflictResolveView.post`'s manual-POST branch mistypes form values as possibly a list
 
 Found by mypy while moving this view from `controllers/photos.py` to `controllers/vault_photos.py`
 (the Memories → Vault Photos move) - pre-existing, unrelated to that move. In the
@@ -4884,7 +4884,18 @@ hygiene gap rather than a live bug - but worth a real fix (narrow `body`'s type 
 `request.POST` through a helper that always returns `str`) rather than a `cast`, per the project's
 mypy policy.
 
-## OPEN 2026-08-31: `apply_image_map_update`'s `stash_photo_fields` call mistypes a nullable Profile as required
+**Fix**: confirmed via Django's own source that `QueryDict.items()` (a `MultiValueDict`) always
+yields the *last single value* per key, never a list - the `list[object]` in the stub's typing
+reflects `__getitem__`'s deliberately wider (and stub-acknowledged, `# type: ignore[override]`)
+override, not anything `.items()` can actually produce. Added an explicit `isinstance(value, str)`
+guard before `int(value)` (dropping the now-unreachable `TypeError` from the except clause, since a
+guaranteed `str` can only raise `ValueError`) - a real type-narrowing fix, not a `cast`, and it
+documents the actual runtime contract instead of relying on `int()`'s exception type as an
+accidental filter. This endpoint had **zero test coverage** before (neither its JSON nor
+form-encoded body shape) - added `PhotoMetadataConflictResolveViewTests` in
+`test_album_cover_move_dedupe.py` covering both, plus the malformed-choice path.
+
+## RESOLVED 2026-09-01: `apply_image_map_update`'s `stash_photo_fields` call mistypes a nullable Profile as required
 
 Found by mypy while adding `image_associations` to `services/media/images.py` (Batch 4 of the
 Vault feature - lightbox pin/wiki/album association display) - pre-existing, unrelated to that
@@ -4896,6 +4907,12 @@ non-optional `Profile`. Same class of issue as the already-logged
 (worth checking whether `image.profile` can actually be null in the codepaths that call this, and
 either narrowing the type at the call site or the parameter, rather than a `cast`, per the
 project's mypy policy).
+
+**Fix**: the guard above the call checked `if image.profile_id:` (the FK column, always loaded) but
+then passed `image.profile` (the related object, a separate attribute as far as mypy is concerned)
+to `stash_photo_fields`. Changed the guard to `if image.profile is not None:` - same runtime
+behavior (a non-null `profile_id` and a resolvable `.profile` agree in practice) and correctly
+narrows the actual object being passed. Verified via `test_undo_mutations.py`.
 
 ## OPEN 2026-08-31: A photo's grid tile can 404/500 for a few seconds right after upload while async processing renames its file
 
@@ -4992,7 +5009,7 @@ same dead `{% block title %}` also sits, unfixed, in: `memories/sharing.html`, `
 (`s/{% block title %}/{% block page_title %}/`) but touches unrelated pages/features, out of scope
 for this PR - worth a dedicated small pass.
 
-## OPEN 2026-08-31: 11 pre-existing mypy errors outside the Vault feature, surfaced by the first full-tree run this session
+## RESOLVED 2026-09-01: 11 pre-existing mypy errors outside the Vault feature, surfaced by the first full-tree run this session
 
 Batch 7's cleanup step ran `mypy /app/src/urbanlens` (880 files) for the first time this session -
 every earlier check was scoped to individual touched files. 13 errors total; 2 were already known
@@ -5019,6 +5036,34 @@ regression, but not investigated further (out of scope for this PR):
 
 Worth a dedicated mypy-hygiene pass; the `type: ignore` cleanups in particular are likely quick once
 someone confirms what the now-passing code path actually is.
+
+**Fix, all confirmed root causes rather than suppressions:**
+- `cache_media_item_into_album`: `owner`'s real type is `Pin | Wiki | Profile` (a Vault album can
+  be Profile-owned), not `Pin | Wiki` as the code's own comment assumed - so `isinstance(owner,
+  Pin)`'s `else` branch was `Wiki | Profile`, and a Profile-owned album's `owner` could have been
+  passed as `wiki`. Not reachable today only because `Profile` happens to have no `.location`
+  attribute, so `getattr(owner, "location", None)` always returned `None` for that case and exited
+  early first - fixed properly with an explicit `isinstance(owner, Pin | Wiki)` guard and two
+  independent `isinstance` narrows, rather than relying on that accident. Verified via
+  `test_albums.py`.
+- The five stale `type: ignore[return-value]`/`[arg-type]` comments: the real fix mypy's own
+  "unused-ignore" was pointing at - each handler's local `_expired(message: str) -> None` helper
+  always raises, but wasn't typed `NoReturn`, so mypy's narrowing after `if x is None: _expired(...)`
+  was fragile (worked for a single plain assignment, silently didn't for an explicitly-annotated or
+  multi-branch one - confirmed with an isolated repro either way). Typed every handler's `_expired`
+  as `-> NoReturn` instead, which narrows robustly regardless of shape; removed the now-redundant
+  `type: ignore`s and one now-dead `raise AssertionError`. Verified via `test_undo.py`,
+  `test_undo_round_trip.py`, `test_undo_redo_is_single_use.py`,
+  `test_undo_photo_reattachment_coverage.py`.
+- `_repr_limit`: `CharField(max_length=255)` genuinely always sets a `max_length` - django-stubs
+  just types the general case (`max_length: int | None`) since not every field has one. Added an
+  explicit `if max_length is None: raise TypeError(...)` guard (not a bare `assert`- `S101` is only
+  test-file-exempted in this project's ruff config).
+- `_declared_family`: switched to `getattr(upload_to, "__qualname__", repr(upload_to))` - a real
+  robustness fix, not just a type appeasement, since `upload_to` can be any callable (a callable
+  class instance, `functools.partial`, ...), not only a plain function guaranteed to have one.
+  Verified via `test_media_family_registry.py`.
+
 ## OPEN 2026-08-31: album detail resolves photo visibility four times per request
 
 Found in a fresh-eyes performance review of the Vault feature; **pre-existing in the shared album
@@ -5410,7 +5455,7 @@ populates, so a `docker cp` of a fresh frontend build into the container's sourc
 sufficient for Python) silently does not reach what's actually served. Documented in
 `CLAUDE.local.md`'s Docker section with the correct rebuild+collectstatic sequence.
 
-## OPEN 2026-09-01: two more pre-existing mypy errors, plus one found-and-fixed in the same run
+## RESOLVED 2026-09-01: two more pre-existing mypy errors, plus one found-and-fixed in the same run
 
 A full-tree `mypy src/urbanlens` run while closing out the Media-lightbox fix above found 15
 errors, not the 13 the 2026-08-31 "11 pre-existing mypy errors" entry (above) accounted for
@@ -5428,10 +5473,20 @@ errors, not the 13 the 2026-08-31 "11 pre-existing mypy errors" entry (above) ac
   (`test_undo.py`, `test_undo_round_trip.py`, `test_undo_redo_is_single_use.py`,
   `test_undo_photo_reattachment_coverage.py` - 40 passed, 3 subtests) - unchanged behavior, one
   fewer mypy error (15 -> 14).
-- Two are genuinely new and left open, in files unrelated to any work this session touched:
-  - `services/photos/photo_enrichment.py:75` (`enriched_max_dimension`) - `{ImageSource.X: n, ...}.get(source, DEFAULT)` doesn't match any `dict.get` overload; the dict literal likely infers a
-    `Literal`-keyed type narrower than the `ImageSource` parameter `.get` is called with. Probably
-    a one-line fix (annotate the literal `dict[ImageSource, int]`), not investigated further.
-  - `services/visits/visits.py:222` (`resolve_location_for_point`) - `google_place.cached_place_name.strip()` after `if is_meaningful_name(google_place.cached_place_name):` - mypy can't see that
-    `is_meaningful_name` narrows `str | None` to `str`, since it's a plain `bool`-returning function
-    rather than a `TypeGuard`. Likely fix: type it `TypeGuard[str]`; not investigated further.
+- Two more were investigated and fixed, in files unrelated to any work this session had otherwise touched:
+  - `services/photos/photo_enrichment.py:75` (`enriched_max_dimension`) - `{ImageSource.X: n, ...}.get(source, DEFAULT)` didn't match any `dict.get` overload. Not `dict[ImageSource, int]`
+    as first guessed above - `source` is a plain `str` (a raw `.values_list()` column, never an
+    `ImageSource` instance), so the correct annotation is `dict[str, int]`: `ImageSource` members
+    are `str` subclasses (`TextChoices`) at runtime, and this makes the dict's declared key type
+    match what it's actually looked up with.
+  - `services/visits/visits.py:222` (`resolve_location_for_point`) - fixed at the source rather than
+    the call site: `services/locations/naming.py`'s `is_meaningful_name(name: str | None) -> bool`
+    is now `-> TypeGuard[str]`. Purely additive (same runtime `True`/`False`, ~40 existing call
+    sites elsewhere are unaffected since TypeGuard only adds narrowing when the checked and later-used
+    expression match) - fixed this call site with zero changes to `visits.py` itself, and also
+    retired an already-stale `# type: ignore[union-attr]` one call site over in `controllers/maps.py`
+    that the same narrowing newly makes unnecessary. Verified via `test_place_name_meaning.py`,
+    `test_location_area_names.py`.
+
+All 15 errors this run found are now fixed - a full-tree `mypy src/urbanlens` run reports
+**zero errors** for the first time this project has run one.

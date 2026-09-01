@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn
 
 from urbanlens.dashboard.models.album.model import Album
 from urbanlens.dashboard.models.images.model import Image
@@ -14,7 +14,7 @@ MODEL_LABEL = "photo_mutation"
 _PHOTO_FIELDS = ("caption", "author", "copyright", "source_url", "latitude", "longitude", "map_hidden", "taken_at")
 
 
-def _expired(message: str) -> None:
+def _expired(message: str) -> NoReturn:
     from urbanlens.dashboard.services.undo.service import UndoExpiredError
 
     raise UndoExpiredError(message)
@@ -24,7 +24,7 @@ def _album(album_id: int) -> Album:
     album = Album.objects.filter(pk=album_id).first()
     if album is None:
         _expired("This album no longer exists.")
-    return album  # type: ignore[return-value]
+    return album
 
 
 def _images(image_ids: list[int]) -> list[Image]:
@@ -71,7 +71,7 @@ class PhotoMutationUndoHandler(MutationUndoHandler):
             image = Image.objects.filter(pk=payload.get("image_id")).first()
             if image is None:
                 _expired("This photo no longer exists.")
-            _apply_fields(image, payload.get("before") or {})  # type: ignore[arg-type]
+            _apply_fields(image, payload.get("before") or {})
             return
         _expired(f"Unknown photo mutation {op!r}.")
 
@@ -94,6 +94,6 @@ class PhotoMutationUndoHandler(MutationUndoHandler):
             image = Image.objects.filter(pk=payload.get("image_id")).first()
             if image is None:
                 _expired("This photo no longer exists.")
-            _apply_fields(image, payload.get("after") or {})  # type: ignore[arg-type]
+            _apply_fields(image, payload.get("after") or {})
             return
         _expired(f"Unknown photo mutation {op!r}.")

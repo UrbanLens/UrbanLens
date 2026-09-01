@@ -4323,6 +4323,7 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
     from urbanlens.dashboard.models.album.model import Album
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
     from urbanlens.dashboard.services.photos.albums import add_images_to_album, album_owner
     from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
@@ -4334,15 +4335,23 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
         return None
 
     owner = album_owner(album)
-    location = getattr(owner, "location", None)
-    if owner is None or location is None:
+    # A personal (Profile-owned) album has no Pin/Wiki to attach media to at
+    # all - checked directly rather than via `getattr(owner, "location", None)`,
+    # which happened to also catch this case today only because Profile has no
+    # `location` attribute of its own to shadow the default.
+    if not isinstance(owner, Pin | Wiki):
+        logger.info("cache_media_item_into_album: album %s has no pin or wiki to attach media to", album_id)
+        return None
+    location = owner.location
+    if location is None:
         logger.info("cache_media_item_into_album: album %s has no location to attach media to", album_id)
         return None
 
     # isinstance rather than `album.parent_pin_id is not None`: it asks the
     # question directly of the object album_owner actually returned, so the two
-    # cannot disagree - and unlike a boolean flag it narrows the Pin | Wiki union
-    # for the two arguments below.
+    # cannot disagree - and narrows each argument to exactly the type
+    # materialize_media_item expects, rather than assuming "not a Pin" means
+    # "must be a Wiki" (album_owner can also return a bare Profile).
     try:
         image = materialize_media_item(
             location=location,
@@ -4352,7 +4361,7 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
             page_url=page_url,
             caption=caption,
             pin=owner if isinstance(owner, Pin) else None,
-            wiki=None if isinstance(owner, Pin) else owner,
+            wiki=owner if isinstance(owner, Wiki) else None,
         )
     except MaterializeError:
         # The vote is already recorded and stays; only the download is lost.

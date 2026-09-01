@@ -42,7 +42,11 @@ def _declared_family(field: FileField) -> tuple[str | None, str | None]:
     if callable(upload_to):
         family = getattr(upload_to, MEDIA_FAMILY_ATTR, None)
         if not family:
-            hint = f"its upload_to callable {upload_to.__qualname__!r} does not declare which directory it writes into."
+            # getattr, not a bare .__qualname__: an upload_to can be any callable
+            # (a callable class instance, a functools.partial, ...), not only a
+            # plain function/method, and only those guarantee __qualname__.
+            name = getattr(upload_to, "__qualname__", repr(upload_to))
+            hint = f"its upload_to callable {name!r} does not declare which directory it writes into."
             return None, f"{hint} Decorate it with @declares_media_family('<prefix>') from urbanlens.dashboard.services.media.access."
         return str(family), None
 

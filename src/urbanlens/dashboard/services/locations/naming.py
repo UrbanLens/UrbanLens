@@ -11,6 +11,7 @@ from django.db import IntegrityError
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from typing import TypeGuard
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
@@ -302,7 +303,7 @@ def normalize_name_for_comparison(name: str | None) -> str:
     return _STRIP_NAME_PATTERN.sub("", name).casefold()
 
 
-def is_meaningful_name(name: str | None) -> bool:
+def is_meaningful_name(name: str | None) -> TypeGuard[str]:
     """Return True when a place or pin name is worth including in external queries."""
     if not name:
         return False

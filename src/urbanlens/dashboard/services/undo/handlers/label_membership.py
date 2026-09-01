@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn
 
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.images.model import Image
@@ -14,7 +14,7 @@ from urbanlens.dashboard.services.undo.base import MutationUndoHandler, register
 MODEL_LABEL = "label_membership"
 
 
-def _expired(message: str) -> None:
+def _expired(message: str) -> NoReturn:
     from urbanlens.dashboard.services.undo.service import UndoExpiredError
 
     raise UndoExpiredError(message)
@@ -31,7 +31,6 @@ def _target(payload: dict[str, Any]) -> Pin | Wiki | Image:
         target = Image.objects.filter(pk=target_id).first()
     else:
         _expired(f"Unknown label target {kind!r}.")
-        raise AssertionError
     if target is None:
         _expired("The item this label was on no longer exists.")
     return target
@@ -41,7 +40,7 @@ def _label(label_id: int) -> Label:
     label = Label.objects.filter(pk=label_id).first()
     if label is None:
         _expired("This label no longer exists.")
-    return label  # type: ignore[return-value]
+    return label
 
 
 def _add(target: Pin | Wiki | Image, label: Label) -> None:

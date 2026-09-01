@@ -198,7 +198,7 @@ def apply_image_map_update(image: Image, body: bytes) -> dict[str, Any]:
         "longitude": str(image.longitude) if image.longitude is not None else None,
         "map_hidden": bool(image.map_hidden),
     }
-    if image.profile_id:
+    if image.profile is not None:
         from urbanlens.dashboard.services.undo.mutations import stash_photo_fields
 
         stash_photo_fields(image.profile, image, before=before, after=after)
