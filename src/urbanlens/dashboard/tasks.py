@@ -766,13 +766,16 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
     new_stored_size: int | None = None
     if image.profile is not None:
         downscale_policy: tuple[int | None, bool] | None = get_downscale_policy(image.profile)
-    elif max_dimension_override is not None:
-        # A profile-less row (location enrichment) has no plan to read a policy
-        # from; its caller passes the cap instead. WebP conversion is not
-        # optional there - these are provider photos kept as gallery thumbnails.
-        downscale_policy = (max_dimension_override, True)
     else:
-        downscale_policy = None
+        # A profile-less row (location enrichment) has no plan to read a policy
+        # from; its caller passes the cap instead. Falling back to a default
+        # rather than skipping, because this call is also what strips the
+        # provider's EXIF - "no cap given" must not silently mean "publish the
+        # provider's original, GPS and all". WebP conversion is not optional
+        # here either: these are provider photos kept as gallery thumbnails.
+        from urbanlens.dashboard.services.photos.photo_enrichment import DEFAULT_ENRICHED_MAX_DIMENSION
+
+        downscale_policy = (max_dimension_override if max_dimension_override is not None else DEFAULT_ENRICHED_MAX_DIMENSION, True)
     if downscale_policy is not None:
         max_dimension, convert_webp = downscale_policy
         # Called unconditionally. It used to be gated on there being a resize, a
@@ -1326,11 +1329,18 @@ _THUMBNAIL_BACKFILL_CURSOR_KEY = "image-thumbnail-backfill-cursor"
 _THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
 
 
-#: How long a row may sit ``pending_scan`` before the sweep assumes its task
-#: was lost rather than merely slow. process_image_upload's own retry ladder
-#: tops out around half an hour (4 attempts, 900s max backoff), so this is
-#: comfortably past a run that is still working.
-STALLED_UPLOAD_AGE = timedelta(hours=1)
+#: How long a row may sit ``pending_scan`` before the sweep assumes its task was
+#: lost rather than merely slow.
+#:
+#: Sized against the worst legitimate case, not the typical one, because the
+#: cost of being wrong is asymmetric: re-queueing a row whose task is still
+#: running starts a *second* ffmpeg pass over the same file on a two-slot
+#: worker, while waiting longer only delays a recovery nobody is watching. The
+#: clock starts at row creation, before the task is even queued, so the budget
+#: is queue wait + ``CELERY_TASK_TIME_LIMIT`` (1h) + the retry ladder
+#: (60+120+240s, about 7 minutes) - and a backed-up sandbox queue is exactly the
+#: condition under which a slow row and a lost one look alike.
+STALLED_UPLOAD_AGE = timedelta(hours=6)
 
 #: Bound on one sweep, so a large backlog is drained over several ticks rather
 #: than dumped onto the sandbox worker at once.
@@ -1377,25 +1387,61 @@ def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     """
     from django.utils import timezone
 
-    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.model import Image, QuotaExemption
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.photos.photo_enrichment import enriched_max_dimension
 
     cutoff = timezone.now() - STALLED_UPLOAD_AGE
     batch = STALLED_UPLOAD_BATCH if limit is None else max(1, limit)
+    # Deduplicated siblings are deliberately excluded. They point at a file
+    # another row owns, and running this task on one would re-encode that shared
+    # file underneath its original - the exact thing attach_deduped_copy exists
+    # to avoid. They are cleared by _sync_deduped_siblings when their original
+    # is processed, which is what re-queueing the original below arranges.
+    #
     # Oldest first: a row that has been invisible longest is the one whose
     # uploader has been waiting longest.
-    stalled = list(Image.objects.filter(pending_scan=True, created__lt=cutoff).order_by("created").values_list("pk", flat=True)[:batch])
+    stalled = list(Image.objects.filter(pending_scan=True, created__lt=cutoff).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED).order_by("created").values_list("pk", "profile_id", "source")[:batch])
     if not stalled:
-        return 0
+        return _clear_orphaned_dedup_siblings(cutoff)
 
-    # No max_dimension is passed even for the profile-less enrichment rows that
-    # normally get one: this path has no way to recover which cap that row was
-    # created with. Such a row recovers scanned and visible but at the
-    # provider's own size, which is the right trade against staying invisible.
-    for image_id in stalled:
-        safely_enqueue_task(process_image_upload, image_id)
+    for image_id, profile_id, source in stalled:
+        # A profile-less row is a provider photo, and its cap lived only at the
+        # call site that created it - recovered here from its source so the
+        # reprocessed file matches what it should have been, rather than
+        # falling back to the generic default.
+        max_dimension = None if profile_id is not None else enriched_max_dimension(source)
+        safely_enqueue_task(process_image_upload, image_id, max_dimension)
     logger.info("Re-enqueued %s upload(s) still pending after %s", len(stalled), STALLED_UPLOAD_AGE)
     return len(stalled)
+
+
+def _clear_orphaned_dedup_siblings(cutoff) -> int:
+    """Clear dedup siblings whose original is gone, so they are not stuck forever.
+
+    A sibling is normally cleared by ``_sync_deduped_siblings`` when its
+    original finishes processing. If the original was deleted first (the user
+    removed it, or it was rejected in a way that missed this sibling), nothing
+    is left to do that - and unlike a real upload the sibling must not be run
+    through the task itself, because the file it points at belongs to somebody
+    else's row.
+
+    Args:
+        cutoff: Only siblings created before this are considered.
+
+    Returns:
+        How many rows were cleared.
+    """
+    from django.db.models import Exists, OuterRef
+
+    from urbanlens.dashboard.models.images.model import Image, QuotaExemption
+
+    has_source_row = Image.objects.filter(profile_id=OuterRef("profile_id"), checksum=OuterRef("checksum")).exclude(pk=OuterRef("pk")).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED)
+    orphaned = Image.objects.filter(pending_scan=True, created__lt=cutoff, quota_exempt_reason=QuotaExemption.DEDUPLICATED).annotate(has_source=Exists(has_source_row)).filter(has_source=False)
+    cleared = orphaned.update(pending_scan=False)
+    if cleared:
+        logger.info("Cleared %s dedup sibling(s) whose original no longer exists", cleared)
+    return cleared
 
 
 @shared_task

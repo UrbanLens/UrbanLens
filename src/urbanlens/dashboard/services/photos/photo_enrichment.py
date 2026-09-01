@@ -52,6 +52,33 @@ _PLACE_PHOTO_MAX_DIMENSION = 1024
 #: forces the WebP re-encode rather than actually shrinking anything.
 _STATIC_IMAGE_MAX_DIMENSION = 800
 
+#: Longest edge for a provider photo whose own source is not in the table below.
+#: Applied rather than skipping the downscale: that call is also what strips the
+#: provider's EXIF (GPS included), so "no policy" must never mean "no strip".
+DEFAULT_ENRICHED_MAX_DIMENSION = 1024
+
+
+def enriched_max_dimension(source: str) -> int:
+    """The longest-edge cap a provider photo from *source* was stored under.
+
+    Lets a recovery path (``tasks.requeue_stalled_pending_uploads``) reprocess a
+    profile-less row at the size it was meant to have, rather than at whatever
+    the provider returned - these rows have no subscriber plan to read a policy
+    from, and the cap is otherwise only known at the call site that created them.
+
+    Args:
+        source: The row's ``ImageSource`` value.
+
+    Returns:
+        The longest-edge cap in pixels.
+    """
+    return {
+        ImageSource.GOOGLE_MAPS: _PLACE_PHOTO_MAX_DIMENSION,
+        ImageSource.GOOGLE_STREET_VIEW: _STATIC_IMAGE_MAX_DIMENSION,
+        ImageSource.GOOGLE_SATELLITE: _STATIC_IMAGE_MAX_DIMENSION,
+    }.get(source, DEFAULT_ENRICHED_MAX_DIMENSION)
+
+
 #: Shared with plugins.builtin.google_places.GoogleMapsPhotosPanelSource.cache_source - reusing
 #: the same LocationCache key lets this source skip the API call entirely when a user's own
 #: pin-detail Media gallery view already warmed it.
@@ -168,7 +195,6 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations import places_resolution
         from urbanlens.dashboard.services.apis.locations.places_resolution import PhotoNotFoundError
-        from urbanlens.dashboard.services.photos.redata_relevance import queue_photo_submission
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         api_key = app_settings.google_unrestricted_api_key or ""

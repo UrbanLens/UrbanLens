@@ -7,7 +7,7 @@ import secrets
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, FloatField, ForeignKey, ImageField, Index, JSONField, ManyToManyField, PositiveIntegerField, TextField, URLField, UUIDField
+from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, FloatField, ForeignKey, ImageField, Index, JSONField, ManyToManyField, PositiveIntegerField, Q, TextField, URLField, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
@@ -712,4 +712,10 @@ class Image(abstract.FrontendDashboardModel):
             # values, so indexing it alone would rarely be chosen by the
             # planner while still costing a write on every photo upload.
             Index(fields=["profile", "quota_exempt_reason"], name="idxdb_image_profile_quota"),
+            # Partial, because the recovery sweep (tasks.requeue_stalled_pending_uploads)
+            # runs hourly and the qualifying set is almost always empty - a full
+            # index on `created` would cost a write on every row for a query
+            # that reads a handful. Postgres only uses a partial index when the
+            # predicate matches, which is exactly that query's WHERE clause.
+            Index(fields=["created"], name="idxdb_image_pending_created", condition=Q(pending_scan=True)),
         ]

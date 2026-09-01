@@ -1221,7 +1221,18 @@ def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bo
         logger.debug("Keeping stored file %s: another image row still references it", name)
         return False
 
-    image.image.delete(save=False)
+    # Suppressed like the derived files below. This is called on the way to
+    # deleting the row, and a storage error here used to escape - which for a
+    # rejected upload meant the uploader was told their file was removed while
+    # the row survived, still pending, to be notified about again on the next
+    # sweep. A file we cannot unlink is a storage problem to be logged; leaving
+    # the row behind because of it is a worse one, since nothing serves an
+    # orphaned file but a stranded pending row is visible to its uploader
+    # forever.
+    try:
+        image.image.delete(save=False)
+    except OSError:
+        logger.warning("Could not remove stored file %s; deleting the row anyway", name, exc_info=True)
     # Checked separately from the original: they are shared together today, but
     # nothing enforces that, and either is just as easy to orphan.
     for field_name in ("thumbnail", "marker_thumbnail"):

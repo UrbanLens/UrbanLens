@@ -360,6 +360,11 @@ PREVIEW_SOURCE_DIR = "preview_sources"
 #: How long a staged source survives an un-run render before the sweep removes
 #: it. Must outlive a queue backlog; anything older is an orphan whose task
 #: never ran (a broker outage at enqueue time).
+#:
+#: Must also stay LONGER than the callers' descriptor cache TTL
+#: (``media_preview._SOURCE_CACHE_TTL``, 1800s). If the file were swept while
+#: its descriptor was still cached, the view would keep re-queueing a render
+#: for a file that no longer exists instead of re-fetching the source.
 PREVIEW_SOURCE_MAX_AGE = 3600
 
 

@@ -18,21 +18,25 @@ set -e
 # configure handler 'file'", the process exits before binding its port, and
 # `docker logs` shows nothing at all. That failure is written up in
 # docs/PROBLEMS.md; this exit code is what makes it visible.
-if [ "$(id -u)" = "0" ]; then
-    _chown_failure_is_fatal=1
-else
-    _chown_failure_is_fatal=0
-fi
 for dir in \
     /var/log/urbanlens \
     /app/src/urbanlens/frontend/static \
     /app/src/urbanlens/media; do
-    if [ "$_chown_failure_is_fatal" = "1" ]; then
-        mkdir -p "$dir"
-        chown -R appuser:appuser "$dir"
-    else
+    if [ "$(id -u)" != "0" ]; then
         mkdir -p "$dir" 2>/dev/null || true
         chown -R appuser:appuser "$dir" 2>/dev/null || true
+        continue
+    fi
+
+    mkdir -p "$dir"
+    # Retried once before giving up, because `chown -R` exits non-zero when a
+    # file vanishes mid-traversal - and these volumes are shared with containers
+    # that are live and deleting files (delete_stored_file, the preview-source
+    # sweep). A restart during ordinary traffic would otherwise crash-loop on a
+    # race. A real permission problem fails both attempts and still exits.
+    if ! chown -R appuser:appuser "$dir"; then
+        echo "entrypoint: chown of $dir failed, retrying once" >&2
+        chown -R appuser:appuser "$dir"
     fi
 done
 

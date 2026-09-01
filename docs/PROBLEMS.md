@@ -31,6 +31,51 @@ were both generated against `0037`, leaving the graph with two leaf nodes and br
 models in the same window: `makemigrations` numbers from what is on disk, so a second 0038 is
 silently produced rather than refused, and nothing complains until something runs `migrate`.
 
+## RESOLVED 2026-09-01: six defects a second review found, all in the first round of fixes
+
+A review of the *fix* commit, not of the original work. Every one of these was introduced by, or
+left incomplete in, the previous round - worth recording because it is the more useful lesson: the
+recovery sweep added to close a gap was itself the largest new hazard in that commit.
+
+1. **`STALLED_UPLOAD_AGE` was shorter than a single legitimate run.** One hour, measured from
+   `Image.created` - which starts before the task is even queued - against a
+   `CELERY_TASK_TIME_LIMIT` of one hour. A 200MB video queued behind another on a two-slot worker
+   would be re-enqueued while still transcoding, starting a second ffmpeg pass over the same file
+   on a container explicitly sized so two large transcodes do not fit. Now six hours, and the
+   docstring no longer misstates the retry ladder as "about half an hour" (it is about seven
+   minutes, and queue wait was never part of it).
+2. **The sweep re-enqueued deduplicated siblings.** `attach_deduped_copy` deliberately keeps them
+   out of `process_image_upload` - they point at a file another row owns, and re-running it
+   re-encodes that shared file underneath the original, defeating the dedup. Excluded now; a
+   sibling whose original no longer exists (so `_sync_deduped_siblings` will never reach it) is
+   cleared in place rather than run through the task.
+3. **Dropping `max_dimension` on requeue skipped the EXIF strip, not just the resize.**
+   `downscale_stored_image` is what removes EXIF; with no policy the call was skipped entirely and
+   the shared tail cleared `pending_scan` anyway, publishing a recovered Street View or Places
+   photo as the provider's untouched original, GPS included. Two fixes: the cap is recoverable from
+   `ImageSource` (`photo_enrichment.enriched_max_dimension`) so the sweep passes the right one, and
+   a profile-less row with no cap now falls back to a default rather than skipping the call.
+4. **`_reject_image_upload` could raise on exactly the file that got it there.**
+   `delete_stored_file` suppressed `OSError` on the thumbnails but not on the original, so a
+   `PermissionError` escaped after the "your upload was removed" notification had already been
+   sent - leaving the row pending, to be rejected and notified about again every sweep, forever.
+   The unlink is now logged and tolerated: an orphaned file is a storage problem, a stranded
+   pending row is a user-visible one.
+5. **Making the root chown fatal traded one crash loop for another.** `chown -R` exits non-zero
+   when a file vanishes mid-traversal, and these volumes are shared with containers that are live
+   and deleting files - so restarting `celery-worker` during ordinary traffic could loop. Retried
+   once before giving up: a race passes the second attempt, a real permission problem fails both.
+6. **No index for the sweep's query.** `filter(pending_scan=True, created__lt=...)` seq-scanned
+   `dashboard_images` hourly. Migration 0043 adds a partial index on `created WHERE pending_scan`,
+   partial because the qualifying set is almost always empty and a full index would cost a write on
+   every upload.
+
+The review also confirmed the parts that were right: `task.retry()` composes correctly with
+`autoretry_for`, `created` is `auto_now_add`, the staged-source descriptor cannot cause a permanent
+404, `Path(name).name` blocks traversal, the write-then-rename is atomic, `preview_sources/` is
+unreachable through every route and both nginx vhosts, and the `queue_photo_submission` removals
+lose no submission.
+
 ## RESOLVED 2026-08-31: nine defects an adversarial review found in the async-scan work
 
 Each of these was in the two commits that moved the malware scan off the request, found by a
