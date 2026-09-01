@@ -5511,6 +5511,27 @@ a.popup-title {
         }
     }
 
+    // .add-to-list-button/.edit-pin-button/.delete-button are also each a bare
+    // 24px icon button elsewhere (the child-pin popup in map-annotations.ts's
+    // detailPinPopupContent renders .edit-pin-button/.delete-button with no
+    // text label at all) - their `.popup-actions .<class>` rules further up
+    // this file size them for that, at (0,2,0) specificity that ties this
+    // dropdown's own `button` rule above and wins on source order. Here, where
+    // the very same classes instead carry a full label ("Add to list", "Edit
+    // pin", "Delete pin"), that 24x24 sizing squeezed the label into an
+    // unreadable wrapped column - reset back to a full-width row at matching
+    // (0,2,0) specificity, scoped so the icon-only usage elsewhere is untouched.
+    .add-to-list-button,
+    .edit-pin-button,
+    .delete-button {
+        width: 100%;
+        height: auto;
+        justify-content: flex-start;
+        padding: 0.35rem 0.5rem;
+        border-radius: 4px;
+        margin-left: 0;
+    }
+
     .material-symbols-outlined {
         font-size: 1.05rem;
     }
