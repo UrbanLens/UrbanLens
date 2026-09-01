@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -95,13 +96,40 @@ class WikiShareServiceTests(TestCase):
         self.assertTrue(new_wiki.aliases.filter(name="Chosen Alias").exists())
 
     def test_photos_only_seeded_when_chosen(self) -> None:
-        image = baker.make("dashboard.Image", pin=self.pin)
+        image = baker.make("dashboard.Image", pin=self.pin, upload_processed_at=timezone.now())
 
         wiki, _created = self._create(image_ids={image.pk})
         image.refresh_from_db()
         self.assertEqual(image.wiki_id, wiki.pk)
         # Still attached to the original pin too.
         self.assertEqual(image.pin_id, self.pin.pk)
+
+    def test_unprocessed_photo_is_processed_before_it_is_shared(self) -> None:
+        image = baker.make("dashboard.Image", pin=self.pin, upload_processed_at=None)
+
+        def mark_processed(image_id: int) -> bool:
+            self.assertEqual(image_id, image.pk)
+            type(image).objects.filter(pk=image_id).update(upload_processed_at=timezone.now())
+            return True
+
+        with mock.patch("urbanlens.dashboard.tasks.process_image_upload", side_effect=mark_processed) as process:
+            wiki, shared = WikiShareService().share_from_pin(self.pin, image_ids={image.pk})
+
+        image.refresh_from_db()
+        self.assertTrue(shared)
+        self.assertEqual(image.wiki_id, wiki.pk)
+        process.assert_called_once_with(image.pk)
+
+    def test_unprocessed_photo_is_not_shared_when_processing_fails(self) -> None:
+        image = baker.make("dashboard.Image", pin=self.pin, upload_processed_at=None)
+
+        with mock.patch("urbanlens.dashboard.tasks.process_image_upload", return_value=False):
+            wiki, shared = WikiShareService().share_from_pin(self.pin, image_ids={image.pk})
+
+        image.refresh_from_db()
+        self.assertFalse(shared)
+        self.assertEqual(wiki.location_id, self.location.pk)
+        self.assertIsNone(image.wiki_id)
 
     def test_sharing_to_an_existing_wiki_contributes_without_renaming_it(self) -> None:
         """The case that used to be impossible.

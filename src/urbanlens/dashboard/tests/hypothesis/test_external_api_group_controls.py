@@ -51,7 +51,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
-from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, set_group_muted, share_pin_in_group_message
+from urbanlens.dashboard.services.messaging.group_chats import add_group_members, create_group_chat, set_group_muted, share_pin_in_group_message
 
 AccessToken = get_access_token_model()
 
@@ -638,3 +638,49 @@ class GroupMessagePayloadTests(GroupControlsBaseTestCase):
         row = next(item for item in payload["results"] if item["kind"] == "group" and item["group_uuid"] == str(self.group.uuid))
         self.assertEqual(row["last_message"]["reactions"], [{"emoji": "🔥", "count": 1, "slugs": [self.member.slug or ""]}])
         self.assertIn("pin_share_id", row["last_message"])
+
+    def test_thread_reactions_mask_hidden_reactor_slug_per_viewer(self) -> None:
+        """A masked group member's reaction still counts without exposing their profile slug."""
+        hidden = _profile()
+        _open_dms(self.creator, hidden)
+        add_group_members(self.group, self.creator, [hidden])
+        Profile.objects.filter(pk=hidden.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
+        hidden.refresh_from_db()
+        hidden.ensure_slug()
+        hidden_auth = _bearer(_token_for(hidden.user))
+
+        message = self._message(body="react privately")
+        react_url = reverse(
+            "external_api:messages.groups.messages.react",
+            kwargs={"group_uuid": self.group.uuid, "message_id": message.pk},
+        )
+        self._post_json(react_url, {"emoji": "🔥"}, hidden_auth)
+
+        creator_row = next(item for item in self._thread_rows(self.creator_auth) if item["id"] == message.pk)
+        hidden_row = next(item for item in self._thread_rows(hidden_auth) if item["id"] == message.pk)
+        self.assertEqual(creator_row["reactions"], [{"emoji": "🔥", "count": 1, "slugs": [""]}])
+        self.assertEqual(hidden_row["reactions"], [{"emoji": "🔥", "count": 1, "slugs": [hidden.slug or ""]}])
+
+    def test_conversation_reactions_mask_hidden_reactor_slug_per_viewer(self) -> None:
+        """The inbox last-message payload must not reintroduce raw reactor slugs."""
+        hidden = _profile()
+        _open_dms(self.creator, hidden)
+        add_group_members(self.group, self.creator, [hidden])
+        Profile.objects.filter(pk=hidden.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
+        hidden.refresh_from_db()
+        hidden.ensure_slug()
+        hidden_auth = _bearer(_token_for(hidden.user))
+
+        message = self._message(body="last reaction")
+        react_url = reverse(
+            "external_api:messages.groups.messages.react",
+            kwargs={"group_uuid": self.group.uuid, "message_id": message.pk},
+        )
+        self._post_json(react_url, {"emoji": "🔥"}, hidden_auth)
+
+        creator_payload = self.client.get(reverse("external_api:messages.conversations"), **self.creator_auth).json()
+        hidden_payload = self.client.get(reverse("external_api:messages.conversations"), **hidden_auth).json()
+        creator_row = next(item for item in creator_payload["results"] if item["kind"] == "group" and item["group_uuid"] == str(self.group.uuid))
+        hidden_row = next(item for item in hidden_payload["results"] if item["kind"] == "group" and item["group_uuid"] == str(self.group.uuid))
+        self.assertEqual(creator_row["last_message"]["reactions"], [{"emoji": "🔥", "count": 1, "slugs": [""]}])
+        self.assertEqual(hidden_row["last_message"]["reactions"], [{"emoji": "🔥", "count": 1, "slugs": [hidden.slug or ""]}])
