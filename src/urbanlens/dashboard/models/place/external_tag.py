@@ -138,6 +138,13 @@ class PlaceExternalTag(abstract.DashboardModel):
             source: Which provider ``tags`` came from.
             tags: The tags to store; entries with an empty value are skipped.
         """
+        from urbanlens.dashboard.models.place.external_tag_group import ExternalTagVocabularyEntry
+
+        kept = [tag for tag in tags if tag.value]
         with transaction.atomic():
             cls.objects.filter(place=place, source=source).delete()
-            cls.objects.bulk_create(cls(place=place, source=source, key=tag.key, value=tag.value, is_primary=tag.is_primary, confidence=tag.confidence) for tag in tags if tag.value)
+            cls.objects.bulk_create(cls(place=place, source=source, key=tag.key, value=tag.value, is_primary=tag.is_primary, confidence=tag.confidence) for tag in kept)
+            # Registers new vocabulary as it's first seen; get_or_create leaves
+            # an existing entry's group/is_preferred untouched on a resync.
+            for tag in kept:
+                ExternalTagVocabularyEntry.objects.get_or_create(source=source, key=tag.key, value=tag.value)

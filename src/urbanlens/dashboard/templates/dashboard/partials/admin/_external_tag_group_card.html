@@ -1,0 +1,25 @@
+{% load dashboard_tags %}
+{% comment %}
+One equivalence group card on the tag mapping admin page.
+
+Context:
+  group - ExternalTagGroup, with `members` prefetched
+  search - current search query, for round-tripping through the preferred-star POST
+{% endcomment %}
+<div class="card exttag-group-card" data-group-id="{{ group.pk }}">
+    <div class="exttag-group-list" data-group-id="{{ group.pk }}">
+        {% for entry in group.members.all %}
+        <span class="tag-chip exttag-vocab-chip {% if entry.is_preferred %}exttag-vocab-chip--preferred{% endif %}" data-entry-id="{{ entry.pk }}" title="{{ entry.key }}">
+            <button type="button" class="exttag-preferred-btn"
+                    title="{% if entry.is_preferred %}Shown on wiki pages{% else %}Show this one instead{% endif %}"
+                    hx-post="{% url 'site_admin_external_tags_preferred' %}"
+                    hx-vals='{"entry_id": "{{ entry.pk }}", "group_id": "{{ group.pk }}", "search": "{{ search|escapejs }}"}'
+                    hx-target="#external-tag-mapping-body" hx-swap="outerHTML">
+                <i class="material-symbols-outlined">{% if entry.is_preferred %}star{% else %}star_outline{% endif %}</i>
+            </button>
+            <span class="tag-chip-name">{{ entry.value|humanize_tag_value }}</span>
+            <span class="exttag-source-badge">{{ entry.get_source_display }}</span>
+        </span>
+        {% endfor %}
+    </div>
+</div>

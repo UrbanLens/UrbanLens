@@ -1,6 +1,7 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load vendor_assets %}
 {% load static %}
+{% load dashboard_tags %}
 
 {% block header %}
 {% vendor_asset "leaflet_css" %}
@@ -184,7 +185,7 @@
         </div>
 
         {% if wiki.place %}
-        {% include "dashboard/partials/wiki/_external_tag_chips.html" with tags=wiki.place.external_tags.all %}
+        {% include "dashboard/partials/wiki/_external_tag_chips.html" with tags=wiki.place|visible_external_tags %}
         {% endif %}
 
         {# -- Aliases / Photos / Comments / Edit history: half-width on wide screens #}

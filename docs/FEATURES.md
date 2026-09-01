@@ -655,9 +655,28 @@ shares one tag set rather than each re-deriving and storing its own near-duplica
 recently. Shown read-only on the wiki page as chips visually matching the Label chip style
 (`_external_tag_chips.html`, reusing the `.tag-chip` CSS with no edit/remove affordance).
 
+**Tag equivalence mapping.** Different providers often describe the same real-world concept
+differently (OSM `amenity=restaurant` vs. Overture `building_subtype=restaurant`), which would
+otherwise show as two near-duplicate chips. `ExternalTagVocabularyEntry`
+(`models/place/external_tag_group.py`) is a persisted, admin-curated record of every distinct
+`(source, key, value)` tag ever seen - auto-registered as new tags appear, never auto-deleted -
+which an admin can place into an `ExternalTagGroup` and mark one member `is_preferred`. With no
+explicit group, two entries are still treated as equivalent by default whenever they humanize to
+the same display text (`services.locations.external_tag_groups.default_group_key`) - an admin can
+override a coincidental default match by putting the colliding entries into their own separate
+(even single-member) explicit groups, since an explicit group always wins over the default.
+`visible_tags_for_place()` resolves, for one Place's actual tags, which single tag to show per
+equivalence group (the wiki chips only ever render this deduplicated set, via the
+`visible_external_tags` template filter) - fed by the admin page at **Site Admin → Tag Mapping**
+(`/site-admin/external-tags/`), which lists every known tag, surfaces unconfirmed default matches
+for review, and supports fast bulk grouping (click/shift-click multi-select, or drag-and-drop
+between groups via Sortable.js) rather than a dialog per pair.
+
 **Not yet built, by design**: automatically suggesting Labels from this data, choosing pin icons
-from it, or feeding it into search. This only captures and displays the raw data - a deliberate
-first step, not a promise those are coming next.
+from it, or a tag-based search/filter UI. `ExternalTagVocabularyEntry.group_id` makes "every tag
+equivalent to X" a single indexed lookup whenever that search feature is eventually built, but no
+UI or querying over `PlaceExternalTag` exists for any purpose yet - this phase only captures,
+displays, and deduplicates the raw data.
 
 ## Notifications
 

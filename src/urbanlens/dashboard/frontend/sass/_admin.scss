@@ -1796,3 +1796,130 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     white-space: nowrap;
   }
 }
+
+// -- External tag mapping admin ------------------------------------------------
+
+.exttag-mapping-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.exttag-search-row {
+    .exttag-search-input {
+        width: 100%;
+        max-width: 360px;
+        padding: .5rem .75rem;
+        border-radius: 8px;
+        border: 1px solid var(--border-color, #cbd5e1);
+        background: var(--card-bg, #fff);
+        color: inherit;
+    }
+}
+
+.exttag-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .6rem .9rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent-color, #6366f1) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-color, #6366f1) 30%, transparent);
+
+    .exttag-bulk-count {
+        font-weight: 600;
+        font-size: .85rem;
+    }
+}
+
+.exttag-section {
+    h3 {
+        margin: 0 0 .25rem;
+        font-size: 1rem;
+    }
+}
+
+.exttag-section-hint {
+    margin: 0 0 .6rem;
+    font-size: .8rem;
+    color: var(--text-muted, #64748b);
+}
+
+.exttag-empty {
+    font-size: .85rem;
+    color: var(--text-muted, #64748b);
+}
+
+.exttag-clusters,
+.exttag-groups-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: .75rem;
+}
+
+.exttag-cluster-card,
+.exttag-group-card {
+    padding: .65rem .75rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.exttag-chip-row,
+.exttag-group-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    min-height: 2.25rem;
+}
+
+// The ungrouped pool and every group card's member list share this class -
+// Sortable is initialized on each one, all sharing one `group:` name so a
+// chip can be dragged between any of them (see external-tag-mapping.ts).
+.exttag-group-list {
+    padding: .35rem;
+    border-radius: 8px;
+    border: 1px dashed var(--border-color, #cbd5e1);
+}
+
+.exttag-vocab-chip {
+    cursor: grab;
+    user-select: none;
+
+    &.exttag-vocab-chip--selected {
+        outline: 2px solid var(--accent-color, #6366f1);
+        outline-offset: 1px;
+    }
+
+    &.exttag-vocab-chip--preferred {
+        font-weight: 600;
+    }
+}
+
+.exttag-chip--ghost {
+    opacity: .4;
+}
+
+.exttag-preferred-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: inherit;
+
+    .material-symbols-outlined {
+        font-size: 16px;
+    }
+}
+
+.exttag-source-badge {
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    opacity: .65;
+}
