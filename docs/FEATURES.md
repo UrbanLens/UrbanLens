@@ -118,7 +118,11 @@ never see the rule engine, only vote buttons on a place that already qualifies.
 - **Global search** (navbar, Ctrl+K) across result types (pins, wikis, photos, trips,
   messages, …) with lightweight natural-language parsing ("photos from last summer",
   "pins in Cincinnati", "pins near me", "messages from Alice"), pg_trgm typo tolerance,
-  and a plain-text fallback when no structured interpretation matches
+  and a plain-text fallback when no structured interpretation matches. Pins and wikis also
+  match by external tag ("restaurants", "pin with tag restaurant" — restricted to pins by the
+  existing "pin" type keyword), including any provider's equivalent tag once admin-grouped —
+  see "Tag equivalence mapping" below. The map's own "Jump To" pin search bar matches the same
+  way
 
 ## Lists & Saved Filters
 
@@ -672,11 +676,15 @@ equivalence group (the wiki chips only ever render this deduplicated set, via th
 for review, and supports fast bulk grouping (click/shift-click multi-select, or drag-and-drop
 between groups via Sortable.js) rather than a dialog per pair.
 
+**Search** — global search (pins and wikis) and the map's "Jump To" pin search both match by
+external tag, including any provider's equivalent tag once admin-grouped or default-matched by
+display text (`services.locations.external_tag_groups.matching_vocabulary`/`tag_match_q`) - see
+"Search & Navigation" above.
+
 **Not yet built, by design**: automatically suggesting Labels from this data, choosing pin icons
-from it, or a tag-based search/filter UI. `ExternalTagVocabularyEntry.group_id` makes "every tag
-equivalent to X" a single indexed lookup whenever that search feature is eventually built, but no
-UI or querying over `PlaceExternalTag` exists for any purpose yet - this phase only captures,
-displays, and deduplicates the raw data.
+from it, or matching a tag *category* against its members ("Food and Beverage" finding a place
+tagged "Restaurant") - neither OSM nor Overture data as ingested today carries that kind of
+parent/child relationship, so there's nothing yet to curate it from.
 
 ## Notifications
 

@@ -25,6 +25,8 @@ from django.urls import reverse
 from urbanlens.dashboard.services.global_search.results import SearchResult, excerpt
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
@@ -53,17 +55,27 @@ _CONCEALMENT_OVERFETCH = 4
 
 
 def _concealed_wiki_haystacks(wiki: Any, viewer: Profile) -> list[str]:
-    """Lowercased name/description/alias text *viewer* may actually see on *wiki*.
+    """Lowercased name/description/alias/tag text *viewer* may actually see on *wiki*.
 
     The shared building block behind every concealed-candidate re-check
     below: what a concealed viewer's own search may match against is exactly
     what the page would render them, never the live row.
+
+    Place tags are included even though they aren't versioned/concealed
+    fields at all: they're provider (OSM/Overture) facts about the place,
+    not wiki-authored content, the same kind of thing
+    ``location.official_name`` already is - so a wiki that matched only via
+    its own place's tag must not be dropped by a concealment re-check meant
+    to hide a stranger's live name/description/alias.
     """
+    from urbanlens.dashboard.services.locations.external_tags import humanize_tag_value
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealed_field_values
 
     values = concealed_field_values(wiki, viewer)
     haystacks = [str(values.get("name") or "").lower(), str(values.get("description") or "").lower()]
     haystacks += [name.lower() for name in conceal_rows(wiki.aliases.all(), viewer).values_list("name", flat=True)]
+    if wiki.location_id and wiki.location.place_id:
+        haystacks += [humanize_tag_value(tag.value).lower() for tag in wiki.location.place.external_tags.all()]
     return haystacks
 
 
@@ -221,12 +233,20 @@ _PLACE_FIELDS = (
 )
 
 
-def term_filter(terms: list[str], fields: list[str]) -> Q:
+def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q] | None = None) -> Q:
     """Build the standard text predicate: every term in at least one field.
 
     Args:
         terms: Lowercased search terms (AND-ed together).
         fields: ORM field paths each term may appear in (OR-ed together).
+        extra: Optional per-term Q builder, OR-ed alongside the field
+            matches - e.g. tag-equivalence matching, which isn't expressible
+            as a plain ``field__icontains`` lookup. Must itself guard against
+            returning a no-op ``Q()`` for "no match" (see
+            :func:`~urbanlens.dashboard.services.locations.external_tag_groups.tag_match_q`),
+            since OR-ing a no-op into an AND-across-terms clause would turn
+            "this term matched nothing extra" into "this term matches
+            everything."
 
     Returns:
         The combined Q object; empty Q when ``terms`` is empty.
@@ -236,6 +256,8 @@ def term_filter(terms: list[str], fields: list[str]) -> Q:
         term_q = Q()
         for field_path in fields:
             term_q |= Q(**{f"{field_path}__icontains": term})
+        if extra is not None:
+            term_q |= extra(term)
         combined &= term_q
     return combined
 
@@ -376,7 +398,7 @@ class SearchProvider(ABC):
         """
         raise NotImplementedError
 
-    def apply_text(self, queryset: _QS, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None) -> _QS:
+    def apply_text(self, queryset: _QS, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None, tag_path: str | None = None) -> _QS:
         """Apply term matching plus fuzzy title matching and relevance ordering.
 
         With no free-text terms (a purely structured query like "photos from
@@ -402,6 +424,11 @@ class SearchProvider(ABC):
             fields: ORM field paths for exact (icontains) term matching.
             location_path: ORM path to this row's Location relation, enabling
                 near-me handling; omit for models with no location.
+            tag_path: ORM path to this row's ``PlaceExternalTag`` relation
+                (e.g. ``"location__place__external_tags"``), enabling
+                external-tag matching alongside the plain field list - see
+                :func:`~urbanlens.dashboard.services.locations.external_tag_groups.tag_match_q`.
+                Omit for models with no place-tagged location.
 
         Returns:
             Filtered queryset annotated with ``search_sim``/``near_hit`` where
@@ -409,6 +436,13 @@ class SearchProvider(ABC):
         """
         has_near = location_path is not None and parsed.near_lat is not None and parsed.near_lng is not None
         geo_q = distance_filter(location_path, parsed) if has_near and location_path is not None else Q()
+        extra = None
+        if tag_path is not None:
+            from functools import partial
+
+            from urbanlens.dashboard.services.locations.external_tag_groups import tag_match_q
+
+            extra = partial(tag_match_q, path=tag_path)
 
         if not parsed.terms:
             if has_near:
@@ -419,7 +453,7 @@ class SearchProvider(ABC):
         if has_near:
             queryset = queryset.annotate(near_hit=Case(When(geo_q, then=Value(value=True)), default=Value(value=False), output_field=BooleanField()))
 
-        text_q = term_filter(parsed.terms, fields)
+        text_q = term_filter(parsed.terms, fields, extra=extra)
         order = (["-near_hit"] if has_near else []) + ["-created"]
         if self.fuzzy_field:
             queryset = queryset.annotate(search_sim=TrigramSimilarity(self.fuzzy_field, parsed.text))
@@ -481,6 +515,7 @@ class PinSearchProvider(SearchProvider):
                 "location__wiki__aliases__name",
             ],
             location_path="location",
+            tag_path="location__place__external_tags",
         ).distinct()
 
         results = []
@@ -637,7 +672,7 @@ class WikiSearchProvider(SearchProvider):
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
         queryset = queryset.filter(date_range_filter("updated", parsed))
-        queryset = self.apply_text(queryset, parsed, ["name", "description", "aliases__name"], location_path="location").distinct()
+        queryset = self.apply_text(queryset, parsed, ["name", "description", "aliases__name"], location_path="location", tag_path="location__place__external_tags").distinct()
         wikis = _concealment_survivors(queryset, profile, limit, lambda w: w, lambda w, v: _concealed_wiki_survives(w, v, parsed.terms))
 
         from urbanlens.dashboard.services.wiki.concealment import conceal_wiki

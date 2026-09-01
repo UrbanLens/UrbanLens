@@ -68,6 +68,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
 
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.locations.external_tag_groups import tag_match_q
     from urbanlens.dashboard.services.wiki.concealment import concealment_active
     from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
 
@@ -96,7 +97,8 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
             | Q(location__official_name__icontains=q)
             | Q(location__wiki__name__icontains=q)
             | Q(location__wiki__aliases__name__icontains=q)
-            | Q(location__wiki__description__icontains=q),
+            | Q(location__wiki__description__icontains=q)
+            | tag_match_q(q, "location__place__external_tags"),
         )
         .distinct()[:12]
     )
@@ -156,7 +158,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     seen_wiki_ids: set[int] = set()
     wiki_qs = (
         Wiki.objects.filter(
-            Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q),
+            Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q) | tag_match_q(q, "location__place__external_tags"),
         )
         .filter(location_id__in=visible_wiki_location_ids_cached(profile))
         .select_related("location")
@@ -202,7 +204,10 @@ def _pin_own_fields_match(pin, q_lower: str) -> bool:
 
     Used to tell "this pin matched on its own name/notes/labels" (always fine
     to surface, concealment or not) apart from "this pin matched only via its
-    location's wiki" (needs the concealed-content re-check).
+    location's wiki" (needs the concealed-content re-check). A place's
+    external tags count as "own data" the same way ``location.official_name``
+    already does below - they're provider (OSM/Overture) facts about the
+    place, not wiki-authored content.
     """
     if q_lower in (pin.name or "").lower():
         return True
@@ -212,7 +217,22 @@ def _pin_own_fields_match(pin, q_lower: str) -> bool:
         return True
     if any(q_lower in label.name.lower() for label in pin.labels.all()):
         return True
-    return bool(pin.location is not None and q_lower in (pin.location.official_name or "").lower())
+    if pin.location is not None and q_lower in (pin.location.official_name or "").lower():
+        return True
+    return _place_has_matching_tag(pin.location.place if pin.location is not None else None, q_lower)
+
+
+def _place_has_matching_tag(place, term: str) -> bool:
+    """Whether *place* itself carries a tag equivalent to *term* (see :func:`matching_vocabulary`)."""
+    if place is None:
+        return False
+    from urbanlens.dashboard.services.locations.external_tag_groups import matching_vocabulary
+
+    entries = matching_vocabulary(term)
+    if not entries:
+        return False
+    matching_tuples = {(entry.source, entry.key, entry.value) for entry in entries}
+    return any((tag.source, tag.key, tag.value) in matching_tuples for tag in place.external_tags.all())
 
 
 def _pin_match_subtitle(pin, q_lower: str, profile) -> str:
