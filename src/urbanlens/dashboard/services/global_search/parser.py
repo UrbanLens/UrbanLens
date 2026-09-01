@@ -612,6 +612,27 @@ def parse_query(raw: str) -> ParsedQuery:
 #: Operator keys that name a date field rather than filtering some other way.
 _DATE_OPERATORS = ("visited", "created", "updated", "viewed", "taken", "starts", "ends")
 
+#: `is:` choices with no backing field anywhere in the codebase (confirmed by
+#: search, not assumed) - "recognized but can't be answered" the same way
+#: `color:`/`contains:` already are, rather than a silent no-op filter.
+#: `archived` is deliberately not listed here - SafetyCheckin has a real
+#: archived state (SafetySearchProvider applies it); it's just a no-op for
+#: types that don't, the same as any other type-specific `is:`/`has:` choice.
+_UNSUPPORTED_STATES: dict[str, str] = {
+    "shared": "isn't tracked as a pin/trip state yet.",
+    "private": "isn't tracked as a pin/trip state yet.",
+    "public": "isn't tracked as a pin/trip state yet.",
+    "starred": "there's no starred/favorite concept yet.",
+}
+
+#: `has:` choices with no real meaning to test. Every Pin already has
+#: coordinates (Location's lat/long are required at creation), so `coords`
+#: would always be true - treated as unanswerable rather than a trivial
+#: always-match.
+_UNSUPPORTED_HAS: dict[str, str] = {
+    "coords": "every pin already has coordinates, so this can't narrow anything.",
+}
+
 
 def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
     """Fold scanned operator clauses into *parsed*, in place.
@@ -625,7 +646,7 @@ def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
     """
     parsed.clauses = list(scanned.clauses)
     parsed.unknown_keys = tuple(scanned.unknown_keys)
-    parsed.unsupported = tuple((clause.key, clause.operator.unsupported_reason) for clause in scanned.clauses if clause.operator.unsupported_reason)
+    unsupported: list[tuple[str, str]] = [(clause.key, clause.operator.unsupported_reason) for clause in scanned.clauses if clause.operator.unsupported_reason]
 
     labels: list[str] = []
     exclude_labels: list[str] = []
@@ -640,8 +661,10 @@ def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
             (exclude_labels if clause.negated else labels).extend(clause.values)
         elif key == "has":
             facets.extend(f"-{value}" if clause.negated else value for value in clause.values)
+            unsupported.extend((f"has:{value}", reason) for value in clause.values if (reason := _UNSUPPORTED_HAS.get(value)))
         elif key == "is":
             states.extend(f"-{value}" if clause.negated else value for value in clause.values)
+            unsupported.extend((f"is:{value}", reason) for value in clause.values if (reason := _UNSUPPORTED_STATES.get(value)))
         elif key == "place":
             parsed.place = clause.value
         elif key == "near":
@@ -660,6 +683,7 @@ def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
     parsed.exclude_labels = tuple(exclude_labels)
     parsed.has = tuple(facets)
     parsed.states = tuple(states)
+    parsed.unsupported = tuple(unsupported)
 
 
 def _apply_date_clause(parsed: ParsedQuery, key: str, value: str) -> None:

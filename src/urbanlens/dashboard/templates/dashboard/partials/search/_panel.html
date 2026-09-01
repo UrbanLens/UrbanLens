@@ -59,6 +59,14 @@
     </div>
     {% endif %}
 
+    {% if problem_notes %}
+    <div class="gs-filters">
+        {% for note in problem_notes %}
+        <span class="gs-filter-chip gs-filter-chip--note">{{ note }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     {% if response.groups %}
         {% for group in response.groups %}
         <div class="gs-section">

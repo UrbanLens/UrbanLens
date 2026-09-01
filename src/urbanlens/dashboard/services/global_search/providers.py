@@ -17,8 +17,10 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
+from django.contrib.gis.db.models.functions import Distance
+from django.contrib.gis.geos import Point
 from django.contrib.postgres.search import TrigramSimilarity
-from django.db.models import BooleanField, Case, Exists, F, OuterRef, Q, Value, When
+from django.db.models import BooleanField, Case, Count, Exists, F, OuterRef, Q, Value, When
 from django.db.models.functions import Concat
 from django.urls import reverse
 
@@ -366,6 +368,157 @@ def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[st
     return annotation, query
 
 
+def apply_label_clause(queryset: _QS, parsed: ParsedQuery, relation: str = "labels") -> _QS:  # noqa: UP047
+    """Filter *queryset* by `label:`/`-label:` (aliases `tag`, `labels`).
+
+    Applied as two separate ``.filter()``/``.exclude()`` calls rather than one
+    combined ``Q()`` - Django's well-known multi-valued-relation pitfall means
+    an OR-inclusion and a NOT-exclusion on the *same* M2M combined in a single
+    filter call don't mean what they look like they mean; two calls each get
+    their own join and are unambiguous.
+
+    Args:
+        queryset: The already access-scoped queryset.
+        parsed: The structured query, carrying ``labels``/``exclude_labels``.
+        relation: ORM path to the Label M2M relation (e.g. ``"labels"``).
+
+    Returns:
+        The filtered queryset; unchanged when neither field is set.
+    """
+    if parsed.labels:
+        included = Q()
+        for name in parsed.labels:
+            included |= Q(**{f"{relation}__name__iexact": name})
+        queryset = queryset.filter(included)
+    if parsed.exclude_labels:
+        excluded = Q()
+        for name in parsed.exclude_labels:
+            excluded |= Q(**{f"{relation}__name__iexact": name})
+        queryset = queryset.exclude(excluded)
+    return queryset
+
+
+def author_clause(path: str, parsed: ParsedQuery, profile: Profile) -> tuple[dict[str, Concat | Exists], Q] | None:
+    """The annotation/Q pair for `by:`/`author:`/`creator:`, or None when unset.
+
+    "me" (case-insensitive) matches ``path`` against the searching profile
+    directly, mirroring how `near:me` is special-cased in the parser. Any
+    other value reuses :func:`person_match` against the same path - the exact
+    mechanism `from:` already uses for a different relation.
+
+    Args:
+        path: ORM path prefix to the Profile being matched (e.g. ``"profile"``,
+            ``"creator"``, ``"last_edited_by"``, ``"sender"``).
+        parsed: The structured query, carrying ``author``.
+        profile: The searching profile, for the "me" case.
+
+    Returns:
+        None when ``parsed.author`` is unset; otherwise an (annotation dict,
+        Q) pair the caller applies exactly as :func:`person_match`'s result.
+    """
+    if not parsed.author:
+        return None
+    if parsed.author.strip().lower() == "me":
+        return {}, Q(**{path: profile})
+    return person_match(path, parsed.author, profile)
+
+
+def apply_pin_has_clause(queryset: _QS, parsed: ParsedQuery) -> _QS:  # noqa: UP047
+    """Filter a Pin queryset by `has:`/`-has:` (see the operator's choice list).
+
+    Each recognized choice is applied as its own ``Exists()``/``isnull``
+    check - mirroring ``PinQuerySet.filter_by_criteria``'s existing
+    ``has_links`` pattern - so choices compose safely regardless of order.
+    ``coords`` and any unrecognized value contribute nothing here; they're
+    already surfaced to the user via ``parsed.unsupported``/an unknown key,
+    never silently treated as a match.
+
+    Args:
+        queryset: The already access-scoped Pin queryset.
+        parsed: The structured query, carrying ``has``.
+
+    Returns:
+        The filtered queryset; unchanged when ``parsed.has`` is empty.
+    """
+    if not parsed.has:
+        return queryset
+
+    from urbanlens.dashboard.models.comments import Comment
+    from urbanlens.dashboard.models.floorplans import Floorplan
+    from urbanlens.dashboard.models.images import Image
+    from urbanlens.dashboard.models.links import PinLink
+    from urbanlens.dashboard.models.markup import PinMarkup
+    from urbanlens.dashboard.models.pin import PinNote
+    from urbanlens.dashboard.models.visits import PinVisit, VisitSource
+
+    fk_relations: dict[str, tuple[type[Any], str]] = {
+        "photos": (Image, "pin"),
+        "comments": (Comment, "pin"),
+        "visits": (PinVisit, "pin"),
+        "notes": (PinNote, "pin"),
+        "links": (PinLink, "pin"),
+        "floorplan": (Floorplan, "pin"),
+        "markup": (PinMarkup, "parent_pin"),
+    }
+
+    for raw in parsed.has:
+        negated = raw.startswith("-")
+        choice = raw[1:] if negated else raw
+        if choice == "labels":
+            queryset = queryset.filter(labels__isnull=negated)
+        elif choice == "wiki":
+            queryset = queryset.filter(wiki__isnull=negated)
+        elif choice == "checkins":
+            checkin_exists = Exists(PinVisit.objects.filter(pin=OuterRef("pk"), source=VisitSource.SAFETY_CHECKIN))
+            queryset = queryset.filter(~checkin_exists if negated else checkin_exists)
+        elif choice in fk_relations:
+            model, fk_field = fk_relations[choice]
+            exists = Exists(model.objects.filter(**{fk_field: OuterRef("pk")}))
+            queryset = queryset.filter(~exists if negated else exists)
+        # else: "coords" or an unrecognized value - contributes nothing here.
+    return queryset
+
+
+#: `sort:` choices every provider can honor uniformly - every model has both
+#: `created` and `updated` (`abstract.DashboardModel`). "recent" is an alias
+#: for "updated": the most user-meaningful notion of recency.
+_UNIVERSAL_SORT_FIELDS: dict[str, str] = {"recent": "-updated", "updated": "-updated", "created": "-created"}
+
+
+def apply_sort(queryset: _QS, parsed: ParsedQuery, *, location_path: str | None = None, visited_field: str | None = None) -> tuple[_QS, bool]:  # noqa: UP047
+    """Reorder *queryset* for `sort:`, when this provider understands the requested mode.
+
+    `nearest` additionally needs `location_path` and a known searcher point
+    (`parsed.near_lat`/`near_lng`, resolved by the engine); `visited`
+    additionally needs `visited_field` (the model's own "last visited"/
+    "visited at" field). A mode this provider has no concept of - or none
+    given - leaves `queryset` untouched, letting the caller's own default
+    ordering (`apply_text`'s near_hit/search_sim/-created, or a bespoke
+    fallback) stand; the caller uses the returned bool to know which it got.
+
+    Args:
+        queryset: The already filtered/access-scoped queryset.
+        parsed: The structured query, carrying ``sort``.
+        location_path: ORM path to this row's Location relation, enabling
+            `nearest`; omit for models with no location.
+        visited_field: This model's own "last visited" DateTimeField name,
+            enabling `visited`; omit for models with no such concept.
+
+    Returns:
+        (queryset, whether a sort mode was actually applied).
+    """
+    mode = parsed.sort or ""
+    if mode == "nearest" and location_path is not None and parsed.near_lat is not None and parsed.near_lng is not None:
+        point = Point(parsed.near_lng, parsed.near_lat, srid=4326)
+        return queryset.annotate(_sort_distance=Distance(f"{location_path}__point", point)).order_by("_sort_distance"), True
+    if mode == "visited" and visited_field is not None:
+        return queryset.order_by(F(visited_field).desc(nulls_last=True)), True
+    order = _UNIVERSAL_SORT_FIELDS.get(mode)
+    if order:
+        return queryset.order_by(order), True
+    return queryset, False
+
+
 class SearchProvider(ABC):
     """One result type's search implementation.
 
@@ -434,7 +587,12 @@ class SearchProvider(ABC):
             Filtered queryset annotated with ``search_sim``/``near_hit`` where
             applicable, ordered most relevant first.
         """
-        has_near = location_path is not None and parsed.near_lat is not None and parsed.near_lng is not None
+        # parsed.near_me is required explicitly, not just near_lat/lng being set:
+        # `sort:nearest` alone (no "near me" wording) also needs a resolved point
+        # (for apply_sort's Distance() ordering below), but must NOT also impose
+        # the near-me radius filter/boost - sort:nearest ranks everything by
+        # distance, it doesn't exclude anything far away.
+        has_near = location_path is not None and parsed.near_me and parsed.near_lat is not None and parsed.near_lng is not None
         geo_q = distance_filter(location_path, parsed) if has_near and location_path is not None else Q()
         extra = None
         if tag_path is not None:
@@ -501,6 +659,20 @@ class PinSearchProvider(SearchProvider):
             shared_with_me = PinShare.objects.filter(to_profile=profile, status=PinShareStatus.ACCEPTED, pin__location_id=OuterRef("location_id")).annotate(**sharer_ann).filter(sharer_q)
             queryset = queryset.filter(Exists(shared_with_me))
         queryset = queryset.filter(date_range_filter("created", parsed))
+        queryset = apply_label_clause(queryset, parsed)
+        if (author_match := author_clause("profile", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
+        queryset = apply_pin_has_clause(queryset, parsed)
+        for raw_state in parsed.states:
+            negated = raw_state.startswith("-")
+            state = raw_state[1:] if negated else raw_state
+            if state == "visited":
+                queryset = queryset.never_visited() if negated else queryset.visited()
+            elif state == "unvisited":
+                queryset = queryset.visited() if negated else queryset.never_visited()
+            # else: unbacked (shared/private/public/archived/starred) or
+            # unrecognized - already surfaced via parsed.unsupported.
         queryset = self.apply_text(
             queryset,
             parsed,
@@ -517,6 +689,10 @@ class PinSearchProvider(SearchProvider):
             location_path="location",
             tag_path="location__place__external_tags",
         ).distinct()
+        if parsed.sort == "most-visited":
+            queryset = queryset.annotate(_visit_count=Count("visit_history", distinct=True)).order_by("-_visit_count")
+        else:
+            queryset, _ = apply_sort(queryset, parsed, location_path="location", visited_field="last_visited")
 
         results = []
         for pin in queryset[:limit]:
@@ -586,6 +762,10 @@ class PhotoSearchProvider(SearchProvider):
             queryset = queryset.filter(
                 Q(taken_at__date__gte=parsed.date_start, taken_at__date__lte=parsed.date_end) | (Q(taken_at__isnull=True) & date_range_filter("created", parsed)),
             )
+        queryset = apply_label_clause(queryset, parsed)
+        if (author_match := author_clause("profile", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
         queryset = self.apply_text(
             queryset,
             parsed,
@@ -615,6 +795,7 @@ class PhotoSearchProvider(SearchProvider):
         # narrows to, so narrowing first is what stops it inspecting every uploader
         # on the site.
         queryset = queryset.visible_to(profile)
+        queryset, _ = apply_sort(queryset, parsed, location_path="location")
 
         results = []
         for image in queryset[:limit]:
@@ -672,7 +853,12 @@ class WikiSearchProvider(SearchProvider):
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
         queryset = queryset.filter(date_range_filter("updated", parsed))
+        queryset = apply_label_clause(queryset, parsed)
+        if (author_match := author_clause("created_by", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
         queryset = self.apply_text(queryset, parsed, ["name", "description", "aliases__name"], location_path="location", tag_path="location__place__external_tags").distinct()
+        queryset, _ = apply_sort(queryset, parsed, location_path="location")
         wikis = _concealment_survivors(queryset, profile, limit, lambda w: w, lambda w, v: _concealed_wiki_survives(w, v, parsed.terms))
 
         from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
@@ -726,7 +912,11 @@ class ArticleSearchProvider(SearchProvider):
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place) | place_filter("wiki__location", parsed.place))
         queryset = queryset.filter(date_range_filter("updated", parsed))
+        if (author_match := author_clause("last_edited_by", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
         queryset = self.apply_text(queryset, parsed, ["content", "pin__name", "pin__aliases__name", "wiki__name", "wiki__aliases__name"]).distinct()
+        queryset, _ = apply_sort(queryset, parsed)
         articles = _concealment_survivors(queryset, profile, limit, lambda a: a.wiki, lambda a, v: _concealed_article_survives(a, v, parsed.terms))
 
         from urbanlens.dashboard.services.wiki.concealment import conceal_wiki, concealment_active, visible_article_revision
@@ -782,6 +972,8 @@ class TripSearchProvider(SearchProvider):
     fuzzy_field = "name"
 
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
+        from django.utils import timezone
+
         from urbanlens.dashboard.models.trips import Trip
 
         queryset = Trip.objects.filter(Q(profiles=profile) | Q(creator=profile))
@@ -790,11 +982,32 @@ class TripSearchProvider(SearchProvider):
             queryset = queryset.filter(start_date__lte=parsed.date_end).filter(
                 Q(end_date__gte=parsed.date_start) | Q(end_date__isnull=True, start_date__gte=parsed.date_start),
             )
+        if (author_match := author_clause("creator", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
+        for raw_state in parsed.states:
+            negated = raw_state.startswith("-")
+            state = raw_state[1:] if negated else raw_state
+            if state in ("upcoming", "past"):
+                # Raw start_date/end_date, not the effective_start/end_date
+                # properties (which fall back to scheduled activities) - those
+                # aren't filterable at the DB level. Neither side matches a
+                # trip with no dates at all, so it participates in neither
+                # state rather than defaulting into one.
+                today = timezone.localdate()
+                if state == "upcoming":
+                    state_q = Q(end_date__gte=today) | Q(end_date__isnull=True, start_date__gte=today)
+                else:
+                    state_q = Q(end_date__lt=today) | Q(end_date__isnull=True, start_date__lt=today)
+                queryset = queryset.exclude(state_q) if negated else queryset.filter(state_q)
+            # else: unbacked (shared/private/public/archived/starred) or
+            # unrecognized - already surfaced via parsed.unsupported.
         queryset = self.apply_text(
             queryset,
             parsed,
             ["name", "description", "activities__title", "activities__notes", "comments__text"],
         ).distinct()
+        queryset, _ = apply_sort(queryset, parsed)
 
         results = []
         for trip in queryset[:limit]:
@@ -832,15 +1045,22 @@ class VisitSearchProvider(SearchProvider):
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place))
         queryset = queryset.filter(date_range_filter("visited_at", parsed))
+        # A visit's "author" is definitionally its pin's owner - there's no
+        # separate concept, unlike every other type `by:` applies to.
+        if (author_match := author_clause("pin__profile", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
         queryset = self.apply_text(
             queryset,
             parsed,
             ["notes", "pin__name", "pin__location__official_name", "pin__location__wiki__name"],
             location_path="pin__location",
         ).distinct()
+        queryset, sort_applied = apply_sort(queryset, parsed, location_path="pin__location", visited_field="visited_at")
 
         results = []
-        for visit in queryset.order_by("-visited_at")[:limit] if not parsed.terms else queryset[:limit]:
+        source = queryset[:limit] if (sort_applied or parsed.terms) else queryset.order_by("-visited_at")[:limit]
+        for visit in source:
             pin = visit.pin
             results.append(
                 SearchResult(
@@ -907,6 +1127,10 @@ class DirectMessageSearchProvider(SearchProvider):
         if not parsed.terms and not parsed.person:
             return []
         queryset = message_search_queryset(profile, parsed).select_related("sender__user", "recipient__user")
+        if (author_match := author_clause("sender", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
+        queryset, _ = apply_sort(queryset, parsed)
 
         from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for
 
@@ -962,7 +1186,12 @@ class MarkupMapSearchProvider(SearchProvider):
         maps_url = reverse("memories.maps")
         results: list[SearchResult] = []
 
-        map_qs = self.apply_text(MarkupMap.objects.for_profile(profile), parsed, ["title"])
+        map_qs = MarkupMap.objects.for_profile(profile)
+        if (author_match := author_clause("profile", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            map_qs = map_qs.annotate(**author_ann).filter(author_q)
+        map_qs = self.apply_text(map_qs, parsed, ["title"])
+        map_qs, _ = apply_sort(map_qs, parsed)
         for markup_map in map_qs[:limit]:
             results.append(
                 SearchResult(
@@ -1038,7 +1267,17 @@ class SafetySearchProvider(SearchProvider):
         from urbanlens.dashboard.models.safety import SafetyCheckin
 
         queryset = SafetyCheckin.objects.filter(profile=profile).filter(date_range_filter("checkin_by", parsed))
+        if (author_match := author_clause("profile", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            queryset = queryset.annotate(**author_ann).filter(author_q)
+        for raw_state in parsed.states:
+            negated = raw_state.startswith("-")
+            state = raw_state[1:] if negated else raw_state
+            if state == "archived":
+                queryset = queryset.filter(archive__isnull=negated)
+            # else: unbacked or unrecognized - already surfaced via parsed.unsupported.
         queryset = self.apply_text(queryset, parsed, ["title", "plan_details", "messages__body"]).distinct()
+        queryset, _ = apply_sort(queryset, parsed)
 
         results = []
         for checkin in queryset[:limit]:
@@ -1084,6 +1323,10 @@ class CommentSearchProvider(SearchProvider):
             .distinct()
             .order_by("-created")
         )
+        if (author_match := author_clause("profile", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            comment_qs = comment_qs.annotate(**author_ann).filter(author_q)
+        comment_qs, _ = apply_sort(comment_qs, parsed)
         comments = _concealment_survivors(comment_qs, profile, limit, lambda c: c.wiki, _concealed_comment_survives)
         names = _display_names(profile, [comment.profile for comment in comments])
 
@@ -1123,6 +1366,10 @@ class CommentSearchProvider(SearchProvider):
             )
 
         trip_comment_qs = TripComment.objects.filter(trip__profiles=profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").distinct().order_by("-created")
+        if (author_match := author_clause("author", parsed, profile)) is not None:
+            author_ann, author_q = author_match
+            trip_comment_qs = trip_comment_qs.annotate(**author_ann).filter(author_q)
+        trip_comment_qs, _ = apply_sort(trip_comment_qs, parsed)
         trip_comments = list(trip_comment_qs[: max(limit - len(results), 0)])
         names = _display_names(profile, [comment.author for comment in trip_comments])
         for comment in trip_comments:

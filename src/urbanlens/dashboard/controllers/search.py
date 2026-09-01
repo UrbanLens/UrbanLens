@@ -115,6 +115,7 @@ class GlobalSearchPanelView(LoginRequiredMixin, View):
                 "query": query,
                 "response": response,
                 "filter_chips": response.parsed.describe_filters(),
+                "problem_notes": response.parsed.describe_problems(),
             },
         )
 
