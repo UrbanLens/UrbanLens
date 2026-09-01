@@ -22,6 +22,51 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## RESOLVED 2026-09-01: `/app/src/backups` was never in the entrypoint's chown loop
+
+Found bringing up the full stack to verify this session's sandbox-tier work: `celery-worker`'s
+scheduled `run_database_backup` failed with
+
+```
+pg_dump: error: could not open output file ".../backup_20260901_015636.sql.tmp": Permission denied
+```
+
+`docker-entrypoint.sh` chowns `/var/log/urbanlens`, `/app/src/urbanlens/frontend/static`, and
+`/app/src/urbanlens/media` to `appuser` at container start (root only) - but never
+`/app/src/backups`, the fourth volume `app` and `celery-worker` both mount. On this checkout the
+directory itself was owned by uid 568, mode `775` (group-writable, not other-writable), while the
+`.sql` files already inside it were `appuser:appuser` - so a backup had written there successfully
+before, just not through this directory's current ownership. `appuser` (1001) is neither the owner
+nor a group member, so read+execute only. Same shape as the `logs/` ownership drift documented
+under "the documented `docker cp` resync breaks the app container" below - a volume whose
+top-level ownership diverges from the files a properly-chowned process already put inside it.
+
+Fixed by adding `/app/src/backups` to the loop, same as the other three. Verified on a fresh boot:
+`stat` on the directory shows `appuser:appuser`, and calling `tasks.run_database_backup()` directly
+produced `Backup completed successfully: backup_20260901_020514.sql` where it previously raised.
+
+## RESOLVED 2026-09-01: `app`'s healthcheck couldn't survive a from-scratch migration
+
+A genuinely empty database's first `migrate` applies `dashboard.0030_v0_7_0` - a squashed migration
+with ~200 operations - which measured 3m14s wall clock, almost entirely Python-side (Django rebuilds
+its migration state after each operation; the DB round-trips themselves are fast against an empty
+schema). `app`'s healthcheck gave `start_period: 30s` plus `retries: 5` * `interval: 30s` = 180s of
+total grace before Compose marks it unhealthy - short of the measured time, so `docker compose up`
+failed with `dependency failed to start: container app is unhealthy` and never created `app-ws`,
+`nginx`, `media-nginx`, either celery worker, `celery-beat`, or either media worker - all of which
+wait on `app: condition: service_healthy`.
+
+Only reachable on a database with none of the schema yet - every environment this project actually
+runs today (dev, staging, prod, the pytest suite's per-run database) already has it applied, so
+`migrate` is a no-op and health returns in seconds. Surfaced now because verifying this session's
+sandbox-tier work meant bringing up the full stack against a fresh database rather than reusing one
+of those - see "the dev database is 18 migrations behind the code" below for why reusing the real
+one wasn't an option either.
+
+Fixed by raising `start_period` to 300s - a from-scratch boot now gets enough grace, and every other
+boot is unaffected (a successful check during `start_period` marks the container healthy
+immediately; the period is a ceiling on tolerated failures, not a fixed wait).
+
 ## RESOLVED 2026-08-31: `PlaceAccessGrant.reason` had an unmigrated field alteration
 
 Noticed while checking this session's own migration; fixed independently by
@@ -326,16 +371,22 @@ Four things blocked `UL_UNTRUSTED_PARSE_POLICY=deny`. Three are now closed; the 
    Fix shape: split the gateway's per-format parsing (pure, sandboxable) from its
    geocode/place-resolution pass (needs the network), route the first half to a sandbox task
    with the uploaded bytes staged in the cache rather than the broker (the pattern
-   `previews.render_preview_via_sandbox` now establishes), and do the second half in the web
+   `previews.request_sandbox_render` now establishes), and do the second half in the web
    process on the parsed dicts. The frontend already shows a "Reading files..." step, so a
    longer round-trip needs no UI change.
-2. ~~**`render_preview` has two request-path callers**~~ - fixed. `tasks.render_media_preview`
-   does the decode on the sandbox queue; `previews.render_preview_via_sandbox` enqueues it and
-   waits a bounded 8s. The bytes travel through the Django cache, not the broker - the source
-   cap is 60MB. On a timeout, a broker outage, or an unconvertible file, all three callers get
-   the same None and fall back to the icon tile, which is what an unconvertible file already
-   did. The task keeps running past the timeout, so a slow first render warms the cache for the
-   reload.
+2. ~~**`render_preview` has two request-path callers**~~ - fixed, then reworked once more:
+   the first fix blocked on the result via a helper that does not exist in the final code.
+   `tasks.render_media_preview` does the decode on the sandbox queue; both callers
+   (`media_preview.MediaPreviewView`, `pin.RedataMediaProxyMixin`) call
+   `previews.request_sandbox_render()`, which is deliberately fire-and-forget - `cache.add()`
+   gates the enqueue to once per key, the source travels through the cache/media volume rather
+   than a 60MB broker message, and the caller returns 404 immediately instead of waiting. A
+   blocking wait would hang every test run (`CELERY_TASK_ALWAYS_EAGER` is off by default in
+   test settings) and pin a web worker per tile for as long as the sandbox is behind - twenty
+   tiles on one gallery page, times the wait, whenever `media-worker` is down. Self-healing
+   instead: the frontend's `urbanlensMediaThumbFallback` retries the same URL twice (2s, 4s)
+   before falling back to the icon tile, and a slow first render still warms the cache for
+   that retry or the next page load.
 3. ~~**`manage.py strip_exif_from_stored_photos`**~~ - fixed, with the exemption written down
    rather than implied: an `allow_untrusted_parse` block scoped to the loop, whose reason string
    says why it is legitimate (already-stored, already-scanned files; a scrub, not an ingest).
@@ -3588,6 +3639,25 @@ This range matches the container-drift note already in `CLAUDE.local.md` ("30 tr
 missing `models/place`, `models/album`, `models/map_overlay` ... and migrations 0026-0038", dated
 2026-08-06), so the drift has been known for over a week in one form and unrecognised as a
 *database* problem.
+
+**Update 2026-09-01:** confirmed still broken, and confirmed to be exactly this drift rather than
+something new - a full `docker compose up --build` (verifying this session's sandbox-tier work)
+failed identically on `dashboard.0030_v0_7_0` with the same `column "show_supporter_badge" of
+relation "dashboard_profiles" already exists`, which blocks `app`'s healthcheck and therefore every
+service that waits on it (`app-ws`, `nginx`, `media-nginx`, both celery workers, `celery-beat`, both
+media workers) - not just an unrelated feature check this time, the entire stack. Did not attempt a
+fix, for the same reason the 2026-08-30 update gave: two of the pending migrations are irreversible
+(`0039` encrypts columns in place under whatever key is active at migrate time; `0042` deletes
+duplicate label rows) and this needs deliberate reconciliation, not another blind `migrate`.
+
+Verified the rest of the stack instead against a scratch database on the same Postgres server
+(`UL_DB_NAME=urbanlens_verify_sandbox docker compose up -d`) - a fresh `CREATE DATABASE` never
+touches this one, migrated clean in about three minutes (see the `app` healthcheck entry above),
+and confirmed every service - including the two new sandbox workers - starts, stays up, and runs as
+non-root. That database was left in place afterward, and the running containers currently point at
+it via that override: a plain `docker compose up`/`restart` later, without the override, will
+recreate them pointed back at this drifted database and reproduce the crash loop until it's
+resolved.
 
 ## Note 2026-08-14: `trip.py`'s masking docstring cites an entry that is not here
 

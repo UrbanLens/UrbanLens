@@ -2,7 +2,8 @@
 set -e
 
 # Volume-mounted directories are owned by root at container start; fix them before
-# dropping privileges so appuser can write logs, media, and compiled static assets.
+# dropping privileges so appuser can write logs, media, compiled static assets, and
+# database backups.
 #
 # Tolerated only for a container that is already unprivileged. The sandbox
 # workers run `cap_drop: ALL` (no CAP_CHOWN) and declare `user: 1001:1001`, so
@@ -21,7 +22,8 @@ set -e
 for dir in \
     /var/log/urbanlens \
     /app/src/urbanlens/frontend/static \
-    /app/src/urbanlens/media; do
+    /app/src/urbanlens/media \
+    /app/src/backups; do
     if [ "$(id -u)" != "0" ]; then
         mkdir -p "$dir" 2>/dev/null || true
         chown -R appuser:appuser "$dir" 2>/dev/null || true

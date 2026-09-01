@@ -199,7 +199,14 @@ services:
       interval: 30s
       timeout: 30s
       retries: 5
-      start_period: 30s
+      # A from-scratch database's first migrate runs every squashed operation in
+      # dashboard.0030_v0_7_0 (~200 of them) - measured ~3m14s. The old 30s start
+      # period gave ~180s of total grace (start_period + retries*interval) before
+      # Compose gave up waiting and declined to start app-ws/nginx/the workers,
+      # which never happens once the schema exists (migrate is then a no-op and
+      # health returns in seconds) - so this costs nothing on every boot after
+      # the first.
+      start_period: 300s
 
     logging:
       driver: "json-file"
