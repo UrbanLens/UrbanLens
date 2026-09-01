@@ -16,7 +16,11 @@ class Migration(migrations.Migration):
     """Add ``idxdb_image_pending_created``."""
 
     dependencies = [
-        ("dashboard", "0042_sync_placeaccessgrant_reason_choices"),
+        # Renumbered from 0043 on merge: the branch grew its own 0043 in
+        # parallel, and two migrations depending on 0042 is a fork `migrate`
+        # refuses. Chained behind it rather than merged, since neither touches
+        # the other's tables.
+        ("dashboard", "0043_external_tag_group"),
     ]
 
     operations = [
