@@ -313,7 +313,7 @@ function boot(): void {
      * ground rather than a ground-floor-only aid. A georeferenced blueprint
      * overlay is better still where one exists (see "Image Overlays" in the
      * layers panel, wired to this pin's own overlay manager) and simply
-     * renders on top - overlays live in Leaflet's overlayPane, not the
+     * renders on top - overlays live in their own imageOverlayPane, not the
      * tilePane the desaturation below dims, so a traced blueprint stays crisp.
      */
     // Created for its side effect - it registers the basemap and overlay
@@ -918,7 +918,7 @@ function boot(): void {
 
         // Once there's an exterior to read as "the building", the basemap
         // recedes (desaturated, in the tile pane only - an image overlay
-        // renders in Leaflet's separate overlayPane, so a traced blueprint
+        // renders in its own separate imageOverlayPane, so a traced blueprint
         // stays crisp) and the plan itself becomes the thing in focus.
         mapEl.classList.toggle("has-plan", current.walls.some((wall) => wall.kind === "exterior"));
 
