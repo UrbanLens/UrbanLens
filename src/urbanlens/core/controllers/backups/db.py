@@ -4,7 +4,6 @@ from contextlib import suppress
 from datetime import UTC, datetime
 import logging
 import os
-from pathlib import Path
 import re
 from shutil import which
 import subprocess  # nosec B404
@@ -183,7 +182,7 @@ class DatabaseBackup:
             raise FileNotFoundError(f"{pg_dump_name} executable not found on PATH")
 
         pg_dump_command = [
-            str(Path(pg_dump).resolve()),
+            pg_dump,
             "-U",
             db_user,
             "-h",
