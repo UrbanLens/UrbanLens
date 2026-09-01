@@ -180,33 +180,29 @@ class WikiShareService:
             pin.images.filter(pk__in=image_ids).update(wiki=wiki)
 
     def _processed_photo_ids(self, pin: Pin, image_ids: set[int]) -> set[int]:
-        """Selected pin photos whose stored bytes have completed upload processing.
+        """Selected pin photos whose stored bytes have already completed upload processing.
 
-        A photo's wiki link controls who may fetch its file. Before a selected
-        image is attached to the wiki, run the same processor the upload path
-        queued so the stored bytes have had EXIF/location metadata stripped.
+        A photo's wiki link controls who may fetch its file, so an image is only
+        eligible once ``process_image_upload`` has stripped embedded EXIF/location
+        metadata from its stored bytes. That parse is decorated ``@untrusted_parse``
+        and may only run in the sandbox worker (``queue=SANDBOX_QUEUE``) - never
+        inline here in the web process - so an image still missing that pass is
+        (re-)enqueued for next time and left out of this share rather than
+        processed on the spot.
         """
         if not image_ids:
             return set()
 
         selected = list(pin.images.filter(pk__in=image_ids).only("pk", "upload_processed_at"))
-        unprocessed = [image.pk for image in selected if image.upload_processed_at is None]
-        if unprocessed:
-            from urbanlens.dashboard.tasks import process_image_upload
-
-            for image_id in unprocessed:
-                try:
-                    processed = process_image_upload(image_id)
-                except Exception:
-                    logger.exception("wiki_share: upload processing failed before sharing image %s from pin %s", image_id, pin.pk)
-                    continue
-                if not processed:
-                    logger.warning("wiki_share: upload processing returned false before sharing image %s from pin %s", image_id, pin.pk)
-
-        processed_ids = set(pin.images.filter(pk__in=image_ids, upload_processed_at__isnull=False).values_list("pk", flat=True))
+        processed_ids = {image.pk for image in selected if image.upload_processed_at is not None}
         skipped = {image.pk for image in selected} - processed_ids
         if skipped:
-            logger.warning("wiki_share: skipped %d selected photo(s) on pin %s because upload processing did not complete", len(skipped), pin.pk)
+            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+            from urbanlens.dashboard.tasks import process_image_upload
+
+            for image_id in skipped:
+                safely_enqueue_task(process_image_upload, image_id)
+            logger.warning("wiki_share: skipped %d selected photo(s) on pin %s pending upload processing", len(skipped), pin.pk)
         return processed_ids
 
 

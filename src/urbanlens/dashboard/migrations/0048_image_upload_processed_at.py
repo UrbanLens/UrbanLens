@@ -3,7 +3,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("dashboard", "0031_v0_7_0_indexes"),
+        ("dashboard", "0047_image_copied_from_image_copied_from_label_and_more"),
     ]
 
     operations = [
