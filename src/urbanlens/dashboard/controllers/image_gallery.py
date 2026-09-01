@@ -422,6 +422,10 @@ class WikiGalleryView(LoginRequiredMixin, View):
             "context_type": "wiki",
             "include_children": include_children,
             "extra_query": "children=1" if include_children else "",
+            # Copy-to-pin target for the lightbox's "Copy to my Private Pin"
+            # action - same expression as the wiki page's own "Back to my pin"
+            # link (location_wiki.py), so the two agree on which pin that is.
+            "user_pin": location.pins.filter(profile=profile).first(),
         }
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:

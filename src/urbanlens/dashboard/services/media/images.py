@@ -1313,6 +1313,7 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         "author": img.author or "",
         "source_url": img.source_url or "",
         "copyright": img.copyright or "",
+        "copied_from_label": img.copied_from_label or "",
         "taken_at": effective_taken_at.isoformat() if effective_taken_at else None,
         # What the pin gallery's delete prompt needs to know: whether removing
         # this photo from a pin would also take it off a community wiki, and

@@ -5337,3 +5337,28 @@ Found while typechecking after an unrelated fix (map overlay pane z-index,
 no relation to that change: `hotkeys.contract.test.ts:33` - `TS2554: Expected 0-1 arguments, but
 got 2.`; `hotkeys.test.ts:61` - `TS18048: 'DEFAULT_HOTKEYS.redo' is possibly 'undefined'.` Not
 investigated further - out of scope for the work in progress at the time.
+
+## OPEN 2026-09-01: clicking any photo in the wiki page's Media section throws - no lightbox ever opens
+
+Found while wiring a wiki-photo "copy to my pin" feature into the lightbox. `pin_media_items.html`
+(shared by the pin and wiki pages' Media sections) renders every tile with
+`onclick="window.mediaOpenLightbox(this)"`, but `window.mediaOpenLightbox` is only ever defined in
+`pages/location/index.html:1935` (the Private Pin page's own inline script) - `pages/location/wiki.html`
+never defines it. Confirmed live: on a wiki page, calling `window.mediaOpenLightbox(btn)` for any
+rendered `.media-item-thumb-btn` throws `TypeError: window.mediaOpenLightbox is not a function`,
+caught nowhere, so a click on any Media-section photo (any provider tab, including the "photos"
+source showing real uploaded/shared Image rows) silently does nothing - no lightbox, no error
+shown to the user.
+
+Separately, the specific `.media-item` tested had `getBoundingClientRect().height === 0` and no
+`offsetParent` despite its containing `[data-tab-panel="photos"]` panel reporting `hidden: false` -
+worth checking whether the Media section's own provider/source-tab filtering also has a default-tab
+visibility issue independent of the missing lightbox opener, once that's fixed and items are
+actually clickable to test against.
+
+Not fixed here - out of scope for the copy-to-pin feature this was found while building, and fixing
+it means either porting a wiki-scoped version of `mediaOpenLightbox` (it currently assumes
+pin-detail-page-only affordances - see `location/index.html`'s own copy for what it wires up) or
+sharing the pin page's implementation, which needs its own design pass. The wiki page's Photos tab
+(`_photo_gallery.html`'s "Manage" sub-view, `WikiGalleryView`) and the Albums page both use the
+correctly-shared lightbox and are unaffected.

@@ -1635,6 +1635,12 @@ urlpatterns = [
                     wiki_media.WikiMediaVoteView.as_view(),
                     name="location.wiki.media.vote",
                 ),
+                # Also registered before the <str:source>/ catch-all below, same reason.
+                path(
+                    "<slug:location_slug>/wiki/media/copy-to-pin/<int:image_id>/",
+                    wiki_media.CopyWikiPhotoView.as_view(),
+                    name="location.wiki.media.copy_to_pin",
+                ),
                 path(
                     "<slug:location_slug>/wiki/media/<str:source>/",
                     wiki_media.WikiMediaProviderView.as_view(),

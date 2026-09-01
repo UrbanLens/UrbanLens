@@ -215,12 +215,19 @@ class QuotaExemption(TextChoices):
     ``DEDUPLICATED`` is the same person's second row for bytes they already
     stored (uploaded the same file to another pin). Same storage key, no
     second quota charge.
+
+    ``WIKI_COPY`` is a recipient's copy of a photo copied from a wiki to
+    their own pin (``services.photos.wiki_copy.copy_wiki_photo_to_pin``) -
+    the wiki-photo counterpart of ``SHARED_COPY``, same reasoning: it points
+    at the wiki photo's own stored file rather than a second copy of the
+    bytes, so it costs the recipient no storage of their own.
     """
 
     EXTERNAL_MEDIA = "external_media", "Cached external media"
     COMMUNITY_CONTRIBUTION = "community", "Community-valued contribution"
     SHARED_COPY = "shared_copy", "Copy of a shared photo"
     DEDUPLICATED = "deduplicated", "Same file already stored for this user"
+    WIKI_COPY = "wiki_copy", "Copy of a wiki photo"
 
 
 class Image(abstract.FrontendDashboardModel):
@@ -330,6 +337,42 @@ class Image(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
+    # Provenance for a photo copied from a wiki onto this row's own pin (see
+    # services.photos.wiki_copy.copy_wiki_photo_to_pin). All four are set
+    # together at copy time and are independent of each other's survival:
+    # `copied_from` points at the source row for as long as it exists (lets a
+    # future UI show "N people copied this" or a "view original" link);
+    # `copied_from_profile`/`copied_from_location` are SET_NULL rather than
+    # CASCADE deliberately - deleting the original photo, its uploader's
+    # account, or the wiki's location must never delete or break attribution
+    # on someone else's independent copy. `copied_from_label` is the one
+    # field that never goes null: a plain-text snapshot of the location/wiki
+    # name taken at copy time, so "Copied from X's wiki" still renders even
+    # in the (extreme) case both FKs above are gone. `author` (below) is
+    # populated the same way at copy time and already covers "originally
+    # uploaded by Y" display on its own - see copy_wiki_photo_to_pin.
+    copied_from = ForeignKey(
+        "self",
+        on_delete=SET_NULL,
+        related_name="copies",
+        null=True,
+        blank=True,
+    )
+    copied_from_profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+    copied_from_location = ForeignKey(
+        "dashboard.Location",
+        on_delete=SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+    copied_from_label = CharField(max_length=255, blank=True, default="")
     caption = CharField(max_length=500, null=True, blank=True)
     # Attribution fields, shown in the lightbox. Auto-populated from EXIF/PNG
     # metadata by process_image_upload when present; when a photo has none of
@@ -569,6 +612,9 @@ class Image(abstract.FrontendDashboardModel):
         direct_message_id: int | None
         profile_id: int | None
         pin_suggestion_id: int | None
+        copied_from_id: int | None
+        copied_from_profile_id: int | None
+        copied_from_location_id: int | None
         # Not a real column - stamped onto an instance by album-listing helpers
         # (services.photos.albums) to carry its AlbumItem membership row's pk
         # alongside the photo, so templates can address removal/reordering
@@ -775,4 +821,7 @@ class Image(abstract.FrontendDashboardModel):
             # that reads a handful. Postgres only uses a partial index when the
             # predicate matches, which is exactly that query's WHERE clause.
             Index(fields=["created"], name="idxdb_image_pending_created", condition=Q(pending_scan=True)),
+            # Serves ImageQuerySet.copied_from_others() - "photos I own that were
+            # copied from someone else" - which always filters by profile first.
+            Index(fields=["profile", "copied_from_profile"], name="idxdb_img_profile_copied_from"),
         ]

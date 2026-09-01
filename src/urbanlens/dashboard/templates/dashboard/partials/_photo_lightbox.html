@@ -118,10 +118,17 @@ Context:
               <i class="material-symbols-outlined">architecture</i> Use as floorplan overlay
             </button>
             {% endif %}
+            {% if show_wiki_copy_action %}
+            <button type="button" id="lightbox-copy-to-pin-action" class="lightbox-actions-item" hidden
+                    onclick="window._lightboxCopyToPin()">
+              <i class="material-symbols-outlined">content_copy</i> Copy to my Private Pin
+            </button>
+            {% endif %}
           </div>
         </div>
       </div>
       <div id="lightbox-meta" class="lightbox-meta">
+        <p id="lightbox-copied-from" class="lightbox-meta-line" hidden></p>
         <p id="lightbox-source-name" class="lightbox-meta-line" hidden></p>
         <p id="lightbox-author" class="lightbox-meta-line" hidden></p>
         <p id="lightbox-taken-at" class="lightbox-meta-line" hidden></p>
@@ -208,6 +215,7 @@ Context:
   var PIN_SEARCH_URL = '{% url "vault.photos.pin_search" %}';
   var WIKI_SEARCH_URL = '{% url "vault.photos.wiki_search" %}';
   var SHARE_FRIENDS_URL = '{% url "vault.photos.share_friends" %}';
+  var WIKI_COPY_TO_PIN_URL_TEMPLATE = '{{ wiki_copy_url_template|default:"" }}';
   // Mutated in place as the cover photo is changed live (see _setCoverPhoto).
   var CURRENT_COVER_ID = {{ current_cover_image_id|default:"null" }};
   var COVER_HERO_KEY = '{{ cover_hero_key|default:"" }}';
@@ -421,12 +429,17 @@ Context:
   }
 
   function _setLightboxMeta(item) {
+    var copiedFromEl = document.getElementById('lightbox-copied-from');
     var sourceNameEl = document.getElementById('lightbox-source-name');
     var authorEl = document.getElementById('lightbox-author');
     var takenEl = document.getElementById('lightbox-taken-at');
     var copyrightEl = document.getElementById('lightbox-copyright');
     var sourceEl = document.getElementById('lightbox-source-link');
     var relevanceEl = document.getElementById('lightbox-relevance-actions');
+    if (copiedFromEl) {
+      copiedFromEl.textContent = item.copiedFromLabel ? 'Copied from ' + item.copiedFromLabel + '’s wiki' : '';
+      copiedFromEl.hidden = !item.copiedFromLabel;
+    }
     if (sourceNameEl) { sourceNameEl.textContent = item.sourceName ? 'Source: ' + item.sourceName : ''; sourceNameEl.hidden = !item.sourceName; }
     if (authorEl) { authorEl.textContent = item.author ? 'By ' + item.author : ''; authorEl.hidden = !item.author; }
     if (takenEl) {
@@ -478,8 +491,14 @@ Context:
     var canShare = !!(item.imageId && item.isMine !== false);
     var shareAction = document.getElementById('lightbox-share-action');
     if (shareAction) shareAction.hidden = !canShare;
+    // Strictly isMine === false, not the inverse of canShare's "!== false":
+    // copying only makes sense for a photo that is definitely someone else's,
+    // never one whose ownership this page's item shape left unspecified.
+    var canCopyToPin = !!(item.imageId && item.isMine === false && WIKI_COPY_TO_PIN_URL_TEMPLATE);
+    var copyToPinAction = document.getElementById('lightbox-copy-to-pin-action');
+    if (copyToPinAction) copyToPinAction.hidden = !canCopyToPin;
     if (actionsMenu) {
-      actionsMenu.hidden = !(canAlbumCover || canShowOnMap || canFloorplan || canShare);
+      actionsMenu.hidden = !(canAlbumCover || canShowOnMap || canFloorplan || canShare || canCopyToPin);
       window._lightboxCloseActions();
     }
   }
@@ -646,6 +665,31 @@ Context:
       window._lightboxCloseActions();
     }).catch(function (err) {
       if (window.toastr) toastr.error(err.message || 'Could not add this photo as an overlay.');
+    }).finally(function () {
+      if (btn) btn.disabled = false;
+    });
+  };
+
+  window._lightboxCopyToPin = function () {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.imageId || !WIKI_COPY_TO_PIN_URL_TEMPLATE) return;
+    var btn = document.getElementById('lightbox-copy-to-pin-action');
+    if (btn) { btn.disabled = true; }
+    fetch(WIKI_COPY_TO_PIN_URL_TEMPLATE.replace('/0/', '/' + item.imageId + '/'), {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+      });
+    }).then(function (data) {
+      if (window.toastr) {
+        toastr.success(data.already_copied ? 'Already on your pin "' + data.pin_name + '".' : 'Copied to your pin "' + data.pin_name + '".');
+      }
+      window._lightboxCloseActions();
+    }).catch(function (err) {
+      if (window.toastr) toastr.error(err.message || 'Could not copy this photo to your pin.');
     }).finally(function () {
       if (btn) btn.disabled = false;
     });

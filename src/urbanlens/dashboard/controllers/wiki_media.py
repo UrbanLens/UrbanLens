@@ -292,3 +292,45 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
         my_vote = None if is_relevant is None else bool(is_relevant)
         response.update({"my_vote": my_vote, "vote_score": score})
         return JsonResponse(response)
+
+
+class CopyWikiPhotoView(LoginRequiredMixin, View):
+    """Copy a wiki photo onto the viewer's own pin at this location.
+
+    POST /location/<slug>/wiki/media/copy-to-pin/<int:image_id>/ →
+    ``{"copied": true, "already_copied": bool, "pin_slug": str, "pin_name": str}``
+
+    Deliberately not a ``PhotoActionView`` action (``controllers.vault_photos``): that view's
+    shared image lookup only ever operates on images the requester already owns, which a wiki
+    photo being copied is not. The image is instead scoped and gated exactly like every other
+    wiki-photo lookup in this module - ``resolve_visible_wiki`` for wiki access,
+    ``visible_rows``/``visible_to`` for concealment and the uploader's own visibility setting -
+    so this can never expose a photo the wiki's own gallery views wouldn't already show this
+    viewer. The target is the viewer's own pin at this wiki's location, the same one "Back to my
+    pin" links to; there is no picker, matching that link's own assumption of a single pin.
+    """
+
+    def post(self, request: HttpRequest, location_slug: str, image_id: int) -> JsonResponse:
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.services.photos.wiki_copy import copy_wiki_photo_to_pin
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+
+        image = visible_rows(Image.objects.filter(pk=image_id, wiki=wiki), wiki, profile).visible_to(profile).first()
+        if image is None:
+            return JsonResponse({"error": "That photo could not be found."}, status=404)
+
+        target_pin = location.pins.filter(profile=profile).first()
+        if target_pin is None:
+            return JsonResponse({"error": "You don't have a pin here to copy it to."}, status=400)
+
+        _copy, created = copy_wiki_photo_to_pin(image, target_pin, profile)
+        return JsonResponse(
+            {
+                "copied": True,
+                "already_copied": not created,
+                "pin_slug": target_pin.slug,
+                "pin_name": target_pin.name,
+            }
+        )

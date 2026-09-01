@@ -23,6 +23,7 @@ export interface PhotoTile {
     itemId: number | null;
     albumSlug: string | null;
     mapHidden: boolean;
+    copiedFromLabel: string;
 }
 
 export interface LightboxItem {
@@ -42,6 +43,7 @@ export interface LightboxItem {
     latitude: number | null;
     longitude: number | null;
     mapHidden: boolean;
+    copiedFromLabel: string;
 }
 
 /** Parse a gallery tile's data attributes into a PhotoTile. */
@@ -67,6 +69,7 @@ export function tileFromElement(el: HTMLElement): PhotoTile | null {
         itemId: el.dataset.itemId ? Number.parseInt(el.dataset.itemId, 10) : null,
         albumSlug: el.dataset.albumSlug || null,
         mapHidden: el.dataset.mapHidden === "true",
+        copiedFromLabel: el.dataset.copiedFromLabel ?? "",
     };
 }
 
@@ -93,6 +96,7 @@ export function tileFromJson(raw: Record<string, unknown>): PhotoTile | null {
         itemId: raw.item_id == null ? null : Number(raw.item_id),
         albumSlug: raw.album_slug ? String(raw.album_slug) : null,
         mapHidden: Boolean(raw.map_hidden),
+        copiedFromLabel: String(raw.copied_from_label ?? ""),
     };
 }
 
@@ -114,6 +118,7 @@ export function lightboxItemFromTile(tile: PhotoTile): LightboxItem {
         latitude: tile.lat,
         longitude: tile.lng,
         mapHidden: tile.mapHidden,
+        copiedFromLabel: tile.copiedFromLabel,
     };
 }
 

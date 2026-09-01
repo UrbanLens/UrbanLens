@@ -313,6 +313,19 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
             pin_suggestion__isnull=True,
         ).order_by("-created")
 
+    def copied_from_others(self) -> Self:
+        """Filter to photos this queryset's owner holds a copy of, but did not author.
+
+        Keyed on ``copied_from_profile`` (set at copy time - see
+        ``services.photos.wiki_copy.copy_wiki_photo_to_pin``), not on comparing
+        ``profile`` to some other row's uploader: a copy is *owned* by the
+        profile that made it (that's what lets it survive the original being
+        deleted), so "whose photo is this really" has to be answered by a
+        separate field, not by ``profile`` itself. Callers scope to one owner
+        first (e.g. ``.filter(profile=viewer)``) - this only narrows further.
+        """
+        return self.filter(copied_from_profile__isnull=False)
+
 
 class ImageManager(abstract.FrontendDashboardManager.from_queryset(ImageQuerySet)):
     pass

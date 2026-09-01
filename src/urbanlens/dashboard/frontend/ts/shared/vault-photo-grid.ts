@@ -94,12 +94,17 @@ function bindGrid(grid: HTMLElement, sort: string): void {
         unbindGrid();
         unbindGrid = null;
     }
+    // Read from the grid's own dataset (set server-side from the ?show= the
+    // page was loaded with), not the URL directly - the "Photos from Others"
+    // toggle is a plain link/full navigation (see photos.html), so whatever
+    // the page loaded with is what pagination should keep requesting.
+    const show = grid.dataset.show === "from_others" ? "from_others" : "";
     unbindGrid = bindPhotoGrid(grid, {
         inAlbum: false,
         itemSelector: ".photo-tile[data-id]",
         imageSelector: ".photo-tile img",
         renderTile: renderVaultPhotoTile,
-        extraParams: { sort },
+        extraParams: show ? { sort, show } : { sort },
         skeletonCount: SKELETON_COUNT,
         renderSkeleton: renderVaultSkeletonTile,
     });
