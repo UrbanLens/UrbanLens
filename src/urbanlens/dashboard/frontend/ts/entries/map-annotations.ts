@@ -1457,13 +1457,14 @@ function init(): void {
         const el = document.createElement("div");
         el.className = "pin-popup child-pin-popup";
         const owner = entry.owner_name ? `<div class="popup-child-parent"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Inside ${escHtml(entry.owner_name)}</div>` : "";
+        // The title itself is the link to the pin's detail page (when one exists),
+        // same as the root-pin popup - a separate "View Details" link duplicated it.
+        const titleHtml = entry.url ? `<a class="popup-title" href="${escHtml(entry.url)}">${escHtml(entry.name || "Child pin")}</a>` : `<div class="popup-title">${escHtml(entry.name || "Child pin")}</div>`;
         el.innerHTML = `
-            <div class="popup-title">${escHtml(entry.name || "Child pin")}</div>
+            ${titleHtml}
             ${owner}
             ${entry.description ? `<div class="popup-desc">${escHtml(entry.description)}</div>` : ""}
-            <div class="popup-actions">
-                ${entry.url ? `<a href="${escHtml(entry.url)}" class="view-full-pin">View Details</a>` : ""}
-            </div>`;
+            <div class="popup-actions"></div>`;
         if (!entry.owner_name) {
             const actions = el.querySelector(".popup-actions")!;
             const promoteBtn = document.createElement("button");

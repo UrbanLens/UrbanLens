@@ -5,8 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from django.core.files.storage import default_storage
 from django.db.models import Count, OuterRef, Prefetch, QuerySet, Subquery
 
+from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.models.images.relevance import MediaRelevance
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.reviews.model import Review
 
@@ -39,17 +42,39 @@ class MapPinPayloadService:
 
     def __init__(self, profile: Profile):
         self.profile = profile
+        self._irrelevant_item_keys: set[str] | None = None
+
+    def _irrelevant_item_keys_for_profile(self) -> set[str]:
+        """This profile's own "not relevant" votes, computed once and cached on this instance.
+
+        Only a materialized community-gallery photo (``media_item_key`` set)
+        can appear here - see ``services.media.media_relevance.effective_relevance``'s
+        own docs on why a plain personal upload is trusted by default instead.
+        """
+        if self._irrelevant_item_keys is None:
+            self._irrelevant_item_keys = set(MediaRelevance.objects.filter(profile=self.profile, is_relevant=False).values_list("item_key", flat=True))
+        return self._irrelevant_item_keys
 
     def prepare_queryset(self, query: QuerySet[Pin]) -> QuerySet[Pin]:
         latest_rating = Review.objects.filter(pin_id=OuterRef("pk")).order_by("-created").values("rating")[:1]
+        # Fallback cover photo when the pin has none set explicitly: its own
+        # earliest photo that this profile hasn't voted irrelevant. Annotated as
+        # raw storage paths (not a second query per pin) so page()/all() stay a
+        # single query regardless of how many pins are being built.
+        fallback_photo = Image.objects.filter(pin_id=OuterRef("pk"), media_type=MediaKind.PHOTO).exclude(media_item_key__in=self._irrelevant_item_keys_for_profile()).order_by("created")
         return (
             # location__wiki as well as location: every pin serialized here reads
             # effective_name, which falls through to Location.display_name, which reads
             # the reverse OneToOne `wiki` - one query per pin on the map's own payload
             # unless it is joined in. That property's docstring asks callers to do this;
             # this is the highest-traffic caller in the app.
-            query.select_related("location", "location__wiki")
-            .annotate(map_rating=Subquery(latest_rating), child_count=Count("detail_pins", distinct=True))
+            query.select_related("location", "location__wiki", "cover_photo")
+            .annotate(
+                map_rating=Subquery(latest_rating),
+                child_count=Count("detail_pins", distinct=True),
+                fallback_photo_thumbnail=Subquery(fallback_photo.values("thumbnail")[:1]),
+                fallback_photo_image=Subquery(fallback_photo.values("image")[:1]),
+            )
             .prefetch_related(Prefetch("labels", queryset=Label.objects.with_customizations_for(self.profile)))
             .order_by("pk")
         )
@@ -121,7 +146,16 @@ class MapPinPayloadService:
             "own_custom_icon_url": pin.custom_icon.url if pin.custom_icon else None,
             "own_color": pin.color,
             "child_count": getattr(pin, "child_count", 0) or 0,
+            "cover_photo_url": self._cover_photo_url(pin),
         }
+
+    @staticmethod
+    def _cover_photo_url(pin: Pin) -> str | None:
+        """The popup thumbnail: the pin's explicit cover photo, else its fallback (see prepare_queryset)."""
+        if pin.cover_photo is not None:
+            return pin.cover_photo.thumb_url
+        path = getattr(pin, "fallback_photo_thumbnail", None) or getattr(pin, "fallback_photo_image", None)
+        return default_storage.url(path) if path else None
 
     @staticmethod
     def _ordered_location_labels(labels: list[Label]) -> list[Label]:

@@ -682,12 +682,19 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
     from urbanlens.dashboard.services.media.images import (
         compute_checksum,
         downscale_stored_image,
+        extract_aperture,
         extract_author,
+        extract_camera_info,
         extract_caption_from_metadata,
         extract_copyright_notice,
         extract_exif_data,
+        extract_focal_length,
+        extract_gps_altitude,
         extract_gps_coords,
         extract_gps_direction,
+        extract_gps_orientation,
+        extract_lens_model,
+        extract_shutter_speed,
         extract_source_url,
         extract_taken_at,
         is_camera_generated_filename,
@@ -702,6 +709,11 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
             # Same GPS-IFD-derived, same privacy opt-out as coords above - the
             # compass bearing is only ever meaningful alongside a location.
             direction = None if strip_location else extract_gps_direction(image_file)
+            # exif_altitude/exif_pitch/exif_roll are write-once (never
+            # overwritten once set, unlike coords/direction above), so skip the
+            # read entirely once a row already carries them.
+            altitude = None if strip_location or image.exif_altitude is not None else extract_gps_altitude(image_file)
+            orientation = None if strip_location or image.exif_pitch is not None else extract_gps_orientation(image_file)
             taken_at = extract_taken_at(image_file)
             checksum = compute_checksum(image_file) if not image.checksum else None
             exif_data = extract_exif_data(image_file) if image.exif_data is None else None
@@ -709,6 +721,11 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
             copyright_notice = extract_copyright_notice(image_file) if not image.copyright else None
             metadata_caption = extract_caption_from_metadata(image_file) if not image.caption else None
             source_url = extract_source_url(image_file) if not image.source_url else None
+            camera_make, camera_model = (None, None) if (image.exif_camera_make or image.exif_camera_model) else extract_camera_info(image_file)
+            lens_model = extract_lens_model(image_file) if not image.exif_lens_model else None
+            shutter_speed = extract_shutter_speed(image_file) if not image.exif_shutter_speed else None
+            aperture = extract_aperture(image_file) if image.exif_aperture is None else None
+            focal_length = extract_focal_length(image_file) if image.exif_focal_length is None else None
     except (OSError, ValueError) as exc:
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return None
@@ -735,6 +752,37 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
     if direction is not None:
         image.direction = Decimal(str(round(direction, 2)))
         update_fields["direction"] = image.direction
+    if not strip_location and image.exif_latitude is None and coords is not None:
+        image.exif_latitude = Decimal(str(round(coords[0], 6)))
+        image.exif_longitude = Decimal(str(round(coords[1], 6)))
+        update_fields["exif_latitude"] = image.exif_latitude
+        update_fields["exif_longitude"] = image.exif_longitude
+    if altitude is not None:
+        image.exif_altitude = Decimal(str(round(altitude, 2)))
+        update_fields["exif_altitude"] = image.exif_altitude
+    if orientation is not None:
+        image.exif_pitch = Decimal(str(round(orientation[0], 2)))
+        image.exif_roll = Decimal(str(round(orientation[1], 2)))
+        update_fields["exif_pitch"] = image.exif_pitch
+        update_fields["exif_roll"] = image.exif_roll
+    if camera_make:
+        image.exif_camera_make = camera_make
+        update_fields["exif_camera_make"] = camera_make
+    if camera_model:
+        image.exif_camera_model = camera_model
+        update_fields["exif_camera_model"] = camera_model
+    if lens_model:
+        image.exif_lens_model = lens_model
+        update_fields["exif_lens_model"] = lens_model
+    if shutter_speed:
+        image.exif_shutter_speed = shutter_speed
+        update_fields["exif_shutter_speed"] = shutter_speed
+    if aperture is not None:
+        image.exif_aperture = Decimal(str(round(aperture, 1)))
+        update_fields["exif_aperture"] = image.exif_aperture
+    if focal_length is not None:
+        image.exif_focal_length = Decimal(str(round(focal_length, 1)))
+        update_fields["exif_focal_length"] = image.exif_focal_length
     if taken_at:
         image.taken_at = taken_at
         update_fields["taken_at"] = taken_at

@@ -1610,6 +1610,38 @@
         </div>
     </section>
 
+    {# -- Keyboard shortcuts ------------------------------------------------------ #}
+    {# Rendered entirely by JS (see the ul-hotkeys- functions near the bottom of #}
+    {# this page): the row labels/descriptions/defaults live in hotkeys.ts, and #}
+    {# this page has no bundled TS entry to import them from, so they're mirrored #}
+    {# in plain JS here rather than duplicated a third time as template context. #}
+    <section class="settings-section ul-section" id="hotkeys-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">keyboard</i>
+            <div>
+                <h2 class="settings-section-title">Shortcuts</h2>
+                <p class="settings-section-desc">Customize keyboard shortcuts used throughout the site.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <form method="post" class="settings-form" id="hotkeys-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="hotkeys">
+                {{ hotkey_form.keyboard_shortcuts }}
+                {% if hotkey_form.keyboard_shortcuts.errors %}
+                <p class="settings-error">{{ hotkey_form.keyboard_shortcuts.errors|join:", " }}</p>
+                {% endif %}
+
+                <div id="hotkey-rows"></div>
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
     {# -- API keys -------------------------------------------------------------- #}
     <section class="settings-section ul-section" id="api-keys-settings-section">
         <div class="settings-section-header">
@@ -2434,6 +2466,92 @@ window.updateClusterRadius = function (value) {
         var form = document.getElementById('markup-defaults-form');
         if (form) schedule(form, 600);
     };
+
+    // -- Keyboard shortcuts row builder + capture ---------------------------
+    // Mirrors DEFAULT_HOTKEYS in frontend/ts/shared/hotkeys.ts - keep the
+    // action id/label/description/default keys in sync by hand if that list
+    // changes (this page has no bundled TS entry to import it from instead).
+    var HOTKEY_DEFAULTS = {
+        undo: { keys: ['ctrl+z'], label: 'Undo', description: 'Undo the last change.' },
+        redo: { keys: ['ctrl+shift+z', 'ctrl+y'], label: 'Redo', description: 'Redo the last undone change.' },
+        toggleFullscreen: { keys: ['f'], label: 'Toggle fullscreen', description: 'Enter or exit fullscreen while playing a game.' },
+    };
+    var hotkeysInput = document.getElementById('id_keyboard_shortcuts');
+    var hotkeyRows = document.getElementById('hotkey-rows');
+    if (hotkeysInput && hotkeyRows) {
+        var overrides = {};
+        try { overrides = JSON.parse(hotkeysInput.value || '{}') || {}; } catch (e) { overrides = {}; }
+
+        function formatCombo(combo) {
+            return combo.split('+').map(function (part) {
+                return part.length === 1 ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1);
+            }).join('+');
+        }
+        function currentCombo(actionId) {
+            return overrides[actionId] || HOTKEY_DEFAULTS[actionId].keys[0];
+        }
+        function commitOverrides() {
+            hotkeysInput.value = JSON.stringify(overrides);
+            var form = document.getElementById('hotkeys-form');
+            if (form) schedule(form, 0);
+        }
+        function normalizeCombo(event) {
+            var parts = [];
+            if (event.ctrlKey || event.metaKey) parts.push('ctrl');
+            if (event.shiftKey) parts.push('shift');
+            if (event.altKey) parts.push('alt');
+            parts.push(event.key.toLowerCase());
+            return parts.join('+');
+        }
+
+        Object.keys(HOTKEY_DEFAULTS).forEach(function (actionId) {
+            var def = HOTKEY_DEFAULTS[actionId];
+            var row = document.createElement('div');
+            row.className = 'settings-hotkey-row';
+            row.innerHTML =
+                '<div class="settings-hotkey-info">' +
+                    '<strong>' + def.label + '</strong>' +
+                    '<span class="settings-help">' + def.description + '</span>' +
+                '</div>' +
+                '<div class="settings-hotkey-controls">' +
+                    '<button type="button" class="settings-hotkey-capture"></button>' +
+                    '<button type="button" class="settings-hotkey-reset" title="Reset to default">' +
+                        '<i class="material-symbols-outlined">restart_alt</i>' +
+                    '</button>' +
+                '</div>';
+            var captureBtn = row.querySelector('.settings-hotkey-capture');
+            var resetBtn = row.querySelector('.settings-hotkey-reset');
+            captureBtn.textContent = formatCombo(currentCombo(actionId));
+            resetBtn.hidden = !overrides[actionId];
+
+            function listen(event) {
+                if (event.key === 'Escape') {
+                    captureBtn.textContent = formatCombo(currentCombo(actionId));
+                } else if (event.key !== 'Tab') {
+                    event.preventDefault();
+                    overrides[actionId] = normalizeCombo(event);
+                    captureBtn.textContent = formatCombo(overrides[actionId]);
+                    resetBtn.hidden = false;
+                    commitOverrides();
+                }
+                captureBtn.classList.remove('is-listening');
+                document.removeEventListener('keydown', listen, true);
+            }
+            captureBtn.addEventListener('click', function () {
+                captureBtn.classList.add('is-listening');
+                captureBtn.textContent = 'Press a key…';
+                document.addEventListener('keydown', listen, true);
+            });
+            resetBtn.addEventListener('click', function () {
+                delete overrides[actionId];
+                captureBtn.textContent = formatCombo(currentCombo(actionId));
+                resetBtn.hidden = true;
+                commitOverrides();
+            });
+
+            hotkeyRows.appendChild(row);
+        });
+    }
 }());
 
 // -- AI settings: toggle sub-options when master switch is flipped -------------

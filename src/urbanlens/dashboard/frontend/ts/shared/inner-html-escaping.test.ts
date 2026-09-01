@@ -56,6 +56,9 @@ const REVIEWED_SAFE = new Map<string, string>([
     ['item.name.replace(/&/g, "&amp;").replace(/</g, "&lt;")', "escaped inline; element content, not an attribute"],
     // Numbers.
     ["seq", "monotonic integer"],
+    // Built entirely from escHtml()-wrapped pieces (entry.url, entry.name) inside
+    // detailPinPopupContent itself - a plain string once assembled, not raw input.
+    ["titleHtml", "pre-built from escHtml()-wrapped pieces"],
     // Markup assembled by the same module, whose own interpolations this test also checks.
     ["iconHtml", "pre-built markup"],
     ["layerPicker", "pre-built markup"],

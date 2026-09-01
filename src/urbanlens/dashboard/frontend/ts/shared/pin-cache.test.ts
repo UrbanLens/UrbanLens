@@ -1,10 +1,10 @@
 /**
  * readCachedPinLocations parses the exact cache shape written by
- * pages/map/index.html's inline script (_writeCache, v8 payload) - these
- * tests write that shape directly rather than importing the map page's script.
+ * pages/map/index.html's inline script (_writeCache) - these tests write
+ * that shape directly rather than importing the map page's script.
  */
 import { beforeEach, describe, expect, test } from "bun:test";
-import { pinCacheKey, purgeForeignPinCaches, readCachedPinLocations } from "./pin-cache";
+import { PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches, readCachedPinLocations } from "./pin-cache";
 
 // localStorage comes from the DOM the test preload registers (see testing/dom-setup.ts),
 // so these exercise a real Storage rather than a hand-rolled stand-in.
@@ -15,7 +15,7 @@ function writeCache(overrides: Record<string, unknown> = {}): void {
     localStorage.setItem(
         `ul_pins_v5_${PROFILE_UUID}`,
         JSON.stringify({
-            v: 8,
+            v: PIN_CACHE_VERSION,
             ts: Date.now(),
             profileUuid: PROFILE_UUID,
             appUuid: "app-1",
@@ -41,7 +41,7 @@ describe("readCachedPinLocations", () => {
         expect(readCachedPinLocations(PROFILE_UUID)).toEqual([]);
     });
 
-    test("parses lat/lng out of a valid v8 cache", () => {
+    test("parses lat/lng out of a valid cache", () => {
         writeCache();
         expect(readCachedPinLocations(PROFILE_UUID)).toEqual([
             { latitude: 40.1, longitude: -75.1 },
@@ -55,7 +55,7 @@ describe("readCachedPinLocations", () => {
     });
 
     test("ignores a stale cache version", () => {
-        writeCache({ v: 7 });
+        writeCache({ v: PIN_CACHE_VERSION - 1 });
         expect(readCachedPinLocations(PROFILE_UUID)).toEqual([]);
     });
 
@@ -63,7 +63,7 @@ describe("readCachedPinLocations", () => {
         localStorage.setItem(
             `ul_pins_v5_${PROFILE_UUID}`,
             JSON.stringify({
-                v: 8,
+                v: PIN_CACHE_VERSION,
                 profileUuid: PROFILE_UUID,
                 pins: {
                     good: { latitude: 40.1, longitude: -75.1 },

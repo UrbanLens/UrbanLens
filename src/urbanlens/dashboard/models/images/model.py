@@ -7,7 +7,27 @@ import secrets
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, FloatField, ForeignKey, ImageField, Index, JSONField, ManyToManyField, PositiveIntegerField, Q, TextField, URLField, UUIDField
+from django.db.models import (
+    CASCADE,
+    SET_NULL,
+    BigIntegerField,
+    BooleanField,
+    CharField,
+    DateTimeField,
+    DecimalField,
+    FloatField,
+    ForeignKey,
+    ImageField,
+    Index,
+    IntegerField,
+    JSONField,
+    ManyToManyField,
+    PositiveIntegerField,
+    Q,
+    TextField,
+    URLField,
+    UUIDField,
+)
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
@@ -348,21 +368,29 @@ class Image(abstract.FrontendDashboardModel):
     # capture point on the map layer; `location` records which shared place the
     # photo belongs to.
     #
-    # KNOWN OMISSION: one pair of columns holds two different provenances - what
+    # KNOWN OMISSION: this pair of columns holds two different provenances - what
     # EXIF reported, and where a person put it - with nothing in the schema
-    # recording which a given row holds. Two consequences worth knowing before
-    # writing here:
+    # recording which a given row holds now.
     #   * The EXIF answer survives only in `exif_data["GPSInfo"]`, and only for
     #     profiles that did not opt out of location metadata (tasks.py pops
     #     GPSInfo when strip_location is set).
     #   * tasks.process_image_upload rewrites these columns unconditionally from
     #     EXIF, and a dozen call sites can re-enqueue it, so a re-run replaces a
     #     manually corrected position with the EXIF one.
-    # TODO: add exif_latitude/exif_longitude (or a coordinate_source field)
-    # before any NEW writer is introduced. Placing a photo from the floorplan
-    # editor is deliberately NOT that writer until this exists.
+    # `exif_latitude`/`exif_longitude` below are the fix: the original
+    # camera-reported position, written once and never touched again, so a
+    # later writer (the floorplan editor, a user drag) can overwrite these
+    # columns without losing the source data for good.
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # The camera-reported GPS position, exactly as extract_gps_coords found it.
+    # Unlike latitude/longitude above, nothing ever overwrites this once set -
+    # it exists so the original source data survives a later manual correction
+    # or (eventually) a floorplan placement. Same strip_location privacy
+    # opt-out as latitude/longitude: never populated for a profile that opted
+    # out of location metadata.
+    exif_latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    exif_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     # Crowd-sourced approximation of this photo's own position, from
     # anonymized SpotGuessr guesses (services.photos.photo_coordinates) - only ever
     # set once a photo has accumulated enough guesses to be worth showing,
@@ -388,6 +416,35 @@ class Image(abstract.FrontendDashboardModel):
     # magnetic north - is not preserved (services.media.images.extract_gps_direction),
     # so a manually set heading and an EXIF one are not directly comparable.
     direction = DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    # The other two axes of the 3-dimensional heading `direction` (yaw/compass
+    # bearing) only partially covers. Standard camera EXIF has no tags for
+    # these - they only ever come from a 360/panorama camera's XMP GPano block
+    # or a drone's gimbal metadata (services.media.images.extract_gps_orientation),
+    # so most photos will have neither. Same strip_location privacy opt-out and
+    # EXIF-only-writer caveat as `direction`.
+    exif_pitch = DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    exif_roll = DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    # Altitude in meters (signed: below sea level is negative), from EXIF
+    # GPSAltitude/GPSAltitudeRef. Location-adjacent like latitude/longitude
+    # above, so it shares their strip_location privacy opt-out even though it
+    # has no mutable counterpart yet for a user to override.
+    exif_altitude = DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    # Camera/lens identification and exposure settings, sourced once from EXIF
+    # at upload and never touched again - useful for a future distortion-
+    # correction or "shot on" display without decrypting `exif_data` for it.
+    # Not location data, so none of these are gated by strip_location.
+    exif_camera_make = CharField(max_length=255, null=True, blank=True)
+    exif_camera_model = CharField(max_length=255, null=True, blank=True)
+    exif_lens_model = CharField(max_length=255, null=True, blank=True)
+    # Display string (e.g. "1/250"), not a decimal - EXIF ExposureTime is a
+    # rational and shutter speeds are conventionally read as fractions.
+    exif_shutter_speed = CharField(max_length=32, null=True, blank=True)
+    exif_aperture = DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    exif_focal_length = DecimalField(max_digits=6, decimal_places=1, null=True, blank=True)
+    # Which floor of a building this was taken on. No standard EXIF tag reports
+    # this - the column exists for a future manual/inferred value and is
+    # populated by nothing today; expect this to be null on virtually every row.
+    exif_floor = IntegerField(null=True, blank=True)
     # SHA-256 hex digest of the uploaded file, used to reject duplicate uploads.
     # Nullable because rows predating this field are backfilled lazily (in
     # process_image_upload) - duplicate checks simply skip unhashed rows.

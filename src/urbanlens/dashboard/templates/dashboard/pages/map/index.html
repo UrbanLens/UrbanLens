@@ -1107,7 +1107,7 @@
         'own_icon', 'own_custom_icon_url', 'own_color',
         'latitude', 'longitude',
         'description', 'status', 'last_visited', 'rating',
-        'tags', 'tags_data', 'viewLocationUrl', 'address',
+        'tags', 'tags_data', 'viewLocationUrl', 'address', 'cover_photo_url',
     ]);
     function _slimPin(pin) {
         const slim = {};
@@ -1126,7 +1126,7 @@
             // on every load, until a fresh _writeCache() happens to overwrite it
             // (which isn't guaranteed - e.g. if the next fetch fails, or the tab
             // closes before a scheduled write fires).
-            if (c.v !== 8 || c.profileUuid !== _PROFILE_UUID) { localStorage.removeItem(_CACHE_KEY); return null; }
+            if (c.v !== 9 || c.profileUuid !== _PROFILE_UUID) { localStorage.removeItem(_CACHE_KEY); return null; }
             if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
             // App UUID mismatch = DB was wiped or app was redeployed with a fresh database.
             // Clear cache so ghost pins from the old DB don't appear on the map.
@@ -1158,7 +1158,7 @@
         if (!_pinStore.size) return;   // nothing to cache yet
         const ts = Date.now();
         const payload = JSON.stringify({
-            v: 8, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
+            v: 9, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
             lastUpdated: _lastKnownUpdated,
             tiles: [..._fetchedTiles],
             pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
@@ -1590,6 +1590,7 @@
 
         const popupContent = `
             <div class="pin-popup" data-uuid="${pin.uuid}" data-id="${pin.id || ''}">
+                ${pin.cover_photo_url ? `<img class="popup-thumb" src="${_escHtml(pin.cover_photo_url)}" alt="" loading="lazy">` : ''}
                 <a class="popup-title" href="${_escHtml(pin.viewLocationUrl)}" title="Open this pin's details">${_escHtml(pin.name || '')}</a>
                 ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${_escHtml(pin.address)}</div>` : ''}
                 ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ''}
@@ -1603,7 +1604,6 @@
                 </div>
                 ${tagChips ? `<div class="popup-tags">${tagChips}</div>` : ''}
                 <div class="popup-actions">
-                    <a href="${_escHtml(pin.viewLocationUrl)}" class="view-full-pin">View Details</a>
                     <div class="popup-menu">
                         <button type="button" class="popup-menu-toggle" aria-haspopup="true" aria-expanded="false"
                                 title="More actions" aria-label="More actions for this pin"

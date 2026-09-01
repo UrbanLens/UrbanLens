@@ -87,7 +87,9 @@
     </div>
 
     <!--  Scripts-->
+    {{ keyboard_shortcuts|json_script:"ul-hotkeys" }}
     <script>
+        window.UL_HOTKEYS = JSON.parse(document.getElementById('ul-hotkeys').textContent);
         var csrftoken = '{{ csrf_token }}';
         // Include CSRF token in all HTMX requests (needed for DELETE/PUT/PATCH)
         document.body.addEventListener('htmx:configRequest', function (evt) {

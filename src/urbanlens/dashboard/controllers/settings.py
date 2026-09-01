@@ -20,6 +20,7 @@ from urbanlens.dashboard.forms.settings_form import (
     DirectMessageSettingsForm,
     ExternalApiSettingsForm,
     HistorySettingsForm,
+    HotkeySettingsForm,
     KeywordTaggingSettingsForm,
     MapCenterForm,
     MapDisplayForm,
@@ -138,6 +139,7 @@ class SettingsView(LoginRequiredMixin, View):
             "map_center_form": MapCenterForm(instance=profile),
             "places_layer_form": PlacesLayerForm(instance=profile),
             "markup_defaults_form": MarkupDefaultsForm(instance=profile),
+            "hotkey_form": HotkeySettingsForm(instance=profile),
             "ai_form": AISettingsForm(instance=profile),
             "keyword_tagging_form": KeywordTaggingSettingsForm(instance=profile),
             "history_form": HistorySettingsForm(instance=profile),
@@ -176,6 +178,7 @@ class SettingsView(LoginRequiredMixin, View):
         map_center_form = MapCenterForm(instance=profile)
         places_layer_form = PlacesLayerForm(instance=profile)
         markup_defaults_form = MarkupDefaultsForm(instance=profile)
+        hotkey_form = HotkeySettingsForm(instance=profile)
         ai_form = AISettingsForm(instance=profile)
         keyword_tagging_form = KeywordTaggingSettingsForm(instance=profile)
         history_form = HistorySettingsForm(instance=profile)
@@ -214,6 +217,13 @@ class SettingsView(LoginRequiredMixin, View):
                 markup_defaults_form.save()
                 messages.success(request, "Annotation defaults saved.")
                 return _settings_redirect("markup-defaults-settings-section")
+
+        elif section == "hotkeys":
+            hotkey_form = HotkeySettingsForm(request.POST, instance=profile)
+            if hotkey_form.is_valid():
+                hotkey_form.save()
+                messages.success(request, "Keyboard shortcuts saved.")
+                return _settings_redirect("hotkeys-settings-section")
 
         elif section == "privacy":
             privacy_form = PrivacySettingsForm(request.POST, instance=profile)
@@ -332,6 +342,7 @@ class SettingsView(LoginRequiredMixin, View):
             "map_center_form": map_center_form,
             "places_layer_form": places_layer_form,
             "markup_defaults_form": markup_defaults_form,
+            "hotkey_form": hotkey_form,
             "ai_form": ai_form,
             "keyword_tagging_form": keyword_tagging_form,
             "history_form": history_form,
@@ -357,6 +368,7 @@ class SettingsView(LoginRequiredMixin, View):
                 map_center_form,
                 places_layer_form,
                 markup_defaults_form,
+                hotkey_form,
                 ai_form,
                 keyword_tagging_form,
                 history_form,

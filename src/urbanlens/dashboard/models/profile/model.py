@@ -629,6 +629,15 @@ class Profile(abstract.PublicDashboardModel):
     # in the customize dialog just adds its key back.
     home_widget_layout = JSONField(default=list, blank=True)
 
+    # Per-action key-combo overrides for the site's customizable hotkeys (see
+    # frontend/ts/shared/hotkeys.ts's DEFAULT_HOTKEYS for the full action set
+    # and each default combo). Keyed by action id, e.g. {"undo": "ctrl+alt+z"}.
+    # Empty = every action uses its default; an action absent from this dict
+    # falls back to its default rather than being disabled. An unrecognized
+    # action id here is simply never matched against - HotkeySettingsForm
+    # already drops those on save, so this is just the storage, not the guard.
+    keyboard_shortcuts = JSONField(default=dict, blank=True)
+
     # Set when the user requests account deletion; cleared on cancel/undo.
     # A non-null value means the account is scheduled for hard deletion at
     # deletion_requested_at + ACCOUNT_DELETION_GRACE_PERIOD.

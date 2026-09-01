@@ -310,6 +310,217 @@ def extract_gps_direction(image_file: IO[bytes]) -> float | None:
 
 
 @untrusted_parse("image.exif")
+def extract_gps_altitude(image_file: IO[bytes]) -> float | None:
+    """Return altitude in meters from EXIF GPS tags, or None if absent.
+
+    Signed: ``GPSAltitudeRef`` 1 means below sea level.
+    """
+    try:
+        gps_ifd = _get_gps_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF GPS altitude extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+
+    if not gps_ifd:
+        return None
+    gps_data = {GPSTAGS.get(k, k): v for k, v in gps_ifd.items()}
+    raw = gps_data.get("GPSAltitude")
+    if raw is None:
+        return None
+    try:
+        altitude = float(raw)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    if not math.isfinite(altitude):
+        return None
+    return -altitude if gps_data.get("GPSAltitudeRef") in (1, b"\x01") else altitude
+
+
+def _flatten_xmp(data: Any, out: dict[str, Any]) -> None:
+    """Flatten Image.getxmp()'s nested dict into {local tag/attribute name (lowercased): value}.
+
+    XMP namespaces (e.g. ``GPano:PosePitchDegrees``, ``drone-dji:GimbalPitchDegree``)
+    aren't preserved consistently by Pillow's XML-to-dict conversion, so this
+    keys purely on the local name - good enough for a best-effort lookup where
+    the field is absent from almost every photo anyway.
+    """
+    if isinstance(data, dict):
+        for key, value in data.items():
+            local = str(key).rsplit("}", 1)[-1].rsplit(":", 1)[-1].lower()
+            if isinstance(value, (dict, list)):
+                _flatten_xmp(value, out)
+            else:
+                out.setdefault(local, value)
+    elif isinstance(data, list):
+        for item in data:
+            _flatten_xmp(item, out)
+
+
+# Candidate XMP field names for each heading axis, in priority order: the
+# Google Photo Sphere "GPano" schema (360/panorama cameras) first, then a
+# drone gimbal's own tags.
+_XMP_PITCH_KEYS = ("posepitchdegrees", "gimbalpitchdegree")
+_XMP_ROLL_KEYS = ("poserolldegrees", "gimbalrolldegree")
+
+
+@untrusted_parse("image.exif")
+def extract_gps_orientation(image_file: IO[bytes]) -> tuple[float, float] | None:
+    """Return (pitch, roll) in degrees from a 360/panorama or drone photo's XMP block.
+
+    Standard camera EXIF carries no such tags - only Google's Photo Sphere
+    "GPano" schema (360/panorama cameras) or a drone's own gimbal metadata do,
+    so this returns None for the overwhelming majority of photos.
+    """
+    try:
+        image_file.seek(0)
+        img = PILImage.open(image_file)
+        xmp = img.getxmp()
+    except Exception as exc:
+        logger.debug("EXIF XMP orientation extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not xmp:
+        return None
+    flat: dict[str, Any] = {}
+    _flatten_xmp(xmp, flat)
+
+    def _first(keys: tuple[str, ...]) -> float | None:
+        for key in keys:
+            if key in flat:
+                try:
+                    return float(flat[key])
+                except (TypeError, ValueError):
+                    continue
+        return None
+
+    pitch, roll = _first(_XMP_PITCH_KEYS), _first(_XMP_ROLL_KEYS)
+    if pitch is None or roll is None:
+        return None
+    if not (math.isfinite(pitch) and math.isfinite(roll)):
+        return None
+    return pitch, roll
+
+
+@untrusted_parse("image.exif")
+def extract_camera_info(image_file: IO[bytes]) -> tuple[str | None, str | None]:
+    """Return (make, model) from EXIF IFD0 tags, or (None, None) if absent."""
+    try:
+        exif = _get_ifd0(image_file)
+    except Exception as exc:
+        logger.debug("EXIF camera info extraction failed: %s", exc)
+        return None, None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif:
+        return None, None
+    make = exif.get(0x010F)  # Make
+    model = exif.get(0x0110)  # Model
+    make = str(make).strip() if make and str(make).strip() else None
+    model = str(model).strip() if model and str(model).strip() else None
+    return make, model
+
+
+@untrusted_parse("image.exif")
+def extract_lens_model(image_file: IO[bytes]) -> str | None:
+    """Return the EXIF LensModel tag, or None if absent."""
+    try:
+        exif_ifd = _get_exif_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF lens model extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif_ifd:
+        return None
+    lens = exif_ifd.get(0xA434)  # LensModel
+    return str(lens).strip() if lens and str(lens).strip() else None
+
+
+@untrusted_parse("image.exif")
+def extract_shutter_speed(image_file: IO[bytes]) -> str | None:
+    """Return EXIF ExposureTime formatted as a display fraction (e.g. "1/250"), or None if absent."""
+    try:
+        exif_ifd = _get_exif_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF shutter speed extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif_ifd:
+        return None
+    raw = exif_ifd.get(0x829A)  # ExposureTime
+    if raw is None:
+        return None
+    try:
+        seconds = float(raw)
+        numerator = getattr(raw, "numerator", None)
+        denominator = getattr(raw, "denominator", None)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    if not math.isfinite(seconds) or seconds <= 0:
+        return None
+    if seconds >= 1:
+        return f"{seconds:.1f}s" if seconds % 1 else f"{int(seconds)}s"
+    if numerator and denominator:
+        return f"{numerator}/{denominator}"
+    return f"1/{round(1 / seconds)}"
+
+
+@untrusted_parse("image.exif")
+def extract_aperture(image_file: IO[bytes]) -> float | None:
+    """Return the EXIF f-number (FNumber), or None if absent."""
+    try:
+        exif_ifd = _get_exif_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF aperture extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif_ifd:
+        return None
+    raw = exif_ifd.get(0x829D)  # FNumber
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+@untrusted_parse("image.exif")
+def extract_focal_length(image_file: IO[bytes]) -> float | None:
+    """Return the EXIF focal length in millimeters (FocalLength), or None if absent."""
+    try:
+        exif_ifd = _get_exif_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF focal length extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+    if not exif_ifd:
+        return None
+    raw = exif_ifd.get(0x920A)  # FocalLength
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+@untrusted_parse("image.exif")
 def extract_taken_at(image_file: IO[bytes]) -> datetime | None:
     """Return the EXIF DateTimeOriginal capture time, or None if absent/unparseable.
 

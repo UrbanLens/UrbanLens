@@ -8,6 +8,7 @@
 
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { matchesHotkey } from "./hotkeys";
 
 export interface UndoProvider {
     canUndo(): boolean;
@@ -209,11 +210,10 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-    if (!event.ctrlKey && !event.metaKey) return;
-    if (event.key.toLowerCase() !== "z" && event.key.toLowerCase() !== "y") return;
     if (isTypingTarget(event.target)) return;
+    const redo = matchesHotkey(event, "redo");
+    if (!redo && !matchesHotkey(event, "undo")) return;
     const provider = activeProvider();
-    const redo = event.key.toLowerCase() === "y" || event.shiftKey;
     if (redo) {
         if (!provider.canRedo()) return;
         event.preventDefault();

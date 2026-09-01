@@ -109,6 +109,11 @@ declare global {
         ulMapOverlayChooseFile?: () => void;
         ulMapOverlayChooseUrl?: () => void;
         ulMapOverlayHandleDrop?: (event: DragEvent, zone: HTMLElement) => void;
+        // The current user's keyboard-shortcut overrides (Settings > Shortcuts),
+        // rendered server-side by base.html via Profile.keyboard_shortcuts - see
+        // shared/hotkeys.ts's loadHotkeys(), the only reader. Keyed by action id,
+        // e.g. {"undo": "ctrl+alt+z"}; absent for an anonymous request.
+        UL_HOTKEYS?: Record<string, string>;
     }
 
     const toastr: Toastr;

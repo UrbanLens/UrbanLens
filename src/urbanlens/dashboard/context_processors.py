@@ -186,6 +186,29 @@ def add_distance_units(request: HttpRequest) -> dict[str, str]:
     return {"distance_units": units}
 
 
+def add_keyboard_shortcuts(request: HttpRequest) -> dict[str, dict[str, str]]:
+    """Expose the viewer's keyboard shortcut overrides to every template.
+
+    base.html renders this via ``json_script`` as ``window.UL_HOTKEYS``, which
+    ``frontend/ts/shared/hotkeys.ts``'s ``loadHotkeys()`` merges over the
+    built-in defaults - see ``Profile.keyboard_shortcuts`` for the storage
+    shape.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``keyboard_shortcuts`` (the profile's override mapping, or
+        ``{}`` for an anonymous request or one with no profile yet).
+    """
+    if isinstance(request.user, User):
+        try:
+            return {"keyboard_shortcuts": request.user.profile.keyboard_shortcuts or {}}
+        except (AttributeError, DatabaseError):
+            pass
+    return {"keyboard_shortcuts": {}}
+
+
 def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
     """Expose the current user's pending-deletion state for the site-wide warning banner.
 

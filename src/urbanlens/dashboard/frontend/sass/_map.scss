@@ -3115,8 +3115,23 @@ div.container .addr-search-bar {
 }
 
 .pin-popup {
-    padding: 12px 14px 10px;
+    // Right padding is wider than the other sides so the title (and any other
+    // first-line content) never runs under Leaflet's own close button, which
+    // sits absolutely positioned at top-right (`right: 6px`) over this content.
+    padding: 12px 26px 10px 14px;
     font-size: .82rem;
+}
+
+.popup-thumb {
+    display: block;
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+    // Bleeds out to the wrapper's own edges/corners rather than sitting inset
+    // inside .pin-popup's padding - the padding above still applies to every
+    // other child via the negative margins below undoing it just for this one.
+    margin: -12px -26px 8px -14px;
+    border-radius: 10px 10px 0 0;
 }
 
 .popup-title {
@@ -3232,22 +3247,11 @@ div.container .addr-search-bar {
 .popup-actions {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 4px;
     margin-top: 6px;
     padding-top: 7px;
     border-top: 1px solid rgba(255, 255, 255, .08);
-}
-
-.view-full-pin {
-    font-size: .75rem;
-    color: $ui-link-on-dark;
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.view-full-pin:hover {
-    text-decoration: underline;
-    color: $ui-link-on-dark-hover;
 }
 
 .popup-actions .add-to-list-button {
@@ -5465,7 +5469,13 @@ a.popup-title {
     &[hidden] {
         display: none;
     }
-    min-width: 11rem;
+    // Fixed (not min-) width: a long label ("Promote child pins") combined with
+    // each button's own nowrap text used to stretch this wider than the popup
+    // itself, since nothing here was ever constrained to the popup's bounds.
+    // Buttons wrap their text instead now, so the menu's own width stays fixed
+    // regardless of label length.
+    width: 12.5rem;
+    max-width: calc(100vw - 24px);
     padding: 0.25rem;
     border: 1px solid var(--border-color, #ccc);
     border-radius: 6px;
@@ -5474,14 +5484,15 @@ a.popup-title {
 
     button {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 0.4rem;
+        width: 100%;
         padding: 0.35rem 0.5rem;
         border: 0;
         background: none;
         cursor: pointer;
         text-align: left;
-        white-space: nowrap;
+        white-space: normal;
         color: inherit;
         border-radius: 4px;
 
@@ -5492,6 +5503,11 @@ a.popup-title {
 
         &.delete-button {
             color: #c62828;
+        }
+
+        .material-symbols-outlined {
+            // Keeps the icon aligned with the first line when a long label wraps.
+            flex-shrink: 0;
         }
     }
 

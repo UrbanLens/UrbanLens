@@ -77,7 +77,11 @@ class MapPinCache:
     which allows fast keyset pages and targeted updates when one pin changes.
     """
 
-    VERSION = "v2"
+    # Bump whenever MapPinPayloadService.serialize()'s shape changes - the whole
+    # point of versioning the key prefix rather than the payload itself is that
+    # a stale cache under the old prefix is simply orphaned (and expires via its
+    # own TTL) instead of needing an explicit migration.
+    VERSION = "v3"
     TTL_SECONDS = 2 * 60 * 60
     LOCK_SECONDS = 30
 

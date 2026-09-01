@@ -1,5 +1,6 @@
 """User settings form - privacy, contact, and style preferences."""
 
+import json
 import re
 
 from django import forms
@@ -90,6 +91,42 @@ class MarkupDefaultsForm(ProfileSettingsForm):
 
     def clean_markup_border_color(self):
         return (self.cleaned_data.get("markup_border_color") or "").strip()
+
+
+# Kept in sync by hand with DEFAULT_HOTKEYS' keys in frontend/ts/shared/hotkeys.ts -
+# JS and Python don't share a source of truth here, same tradeoff as
+# PIN_CACHE_VERSION's two independent literals (see pin-cache.contract.test.ts).
+_KNOWN_HOTKEY_ACTIONS = frozenset({"undo", "redo", "toggleFullscreen"})
+_HOTKEY_COMBO_RE = re.compile(r"^(ctrl\+)?(shift\+)?(alt\+)?[a-z0-9]+$")
+
+
+class HotkeySettingsForm(ProfileSettingsForm):
+    """Per-action keyboard shortcut overrides (Settings > Shortcuts).
+
+    One hidden field carries the whole override mapping as JSON, built
+    client-side by the Shortcuts section's key-capture inputs - mirrors
+    MarkupDefaultsForm's hidden-input pattern, but a field-per-action here
+    would mean a migration every time hotkeys.ts gains an action.
+    """
+
+    keyboard_shortcuts = forms.CharField(required=False, widget=forms.HiddenInput(attrs={"id": "id_keyboard_shortcuts"}))
+
+    class Meta:
+        model = Profile
+        fields = ["keyboard_shortcuts"]
+
+    def clean_keyboard_shortcuts(self) -> dict[str, str]:
+        raw = self.cleaned_data.get("keyboard_shortcuts") or "{}"
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        # Drop an unrecognized action id or malformed combo (a stale client, or
+        # someone editing the hidden field directly) rather than rejecting the
+        # whole save - every other action's override still gets to save.
+        return {action: combo for action, combo in parsed.items() if action in _KNOWN_HOTKEY_ACTIONS and isinstance(combo, str) and _HOTKEY_COMBO_RE.match(combo)}
 
 
 # "Friends only" is circular for friend requests (they're not friends yet), so exclude it.

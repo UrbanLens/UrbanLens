@@ -15,6 +15,8 @@
  *      `body.page-<game>` custom properties keep applying inside it.
  */
 
+import { matchesHotkey } from "./hotkeys";
+
 export interface GameShellOptions {
     /** The page root - `.ul-game`, carrying the game's legacy page class. */
     root: HTMLElement;
@@ -498,10 +500,10 @@ export function createGameShell(opts: GameShellOptions): GameShell {
     // Esc in focus mode is deliberately not handled: it must never abandon a
     // live round. Native Esc still leaves true fullscreen.
     document.addEventListener("keydown", (event: KeyboardEvent) => {
-        if (event.key !== "f" && event.key !== "F") {
+        if (!matchesHotkey(event, "toggleFullscreen")) {
             return;
         }
-        if (event.ctrlKey || event.metaKey || event.altKey || isTypingTarget(event.target)) {
+        if (isTypingTarget(event.target)) {
             return;
         }
         if (!shell.classList.contains("is-playing")) {

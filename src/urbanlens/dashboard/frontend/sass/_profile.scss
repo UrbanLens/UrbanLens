@@ -852,6 +852,72 @@
     transition: opacity 0.2s;
 }
 
+.settings-hotkey-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.65rem 0;
+    max-width: 32rem;
+
+    & + & {
+        border-top: 1px solid var(--ul-grey-1);
+    }
+}
+
+.settings-hotkey-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+
+    strong {
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+
+    .settings-help {
+        margin: 0;
+    }
+}
+
+.settings-hotkey-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+.settings-hotkey-capture {
+    min-width: 7rem;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--ul-grey-2);
+    border-radius: 6px;
+    background: var(--card-bg, #fff);
+    color: inherit;
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+
+    &:hover {
+        border-color: var(--primary-color);
+    }
+
+    &.is-listening {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+    }
+}
+
+.settings-hotkey-reset {
+    @include icon-btn(24px);
+    color: var(--ul-grey-6);
+
+    &:hover {
+        color: var(--ul-grey-4);
+    }
+}
+
 .settings-actions {
     margin-top: 1.5rem;
     padding-top: 1rem;

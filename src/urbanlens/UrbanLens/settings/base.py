@@ -184,6 +184,7 @@ TEMPLATES = [
                 "urbanlens.dashboard.context_processors.add_pending_account_deletion",
                 "urbanlens.dashboard.context_processors.add_environment_indicator",
                 "urbanlens.dashboard.context_processors.add_distance_units",
+                "urbanlens.dashboard.context_processors.add_keyboard_shortcuts",
                 "urbanlens.dashboard.context_processors.add_direct_messages",
                 "urbanlens.dashboard.context_processors.add_demo_context",
             ],
