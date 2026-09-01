@@ -36,7 +36,8 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
 from urbanlens.dashboard.models.pin_share.model import PinShare
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for
+from urbanlens.dashboard.models.reactions.model import Reaction
+from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for, reaction_summary
 from urbanlens.dashboard.services.messaging.group_chats import (
     add_group_members,
     create_group_chat,
@@ -303,6 +304,22 @@ class GroupMessageLiveIdentityPrivacyTests(TestCase):
 
         self.assertEqual(payload["sender_name"], self.hidden_sender.username)
         self.assertEqual(payload["sender_slug"], self.hidden_sender.slug)
+
+    def test_reaction_summary_masks_hidden_reactor_slug_for_viewer(self) -> None:
+        message = create_group_message(self.viewer, self.group, "React here")
+        Reaction.objects.create(profile=self.hidden_sender, group_message=message, emoji="👍")
+
+        summary = reaction_summary(message, viewer=self.viewer)
+
+        self.assertEqual(summary, [{"emoji": "👍", "count": 1, "slugs": [""]}])
+
+    def test_reaction_summary_keeps_real_slug_for_reactors_own_view(self) -> None:
+        message = create_group_message(self.viewer, self.group, "React here")
+        Reaction.objects.create(profile=self.hidden_sender, group_message=message, emoji="👍")
+
+        summary = reaction_summary(message, viewer=self.hidden_sender)
+
+        self.assertEqual(summary, [{"emoji": "👍", "count": 1, "slugs": [self.hidden_sender.slug or ""]}])
 
 
 class GroupPinShareTests(TestCase):

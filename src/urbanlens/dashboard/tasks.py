@@ -869,6 +869,8 @@ def process_image_upload(self, image_id: int) -> bool:
     if stored_size is not None and stored_size != image.file_size:
         image.file_size = stored_size
         update_fields["file_size"] = stored_size
+    image.upload_processed_at = timezone.now()
+    update_fields["upload_processed_at"] = image.upload_processed_at
 
     if image.location_id is None:
         location = _resolve_image_location(image, coords)

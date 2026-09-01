@@ -79,6 +79,17 @@ class VideoUploadDispatchTests(TestCase):
         self.image.refresh_from_db()
         self.assertEqual(self.image.file_size, 12345)
 
+    def test_successful_processing_marks_upload_processed(self) -> None:
+        self.assertIsNone(self.image.upload_processed_at)
+        with (
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+            patch("urbanlens.dashboard.services.media.videos.process_uploaded_video", return_value=({}, None)),
+        ):
+            process_image_upload(self.image.pk)
+
+        self.image.refresh_from_db()
+        self.assertIsNotNone(self.image.upload_processed_at)
+
     def test_video_upload_does_not_enqueue_photo_keyword_generation(self) -> None:
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
