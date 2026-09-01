@@ -163,7 +163,7 @@ export interface Marker extends ItemDetails {
     lat?: number | null;
     lng?: number | null;
     // The linked detail pin's own icon/color, when it has customizations of
-    // its own (set via the pin detail page's detail-pin dialog) - null falls
+    // its own (set via the Private Pin page's detail-pin dialog) - null falls
     // back to the kind-based defaults below, same as a plain detail pin.
     icon?: string | null;
     color?: string | null;

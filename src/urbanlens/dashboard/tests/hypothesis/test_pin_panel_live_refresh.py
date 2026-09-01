@@ -1,4 +1,4 @@
-"""Live-refresh notifications for the pin detail page's external-data panels.
+"""Live-refresh notifications for the Private Pin page's external-data panels.
 
 Some panels (Wikipedia, Nominatim, EPA ECHO's exact-site detail) have side
 effects beyond their own content - an auto-added alias/link, or a changed

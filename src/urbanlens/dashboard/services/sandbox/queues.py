@@ -46,7 +46,7 @@ class Queue(StrEnum):
     Attributes:
         DEFAULT: Celery's own default queue name. Anything without an explicit
             queue lands here, drained by ``celery-worker``.
-        PANEL_FETCH: External-data panel fetches for the pin detail page.
+        PANEL_FETCH: External-data panel fetches for the Private Pin page.
         SANDBOX: Interactive parsing of untrusted user-supplied bytes - image
             decode, video transcode, document conversion. Drained by
             ``media-worker``, which has no route to the internet.

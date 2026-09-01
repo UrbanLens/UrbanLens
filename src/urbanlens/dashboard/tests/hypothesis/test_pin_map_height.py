@@ -1,4 +1,4 @@
-"""Tests for the pin detail page's drag-to-resize map height preference.
+"""Tests for the Private Pin page's drag-to-resize map height preference.
 
 Covers PinController.set_map_height (save/clamp/validate) and the pin
 details page's rendering of the saved height as an inline style.

@@ -33,10 +33,10 @@ This exposes internal infrastructure details and looks broken. The panel should 
 The Photos from Google Maps section shows six placeholder/broken image icons. No images load. This may be the same API key misconfiguration as Street View, but the visual result is a grid of broken boxes that looks like a rendering failure.
 
 ### Major — News, Building Characteristics, and LoopNet Listings panels stuck loading indefinitely
-Three panels on the pin detail page show a "Loading…" spinner that never resolves. There is no timeout, no error state, and no empty state fallback. Users have no way to know whether to wait or whether something is broken.
+Three panels on the Private Pin page show a "Loading…" spinner that never resolves. There is no timeout, no error state, and no empty state fallback. Users have no way to know whether to wait or whether something is broken.
 
 ### Major — "What are aliases and nicknames?" popover fires on every page load
-The explanatory popover for the Aliases section appears on every visit to a pin detail page, blocking the Aliases content. If this is a first-run tooltip it should only appear once (gated by a localStorage or user preference flag); if it's always-on documentation, it should be collapsed by default, not an overlay.
+The explanatory popover for the Aliases section appears on every visit to a Private Pin page, blocking the Aliases content. If this is a first-run tooltip it should only appear once (gated by a localStorage or user preference flag); if it's always-on documentation, it should be collapsed by default, not an overlay.
 
 ### Minor — Four star-rating fields with unclear distinctions
 Danger, Priority, Rating, and Vulnerability are four separate 5-star fields displayed side by side at the top of every pin. A first-time user won't understand the difference between "Rating" and "Priority," or why "Danger" and "Vulnerability" are separate. Consider consolidating, renaming, or adding tooltip explanations.

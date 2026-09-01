@@ -591,7 +591,7 @@ def _render_manual_only(data: dict[str, Any]) -> dict[str, Any] | None:
 
 
 class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
-    """County property ownership/tax record card on the pin detail page."""
+    """County property ownership/tax record card on the Private Pin page."""
 
     key = "property_records"
     cache_source = _CACHE_SOURCE
@@ -690,7 +690,7 @@ class PropertyRecordsPlugin(UrbanLensPlugin):
     description: ClassVar[str] = (
         "Parcel ownership, assessed value, and sale history lookups, retrieved from REData, a standalone "
         "service. Populates the pin/wiki Ownership and Sale History cards with OFFICIAL-sourced records and "
-        "shows a details card on the pin detail page. Coverage varies by county - a place REData doesn't yet "
+        "shows a details card on the Private Pin page. Coverage varies by county - a place REData doesn't yet "
         "have data for surfaces as 'not automatable' rather than failing silently. USA only. Requires "
         "UL_REDATA_API_URL/UL_REDATA_API_KEY to be configured."
     )

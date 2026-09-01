@@ -1019,7 +1019,7 @@
 }
 
 // -- Cover photo hero banner -----------------------------------------------------
-// Used on both the pin detail page and the wiki page (see cover-hero.js for the
+// Used on both the Private Pin page and the wiki page (see cover-hero.js for the
 // hover prev/next cycling). Absent entirely unless a cover photo is set, so a
 // pin/wiki without one renders exactly as before.
 .cover-hero {
@@ -1110,7 +1110,7 @@
   opacity: 1;
 }
 
-// The pin detail page's cover hero isn't a standalone .cover-hero div like the
+// The Private Pin page's cover hero isn't a standalone .cover-hero div like the
 // wiki page's - it's rendered via the shared _page_hero.html's own
 // hero_image_url/--cover mechanism (see _page_hero.scss), so the nav buttons
 // live inside a .ul-page-hero--cover instead and need their own hover rule.

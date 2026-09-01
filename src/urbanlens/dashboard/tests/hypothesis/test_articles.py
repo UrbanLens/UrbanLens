@@ -260,7 +260,7 @@ class PinArticleViewTests(TestCase):
 
     def test_meta_bar_is_gone(self) -> None:
         """The privacy/word-count/last-edited/revision-count meta bar was removed
-        as redundant now the pin detail page always shows an Edit History tab."""
+        as redundant now the Private Pin page always shows an Edit History tab."""
         save_article(editor=self.profile, content="Built in 1900. Some history here.", pin=self.pin)
         response = self.client.get(reverse("pin.article", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)

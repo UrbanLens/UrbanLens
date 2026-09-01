@@ -9,7 +9,7 @@ declare const L: typeof import("leaflet");
 /**
  * Shared map markup drawing/editing toolbar - lines, arrows, shapes, and text
  * labels drawn on a Leaflet map via window.MarkupEngine. Used identically by
- * the pin detail page, the Location wiki page, and the safety check-in map; a
+ * the Private Pin page, the Location wiki page, and the safety check-in map; a
  * fix here lands on all three.
  *
  * Ported from the old `_markup_toolbar_script.html` text fragment (which

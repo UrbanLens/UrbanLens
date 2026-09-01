@@ -82,7 +82,7 @@ class GoogleImagesPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "google_images"
     verbose_name: ClassVar[str] = "Google Images"
-    description: ClassVar[str] = "Adds up to 10 Google Image Search results (by address) to the pin detail page's Media gallery, via REData's web-search endpoint."
+    description: ClassVar[str] = "Adds up to 10 Google Image Search results (by address) to the Private Pin page's Media gallery, via REData's web-search endpoint."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:

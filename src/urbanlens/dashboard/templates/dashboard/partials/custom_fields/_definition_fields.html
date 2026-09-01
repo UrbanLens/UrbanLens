@@ -13,7 +13,7 @@
 </select>
 <select name="style" class="cf-input cf-style-select" title="Style" data-current="{{ field.style|default:'' }}" hidden></select>
 {% if show_display %}
-<select name="display" class="cf-input cf-display-select" title="Where this field appears on the pin details page">
+<select name="display" class="cf-input cf-display-select" title="Where this field appears on your Private Pin page">
     {% for value, label in display_choices %}
     <option value="{{ value }}" {% if field.display == value %}selected{% endif %}>{{ label }}</option>
     {% endfor %}

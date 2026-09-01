@@ -161,7 +161,7 @@ Context:
 {% endif %}
 
 {% if context_type == "wiki" %}
-{# -- Import a public Flickr album by URL - the pin detail page's own copy  #}
+{# -- Import a public Flickr album by URL - the Private Pin page's own copy  #}
 {# of this dialog lives in location/index.html instead, alongside its      #}
 {# "Import Photos" button at the Media-section level. #}
 <dialog id="flickr-album-dialog" class="ul-dialog" aria-label="Flickr album"></dialog>
@@ -211,7 +211,7 @@ Context:
   var _dragDepth = 0;
   var _overlay   = document.getElementById('gallery-drop-overlay');
 
-  // On the pin detail page, this partial is nested inside the "Mine" media
+  // On the Private Pin page, this partial is nested inside the "Mine" media
   // sub-tab (see location/index.html's #pin-gallery-panel, hidden whenever
   // "All" is the active view) - a hidden ancestor hides this overlay
   // regardless of its own `hidden` state, so setting `_overlay.hidden = false`

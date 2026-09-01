@@ -227,7 +227,7 @@ Context:
   // A <dialog> opened with showModal() is promoted to the browser's top layer,
   // but per spec that promotion is void if any ancestor has display: none -
   // the dialog still reports open === true, but renders at zero size and is
-  // never actually painted. On the pin detail page this partial is loaded
+  // never actually painted. On the Private Pin page this partial is loaded
   // (via _photo_gallery.html) inside the Media section's "Mine" view panel,
   // which is exactly such an ancestor whenever a different view tab is
   // active - the common case, since "All" is the default. Reparenting to
@@ -885,7 +885,7 @@ Context:
   // Called from the lightbox's Relevant/Not relevant buttons (only shown for
   // Media-gallery items, see canRelevance). Persists the mark, updates the
   // lightbox's own button state, and syncs the corresponding grid tile back
-  // on the pin detail page's Media section (if that tile is present).
+  // on the Private Pin page's Media section (if that tile is present).
   // Marking relevant also materializes the item server-side (downloads and
   // saves it as a real Image row - see PinController.media_relevance) so it
   // survives the external provider's URL ever going dead; once that

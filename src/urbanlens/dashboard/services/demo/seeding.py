@@ -286,7 +286,7 @@ def seed_demo_account(*, ttl_hours: int = 24, username: str = "", password: str 
 
 #: The one place a dev environment is pinned to by name rather than by catalog.
 #: Real coordinates, like everything else seeded here - a pin is a claim that a
-#: place exists at a point, and the whole pin detail page (boundaries, parcel
+#: place exists at a point, and the whole Private Pin page (boundaries, parcel
 #: lookup, wiki) answers emptily for a point nobody has ever surveyed.
 #: ``Location`` carries no name field of its own (the community-editable name
 #: lives on ``Wiki``, the external-source one in ``official_name``), so the

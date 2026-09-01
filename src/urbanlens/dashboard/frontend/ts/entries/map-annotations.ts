@@ -2,7 +2,7 @@
  * Shared map annotations page: markup drawing/editing, the unified detail-pin
  * side panel, the typed boundary editor (+ its context menu), the photo
  * layer, and the Details/Photos layers list panel. Used identically by the
- * pin detail page and the Location wiki page. The map's right-click menu is
+ * Private Pin page and the Location wiki page. The map's right-click menu is
  * the shared base (copy coordinates, Street View, directions) plus "Create
  * child pin here"; boundary polygons extend that same menu with Edit /
  * Convert / Delete.
@@ -665,7 +665,7 @@ function init(): void {
         window.addEventListener("orientationchange", () => setTimeout(() => map.invalidateSize(), 300));
     })();
 
-    // -- Map resize handle (pin detail page only - wiki page has no handle in ---
+    // -- Map resize handle (Private Pin page only - wiki page has no handle in ---
     // its DOM, so this is a silent no-op there). Dragging the bottom border
     // saves the new height (see PinController.set_map_height) so every pin
     // detail page's map opens at that height going forward. Bounds must match

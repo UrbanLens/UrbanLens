@@ -1,6 +1,6 @@
 """Wiki Media gallery - the community-page counterpart of the pin detail Media section.
 
-The pin detail page renders a combined Media gallery (external archival/media
+The Private Pin page renders a combined Media gallery (external archival/media
 providers plus the owner's own uploads) with per-user relevance marking (see
 ``controllers.pin.PinController.media_provider`` / ``media_relevance``). These
 views expose the same external media on a Location's community **wiki**, with
@@ -8,13 +8,13 @@ two deliberate differences:
 
 * **External media is automatic.** It's about the place, not a private upload,
   so it appears on the wiki straight from the shared per-Location
-  ``LocationCache`` the pin detail page already warms. User-uploaded photos, by
+  ``LocationCache`` the Private Pin page already warms. User-uploaded photos, by
   contrast, only appear once intentionally shared to the wiki (``Image.wiki``).
 * **Thumbs are community votes.** A thumbs-up/down is stored in the same
   Location-scoped :class:`MediaRelevance` model, but the wiki reads the
   *aggregate* across every contributing profile as a net score (up - down) and
   sorts items highest-first. Because ``MediaRelevance`` is keyed by Location,
-  a relevance mark made on any user's pin detail page already counts here - no
+  a relevance mark made on any user's Private Pin page already counts here - no
   schema change needed for the score itself (see
   ``MediaRelevanceQuerySet.vote_scores``).
 * **An up-vote also submits the item to the wiki.** Unlike the pin detail
@@ -177,7 +177,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         they have a pin at (or near) this location; we use *their* pin so the
         fetch is gated by their ``external_apis_enabled`` and counts against
         their quota. A boundary-mate viewer with no pin at this exact location
-        just sees whatever the pin detail page has already cached (204).
+        just sees whatever the Private Pin page has already cached (204).
         """
         from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
 

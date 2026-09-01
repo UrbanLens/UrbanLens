@@ -90,7 +90,7 @@ class INaturalistPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "inaturalist"
     verbose_name: ClassVar[str] = "iNaturalist"
-    description: ClassVar[str] = "Shows recent nearby wildlife/plant sightings on the pin detail page, sourced through REData's nature-observations registry (iNaturalist)."
+    description: ClassVar[str] = "Shows recent nearby wildlife/plant sightings on the Private Pin page, sourced through REData's nature-observations registry (iNaturalist)."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:

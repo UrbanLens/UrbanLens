@@ -5178,7 +5178,7 @@ test's `baker.make` line for the same model first would have caught all three.
 survivor advertising an **older** date than its own visit history supports.
 
 Reproduced before fixing: survivor showed 2026-05-16 while its absorbed history said 2026-08-12.
-User-visible on the map popup (`last_visited` is in the payload) and the pin detail page.
+User-visible on the map popup (`last_visited` is in the payload) and the Private Pin page.
 
 Fixed by calling `sync_last_visited(survivor)` inside the merge's transaction. That also settles
 a second staleness found on the way: **the merge issued no cache invalidation for the survivor

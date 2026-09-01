@@ -76,7 +76,7 @@ def _marker_dict(marker: FloorplanMarker, source_uuids: dict, reference_uuids: d
     """One marker's document entry, deferring to its linked pin where it has one.
 
     A linked pin is the freshest copy of name/icon/color once it exists - it
-    may have been renamed or restyled from the pin detail page since this
+    may have been renamed or restyled from the Private Pin page since this
     marker was last saved here.
     """
     linked = marker.linked_pin

@@ -121,7 +121,7 @@ def building_child_count(target: Pin | Wiki) -> int:
 def is_site_scope(target: Pin | Wiki) -> bool:
     """Whether this marker describes a parcel/site rather than a single building.
 
-    Memoized on the instance: a single pin-detail page render asks this from
+    Memoized on the instance: a single Private Pin page render asks this from
     several independent panels, and the answer can't change mid-request.
 
     Args:
@@ -153,7 +153,7 @@ def parcel_buildings(location: Location | None) -> list[dict] | None:
     """Every building known on this location's parcel, from cache only.
 
     Never fetches - the cache is filled by ``ParcelBuildingsPanelSource`` (on
-    demand, when a pin detail page asks for its panel) and by that plugin's
+    demand, when a Private Pin page asks for its panel) and by that plugin's
     background enrichment source, so a page render only ever reads it.
 
     Args:

@@ -79,7 +79,7 @@ class AddFeatureAccessBetaFlagTests(TestCase):
 
 
 class PinDetailTemporalSliderContextTests(TestCase):
-    """``temporal_slider_years``/``temporal_imagery_url_template`` on the pin detail page."""
+    """``temporal_slider_years``/``temporal_imagery_url_template`` on the Private Pin page."""
 
     def setUp(self) -> None:
         super().setUp()

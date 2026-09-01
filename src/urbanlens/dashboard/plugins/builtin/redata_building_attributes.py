@@ -214,7 +214,7 @@ def _render_building_attributes(data: dict[str, Any]) -> dict[str, Any] | None:
 
 
 class RedataBuildingAttributesPanelSource(CoordinateGatedInfoPanelSource):
-    """Standardized building number/name/year-built card on the pin detail page, via REData."""
+    """Standardized building number/name/year-built card on the Private Pin page, via REData."""
 
     key = "redata_building_attributes"
     cache_source = _CACHE_SOURCE

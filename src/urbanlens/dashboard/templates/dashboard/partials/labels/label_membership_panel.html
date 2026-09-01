@@ -1,7 +1,7 @@
 {% load dashboard_tags %}
 {# Pin or location label membership panel (tags, categories, and statuses). #}
 {# `embedded` drops the .card wrapper and the "Labels" header entirely for the #}
-{# pin detail page's combined Organization section: labels already have a #}
+{# Private Pin page's combined Organization section: labels already have a #}
 {# universal look site-wide, so that context doesn't repeat a title for them - #}
 {# it's added/collapsed from the Organization card's own header instead. See #}
 {# location/index.html and _membership_panel_ctx(). #}
@@ -10,7 +10,7 @@
 {# bare slot div meant to hold nothing else (e.g. the photo gallery's label #}
 {# icon - see _photo_gallery.html's #photo-label-panel-slot). #}
 {% if embedded %}
-{# Organization's card-header lives on the pin detail page itself (see location/index.html) - #}
+{# Organization's card-header lives on the Private Pin page itself (see location/index.html) - #}
 {# push this panel's member count out to that header's badge via an OOB swap. #}
 <span class="badge" id="organization-count-badge" hx-swap-oob="true"{% if not member_ids %} hidden{% endif %}>{{ member_ids|length }}</span>
 {% endif %}

@@ -1,5 +1,5 @@
 """Tests for the pin-comments panel's "Notes" wording (UL prompt: rename the
-Comments subnav to Notes on the pin detail page).
+Comments subnav to Notes on the Private Pin page).
 
 A pin's comments are private to its owner - there's no one else to converse
 with - so "Comments" implied a shared discussion that doesn't exist there.

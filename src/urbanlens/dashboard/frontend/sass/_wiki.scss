@@ -886,7 +886,7 @@
     }
 }
 // -- Wiki Media gallery (external providers + shared photos, with voting) -------
-// The pin detail page's Media tiles are styled under
+// The Private Pin page's Media tiles are styled under
 // `body.page-location-details .pin-detail-grid` and don't reach the wiki, so
 // the same class names are re-styled here for the wiki's own Media section
 // (see pages/location/wiki.html + controllers/wiki_media.py). Unlike the pin

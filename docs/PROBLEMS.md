@@ -4278,7 +4278,7 @@ thirteen failures and left three genuine ones, each a different rule:
   when the file 404s - taking the button's only accessible name with it. **Fixed
   2026-08-24** by putting `aria-label` on the button in all three places that
   render a photo tile, so the name no longer depends on the thumbnail loading.
-- **`aria-required-children`, critical, the pin detail page.** `#media-tabs`
+- **`aria-required-children`, critical, the Private Pin page.** `#media-tabs`
   declares `role="tablist"` in markup but is filled by JavaScript, and the
   buttons it generates carried no `role="tab"` - unlike the statically-rendered
   article sub-tabs directly above them. It also stayed an empty tablist when
@@ -4292,7 +4292,7 @@ thirteen failures and left three genuine ones, each a different rule:
   identical defect under a different selector and were deliberately left
   untouched - worth a follow-up pass rather than one-off patches per selector.
 
-Both fixes were verified against the deployment: the pin detail page's scan is
+Both fixes were verified against the deployment: the Private Pin page's scan is
 now clean. The home page's is not, because clearing `button-name` uncovered a
 second defect underneath it:
 
@@ -4309,7 +4309,7 @@ second defect underneath it:
   against predates the current HEAD. Needs a fresh scan against a current
   deploy before treating this as still open.
 
-## OPEN (ratcheted) 2026-08-24: one pin-detail page load can exhaust the database connection pool
+## OPEN (ratcheted) 2026-08-24: one Private Pin page load can exhaust the database connection pool
 
 Found by `tests/integration/` on 2026-08-24, and only visible because the
 console/network guard watches every request a page makes rather than just the
@@ -5141,7 +5141,7 @@ in `partials/pins/_pin_location_data_tabs.html:35`, `_pin_plugin_tabs.html:40`,
 never loads its content.
 
 Unrelated to the Vault (the string appears in no Vault or album template) - surfaced only because a
-Vault album spec navigates to a pin detail page. Worth guarding the trigger expression
+Vault album spec navigates to a Private Pin page. Worth guarding the trigger expression
 (`window.ulSectionCollapsed && !window.ulSectionCollapsed(...)`) or asserting load order.
 
 ## OPEN 2026-08-31: the integration suite's login setup fails after a *successful* sign-in

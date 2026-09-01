@@ -1,4 +1,4 @@
-"""Regression tests for the pin detail page's "external panel 204 removal" marker.
+"""Regression tests for the Private Pin page's "external panel 204 removal" marker.
 
 A hardcoded JS Set of section ids (previously named `_extSections`) decided which
 auto-loading external-data cards got their "Loading..." placeholder removed when
@@ -241,7 +241,7 @@ class PendingPanelPlaceholderMarkerTests(TestCase):
 
 
 class ConsistentLoadingPlaceholderTests(TestCase):
-    """Every initial "Loading..." placeholder on the pin detail page uses the same
+    """Every initial "Loading..." placeholder on the Private Pin page uses the same
     small per-panel .view-loading spinner - a user reported the one at the very
     top of the page (under the title, before #pin-overview's first hx-load swap)
     as a jarring full-width gray bar, distinct from every other panel's spinner

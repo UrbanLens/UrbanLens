@@ -341,7 +341,7 @@ class MediaRelevanceQuerySet(abstract.DashboardQuerySet):
         ``is_relevant=True`` row counts ``+1`` and every ``is_relevant=False``
         row counts ``-1``, summed across all contributing profiles. Because
         :class:`MediaRelevance` is keyed by Location (not Pin), a relevance
-        mark made on any user's pin detail page for this place is already part
+        mark made on any user's Private Pin page for this place is already part
         of this aggregate - that's how a pin-detail thumbs-up "carries over" to
         the wiki with no extra bookkeeping.
 

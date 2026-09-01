@@ -1,7 +1,7 @@
 """Tests for the explicit, user-initiated wiki creation flow.
 
 Wikis are never auto-created: ``WikiShareService.share_from_pin`` is the
-single creation entry point, invoked by the pin detail page's "Create wiki"
+single creation entry point, invoked by the Private Pin page's "Create wiki"
 button. The user chooses which pin fields, aliases, and photos to seed the
 new wiki with; nothing is copied unless explicitly selected, and an existing
 wiki is never overwritten with personal data.

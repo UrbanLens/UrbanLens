@@ -1,6 +1,6 @@
 """Importing buildings on a *pin* page must not fail on the wiki side.
 
-Reported from staging: adding several buildings from the pin detail page
+Reported from staging: adding several buildings from the Private Pin page
 500'd with `ChildWikiLocationError: There is already a wiki marker at these
 exact coordinates`, **after** the child pins had already been created. Three
 separate defects behind one traceback:

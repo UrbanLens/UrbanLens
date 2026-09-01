@@ -1,7 +1,7 @@
 """A parcel outline a provider offered must beat one we invented.
 
 Reported from the e2e deployment, on the HRSH pin: the boundary drawn on the
-pin detail page is not REData's parcel at all. REData offers six scored
+Private Pin page is not REData's parcel at all. REData offers six scored
 candidates for that parcel and flags one of them ``is_suggested``; the app drew
 a convex hull fitted around the pin and its three child pins instead.
 

@@ -1653,8 +1653,8 @@ class FloorplanAutosaveCostTests(TestCase):
 
     def _resave_unchanged(self) -> int:
         """Save the plan exactly as it stands, and count the queries."""
-        from django.test.utils import CaptureQueriesContext
         from django.db import connection
+        from django.test.utils import CaptureQueriesContext
 
         document = document_for(self.floorplan)
         with CaptureQueriesContext(connection) as captured:
@@ -2012,7 +2012,7 @@ class FloorplanMarkerLinkedPinTests(TestCase):
 
     def test_document_for_prefers_the_linked_pins_own_name_and_style(self) -> None:
         """The pin is the freshest copy once it exists - it may have been
-        renamed or restyled from the pin detail page since this marker was
+        renamed or restyled from the Private Pin page since this marker was
         last saved here."""
         save_document(
             self.floorplan,

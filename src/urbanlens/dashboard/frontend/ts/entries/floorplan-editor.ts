@@ -87,7 +87,7 @@ type SelectionItem =
 /** Marker kinds that can join floors together. */
 
 const WALL_STYLE: Record<string, { color: string; weight: number; dashArray?: string }> = {
-    // Same blue as a building's boundary on the pin detail page - it plays
+    // Same blue as a building's boundary on the Private Pin page - it plays
     // the same role here: the building's own outline, not a property line
     // (that's "fence", below) and not a partition (that's "interior").
     exterior: { color: "#1d4ed8", weight: 5 },
@@ -136,7 +136,7 @@ const UNBOUND_FILL = { color: "#b0bec5", weight: 1, dashArray: "4 4", fillColor:
  * glyph blended into the map beneath it.
  */
 // A marker's icon/color prefer its linked detail pin's own customizations
-// (set via the pin detail page's detail-pin dialog - see Marker.icon/color)
+// (set via the Private Pin page's detail-pin dialog - see Marker.icon/color)
 // over the kind-based defaults, the same priority detailIcon() in
 // map-annotations.ts gives a plain detail pin.
 function markerIcon(marker: Marker, selected: boolean): L.DivIcon {
@@ -4215,7 +4215,7 @@ function boot(): void {
      * The controls are server-rendered once in the page and moved into view
      * rather than rebuilt per selection: the icon set and the palette live in
      * Python, and a copy of either here would be a second list to keep in step
-     * with the pin detail page - which is the thing this is meant to prevent.
+     * with the Private Pin page - which is the thing this is meant to prevent.
      *
      * Appearance is stored on the marker's linked detail pin, not on the
      * marker, so a marker styled here and the same pin styled from the pin page

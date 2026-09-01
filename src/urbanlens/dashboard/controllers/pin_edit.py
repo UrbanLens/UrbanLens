@@ -148,7 +148,7 @@ def _overview_context(pin: Pin) -> dict:
 
 
 def _pin_hero_oob(request, pin: Pin, *, linked_wiki_locations: list[Location]) -> str:
-    """Render the pin detail page hero as an out-of-band HTMX swap.
+    """Render the Private Pin page hero as an out-of-band HTMX swap.
 
     The hero (with its Community Wiki box) lives in base.html's
     ``{% block hero %}`` (see ``pages/location/index.html``), outside

@@ -269,7 +269,7 @@ Consequences worth knowing:
 ## The restructure suggestion is one dialog, and it is offered exactly once
 
 `services/pins/pin_restructure.py` answers two questions that are really one — "this pin's hierarchy
-doesn't match the ground" — so they share a single prompt on the pin detail page rather than
+doesn't match the ground" — so they share a single prompt on the Private Pin page rather than
 interrupting twice:
 
 1. buildings on this property with no child pin yet, and
@@ -346,7 +346,7 @@ Load-bearing details:
 
 ## Sub-pin data is never hidden by nesting - but each surface aggregates independently
 
-The pin detail page's "show sub pin details" toggle (`?children=1`) is not one mechanism - every
+The Private Pin page's "show sub pin details" toggle (`?children=1`) is not one mechanism - every
 aggregating view (map markers, photo gallery, visit history, and now Notes/comments) independently
 swaps its own queryset from `pin.<related>` to `<Model>.objects.filter(pin__in=Pin.objects.
 filter(pk=pin.pk).with_descendants())` when the flag is set, and independently threads

@@ -224,7 +224,7 @@ existing pieces.
 
 ### 2.8 The external-data pipeline: gateway → plugin → panel → cache → enrichment
 
-One architecture serves: on-demand pin-detail panels (Celery `panel_fetch` queue, 204-marker
+One architecture serves: on-demand Private Pin panels (Celery `panel_fetch` queue, 204-marker
 protocol for empty results, suppression windows on timeout), the hourly background enrichment
 drip (spends *leftover* rate-limit budget only, admin-tunable), name resolution
 (quality-gated `NameProvider` candidates with user-configurable priority), boundary provider
@@ -268,7 +268,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
 - **Worker capacity**: staging login timeouts were traced to worker saturation under load, not
   slow code. `WEB_CONCURRENCY` matters; long-running work belongs on Celery (`panel_fetch` for
   panels); anything added to the request path must be near-instant.
-- **Caching layers**: server API caches (per-Location, 7-day `LocationCache`), pin-detail
+- **Caching layers**: server API caches (per-Location, 7-day `LocationCache`), Private Pin panel
   freshness windows (UL-277 reports wrong "fresh" marking), client pin cache, saved-filter cache.
   When adding a cache, define: key scope (user!), invalidation trigger, and version bump story.
 - **Static/asset pipeline**: css minification (UL-366), smaller mobile css (UL-365), image/API
@@ -350,7 +350,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
   coverage targets in the repo.
 - **Integration/E2E** (UL-368): nothing exists today. The chiron dev server
   (`https://dev.urbanlens.org`) is the natural target for a Playwright-style smoke suite
-  (login → map load → pin create → pin detail → trip create).
+  (login → map load → pin create → Private Pin page → trip create).
 - **Review AI-created tests for uselessness** (UL-38) — inflated coverage from assertion-free or
   tautological tests corrupts the coverage signal everything above depends on.
 
@@ -407,7 +407,7 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
      away), since the page's own save logic is already correct on every committed change.
    - **Page overflows footer** — CSS; reproduce in a browser before touching it.
 
-6. **Pin-detail cache freshness** (UL-277) — items marked "fresh" after 10+ minutes;
+6. **Private Pin panel cache freshness** (UL-277) — items marked "fresh" after 10+ minutes;
    audit the freshness-window computation in `external_data.py`.
 7. ~~**Filter correctness**: unrated pin passing a rating filter (UL-270); sliders ignoring
    0/"unrated" (UL-296)~~ RESOLVED 2026-07-18 (`18d03c3d`) — `filter_by_criteria`'s min/max
@@ -563,7 +563,7 @@ These have most of their machinery already built:
    (`timezone=auto`, no separate timezone-lookup library needed) rather than `astral`, since the
    app already calls it as a weather fallback and this avoids a new dependency; fetched
    independently of whichever provider serves the temperature/condition forecast, since
-   OpenWeatherMap's 5-day endpoint has no sunrise/sunset field. Landed on the pin detail page's
+   OpenWeatherMap's 5-day endpoint has no sunrise/sunset field. Landed on the Private Pin page's
    weather panel only - trip planning integration is still open, tracked as follow-up.
 7. **Trip page pin-add parity** (UL-342) — map-click/coordinate/place-search add exists on the
    main map; port to trip context.

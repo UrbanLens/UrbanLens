@@ -2,7 +2,7 @@
 
 Pin-scoped views (``Pin*``) manage ``PinOwner``/``PinPropertySale`` - private
 to one pin, never shared with other users or the wiki, never intermingled
-with wiki data on the pin detail page. Wiki-scoped views (``Wiki*``) manage
+with wiki data on the Private Pin page. Wiki-scoped views (``Wiki*``) manage
 ``WikiOwner``/``WikiPropertySale`` - shared with everyone who has this
 location pinned, visible only on the wiki page, never on any individual
 pin's own card. This mirrors the ``PinAlias``/``WikiAlias`` split
@@ -163,7 +163,7 @@ def _parse_sale_price_and_date(request: HttpRequest) -> tuple[Decimal | None, da
 
 
 def _render_pin_ownership_panel(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the pin detail page's private Ownership card.
+    """Render the Private Pin page's private Ownership card.
 
     Ungated: ``PinOwner`` has no ``source`` field because private per-pin
     records are definitionally user-entered (see ``OwnerSource``'s docstring).
@@ -250,7 +250,7 @@ class PinOwnerRemoveView(LoginRequiredMixin, View):
 
 
 def _render_pin_sale_tab(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the pin detail page's private Sale History tab.
+    """Render the Private Pin page's private Sale History tab.
 
     Goes through the same row builder as the wiki tab purely so one template
     shape serves both; nothing is ever withheld here, since a pin's parties

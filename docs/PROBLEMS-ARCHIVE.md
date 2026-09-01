@@ -3479,7 +3479,7 @@ preserved history (`DirectMessage`, `ConversationKey`).
 
 ## RESOLVED 2026-08-18: importing buildings on a *pin* page 500'd on the wiki side
 
-Reported from staging with a traceback: adding several buildings from the pin detail page raised
+Reported from staging with a traceback: adding several buildings from the Private Pin page raised
 `ChildWikiLocationError: There is already a wiki marker at these exact coordinates` out of
 `mirror_buildings_to_wiki` -> `_location_for_child_wiki`, **after** the child pins had already been
 created. The user saw a 500 for work that had succeeded.
@@ -5155,7 +5155,7 @@ see: each module looks correct in isolation and the defect is in the seam.
   decides whether to refresh by comparing `Max(updated)` across the profile's pins - which a
   *deletion* cannot advance, so the poll is structurally blind to deletions; the only signal is
   the `ul_pins_dirty` flag. (3) `deletePinCascade` is a shared helper in `base.html` called from
-  both the map page and the pin detail page, and it did not set that flag - the map's call site
+  both the map page and the Private Pin page, and it did not set that flag - the map's call site
   set it separately, and the detail page's call site did not. So a pin deleted from its detail
   page stayed in the map's cache indefinitely, restored on every subsequent load, with a marker
   that 404s when clicked. It only self-corrected in the one case where the deleted pin happened
@@ -5540,7 +5540,7 @@ Twice in one session, so it is worth stating as a rule: **a module-level tuple o
 references is a testability trap** - it freezes the bindings at import and silently ignores
 patching. Name the functions inside the function that uses them.
 
-Verified clean: the pin detail page's street-view provider fan-out already isolates per provider
+Verified clean: the Private Pin page's street-view provider fan-out already isolates per provider
 and records an `ok=False` result for the admin debug overlay, which is the pattern the rest should
 match.
 
@@ -5549,7 +5549,7 @@ match.
 An AST sweep for `for <source|provider|panel|handler> in ...` loops that invoke the loop variable
 with no `try` inside found six candidates; two were real.
 
-- **`panel_readiness` (pin detail page)** - the most consequential of the three. It builds the tab
+- **`panel_readiness` (Private Pin page)** - the most consequential of the three. It builds the tab
   strip for the app's busiest page, and it calls `is_ready(pin)` per *bespoke* panel with no guard.
   Panels are the plugin extensibility surface, so a single plugin raising there returned a 500 for
   the whole pin page instead of affecting its own tab. Failures are now logged and treated as "not
@@ -5592,7 +5592,7 @@ page (flat in both label count and visit count).
 
 Two notes on getting the measurement right, both of which cost a cycle:
 
-- The first harness demanded a delta of exactly zero and reported *-2* on the pin detail page. That
+- The first harness demanded a delta of exactly zero and reported *-2* on the Private Pin page. That
   is warm-up, not a fix: the first request of a test populates per-process caches. The harness now
   measures a discarded warm-up call first and asserts one-sided - cost must not *grow*; a page
   getting cheaper is never the bug being hunted.

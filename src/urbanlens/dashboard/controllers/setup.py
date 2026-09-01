@@ -206,7 +206,7 @@ def _build_feature_groups(app_settings) -> list[dict]:
                 },
                 {
                     "name": "Google Street View",
-                    "description": "Street-level imagery on pin detail pages",
+                    "description": "Street-level imagery on Private Pin pages",
                     "env_var": "UL_GOOGLE_UNRESTRICTED_API_KEY",
                     "configured": bool(app_settings.google_unrestricted_api_key),
                 },

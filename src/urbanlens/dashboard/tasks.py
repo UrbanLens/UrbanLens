@@ -220,7 +220,7 @@ def generate_boundaries_for_location(location_id: int) -> bool:
     """Generate (or, if stale, refresh) the default property/building boundaries for a Location.
 
     Scheduled single-flight by ``schedule_location_boundary_generation`` (wiki
-    page, and the pin detail page's stale-refresh path) - the pin detail
+    page, and the Private Pin page's stale-refresh path) - the pin detail
     page's first-ever generation uses the "boundary" panel source instead,
     which calls the same ``generate_location_boundaries`` function.
 
@@ -564,7 +564,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     Runs Wikipedia and NPS lookups so that the first time a user opens the pin
     detail page the data is already cached.  Also migrates any Google Places
     details already held in the Django request cache into LocationCache so the
-    pin detail page can skip the Places Details API call.
+    Private Pin page can skip the Places Details API call.
 
     Args:
         location_id: PK of the Location to prefetch data for.
@@ -625,7 +625,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
             logger.exception("prefetch_location_external_data: NPS lookup failed for location %s", location_id)
 
     # Google Places - migrate from Django request cache into LocationCache so the
-    # pin detail page can display it without a fresh API call.
+    # Private Pin page can display it without a fresh API call.
     if google_place_id and LocationCache.get_fresh(location, "google_places") is None:
         try:
             from django.core.cache import cache as django_cache
@@ -3221,7 +3221,7 @@ def hard_delete_expired_accounts() -> int:
 def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = None) -> None:
     """Fetch one external-data panel's upstream data in the background.
 
-    Scheduled by ``external_data.schedule_panel_fetch`` when a pin detail page
+    Scheduled by ``external_data.schedule_panel_fetch`` when a Private Pin page
     finds a panel's store empty; the page polls until this task persists the
     result (LocationCache row, Boundary geometry column, or warmed slide caches).
 

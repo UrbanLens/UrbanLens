@@ -1,4 +1,4 @@
-"""Tests for the pin detail page hero: click-to-rename title, and the layout
+"""Tests for the Private Pin page hero: click-to-rename title, and the layout
 fix that stopped the eyebrow/title/subtitle/back-link/wiki-box from
 overlapping (see _pin_detail_hero_body.html, _page_hero.scss).
 """

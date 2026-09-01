@@ -1,6 +1,6 @@
 """Scheduled background enrichment of Locations (and thereby pins and wikis).
 
-Most external data is fetched lazily - a pin detail page schedules a panel
+Most external data is fetched lazily - a Private Pin page schedules a panel
 fetch, a new wiki triggers :func:`~urbanlens.dashboard.tasks.enrich_wiki_location`,
 and so on. A small set of high-value data (official names, aliases, street
 addresses, and property/building boundaries) is worth having for *every*

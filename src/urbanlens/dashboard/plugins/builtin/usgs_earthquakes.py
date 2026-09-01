@@ -77,7 +77,7 @@ class UsgsEarthquakePlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "usgs_earthquakes"
     verbose_name: ClassVar[str] = "USGS Earthquake Hazards"
-    description: ClassVar[str] = "Shows recent nearby seismic activity as structural-risk context on the pin detail page, sourced through REData's natural-hazards registry (USGS FDSN event catalog)."
+    description: ClassVar[str] = "Shows recent nearby seismic activity as structural-risk context on the Private Pin page, sourced through REData's natural-hazards registry (USGS FDSN event catalog)."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:

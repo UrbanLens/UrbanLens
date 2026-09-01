@@ -1,4 +1,4 @@
-"""How many requests the pin detail page fires the moment it opens.
+"""How many requests the Private Pin page fires the moment it opens.
 
 The integration suite found this page exhausting the database connection pool:
 it loads its enrichment panels with `hx-trigger="load"`, so opening it issues
@@ -32,7 +32,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 
-#: The most load-triggered HTMX requests the pin detail page may fire.
+#: The most load-triggered HTMX requests the Private Pin page may fire.
 #:
 #: Was 53 at the time of writing; lowered to **48** when the Visits/Photos/
 #: Article/Notes/Edit-History subnav tabs switched from `hx-trigger="load"` to
@@ -72,7 +72,7 @@ class PinDetailFanoutBudgetTests(TestCase):
 
     def _rendered(self) -> str:
         response = self.client.get(reverse("pin.details", kwargs={"pin_slug": self.pin.slug}))
-        self.assertEqual(response.status_code, 200, "the pin detail page did not render, so nothing was counted")
+        self.assertEqual(response.status_code, 200, "the Private Pin page did not render, so nothing was counted")
         return response.content.decode()
 
     def test_the_page_does_not_fire_more_requests_on_load_than_its_budget(self) -> None:
@@ -82,7 +82,7 @@ class PinDetailFanoutBudgetTests(TestCase):
         self.assertLessEqual(
             count,
             MAX_LOAD_TRIGGERED_REQUESTS,
-            f"the pin detail page now fires {count} requests the moment it opens, over its budget of "
+            f"the Private Pin page now fires {count} requests the moment it opens, over its budget of "
             f"{MAX_LOAD_TRIGGERED_REQUESTS}. Each one takes its own database connection at the same moment as all "
             "the others, which is what exhausted the pool on the dev deployment. Load the new one on demand, or "
             "make the case for raising the budget.",

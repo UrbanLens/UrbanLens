@@ -163,7 +163,7 @@ def _wiki_gallery_images(request: HttpRequest, wiki: Wiki, profile: Profile):
 
 
 class PinGalleryView(LoginRequiredMixin, View):
-    """HTML gallery panel for the pin detail page (loaded via HTMX)."""
+    """HTML gallery panel for the Private Pin page (loaded via HTMX)."""
 
     def _get_context(self, request: HttpRequest, pin_slug: str) -> dict:
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
