@@ -21,6 +21,13 @@ import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, recluster
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 import { createPhotoClusterGroup, makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize, tagPhotoMarker } from "../shared/photo-map";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
+import { openMediaLightbox } from "../shared/media-lightbox";
+
+// Exposed at module scope, not inside the page-init function below: this
+// needs no page-specific state (it reads the clicked tile's own containing
+// grid fresh from the DOM), so it's available as soon as this shared bundle
+// loads - both pages' pin_media_items.html tiles call it directly.
+window.mediaOpenLightbox = openMediaLightbox;
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");

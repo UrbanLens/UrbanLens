@@ -633,12 +633,18 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         rendered_items = [
             {
-                "item": MediaItem(url=img.image.url, thumb_url=img.image.url, caption=img.caption or "", source="My Photos", page_url=img.image.url),
+                "item": MediaItem(url=img.image.url, thumb_url=img.image.url, caption=img.caption or "", source="My Photos", page_url=img.image.url, author=img.author or ""),
                 "key": f"photo-{img.pk}",
                 "is_relevant": None,
                 "image_id": img.pk,
                 "lat": img.latitude,
                 "lng": img.longitude,
+                # Always true - this preview is already scoped to the viewer's
+                # own pin (see the queryset above) - but set explicitly rather
+                # than left absent, so pin_media_items.html's data-mine reads
+                # the same way regardless of which page rendered the tile.
+                "is_mine": True,
+                "copied_from_label": img.copied_from_label or "",
             }
             for img in images
         ]

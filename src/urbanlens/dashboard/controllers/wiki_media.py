@@ -118,6 +118,11 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     # a still-transient item has no REData photo_id to
                     # attach to (see WikiMediaVoteView.post).
                     "image_id": local_image.pk if local_image else None,
+                    # Ownership isn't meaningful for an external-provider result
+                    # (explicitly None, not just absent - see the "photos"
+                    # branch below and pin_media_items.html's data-mine, which
+                    # needs to tell "no data" apart from "definitely not mine").
+                    "is_mine": None,
                 },
             )
 
@@ -146,13 +151,18 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
             key = media_item_key(url)
             rendered_items.append(
                 {
-                    "item": MediaItem(url=url, thumb_url=url, caption=img.caption or "", source="Photos", page_url=url),
+                    "item": MediaItem(url=url, thumb_url=url, caption=img.caption or "", source="Photos", page_url=url, author=img.author or ""),
                     "key": key,
                     "is_relevant": my_marks.get(key),
                     "vote_score": scores.get(key, 0),
                     "image_id": img.pk,
                     "lat": img.latitude,
                     "lng": img.longitude,
+                    # Drives the lightbox's "Copy to my Private Pin" action
+                    # (isMine === false) and its "Copied from..." line - see
+                    # pin_media_items.html and shared/media-lightbox.ts.
+                    "is_mine": img.profile_id == profile.pk,
+                    "copied_from_label": img.copied_from_label or "",
                     "_redata_confidence": img.redata_confidence,
                     "_created": img.created,
                 },

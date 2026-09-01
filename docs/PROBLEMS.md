@@ -5345,7 +5345,7 @@ infers its own precise type instead. Nothing indexes `DEFAULT_HOTKEYS` with a dy
 `Object.entries()` and lookups into `loadHotkeys()`'s own already-generic return value), so
 nothing needed the wider type in the first place.
 
-## OPEN 2026-09-01: clicking any photo in the wiki page's Media section throws - no lightbox ever opens
+## RESOLVED 2026-09-01: clicking any photo in the wiki page's Media section throws - no lightbox ever opens
 
 Found while wiring a wiki-photo "copy to my pin" feature into the lightbox. `pin_media_items.html`
 (shared by the pin and wiki pages' Media sections) renders every tile with
@@ -5363,9 +5363,75 @@ worth checking whether the Media section's own provider/source-tab filtering als
 visibility issue independent of the missing lightbox opener, once that's fixed and items are
 actually clickable to test against.
 
-Not fixed here - out of scope for the copy-to-pin feature this was found while building, and fixing
-it means either porting a wiki-scoped version of `mediaOpenLightbox` (it currently assumes
-pin-detail-page-only affordances - see `location/index.html`'s own copy for what it wires up) or
-sharing the pin page's implementation, which needs its own design pass. The wiki page's Photos tab
-(`_photo_gallery.html`'s "Manage" sub-view, `WikiGalleryView`) and the Albums page both use the
-correctly-shared lightbox and are unaffected.
+**Fix**: extracted the pin page's previously inline, page-local `window.mediaOpenLightbox` into a
+new shared module (`frontend/ts/shared/media-lightbox.ts`), exposed identically by
+`entries/map-annotations.ts` (loaded by both the pin and wiki pages) instead of either page's own
+inline `<script>` - so both pages get the same opener by construction rather than by remembering to
+duplicate it. It reads the containing grid by the shared `.media-gallery-grid` class rather than
+either page's own id, and gates the lightbox's relevance thumbs-up/down on the grid actually
+carrying a `data-relevance-url` (only the pin page's grid does - the wiki has its own separate
+per-tile vote UI instead), which the old pin-only implementation never needed to distinguish.
+Separately, `_photo_lightbox.html` is now included eagerly at the top of `wiki.html` instead of only
+inside the wiki's lazily-htmx-loaded "Manage" gallery partial - the Media section's tiles need the
+dialog to exist before "Manage" is ever opened. Ownership/copy-provenance now flows through explicit
+`is_mine`/`copied_from_label` keys added server-side (`wiki_media.py`, `pin.py`), including an
+explicit `is_mine: None` for external-provider results (never-materialized search results, where
+ownership isn't meaningful) - a plain missing key would have been indistinguishable from `None` at
+the Python level but resolves to `''` in Django's template layer, which would have made
+`{% if entry.is_mine is not None %}` wrongly true for every external result.
+
+Added 14 unit tests for the new module (`media-lightbox.test.ts`) - it had zero coverage before,
+which is exactly how the original bug shipped unnoticed in the first place.
+
+**The `getBoundingClientRect().height === 0` question above is a confirmed testing artifact, not a
+product bug.** Re-tested live once the lightbox worked: clicking the wiki's "Photos" subnav tab
+(`data-tab="photos"`) actually opens the unrelated **Albums** panel, which hides "Overview" - and
+`#wiki-media-section`/`#wiki-media-grid` live inside Overview, not Photos. In normal page flow
+(default Overview tab, no extra clicks) Media-section tiles render at real size (257x254,
+`display:flex`) and are genuinely clickable. Whatever tested this originally almost certainly had
+the wrong tab open.
+
+**A second, real bug found live while verifying the fix above, also fixed here**: a copied photo's
+author never rendered in the Media-gallery lightbox, even though `Image.author` was populated
+correctly by `copy_wiki_photo_to_pin` - directly undercutting half of the original feature request's
+own example ("Jill should see it was copied by **and authored by** John"). Root cause:
+`services/apis/assets/base.py`'s `MediaItem` dataclass (the shared shape for every Media-gallery
+tile, external-provider results included) had no `author` field at all, so
+`frontend/ts/shared/media-lightbox.ts` hardcoded `author: ""` for every item on this path - a
+separate, older lightbox path (`_photo_gallery.html`/`photo-tile.ts`, used by the Photos tab and
+Albums) was unaffected; only this newly-shared-correctly Media-gallery path was silently dropping
+it. Fixed by adding `author: str = ""` to `MediaItem` (populated from `Image.author` at both
+Image-backed call sites, left blank for external-provider results exactly as before) and threading
+it through `pin_media_items.html`'s `data-media-author` and the TS parser, with a regression test.
+
+Verifying this fix also surfaced a deployment-only gotcha, unrelated to the code itself: this dev
+stack's compiled static assets live in a Docker volume that only `manage.py collectstatic`
+populates, so a `docker cp` of a fresh frontend build into the container's source tree (which is
+sufficient for Python) silently does not reach what's actually served. Documented in
+`CLAUDE.local.md`'s Docker section with the correct rebuild+collectstatic sequence.
+
+## OPEN 2026-09-01: two more pre-existing mypy errors, plus one found-and-fixed in the same run
+
+A full-tree `mypy src/urbanlens` run while closing out the Media-lightbox fix above found 15
+errors, not the 13 the 2026-08-31 "11 pre-existing mypy errors" entry (above) accounted for
+(11 there + the 2 logged as their own separate entries). Cross-checked line by line:
+
+- 12 of the 15 are exactly the ones already covered by those existing entries (line numbers in
+  `tasks.py`/`checks.py` shifted by a few lines from unrelated intervening edits, but same
+  function, same error).
+- One, `services/undo/base.py:67` (`UndoHandler.redo_delete`), was new but is now **fixed**:
+  `cls.model.objects.filter(pk__in=pks).delete()` doesn't type-check because django-stubs only
+  adds `.objects` to a concrete model subclass via its mypy plugin, never to a bare `type[Model]`
+  classvar like `UndoHandler.model`. Swapped to `cls.model._default_manager` (`# noqa: SLF001`),
+  which django-stubs types directly on `Model` for exactly this reason - the same pattern already
+  used in `controllers/account.py:681`. Verified via the full undo/redo hypothesis suite
+  (`test_undo.py`, `test_undo_round_trip.py`, `test_undo_redo_is_single_use.py`,
+  `test_undo_photo_reattachment_coverage.py` - 40 passed, 3 subtests) - unchanged behavior, one
+  fewer mypy error (15 -> 14).
+- Two are genuinely new and left open, in files unrelated to any work this session touched:
+  - `services/photos/photo_enrichment.py:75` (`enriched_max_dimension`) - `{ImageSource.X: n, ...}.get(source, DEFAULT)` doesn't match any `dict.get` overload; the dict literal likely infers a
+    `Literal`-keyed type narrower than the `ImageSource` parameter `.get` is called with. Probably
+    a one-line fix (annotate the literal `dict[ImageSource, int]`), not investigated further.
+  - `services/visits/visits.py:222` (`resolve_location_for_point`) - `google_place.cached_place_name.strip()` after `if is_meaningful_name(google_place.cached_place_name):` - mypy can't see that
+    `is_meaningful_name` narrows `str | None` to `str`, since it's a plain `bool`-returning function
+    rather than a `TypeGuard`. Likely fix: type it `TypeGuard[str]`; not investigated further.

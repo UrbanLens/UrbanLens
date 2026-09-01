@@ -64,7 +64,11 @@ class UndoHandler(abc.ABC):
         pks = payload.get("restored_pks") or []
         if cls.model is None or not pks:
             return
-        cls.model.objects.filter(pk__in=pks).delete()
+        # _default_manager, not objects: django-stubs only types `objects` on
+        # a concrete model subclass (via its mypy plugin), not on a `type[Model]`
+        # classvar like this one - `_default_manager` is the same manager,
+        # typed directly on the base class for exactly this situation.
+        cls.model._default_manager.filter(pk__in=pks).delete()  # noqa: SLF001
 
     @classmethod
     def undo_mutation(cls, payload: dict[str, Any]) -> None:  # noqa: ARG003 - interface; override uses payload

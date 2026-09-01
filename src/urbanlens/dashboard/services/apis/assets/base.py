@@ -50,6 +50,10 @@ class MediaItem:
             and the gallery needs that to decide whether the item has to be
             rendered server-side to be displayable at all (see
             ``services.media.previews``).
+        author: Who to credit for the photo itself, distinct from ``source``
+            (the provider/archive). Empty for providers that don't expose a
+            per-item credit; populated for a wiki-shared ``Image`` row from
+            ``Image.author`` (see ``services.photos.wiki_copy``).
     """
 
     url: str
@@ -58,6 +62,7 @@ class MediaItem:
     source: str
     page_url: str = ""
     content_type: str = ""
+    author: str = ""
 
 
 class MediaProvider(Gateway, ABC):

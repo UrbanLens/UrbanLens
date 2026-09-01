@@ -35,15 +35,25 @@ export interface LightboxItem {
     sourceUrl: string;
     sourceName: string;
     takenAt: string;
-    imageId: number;
+    // Gallery/album items always have a real Image row; Media-gallery items
+    // (see media-lightbox.ts) don't until one is materialized - null there.
+    imageId: number | null;
     uuid: string;
     isMine: boolean;
     canRelevance: boolean;
-    relevant: null;
+    // null for every gallery/album item (relevance marking isn't a concept
+    // there); a real tri-state for Media-gallery items, which can be voted/
+    // marked relevant or not.
+    relevant: boolean | null;
     latitude: number | null;
     longitude: number | null;
     mapHidden: boolean;
     copiedFromLabel: string;
+    // Only ever set by Media-gallery items (see media-lightbox.ts) - which
+    // provider's result this is, and its dedupe key within that provider.
+    // Gallery/album items leave both unset.
+    mediaSource?: string;
+    mediaKey?: string;
 }
 
 /** Parse a gallery tile's data attributes into a PhotoTile. */

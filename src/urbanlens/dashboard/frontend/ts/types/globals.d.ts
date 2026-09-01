@@ -3,6 +3,8 @@
  * need to interoperate with. These are intentionally minimal - just the
  * surface actually called from the modules in this project.
  */
+import type { LightboxItem } from "../shared/photo-tile";
+
 interface ToastrOptions {
     timeOut?: number;
     closeButton?: boolean;
@@ -73,7 +75,11 @@ declare global {
         // shared/album-items.ts; called from the server-rendered Media gallery
         // tiles, which that module doesn't own.
         albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
-        galleryOpenLightboxItem?: (list: unknown[], idx: number) => void;
+        galleryOpenLightboxItem?: (list: LightboxItem[], idx: number) => void;
+        // Defined by shared/media-lightbox.ts, exposed by entries/map-annotations.ts
+        // (loaded identically by the pin and wiki pages); called from the Media
+        // gallery tiles pin_media_items.html renders on both.
+        mediaOpenLightbox?: (thumbBtn: HTMLElement) => void;
         // Defined by pages/vault/photos.html's own inline script (upload/delete/
         // lightbox are plain page JS, not a module); called from
         // shared/vault-photo-grid.ts's fetched tiles.
