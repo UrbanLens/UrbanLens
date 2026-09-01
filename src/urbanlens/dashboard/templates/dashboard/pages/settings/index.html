@@ -544,7 +544,7 @@
                 <i class="material-symbols-outlined">add_photo_alternate</i>
                 Google Photos
             </h3>
-            <p class="settings-section-desc">Connect Google Photos to pick photos to import from the pin detail page.</p>
+            <p class="settings-section-desc">Connect Google Photos to pick photos to import from your Private Pin page.</p>
             <div hx-get="{% url 'settings.google_photos' %}" hx-trigger="load" hx-swap="outerHTML">
                 <p class="loading-text">Loading...</p>
             </div>
@@ -1351,7 +1351,7 @@
                 </div>
 
                 <p class="settings-help" style="margin:0.75rem 0 0;">
-                    AI can also read external links on your pin detail pages to fill in supported fields -
+                    AI can also read external links on your Private Pin pages to fill in supported fields -
                     look for the <i class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem;vertical-align:middle;">auto_awesome</i>
                     button next to each link. Results are reviewable on the page linked from each completion notification.
                 </p>

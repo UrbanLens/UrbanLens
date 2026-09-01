@@ -413,7 +413,7 @@ Domains covered, and the question each spec file is really asking:
 | `services/media-storage` | Do uploaded bytes survive leaving the process, and does the URL handed back actually serve them? |
 | `services/*` | Valkey, Celery, Channels, the static pipeline, headers, third-party origins. |
 | `ui/trips` | Does a trip page render the join, including the empty case? |
-| `ui/*` | Sign-in, the map, navigation, pin detail. |
+| `ui/*` | Sign-in, the map, navigation, the Private Pin page. |
 | `security/assumptions` | Are the two accounts two people, and can each still read their own rows? (If this is red, ignore the rest of `security/`.) |
 | `security/authorization` | Does another account's pin, list, trip, label, filter, photo, check-in or undo entry look like it never existed - and can they not write it either? |
 | `security/isolation` | Do search, the map JSON, HTML, photo bytes and unearned wikis stay scoped to the caller? |

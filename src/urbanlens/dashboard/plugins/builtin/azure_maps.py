@@ -143,7 +143,7 @@ class AzureMapsPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "azure_maps"
     verbose_name: ClassVar[str] = "Azure Maps"
-    description: ClassVar[str] = "Microsoft Azure Maps integration: reverse-geocoded address and nearby POI details on the pin detail page, and place-name candidates. Requires an Azure Maps subscription key."
+    description: ClassVar[str] = "Microsoft Azure Maps integration: reverse-geocoded address and nearby POI details on the Private Pin page, and place-name candidates. Requires an Azure Maps subscription key."
     author: ClassVar[str] = "UrbanLens"
     # Alongside the other name-resolution plugins (Google Maps is 10, Google
     # Places is 10); Azure sits just after them.

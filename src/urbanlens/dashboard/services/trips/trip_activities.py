@@ -278,7 +278,7 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
                 defaults={"official_name": name or "Activity Location"},
             )
             # Wikis are user-created only; a trip activity location gets one
-            # when someone explicitly creates it from a pin detail page.
+            # when someone explicitly creates it from a Private Pin page.
             return location, None
         except (ValueError, TypeError):
             pass

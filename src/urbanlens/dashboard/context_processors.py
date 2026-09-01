@@ -136,7 +136,7 @@ def add_demo_context(request: HttpRequest) -> dict[str, object]:
 
 
 #: URL-name prefixes that belong to a nav-bar section other than their own, e.g.
-#: pin detail pages (``pin.*``) are reached from the map and should keep "Map" active.
+#: Private Pin pages (``pin.*``) are reached from the map and should keep "Map" active.
 _NAV_SECTION_ALIASES = {"pin": "map", "spotguessr": "games", "trivia": "games"}
 
 

@@ -2,12 +2,12 @@
 
 Three user-facing aggregates fan out to independently-registered contributors:
 the Memories feed (covered in ``test_memories_source_isolation``), the Journal,
-and the pin detail page's panel readiness map. Each is an advertised
+and the Private Pin page's panel readiness map. Each is an advertised
 extensibility seam - "add one function/plugin and nothing else changes" - which
 is exactly what makes unguarded fan-out expensive: a bug in one contributor takes
 out every other contributor's output along with the page.
 
-The panel one matters most. ``panel_readiness`` builds the pin detail page's tab
+The panel one matters most. ``panel_readiness`` builds the Private Pin page's tab
 strip, and panels are the plugin surface, so a single plugin raising in
 ``is_ready()`` returned a 500 for the app's busiest page rather than affecting its
 own tab.

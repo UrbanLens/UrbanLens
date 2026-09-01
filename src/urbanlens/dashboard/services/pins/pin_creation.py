@@ -363,7 +363,7 @@ def create_pin_for_profile(
             logger.warning("Failed to link Google Place %s", google_place_id, exc_info=True)
 
     # Pre-warm LocationCache for Wikipedia, NPS, and Google Places, plus the
-    # web-search results cache, so the pin detail page doesn't need to hit the
+    # web-search results cache, so the Private Pin page doesn't need to hit the
     # APIs on first load.
     from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 

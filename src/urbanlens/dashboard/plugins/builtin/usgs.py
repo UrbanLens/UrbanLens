@@ -1,4 +1,4 @@
-"""USGS plugin: historical topographic map panel on the pin detail page."""
+"""USGS plugin: historical topographic map panel on the Private Pin page."""
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ class UsgsPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "usgs"
     verbose_name: ClassVar[str] = "USGS Historical Topo Maps"
-    description: ClassVar[str] = "Shows USGS Historical Topographic Map Collection maps near a pin on the pin detail page. USA only."
+    description: ClassVar[str] = "Shows USGS Historical Topographic Map Collection maps near a pin on the Private Pin page. USA only."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

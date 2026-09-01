@@ -127,25 +127,41 @@ async function afterServerChange(): Promise<void> {
     window.location.reload();
 }
 
+// Both the click handlers and the Ctrl+Z/Ctrl+Shift+Z shortcut funnel through
+// this one function for the server-backed provider (see activeProvider below),
+// so guarding here covers a rapid double-click and a held-down shortcut alike.
+// The backend already serializes a genuine double-submit correctly (the loser
+// gets a 410/"already restored" style error), but a same-tab double-click was
+// still sending a second real request for what the user experienced as one
+// action - which surfaced as a confusing error toast for a redundant click,
+// not any actual corruption.
+let requestInFlight = false;
+
 async function postStack(which: "undo" | "redo"): Promise<void> {
+    if (requestInFlight) return;
     const url = stackUrl(which);
     if (!url) return;
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "X-CSRFToken": getCsrfToken(), "X-Requested-With": "XMLHttpRequest" },
-    });
-    let data: UndoStackState & { ok?: boolean; error?: string } | null = null;
+    requestInFlight = true;
     try {
-        data = (await response.json()) as UndoStackState & { ok?: boolean; error?: string };
-    } catch {
-        data = null;
+        const response = await fetch(url, {
+            method: "POST",
+            headers: { "X-CSRFToken": getCsrfToken(), "X-Requested-With": "XMLHttpRequest" },
+        });
+        let data: UndoStackState & { ok?: boolean; error?: string } | null = null;
+        try {
+            data = (await response.json()) as UndoStackState & { ok?: boolean; error?: string };
+        } catch {
+            data = null;
+        }
+        if (data) applyServerState(data);
+        if (!response.ok) {
+            toast.error(data?.error || (which === "undo" ? "Could not undo." : "Could not redo."));
+            return;
+        }
+        await afterServerChange();
+    } finally {
+        requestInFlight = false;
     }
-    if (data) applyServerState(data);
-    if (!response.ok) {
-        toast.error(data?.error || (which === "undo" ? "Could not undo." : "Could not redo."));
-        return;
-    }
-    await afterServerChange();
 }
 
 function setHidden(node: HTMLElement | null, hidden: boolean): void {
@@ -272,6 +288,7 @@ export function resetUndoBarForTests(): void {
     localProvider = null;
     serverState = { can_undo: false, can_redo: false, undo_label: null, redo_label: null };
     installed = false;
+    requestInFlight = false;
     window.clearTimeout(refreshTimer);
     document.removeEventListener("keydown", onKeydown);
     window.removeEventListener("resize", placeBar);

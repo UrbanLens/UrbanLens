@@ -38,7 +38,7 @@ class SiteFeature(TextChoices):
     # which costs meaningfully more CPU than a photo upload - kept as its own
     # grant for the same reason as VIDEO_UPLOADS.
     DOCUMENT_UPLOADS = "document_uploads", "Document uploads"
-    # Nearby-facility/feature research tabs on the pin detail page - separate
+    # Nearby-facility/feature research tabs on the Private Pin page - separate
     # from each plugin's own unconditional "data about this exact pin" card,
     # which everyone gets. Today exactly one source declares this
     # (EpaEchoNearbyPanelSource, EPA's nearby-regulated-facilities list); the

@@ -162,7 +162,7 @@ Templates must receive already-concealed context; none of these should contain a
 - `pages/location/wiki.html:513-530` — the recently-viewed localStorage entry writes `wiki.name` into the viewer's browser and resurfaces it on the home-page widget, escaping the server render entirely. Write the concealed name.
 - `pages/location/wiki.html:601-609` `sortByVotes()` — must be a no-op (§3).
 - `partials/wiki/_boundary_vote_dialog.html:147-154` — the auto-open timer, gated on `boundary_vote.auto_open`.
-- `partials/pins/pin_media_items.html:3` — the `debug` block. Inert on the wiki today (`WikiMediaProviderView` passes no `debug`), but the template is shared with pin detail, where `debug.query` is a user-authored pin name. Never render it on a wiki response, concealed or not.
+- `partials/pins/pin_media_items.html:3` — the `debug` block. Inert on the wiki today (`WikiMediaProviderView` passes no `debug`), but the template is shared with the Private Pin page, where `debug.query` is a user-authored pin name. Never render it on a wiki response, concealed or not.
 - `frontend/ts/entries/map-annotations.ts:957-961` — `refreshPanelHeader` computes `total = detailPins.length + markupItems.length + photoPanelItems.length`, writes "N Items", and hides the edge handle on `total ? "" : "none"`. Client-side, after the payloads land. It falls out correctly *only if* concealment was applied at the payload layer. Same file, `:2252-2258`: `setMainMarkerVisible(!boundaryHasRealPolygon("property"))` and the one-shot `fitBounds` frame the map to a possibly community-drawn polygon.
 
 ### 1.6 Write-side suppression

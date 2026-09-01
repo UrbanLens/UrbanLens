@@ -1,4 +1,4 @@
-"""Wikipedia plugin: article summary panel on the pin detail page."""
+"""Wikipedia plugin: article summary panel on the Private Pin page."""
 
 from __future__ import annotations
 
@@ -211,7 +211,7 @@ class WikipediaPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "wikipedia"
     verbose_name: ClassVar[str] = "Wikipedia"
-    description: ClassVar[str] = "Shows the best-matching Wikipedia article for a pin's location on the pin detail page."
+    description: ClassVar[str] = "Shows the best-matching Wikipedia article for a pin's location on the Private Pin page."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

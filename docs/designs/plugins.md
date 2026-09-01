@@ -19,7 +19,7 @@ class NpsPlugin(UrbanLensPlugin):
 
     name = "nps"                        # unique slug (required)
     verbose_name = "National Park Service"
-    description = "Shows nearby US national park information on the pin detail page."
+    description = "Shows nearby US national park information on the Private Pin page."
     author = "UrbanLens"
     version = "1.0"
     order = 100                         # sort key for aggregated contributions
@@ -29,7 +29,7 @@ class NpsPlugin(UrbanLensPlugin):
         return {"nps": ServiceDefaults(display_name="National Park Service API", calls_per_minute=10, calls_per_day=500, usa_only=True)}
 
     def get_panel_sources(self):
-        """Pin-detail panels (PanelSource subclasses)."""
+        """Private Pin panels (PanelSource subclasses)."""
         return [NpsPanelSource()]
 ```
 
@@ -38,7 +38,7 @@ class NpsPlugin(UrbanLensPlugin):
 | Method | Contributes |
 | --- | --- |
 | `get_service_defaults()` | Default `ApiRateLimit` config per service key (rate limits, USA-only flag, notes) |
-| `get_panel_sources()` | `PanelSource` panels on the pin detail page (Wikipedia-style sections and Media-gallery providers) |
+| `get_panel_sources()` | `PanelSource` panels on the Private Pin page (Wikipedia-style sections and Media-gallery providers) |
 | `get_satellite_providers()` | `SatelliteViewProvider` gateways for the satellite carousel |
 | `get_street_view_providers()` | `StreetViewProvider` gateways for the street-view carousel |
 | `get_name_providers()` | `NameProvider` sources of place-name candidates for a location (see below) |
@@ -62,7 +62,7 @@ comes from:
 
 | Base class | Use when | Must declare |
 | --- | --- | --- |
-| `InfoPanelSource` | The panel is its own section on the pin detail page (the common case) | `key`, `cache_source`, `section_id`, `icon`, `title`, `fetch`, `render_context` |
+| `InfoPanelSource` | The panel is its own section on the Private Pin page (the common case) | `key`, `cache_source`, `section_id`, `icon`, `title`, `fetch`, `render_context` |
 | `CoordinateGatedInfoPanelSource` | Same, but meaningless without coordinates | the above; optionally `geo_boundary` to restrict it to a region |
 | `GalleryMediaSource` | The panel is a source tab inside the combined Media gallery | `key`, `cache_source`, `fetch`, `media_items` |
 | `SlidesPanelSource` | The panel feeds the satellite/street-view carousels | `key`, `section_id`, `icon`, `title`, `collect(lat, lng)`; readiness is a cache flag, not a `LocationCache` row |

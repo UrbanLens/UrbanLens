@@ -578,7 +578,7 @@ class FloorplanMarker(FloorplanItem):
             ``linked_pin`` equivalent - a detail pin has no notion of "storey"
             to link across.
         linked_pin: The detail pin (``Pin.parent_pin``-child) this marker
-            *is*, elsewhere on the site - the pin detail page, its map, its
+            *is*, elsewhere on the site - the Private Pin page, its map, its
             own edit/delete UI. Null only for markers on a wiki-published
             copy of a plan (see ``services.floorplans.serialization``),
             which has no owning pin to parent one under. ``CASCADE`` so

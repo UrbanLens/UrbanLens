@@ -1,4 +1,4 @@
-"""Admin-only observability for external-API results on the pin detail page.
+"""Admin-only observability for external-API results on the Private Pin page.
 
 Tracks, per rendered result, what query/coordinates produced it and whether
 it was served from cache -- surfaced client-side via the Dev Tools toolbar.

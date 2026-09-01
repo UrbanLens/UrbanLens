@@ -234,9 +234,3 @@ export function bindPhotoContextMenu(): void {
         if (event.key === "Escape") closeMenu();
     });
 }
-
-declare global {
-    interface Window {
-        galleryOpenLightboxItem?: (list: unknown[], idx: number) => void;
-    }
-}

@@ -1,4 +1,4 @@
-"""Tests for the pin detail page's "Organization" combined label/list dialog.
+"""Tests for the Private Pin page's "Organization" combined label/list dialog.
 
 Covers three related bugs fixed together:
 
@@ -23,7 +23,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 
 
 class PinOrganizeDialogTests(TestCase):
-    """The pin detail page's combined Organize ("+") dialog."""
+    """The Private Pin page's combined Organize ("+") dialog."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -169,7 +169,7 @@ class LabelCreateAndAddTests(TestCase):
 
 
 class CustomFieldsAddFormVisibilityTests(TestCase):
-    """The pin detail page's Custom Fields "+" form should start hidden."""
+    """The Private Pin page's Custom Fields "+" form should start hidden."""
 
     def setUp(self) -> None:
         super().setUp()

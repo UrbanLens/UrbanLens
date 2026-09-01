@@ -122,7 +122,7 @@ and the correction is the useful part: `can_request` admits `Declined` and
 Both now have tests asserting the refusal, sitting next to the re-orientation so
 nobody widens one without reading why the other is narrow.
 
-### 3. One pin-detail page load opens ~30 database connections at once
+### 3. One Private Pin page load opens ~30 database connections at once
 
 **Found:** the panel fan-out exhausted `max_connections`, producing 500s across
 whichever panels arrived when the pool was full.

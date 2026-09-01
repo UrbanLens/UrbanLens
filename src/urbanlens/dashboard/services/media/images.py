@@ -198,7 +198,7 @@ def apply_image_map_update(image: Image, body: bytes) -> dict[str, Any]:
         "longitude": str(image.longitude) if image.longitude is not None else None,
         "map_hidden": bool(image.map_hidden),
     }
-    if image.profile_id:
+    if image.profile is not None:
         from urbanlens.dashboard.services.undo.mutations import stash_photo_fields
 
         stash_photo_fields(image.profile, image, before=before, after=after)
@@ -1313,6 +1313,7 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         "author": img.author or "",
         "source_url": img.source_url or "",
         "copyright": img.copyright or "",
+        "copied_from_label": img.copied_from_label or "",
         "taken_at": effective_taken_at.isoformat() if effective_taken_at else None,
         # What the pin gallery's delete prompt needs to know: whether removing
         # this photo from a pin would also take it off a community wiki, and

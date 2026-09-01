@@ -528,7 +528,7 @@ class Profile(abstract.PublicDashboardModel):
     # are private to a pin's owner, community wikis are not).
     auto_create_pin_article_from_wikipedia = BooleanField(default=True, help_text="When a Wikipedia article is matched to one of your pins, automatically start that pin's article from it (if it doesn't have one yet).")
 
-    # Whether pin detail pages may suggest reorganizing a pin's hierarchy -
+    # Whether Private Pin pages may suggest reorganizing a pin's hierarchy -
     # creating a child pin per building on a multi-building property, and
     # nesting existing top-level pins that fall inside the property boundary.
     # Off silences the suggestion everywhere at once; declining it on a single
@@ -571,12 +571,12 @@ class Profile(abstract.PublicDashboardModel):
     # field, so only genuinely new accounts ever see it.
     map_pin_suggestions_intro_seen = BooleanField(default=False, help_text="Internal: whether the new-user pin-suggestions intro dialog has been shown on the map.")
 
-    # Default ordering for the pin detail page's Media gallery. "relevant"
+    # Default ordering for the Private Pin page's Media gallery. "relevant"
     # surfaces items this user has explicitly marked relevant first (falling
     # back to arrival order); "recent" ignores relevance marks entirely.
     media_gallery_sort = CharField(max_length=20, choices=[("relevant", "Relevant first"), ("recent", "Most recent")], default="relevant")
 
-    # User-dragged height (px) for the pin detail page's map, from the resize
+    # User-dragged height (px) for the Private Pin page's map, from the resize
     # handle on its bottom border. None means "use the default responsive
     # height" (see PinController.set_map_height / _pin-detail.scss).
     pin_detail_map_height = IntegerField(null=True, blank=True)

@@ -101,7 +101,7 @@ class MapPinPayloadAmplificationTests(_AmplificationTestCase):
 
 
 class PinDetailPageAmplificationTests(_AmplificationTestCase):
-    """The pin detail page against its own content - labels, images, comments, visits."""
+    """The Private Pin page against its own content - labels, images, comments, visits."""
 
     def setUp(self) -> None:
         super().setUp()

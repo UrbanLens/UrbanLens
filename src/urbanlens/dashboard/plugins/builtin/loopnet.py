@@ -1,4 +1,4 @@
-"""LoopNet plugin: commercial real-estate listings panel on the pin detail page.
+"""LoopNet plugin: commercial real-estate listings panel on the Private Pin page.
 
 Retrieval lives entirely in REData (the standalone service that already owns
 property records for this app - see ``plugins.builtin.property_records``):

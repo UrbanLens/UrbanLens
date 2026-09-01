@@ -10,7 +10,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   Borders, Places, Pins, Child pins), HTMX-driven panels, and a filter sidebar (labels, rating,
   visited status, date pinned, scores, saved filter configurations)
 - **Map right-click menu** — every map shares the same base actions (copy coordinates, Street View
-  when Google has coverage, directions to that point). The main map adds "Add Pin Here"; pin detail
+  when Google has coverage, directions to that point). The main map adds "Add Pin Here"; Private Pin
   and wiki maps add "Create child pin here". Clicking or right-clicking a parcel or building
   boundary on those pages also offers Edit, Convert to the other type, and Delete. The floorplan
   editor keeps its own specialised menu.
@@ -44,7 +44,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   pin, even if new buildings turn up later), or don't show again (Settings → Map → Pin Organization
   Suggestions). Buildings you've already pinned are detected by their real footprint polygon, not a
   fixed radius, so a pin at the far end of a long hall still counts as covering it
-- **Notes (pin comments) are never hidden by nesting** — the pin detail page's "show sub pin
+- **Notes (pin comments) are never hidden by nesting** — the Private Pin page's "show sub pin
   details" toggle (`?children=1`) aggregates a child pin's private notes into its parent's Notes
   tab too, each labelled with a link back to the sub pin it was written on, alongside the map,
   photo gallery, and visit history the toggle already covered
@@ -155,21 +155,21 @@ never see the rule engine, only vote buttons on a place that already qualifies.
 - **Wiki** — opt-in, community-editable page for a Location: description, aliases, community
   danger/vulnerability/rating stat voting (`WikiStatVote`, fuzzed community counts for privacy),
   edit history with revert (`WikiEdit`)
-- **Wiki Media gallery** — the pin detail page's combined Media section, mirrored on the wiki
+- **Wiki Media gallery** — the Private Pin page's combined Media section, mirrored on the wiki
   (`controllers/wiki_media.py`): the same external providers (Wikimedia, Smithsonian, Library of
   Congress, Internet Archive, Web Images (SearXNG), Yelp, Google Images/Maps, LoopNet, CRIS, …)
   appear automatically
   from the shared per-Location cache, alongside a "Photos" tab of images intentionally shared to
   the wiki (`Image.wiki`) and a "Manage" tab for uploads. Thumbs-up/down are **community votes**
   (net score up − down, highest ranked first); because relevance is stored per-Location
-  (`MediaRelevance`), a relevance mark made on any user's pin detail page already counts here
+  (`MediaRelevance`), a relevance mark made on any user's Private Pin page already counts here
 - **REData photo relevance scoring** — every new photo (upload, Google Places business photo
   backfill, or Media-gallery item materialized via "mark relevant"/"send to wiki") is submitted to
   REData's photo-scoring service with whatever signal is available (capture/location coordinates,
   capture date, uploader/photographer, wiki abandonment date); REData returns a calibrated
   confidence ("is this really a photo of this place") cached on the `Image` row
   (`services.photos.redata_relevance`). Relevant/not-relevant votes on a materialized photo are
-  forwarded too, as REData's training signal - never as a scoring input. The pin detail page's own-
+  forwarded too, as REData's training signal - never as a scoring input. The Private Pin page's own-
   photos preview and the wiki's Photos tab order by this confidence (vote score first on the wiki,
   confidence breaking ties, including when nothing has been voted on at all); a REData outage or
   missing configuration silently falls back to upload-recency ordering
@@ -178,7 +178,7 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   created, edited, reparented, or deleted/converted away (retired, not hard-deleted), and a pin's
   complete current tag/category set is resynced whenever it changes, from any of the ~20 call
   sites that touch `Pin.labels` (`models.labels.signals`, the `Pin.labels` `m2m_changed` receiver
-  in `models.pin.signals`, `services.labels.redata_suggestions`). The pin detail page's "Add
+  in `models.pin.signals`, `services.labels.redata_suggestions`). The Private Pin page's "Add
   Labels" dialog lazily loads a "Suggested for this place" section from REData's suggestion
   endpoint, scored against that profile's own vocabulary; a management command
   (`backfill_redata_labels`) primes REData with taxonomy/assignments that predate this
@@ -217,7 +217,7 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   opacity/visibility/layer controls. Tiles stream through UrbanLens's own authenticated proxy
   (`controllers/historical_map_tiles.py`; 200s and definitive 404s cached, institutional outages
   never cached) so REData's API key stays server-side
-- **OpenHistoricalMap time slider** (beta) — a compact time slider below the map on pin-detail and
+- **OpenHistoricalMap time slider** (beta) — a compact time slider below the map on Private Pin and
   wiki pages lets a beta user scrub through years and see OpenHistoricalMap's dated vector data
   (roads, buildings, land-use tagged with `start_date`/`end_date`) overlaid on the live map, for
   locations where OHM has nearby dated coverage. Gated by `SiteFeature.BETA_FEATURES`; the slider
@@ -308,9 +308,9 @@ floorplan alongside a building; they answer only through their own endpoints
   they are the most telling records on the card: an open code-enforcement lien and years of
   unpaid tax are what "abandoned" looks like in public records
 
-## External Data Enrichment (Pin Detail Page)
+## External Data Enrichment (Private Pin Page)
 
-On-demand, cached lookups shown as panels on the pin detail page. Many of these are now backed by
+On-demand, cached lookups shown as panels on the Private Pin page. Many of these are now backed by
 REData (`../REData`, a standalone service reached via `UL_REDATA_API_URL`/`UL_REDATA_API_KEY`)
 rather than calling their upstream provider directly - REData pools rate limits/credentials across
 every UrbanLens deployment and normalizes each provider family's response shape. A handful of
@@ -419,7 +419,7 @@ direct-only because REData's contract can't reproduce what they show:
   `/parcels/{uuid}/sale-records/`) feed the Sale History cards — matched to the parcel by
   address/PIN before attribution, with non-arms-length transfers excluded (see
   `docs/designs/redata-integration.md`)
-- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
+- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the Private Pin page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
 - **What the weather was** — a finished trip's weather panel used to be empty, because the forecast
   can say nothing about a day that has passed. Past activities now show the *recorded* conditions for
   their day (high/low, rainfall, snowfall, peak wind and gust) from REData's `/weather/history/`
@@ -427,7 +427,7 @@ direct-only because REData's contract can't reproduce what they show:
   week-long trip costs one lookup per location; a recorded day never changes, so it is cached
   permanently rather than under the external-data freshness window. Days inside ERA5's ~6-day
   publication lag are not requested at all, so they are never cached as blank
-- **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
+- **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the Private Pin page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
 - Satellite imagery carousel: Google Maps and Esri (incl. up to 5 historical Wayback releases) are
   direct; additional providers (NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap) via REData
 - Street-view carousel: Google Street View is direct; Mapillary, KartaView, and Panoramax are via
@@ -453,7 +453,7 @@ buffer, per-run caps).
 ## Extensibility: Plugin System
 
 Third-party integrations are packaged as **plugins** (`dashboard/plugins/builtin/`) — see
-`docs/designs/plugins.md` for the full contribution API. A plugin can add rate-limited services, pin-detail
+`docs/designs/plugins.md` for the full contribution API. A plugin can add rate-limited services, Private Pin
 panels, satellite/street-view providers, place-name providers, and lifecycle hooks. Plugins are
 discoverable from bundled modules, an env-var module list, or pip entry points, and can be
 enabled/disabled per-install or per-service without a restart. Inventory at `/site-admin/plugins/`.
@@ -497,7 +497,7 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   checksum-based duplicate detection. On a private pin, the lightbox's more-actions menu offers
   **Use as floorplan overlay**, which adds the photo as a georeferenced blueprint and opens the
   floorplan editor to warp it.
-- **Albums** (Photos tab on pin detail and wiki): named groupings of a place's photos (plain,
+- **Albums** (Photos tab on Private Pin and wiki): named groupings of a place's photos (plain,
   visit, area, timelapse). Photos default to newest-uploaded; dragging one
   freezes a custom order for that album (later uploads stay at the end). Date
   and name sorts follow live metadata, so a caption or EXIF edit does not

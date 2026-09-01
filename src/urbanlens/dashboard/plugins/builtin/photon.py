@@ -103,7 +103,7 @@ class PhotonPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "photon"
     verbose_name: ClassVar[str] = "Photon"
-    description: ClassVar[str] = "Alternate reverse-geocoded address on the pin detail page, via REData's Photon-tagged geocode result."
+    description: ClassVar[str] = "Alternate reverse-geocoded address on the Private Pin page, via REData's Photon-tagged geocode result."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:

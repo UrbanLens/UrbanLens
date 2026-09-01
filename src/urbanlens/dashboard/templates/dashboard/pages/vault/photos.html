@@ -84,8 +84,16 @@
         {# -- Full gallery ---------------------------------------------------- #}
         <section class="photos-gallery" aria-label="All photos">
             <div class="photos-gallery-head">
-                <h2><i class="material-symbols-outlined">grid_view</i> All photos</h2>
+                <h2><i class="material-symbols-outlined">grid_view</i> {% if show == "from_others" %}Photos from Others{% else %}All photos{% endif %}</h2>
                 {% if photo_count %}<span class="badge">{{ photo_count }}</span>{% endif %}
+                {% if from_others_count %}
+                <a href="?show={% if show == 'from_others' %}mine{% else %}from_others{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"
+                   class="btn btn--ghost btn--sm photos-show-others-toggle" id="vault-photos-show-others">
+                    <i class="material-symbols-outlined">group</i>
+                    {% if show == "from_others" %}Show all photos{% else %}Photos from Others{% endif %}
+                    <span class="badge">{{ from_others_count }}</span>
+                </a>
+                {% endif %}
                 {% if images %}
                 <label class="photos-sort-label" for="vault-photos-sort">
                     <i class="material-symbols-outlined">sort</i>
@@ -101,7 +109,8 @@
             <ul class="photos-grid" id="photo-grid"
                 data-items-url="{% url 'vault.photos.items' %}"
                 data-photo-count="{{ photo_count }}"
-                data-grid-page-size="{{ grid_page_size }}">
+                data-grid-page-size="{{ grid_page_size }}"
+                data-show="{{ show }}">
                 {% include "dashboard/partials/vault/_photo_grid.html" %}
             </ul>
             {% else %}

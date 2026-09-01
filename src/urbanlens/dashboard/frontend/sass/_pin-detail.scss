@@ -159,7 +159,7 @@
     }
 }
 
-// -- Tag chips (pin detail page) ---------------------------------------------
+// -- Tag chips (Private Pin page) ---------------------------------------------
 .tag-chips-row {
     display: flex;
     flex-wrap: wrap;
@@ -3949,7 +3949,7 @@ body.page-location-details {
     }
 }
 
-// -- Pin detail page: section card accents --------------------------------
+// -- Private Pin page: section card accents --------------------------------
 
 body.page-location-details {
 
@@ -5092,7 +5092,7 @@ body.page-location-details .pin-detail-grid {
 
 // Admin-only floating panel (toggled via the Dev Tools toolbar) listing the
 // search term/coordinates and cache status behind every external-API result
-// currently loaded on the pin detail page.
+// currently loaded on the Private Pin page.
 .pin-debug-overlay {
     position: fixed;
     top: 4.5rem;

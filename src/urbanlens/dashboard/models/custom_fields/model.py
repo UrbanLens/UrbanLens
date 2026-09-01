@@ -78,7 +78,7 @@ class CustomFieldType(TextChoices):
 
 
 class CustomFieldDisplay(TextChoices):
-    """Where a field appears on the pin detail page.
+    """Where a field appears on the Private Pin page.
 
     Only meaningful for pin fields today - other entity types render in
     compact strips with no section layout to place a field into.
@@ -173,7 +173,7 @@ class CustomField(abstract.FrontendDashboardModel):
         style: Presentation style for the value input (:class:`CustomFieldStyle`);
             blank means the type's default. Only meaningful for types listed in
             :data:`STYLES_BY_TYPE`.
-        display: Where the field appears on the pin detail page
+        display: Where the field appears on the Private Pin page
             (:class:`CustomFieldDisplay`). Only meaningful for pin fields.
         config: Type/style-specific configuration: ``{"choices": [...]}`` for
             select fields, optional ``{"min": ..., "max": ...}`` for sliders,

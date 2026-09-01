@@ -220,7 +220,7 @@ def generate_boundaries_for_location(location_id: int) -> bool:
     """Generate (or, if stale, refresh) the default property/building boundaries for a Location.
 
     Scheduled single-flight by ``schedule_location_boundary_generation`` (wiki
-    page, and the pin detail page's stale-refresh path) - the pin detail
+    page, and the Private Pin page's stale-refresh path) - the pin detail
     page's first-ever generation uses the "boundary" panel source instead,
     which calls the same ``generate_location_boundaries`` function.
 
@@ -564,7 +564,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     Runs Wikipedia and NPS lookups so that the first time a user opens the pin
     detail page the data is already cached.  Also migrates any Google Places
     details already held in the Django request cache into LocationCache so the
-    pin detail page can skip the Places Details API call.
+    Private Pin page can skip the Places Details API call.
 
     Args:
         location_id: PK of the Location to prefetch data for.
@@ -625,7 +625,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
             logger.exception("prefetch_location_external_data: NPS lookup failed for location %s", location_id)
 
     # Google Places - migrate from Django request cache into LocationCache so the
-    # pin detail page can display it without a fresh API call.
+    # Private Pin page can display it without a fresh API call.
     if google_place_id and LocationCache.get_fresh(location, "google_places") is None:
         try:
             from django.core.cache import cache as django_cache
@@ -3221,7 +3221,7 @@ def hard_delete_expired_accounts() -> int:
 def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = None) -> None:
     """Fetch one external-data panel's upstream data in the background.
 
-    Scheduled by ``external_data.schedule_panel_fetch`` when a pin detail page
+    Scheduled by ``external_data.schedule_panel_fetch`` when a Private Pin page
     finds a panel's store empty; the page polls until this task persists the
     result (LocationCache row, Boundary geometry column, or warmed slide caches).
 
@@ -4323,6 +4323,7 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
     from urbanlens.dashboard.models.album.model import Album
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
     from urbanlens.dashboard.services.photos.albums import add_images_to_album, album_owner
     from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
@@ -4334,15 +4335,23 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
         return None
 
     owner = album_owner(album)
-    location = getattr(owner, "location", None)
-    if owner is None or location is None:
+    # A personal (Profile-owned) album has no Pin/Wiki to attach media to at
+    # all - checked directly rather than via `getattr(owner, "location", None)`,
+    # which happened to also catch this case today only because Profile has no
+    # `location` attribute of its own to shadow the default.
+    if not isinstance(owner, Pin | Wiki):
+        logger.info("cache_media_item_into_album: album %s has no pin or wiki to attach media to", album_id)
+        return None
+    location = owner.location
+    if location is None:
         logger.info("cache_media_item_into_album: album %s has no location to attach media to", album_id)
         return None
 
     # isinstance rather than `album.parent_pin_id is not None`: it asks the
     # question directly of the object album_owner actually returned, so the two
-    # cannot disagree - and unlike a boolean flag it narrows the Pin | Wiki union
-    # for the two arguments below.
+    # cannot disagree - and narrows each argument to exactly the type
+    # materialize_media_item expects, rather than assuming "not a Pin" means
+    # "must be a Wiki" (album_owner can also return a bare Profile).
     try:
         image = materialize_media_item(
             location=location,
@@ -4352,7 +4361,7 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
             page_url=page_url,
             caption=caption,
             pin=owner if isinstance(owner, Pin) else None,
-            wiki=None if isinstance(owner, Pin) else owner,
+            wiki=owner if isinstance(owner, Wiki) else None,
         )
     except MaterializeError:
         # The vote is already recorded and stays; only the download is lost.

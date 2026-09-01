@@ -8,7 +8,7 @@ REST API endpoints use DRF ViewSets under `/rest/`. Custom actions use `@action(
 
 Template/HTMX views use `TemplateView` or `ViewMixin` and return rendered HTML. Key controllers:
 - `maps.MapController` - Map display, pin add/edit, search
-- `pin.PinController` - Pin detail, image/weather/search integrations
+- `pin.PinController` - Private Pin page, image/weather/search integrations
 - `userprofile.ViewProfileView/EditProfileView` - Profile CRUD
 
 ## URL Routing
@@ -35,7 +35,7 @@ User-facing objects are slug-addressed: trips are `/trips/<slug>/` (not uuid), e
 
 The project connects to many external APIs via service classes in `dashboard/services/`. Each service wraps one API. 
 
-External integrations are wired into the app through the plugin system: the API client stays a `Gateway` subclass in `dashboard/services/apis/`, and a small `UrbanLensPlugin` subclass (bundled ones live in `dashboard/plugins/builtin/`) declares its rate-limit defaults and contributions (pin-detail panels, imagery providers, hook callbacks). New integrations should be added as plugins; services not yet converted still register their defaults in `rate_limiter.SERVICE_REGISTRY`.
+External integrations are wired into the app through the plugin system: the API client stays a `Gateway` subclass in `dashboard/services/apis/`, and a small `UrbanLensPlugin` subclass (bundled ones live in `dashboard/plugins/builtin/`) declares its rate-limit defaults and contributions (Private Pin panels, imagery providers, hook callbacks). New integrations should be added as plugins; services not yet converted still register their defaults in `rate_limiter.SERVICE_REGISTRY`.
 
 API usage and cost tracking is **automatic**: the `Gateway` base wraps every request in a
 rate-limited session that writes an `ApiCallLog` row (with a `cost_estimate`) per call - no

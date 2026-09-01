@@ -2,7 +2,7 @@
  * Shared map annotations page: markup drawing/editing, the unified detail-pin
  * side panel, the typed boundary editor (+ its context menu), the photo
  * layer, and the Details/Photos layers list panel. Used identically by the
- * pin detail page and the Location wiki page. The map's right-click menu is
+ * Private Pin page and the Location wiki page. The map's right-click menu is
  * the shared base (copy coordinates, Street View, directions) plus "Create
  * child pin here"; boundary polygons extend that same menu with Edit /
  * Convert / Delete.
@@ -21,6 +21,13 @@ import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, recluster
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 import { createPhotoClusterGroup, makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize, tagPhotoMarker } from "../shared/photo-map";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
+import { openMediaLightbox } from "../shared/media-lightbox";
+
+// Exposed at module scope, not inside the page-init function below: this
+// needs no page-specific state (it reads the clicked tile's own containing
+// grid fresh from the DOM), so it's available as soon as this shared bundle
+// loads - both pages' pin_media_items.html tiles call it directly.
+window.mediaOpenLightbox = openMediaLightbox;
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");
@@ -665,7 +672,7 @@ function init(): void {
         window.addEventListener("orientationchange", () => setTimeout(() => map.invalidateSize(), 300));
     })();
 
-    // -- Map resize handle (pin detail page only - wiki page has no handle in ---
+    // -- Map resize handle (Private Pin page only - wiki page has no handle in ---
     // its DOM, so this is a silent no-op there). Dragging the bottom border
     // saves the new height (see PinController.set_map_height) so every pin
     // detail page's map opens at that height going forward. Bounds must match

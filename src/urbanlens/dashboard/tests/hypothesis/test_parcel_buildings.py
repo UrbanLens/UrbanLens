@@ -318,7 +318,7 @@ class BuildingRowsTests(TestCase):
 
 
 class ParcelBuildingsPanelViewTests(TestCase):
-    """The pin detail page's "Buildings on this Property" endpoint."""
+    """The Private Pin page's "Buildings on this Property" endpoint."""
 
     def setUp(self) -> None:
         super().setUp()

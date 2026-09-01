@@ -1,4 +1,4 @@
-"""Media archive plugins: providers for the pin detail page's combined Media gallery.
+"""Media archive plugins: providers for the Private Pin page's combined Media gallery.
 
 Each plugin contributes one :class:`~urbanlens.dashboard.services.pins.external_data.MediaPanelSource`,
 which the gallery fetches independently so a slow provider never blocks the
@@ -29,7 +29,7 @@ class SmithsonianPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "smithsonian"
     verbose_name: ClassVar[str] = "Smithsonian Open Access"
-    description: ClassVar[str] = "Adds Smithsonian Open Access archive media to the pin detail page's Media gallery. USA-centric. Via REData."
+    description: ClassVar[str] = "Adds Smithsonian Open Access archive media to the Private Pin page's Media gallery. USA-centric. Via REData."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:
@@ -44,7 +44,7 @@ class WikimediaPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "wikimedia"
     verbose_name: ClassVar[str] = "Wikimedia Commons"
-    description: ClassVar[str] = "Adds Wikimedia Commons media to the pin detail page's Media gallery."
+    description: ClassVar[str] = "Adds Wikimedia Commons media to the Private Pin page's Media gallery."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
@@ -70,7 +70,7 @@ class LibraryOfCongressPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "library_of_congress"
     verbose_name: ClassVar[str] = "Library of Congress"
-    description: ClassVar[str] = "Adds Library of Congress archive media to the pin detail page's Media gallery. USA-centric. Via REData."
+    description: ClassVar[str] = "Adds Library of Congress archive media to the Private Pin page's Media gallery. USA-centric. Via REData."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:
@@ -85,7 +85,7 @@ class DigitalCommonwealthPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "digital_commonwealth"
     verbose_name: ClassVar[str] = "Digital Commonwealth"
-    description: ClassVar[str] = "Photographs, maps, and documents from Massachusetts libraries, museums, and archives for the pin detail page's Media gallery. Massachusetts pins only. Via REData."
+    description: ClassVar[str] = "Photographs, maps, and documents from Massachusetts libraries, museums, and archives for the Private Pin page's Media gallery. Massachusetts pins only. Via REData."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:
@@ -100,7 +100,7 @@ class InternetArchivePlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "internet_archive"
     verbose_name: ClassVar[str] = "Internet Archive"
-    description: ClassVar[str] = "Free, open-source full-text/media search across archive.org's books, photos, newspapers, and recordings for the pin detail page's Media gallery. Via REData."
+    description: ClassVar[str] = "Free, open-source full-text/media search across archive.org's books, photos, newspapers, and recordings for the Private Pin page's Media gallery. Via REData."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:
@@ -115,7 +115,7 @@ class ChroniclingAmericaPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "chronicling_america"
     verbose_name: ClassVar[str] = "Historic Newspapers (Chronicling America)"
-    description: ClassVar[str] = "Adds dated historic-newspaper pages (Library of Congress Chronicling America, 1794-1963) to the pin detail page's Media gallery. USA only. Via REData."
+    description: ClassVar[str] = "Adds dated historic-newspaper pages (Library of Congress Chronicling America, 1794-1963) to the Private Pin page's Media gallery. USA only. Via REData."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:

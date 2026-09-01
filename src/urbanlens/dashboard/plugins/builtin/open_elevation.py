@@ -101,7 +101,7 @@ class OpenElevationPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "open_elevation"
     verbose_name: ClassVar[str] = "Elevation"
-    description: ClassVar[str] = "Shows the pin's elevation above/below sea level on the pin detail page, sourced through REData (USGS 3DEP, Open-Elevation, Open-Meteo/Copernicus)."
+    description: ClassVar[str] = "Shows the pin's elevation above/below sea level on the Private Pin page, sourced through REData (USGS 3DEP, Open-Elevation, Open-Meteo/Copernicus)."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:

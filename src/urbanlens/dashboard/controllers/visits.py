@@ -1,4 +1,4 @@
-"""Visit history controller - HTMX views for PinVisit CRUD on the pin detail page."""
+"""Visit history controller - HTMX views for PinVisit CRUD on the Private Pin page."""
 
 from __future__ import annotations
 

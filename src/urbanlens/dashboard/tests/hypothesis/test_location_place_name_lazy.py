@@ -4,7 +4,7 @@ Covers the full lazy-loading chain: the model property is cache-only,
 tasks.resolve_location_place_name is what actually populates the cache in the
 background, and PinOverviewView (the actual renderer of
 pin_overview_partial.html/deduplicated_identity_fields, loaded as an HTMX
-fragment by the main pin detail page) is what dispatches it - see each
+fragment by the main Private Pin page) is what dispatches it - see each
 piece's own docstring for the reasoning. Regression coverage for the reported
 bug: "we're still contacting external APIs (like google places) immediately
 on the import of each pin... even when place data should be cached."

@@ -181,6 +181,59 @@ class SameUserDedupeTests(TestCase):
         self.assertIn("caption", conflict.fields)
 
 
+class PhotoMetadataConflictResolveViewTests(TestCase):
+    """vault.photos.conflicts.resolve, both the JSON and form-encoded request shapes."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        pin_a = baker.make_recipe("dashboard.pin")
+        pin_b = baker.make_recipe("dashboard.pin", profile=pin_a.profile)
+        self.client.force_login(pin_a.profile.user)
+        file = lambda name: SimpleUploadedFile(name, _PNG_BYTES, content_type="image/png")
+        first = upload_photo_for_owner(pin_a, pin_a.profile, file("a.png"), "first caption")
+        second = upload_photo_for_owner(pin_b, pin_a.profile, file("b.png"), "second caption")
+        assert isinstance(first, Image)
+        assert isinstance(second, Image)
+        self.existing_image = first
+        self.new_image = second
+        self.conflict = PhotoMetadataConflict.objects.get(profile=pin_a.profile)
+        self.url = reverse("vault.photos.conflicts.resolve", args=[self.conflict.pk])
+
+    def test_json_body_picks_the_new_value(self) -> None:
+        response = self.client.post(self.url, data=json.dumps({"choices": {"caption": 1}}), content_type="application/json")
+
+        self.assertEqual(response.status_code, HTTPStatus.OK, response.content)
+        self.conflict.refresh_from_db()
+        self.assertEqual(self.conflict.status, PhotoIssueStatus.RESOLVED)
+        self.existing_image.refresh_from_db()
+        self.new_image.refresh_from_db()
+        self.assertEqual(self.existing_image.caption, "second caption")
+        self.assertEqual(self.new_image.caption, "second caption")
+
+    def test_form_encoded_body_picks_the_existing_value(self) -> None:
+        # The manual-POST fallback path (no JSON body) - see
+        # PhotoMetadataConflictResolveView.post and docs/PROBLEMS.md's mypy
+        # sweep: request.POST.items() is stub-typed as str | list[object]
+        # even though Django's QueryDict.items() only ever yields the last
+        # single value per key, never a list.
+        response = self.client.post(self.url, {"field_caption": "0"})
+
+        self.assertEqual(response.status_code, HTTPStatus.OK, response.content)
+        self.conflict.refresh_from_db()
+        self.assertEqual(self.conflict.status, PhotoIssueStatus.RESOLVED)
+        self.existing_image.refresh_from_db()
+        self.assertEqual(self.existing_image.caption, "first caption")
+
+    def test_form_encoded_body_ignores_a_non_numeric_choice(self) -> None:
+        response = self.client.post(self.url, {"field_caption": "not-a-number"})
+
+        self.assertEqual(response.status_code, HTTPStatus.OK, response.content)
+        self.conflict.refresh_from_db()
+        self.assertEqual(self.conflict.status, PhotoIssueStatus.RESOLVED)
+        self.existing_image.refresh_from_db()
+        self.assertEqual(self.existing_image.caption, "first caption")
+
+
 class MapHiddenTests(TestCase):
     """map_hidden keeps GPS but drops the photo from with_coords()."""
 

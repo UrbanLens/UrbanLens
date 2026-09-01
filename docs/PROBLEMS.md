@@ -4278,7 +4278,7 @@ thirteen failures and left three genuine ones, each a different rule:
   when the file 404s - taking the button's only accessible name with it. **Fixed
   2026-08-24** by putting `aria-label` on the button in all three places that
   render a photo tile, so the name no longer depends on the thumbnail loading.
-- **`aria-required-children`, critical, the pin detail page.** `#media-tabs`
+- **`aria-required-children`, critical, the Private Pin page.** `#media-tabs`
   declares `role="tablist"` in markup but is filled by JavaScript, and the
   buttons it generates carried no `role="tab"` - unlike the statically-rendered
   article sub-tabs directly above them. It also stayed an empty tablist when
@@ -4292,7 +4292,7 @@ thirteen failures and left three genuine ones, each a different rule:
   identical defect under a different selector and were deliberately left
   untouched - worth a follow-up pass rather than one-off patches per selector.
 
-Both fixes were verified against the deployment: the pin detail page's scan is
+Both fixes were verified against the deployment: the Private Pin page's scan is
 now clean. The home page's is not, because clearing `button-name` uncovered a
 second defect underneath it:
 
@@ -4309,7 +4309,7 @@ second defect underneath it:
   against predates the current HEAD. Needs a fresh scan against a current
   deploy before treating this as still open.
 
-## OPEN (ratcheted) 2026-08-24: one pin-detail page load can exhaust the database connection pool
+## OPEN (ratcheted) 2026-08-24: one Private Pin page load can exhaust the database connection pool
 
 Found by `tests/integration/` on 2026-08-24, and only visible because the
 console/network guard watches every request a page makes rather than just the
@@ -4873,7 +4873,7 @@ permission gate (author or trip creator), but no test file anywhere in the suite
 `TripCommentDeleteView` or `delete_comment` at all - not the basic delete, the permission gate, or
 image cleanup. Would need a full TripComment/Trip fixture setup, not a surgical addition.
 
-## OPEN 2026-08-30: `PhotoMetadataConflictResolveView.post`'s manual-POST branch mistypes form values as possibly a list
+## RESOLVED 2026-09-01: `PhotoMetadataConflictResolveView.post`'s manual-POST branch mistypes form values as possibly a list
 
 Found by mypy while moving this view from `controllers/photos.py` to `controllers/vault_photos.py`
 (the Memories → Vault Photos move) - pre-existing, unrelated to that move. In the
@@ -4884,7 +4884,18 @@ hygiene gap rather than a live bug - but worth a real fix (narrow `body`'s type 
 `request.POST` through a helper that always returns `str`) rather than a `cast`, per the project's
 mypy policy.
 
-## OPEN 2026-08-31: `apply_image_map_update`'s `stash_photo_fields` call mistypes a nullable Profile as required
+**Fix**: confirmed via Django's own source that `QueryDict.items()` (a `MultiValueDict`) always
+yields the *last single value* per key, never a list - the `list[object]` in the stub's typing
+reflects `__getitem__`'s deliberately wider (and stub-acknowledged, `# type: ignore[override]`)
+override, not anything `.items()` can actually produce. Added an explicit `isinstance(value, str)`
+guard before `int(value)` (dropping the now-unreachable `TypeError` from the except clause, since a
+guaranteed `str` can only raise `ValueError`) - a real type-narrowing fix, not a `cast`, and it
+documents the actual runtime contract instead of relying on `int()`'s exception type as an
+accidental filter. This endpoint had **zero test coverage** before (neither its JSON nor
+form-encoded body shape) - added `PhotoMetadataConflictResolveViewTests` in
+`test_album_cover_move_dedupe.py` covering both, plus the malformed-choice path.
+
+## RESOLVED 2026-09-01: `apply_image_map_update`'s `stash_photo_fields` call mistypes a nullable Profile as required
 
 Found by mypy while adding `image_associations` to `services/media/images.py` (Batch 4 of the
 Vault feature - lightbox pin/wiki/album association display) - pre-existing, unrelated to that
@@ -4896,6 +4907,12 @@ non-optional `Profile`. Same class of issue as the already-logged
 (worth checking whether `image.profile` can actually be null in the codepaths that call this, and
 either narrowing the type at the call site or the parameter, rather than a `cast`, per the
 project's mypy policy).
+
+**Fix**: the guard above the call checked `if image.profile_id:` (the FK column, always loaded) but
+then passed `image.profile` (the related object, a separate attribute as far as mypy is concerned)
+to `stash_photo_fields`. Changed the guard to `if image.profile is not None:` - same runtime
+behavior (a non-null `profile_id` and a resolvable `.profile` agree in practice) and correctly
+narrows the actual object being passed. Verified via `test_undo_mutations.py`.
 
 ## OPEN 2026-08-31: A photo's grid tile can 404/500 for a few seconds right after upload while async processing renames its file
 
@@ -4992,7 +5009,7 @@ same dead `{% block title %}` also sits, unfixed, in: `memories/sharing.html`, `
 (`s/{% block title %}/{% block page_title %}/`) but touches unrelated pages/features, out of scope
 for this PR - worth a dedicated small pass.
 
-## OPEN 2026-08-31: 11 pre-existing mypy errors outside the Vault feature, surfaced by the first full-tree run this session
+## RESOLVED 2026-09-01: 11 pre-existing mypy errors outside the Vault feature, surfaced by the first full-tree run this session
 
 Batch 7's cleanup step ran `mypy /app/src/urbanlens` (880 files) for the first time this session -
 every earlier check was scoped to individual touched files. 13 errors total; 2 were already known
@@ -5019,6 +5036,34 @@ regression, but not investigated further (out of scope for this PR):
 
 Worth a dedicated mypy-hygiene pass; the `type: ignore` cleanups in particular are likely quick once
 someone confirms what the now-passing code path actually is.
+
+**Fix, all confirmed root causes rather than suppressions:**
+- `cache_media_item_into_album`: `owner`'s real type is `Pin | Wiki | Profile` (a Vault album can
+  be Profile-owned), not `Pin | Wiki` as the code's own comment assumed - so `isinstance(owner,
+  Pin)`'s `else` branch was `Wiki | Profile`, and a Profile-owned album's `owner` could have been
+  passed as `wiki`. Not reachable today only because `Profile` happens to have no `.location`
+  attribute, so `getattr(owner, "location", None)` always returned `None` for that case and exited
+  early first - fixed properly with an explicit `isinstance(owner, Pin | Wiki)` guard and two
+  independent `isinstance` narrows, rather than relying on that accident. Verified via
+  `test_albums.py`.
+- The five stale `type: ignore[return-value]`/`[arg-type]` comments: the real fix mypy's own
+  "unused-ignore" was pointing at - each handler's local `_expired(message: str) -> None` helper
+  always raises, but wasn't typed `NoReturn`, so mypy's narrowing after `if x is None: _expired(...)`
+  was fragile (worked for a single plain assignment, silently didn't for an explicitly-annotated or
+  multi-branch one - confirmed with an isolated repro either way). Typed every handler's `_expired`
+  as `-> NoReturn` instead, which narrows robustly regardless of shape; removed the now-redundant
+  `type: ignore`s and one now-dead `raise AssertionError`. Verified via `test_undo.py`,
+  `test_undo_round_trip.py`, `test_undo_redo_is_single_use.py`,
+  `test_undo_photo_reattachment_coverage.py`.
+- `_repr_limit`: `CharField(max_length=255)` genuinely always sets a `max_length` - django-stubs
+  just types the general case (`max_length: int | None`) since not every field has one. Added an
+  explicit `if max_length is None: raise TypeError(...)` guard (not a bare `assert`- `S101` is only
+  test-file-exempted in this project's ruff config).
+- `_declared_family`: switched to `getattr(upload_to, "__qualname__", repr(upload_to))` - a real
+  robustness fix, not just a type appeasement, since `upload_to` can be any callable (a callable
+  class instance, `functools.partial`, ...), not only a plain function guaranteed to have one.
+  Verified via `test_media_family_registry.py`.
+
 ## OPEN 2026-08-31: album detail resolves photo visibility four times per request
 
 Found in a fresh-eyes performance review of the Vault feature; **pre-existing in the shared album
@@ -5141,7 +5186,7 @@ in `partials/pins/_pin_location_data_tabs.html:35`, `_pin_plugin_tabs.html:40`,
 never loads its content.
 
 Unrelated to the Vault (the string appears in no Vault or album template) - surfaced only because a
-Vault album spec navigates to a pin detail page. Worth guarding the trigger expression
+Vault album spec navigates to a Private Pin page. Worth guarding the trigger expression
 (`window.ulSectionCollapsed && !window.ulSectionCollapsed(...)`) or asserting load order.
 
 ## OPEN 2026-08-31: the integration suite's login setup fails after a *successful* sign-in
@@ -5329,3 +5374,119 @@ at this app's beta scale (~2 users):
   redirect branch); and `controllers/pin_lists.py:155-176` (`_items_map_data` plots every matching pin
   on the overview map with no cap, unlike the near-identical `SavedFilterPreviewView`'s explicit
   `_PREVIEW_MAP_PIN_LIMIT = 500`).
+
+## RESOLVED 2026-09-01: `bun run typecheck` failed on `hotkeys.test.ts`/`hotkeys.contract.test.ts`
+
+Found while typechecking after an unrelated fix (map overlay pane z-index,
+`map-image-overlays.ts`) - these two failures were pre-existing on the branch, unrelated to that
+change: `hotkeys.contract.test.ts:33` - `TS2554: Expected 0-1 arguments, but got 2.`;
+`hotkeys.test.ts:61` - `TS18048: 'DEFAULT_HOTKEYS.redo' is possibly 'undefined'.` Fixed: the first
+was bun's `expect()` not accepting a second (custom-message) argument at all - the check now
+throws its own descriptive `Error` before the assertion instead. The second was the real bug
+`hotkeys.ts` pointed at - `DEFAULT_HOTKEYS` was annotated `Record<string, HotkeyDefault>`, which
+widens every property access to `T | undefined` even though the object is a fixed literal whose
+keys (`undo`/`redo`/`toggleFullscreen`) are always present; dropped the annotation so the literal
+infers its own precise type instead. Nothing indexes `DEFAULT_HOTKEYS` with a dynamic string (only
+`Object.entries()` and lookups into `loadHotkeys()`'s own already-generic return value), so
+nothing needed the wider type in the first place.
+
+## RESOLVED 2026-09-01: clicking any photo in the wiki page's Media section throws - no lightbox ever opens
+
+Found while wiring a wiki-photo "copy to my pin" feature into the lightbox. `pin_media_items.html`
+(shared by the pin and wiki pages' Media sections) renders every tile with
+`onclick="window.mediaOpenLightbox(this)"`, but `window.mediaOpenLightbox` is only ever defined in
+`pages/location/index.html:1935` (the Private Pin page's own inline script) - `pages/location/wiki.html`
+never defines it. Confirmed live: on a wiki page, calling `window.mediaOpenLightbox(btn)` for any
+rendered `.media-item-thumb-btn` throws `TypeError: window.mediaOpenLightbox is not a function`,
+caught nowhere, so a click on any Media-section photo (any provider tab, including the "photos"
+source showing real uploaded/shared Image rows) silently does nothing - no lightbox, no error
+shown to the user.
+
+Separately, the specific `.media-item` tested had `getBoundingClientRect().height === 0` and no
+`offsetParent` despite its containing `[data-tab-panel="photos"]` panel reporting `hidden: false` -
+worth checking whether the Media section's own provider/source-tab filtering also has a default-tab
+visibility issue independent of the missing lightbox opener, once that's fixed and items are
+actually clickable to test against.
+
+**Fix**: extracted the pin page's previously inline, page-local `window.mediaOpenLightbox` into a
+new shared module (`frontend/ts/shared/media-lightbox.ts`), exposed identically by
+`entries/map-annotations.ts` (loaded by both the pin and wiki pages) instead of either page's own
+inline `<script>` - so both pages get the same opener by construction rather than by remembering to
+duplicate it. It reads the containing grid by the shared `.media-gallery-grid` class rather than
+either page's own id, and gates the lightbox's relevance thumbs-up/down on the grid actually
+carrying a `data-relevance-url` (only the pin page's grid does - the wiki has its own separate
+per-tile vote UI instead), which the old pin-only implementation never needed to distinguish.
+Separately, `_photo_lightbox.html` is now included eagerly at the top of `wiki.html` instead of only
+inside the wiki's lazily-htmx-loaded "Manage" gallery partial - the Media section's tiles need the
+dialog to exist before "Manage" is ever opened. Ownership/copy-provenance now flows through explicit
+`is_mine`/`copied_from_label` keys added server-side (`wiki_media.py`, `pin.py`), including an
+explicit `is_mine: None` for external-provider results (never-materialized search results, where
+ownership isn't meaningful) - a plain missing key would have been indistinguishable from `None` at
+the Python level but resolves to `''` in Django's template layer, which would have made
+`{% if entry.is_mine is not None %}` wrongly true for every external result.
+
+Added 14 unit tests for the new module (`media-lightbox.test.ts`) - it had zero coverage before,
+which is exactly how the original bug shipped unnoticed in the first place.
+
+**The `getBoundingClientRect().height === 0` question above is a confirmed testing artifact, not a
+product bug.** Re-tested live once the lightbox worked: clicking the wiki's "Photos" subnav tab
+(`data-tab="photos"`) actually opens the unrelated **Albums** panel, which hides "Overview" - and
+`#wiki-media-section`/`#wiki-media-grid` live inside Overview, not Photos. In normal page flow
+(default Overview tab, no extra clicks) Media-section tiles render at real size (257x254,
+`display:flex`) and are genuinely clickable. Whatever tested this originally almost certainly had
+the wrong tab open.
+
+**A second, real bug found live while verifying the fix above, also fixed here**: a copied photo's
+author never rendered in the Media-gallery lightbox, even though `Image.author` was populated
+correctly by `copy_wiki_photo_to_pin` - directly undercutting half of the original feature request's
+own example ("Jill should see it was copied by **and authored by** John"). Root cause:
+`services/apis/assets/base.py`'s `MediaItem` dataclass (the shared shape for every Media-gallery
+tile, external-provider results included) had no `author` field at all, so
+`frontend/ts/shared/media-lightbox.ts` hardcoded `author: ""` for every item on this path - a
+separate, older lightbox path (`_photo_gallery.html`/`photo-tile.ts`, used by the Photos tab and
+Albums) was unaffected; only this newly-shared-correctly Media-gallery path was silently dropping
+it. Fixed by adding `author: str = ""` to `MediaItem` (populated from `Image.author` at both
+Image-backed call sites, left blank for external-provider results exactly as before) and threading
+it through `pin_media_items.html`'s `data-media-author` and the TS parser, with a regression test.
+
+Verifying this fix also surfaced a deployment-only gotcha, unrelated to the code itself: this dev
+stack's compiled static assets live in a Docker volume that only `manage.py collectstatic`
+populates, so a `docker cp` of a fresh frontend build into the container's source tree (which is
+sufficient for Python) silently does not reach what's actually served. Documented in
+`CLAUDE.local.md`'s Docker section with the correct rebuild+collectstatic sequence.
+
+## RESOLVED 2026-09-01: two more pre-existing mypy errors, plus one found-and-fixed in the same run
+
+A full-tree `mypy src/urbanlens` run while closing out the Media-lightbox fix above found 15
+errors, not the 13 the 2026-08-31 "11 pre-existing mypy errors" entry (above) accounted for
+(11 there + the 2 logged as their own separate entries). Cross-checked line by line:
+
+- 12 of the 15 are exactly the ones already covered by those existing entries (line numbers in
+  `tasks.py`/`checks.py` shifted by a few lines from unrelated intervening edits, but same
+  function, same error).
+- One, `services/undo/base.py:67` (`UndoHandler.redo_delete`), was new but is now **fixed**:
+  `cls.model.objects.filter(pk__in=pks).delete()` doesn't type-check because django-stubs only
+  adds `.objects` to a concrete model subclass via its mypy plugin, never to a bare `type[Model]`
+  classvar like `UndoHandler.model`. Swapped to `cls.model._default_manager` (`# noqa: SLF001`),
+  which django-stubs types directly on `Model` for exactly this reason - the same pattern already
+  used in `controllers/account.py:681`. Verified via the full undo/redo hypothesis suite
+  (`test_undo.py`, `test_undo_round_trip.py`, `test_undo_redo_is_single_use.py`,
+  `test_undo_photo_reattachment_coverage.py` - 40 passed, 3 subtests) - unchanged behavior, one
+  fewer mypy error (15 -> 14).
+- Two more were investigated and fixed, in files unrelated to any work this session had otherwise touched:
+  - `services/photos/photo_enrichment.py:75` (`enriched_max_dimension`) - `{ImageSource.X: n, ...}.get(source, DEFAULT)` didn't match any `dict.get` overload. Not `dict[ImageSource, int]`
+    as first guessed above - `source` is a plain `str` (a raw `.values_list()` column, never an
+    `ImageSource` instance), so the correct annotation is `dict[str, int]`: `ImageSource` members
+    are `str` subclasses (`TextChoices`) at runtime, and this makes the dict's declared key type
+    match what it's actually looked up with.
+  - `services/visits/visits.py:222` (`resolve_location_for_point`) - fixed at the source rather than
+    the call site: `services/locations/naming.py`'s `is_meaningful_name(name: str | None) -> bool`
+    is now `-> TypeGuard[str]`. Purely additive (same runtime `True`/`False`, ~40 existing call
+    sites elsewhere are unaffected since TypeGuard only adds narrowing when the checked and later-used
+    expression match) - fixed this call site with zero changes to `visits.py` itself, and also
+    retired an already-stale `# type: ignore[union-attr]` one call site over in `controllers/maps.py`
+    that the same narrowing newly makes unnecessary. Verified via `test_place_name_meaning.py`,
+    `test_location_area_names.py`.
+
+All 15 errors this run found are now fixed - a full-tree `mypy src/urbanlens` run reports
+**zero errors** for the first time this project has run one.

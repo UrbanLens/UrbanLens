@@ -18,11 +18,14 @@
      data-media-page-url="{{ item.page_url|default:item.url }}"
      data-media-remote-url="{{ item.url }}"
      data-media-caption="{{ item.caption }}"
+     data-media-author="{{ item.author }}"
      data-media-relevant="{% if entry.is_relevant == True %}true{% elif entry.is_relevant == False %}false{% else %}{% endif %}"
      data-vote-score="{{ entry.vote_score|default:0 }}"
      data-image-id="{{ entry.image_id|default:"" }}"
      data-lat="{{ entry.lat|default:"" }}"
      data-lng="{{ entry.lng|default:"" }}"
+     {% if entry.is_mine is not None %}data-mine="{% if entry.is_mine %}true{% else %}false{% endif %}"{% endif %}
+     data-copied-from-label="{{ entry.copied_from_label|default:"" }}"
      {% if not wiki_mode and source_key != "photos" %}draggable="true" ondragstart="window.mediaItemDragStart(event, this)"{% endif %}
      title="{{ item.caption }}">
     {% if not wiki_mode and source_key != "photos" %}

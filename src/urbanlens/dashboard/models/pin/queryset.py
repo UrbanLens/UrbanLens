@@ -191,7 +191,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     def near_point(self, point: Point, radius_km: float) -> Self:
         """Return root pins whose location falls within ``radius_km`` of ``point``, closest first.
 
-        Used by the pin detail page's "Nearby Pins" map layer to find a
+        Used by the Private Pin page's "Nearby Pins" map layer to find a
         profile's other pins around the one being viewed.
 
         Args:

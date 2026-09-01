@@ -204,7 +204,7 @@ class PinDetailPageSimpleInfoPanelsContextTests(TestCase):
 
 
 class PinDetailHeroSubnavTests(TestCase):
-    """The pin detail page has a standard page hero + subnav (like every other page)."""
+    """The Private Pin page has a standard page hero + subnav (like every other page)."""
 
     def setUp(self) -> None:
         super().setUp()

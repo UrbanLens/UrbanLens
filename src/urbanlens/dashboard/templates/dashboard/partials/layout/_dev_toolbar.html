@@ -601,7 +601,7 @@
     if (debugToggleBtn) {
         debugToggleBtn.addEventListener('click', function () {
             if (typeof window.togglePinDebugOverlay !== 'function') {
-                if (window.toastr) toastr.warning('Open a pin detail page to use API debug info.');
+                if (window.toastr) toastr.warning('Open a Private Pin page to use API debug info.');
                 return;
             }
             window.togglePinDebugOverlay();
@@ -612,7 +612,7 @@
     if (clearPageCacheBtn) {
         clearPageCacheBtn.addEventListener('click', function () {
             if (typeof window.clearPinResultCache !== 'function') {
-                if (window.toastr) toastr.warning('Open a pin detail page to clear its API cache.');
+                if (window.toastr) toastr.warning('Open a Private Pin page to clear its API cache.');
                 return;
             }
             if (!window.confirm('Clear cached API results for this pin and reload?')) return;

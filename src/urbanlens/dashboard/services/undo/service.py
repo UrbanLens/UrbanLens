@@ -70,7 +70,10 @@ def applying_undo() -> Iterator[None]:
 
 def _repr_limit() -> int:
     """Width of ``UndoAction.object_repr``, so describe() cannot overflow it."""
-    return UndoAction._meta.get_field("object_repr").max_length  # noqa: SLF001 - _meta is public API
+    max_length = UndoAction._meta.get_field("object_repr").max_length  # noqa: SLF001 - _meta is public API
+    if max_length is None:
+        raise TypeError("UndoAction.object_repr must declare a max_length.")
+    return max_length
 
 
 def _truncate_repr(text: str) -> str:

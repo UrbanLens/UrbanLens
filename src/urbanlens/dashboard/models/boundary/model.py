@@ -64,7 +64,7 @@ class Boundary(abstract.DashboardModel):
         Community-drawn customisation made on the wiki page. Display only.
 
     Pin boundary (pin=<Pin>, profile=pin.profile):
-        A user's personal customisation made on the pin detail page, or the
+        A user's personal customisation made on the Private Pin page, or the
         auto-refitted child-pin bounds when ``generated_from_children`` is set.
         Display only, and only for that pin's own map.
 

@@ -239,7 +239,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         blank=True,
         related_name="pins_inferred",
     )
-    # Hero banner photo for the pin detail page. Any Image tied to this pin
+    # Hero banner photo for the Private Pin page. Any Image tied to this pin
     # (its own gallery uploads or a materialized Media-gallery item, see
     # services.media.media_materialize) is eligible; SET_NULL so deleting the photo
     # just drops the banner rather than the pin.

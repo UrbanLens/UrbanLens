@@ -146,6 +146,18 @@ interface LiveOverlay {
     visible: boolean;
 }
 
+// Idle z-index matches Leaflet's default `overlayPane` (the pane this used to
+// share) so ordinary stacking is unchanged. Raised only while an overlay is
+// being aligned - see startAlign/stopAlign below - to clear
+// map-annotations.ts's boundaryPane (540, 560 while a boundary is itself being
+// edited) and markupPane (550): cross-pane stacking is decided purely by each
+// pane's own z-index, never DOM order or a child's own z-index (the
+// `.ul-map-overlay-handle` z-index in _map_overlays.scss is inert for exactly
+// this reason), so an overlay parked inside a boundary polygon was otherwise
+// permanently stuck beneath it - undraggable and unclickable while aligning.
+export const OVERLAY_PANE_IDLE_ZINDEX = "400";
+export const OVERLAY_PANE_ALIGNING_ZINDEX = "700";
+
 /**
  * Attach the image-overlay renderer to a map.
  *
@@ -155,7 +167,10 @@ interface LiveOverlay {
  * @param options Endpoints and callbacks - see {@link MapOverlayOptions}.
  */
 export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: MapOverlayOptions) {
-    const pane = map.getPane("overlayPane");
+    // Own pane rather than Leaflet's shared default `overlayPane`, so raising
+    // it while aligning can't affect anything else that pane might hold.
+    const pane = map.createPane("imageOverlayPane");
+    pane.style.zIndex = OVERLAY_PANE_IDLE_ZINDEX;
     const live = new Map<string, LiveOverlay>();
     const container = document.createElement("div");
     // leaflet-zoom-hide makes Leaflet hide the whole container for the duration
@@ -165,7 +180,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
     // end. Hiding through the animation and redrawing on zoomend is what
     // Leaflet's own vector renderer does short of implementing _animateZoom.
     container.className = "ul-map-overlay-container leaflet-zoom-hide";
-    pane?.appendChild(container);
+    pane.appendChild(container);
 
     function pixelFor(corner: [number, number]) {
         const point = map.latLngToLayerPoint(leaflet.latLng(corner[0], corner[1]));
@@ -380,15 +395,18 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
                 redraw(existing);
             });
         },
-        /** Show the drag handles for one overlay, hiding every other set. */
+        /** Show the drag handles for one overlay, hiding every other set, and raise the
+         * overlay pane above any boundary/markup drawn on top so it can be dragged. */
         startAlign(uuid: string): void {
+            pane.style.zIndex = OVERLAY_PANE_ALIGNING_ZINDEX;
             live.forEach((item, key) => {
                 item.aligning = key === uuid;
                 redraw(item);
             });
         },
-        /** Hide every overlay's drag handles. */
+        /** Hide every overlay's drag handles and restore normal stacking. */
         stopAlign(): void {
+            pane.style.zIndex = OVERLAY_PANE_IDLE_ZINDEX;
             live.forEach((item) => {
                 item.aligning = false;
                 redraw(item);

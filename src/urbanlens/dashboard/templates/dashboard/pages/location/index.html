@@ -295,6 +295,7 @@
                     Loading...
                 </div>
                 <div class="media-gallery-grid" id="media-gallery-grid"
+                     data-relevance-url="{% url 'pin.media.relevance' pin.slug %}"
                      data-adaptive-pagination-list data-adaptive-pagination-min-page-size="6"></div>
                 <div class="media-gallery-empty" id="media-gallery-empty" hidden>
                     <i class="material-symbols-outlined">collections</i>
@@ -1074,7 +1075,7 @@
             },
             {
                 id: 'photos', icon: 'add_photo_alternate', target: '#pin-gallery-panel, #photo-gallery .gallery-upload-compact-btn',
-                eyebrow: 'Evidence & memories', title: 'Attach photos without leaving the detail page',
+                eyebrow: 'Evidence & memories', title: 'Attach photos without leaving your Private Pin',
                 body: 'Drag photos into the gallery or use the upload button - GPS-tagged photos can be positioned on your location map.',
                 button: 'Upload a photo', watchSelector: '#pin-gallery-panel .gallery-upload-compact-btn, #photo-gallery .gallery-upload-compact-btn',
                 action: function () {
@@ -1931,46 +1932,10 @@
             }).catch(function () { if (window.toastr) toastr.error('Failed to send photos to the wiki.'); });
         };
 
-        // -- Lightbox --------------------------------------------------------------
-        window.mediaOpenLightbox = function (thumbBtn) {
-            var itemEl = thumbBtn.closest('.media-item');
-            if (!itemEl) return;
-            var visible = Array.prototype.slice.call(document.querySelectorAll('#media-gallery-grid .media-item'))
-                .filter(function (el) { return !el.classList.contains('media-tab-excluded'); });
-            var list = visible.map(function (el) {
-                var relevant = el.dataset.mediaRelevant === 'true' ? true : (el.dataset.mediaRelevant === 'false' ? false : null);
-                return {
-                    url: el.dataset.mediaUrl,
-                    // Fallback for a full-res file the browser can't render
-                    // (e.g. a Wikimedia .tif result) - see _photo_lightbox.html.
-                    thumbUrl: el.dataset.mediaThumb || '',
-                    caption: el.dataset.mediaCaption || '',
-                    sourceUrl: el.dataset.mediaPageUrl || el.dataset.mediaUrl,
-                    sourceName: el.dataset.mediaSourceName || '',
-                    mediaSource: el.dataset.mediaSource,
-                    mediaKey: el.dataset.mediaKey,
-                    relevant: relevant,
-                    // Your own photos aren't "relevant"-markable (see
-                    // pin_media_items.html's source_key == "photos" branch) -
-                    // manage those from the section's "Mine" tab instead.
-                    canRelevance: el.dataset.mediaSource !== 'photos',
-                    // Only set once an item has been materialized (see
-                    // mediaSetRelevance) - enables "Set as cover photo" for a
-                    // relevant-marked item exactly like a real upload, since
-                    // by then it genuinely is one.
-                    imageId: el.dataset.imageId ? parseInt(el.dataset.imageId, 10) : null,
-                    // Own-photos preview tiles always carry these server-side
-                    // (pin.py's photos MediaItem builder); other tiles only
-                    // gain them once dropped onto the map (see
-                    // mediaApplyMaterializedDrop) - drives the lightbox's
-                    // small location map (_photo_lightbox.html).
-                    latitude: el.dataset.lat ? parseFloat(el.dataset.lat) : null,
-                    longitude: el.dataset.lng ? parseFloat(el.dataset.lng) : null,
-                };
-            });
-            var idx = visible.indexOf(itemEl);
-            if (window.galleryOpenLightboxItem) window.galleryOpenLightboxItem(list, idx < 0 ? 0 : idx);
-        };
+        // Lightbox: window.mediaOpenLightbox is defined by shared/media-lightbox.ts,
+        // exposed by entries/map-annotations.ts (loaded below on this page and on
+        // the wiki page identically) - not this page's own inline script, so both
+        // pages' Media sections stay behaviorally identical by construction.
     }());
 
     // -- Click-to-edit-in-place hero title (see .pin-name-editable, _page_hero.scss) --

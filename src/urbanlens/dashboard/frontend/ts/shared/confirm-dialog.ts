@@ -175,7 +175,7 @@ export async function deletePinCascade(pinUuid: string, pinName: string, csrfTok
         // pin's `updated` timestamp - a deletion cannot advance that, so the poll is
         // blind to it and the map would keep restoring a pin that no longer exists.
         // Flagged here rather than at each call site: the map page remembered to, the
-        // pin detail page did not, and the next caller would have had to know as well.
+        // Private Pin page did not, and the next caller would have had to know as well.
         try {
             localStorage.setItem("ul_pins_dirty", "1");
         } catch {

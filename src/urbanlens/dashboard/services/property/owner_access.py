@@ -55,7 +55,7 @@ def can_see_official_owners(user: AbstractBaseUser | AnonymousUser | None) -> bo
 def viewer_of(pin) -> AbstractBaseUser | None:
     """The user whose entitlement governs what a pin's panels may show.
 
-    The pin detail page only ever renders a pin its own owner requested
+    The Private Pin page only ever renders a pin its own owner requested
     (``PinController.panel_info`` looks it up by ``profile__user``), so the
     pin's own profile is the viewer. Resolved defensively - a panel source
     can be rendered from background code with no pin at all - and any failure

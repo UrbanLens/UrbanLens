@@ -255,7 +255,7 @@ def schedule_location_boundary_generation(location: Location, profile=None) -> b
     surface this as "pending") and a stale one due for a background refresh
     (callers already have a - possibly stale - boundary to show, and should
     surface this as "refreshing" instead, never as "pending"). Used by pages
-    that aren't pin-scoped (the wiki page); pin detail pages go through the
+    that aren't pin-scoped (the wiki page); Private Pin pages go through the
     "boundary" panel source for the never-generated case, and this function
     directly for the stale-refresh case, since the panel source's own
     single-flight/readiness plumbing has no stale-but-serve concept.
@@ -297,7 +297,7 @@ def generate_location_boundaries(location: Location, *, name: str | None = None)
     """Resolve a Location onto a real-world place, provisioning geometry if needed.
 
     The single choke point every boundary-generation call site funnels through
-    (wiki creation, the pin detail page's boundary panel, the wiki page's own
+    (wiki creation, the Private Pin page's boundary panel, the wiki page's own
     scheduler). It answers "what is this coordinate standing on?" rather than
     "what shape should I draw here?", which is the change that stops one
     property accumulating a copy of its own outline per person who pinned it.

@@ -30,7 +30,7 @@ class FlickrPlugin(UrbanLensPlugin):
     description: ClassVar[str] = (
         "Searches a user's own Flickr photos near a pin (server-side geo radius) and imports selected ones; "
         "imports any public Flickr album/photoset by URL onto a pin or wiki, no account connection required; "
-        "and adds a required-operator public Flickr search to the pin detail page's Media gallery."
+        "and adds a required-operator public Flickr search to the Private Pin page's Media gallery."
     )
     author: ClassVar[str] = "UrbanLens"
     order: ClassVar[int] = 41

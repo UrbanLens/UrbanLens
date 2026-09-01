@@ -105,7 +105,7 @@ declared scopes means access denied, never "no scope needed."
 | `push:manage` | Register/remove this device's push notifications |
 | `custom_fields:read` / `custom_fields:write` | Read your custom field definitions and values / create, edit, delete them |
 | `undo:read` / `undo:write` | Read your recent delete history available to undo / restore a previously deleted item |
-| `panels:read` | Read pin-detail enrichment panels (boundaries and other plugin-contributed data) |
+| `panels:read` | Read Private Pin enrichment panels (boundaries and other plugin-contributed data) |
 | `assistant:write` | Chat with your AI assistant, including creating trips and trip activities it suggests |
 
 **`messages:read`/`messages:write` can never be granted to a PAT**, even one hand-edited to carry
@@ -257,7 +257,7 @@ in a couple of seconds.
 
 ## Panels
 
-Pin-detail enrichment panels (the same `PanelSource` plugin data backing the internal HTMX tab strip) as JSON — a job-shaped ask/cached-or-pending/poll surface, since a cold fetch talks to an upstream provider from a Celery worker, never on the request thread.
+Private Pin enrichment panels (the same `PanelSource` plugin data backing the internal HTMX tab strip) as JSON — a job-shaped ask/cached-or-pending/poll surface, since a cold fetch talks to an upstream provider from a Celery worker, never on the request thread.
 
 `GET /pins/{pin_slug}/panels/` — `PinPanelsListView` — scopes: `panels:read` — every panel exposed to this API for this pin, with its readiness. A source is listed only when it has declared a non-empty `api_kinds` (the panel author's explicit opt-in — see below), passes its own `gate(pin)` precondition (e.g. has usable coordinates), and the caller holds whatever `SiteFeature` the source requires, if any — a feature-gated source the caller can't see is omitted entirely, the same rule the web tab strip applies. Response: `[{key, kinds[], ready}]`.
 

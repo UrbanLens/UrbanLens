@@ -2,7 +2,7 @@
 
 Routes are keyed by the Location slug (the stable URL token) but every view
 operates on the :class:`~urbanlens.dashboard.models.wiki.model.Wiki` for that
-Location. Wikis are user-created (from the pin detail page); these views 404
+Location. Wikis are user-created (from the Private Pin page); these views 404
 when the place has no wiki yet.
 """
 
@@ -184,7 +184,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         # Page-wide "show child pin details" toggle: when on (?children=1), the
         # map, photo gallery, and comments all include content from this wiki's
         # child wikis (any depth). Off by default except on a parcel wiki,
-        # whose children *are* the content, matching the pin detail page.
+        # whose children *are* the content, matching the Private Pin page.
         include_children = request.GET.get("children", "1" if wiki_is_site_scope else "0") == "1"
         has_child_wikis = visible_rows(wiki.child_wikis.all(), wiki, profile).exists()
 

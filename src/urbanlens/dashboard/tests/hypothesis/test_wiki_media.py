@@ -147,7 +147,7 @@ class WikiMediaVoteViewTests(TestCase):
         self.assertFalse(MediaRelevance.objects.filter(profile=self.profile, location=self.location, source="wikimedia", item_key="a").exists())
 
     def test_pin_detail_mark_carries_over_to_the_wiki_score(self) -> None:
-        """A mark made by another user (e.g. on their pin detail page) already
+        """A mark made by another user (e.g. on their Private Pin page) already
         counts, since MediaRelevance is Location-scoped."""
         other = baker.make(User).profile
         _mark(other, self.location, "wikimedia", "a", True)
@@ -279,7 +279,7 @@ class WikiMediaProviderViewTests(TestCase):
             ]},
             query_key="q",
         )
-        # A prior up-vote (as if from another user's pin detail page).
+        # A prior up-vote (as if from another user's Private Pin page).
         other = baker.make(User).profile
         _mark(other, self.location, "wikimedia", media_item_key(url_a), True)
 

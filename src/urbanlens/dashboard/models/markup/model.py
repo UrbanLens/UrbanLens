@@ -123,7 +123,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
     # pin-share dialog's "New map" flow). Set immediately on creation,
     # independent of whether the map is ever actually shared - distinct from
     # PinShare.markup_map, which records a map attached to a specific share
-    # event. Backs the pin detail page's "Markup Maps" section.
+    # event. Backs the Private Pin page's "Markup Maps" section.
     pin = ForeignKey(
         "dashboard.Pin",
         on_delete=SET_NULL,
@@ -138,7 +138,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
     # `pin` (a single explicit, user-set link): a map can geometrically point
     # at several pins at once, and this set is a passive detection record
     # consumed by search and pin-share tracking, never edited directly by a
-    # user, so it is unaffected by `pin` being cleared from the pin detail page.
+    # user, so it is unaffected by `pin` being cleared from the Private Pin page.
     inferred_pins: ManyToManyField[Pin, Pin] = ManyToManyField(
         "dashboard.Pin",
         blank=True,

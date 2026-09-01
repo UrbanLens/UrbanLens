@@ -163,7 +163,7 @@ def _wiki_gallery_images(request: HttpRequest, wiki: Wiki, profile: Profile):
 
 
 class PinGalleryView(LoginRequiredMixin, View):
-    """HTML gallery panel for the pin detail page (loaded via HTMX)."""
+    """HTML gallery panel for the Private Pin page (loaded via HTMX)."""
 
     def _get_context(self, request: HttpRequest, pin_slug: str) -> dict:
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
@@ -422,6 +422,10 @@ class WikiGalleryView(LoginRequiredMixin, View):
             "context_type": "wiki",
             "include_children": include_children,
             "extra_query": "children=1" if include_children else "",
+            # Copy-to-pin target for the lightbox's "Copy to my Private Pin"
+            # action - same expression as the wiki page's own "Back to my pin"
+            # link (location_wiki.py), so the two agree on which pin that is.
+            "user_pin": location.pins.filter(profile=profile).first(),
         }
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:

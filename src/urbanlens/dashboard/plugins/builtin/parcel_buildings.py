@@ -18,7 +18,7 @@ Two providers, in order:
    beats nothing.
 
 The cached list is what powers the "Buildings on this Property" panel on both
-the pin detail page and the wiki, the "would you like to add pins for the
+the Private Pin page and the wiki, the "would you like to add pins for the
 buildings here?" offer, and the child-pin classifier's fallback proximity test
 (see ``services.locations.site_scope``).
 """

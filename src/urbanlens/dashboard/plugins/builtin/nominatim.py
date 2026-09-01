@@ -1,4 +1,4 @@
-"""Nominatim plugin: OpenStreetMap place metadata panel on the pin detail page.
+"""Nominatim plugin: OpenStreetMap place metadata panel on the Private Pin page.
 
 Deliberately kept direct-only (no REData resolution-module wrapper), unlike
 most other single-provider integrations migrated to REData: this panel's
@@ -105,7 +105,7 @@ class NominatimPanelSource(LocationCachePanelSource):
     def fetch(self, pin: Pin) -> None:
         """Reverse-geocode the pin's coordinates and cache the place metadata.
 
-        Nominatim's panel data lands lazily (only once the pin detail page is
+        Nominatim's panel data lands lazily (only once the Private Pin page is
         viewed), well after a Location's ``official_name`` is first resolved
         at creation time. When that first resolution never found a real name
         - or, worse, fell back to a bare city/administrative name - this is
@@ -256,7 +256,7 @@ class NominatimPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "nominatim"
     verbose_name: ClassVar[str] = "Nominatim"
-    description: ClassVar[str] = "Reverse-geocodes pins via Nominatim and shows OpenStreetMap place metadata on the pin detail page."
+    description: ClassVar[str] = "Reverse-geocodes pins via Nominatim and shows OpenStreetMap place metadata on the Private Pin page."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

@@ -613,8 +613,8 @@ def _import_pins(
     (matching an existing shared Location nearby, or creating a new one)
     happens inside ``Pin.objects.get_nearby_or_create``. No community wiki,
     boundary, or external-API work happens at import time: wikis are created
-    explicitly by the user from the pin detail page, and default boundaries
-    are generated lazily when a pin detail page is first viewed.
+    explicitly by the user from the Private Pin page, and default boundaries
+    are generated lazily when a Private Pin page is first viewed.
 
     Pins are deduped per-profile by proximity via ``Pin.objects.get_nearby_or_create``
     (the same helper the Google Takeout importer uses) rather than inserted

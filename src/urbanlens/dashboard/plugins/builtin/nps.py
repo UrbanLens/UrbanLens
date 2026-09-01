@@ -1,4 +1,4 @@
-"""National Park Service plugin: nearby-park panel on the pin detail page.
+"""National Park Service plugin: nearby-park panel on the Private Pin page.
 
 Backed by REData's local NPS catalog (``services.apis.locations.redata_national_parks_gateway``),
 a pure proximity search rather than the boundary-containment lookup this
@@ -289,7 +289,7 @@ class NpsPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "nps"
     verbose_name: ClassVar[str] = "National Park Service"
-    description: ClassVar[str] = "Shows nearby US national park information on the pin detail page, via REData's local NPS catalog. USA only."
+    description: ClassVar[str] = "Shows nearby US national park information on the Private Pin page, via REData's local NPS catalog. USA only."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

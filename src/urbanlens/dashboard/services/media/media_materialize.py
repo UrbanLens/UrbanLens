@@ -1,6 +1,6 @@
 """Turns a transient Media-gallery item into a persisted ``Image`` row.
 
-The pin detail page's Media gallery (Wikimedia, Smithsonian, Yelp, Google
+The Private Pin page's Media gallery (Wikimedia, Smithsonian, Yelp, Google
 Images, ...) renders straight from each provider's live results (see
 ``services.pins.external_data``) without persisting anything per item - that's
 what keeps browsing it cheap. Two actions need a real, durable photo though:

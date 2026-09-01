@@ -61,7 +61,7 @@ _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
 _WEB_SEARCH_PAGE_SIZE = _WEB_SEARCH_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
 _WEB_SEARCH_MIN_REFRESH_AGE = timedelta(days=1)
 
-# The pin detail page map's drag-to-resize handle - see set_map_height and
+# The Private Pin page map's drag-to-resize handle - see set_map_height and
 # _pin-detail.scss. 320px matches the default height's existing min-height
 # floor (the request's "minimum height should be the current height we're
 # using"); 1200px is just a sane ceiling against an accidental huge drag.
@@ -267,7 +267,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # Readiness is resolved in one bulk pass: asking each source its own
         # is_ready() is a LocationCache query per tab, all answering the same
         # "which of this location's cache rows are fresh?" question, and this
-        # runs on every pin detail page render.
+        # runs on every Private Pin page render.
         tab_readiness = panel_readiness(pin, [all_info_panels[tab["key"]] for tab in panel_tabs])
         default_panel_tab_key = next((tab["key"] for tab in panel_tabs if tab_readiness[tab["key"]]), None)
 
@@ -507,7 +507,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         HTMX partial: captioned media items for the pin's location from a single provider.
 
-        Backs the combined "Media" section on the pin detail page. Each provider
+        Backs the combined "Media" section on the Private Pin page. Each provider
         (Smithsonian, Wikimedia Commons, Library of Congress, Yelp, Google
         Images, Google Maps, ...) is fetched via its own HTMX request targeting
         the shared gallery grid (see ``media-gallery-section`` in the pin detail
@@ -633,12 +633,18 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         rendered_items = [
             {
-                "item": MediaItem(url=img.image.url, thumb_url=img.image.url, caption=img.caption or "", source="My Photos", page_url=img.image.url),
+                "item": MediaItem(url=img.image.url, thumb_url=img.image.url, caption=img.caption or "", source="My Photos", page_url=img.image.url, author=img.author or ""),
                 "key": f"photo-{img.pk}",
                 "is_relevant": None,
                 "image_id": img.pk,
                 "lat": img.latitude,
                 "lng": img.longitude,
+                # Always true - this preview is already scoped to the viewer's
+                # own pin (see the queryset above) - but set explicitly rather
+                # than left absent, so pin_media_items.html's data-mine reads
+                # the same way regardless of which page rendered the tile.
+                "is_mine": True,
+                "copied_from_label": img.copied_from_label or "",
             }
             for img in images
         ]
@@ -810,7 +816,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
     def nearby_pins_json(self, request: Request, pin_slug: str):
         """Return the profile's other pins near this one, for the "Nearby Pins" map layer.
 
-        Off by default on the pin detail page map - only fetched once the
+        Off by default on the Private Pin page map - only fetched once the
         user turns the layer on.
         """
         try:
@@ -840,9 +846,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"sort": sort})
 
     def set_map_height(self, request: Request):
-        """Persist the requesting user's dragged pin detail page map height (px).
+        """Persist the requesting user's dragged Private Pin page map height (px).
 
-        Applies to every pin detail page's map going forward, not just the one
+        Applies to every Private Pin page's map going forward, not just the one
         being viewed when the drag happened - it's a display preference, not
         per-pin data.
         """
@@ -1981,7 +1987,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         }
         return render(request, "dashboard/partials/pins/pin_usgs_topo.html", context)
 
-    # Sources rendered via LocationCache on the pin detail page (see the endpoints above).
+    # Sources rendered via LocationCache on the Private Pin page (see the endpoints above).
     _LOCATION_CACHE_DEBUG_SOURCES = ("wikipedia", "nominatim", "nps", "loopnet", "usgs_topo", "smithsonian", "wikimedia", "library_of_congress", "web_search")
     # Gateway service_keys used by the satellite/street-view carousels (see satellite_view_carousell / street_view).
     _SATELLITE_DEBUG_SERVICES = ("google_maps", "esri", "nasa_gibs", "mapbox", "bing_maps", "open_aerial_map")

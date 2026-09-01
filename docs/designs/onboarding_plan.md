@@ -9,7 +9,7 @@ UrbanLens onboarding should appear as contextual, dismissible guidance while peo
 3. **Search and filter**: once the user has a small collection, point out filters for ratings, visits, tags/labels, and names.
 4. **Map layers**: introduce satellite, topographic, and weather overlays as situational tools for exploration planning.
 
-## Implemented pin-detail nudges
+## Implemented Private Pin nudges
 
 1. **Personal detail map**: introduce private detail pins, shapes, arrows, labels, hazards, and access-route annotation.
 2. **Photos**: point users toward the gallery and GPS-aware photo map layer.

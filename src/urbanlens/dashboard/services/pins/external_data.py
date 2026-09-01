@@ -1,4 +1,4 @@
-"""Background-fetch orchestration for the pin detail page's external-data panels.
+"""Background-fetch orchestration for the Private Pin page's external-data panels.
 
 Every external-data panel (Wikipedia, media archives, satellite imagery,
 default boundaries, ...) used to fetch its upstream data inside the HTTP request
@@ -566,7 +566,7 @@ class CoordinateGatedInfoPanelSource(InfoPanelSource, ABC):
 class GalleryMediaSource(LocationCachePanelSource, ABC):
     """Base for anything that can appear as a source tab in the Media gallery.
 
-    The pin detail page's Media gallery combines results from several
+    The Private Pin page's Media gallery combines results from several
     unrelated providers (archive/media search engines, business directories,
     imagery APIs, ...) behind one uniform per-source loader/tab. Each
     provider needs only its own ``fetch`` (writing to its ``LocationCache``
@@ -1194,7 +1194,7 @@ def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None) -> d
     individually is one ``LocationCache`` query per source - with ~30
     registered sources (three core plus every enabled plugin's contributions)
     that is ~30 round trips to answer a question the database can answer once,
-    and it happens on the pin detail page's own render. Anything that needs the
+    and it happens on the Private Pin page's own render. Anything that needs the
     readiness of more than one source should call this instead of looping.
 
     Sources are grouped by where their store actually lives, so each group
@@ -1253,7 +1253,7 @@ def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None) -> d
             readiness[source_key] = bool(warm.get(ready_key))
 
     for bespoke_source in bespoke:
-        # Guarded per source: this map is built for the pin detail page's tab strip, and
+        # Guarded per source: this map is built for the Private Pin page's tab strip, and
         # panels are the plugin extensibility surface, so one plugin's is_ready() raising
         # would otherwise 500 the whole page rather than affecting its own tab. "Not
         # ready" is the safe default - the tab shows its pending state and polls, which

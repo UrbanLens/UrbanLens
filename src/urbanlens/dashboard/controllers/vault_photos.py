@@ -40,15 +40,18 @@ def _sorted_gallery(profile: Profile, request: HttpRequest):
 
     Args:
         profile: Whose gallery to list.
-        request: The current HttpRequest, read for ``sort``.
+        request: The current HttpRequest, read for ``sort`` and ``show``.
 
     Returns:
-        The gallery queryset, ordered.
+        The gallery queryset, ordered, and narrowed to copies of someone else's
+        photo when ``show=from_others`` (see ``ImageQuerySet.copied_from_others``).
     """
     # profile__user: image_to_gallery_json names the uploader via
     # _visible_uploader_name -> Profile.username -> self.user.username, which is
     # two queries per row without this - 2x the page size on every scroll fetch.
     gallery = Image.objects.uploaded_by(profile).photos().select_related("pin", "wiki", "profile__user")
+    if request.GET.get("show") == "from_others":
+        gallery = gallery.copied_from_others()
     sort = gallery_sort_spec(request.GET.get("sort") or GallerySort.RECENT)
     return sort.apply(gallery)
 
@@ -179,6 +182,7 @@ class VaultPhotosView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         gallery = _sorted_gallery(profile, request)
         sort = request.GET.get("sort") or GallerySort.RECENT
+        show = request.GET.get("show") or "mine"
         images = list(gallery[:_GALLERY_PAGE_SIZE])
         used_bytes, exempt_bytes = get_storage_totals(profile)
         return render(
@@ -191,6 +195,7 @@ class VaultPhotosView(LoginRequiredMixin, View):
                 "images": images,
                 "profile": profile,
                 "photo_count": gallery.count(),
+                "from_others_count": Image.objects.uploaded_by(profile).photos().copied_from_others().count(),
                 "unlogged_visits_count": len(unlogged_visited_pins(profile)),
                 "storage_used_bytes": used_bytes,
                 "storage_quota_bytes": get_quota_bytes(profile),
@@ -198,6 +203,7 @@ class VaultPhotosView(LoginRequiredMixin, View):
                 "max_upload_file_size_bytes": max_upload_file_size_bytes(),
                 "grid_page_size": _GALLERY_PAGE_SIZE,
                 "sort": sort,
+                "show": show,
                 "gallery_sort_specs": list(GALLERY_SORT_SPECS.values()),
             },
         )
@@ -742,10 +748,10 @@ class PhotoMetadataConflictResolveView(LoginRequiredMixin, View):
                     continue
         else:
             for key, value in request.POST.items():
-                if key.startswith("field_"):
+                if key.startswith("field_") and isinstance(value, str):
                     try:
                         choices[key.removeprefix("field_")] = int(value)
-                    except (TypeError, ValueError):
+                    except ValueError:
                         continue
         resolve_photo_metadata_conflict(conflict, choices)
         return _toast("Photo details updated.", refresh_queue=True)

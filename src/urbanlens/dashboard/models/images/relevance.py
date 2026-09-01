@@ -1,4 +1,4 @@
-"""Per-user relevance marks for the pin detail page's Media gallery.
+"""Per-user relevance marks for the Private Pin page's Media gallery.
 
 The Media gallery (Wikimedia/Smithsonian/Yelp/Google Images/...) renders
 straight from each provider's live results (see ``services.pins.external_data``)

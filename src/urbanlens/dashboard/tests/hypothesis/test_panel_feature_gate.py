@@ -156,7 +156,7 @@ class GatedPanelTabAssemblyTests(TestCase):
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
 
     def _tab_keys(self) -> list[str]:
-        """Render the pin detail page and return its tab strip's source keys.
+        """Render the Private Pin page and return its tab strip's source keys.
 
         Returns:
             The ``key`` of every tab in the page's ``panel_tabs`` context.

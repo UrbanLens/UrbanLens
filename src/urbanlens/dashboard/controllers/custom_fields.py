@@ -256,7 +256,7 @@ class CustomFieldSettingsPanelView(LoginRequiredMixin, View):
                     "label": label,
                     "icon": ENTITY_ICONS.get(entity_type, "tune"),
                     "fields": list(CustomField.objects.for_entity(profile, entity_type)),
-                    # display placement only exists on the pin detail page today.
+                    # display placement only exists on the Private Pin page today.
                     "supports_display": entity_type == CustomFieldEntity.PIN,
                 },
             )
@@ -350,7 +350,7 @@ _FIXED_DEFAULT_STEP = 11.0
 
 
 def _render_pin_panel(request: HttpRequest, profile: Profile, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the pin detail page's custom-fields area.
+    """Render the Private Pin page's custom-fields area.
 
     The response is one wrapper (``#pin-custom-fields-panel``) holding the
     Custom Fields card (display=default rows), one standalone card per
@@ -419,7 +419,7 @@ class CustomFieldPositionView(LoginRequiredMixin, View):
     """POST: remember where the user dragged a fixed-display field.
 
     The position is per-field (fields are already per-user) and applies to
-    every pin detail page, per the feature request. Values are viewport
+    every Private Pin page, per the feature request. Values are viewport
     percentages, clamped server-side so a bad client can't park a field
     off-screen for good.
     """

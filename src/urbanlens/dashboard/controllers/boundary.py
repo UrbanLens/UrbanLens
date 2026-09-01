@@ -87,7 +87,7 @@ def _detail_building_entries(pin: Pin) -> list[dict]:
 
 
 def _pin_boundary_payload(pin: Pin, *, pending: bool, refreshing: bool = False) -> dict:
-    """Full boundary payload for a pin detail page map."""
+    """Full boundary payload for a Private Pin page map."""
     boundaries = {}
     for boundary_type in (BoundaryType.PROPERTY, BoundaryType.BUILDING):
         polygon, source = Boundary.objects.resolve_for_pin(pin, boundary_type)

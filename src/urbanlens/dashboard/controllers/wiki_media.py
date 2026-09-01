@@ -1,6 +1,6 @@
 """Wiki Media gallery - the community-page counterpart of the pin detail Media section.
 
-The pin detail page renders a combined Media gallery (external archival/media
+The Private Pin page renders a combined Media gallery (external archival/media
 providers plus the owner's own uploads) with per-user relevance marking (see
 ``controllers.pin.PinController.media_provider`` / ``media_relevance``). These
 views expose the same external media on a Location's community **wiki**, with
@@ -8,13 +8,13 @@ two deliberate differences:
 
 * **External media is automatic.** It's about the place, not a private upload,
   so it appears on the wiki straight from the shared per-Location
-  ``LocationCache`` the pin detail page already warms. User-uploaded photos, by
+  ``LocationCache`` the Private Pin page already warms. User-uploaded photos, by
   contrast, only appear once intentionally shared to the wiki (``Image.wiki``).
 * **Thumbs are community votes.** A thumbs-up/down is stored in the same
   Location-scoped :class:`MediaRelevance` model, but the wiki reads the
   *aggregate* across every contributing profile as a net score (up - down) and
   sorts items highest-first. Because ``MediaRelevance`` is keyed by Location,
-  a relevance mark made on any user's pin detail page already counts here - no
+  a relevance mark made on any user's Private Pin page already counts here - no
   schema change needed for the score itself (see
   ``MediaRelevanceQuerySet.vote_scores``).
 * **An up-vote also submits the item to the wiki.** Unlike the pin detail
@@ -118,6 +118,11 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     # a still-transient item has no REData photo_id to
                     # attach to (see WikiMediaVoteView.post).
                     "image_id": local_image.pk if local_image else None,
+                    # Ownership isn't meaningful for an external-provider result
+                    # (explicitly None, not just absent - see the "photos"
+                    # branch below and pin_media_items.html's data-mine, which
+                    # needs to tell "no data" apart from "definitely not mine").
+                    "is_mine": None,
                 },
             )
 
@@ -146,13 +151,18 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
             key = media_item_key(url)
             rendered_items.append(
                 {
-                    "item": MediaItem(url=url, thumb_url=url, caption=img.caption or "", source="Photos", page_url=url),
+                    "item": MediaItem(url=url, thumb_url=url, caption=img.caption or "", source="Photos", page_url=url, author=img.author or ""),
                     "key": key,
                     "is_relevant": my_marks.get(key),
                     "vote_score": scores.get(key, 0),
                     "image_id": img.pk,
                     "lat": img.latitude,
                     "lng": img.longitude,
+                    # Drives the lightbox's "Copy to my Private Pin" action
+                    # (isMine === false) and its "Copied from..." line - see
+                    # pin_media_items.html and shared/media-lightbox.ts.
+                    "is_mine": img.profile_id == profile.pk,
+                    "copied_from_label": img.copied_from_label or "",
                     "_redata_confidence": img.redata_confidence,
                     "_created": img.created,
                 },
@@ -177,7 +187,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         they have a pin at (or near) this location; we use *their* pin so the
         fetch is gated by their ``external_apis_enabled`` and counts against
         their quota. A boundary-mate viewer with no pin at this exact location
-        just sees whatever the pin detail page has already cached (204).
+        just sees whatever the Private Pin page has already cached (204).
         """
         from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
 
@@ -292,3 +302,45 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
         my_vote = None if is_relevant is None else bool(is_relevant)
         response.update({"my_vote": my_vote, "vote_score": score})
         return JsonResponse(response)
+
+
+class CopyWikiPhotoView(LoginRequiredMixin, View):
+    """Copy a wiki photo onto the viewer's own pin at this location.
+
+    POST /location/<slug>/wiki/media/copy-to-pin/<int:image_id>/ →
+    ``{"copied": true, "already_copied": bool, "pin_slug": str, "pin_name": str}``
+
+    Deliberately not a ``PhotoActionView`` action (``controllers.vault_photos``): that view's
+    shared image lookup only ever operates on images the requester already owns, which a wiki
+    photo being copied is not. The image is instead scoped and gated exactly like every other
+    wiki-photo lookup in this module - ``resolve_visible_wiki`` for wiki access,
+    ``visible_rows``/``visible_to`` for concealment and the uploader's own visibility setting -
+    so this can never expose a photo the wiki's own gallery views wouldn't already show this
+    viewer. The target is the viewer's own pin at this wiki's location, the same one "Back to my
+    pin" links to; there is no picker, matching that link's own assumption of a single pin.
+    """
+
+    def post(self, request: HttpRequest, location_slug: str, image_id: int) -> JsonResponse:
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.services.photos.wiki_copy import copy_wiki_photo_to_pin
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+
+        image = visible_rows(Image.objects.filter(pk=image_id, wiki=wiki), wiki, profile).visible_to(profile).first()
+        if image is None:
+            return JsonResponse({"error": "That photo could not be found."}, status=404)
+
+        target_pin = location.pins.filter(profile=profile).first()
+        if target_pin is None:
+            return JsonResponse({"error": "You don't have a pin here to copy it to."}, status=400)
+
+        _copy, created = copy_wiki_photo_to_pin(image, target_pin, profile)
+        return JsonResponse(
+            {
+                "copied": True,
+                "already_copied": not created,
+                "pin_slug": target_pin.slug,
+                "pin_name": target_pin.name,
+            }
+        )

@@ -1,7 +1,7 @@
 @use 'sass:color';
 @use 'variables' as *;
 
-// -- Pin list membership panel (on pin detail page) ---------------------------
+// -- Pin list membership panel (on Private Pin page) ---------------------------
 
 
 // -- Tags (replaces pin lists) -------------------------------------------------
@@ -911,14 +911,14 @@ $org-stat-col-color-w: 2.75rem;
     border-radius: 50%;
 }
 
-// -- Tag membership panel (on pin detail page) ---------------------------------
+// -- Tag membership panel (on Private Pin page) ---------------------------------
 
 .tag-panel {
     @include surface;
     overflow: hidden;
 }
 
-// Nested inside the pin detail page's combined "Organization" card (see
+// Nested inside the Private Pin page's combined "Organization" card (see
 // .organization-card) instead of standing alone - drop the card-in-a-card
 // chrome entirely and render just the label chips, no header of its own.
 .tag-panel--embedded {

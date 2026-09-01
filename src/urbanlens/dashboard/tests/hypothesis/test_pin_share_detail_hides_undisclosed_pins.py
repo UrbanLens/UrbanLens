@@ -1,4 +1,4 @@
-"""The shared-pin detail page must not read through to a pin nobody offered.
+"""The shared-Private Pin page must not read through to a pin nobody offered.
 
 ``PinShareStatus.DETECTED`` rows are provenance bookkeeping, auto-recorded when
 a place was revealed indirectly - a shared map's geometry, a location mentioned

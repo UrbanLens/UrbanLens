@@ -94,6 +94,58 @@ describe("the floating undo bar", () => {
         expect(calls).toEqual([]);
     });
 
+    test("a rapid second click while an undo is in flight sends only one request", async () => {
+        // Pre-seed the bar (with its buttons) exactly as a server-rendered page
+        // would, so ensureBar() finds it already present and reuses it as-is
+        // (its early `if (root) return root` skips (re)building the buttons) -
+        // the dataset URLs must be in place before installUndoBar() runs, since
+        // its fetchStack() reads them synchronously before its first await.
+        const bar = document.createElement("nav");
+        bar.id = "ul-undo-bar";
+        bar.hidden = true;
+        bar.dataset.stackUrl = "/test/undo/stack/";
+        bar.dataset.undoUrl = "/test/undo/undo/";
+        bar.dataset.redoUrl = "/test/undo/redo/";
+        bar.innerHTML = '<button type="button" id="ul-undo-btn" hidden></button><button type="button" id="ul-redo-btn" hidden></button>';
+        document.body.appendChild(bar);
+
+        let undoCalls = 0;
+        let resolveUndoResponse: ((value: Response) => void) | undefined;
+        const originalFetch = window.fetch;
+        window.fetch = (async (input: RequestInfo | URL) => {
+            const url = typeof input === "string" ? input : input.toString();
+            if (url.includes("/undo/undo/")) {
+                undoCalls++;
+                return new Promise<Response>((resolve) => {
+                    resolveUndoResponse = resolve;
+                });
+            }
+            // The initial stack GET installUndoBar() fires at install time.
+            return new Response(JSON.stringify({ can_undo: true, can_redo: false, undo_label: "Delete", redo_label: null }), { status: 200 });
+        }) as typeof window.fetch;
+
+        try {
+            installUndoBar();
+            const undoBtn = document.getElementById("ul-undo-btn") as HTMLButtonElement;
+            // Let installUndoBar's fetchStack() (fetch -> response.json() ->
+            // syncButtons(), each its own microtask hop) resolve so the undo
+            // button is enabled before the test clicks it.
+            for (let i = 0; i < 20 && undoBtn.hidden; i++) await new Promise((r) => setTimeout(r, 0));
+            expect(undoBtn.hidden).toBe(false);
+
+            undoBtn.click();
+            undoBtn.click(); // rapid second click while the first request is still pending
+
+            expect(undoCalls).toBe(1);
+
+            resolveUndoResponse?.(new Response(JSON.stringify({ can_undo: false, can_redo: true, undo_label: null, redo_label: null }), { status: 200 }));
+            await new Promise((r) => setTimeout(r, 0));
+            await new Promise((r) => setTimeout(r, 0));
+        } finally {
+            window.fetch = originalFetch;
+        }
+    });
+
     test("lifts above another floating control in the same corner", () => {
         const collider = document.createElement("div");
         collider.className = "map-buttons";

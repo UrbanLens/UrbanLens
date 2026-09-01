@@ -76,7 +76,7 @@ class AerialMediaPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "redata_aerial_media"
     verbose_name: ClassVar[str] = "Aerial & Drone Footage"
-    description: ClassVar[str] = "Adds an aerial/drone footage tab to the pin detail page's Media gallery, from REData's pooled media index filtered to overhead views."
+    description: ClassVar[str] = "Adds an aerial/drone footage tab to the Private Pin page's Media gallery, from REData's pooled media index filtered to overhead views."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:
