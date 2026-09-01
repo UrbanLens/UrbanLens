@@ -11,7 +11,13 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { matrix3dForCorners, overlaySubmitEnabled } from "./map-image-overlays";
+import { matrix3dForCorners, OVERLAY_PANE_ALIGNING_ZINDEX, OVERLAY_PANE_IDLE_ZINDEX, overlaySubmitEnabled } from "./map-image-overlays";
+
+// map-annotations.ts's boundaryPane/markupPane z-indexes this must clear while
+// an overlay is being aligned - kept as literals (not imported) so this fails
+// loudly if either side drifts, rather than silently staying in sync.
+const BOUNDARY_PANE_EDITING_ZINDEX = 560;
+const MARKUP_PANE_ZINDEX = 550;
 
 /** Parse a `matrix3d(...)` string back into its 16 column-major numbers. */
 function parseMatrix(css: string): number[] {
@@ -146,5 +152,23 @@ describe("overlaySubmitEnabled", () => {
 
     it("is enabled once an existing photo is picked", () => {
         expect(overlaySubmitEnabled({ hasFile: false, urlValue: "", imageIdValue: "42" })).toBe(true);
+    });
+});
+
+describe("overlay pane z-index", () => {
+    it("sits below map-annotations.ts's boundary/markup panes while idle", () => {
+        // Idle overlays are not the bug being guarded against; this just documents
+        // that the idle value is unchanged from Leaflet's own default pane.
+        expect(Number(OVERLAY_PANE_IDLE_ZINDEX)).toBe(400);
+    });
+
+    it("clears every boundary/markup pane z-index while an overlay is aligning", () => {
+        // Regression guard for the reported bug: an overlay's handles were
+        // unclickable while dragging because a boundary polygon's pane sat above
+        // the (shared, default) overlay pane. If either sibling pane's z-index is
+        // ever raised past this, this constant must move too.
+        const raised = Number(OVERLAY_PANE_ALIGNING_ZINDEX);
+        expect(raised).toBeGreaterThan(BOUNDARY_PANE_EDITING_ZINDEX);
+        expect(raised).toBeGreaterThan(MARKUP_PANE_ZINDEX);
     });
 });

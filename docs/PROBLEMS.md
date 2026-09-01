@@ -5329,3 +5329,11 @@ at this app's beta scale (~2 users):
   redirect branch); and `controllers/pin_lists.py:155-176` (`_items_map_data` plots every matching pin
   on the overview map with no cap, unlike the near-identical `SavedFilterPreviewView`'s explicit
   `_PREVIEW_MAP_PIN_LIMIT = 500`).
+
+## OPEN 2026-09-01: `bun run typecheck` fails on `hotkeys.test.ts`/`hotkeys.contract.test.ts`, unrelated to any change in progress
+
+Found while typechecking after an unrelated fix (map overlay pane z-index,
+`map-image-overlays.ts`) - these two failures are pre-existing on the branch and reproduce with
+no relation to that change: `hotkeys.contract.test.ts:33` - `TS2554: Expected 0-1 arguments, but
+got 2.`; `hotkeys.test.ts:61` - `TS18048: 'DEFAULT_HOTKEYS.redo' is possibly 'undefined'.` Not
+investigated further - out of scope for the work in progress at the time.
