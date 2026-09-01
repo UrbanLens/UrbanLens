@@ -416,8 +416,23 @@ migration — don't "simplify" it to a literal list.
 
 ## Undo framework — do not "delete" through save()/post_save
 
-The generic undo system (`services/undo/`, `models/undo/UndoAction`) stages deletions in cache
-before they're finalized. Per-model handlers exist for pin, wiki, safety check-in, and trip.
+The generic undo system (`services/undo/`, `models/undo/UndoAction`) stores the serialized
+payload needed to restore or redo an action directly on the `UndoAction` row itself, not in a
+cache: a cache entry can vanish well before its nominal TTL (no shared Redis/Valkey configured,
+so a locmem cache other workers can't see; or early eviction under memory pressure), which used
+to surface as an undo entry that still listed as recent and un-expired but silently failed the
+moment it was actually restored. A dozen per-model/mutation handlers exist under
+`services/undo/handlers/` (pin, wiki, trip, label, label membership, saved filter, pin list,
+safety check-in, markup map, plus `_mutation` variants for pin/wiki/photo field changes) - see
+that package's docstrings for exactly what each does and doesn't restore.
+
+Both `restore_undo_action` and `redo_undo_action` claim the row under `select_for_update()` and
+check `undone_at`/expiry *after* acquiring the lock, so a double-submit (a retried request, a
+race between two tabs) always leaves exactly one winner - the loser gets `UndoAlreadyRestoredError`
+rather than double-applying. See `tests/hypothesis/test_undo_restore_is_single_use.py` and its
+`test_undo_redo_is_single_use.py` sibling, which both prove this with a real two-instance
+double-submit rather than just asserting on the code shape.
+
 Related but broader rule that bit this codebase before: **never call `.save()` inside a
 `post_save` signal handler or in `__str__`** — it causes recursive-save bugs; use
 `queryset.update()` for side-effect-free caching instead, and always set `dispatch_uid` on signal
