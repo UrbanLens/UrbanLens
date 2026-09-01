@@ -117,9 +117,10 @@ class GlobalSearchEngine:
         if len(" ".join(raw_query.split())) < MIN_QUERY_LENGTH or parsed.is_empty:
             return SearchResponse(parsed=parsed)
 
-        if parsed.near_me:
+        if parsed.near_me or parsed.sort == "nearest":
             # The parser has no profile/DB access, so "near me" is resolved to
-            # coordinates here, once we know who is searching.
+            # coordinates here, once we know who is searching. `sort:nearest`
+            # needs the same point even without "near me" wording.
             point = profile.best_known_point()
             if point is not None:
                 parsed.near_lat, parsed.near_lng = point
@@ -192,7 +193,12 @@ class GlobalSearchEngine:
                 response.errors.append(f"{meta.label} could not be searched right now.")
                 continue
             if results:
-                results.sort(key=lambda result: result.score, reverse=True)
+                if parsed.sort in (None, "", "relevance"):
+                    results.sort(key=lambda result: result.score, reverse=True)
+                # else: a real `sort:` mode is active - each provider already
+                # ordered its own queryset for it (or left its default order
+                # standing, when it has no concept of the requested mode), so
+                # that order is trusted here rather than re-shuffled by score.
                 response.groups.append(SearchGroup(meta=meta, results=results))
                 response.total += len(results)
         return response

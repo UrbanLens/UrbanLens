@@ -275,3 +275,34 @@ class ParseQueryOperatorTests(SimpleTestCase):
 
         problems = parse_query("color:red").describe_problems()
         self.assertTrue(any("colour" in problem or "color" in problem for problem in problems))
+
+    def test_an_unbacked_is_value_explains_itself(self) -> None:
+        """`is:` mixes answerable and unanswerable values on one operator - unlike
+        `color:`, which is unanswerable outright."""
+        from urbanlens.dashboard.services.global_search.parser import parse_query
+
+        parsed = parse_query("is:starred")
+        self.assertIn(("is:starred", parsed.unsupported[0][1]), parsed.unsupported)
+        problems = parsed.describe_problems()
+        self.assertTrue(any("starred" in problem for problem in problems))
+
+    def test_an_unbacked_has_value_explains_itself(self) -> None:
+        from urbanlens.dashboard.services.global_search.parser import parse_query
+
+        problems = parse_query("has:coords").describe_problems()
+        self.assertTrue(any("coords" in problem or "coordinates" in problem for problem in problems))
+
+    def test_a_backed_is_value_is_not_reported_as_unsupported(self) -> None:
+        """`archived` is unbacked for most types but real for safety check-ins -
+        it must not be blanket-flagged as unanswerable."""
+        from urbanlens.dashboard.services.global_search.parser import parse_query
+
+        parsed = parse_query("is:archived")
+        self.assertFalse(any(key.endswith("archived") for key, _reason in parsed.unsupported))
+
+    def test_answerable_is_values_are_not_reported_as_unsupported(self) -> None:
+        from urbanlens.dashboard.services.global_search.parser import parse_query
+
+        for value in ("visited", "unvisited", "upcoming", "past"):
+            parsed = parse_query(f"is:{value}")
+            self.assertEqual(parsed.unsupported, (), f"is:{value} should not be flagged unsupported")

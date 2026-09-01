@@ -123,6 +123,17 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   existing "pin" type keyword), including any provider's equivalent tag once admin-grouped —
   see "Tag equivalence mapping" below. The map's own "Jump To" pin search bar matches the same
   way
+- **Typed search operators** (`type:`, `place:`, `near:`, `visited:`/`created:`/`updated:`, …) —
+  the same query box also accepts exact `key:value` syntax, unrecognized keys fall back to plain
+  text rather than erroring. `label:`/`-label:` narrows/excludes by Label (pins, photos, wikis
+  only — the only types with one); `by:`/`author:` (`by:me` or a name) filters by who created
+  it, per type's own notion of authorship; `has:`/`-has:` (pins only — photos, comments, visits,
+  notes, labels, links, floorplan, markup, wiki, check-ins) and `is:` (`visited`/`unvisited` on
+  pins, `upcoming`/`past` on trips, `archived` on safety check-ins) filter by attached content or
+  state; `sort:` (`recent`/`created`/`updated` on everything, `visited` on pins/visits,
+  `most-visited` and `nearest` on pins) reorders a section instead of the default relevance
+  ranking. A choice with no real backing anywhere (`is:starred`, `has:coords`, …) explains itself
+  next to the results rather than silently returning nothing
 
 ## Lists & Saved Filters
 
