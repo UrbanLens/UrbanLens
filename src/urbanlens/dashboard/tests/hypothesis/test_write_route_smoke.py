@@ -121,7 +121,7 @@ class WriteRouteSmokeTests(TestCase):
             # The next tier of gates, measured after session_id landed: each is
             # one object and unlocks 5-14 routes. Album is the largest single
             # gate left at 14.
-            "album_slug": baker.make("dashboard.Album", profile=profile, name="Smoke Album").slug,
+            "album_slug": baker.make("dashboard.Album", profile=profile, parent_profile=profile, name="Smoke Album").slug,
             "activity_id": baker.make("dashboard.TripActivity", trip=trip).pk,
             "alias_id": baker.make("dashboard.PinAlias", pin=pin, name="smoke-alias").pk,
             "comment_id": baker.make("dashboard.Comment", profile=profile, pin=pin, text="smoke").pk,

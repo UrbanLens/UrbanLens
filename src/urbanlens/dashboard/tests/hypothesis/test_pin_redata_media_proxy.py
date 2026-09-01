@@ -137,12 +137,22 @@ class CrisAttachmentPreviewModeTests(SimpleTestCase):
         return buffer.getvalue()
 
     def test_a_tiff_attachment_is_converted(self) -> None:
+        # Two requests, because the decode now happens between them: the view
+        # fetches and queues, tasks.render_media_preview decodes in the sandbox
+        # worker, and the second request is the one that serves a preview. The
+        # first 404 is what the gallery's onerror retry is for - see the same
+        # pattern in test_media_previews.py.
+        from urbanlens.dashboard.tasks import render_media_preview
+
         with (
-            patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
-            patch("urbanlens.dashboard.controllers.pin.cache.set"),
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "download_cultural_resource_attachment", return_value=(self._tiff_bytes(), "image/tiff")),
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
+            self.assertEqual(self.client.get(self.url, {"preview": "1"}).status_code, 404)
+            _task, source_key, preview_key, ttl, failure_ttl = enqueue.call_args.args
+            render_media_preview(source_key, preview_key, ttl, failure_ttl)
+
             response = self.client.get(self.url, {"preview": "1"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "image/jpeg")

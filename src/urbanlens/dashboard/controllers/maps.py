@@ -269,7 +269,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             bounds = parse_infrastructure_bbox(request.GET.get("bbox"))
         except ValueError as exc:
             logger.warning("Unable to parse infrastructure bbox: %s", str(exc))
-            return JsonResponse({"error": "Unable to parse infrastructure bbox"}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)
 
         try:
             collection = infrastructure_feature_collection(bounds)

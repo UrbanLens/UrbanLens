@@ -22,6 +22,120 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## RESOLVED 2026-09-01: `--fresh-db` dropped another session's live database mid-run
+
+This session's own broad regression sweep (`run14`, everything in `dashboard/tests/hypothesis/`
+except a dozen already-covered areas, ~9500 tests) was roughly two-thirds through when a
+`bin/run_tests.sh --fresh-db` invocation from *this same session* - checking two failing tests
+in isolation, without setting `UL_TEST_DB_NAME` - defaulted to the same name the sweep was
+using (`ul_fast`). `--fresh-db` terminates every connection to its target and drops it
+unconditionally, by design, to recover a database left half-built by an interrupted prior run of
+the script itself; the sweep's hours-long connection was one of those it terminated instead. The
+rebuild then itself deadlocked partway through migrating (a known-separate contention risk this
+file already documented for `--parallel`, triggered here by two independent sessions instead),
+leaving `ul_fast` part-migrated - some tables from a fresh `0001` onward, most not.
+
+Final tally: 1050 failed, 173 errors, out of ~9500. Manually classifying every failure's
+traceback for a database/connection signature accounted for 1163 directly (a missing column
+cascading into "transaction aborted" on every later query in the same test; `auth_user.username`
+still `varchar(30)` because `auth.0009` never got to re-run; Channels/websocket and concurrent
+"race" tests disproportionately hit, since they depend on multiple simultaneous connections
+surviving the same window). The remaining 60 needed individual tracing - all but a handful
+reduced to the same cause with a different symptom (a migration-seeded row missing, `flush`'s
+TRUNCATE dependency order breaking against a mismatched schema, a `varchar(30)` username no
+current model declares). None were code regressions; the small number of real, independent
+findings mixed in are the other entries dated 2026-09-01 in this file.
+
+Fixed two ways. `bin/run_tests.sh --fresh-db` now checks for other active connections to the
+target database first and refuses unless `--force` is passed, restoring the old unconditional
+behaviour only for what the original comment actually described - recovering your *own*
+abandoned run, not someone else's live one. And the `UL_TEST_DB_NAME` doc comment, which read as
+"a unique name is generated when unset" with no caveat that this is false for
+`--fast`/`--fresh-db` specifically (their default is the fixed, deliberately-shared `ul_fast`),
+now says so.
+
+Verified two ways. Every one of the 133 files touched by any failure or error, re-run in full
+against a fresh, uniquely-named throwaway database: 1698 passed, 6 failed - all 6 already
+explained (two are the OPEN entries below; four were `test_write_route_smoke.py`, a real,
+independent, pre-existing fixture bug this re-check happened to be the first run to actually
+exercise to completion - see the next entry). And `ul_fast` itself, rebuilt clean with the new
+guard in place.
+
+## RESOLVED 2026-09-01: the write-route smoke sweep's own fixture violated a constraint it should have satisfied
+
+`test_write_route_smoke.py` sweeps every discoverable write route with a minimal request,
+asserting none answers with a 5xx - the coverage the entry above's re-check happened to exercise
+to completion for what looks like the first time. Its own `setUp()` fixture failed before any
+route was ever swept: `baker.make("dashboard.Album", profile=profile, name="Smoke Album")` sets
+`profile` (the album's creator, always required) but none of
+`parent_pin`/`parent_wiki`/`parent_profile` - the three the `ck_album_exactly_one_owner`
+constraint requires exactly one of - and Model Bakery does not fill optional foreign keys on its
+own, so all three came back null and Postgres correctly rejected the row. Fixed by adding
+`parent_profile=profile`, making it a Vault album like the rest of this fixture's single-user
+scope. Swept clean once it could run: 4 passed in 369s, no crashing route found among the ~390
+in reach.
+
+## RESOLVED 2026-09-01: a CRIS preview test still asserted the pre-async-rework contract
+
+`test_pin_redata_media_proxy.py::CrisAttachmentPreviewModeTests.test_a_tiff_attachment_is_converted`
+asserted a single request to `?preview=1` returns `200` with a converted JPEG - true before this
+session's async-preview rework, false after: `RedataMediaProxyMixin.serve_media` now calls
+`previews.request_sandbox_render()` and returns 404 immediately for anything that is not already
+web-safe, the same as `MediaPreviewView`. Missed when `test_media_previews.py`'s equivalent test
+was updated for the same change, because this is a different view reusing the same mixin from a
+different test file - `run14` (a broad sweep, not a targeted run) is what caught it. Fixed the
+same way: patch `safely_enqueue_task` to capture the queued args, call
+`tasks.render_media_preview()` directly to do what the sandbox worker would, then request again
+and expect the real response.
+
+## RESOLVED 2026-09-01: two endpoints logged the specific validation error and returned a generic one
+
+`controllers/floorplans.py`'s `FloorplanValidationError` handler and `controllers/maps.py`'s
+`infrastructure_features` bbox handler both did the same thing: `logger.warning("...: %s",
+str(exc))` followed by `JsonResponse({"error": "<hardcoded generic phrase>"}, status=400)` -
+discarding the specific, already-logged, already-safe message (`FloorplanValidationError`'s
+messages are all deliberately-authored field/limit text, same as `parse_infrastructure_bbox`'s;
+neither ever echoes anything unvalidated) and replacing it with text that names nothing. Two
+existing floorplan tests (`test_a_bad_number_is_a_400_naming_the_field`,
+`test_a_missing_wall_coordinate_is_a_400_naming_the_defect`) and one map test
+(`test_rejects_oversized_viewport`) already asserted the specific message should reach the
+client and were failing against the real endpoints, surfaced by `run14`. Both fixed the same
+way: return `str(exc)` instead of the generic literal. Contrast with the `ValueError` branch
+beside the floorplan one, which deliberately does *not* do this and explains why in its own
+comment - its text is not known to be safe, unlike a validation exception's.
+
+## OPEN 2026-09-01: the test-runner container's compiled JS bundles go stale the same way `bin/` did
+
+`test_compiled_js_references_resolve.py::CompiledJsReferenceTests.
+test_every_bundle_a_template_names_exists` failed for the first time this session, listing three
+bundles templates reference that the container doesn't have committed:
+`site_admin_external_tags.js`, `vault-documents.js`, `vault-photos.js`. All three exist on the
+host and build successfully (confirmed in the full `docker compose` bring-up's `app` container
+logs, same session) - `bin/run_tests.sh`'s sync step copies Python/template source (`docker cp
+src/.`, plus `bin/.`) into the test-runner container, but never rebuilds the frontend. The
+test-runner's `entrypoint: ["sleep", "infinity"]` deliberately bypasses `/docker-entrypoint.sh`
+(see the compose file's own comment - `init.py` runs migrate+collectstatic, not wanted here), so
+nothing else runs `bin/build-frontend.ts` for it either. Same class of failure as "RESOLVED
+2026-09-01: `bin/` stopped being synced into the test container" above - a container copy
+drifting from the tree, invisible until something exercises exactly the missing piece - just for
+compiled assets instead of scripts. Not fixed here: unlike copying `bin/`, rebuilding the
+frontend on every sync has a real time cost worth deciding on deliberately rather than
+defaulting into.
+
+## OPEN 2026-09-01: a source-scan regression guard is one reference short of its own threshold
+
+`test_friend_accepted_source_profile.py::EveryFriendAcceptedSiteSetsSourceProfileTests.
+test_the_scan_still_finds_the_sites` counts occurrences of the literal string
+`NotificationType.FRIEND_ACCEPTED` across `services/social/friendship.py` and
+`controllers/friendship.py`, asserting at least 3 ("Guard against the check passing because it
+matched nothing"). It currently finds 2 - both in `friendship.py`; `controllers/friendship.py`
+has none. `git log` on both files shows nothing recent enough to explain it (the last commit
+touching either predates this branch), so this is not a regression from anything here - either a
+third call site was consolidated away at some point without the test's threshold being lowered
+to match, or one is missing and has been for a while. Not investigated further: distinguishing
+"stale threshold" from "a friend-accepted notification stopped firing somewhere it used to"
+needs more history on the notification call sites than a source scan alone gives.
+
 ## RESOLVED 2026-09-01: `/app/src/backups` was never in the entrypoint's chown loop
 
 Found bringing up the full stack to verify this session's sandbox-tier work: `celery-worker`'s
