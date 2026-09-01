@@ -31,6 +31,22 @@ were both generated against `0037`, leaving the graph with two leaf nodes and br
 models in the same window: `makemigrations` numbers from what is on disk, so a second 0038 is
 silently produced rather than refused, and nothing complains until something runs `migrate`.
 
+## RESOLVED 2026-09-01: `bin/` stopped being synced into the test container, silently removing 11 tests
+
+`bin/run_tests.sh` synced only `src/`, with a comment explaining that nothing under `tests/` reads
+`bin/` anymore since `bin/opslib` moved to the `infrastructure` repo. That stopped being true:
+`test_template_comments.py`, `test_run_codeql.py` and `test_ops_tooling_contract.py` each resolve a
+checker by path off the repo root. Every containerised run errored all 11 of `test_template_comments`
+at setup with `FileNotFoundError: /app/bin/check_template_comments.py`, against whatever the image
+was last built with - which reads as a broken test rather than as absent coverage, and is the same
+shape as the `django-perf-rec` gap recorded above.
+
+Restored, the way the old comment said to: `docker cp bin/.` plus the chown. 25 pass where 11 errored.
+
+Worth generalising: this class of failure (a container copy that has drifted from the tree) does not
+announce itself as missing coverage. `bin/run_tests.sh` verifies host/container parity for `src/`
+after each sync and would have caught it there; it does not for `bin/`.
+
 ## RESOLVED 2026-09-01: six defects a second review found, all in the first round of fixes
 
 A review of the *fix* commit, not of the original work. Every one of these was introduced by, or

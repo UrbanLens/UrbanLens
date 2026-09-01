@@ -64,20 +64,40 @@ class WikiNeighbourTestCase(TestCase):
         self.neighbour_pin = baker.make(Pin, profile=self.neighbour, location=self.location, parent_pin=None)
         self.wiki = baker.make(Wiki, location=self.location)
 
+    def _processed(self, image: Image, **fields) -> Image:
+        """Finish a fixture upload the way ``tasks.process_image_upload`` would.
+
+        A fresh upload is stored raw and gated to its uploader until that task
+        runs (see ``Image.pending_scan``). This file is about the *sharing*
+        gate, so leaving it pending would make every negative assertion here
+        pass for the wrong reason - a photo invisible because it is unprocessed,
+        not because it was never shared - which is exactly the vacuous shape the
+        positive controls in this module exist to catch. Set directly rather
+        than by running the task: a real Pillow decode per fixture buys nothing.
+
+        Args:
+            image: The freshly uploaded row.
+            **fields: Any other columns to stamp in the same write.
+
+        Returns:
+            The same row, re-read.
+        """
+        Image.objects.filter(pk=image.pk).update(pending_scan=False, **fields)
+        image.refresh_from_db()
+        return image
+
     def _private_photo(self) -> Image:
         """A photo uploaded to the owner's own pin, never contributed anywhere."""
         result = upload_photo_for_owner(self.owner_pin, self.owner, SimpleUploadedFile("private.jpg", _jpeg_bytes(), content_type="image/jpeg"), PRIVATE_CAPTION)
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
-        return result
+        return self._processed(result)
 
     def _shared_photo(self) -> Image:
         """A photo the owner deliberately contributed to the wiki."""
         result = upload_photo_for_owner(self.owner_pin, self.owner, SimpleUploadedFile("shared.jpg", _jpeg_bytes((30, 20, 10)), content_type="image/jpeg"), "deliberately shared")
         assert isinstance(result, Image)
         attach_to_wiki(result, self.wiki, added_by=self.owner)
-        Image.objects.filter(pk=result.pk).update(wiki=self.wiki)
-        result.refresh_from_db()
-        return result
+        return self._processed(result, wiki=self.wiki)
 
     def _as_neighbour(self) -> None:
         self.client.force_login(self.neighbour_user)

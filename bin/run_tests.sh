@@ -108,14 +108,17 @@ fi
 sync_tree() {
     echo "==> syncing working tree into $CONTAINER"
     docker cp src/. "$CONTAINER":/app/src/
-    # bin/ is not synced: nothing under tests/ imports from it anymore now that
-    # bin/opslib and the ops-tooling tests that reached it by path have moved to
-    # the separate `infrastructure` repo (see docs/PROBLEMS.md's history of this
-    # sync, and that repo's tests/test_ops_tooling.py for where those tests live
-    # now). If a future test starts importing something under bin/ again, restore
-    # this the same way src/ is handled below.
+    # bin/ is synced again. It was dropped when bin/opslib and the ops-tooling
+    # tests that reached it by path moved to the separate `infrastructure` repo,
+    # on the grounds that nothing under tests/ read it anymore - but three
+    # modules do (test_template_comments.py, test_run_codeql.py,
+    # test_ops_tooling_contract.py), each resolving a checker by path off the
+    # repo root. Without this they error at setup with FileNotFoundError against
+    # whatever the image was last built with, which reads as a broken test
+    # rather than as missing coverage.
+    docker cp bin/. "$CONTAINER":/app/bin/
     # Not optional: docker cp preserves host ownership, and the app runs as appuser.
-    docker exec -u root "$CONTAINER" chown -R appuser:appuser /app/src
+    docker exec -u root "$CONTAINER" chown -R appuser:appuser /app/src /app/bin
 
     # `docker cp` only ever adds and overwrites - a Python file deleted on the host
     # stays in the container forever. That is not cosmetic: a scratch test file
