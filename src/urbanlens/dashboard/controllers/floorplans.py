@@ -357,7 +357,7 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": "Stale Document Error", "stale": True}, status=409)
         except FloorplanValidationError as exc:
             logger.warning("FloorPlanValidationError: %s", str(exc))
-            return JsonResponse({"ok": False, "error": "Floorplan Validation Error"}, status=400)
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
         except ValueError:
             # Not a validation failure the serializer raised deliberately, so
             # its text is not known to be safe to show - it may carry internals
