@@ -756,20 +756,28 @@ def toggle_group_reaction(profile: Profile, message: GroupMessage, emoji: str) -
         Reaction.objects.create(profile=profile, group_message=message, emoji=emoji)
         action = "added"
 
-    # Fanned out through the same per-member channel groups every other group
-    # event uses, so a web client with the thread open sees the reaction land
-    # without polling. The summary carries no identity beyond profile slugs
-    # that a member of the group can already read off the member list, so -
-    # unlike a message payload - one shared payload is correct for everyone.
-    _broadcast_group_event(
-        message.group,
-        {
-            "type": "group_reaction",
-            "group_uuid": str(message.group.uuid),
-            "message_id": message.pk,
-            "reactions": reaction_summary(message),
-        },
-    )
+    # Reaction summaries carry reactor slugs, so they are identity-bearing in
+    # the same way message payloads are. Build one payload per viewer so a
+    # member whose profile is masked from another member stays masked here too.
+    hydrated = GroupMessage.objects.prefetch_related("reactions__profile").get(pk=message.pk)
+    deliveries = [
+        (
+            direct_message_group_name(membership.profile_id),
+            {
+                "type": "group_reaction",
+                "group_uuid": str(message.group.uuid),
+                "message_id": message.pk,
+                "reactions": reaction_summary(hydrated, viewer=membership.profile),
+            },
+        )
+        for membership in message.group.active_memberships().select_related("profile", "profile__user")
+    ]
+
+    def _send() -> None:
+        for channel_group, payload in deliveries:
+            send_group_message(channel_group, {"type": "dm.message", "message": payload})
+
+    transaction.on_commit(_send)
     return action
 
 

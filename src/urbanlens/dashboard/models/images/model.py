@@ -502,6 +502,9 @@ class Image(abstract.FrontendDashboardModel):
     # Nullable because rows predating this field are backfilled lazily by
     # process_image_upload; usage sums simply skip unmeasured rows until then.
     file_size = BigIntegerField(null=True, blank=True)
+    # Set once process_image_upload has had a chance to copy metadata to the row
+    # and rewrite the stored file without embedded EXIF/location blocks.
+    upload_processed_at = DateTimeField(null=True, blank=True)
     # Why this row's bytes don't count against its profile's storage quota
     # (empty = they do). Set at creation by whichever path produced a row that
     # owns no exclusive storage of its own - services.media.media_materialize

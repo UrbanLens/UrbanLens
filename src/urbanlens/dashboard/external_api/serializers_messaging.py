@@ -522,7 +522,7 @@ def build_group_message_payload(message: GroupMessage, viewer: Profile) -> dict[
         "sender_delete_after": "",
         "expires_for_recipient": False,
         "tombstone": tombstone,
-        "reactions": reaction_summary(message),
+        "reactions": reaction_summary(message, viewer=viewer),
         "share": None,
         "pin_share_id": viewer_share.pin_share_id if viewer_share is not None else None,
         "markup_map_uuid": None,

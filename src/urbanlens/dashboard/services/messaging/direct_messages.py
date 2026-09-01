@@ -969,7 +969,7 @@ def delete_message_for_self(message: DirectMessage, actor: Profile) -> DirectMes
     return message
 
 
-def reaction_summary(message: DirectMessage | GroupMessage) -> list[dict[str, Any]]:
+def reaction_summary(message: DirectMessage | GroupMessage, *, viewer: Profile | None = None) -> list[dict[str, Any]]:
     """Summarize a message's reactions grouped by emoji.
 
     Accepts either message kind on purpose. ``Reaction`` is one table with a
@@ -982,6 +982,9 @@ def reaction_summary(message: DirectMessage | GroupMessage) -> list[dict[str, An
 
     Args:
         message: The direct or group message whose reactions to summarize.
+        viewer: The group member the summary is being rendered for. Direct
+            messages ignore this because both participants already know each
+            other; group messages use it to blank masked reactor slugs.
 
     Returns:
         A list of ``{"emoji", "count", "slugs"}`` dicts, one per distinct
@@ -993,9 +996,17 @@ def reaction_summary(message: DirectMessage | GroupMessage) -> list[dict[str, An
         should ``prefetch_related("reactions__profile")`` beforehand to avoid
         N+1 queries; this function itself never forces a fresh query.
     """
+    from urbanlens.dashboard.models.group_chats.model import GroupMessage
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+
     grouped: dict[str, list[str]] = {}
     for reaction in message.reactions.all():
-        grouped.setdefault(reaction.emoji, []).append(reaction.profile.slug or "")
+        if isinstance(message, GroupMessage) and viewer is not None and reaction.profile_id != viewer.pk:
+            identity = resolve_visible_identity(viewer, reaction.profile)
+            slug = "" if identity["is_masked"] else (reaction.profile.slug or "")
+        else:
+            slug = reaction.profile.slug or ""
+        grouped.setdefault(reaction.emoji, []).append(slug)
     return [{"emoji": emoji, "count": len(slugs), "slugs": slugs} for emoji, slugs in grouped.items()]
 
 

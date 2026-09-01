@@ -85,7 +85,8 @@ class WikiShareService:
         include = {f for f in (include_fields or set()) if f in SEEDABLE_FIELDS}
         location: Location = pin.location
 
-        shared = bool(include or alias_ids or image_ids)
+        photo_ids = self._processed_photo_ids(pin, image_ids or set())
+        shared = bool(include or alias_ids or photo_ids)
 
         with transaction.atomic():
             # Ordinarily a no-op: the page was created when the pin was, by
@@ -104,7 +105,7 @@ class WikiShareService:
                 if value:
                     WikiStatVote.objects.update_or_create(wiki=wiki, profile=pin.profile, field=field, defaults={"value": value})
             self._seed_aliases(pin, wiki, alias_ids or set())
-            self._seed_photos(pin, wiki, image_ids or set())
+            self._seed_photos(pin, wiki, photo_ids)
             if created:
                 # Naming stays a creation-time act. Renaming a page other
                 # people read because somebody shared a photo to it would be a
@@ -177,6 +178,36 @@ class WikiShareService:
         """Attach the chosen photos to the wiki's gallery, keeping their pin link intact."""
         if image_ids:
             pin.images.filter(pk__in=image_ids).update(wiki=wiki)
+
+    def _processed_photo_ids(self, pin: Pin, image_ids: set[int]) -> set[int]:
+        """Selected pin photos whose stored bytes have completed upload processing.
+
+        A photo's wiki link controls who may fetch its file. Before a selected
+        image is attached to the wiki, run the same processor the upload path
+        queued so the stored bytes have had EXIF/location metadata stripped.
+        """
+        if not image_ids:
+            return set()
+
+        selected = list(pin.images.filter(pk__in=image_ids).only("pk", "upload_processed_at"))
+        unprocessed = [image.pk for image in selected if image.upload_processed_at is None]
+        if unprocessed:
+            from urbanlens.dashboard.tasks import process_image_upload
+
+            for image_id in unprocessed:
+                try:
+                    processed = process_image_upload(image_id)
+                except Exception:
+                    logger.exception("wiki_share: upload processing failed before sharing image %s from pin %s", image_id, pin.pk)
+                    continue
+                if not processed:
+                    logger.warning("wiki_share: upload processing returned false before sharing image %s from pin %s", image_id, pin.pk)
+
+        processed_ids = set(pin.images.filter(pk__in=image_ids, upload_processed_at__isnull=False).values_list("pk", flat=True))
+        skipped = {image.pk for image in selected} - processed_ids
+        if skipped:
+            logger.warning("wiki_share: skipped %d selected photo(s) on pin %s because upload processing did not complete", len(skipped), pin.pk)
+        return processed_ids
 
 
 def seedable_field_values(pin: Pin) -> list[dict]:
