@@ -59,6 +59,17 @@ def default_group_key(value: str) -> str:
     return humanize_tag_value(value).strip().lower()
 
 
+def _bucket_key(entry: ExternalTagVocabularyEntry) -> str:
+    """The equivalence-bucket key for one vocabulary entry.
+
+    Shared by :func:`visible_tags_for_place` (resolving what to *show*) and
+    :func:`matching_vocabulary` (resolving what a search term *reaches*) -
+    both are the same "which tags count as the same thing" question, just
+    run in opposite directions.
+    """
+    return f"group:{entry.group_id}" if entry.group_id else f"value:{default_group_key(entry.value)}"
+
+
 def visible_tags_for_place(place: Place) -> list[PlaceExternalTag]:
     """One representative :class:`PlaceExternalTag` per equivalence group on ``place``.
 
@@ -89,7 +100,7 @@ def visible_tags_for_place(place: Place) -> list[PlaceExternalTag]:
     bucket_order: list[str] = []
     for row in rows:
         entry = vocab_by_tuple.get((row.source, row.key, row.value))
-        bucket_key = f"group:{entry.group_id}" if entry and entry.group_id else f"value:{default_group_key(row.value)}"
+        bucket_key = _bucket_key(entry) if entry else f"value:{default_group_key(row.value)}"
         if bucket_key not in buckets:
             buckets[bucket_key] = []
             bucket_order.append(bucket_key)
@@ -133,6 +144,83 @@ def suggested_clusters() -> list[SuggestedCluster]:
     for entry in ExternalTagVocabularyEntry.objects.ungrouped():
         clusters.setdefault(default_group_key(entry.value), []).append(entry)
     return [SuggestedCluster(key=key, entries=entries) for key, entries in sorted(clusters.items()) if len(entries) >= 2]
+
+
+def _loosely_contains(haystack: str, needle: str) -> bool:
+    """Substring match tolerant of a simple trailing-``s`` plural mismatch.
+
+    Exists so searching "restaurants" finds a tag whose humanized value is
+    "Restaurant" - plain ``in`` fails there since the longer word is never a
+    substring of the shorter one. Deliberately not a general stemmer: one
+    trailing-``s`` strip, used only for tag search matching.
+
+    Args:
+        haystack: Lowercased text to search within.
+        needle: Lowercased search term.
+
+    Returns:
+        Whether ``needle`` (or its de-pluralized form) appears in ``haystack``.
+    """
+    if not needle:
+        return False
+    if needle in haystack:
+        return True
+    singular = needle.rstrip("s")
+    return bool(singular) and singular != needle and singular in haystack
+
+
+def matching_vocabulary(term: str) -> list[ExternalTagVocabularyEntry]:
+    """Every vocabulary entry equivalent to any entry whose display text matches ``term``.
+
+    "Equivalent" is the same bucketing :func:`visible_tags_for_place` uses -
+    an explicit group, or a shared :func:`default_group_key` - run in the
+    opposite direction: starting from a search term rather than a place's
+    tags. This is what makes searching one provider's wording (e.g. OSM's
+    "amenity=restaurant") also reach an admin-grouped equivalent from another
+    provider (Overture's "building_subtype=restaurant"), the same way the
+    wiki chip already collapses them to one.
+
+    Args:
+        term: A single search token (already lowercased or not - normalized
+            here).
+
+    Returns:
+        Matching entries across every matched equivalence bucket. Empty for
+        a blank term or no match.
+    """
+    normalized = term.strip().lower()
+    if not normalized:
+        return []
+    entries = list(ExternalTagVocabularyEntry.objects.all())
+    matched_buckets = {_bucket_key(entry) for entry in entries if _loosely_contains(humanize_tag_value(entry.value).lower(), normalized)}
+    if not matched_buckets:
+        return []
+    return [entry for entry in entries if _bucket_key(entry) in matched_buckets]
+
+
+def tag_match_q(term: str, path: str) -> Q:
+    """A Q object matching :class:`PlaceExternalTag` rows equivalent to ``term``.
+
+    Args:
+        term: A single search token.
+        path: ORM path to a ``PlaceExternalTag`` relation (e.g.
+            ``"location__place__external_tags"``).
+
+    Returns:
+        The OR of every matched ``(source, key, value)`` triple, anchored at
+        ``path``. When nothing matches, returns ``Q(pk__in=())`` - a
+        guaranteed-false Q - rather than an empty ``Q()``. An empty ``Q()``
+        is a no-op filter (matches everything); OR-ing that into a per-term
+        AND-across-terms clause would silently turn "no tag match" into
+        "match every row" once callers stop guarding for it.
+    """
+    entries = matching_vocabulary(term)
+    if not entries:
+        return Q(pk__in=())
+    combined = Q()
+    for entry in entries:
+        combined |= Q(**{f"{path}__source": entry.source, f"{path}__key": entry.key, f"{path}__value": entry.value})
+    return combined
 
 
 @transaction.atomic

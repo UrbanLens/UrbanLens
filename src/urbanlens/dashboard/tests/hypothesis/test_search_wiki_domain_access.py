@@ -204,3 +204,33 @@ class AutocompleteWikiDomainAccessTests(_BoundaryMateFixture):
         stranger = baker.make(User).profile
         results = search_local("Boundary Wiki", stranger)
         self.assertFalse(any(r.title == "Boundary Wiki" for r in results))
+
+
+class ExternalTagSearchDomainAccessTests(_BoundaryMateFixture):
+    """A wiki reached only through a boundary-mate pin must also be findable by its place's
+    external tag - in both site search and the map's "Jump To" autocomplete - and a stranger
+    with no domain access on that place must not find it via the tag either."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, ExtractedTag, PlaceExternalTag
+
+        PlaceExternalTag.sync_for_source(self.parcel, ExternalTagSource.OVERTURE, [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)])
+
+    def test_site_search_finds_the_wiki_via_a_boundary_mate_pin_and_its_tag(self) -> None:
+        response = GlobalSearchEngine().search(self.profile, "restaurant")
+        self.assertIn("Boundary Wiki", _group_titles(response, "wikis"))
+
+    def test_site_search_a_profile_with_no_pin_on_the_place_does_not_find_it(self) -> None:
+        stranger = baker.make(User).profile
+        response = GlobalSearchEngine().search(stranger, "restaurant")
+        self.assertNotIn("Boundary Wiki", _group_titles(response, "wikis"))
+
+    def test_map_search_finds_the_wiki_via_a_boundary_mate_pin_and_its_tag(self) -> None:
+        results = search_local("restaurant", self.profile)
+        self.assertTrue(any(r.title == "Boundary Wiki" for r in results))
+
+    def test_map_search_a_profile_with_no_pin_on_the_place_does_not_find_it(self) -> None:
+        stranger = baker.make(User).profile
+        results = search_local("restaurant", stranger)
+        self.assertFalse(any(r.title == "Boundary Wiki" for r in results))

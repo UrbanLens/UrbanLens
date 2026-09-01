@@ -223,6 +223,72 @@ class PinSearchTests(TestCase):
             for unexpected_title in unexpected_titles:
                 self.assertNotIn(unexpected_title, titles)
 
+class PinExternalTagSearchTests(TestCase):
+    """Pins found by external tag: plain text, "pin with tag X" phrasing, provider synonyms, privacy."""
+
+    def setUp(self):
+        from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, ExtractedTag, PlaceExternalTag
+        from urbanlens.dashboard.models.place.model import Place
+
+        self.ExternalTagSource = ExternalTagSource
+        self.ExtractedTag = ExtractedTag
+        self.PlaceExternalTag = PlaceExternalTag
+
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.other_user = baker.make("auth.User")
+        self.other_profile = self.other_user.profile
+
+        self.place = baker.make(Place)
+        self.location = baker.make("dashboard.Location", latitude="39.10", longitude="-84.51", place=self.place)
+        self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location, name="The Grand Eatery")
+        PlaceExternalTag.sync_for_source(self.place, ExternalTagSource.OVERTURE, [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)])
+
+    def _titles(self, response, slug="pins"):
+        for group in response.groups:
+            if group.meta.slug == slug:
+                return [result.title for result in group.results]
+        return []
+
+    def test_bare_term_finds_the_pin_by_its_tag(self):
+        response = GlobalSearchEngine().search(self.profile, "restaurant")
+        self.assertIn("The Grand Eatery", self._titles(response))
+
+    def test_plural_term_finds_the_pin_by_its_tag(self):
+        response = GlobalSearchEngine().search(self.profile, "restaurants")
+        self.assertIn("The Grand Eatery", self._titles(response))
+
+    def test_pin_with_tag_phrasing_restricts_to_pins_only(self):
+        response = GlobalSearchEngine().search(self.profile, "pin with tag restaurant")
+        self.assertEqual({group.meta.slug for group in response.groups}, {"pins"})
+        self.assertIn("The Grand Eatery", self._titles(response))
+
+    def test_matches_via_an_equivalent_tag_from_another_provider(self):
+        from urbanlens.dashboard.models.place.external_tag_group import ExternalTagVocabularyEntry
+        from urbanlens.dashboard.services.locations.external_tag_groups import create_group
+
+        osm_entry, _ = ExternalTagVocabularyEntry.objects.get_or_create(source=self.ExternalTagSource.OSM, key="amenity", value="eatery")
+        overture_entry = ExternalTagVocabularyEntry.objects.get(source=self.ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant")
+        create_group([osm_entry.pk, overture_entry.pk])
+        self.PlaceExternalTag.objects.bulk_create([self.PlaceExternalTag(place=self.place, source=self.ExternalTagSource.OSM, key="amenity", value="eatery")])
+
+        response = GlobalSearchEngine().search(self.profile, "eatery")
+
+        self.assertIn("The Grand Eatery", self._titles(response))
+
+    def test_does_not_return_other_users_pin_via_tag_match(self):
+        from urbanlens.dashboard.models.place.model import Place
+
+        other_place = baker.make(Place)
+        other_location = baker.make("dashboard.Location", latitude="10.0", longitude="10.0", place=other_place)
+        baker.make("dashboard.Pin", profile=self.other_profile, location=other_location, name="Someone Else's Diner")
+        self.PlaceExternalTag.sync_for_source(other_place, self.ExternalTagSource.OVERTURE, [self.ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)])
+
+        response = GlobalSearchEngine().search(self.profile, "restaurant")
+
+        self.assertNotIn("Someone Else's Diner", self._titles(response))
+
+
 class PhotoSearchTests(TestCase):
     """Photos: caption/keyword matching and uploader scoping."""
 

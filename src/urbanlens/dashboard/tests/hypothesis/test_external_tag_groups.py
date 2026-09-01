@@ -12,9 +12,11 @@ from urbanlens.dashboard.services.locations.external_tag_groups import (
     ExternalTagGroupError,
     create_group,
     default_group_key,
+    matching_vocabulary,
     move_entry,
     set_preferred,
     suggested_clusters,
+    tag_match_q,
     visible_tags_for_place,
 )
 
@@ -298,6 +300,64 @@ class VisibleExternalTagsFilterTests(TestCase):
         ExternalTagVocabularyEntry.objects.get_or_create(source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant")
 
         self.assertEqual(len(visible_external_tags(place)), 1)
+
+
+class MatchingVocabularyTests(TestCase):
+    def test_direct_text_match(self):
+        ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
+
+        self.assertEqual(len(matching_vocabulary("restaurant")), 1)
+
+    def test_matches_via_an_explicit_group_even_with_no_shared_text(self):
+        osm = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="eatery")
+        overture = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant")
+        create_group([osm.pk, overture.pk])
+
+        matches = matching_vocabulary("restaurant")
+
+        self.assertEqual({m.pk for m in matches}, {osm.pk, overture.pk})
+
+    def test_matches_via_default_same_text_grouping_across_providers(self):
+        osm = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
+        overture = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant")
+
+        matches = matching_vocabulary("restaurant")
+
+        self.assertEqual({m.pk for m in matches}, {osm.pk, overture.pk})
+
+    def test_plural_search_term_matches_a_singular_tag(self):
+        ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
+
+        self.assertEqual(len(matching_vocabulary("restaurants")), 1)
+
+    def test_blank_term_matches_nothing(self):
+        ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
+
+        self.assertEqual(matching_vocabulary("   "), [])
+
+    def test_no_match_returns_empty(self):
+        ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
+
+        self.assertEqual(matching_vocabulary("church"), [])
+
+
+class TagMatchQTests(TestCase):
+    def test_matches_a_place_carrying_an_equivalent_tag(self):
+        place = baker.make(Place)
+        _sync(place, ExternalTagSource.OSM, "amenity", "restaurant")
+
+        matched = Place.objects.filter(tag_match_q("restaurants", "external_tags"))
+
+        self.assertIn(place, matched)
+
+    def test_no_vocabulary_match_excludes_every_row_rather_than_matching_all(self):
+        """A never-matching Q, not an empty (always-true) one - see the module docstring."""
+        place = baker.make(Place)
+        _sync(place, ExternalTagSource.OSM, "amenity", "restaurant")
+
+        matched = Place.objects.filter(tag_match_q("nonexistentterm", "external_tags"))
+
+        self.assertFalse(matched.exists())
 
 
 class VocabularyAutoRegistrationTests(TestCase):

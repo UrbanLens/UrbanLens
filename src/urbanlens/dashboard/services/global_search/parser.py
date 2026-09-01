@@ -77,7 +77,7 @@ _MONTHS: dict[str, int] = {name.lower(): index for index, name in enumerate(cale
 _MONTHS.update({name.lower(): index for index, name in enumerate(calendar.month_abbr) if name})
 
 #: Filler tokens dropped from the leftover free text ("my pins in ohio").
-_STOPWORDS = {"my", "our", "from", "of", "the", "a", "an", "with", "about", "for", "show", "me", "find", "search"}
+_STOPWORDS = {"my", "our", "from", "of", "the", "a", "an", "with", "about", "for", "show", "me", "find", "search", "tag", "tags", "tagged"}
 
 _MONTH_PATTERN = "|".join(sorted(_MONTHS, key=len, reverse=True))
 _SEASON_PATTERN = "|".join(_SEASONS)
