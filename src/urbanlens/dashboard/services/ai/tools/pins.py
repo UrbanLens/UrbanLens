@@ -30,7 +30,7 @@ def _pin_row(pin: Pin) -> dict[str, Any]:
 
 
 class SearchPinsArgs(BaseModel):
-    query: str
+    query: str = Field(max_length=200)
     limit: int = Field(default=5, ge=1, le=_ROW_LIMIT)
 
 
@@ -69,7 +69,7 @@ register(
 
 
 class FindUnvisitedPinsArgs(BaseModel):
-    state: str = ""
+    state: str = Field(default="", max_length=100)
     limit: int = Field(default=5, ge=1, le=_ROW_LIMIT)
 
 

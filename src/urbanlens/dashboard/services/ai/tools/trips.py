@@ -107,9 +107,9 @@ register(
 
 
 class AddTripActivityArgs(BaseModel):
-    trip_slug: str
-    pin_slug: str
-    scheduled_date: str = ""
+    trip_slug: str = Field(max_length=255)
+    pin_slug: str = Field(max_length=255)
+    scheduled_date: str = Field(default="", max_length=32)
 
 
 def _add_trip_activity(context: ToolContext, args: AddTripActivityArgs) -> dict[str, Any]:
