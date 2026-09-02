@@ -8,7 +8,7 @@ discovery mechanism, so a new tool module belongs in this list.
 
 from __future__ import annotations
 
-from urbanlens.dashboard.services.ai.tools import pins, trips  # noqa: F401 - import for registration side effect
+from urbanlens.dashboard.services.ai.tools import pins, trips
 from urbanlens.dashboard.services.ai.tools.registry import (
     MAX_TOOL_CALLS,
     MAX_TOOL_RESULT_CHARS,
@@ -17,6 +17,7 @@ from urbanlens.dashboard.services.ai.tools.registry import (
     ToolContext,
     ToolResult,
     ToolSpec,
+    available_tools,
     execute,
     register,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "ToolContext",
     "ToolResult",
     "ToolSpec",
+    "available_tools",
     "execute",
     "register",
 ]

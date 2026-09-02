@@ -105,7 +105,7 @@ class CreateTripTests(TestCase):
 
     def test_write_tool_is_summarized_not_a_read_summary(self) -> None:
         result = execute("create_trip", {"name": "Labeled Trip"}, _context(self.profile))
-        self.assertEqual(result.summary, "Create trip")
+        self.assertEqual(result.summary, "Created a trip")
 
 
 class AddTripActivityTests(TestCase):

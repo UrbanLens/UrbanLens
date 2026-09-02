@@ -192,11 +192,13 @@ class ToolSpec[ArgsT: BaseModel]:
             the client by the turn/poll response, not executed server-side.
         scope: See :class:`DataScope`.
         progress_label: Shown in the pending bubble while this tool runs.
-        action_label: A past-tense summary for a completed direct execution
-            (``ToolResult.summary``), and - for a tool with
-            ``requires_confirmation=True`` - doubles as the confirm button's
-            imperative text (e.g. "Create trip"). ``None`` only makes sense
-            when a caller intends to override the summary itself.
+        action_label: A past-tense summary for a completed execution
+            (``ToolResult.summary``), shown in the turn's action log - e.g.
+            "Created a trip". A tool with ``requires_confirmation=True`` gets
+            its own imperative confirm-button label when that flow ships
+            (batch 2d); this field is the log entry, not that button.
+            ``None`` only makes sense when a caller intends to override the
+            summary itself.
     """
 
     name: str
@@ -287,6 +289,33 @@ def _capped(data: dict[str, Any]) -> dict[str, Any]:
     return {"error": "The tool's result was too large and was discarded."}
 
 
+def available_tools(context: ToolContext) -> list[ToolSpec[Any]]:
+    """Every registered tool whose ``features``/``requires_external_apis``/``needs_page`` gate ``context`` currently satisfies.
+
+    Builds the model's advertised tool list (what ``send_with_tools`` offers
+    it this turn). Not itself consulted by :func:`execute` - that
+    re-derives the same three checks per call via :func:`_is_available`, so
+    a tool name outside what was advertised (a stale client, a model that
+    hallucinates a name) is refused for the same reason a spoofed one would
+    be, not merely absent from a list.
+
+    Args:
+        context: The scoped execution context.
+
+    Returns:
+        The available tools, in registration order.
+    """
+    return [spec for spec in REGISTRY.values() if _is_available(spec, context)]
+
+
+def _is_available(spec: ToolSpec[Any], context: ToolContext) -> bool:
+    if spec.features and not any(_user_has_feature(context.profile, feature) for feature in spec.features):
+        return False
+    if spec.requires_external_apis and not context.profile.external_apis_enabled:
+        return False
+    return not (spec.needs_page and context.page is None)
+
+
 def execute(name: str, raw_args: dict[str, Any] | None, context: ToolContext) -> ToolResult:
     """Run ``name`` with ``raw_args``, enforcing every rule in the module docstring.
 
@@ -307,12 +336,8 @@ def execute(name: str, raw_args: dict[str, Any] | None, context: ToolContext) ->
     if spec is None:
         return ToolResult(data={"error": f'Unknown tool "{name}". Use only the tools you were given, or reply.'})
 
-    if spec.features and not any(_user_has_feature(context.profile, feature) for feature in spec.features):
-        return ToolResult(data={"error": "This tool isn't available on the user's current plan."})
-    if spec.requires_external_apis and not context.profile.external_apis_enabled:
-        return ToolResult(data={"error": "This tool requires external APIs, which are turned off for this user."})
-    if spec.needs_page and context.page is None:
-        return ToolResult(data={"error": "This tool only works with a specific page open."})
+    if not _is_available(spec, context):
+        return ToolResult(data={"error": "This tool isn't available for this user or context right now."})
     if not spec.read_only and current_role() is ProcessRole.AI:
         return ToolResult(data={"error": "This action needs the user's confirmation and cannot run automatically."})
 

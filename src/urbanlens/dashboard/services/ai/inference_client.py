@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING, Protocol
 import requests
 
 # Re-exported so gateway.py (and anything else under `dashboard`) can build
-# requests without importing urbanlens_ai directly - this module is the one
-# permitted import site (see the module docstring).
-from urbanlens_ai.schema import InferenceRequest, InferenceResponse, Message, Provider, ToolSpec
+# requests and inspect responses without importing urbanlens_ai directly -
+# this module is the one permitted import site (see the module docstring).
+from urbanlens_ai.schema import InferenceRequest, InferenceResponse, Message, Provider, TextBlock, ToolSpec, ToolUseBlock
 
 if TYPE_CHECKING:
     from urbanlens_ai.config import InferenceConfig
@@ -29,7 +29,9 @@ __all__ = [
     "Message",
     "Provider",
     "RemoteInferenceClient",
+    "TextBlock",
     "ToolSpec",
+    "ToolUseBlock",
     "get_inference_client",
 ]
 

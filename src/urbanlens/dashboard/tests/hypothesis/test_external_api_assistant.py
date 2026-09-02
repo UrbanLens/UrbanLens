@@ -23,6 +23,7 @@ from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.ai.assistant import MAX_HISTORY_ENTRIES, MAX_MESSAGE_CHARS
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens_ai.schema import InferenceResponse, TextBlock, ToolUseBlock, Usage
 
 
 def _bearer(raw_key: str) -> dict:
@@ -31,20 +32,27 @@ def _bearer(raw_key: str) -> dict:
 
 
 class _StubGateway:
-    """Feeds a scripted sequence of answers to the loop.
+    """Feeds a scripted sequence of native-tool-calling responses to the loop.
 
-    Carries ``model``/``cost`` because ``run_assistant_turn`` reads both -
-    once, in its ``finally`` block - the same shape a real ``LLMGateway``
-    always provides.
+    Each step is either ``{"reply": "..."}`` or ``{"tool": name, "args": {...}}``
+    - see ``test_ai_assistant.py``'s own stub for the fuller version. Carries
+    ``model``/``cost`` because ``run_assistant_turn`` reads both - once, in
+    its ``finally`` block - the same shape a real ``LLMGateway`` always
+    provides.
     """
 
-    def __init__(self, answers: list[str | None]) -> None:
-        self.answers = list(answers)
+    def __init__(self, steps: list[dict]) -> None:
+        self.steps = list(steps)
         self.model = "gpt-5-nano"
         self.cost = Decimal("0.01")
 
-    def send_prompt(self, prompt: str, **kwargs) -> str | None:
-        return self.answers.pop(0) if self.answers else None
+    def send_with_tools(self, prompt: str, tools: list) -> InferenceResponse | None:
+        if not self.steps:
+            return None
+        step = self.steps.pop(0)
+        if "reply" in step:
+            return InferenceResponse(content=[TextBlock(text=step["reply"])], stop_reason="end_turn", usage=Usage(output_tokens=5))
+        return InferenceResponse(content=[ToolUseBlock(id="tu_1", name=step["tool"], input=step.get("args", {}))], stop_reason="tool_use", usage=Usage(output_tokens=5))
 
 
 class _AssistantApiTestCase(TestCase):
@@ -72,7 +80,7 @@ class AssistantMessageTests(_AssistantApiTestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_reply_and_history_round_trip(self) -> None:
-        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=_StubGateway(['{"reply": "Hi there!"}'])):
+        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=_StubGateway([{"reply": "Hi there!"}])):
             response = self.client.post(reverse("external_api:assistant.message"), {"message": "hi", "history": []}, content_type="application/json", **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 200, response.content)
         body = response.json()
@@ -81,7 +89,7 @@ class AssistantMessageTests(_AssistantApiTestCase):
 
     def test_history_is_capped_to_max_entries(self) -> None:
         long_history = [{"role": "user", "content": f"message {i}"} for i in range(MAX_HISTORY_ENTRIES + 10)]
-        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=_StubGateway(['{"reply": "ok"}'])):
+        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=_StubGateway([{"reply": "ok"}])):
             response = self.client.post(
                 reverse("external_api:assistant.message"), {"message": "hi", "history": long_history}, content_type="application/json", **_bearer(self.raw_key)
             )
@@ -106,7 +114,7 @@ class AssistantMessageTests(_AssistantApiTestCase):
 
     def test_log_api_call_regression_exactly_one_row_with_cost(self) -> None:
         """The bug this phase fixed: a multi-round-trip turn must log exactly once, with cost."""
-        gateway = _StubGateway(['{"tool": "list_trips", "args": {}}', '{"reply": "Here are your trips."}'])
+        gateway = _StubGateway([{"tool": "list_trips", "args": {}}, {"reply": "Here are your trips."}])
         with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
             response = self.client.post(reverse("external_api:assistant.message"), {"message": "what are my trips?"}, content_type="application/json", **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 200, response.content)
@@ -116,8 +124,8 @@ class AssistantMessageTests(_AssistantApiTestCase):
         self.assertIsNotNone(rows[0].cost_estimate)
 
     def test_log_api_call_records_failure_when_the_model_gives_up(self) -> None:
-        """A dead gateway (send_prompt returns None) still logs one failed call, not zero."""
-        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=_StubGateway([None])):
+        """A dead gateway (send_with_tools returns None) still logs one failed call, not zero."""
+        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=_StubGateway([])):
             response = self.client.post(reverse("external_api:assistant.message"), {"message": "hi"}, content_type="application/json", **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 200)
         rows = list(ApiCallLog.objects.filter(service="assistant"))

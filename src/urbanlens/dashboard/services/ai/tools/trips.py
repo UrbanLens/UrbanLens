@@ -101,7 +101,7 @@ register(
         user_content_fields=frozenset({"name"}),
         scope=DataScope.OWN_PROFILE,
         progress_label="Creating a trip…",
-        action_label="Create trip",
+        action_label="Created a trip",
     ),
 )
 
@@ -181,6 +181,6 @@ register(
         user_content_fields=frozenset({"trip", "pin"}),
         scope=DataScope.VISIBLE_SHARED,
         progress_label="Adding a pin to a trip…",
-        action_label="Add to trip",
+        action_label="Added a pin to a trip",
     ),
 )
