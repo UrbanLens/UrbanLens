@@ -102,6 +102,20 @@ class InviteByEmailPrivacyTests(TestCase):
 
         self.assertTrue(FriendInvitation.objects.filter(inviter=self.inviter.profile, email="brandnew@example.com").exists())
 
+    @patch("django.core.mail.EmailMultiAlternatives.send")
+    def test_reinviting_a_gmail_variant_replaces_the_pending_invitation(self, mock_send) -> None:
+        """A dot/+ variant of an already-invited address must dedupe against
+        the same pending FriendInvitation row, not create a second one -
+        otherwise the invitee's eventual signup only auto-accepts whichever
+        row happens to match their exact registered spelling."""
+        self.client.post(self.url, {"email": "johndoe3@gmail.com"})
+        self.client.post(self.url, {"email": "John.Doe.3+invite@gmail.com"})
+
+        self.assertEqual(
+            FriendInvitation.objects.filter(inviter=self.inviter.profile, accepted_at__isnull=True).count(),
+            1,
+        )
+
     def test_gmail_variant_of_existing_email_is_matched(self) -> None:
         target = make_invitable_user(username="realuser", email="jakesmith@gmail.com", is_active=True)
 

@@ -229,17 +229,29 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
         The ``(membership, created)`` pair.
 
     Raises:
-        TripPermissionError: The actor may not add members, or a block exists
-            between the two profiles.
+        TripPermissionError: The actor may not add members.
         TripValidationError: No username was supplied.
-        TripMemberNotFoundError: No user has that username.
-        TripQuotaError: The trip is already at ``max_trip_members``.
+        TripQuotaError: The trip is already at ``max_trip_members``. Checked
+            before the username is resolved, so trip capacity can never be
+            used to infer whether an arbitrary username exists.
+        TripMemberNotFoundError: No user has that username, or a block
+            exists between the two profiles - both answer identically so a
+            block can't be distinguished from a nonexistent account.
     """
     require_perform(actor, trip, trip.allow_add_members, ADD_MEMBER_DENIED)
 
     clean_username = (username or "").strip()
     if not clean_username:
         raise TripValidationError("Username is required.")
+
+    # Checked before the username is even looked up: if this ran after
+    # resolving the user, "trip full" would only ever fire for a real,
+    # unblocked account, turning trip capacity into a free username-existence
+    # oracle for anyone who can fill their own trip with known accounts once.
+    max_members = SiteSettings.get_current().max_trip_members
+    current_count = trip.profiles.count()
+    if current_count >= max_members:
+        raise TripQuotaError(f"This trip is full ({max_members} members maximum).")
 
     from django.contrib.auth.models import User
 
@@ -251,18 +263,12 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
         raise TripMemberNotFoundError(f'No user found with username "{clean_username}".', clean_username) from exc
 
     new_profile, _ = Profile.objects.get_or_create(user=user)
-    # A block must stop this the same way it stops a direct message - it's
-    # another unsolicited-contact vector (a forced membership row plus a
-    # notification), not a passive visibility setting. Message kept
-    # direction-agnostic, matching accepts_direct_messages_from's rejection
-    # wording, so it never discloses who blocked whom.
+    # A block answers exactly like a nonexistent username (see
+    # TripMemberNotFoundError above) instead of TripPermissionError: telling a
+    # caller "this account exists and is blocking you" is itself the same
+    # enumeration leak as confirming any other account's existence.
     if Profile.are_blocked(actor, new_profile):
-        raise TripPermissionError("This user isn't accepting invitations from you.")
-
-    max_members = SiteSettings.get_current().max_trip_members
-    current_count = trip.profiles.count()
-    if current_count >= max_members:
-        raise TripQuotaError(f"This trip is full ({max_members} members maximum).")
+        raise TripMemberNotFoundError(f'No user found with username "{clean_username}".', clean_username)
 
     membership, created = TripMembership.objects.get_or_create(trip=trip, profile=new_profile, defaults={"status": TripMembership.STATUS_INVITED})
     if created:

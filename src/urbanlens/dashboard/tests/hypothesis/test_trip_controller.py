@@ -890,7 +890,11 @@ class TripMembersViewTests(TestCase):
             content_type="application/json",
         )
 
-        self.assertEqual(resp.status_code, 403)
+        # 404, identical to an unknown username - a 403 here would confirm the
+        # account exists and is blocking the caller, which is itself an
+        # enumeration leak.
+        self.assertEqual(resp.status_code, 404)
+        self.assertIn("No user found", resp.content.decode())
         self.assertFalse(TripMembership.objects.filter(trip=self.trip, profile=blocker).exists())
 
     def test_cannot_add_a_user_the_inviter_blocked(self) -> None:
@@ -904,7 +908,9 @@ class TripMembersViewTests(TestCase):
             content_type="application/json",
         )
 
-        self.assertEqual(resp.status_code, 403)
+        # Same as the reverse-direction block above: 404, not 403.
+        self.assertEqual(resp.status_code, 404)
+        self.assertIn("No user found", resp.content.decode())
         self.assertFalse(TripMembership.objects.filter(trip=self.trip, profile=target).exists())
 
 

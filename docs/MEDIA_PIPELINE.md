@@ -40,7 +40,7 @@ conflating them overstates what is actually enforced:
 | python-docx | AI document import, **import preview (request)** | mixed | yes |
 | lxml / fastkml / gpxpy | KML, GPX, OSM XML | routed via `run_user_data_import` | yes |
 | GDAL / GeoPandas / Shapely | shapefile, WKT/WKB | routed via `run_user_data_import` | yes |
-| clamd | everything | sandbox (its own container for the daemon) | n/a |
+| clamd | everything, except VirusTotal-eligible fetched assets (see below) | sandbox (its own container for the daemon) | n/a |
 
 Every parser is now guarded, so `warn` logs a complete worklist rather than a
 partial one. Two rows still say **request**: `controllers/pin.parse_for_preview`
@@ -69,6 +69,18 @@ synchronously (avatars, marker icons, achievement art) store their file on
 something that is not an `Image` row, so no task will ever run over it and
 there is no `pending_scan` to gate it with; a test pins that split
 (`tests/hypothesis/test_async_malware_scan.py`).
+
+For `Image` rows fetched by our server from a public external host (Media
+gallery imports from Wikimedia/Smithsonian/LOC/etc., Google Street
+View/Satellite - see `malware_scan.VIRUSTOTAL_ELIGIBLE_SOURCES`),
+`tasks._scan_pending_upload` tries a VirusTotal hash lookup first
+(`services/security/virustotal_scan.py`) and only falls back to the ClamAV
+scan above when VirusTotal has no definitive verdict (unconfigured, unknown
+hash, quota exhausted, any error). A user's own upload, and a user's own
+connected photo library (Immich/Flickr/Google Photos, imported with their own
+credentials) never take this path - VirusTotal shares every file it is shown
+industry-wide, which is only acceptable for content that was already public
+before we fetched it.
 
 Anything that opens the file with a real parser is marked
 `@untrusted_parse` (`services/sandbox/guard.py`) and cannot run here.

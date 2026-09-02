@@ -1199,14 +1199,22 @@ def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
     worse outcome.
     """
     from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 
     pending_by_id: dict[int, FriendInvitation] = {}
 
-    for invitation in FriendInvitation.objects.filter(
-        email__iexact=user.email,
-        accepted_at__isnull=True,
-    ).select_related("inviter"):
-        pending_by_id[invitation.pk] = invitation
+    # Matched on the normalized address, not case-insensitive-exact, so a
+    # pending invite sent to a Gmail dot/+ variant of this address is still
+    # found - see FriendInvitation.email_normalized. Skipped entirely for a
+    # blank email so a blank-normalized invitation row (there should be none,
+    # but see the field's own blank default) can never spuriously match.
+    normalized_email = normalize_email(user.email) if user.email else ""
+    if normalized_email:
+        for invitation in FriendInvitation.objects.filter(
+            email_normalized=normalized_email,
+            accepted_at__isnull=True,
+        ).select_related("inviter"):
+            pending_by_id[invitation.pk] = invitation
 
     if invite_token:
         token_invitation = (

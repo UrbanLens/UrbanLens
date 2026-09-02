@@ -38,7 +38,7 @@ from django.template.loader import render_to_string
 
 from urbanlens.dashboard.models.email_log import EmailType
 from urbanlens.dashboard.models.visits.participant import ExternalVisitParticipant
-from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email
+from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email, normalize_email
 from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, has_sent_join_email, hash_email, record_email_sent
 
 if TYPE_CHECKING:
@@ -88,7 +88,10 @@ def _send_visit_invite_email(request: HttpRequest, owner: Profile, email: str) -
     # handled by the hashed ExternalVisitParticipant row instead.
     from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 
-    FriendInvitation.objects.filter(inviter=owner, email=email, accepted_at__isnull=True).delete()
+    # Matched on the normalized address so re-inviting a Gmail dot/+ variant
+    # of an already-invited address replaces the old row instead of leaving
+    # two - see FriendInvitation.email_normalized.
+    FriendInvitation.objects.filter(inviter=owner, email_normalized=normalize_email(email), accepted_at__isnull=True).delete()
     invitation = FriendInvitation(inviter=owner, email=email)
     invitation.save()
 

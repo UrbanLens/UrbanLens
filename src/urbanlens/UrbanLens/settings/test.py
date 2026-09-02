@@ -65,6 +65,12 @@ CELERY_RESULT_BACKEND = "cache+memory://"
 # behavior).
 _app_settings.clamav_enabled = False
 
+# Forced to None (rather than relying on the field's own default) so a real
+# UL_VIRUSTOTAL_API_KEY in a developer's local .env can't make the suite make
+# live network calls. Tests that exercise the VirusTotal path patch this back
+# explicitly - see services.security.virustotal_scan.
+_app_settings.virustotal_api_key = None
+
 # The suite calls the parsers directly - that is how they are unit tested - so
 # the sandbox boundary is not enforced here. The tests that verify the boundary
 # itself (services/sandbox) raise it back to "deny" with override_settings.

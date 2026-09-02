@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import uuid
 
 from django.core.validators import MaxLengthValidator
-from django.db.models import CASCADE, DateTimeField, EmailField, ForeignKey, TextField, UUIDField
+from django.db.models import CASCADE, CharField, DateTimeField, EmailField, ForeignKey, TextField, UUIDField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -29,6 +29,14 @@ class FriendInvitation(abstract.DashboardModel):
         related_name="sent_invitations",
     )
     email = EmailField(db_index=True)
+    # Canonical form of `email` (lowercased, Gmail dots/+suffix stripped - see
+    # normalize_email) kept in sync in save() below, mirroring
+    # Profile.primary_email_normalized. `email` itself stays as typed since it's
+    # still the literal send-target/display value; every cross-account
+    # match (signup auto-accept, re-invite dedup) must go through this field
+    # instead, or a Gmail variant of an already-invited address silently
+    # misses both.
+    email_normalized = CharField(max_length=254, blank=True, default="", db_index=True)
     token = UUIDField(default=uuid.uuid4, unique=True, editable=False)
     expires_at = DateTimeField()
     accepted_at = DateTimeField(null=True, blank=True)
@@ -53,8 +61,11 @@ class FriendInvitation(abstract.DashboardModel):
         pass
 
     def save(self, *args, **kwargs):
+        from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
         if not self.pk and not self.expires_at:
             self.expires_at = timezone.now() + timedelta(days=14)
+        self.email_normalized = normalize_email(self.email) if self.email else ""
         super().save(*args, **kwargs)
 
     def is_expired(self) -> bool:

@@ -170,6 +170,23 @@ class UnknownEmailInviteTests(_VisitInviteTestCase):
         self.assertEqual(second.email_hash, hash_email("stranger@example.com"))
 
     @patch("django.core.mail.EmailMultiAlternatives.send")
+    def test_reinviting_a_gmail_variant_replaces_the_pending_invitation(self, mock_send):
+        """Same dedup guarantee as the friend-invite-by-email flow (see
+        test_friend_invite_privacy.py) - this is a separate code path into
+        the same FriendInvitation table, and must not let a Gmail dot/+
+        variant leave two open rows behind."""
+        from urbanlens.dashboard.services.visits.visit_invites import _send_visit_invite_email
+
+        request = self._post_request({})
+        _send_visit_invite_email(request, self.owner, "johndoe3@gmail.com")
+        _send_visit_invite_email(request, self.owner, "John.Doe.3+invite@gmail.com")
+
+        self.assertEqual(
+            FriendInvitation.objects.filter(inviter=self.owner, accepted_at__isnull=True).count(),
+            1,
+        )
+
+    @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_rate_limit_suppresses_email(self, mock_send):
         settings = SiteSettings.get_current()
         settings.email_limit_per_hour = 1

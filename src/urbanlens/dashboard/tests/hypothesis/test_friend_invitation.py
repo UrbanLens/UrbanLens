@@ -73,6 +73,31 @@ class PendingFriendInvitationTests(TestCase):
             ).exists(),
         )
 
+    def test_process_pending_invitations_matches_gmail_variant(self) -> None:
+        """A pending invite to one Gmail spelling must still be found when the
+        invitee registers under a dot/+ variant of the same address - see
+        FriendInvitation.email_normalized. Previously this orphaned the
+        invitation: a case-insensitive-exact match doesn't strip Gmail dots.
+        """
+        inviter = baker.make(User).profile
+        invitee = baker.make(User, email="john.doe.3@gmail.com", is_active=False)
+        invitation = FriendInvitation.objects.create(
+            inviter=inviter,
+            email="johndoe3@gmail.com",
+        )
+
+        _process_pending_invitations(invitee)
+
+        friendship = Friendship.objects.filter(
+            from_profile=inviter,
+            to_profile=invitee.profile,
+            status=FriendshipStatus.REQUESTED,
+        ).first()
+        self.assertIsNotNone(friendship)
+
+        invitation.refresh_from_db()
+        self.assertIsNotNone(invitation.accepted_at)
+
     def test_email_verification_uses_persisted_invite_token_when_email_differs(self) -> None:
         inviter = baker.make(User).profile
         invitee = baker.make(User, email="different@example.com", is_active=False)
@@ -144,6 +169,51 @@ class PendingSubscriptionGrantRedemptionTests(TestCase):
         _process_pending_invitations(invitee)
 
         self.assertFalse(UserSubscription.objects.filter(user=invitee).exists())
+
+
+class EmailNormalizedFieldTests(TestCase):
+    """FriendInvitation.email_normalized self-populates on every save."""
+
+    def test_gmail_variant_is_dot_and_plus_stripped(self) -> None:
+        inviter = baker.make(User).profile
+        invitation = FriendInvitation.objects.create(inviter=inviter, email="Jake.Smith+x@gmail.com")
+
+        self.assertEqual(invitation.email_normalized, "jakesmith@gmail.com")
+
+    def test_non_gmail_address_is_only_lowercased(self) -> None:
+        inviter = baker.make(User).profile
+        invitation = FriendInvitation.objects.create(inviter=inviter, email="Jake.Smith@Example.com")
+
+        self.assertEqual(invitation.email_normalized, "jake.smith@example.com")
+
+
+class EmailNormalizedBackfillMigrationTests(TestCase):
+    """The 0048 migration's data backfill, exercised directly against a real row.
+
+    Regression coverage for the migration function itself (app label/field-name
+    typos, the only()/iterator()/bulk_update plumbing) that a plain model-level
+    test of save() can't reach, since save() already keeps email_normalized
+    populated on every row created through the ORM during the test run.
+    """
+
+    def test_backfill_normalizes_a_row_left_blank(self) -> None:
+        import importlib
+
+        from django.apps import apps as live_apps
+
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0048_friendinvitation_email_normalized")
+
+        inviter = baker.make(User).profile
+        invitation = FriendInvitation.objects.create(inviter=inviter, email="Jake.Smith+x@gmail.com")
+        # Simulate a pre-existing row as it looked right after the AddField
+        # ran and before the backfill did - blank, same as the field's own
+        # default.
+        FriendInvitation.objects.filter(pk=invitation.pk).update(email_normalized="")
+
+        migration.backfill_friendinvitation_email_normalized(live_apps, None)
+
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.email_normalized, "jakesmith@gmail.com")
 
 
 class MarkAcceptedClaimTests(TestCase):

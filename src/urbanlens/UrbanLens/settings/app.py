@@ -328,6 +328,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
     redata_api_url: str | None = Field(default=None, description="Base URL of the REData property-records service (e.g. https://redata.example.com), no trailing slash needed")
     redata_api_key: str | None = Field(default=None, description="Bearer API key for REData's external API - needs at least the parcels:read scope")
+    virustotal_api_key: str | None = Field(
+        default=None,
+        description=(
+            "VirusTotal API key (public/free tier), sent as the x-apikey header. When set, externally-fetched "
+            "(non-upload) image assets are looked up by hash on VirusTotal before falling back to ClamAV - see "
+            "services.security.virustotal_scan. Unset (the default) skips VirusTotal entirely; those assets go "
+            "straight to ClamAV, same as every upload."
+        ),
+    )
     discord_client_secret: str | None = Field(default=None, description="The discord client secret")
     discord_client_id: str | None = Field(default=None, description="The discord client ID")
     twilio_account_sid: str | None = Field(default=None, description="The Twilio account SID, for outbound SMS/WhatsApp notifications")

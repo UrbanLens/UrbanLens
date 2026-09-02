@@ -937,10 +937,13 @@ def invite_by_email(
         return
 
     # No registered account - create an invitation token and send email.
-    # Avoid duplicate pending invitations from the same inviter.
+    # Avoid duplicate pending invitations from the same inviter. Matched on
+    # the normalized address, not the raw one, so re-inviting a Gmail dot/+
+    # variant of an already-invited address replaces the old row instead of
+    # leaving two.
     FriendInvitation.objects.filter(
         inviter=inviter,
-        email=email,
+        email_normalized=normalize_email(email),
         accepted_at__isnull=True,
     ).delete()
 

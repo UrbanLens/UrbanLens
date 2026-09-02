@@ -679,13 +679,26 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
         The newly created (INVITED) SafetyCheckinPartner row.
 
     Raises:
-        ValueError: Unknown username, inviting yourself, inviting a blocked
-            profile, an existing invite/acceptance for that profile, or the
-            site's ``max_safety_checkin_partners`` cap already reached.
+        ValueError: The site's ``max_safety_checkin_partners`` cap is already
+            reached (checked before the username is resolved, so check-in
+            capacity can never be used to infer whether an arbitrary username
+            exists); or, once resolved: an unknown username, a block between
+            the two profiles (answers identically to an unknown username -
+            see below), inviting yourself, or an existing invite/acceptance
+            for that profile.
     """
     from django.contrib.auth.models import User
 
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+    # Checked before the username is even looked up: if this ran after
+    # resolving the user, "check-in full" would only ever fire for a real,
+    # unblocked account, turning check-in capacity into a free
+    # username-existence oracle for anyone who can fill their own check-in
+    # with known accounts once.
+    max_partners = SiteSettings.get_current().max_safety_checkin_partners
+    if max_partners > 0 and checkin.partners.count() >= max_partners:
+        raise SafetyValidationError(f"A check-in can have at most {max_partners} partners.")
 
     try:
         user = User.objects.get(username__iexact=username)
@@ -695,14 +708,14 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
 
     if invitee.pk == checkin.profile_id:
         raise SafetyValidationError("You can't add yourself as a partner on your own check-in.")
+    # Answers exactly like an unknown username (above) rather than a
+    # block-specific message: confirming "this account exists and is
+    # blocking you" is itself the same enumeration leak as confirming any
+    # other account's existence.
     if Profile.are_blocked(inviter, invitee):
-        raise SafetyValidationError("This user isn't accepting invitations from you.")
+        raise SafetyValidationError(f'No user found with username "{username}".')
     if checkin.partners.filter(profile=invitee).exists():
         raise SafetyValidationError(f"{invitee.username} has already been invited.")
-
-    max_partners = SiteSettings.get_current().max_safety_checkin_partners
-    if max_partners > 0 and checkin.partners.count() >= max_partners:
-        raise SafetyValidationError(f"A check-in can have at most {max_partners} partners.")
 
     try:
         partner = SafetyCheckinPartner.objects.create(checkin=checkin, profile=invitee, invited_by=inviter)

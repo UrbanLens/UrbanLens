@@ -235,6 +235,14 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=5000,
         notes="Free k-anonymity range API. Used when users set or change passwords.",
     ),
+    "virustotal": ServiceDefaults(
+        display_name="VirusTotal",
+        # VirusTotal's own public/free API tier: 4 requests/minute, 500/day.
+        # calls_per_day is capped at 490, not 500, as our own safety margin.
+        calls_per_minute=4,
+        calls_per_day=490,
+        notes=("Free public API tier, hash-lookup only. Fast path before ClamAV on externally-fetched image assets - never sent a user upload or a user's own cloud photo library. See services.security.virustotal_scan."),
+    ),
     "sms": ServiceDefaults(
         display_name="Twilio SMS",
         calls_per_minute=10,

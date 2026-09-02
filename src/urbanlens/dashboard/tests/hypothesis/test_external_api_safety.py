@@ -15,6 +15,7 @@ partner into a live check-in. The tests here hold four lines in particular:
 from __future__ import annotations
 
 import datetime
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -414,6 +415,23 @@ class SafetyPartnerTests(_SafetyApiTestCase):
 
     def test_unknown_username_is_400_with_the_services_own_message(self) -> None:
         response = self._invite("nobody-here")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("No user found", response.json()["error"])
+
+    def test_blocked_invitee_is_400(self) -> None:
+        """Same message and status as an unknown username.
+
+        A block existing between the two profiles must not be distinguishable
+        from the invitee not existing at all - confirming one confirms the
+        other's account is real. Uses a real, resolvable invitee - blocking
+        never triggers for an already-nonexistent username, so the test would
+        be meaningless without one.
+        """
+        invitee = baker.make(User, username="apartner")
+        Profile.objects.get_or_create(user=invitee)
+
+        with mock.patch.object(Profile, "are_blocked", return_value=True):
+            response = self._invite("apartner")
         self.assertEqual(response.status_code, 400)
         self.assertIn("No user found", response.json()["error"])
 

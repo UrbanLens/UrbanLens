@@ -22,6 +22,51 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-09-01: two `Image` import tasks omit `source=`, silently defaulting to `UPLOAD`
+
+Found while wiring VirusTotal-first scanning for externally-fetched images (`services/security/malware_scan.py`'s
+`VIRUSTOTAL_ELIGIBLE_SOURCES`). `tasks.import_immich_photos` and `tasks.import_google_photos` both build their
+`Image.objects.create(...)` call without a `source=` kwarg (unlike `import_flickr_photos`/`import_flickr_album_photos`,
+which explicitly set `source=ImageSource.FLICKR`), so every row they create defaults to `ImageSource.UPLOAD` -
+indistinguishable, to every `source`-keyed consumer, from an ordinary manual upload. That's wrong: these are picker-dialog
+imports from a user's own connected Immich server / Google Photos account, not the upload form.
+
+Doesn't affect VirusTotal eligibility either way - both `UPLOAD` and the correct `IMMICH`/`GOOGLE_PHOTOS` values are
+excluded from `VIRUSTOTAL_ELIGIBLE_SOURCES` (see that constant's docstring: a user's own connected photo library is
+private content, scanned by ClamAV only, regardless of how it's labeled). It does affect the Media gallery's per-source
+tabs (these rows show under "Upload" instead of their own tab), `services/achievements/metrics.py`'s `UPLOAD`-filtered
+upload counts, and `services/reputation/builtin_rules.py`'s `UPLOAD`-gated reputation logic - all silently miscounting
+Immich/Google-Photos imports as manual uploads. Left unfixed here since it's orthogonal to the scanning change and
+touches achievement/reputation counting, which deserves its own look at whether retroactively recategorizing existing
+rows is warranted.
+
+## OPEN 2026-09-01: `has_sent_join_email` doesn't share `FriendInvitation`'s Gmail-variant normalization
+
+Found alongside the fix for `FriendInvitation.email_normalized` (see the friend-invite/visit-invite email-canonicalization
+work, same date). `services/security/email_safety.has_sent_join_email` dedupes by `hash_email(email)` - a hash of the
+*raw* address, not the normalized one `normalize_email` would produce. So a join-the-site invite email to
+`johndoe3@gmail.com` and a second one to `John.Doe.3+invite@gmail.com` from the same inviter are not recognized as the
+same mailbox: the second send is not suppressed, and the recipient gets two "invited you to join UrbanLens" emails
+instead of one. `FriendInvitation`'s own row-level dedup (fixed) is unaffected - it now matches on `email_normalized`
+regardless of what `has_sent_join_email` decides - so this is a duplicate-email annoyance, not a data-integrity or
+enumeration issue. Fix would be normalizing before hashing in `hash_email`/`has_sent_join_email`, which touches every
+existing `EmailSendLog` row's hash semantics and so deserves its own pass rather than folding into an unrelated change.
+
+## OPEN 2026-09-01: VirusTotal fast-path scanning is hash-lookup-only, never submits an unknown file
+
+`services/security/virustotal_scan.py` (see also `services/apis/security/virustotal.py`) only calls VirusTotal's
+`GET /files/{sha256}` hash-lookup endpoint before falling back to ClamAV - it never calls `POST /files` to submit a
+file VirusTotal has never seen. Deliberate scope decision, not an oversight: the upload endpoint returns no immediate
+verdict (an uploaded file has to be polled separately via `GET /analyses/{id}` until analysis completes, which can take
+some time), so submitting a never-before-seen file buys nothing for the scan that triggered it - by the time an
+analysis would complete, this scan has already fallen back to ClamAV. The consequence: a public asset that VirusTotal's
+own crawlers haven't already indexed independently (Wikimedia/Smithsonian/LOC/etc. content plausibly often has been;
+something more obscure plausibly hasn't) will keep going through ClamAV on every fetch, forever, rather than eventually
+warming VirusTotal's cache for future lookups. If the actual ClamAV load reduction from lookup-only turns out to be
+smaller than hoped, the next step is submit-and-don't-wait (fire the upload so a *future* lookup of the same hash can
+hit, without blocking or polling for the current one) - deferred rather than built speculatively, since it adds a
+32MB size gate and competes with the same daily quota the lookups use for no benefit to the request that pays for it.
+
 ## RESOLVED 2026-09-01: `--fresh-db` dropped another session's live database mid-run
 
 This session's own broad regression sweep (`run14`, everything in `dashboard/tests/hypothesis/`

@@ -455,7 +455,7 @@ All trip views map service exceptions uniformly: not-found→404, permission→4
 - `DELETE /trips/{trip_slug}/leave/` — leave, or decline an invite — **the creator is refused with 400** (must delete or transfer instead).
 - `PUT /trips/{trip_slug}/rsvp/` — set/clear caller's trip-wide RSVP (`yes`|`no`|`maybe`|null).
 - `GET /trips/{trip_slug}/members/` — the roster, paginated — `{profile(masked), status(invited|joined), rsvp, is_organizer, is_creator, created}`.
-- `POST /trips/{trip_slug}/members/` — invite by username — **201** new invite, **200** re-invite (no duplicate notification).
+- `POST /trips/{trip_slug}/members/` — invite by username — **201** new invite, **200** re-invite (no duplicate notification) — **404** for both an unknown username and a block between the two profiles, with an identical message: a distinct 403 for "blocked" would itself confirm the account exists, so it answers exactly like a nonexistent one. The `max_trip_members` cap is checked before the username is resolved, for the same reason - a cap error must never depend on the target existing.
 - `PATCH /trips/{trip_slug}/members/{member_slug}/` — set a member's organizer flag (`is_organizer`, explicit target) — **creator only**, else 403.
 - `DELETE /trips/{trip_slug}/members/{member_slug}/` — remove a member — **members may remove themselves; otherwise creator only** → 403.
 
@@ -538,7 +538,7 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 - `DELETE /safety/checkins/{checkin_slug}/` — stages an Undo History entry.
 - `POST /safety/checkins/{checkin_slug}/check-in/` — caller checks in, resolving it — 409 if already resolved.
 - `POST /safety/checkins/{checkin_slug}/cancel/` — cancel so it never escalates — 409 if already resolved.
-- `POST /safety/checkins/{checkin_slug}/partners/` — invite a partner by username — accept/decline live under `safety/partner-invites/`, not here.
+- `POST /safety/checkins/{checkin_slug}/partners/` — invite a partner by username — accept/decline live under `safety/partner-invites/`, not here. **400** with an identical message for both an unknown username and a block between the two profiles (same enumeration reasoning as the trip-members endpoint above); the `max_safety_checkin_partners` cap is likewise checked before the username is resolved.
 - `DELETE /safety/checkins/{checkin_slug}/partners/{partner_id}/` — remove a partner — also force-closes an accepted partner's open WebSocket.
 - `GET/POST /safety/checkins/{checkin_slug}/photos/` — list / attach an already-uploaded image by uuid (not a second upload path).
 - `DELETE /safety/checkins/{checkin_slug}/photos/{image_id}/` — delete photo + stored file.

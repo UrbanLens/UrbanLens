@@ -65,10 +65,12 @@ class InviteCheckinPartnerTests(TestCase):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=self.owner.username)
 
     def test_blocked_invitee_raises(self):
+        """Same message as an unknown username - confirming a block would itself
+        confirm the account exists, which is the enumeration leak this guards."""
         invitee = _profile()
         Friendship.objects.create(from_profile=invitee, to_profile=self.owner, status=FriendshipStatus.BLOCKED)
 
-        with self.assertRaisesMessage(ValueError, "isn't accepting invitations"):
+        with self.assertRaisesMessage(ValueError, "No user found"):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=invitee.username)
 
     def test_duplicate_invite_raises(self):
@@ -88,6 +90,22 @@ class InviteCheckinPartnerTests(TestCase):
 
         with self.assertRaisesMessage(ValueError, "at most 1 partners"):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=second.username)
+
+    def test_over_cap_raises_even_for_unknown_username(self):
+        """The cap check must fire before username resolution.
+
+        Otherwise "check-in full" only ever answers for a real account,
+        letting a caller who fills their own check-in once turn the cap into
+        a free, repeatable username-existence oracle.
+        """
+        settings = SiteSettings.get_current()
+        settings.max_safety_checkin_partners = 1
+        settings.save(update_fields=["max_safety_checkin_partners"])
+        first = _profile()
+        invite_checkin_partner(self.checkin, inviter=self.owner, username=first.username)
+
+        with self.assertRaisesMessage(ValueError, "at most 1 partners"):
+            invite_checkin_partner(self.checkin, inviter=self.owner, username="no-such-person-at-all")
 
     def test_successful_invite_creates_invited_partner(self):
         invitee = _profile()

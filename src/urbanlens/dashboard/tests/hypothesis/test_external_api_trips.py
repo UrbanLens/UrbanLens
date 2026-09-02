@@ -289,16 +289,35 @@ class TripMemberTests(_TripApiTestCase):
         self.assertIn("no-such-person", response.json()["error"])
 
     def test_blocked_user_cannot_be_invited(self) -> None:
-        """A block stops a forced membership the same way it stops a DM."""
+        """A block stops a forced membership the same way it stops a DM.
+
+        404, identical to an unknown username - a 403 would confirm the
+        account exists and is blocking the caller, which is itself an
+        enumeration leak.
+        """
         with mock.patch.object(Profile, "are_blocked", return_value=True):
             response = self._add("invitee")
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("No user found", response.json()["error"])
 
     def test_member_cap_is_enforced(self) -> None:
         """Hitting max_trip_members answers 400 rather than over-filling the trip."""
         settings_row = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings_row.pk).update(max_trip_members=1)
         response = self._add("invitee")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("full", response.json()["error"])
+
+    def test_member_cap_is_enforced_even_for_unknown_username(self) -> None:
+        """The cap check must fire before username resolution.
+
+        Otherwise "trip full" only ever answers for a real, unblocked account,
+        letting a caller who fills their own trip once turn the cap into a
+        free, repeatable username-existence oracle.
+        """
+        settings_row = SiteSettings.get_current()
+        SiteSettings.objects.filter(pk=settings_row.pk).update(max_trip_members=1)
+        response = self._add("no-such-person-at-all")
         self.assertEqual(response.status_code, 400)
         self.assertIn("full", response.json()["error"])
 

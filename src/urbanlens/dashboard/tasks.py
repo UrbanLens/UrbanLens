@@ -996,11 +996,19 @@ def _scan_pending_upload(task, image: Image) -> bool:
     Raises:
         celery.exceptions.Retry: clamd was unreachable and retries remain.
     """
-    from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
+    from urbanlens.dashboard.services.security.malware_scan import (
+        VIRUSTOTAL_ELIGIBLE_SOURCES,
+        MalwareScanUnavailableError,
+        malware_error_for_fetched_asset,
+        malware_error_for_upload,
+    )
 
     try:
         with image.image.open("rb") as stored:
-            malware_error = malware_error_for_upload(stored)
+            if image.source in VIRUSTOTAL_ELIGIBLE_SOURCES:
+                malware_error = malware_error_for_fetched_asset(stored, checksum=image.checksum)
+            else:
+                malware_error = malware_error_for_upload(stored)
     except MalwareScanUnavailableError as exc:
         if task.request.retries < task.max_retries:
             # A clamd hiccup must not reject somebody's photo. Same backoff the
