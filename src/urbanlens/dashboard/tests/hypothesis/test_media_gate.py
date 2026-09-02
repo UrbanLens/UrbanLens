@@ -652,7 +652,13 @@ class SafetyContactTokenPhotoTests(TestCase):
         self.assertEqual(response.status_code, 404, "a contact's token reached a photo on a different check-in")
 
     def test_the_portal_lists_the_photo(self):
+        """Photos only surface to a contact once the check-in has escalated - see
+        SafetyContactPortalEscalationGateTests in test_safety.py for the
+        pre-escalation guard this must not regress."""
         from django.urls import reverse
+
+        self.checkin.escalated_at = self._now()
+        self.checkin.save(update_fields=["escalated_at", "updated"])
 
         response = self.client.get(reverse("safety.contact.portal", args=[self.contact.token]))
 
