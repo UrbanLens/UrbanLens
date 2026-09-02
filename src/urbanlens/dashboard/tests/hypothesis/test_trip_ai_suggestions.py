@@ -309,6 +309,13 @@ class GenerateTripSuggestionsTests(TestCase):
         result = generate_trip_suggestions(self.trip, self.alice)
         self.assertFalse(result.generated)
 
+    def test_requester_without_ai_feature_is_unavailable(self) -> None:
+        """The real (unmocked) get_gateway requires SiteFeature.AI on the requester,
+        even though the site-wide toggle above is on by default - self.alice has
+        no subscription/default_features grant (see setUp's bootstrap dance)."""
+        result = generate_trip_suggestions(self.trip, self.alice)
+        self.assertFalse(result.generated)
+
     def test_successful_generation_parses_summary(self) -> None:
         gateway = _StubGateway('{"summary": "Looks good.", "pin_suggestions": [], "schedule": null}')
         with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway):

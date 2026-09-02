@@ -16,6 +16,8 @@ import pytest
 
 from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.controllers.pin import PinController
+from urbanlens.dashboard.models.site_settings.model import SiteSettings
+from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.pins.external_data import schedule_panel_fetch
 
@@ -37,14 +39,40 @@ def test_get_gateway_returns_none_when_profile_ai_disabled() -> None:
     assert get_gateway(profile=profile) is None
 
 
+def _grant_ai_to_everyone() -> None:
+    settings_obj = SiteSettings.get_current()
+    SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
+
+
 @pytest.mark.django_db
 def test_get_gateway_allows_when_profile_fully_enabled() -> None:
+    _grant_ai_to_everyone()
     profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
 
     with mock.patch("urbanlens.dashboard.services.ai.cloudflare.CloudflareGateway") as gateway_cls:
         get_gateway(profile=profile)
 
     gateway_cls.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_get_gateway_returns_none_when_profile_lacks_ai_feature() -> None:
+    """A profile with both preferences on, but no ``SiteFeature.AI`` grant (the
+    default for a fresh account with no subscription), gets no gateway.
+
+    A throwaway user is created first to absorb the "first user in a fresh
+    test database becomes bootstrap site admin" promotion (which would
+    otherwise grant every ``SiteFeature`` to the profile under test).
+    """
+    from model_bakery import baker
+
+    baker.make("auth.User")
+    profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
+
+    with mock.patch("urbanlens.dashboard.services.ai.cloudflare.CloudflareGateway") as gateway_cls:
+        assert get_gateway(profile=profile) is None
+
+    gateway_cls.assert_not_called()
 
 
 @pytest.mark.django_db

@@ -15,6 +15,7 @@ from unittest.mock import patch
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.services.trivia.classifier import classify_trivia_question
 
@@ -107,3 +108,31 @@ class ClassifyTriviaQuestionTests(TestCase):
 
         self.assertIn("<USER_DATA>", captured["prompt"])
         self.assertIn("What year was it built?", captured["prompt"])
+
+
+class ClassifyTriviaQuestionProfileGateTests(TestCase):
+    """The real ``get_gateway`` (unmocked) requires the submitter to hold ``SiteFeature.AI``.
+
+    A submission from a profile without the feature fails closed exactly like
+    a site-wide AI outage does (``ai_unavailable``) - per
+    ``SiteSettings.ai_trivia_moderation_enabled``'s own help text, that holds
+    the question in pending review rather than rejecting it; it does not
+    require moderation to bypass the gate.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
+        self.location = _make_location()
+
+    def test_submitter_without_ai_feature_fails_closed(self) -> None:
+        verdict = classify_trivia_question("What year was it built?", "1937", self.location, profile=self.profile)
+        self.assertFalse(verdict.approved)
+        self.assertEqual(verdict.reason, "ai_unavailable")
+
+    def test_no_submitting_profile_is_unaffected(self) -> None:
+        """AI-generated questions (profile=None) skip the per-profile gate entirely."""
+        with patch("urbanlens.dashboard.services.trivia.classifier.get_gateway", return_value=_FakeGateway("APPROVE")) as mock_get_gateway:
+            verdict = classify_trivia_question("What year was it built?", "1937", self.location)
+        self.assertTrue(verdict.approved)
+        self.assertIsNone(mock_get_gateway.call_args.kwargs["profile"])

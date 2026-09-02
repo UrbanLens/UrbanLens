@@ -38,9 +38,10 @@ def get_gateway(feature: str | None = None, profile: Profile | None = None, prov
             that feature's per-toggle must be enabled in addition to the global
             ``ai_enabled`` flag.
         profile: Optional profile the call is being made on behalf of. When
-            given, both its ``ai_enabled`` and ``external_apis_enabled``
-            preferences must also be on - centralizes the per-profile check so
-            individual callers don't each duplicate it.
+            given, its ``ai_enabled``/``external_apis_enabled`` preferences and
+            the ``SiteFeature.AI`` subscription entitlement must all hold -
+            centralizes the per-profile check so individual callers don't each
+            duplicate it.
         provider: Optional provider override (``"openai"``, ``"cloudflare"``,
             or ``"anthropic"``). When given, this takes precedence over the
             site-wide ``ai_provider`` setting - used by callers that need a
@@ -62,9 +63,16 @@ def get_gateway(feature: str | None = None, profile: Profile | None = None, prov
         logger.debug("AI is globally disabled; skipping AI call")
         return None
 
-    if profile is not None and (not profile.ai_enabled or not profile.external_apis_enabled):
-        logger.debug("AI is disabled for profile %s; skipping AI call", profile.pk)
-        return None
+    if profile is not None:
+        if not profile.ai_enabled or not profile.external_apis_enabled:
+            logger.debug("AI is disabled for profile %s; skipping AI call", profile.pk)
+            return None
+
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+        if not user_has_feature(profile.user, SiteFeature.AI):
+            logger.debug("Profile %s lacks the AI subscription feature; skipping AI call", profile.pk)
+            return None
 
     if feature:
         field = _FEATURE_FIELDS.get(feature)
