@@ -9,7 +9,7 @@ nothing for the scan that triggered it - see that module's docstring.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from typing import Any, ClassVar
 
@@ -29,7 +29,10 @@ class VirusTotalGateway(Gateway):
     service_key: ClassVar[str] = "virustotal"
     paid_service: ClassVar[bool] = False
 
-    api_key: str | None = settings.virustotal_api_key
+    # default_factory, not a bare default: a dataclass field's bare default is evaluated
+    # once at class-definition/import time, so a later settings change never reaches
+    # subsequent instantiations - default_factory re-reads it fresh each time.
+    api_key: str | None = field(default_factory=lambda: settings.virustotal_api_key)
 
     def __post_init__(self) -> None:
         """Attach the x-apikey auth header for every request this gateway makes."""

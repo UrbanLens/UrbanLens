@@ -91,8 +91,11 @@ class RedataCidGateway(Gateway):
     service_key: ClassVar[str] = "redata_cid_lookup"
     paid_service: ClassVar[bool] = False
 
-    base_url: str | None = settings.redata_api_url
-    api_key: str | None = settings.redata_api_key
+    # default_factory, not a bare default: a dataclass field's bare default is evaluated
+    # once at class-definition/import time, so a later settings change never reaches
+    # subsequent instantiations - default_factory re-reads it fresh each time.
+    base_url: str | None = field(default_factory=lambda: settings.redata_api_url)
+    api_key: str | None = field(default_factory=lambda: settings.redata_api_key)
 
     def __post_init__(self) -> None:
         Gateway.__post_init__(self)

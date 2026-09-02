@@ -20,7 +20,7 @@ module's docstring) and when.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from typing import Any, ClassVar
 
@@ -78,8 +78,11 @@ class RedataLabelsGateway(RedataJsonGateway):
     service_key: ClassVar[str] = "redata_labels"
     paid_service: ClassVar[bool] = False
 
-    base_url: str | None = settings.redata_api_url
-    api_key: str | None = settings.redata_api_key
+    # default_factory, not a bare default: a dataclass field's bare default is evaluated
+    # once at class-definition/import time, so a later settings change never reaches
+    # subsequent instantiations - default_factory re-reads it fresh each time.
+    base_url: str | None = field(default_factory=lambda: settings.redata_api_url)
+    api_key: str | None = field(default_factory=lambda: settings.redata_api_key)
 
     def get_model(self) -> dict[str, Any]:
         """Return what is currently producing label suggestions, and how well.

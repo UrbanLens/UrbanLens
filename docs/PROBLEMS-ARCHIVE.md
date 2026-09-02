@@ -11,6 +11,44 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-02: nine `Gateway` subclasses read a credential setting once at import time, not per-instantiation
+
+Found while adding the assistant's `get_weather` tool (`services/ai/tools/weather.py`), and confirmed as a live bug -
+not just a test artifact - via a real test failure: `test_weather_resolution.py`'s
+`test_openweathermap_configured_takes_priority_over_open_meteo_on_direct_path` started failing once a new,
+unrelated test file (`test_ai_tools_weather.py`) happened to import `services.apis.weather.gateway` earlier in the
+same process while `settings.openweathermap_api_key` was mocked to `None`, poisoning the value for every later
+`OpenWeatherMapGateway()` in that process regardless of what the settings object held afterward.
+
+Root cause: `api_key: str | None = settings.openweathermap_api_key` (and siblings) is a bare `@dataclass` field
+default, evaluated exactly once - at class-definition/module-import time - not per-instantiation. Fixed by
+switching every live instance of the pattern to `field(default_factory=lambda: settings.the_attr)`, which re-reads
+the current value on every call, in: `services/apis/weather/gateway.py` (`OpenWeatherMapGateway`),
+`services/apis/property_records/redata_gateway.py` (`RedataGateway`),
+`services/apis/photos/redata_photos_gateway.py` (`RedataPhotosGateway`),
+`services/apis/locations/google/redata_cid_gateway.py` (`RedataCidGateway`),
+`services/apis/locations/google/redata_places_gateway.py` (`RedataPlacesGateway`),
+`services/apis/labels/redata_labels_gateway.py` (`RedataLabelsGateway`),
+`services/apis/locations/redata_context_gateway.py` (`RedataLocationContextGateway`),
+`services/apis/security/virustotal.py` (`VirusTotalGateway`), `services/apis/messaging/sms.py` (`SmsGateway`),
+`services/apis/messaging/whatsapp.py` (`WhatsAppGateway`) - all nine are themselves `@dataclass`-decorated and
+redeclare `base_url`/`api_key`/`account_sid`/`auth_token`/`from_number` as genuine dataclass fields with the same
+bare-default shape.
+
+One tenth site, `services/apis/redata_json_gateway.py`'s `RedataJsonGateway`, has the identical-looking
+`base_url`/`api_key` lines but is **not** itself `@dataclass`-decorated (it's a plain `Gateway` subclass) - those
+lines are ordinary class attributes, not dataclass fields, and are always shadowed by the redeclared dataclass
+fields on its two concrete subclasses (`RedataLabelsGateway`, `RedataPhotosGateway`), which are never constructed
+by passing `base_url=`/`api_key=` explicitly. `RedataJsonGateway` itself is never instantiated directly anywhere
+in the codebase (confirmed by grep), so this copy is dead/inert rather than a tenth live bug - left as-is; a
+`field(default_factory=...)` edit there would be silently inert too (dataclass processing never runs on this
+class) and touching it would misleadingly suggest it does something.
+
+In production this was low-risk (settings are effectively static per worker process, and REData/Twilio/VirusTotal
+keys are rarely rotated without a restart), but it meant a live key rotation, a settings reload, or - the case that
+actually surfaced it - a test process where mock-patching order and first-import order interact, would silently
+use a stale credential instead of the current one.
+
 ## RESOLVED 2026-08-31: `OvertureMapsGateway` scanned the entire planet's buildings dataset per lookup, OOM-killing Celery workers
 
 Found investigating a host-wide (`chiron`) out-of-memory emergency: `celeryd` prefork children in
