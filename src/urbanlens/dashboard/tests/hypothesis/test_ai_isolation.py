@@ -25,12 +25,19 @@ separable claims, each of which fails differently.
    REData, no web" guarantee (the network is the real boundary; this is
    the fail-fast rail that catches a violation even if a reviewer misses it
    and ``ai_network`` somehow didn't).
+6. The egress-proxy allowlist (``config/egress/filter``) never carries a
+   REData host, and does carry every host a shipped provider adapter or
+   tool gateway actually calls (:class:`EgressFilterTests`) - the allowlist
+   is the real network boundary the other five claims are defense in depth
+   for, so a host silently missing here is the sandbox stack failing at
+   runtime with nothing in the test suite having caught it beforehand.
 """
 
 from __future__ import annotations
 
 import ast
 import pathlib
+import re
 import subprocess
 import sys
 from typing import Any
@@ -407,6 +414,51 @@ class ComposeTopologyTests(SimpleTestCase):
     def test_ai_worker_depends_on_ai_inference_being_healthy(self) -> None:
         compose = _compose()
         self.assertIn("ai-inference", compose["services"]["ai-worker"]["depends_on"])
+
+
+def _egress_filter_lines() -> list[str]:
+    import pathlib
+
+    path = pathlib.Path(__file__).resolve().parents[5] / "src" / "urbanlens" / "config" / "egress" / "filter"
+    return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.strip().startswith("#")]
+
+
+class EgressFilterTests(SimpleTestCase):
+    """The egress-proxy allowlist matches what ai-worker's own tools actually call.
+
+    A host missing here isn't a code-level failure - it's ``ai-worker`` (or
+    ``ai-inference``) silently unable to reach a host that's genuinely on the
+    allowlist's intended set, discovered only once the sandbox stack is
+    actually running with FilterDefaultDeny enforcing it. This is what
+    would have caught ``distance_and_drive_time``/``get_weather`` shipping
+    without their hosts ever being added here.
+    """
+
+    def test_no_redata_host_is_ever_allowed(self) -> None:
+        lines = _egress_filter_lines()
+        self.assertFalse([line for line in lines if "redata" in line.lower()])
+
+    def test_every_provider_and_tool_gateway_host_is_allowed(self) -> None:
+        # One entry per host a shipped provider adapter or tool gateway
+        # actually calls - see urbanlens_ai/providers/ and
+        # services/ai/tools/{routing,weather}.py's default base_urls.
+        expected_hosts = {
+            "api.anthropic.com",
+            "api.openai.com",
+            "api.cloudflare.com",
+            "router.project-osrm.org",
+            "api.open-meteo.com",
+            "api.openweathermap.org",
+        }
+        # Each line is itself an anchored regex (FilterExtended's format) -
+        # compile and match the plain hostname against it, rather than
+        # string-comparing two different (both valid) escaped renderings of
+        # the same host, which is what re.escape(host) vs. a hand-written
+        # line would otherwise force this into.
+        patterns = [re.compile(line) for line in _egress_filter_lines()]
+        for host in expected_hosts:
+            with self.subTest(host=host):
+                self.assertTrue(any(pattern.match(host) for pattern in patterns), f"{host!r} has no matching entry in the egress filter")
 
 
 #: A module or submodule name is forbidden if its root matches one of these

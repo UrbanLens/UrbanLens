@@ -22,6 +22,23 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-09-02: `OSRMGateway.base_url` has no production override - every deployment routes through the public demo server
+
+Found while adding the egress-proxy filter entries the assistant's `distance_and_drive_time` tool
+needs (`router.project-osrm.org` - see the entry above on the tools-import sweep and the sandbox
+egress filter, same audit). `services/apis/routing/osrm.py`'s own docstring says "production
+installs should point `base_url` at a self-hosted instance", but nothing actually wires that up:
+`base_url: str = _DEMO_BASE_URL` is a bare dataclass default with no `settings.*`/env-var source,
+and every caller (`services/ai/tools/routing.py`'s `_distance_and_drive_time`, and anywhere else
+`OSRMGateway()` is constructed) always gets the demo server, with no way to override it short of
+passing `base_url=` explicitly at each call site. The demo server is documented upstream as
+dev/test-only (rate-limited, no uptime guarantee), so any real deployment's drive-time answers
+depend on a service OSRM itself doesn't promise to keep available. Fix would be a
+`ul_osrm_base_url: str | None` pydantic setting (mirroring `ul_openweathermap_api_key`'s pattern)
+threaded into `OSRMGateway`'s `default_factory` the same way the weather gateway fix in this same
+session's work handles `api_key` - not done here since it's a new setting plus deployment-docs
+change, not a fix to code already touched this session.
+
 ## OPEN 2026-09-02: `style_suggestions.py`'s own AI-access check was never unified onto `assistant_available()`, and doing so naively would be wrong
 
 Found auditing the AI-assistant sandboxing work (`docs/AI_PIPELINE.md`) for completeness.

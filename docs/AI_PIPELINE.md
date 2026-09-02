@@ -114,9 +114,16 @@ AST sweep of `services/ai/tools/` for forbidden imports (`redata_*`,
 `*_resolution`, `requests`, `httpx`, `urllib`); a subprocess check that
 importing `urbanlens_ai` never pulls in `django`/`urbanlens`; a PyYAML parse
 of `docker-compose.yml` asserting the network topology and each AI service's
-env keys are a subset of what's allowed; and the role-guard functions
-themselves (`current_policy()`, `redata_configured()`) under a patched
-`current_role()`.
+env keys are a subset of what's allowed; the role-guard functions themselves
+(`current_policy()`, `redata_configured()`) under a patched `current_role()`;
+and a check on `config/egress/filter` itself - no REData host ever allowed,
+and every host a shipped provider adapter or tool gateway actually calls
+present (`EgressFilterTests`). That last one exists because it's the one
+gap a code review of the tools alone won't catch: `distance_and_drive_time`
+and `get_weather` shipped once, in this same batch, without their hosts
+(`router.project-osrm.org`, `api.open-meteo.com`, `api.openweathermap.org`)
+ever being added to the filter - correct code, silently unreachable at
+runtime, until this test made the omission a CI failure instead.
 
 ## The tool registry
 

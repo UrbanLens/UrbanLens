@@ -1,3 +1,12 @@
 ^api\.anthropic\.com$
 ^api\.openai\.com$
 ^api\.cloudflare\.com$
+# ai-worker's own outbound tool calls (services/ai/tools/routing.py,
+# weather.py) - added when those tools shipped; this file otherwise only
+# ever needed ai-inference's provider hosts above. router.project-osrm.org
+# is OSRM's public demo server - OSRMGateway.base_url has no production
+# override wired up yet (see docs/PROBLEMS.md, 2026-09-02), so this is the
+# only OSRM host reachable today regardless of deployment.
+^router\.project-osrm\.org$
+^api\.open-meteo\.com$
+^api\.openweathermap\.org$
