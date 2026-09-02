@@ -232,6 +232,8 @@ class RegistrationTests(TestCase):
             "undo_last_action",
             "distance_and_drive_time",
             "get_weather",
+            "has_tunnels",
+            "have_i_been_here",
         ):
             self.assertIn(name, REGISTRY)
 
