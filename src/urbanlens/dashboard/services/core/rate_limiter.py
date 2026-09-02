@@ -238,9 +238,14 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     "virustotal": ServiceDefaults(
         display_name="VirusTotal",
         # VirusTotal's own public/free API tier: 4 requests/minute, 500/day.
-        # calls_per_day is capped at 490, not 500, as our own safety margin.
-        calls_per_minute=4,
-        calls_per_day=490,
+        # Both capped below that (not merely at it) on purpose: check_rate_limit's
+        # rolling window is ours, not VirusTotal's, so a call that lands right at
+        # our own ceiling isn't guaranteed to land inside VirusTotal's - clock
+        # skew or window-boundary misalignment could still trip their real 429.
+        # Staying strictly under both gives that margin instead of running the
+        # rolling window flush against the actual wall.
+        calls_per_minute=3,
+        calls_per_day=480,
         notes=("Free public API tier, hash-lookup only. Fast path before ClamAV on externally-fetched image assets - never sent a user upload or a user's own cloud photo library. See services.security.virustotal_scan."),
     ),
     "sms": ServiceDefaults(

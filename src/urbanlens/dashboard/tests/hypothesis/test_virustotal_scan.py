@@ -124,7 +124,7 @@ def test_gateway_request_error_raises_no_verdict() -> None:
 
 
 def test_rate_limit_exceeded_raises_no_verdict() -> None:
-    """Quota exhaustion (490/day or 4/minute) must fail over silently, not
+    """Quota exhaustion (calls_per_day/calls_per_minute) must fail over silently, not
     raise something the caller doesn't already handle."""
     gateway = Mock()
     gateway.get_file_report.side_effect = RateLimitExceededError("virustotal")
