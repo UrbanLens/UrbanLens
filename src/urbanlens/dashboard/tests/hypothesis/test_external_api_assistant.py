@@ -58,10 +58,11 @@ class _AssistantApiTestCase(TestCase):
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=scopes)
         return raw
 
-    def _post_message(self, message: str, history: list | None = None):
-        return self.client.post(
-            reverse("external_api:assistant.message"), {"message": message, "history": history or []}, content_type="application/json", **_bearer(self.raw_key)
-        )
+    def _post_message(self, message: str, history: list | None = None, page_path: str | None = None):
+        body = {"message": message, "history": history or []}
+        if page_path is not None:
+            body["page_path"] = page_path
+        return self.client.post(reverse("external_api:assistant.message"), body, content_type="application/json", **_bearer(self.raw_key))
 
     def _poll(self, turn_id: str, attempt: int | None = None):
         url = reverse("external_api:assistant.turn", args=[turn_id])
@@ -115,6 +116,22 @@ class AssistantMessageTests(_AssistantApiTestCase):
         self.assertEqual(first.status_code, 202)
         self.assertEqual(second.status_code, 409)
         self.assertEqual(mock_enqueue.call_count, 1)
+
+    def test_page_path_resolves_to_a_page_object_on_the_enqueued_task(self) -> None:
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        with _enqueued() as mock_enqueue:
+            self._post_message("hi", page_path=reverse("pin.details", args=[pin.slug]))
+        self.assertEqual(mock_enqueue.call_args.kwargs["page"], {"kind": "pin", "id": pin.pk})
+
+    def test_an_unresolvable_page_path_enqueues_no_page(self) -> None:
+        with _enqueued() as mock_enqueue:
+            self._post_message("hi", page_path="/not/a/real/route/")
+        self.assertIsNone(mock_enqueue.call_args.kwargs["page"])
+
+    def test_no_page_path_enqueues_no_page(self) -> None:
+        with _enqueued() as mock_enqueue:
+            self._post_message("hi")
+        self.assertIsNone(mock_enqueue.call_args.kwargs["page"])
 
     def test_queue_failure_releases_the_lock_and_returns_503(self) -> None:
         with patch("urbanlens.dashboard.external_api.views_assistant.safely_enqueue_task", return_value=None):

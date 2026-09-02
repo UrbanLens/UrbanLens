@@ -33,7 +33,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 </head>
 
-<body class="{% if page_name %}page-{{ page_name }}{% endif %}">
+<body class="{% if page_name %}page-{{ page_name }}{% endif %}" data-page-name="{{ page_name }}" data-nav-section="{{ nav_section }}">
     {% include 'dashboard/partials/layout/_env_indicator.html' %}
     {% include 'dashboard/partials/layout/_demo_banner.html' %}
     {% include 'dashboard/partials/layout/_account_deletion_banner.html' %}

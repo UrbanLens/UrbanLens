@@ -108,4 +108,31 @@ class RunAssistantTurnTaskTests(TestCase):
         history = [{"role": "user", "content": "earlier"}]
         with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
             run_assistant_turn_task(self.profile.pk, history, "hello", token)
-        mock_run.assert_called_once_with(self.profile, history, "hello")
+        mock_run.assert_called_once_with(self.profile, history, "hello", page=None)
+
+    def test_a_verified_page_reaches_run_assistant_turn(self) -> None:
+        from urbanlens.dashboard.services.ai.page_context import PageObject
+
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        token = acquire_turn_lock(self.profile)
+        assert token is not None
+        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
+            run_assistant_turn_task(self.profile.pk, [], "hello", token, page={"kind": "pin", "id": pin.pk})
+        mock_run.assert_called_once_with(self.profile, [], "hello", page=PageObject(kind="pin", id=pin.pk))
+
+    def test_a_page_belonging_to_another_profile_is_dropped_not_trusted(self) -> None:
+        """The task re-verifies against its own profile - it never just trusts what the web view enqueued."""
+        other_profile = Profile.objects.get(user=baker.make("auth.User"))
+        other_pin = baker.make("dashboard.Pin", profile=other_profile)
+        token = acquire_turn_lock(self.profile)
+        assert token is not None
+        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
+            run_assistant_turn_task(self.profile.pk, [], "hello", token, page={"kind": "pin", "id": other_pin.pk})
+        mock_run.assert_called_once_with(self.profile, [], "hello", page=None)
+
+    def test_a_malformed_page_payload_is_dropped_not_a_raise(self) -> None:
+        token = acquire_turn_lock(self.profile)
+        assert token is not None
+        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
+            run_assistant_turn_task(self.profile.pk, [], "hello", token, page={"kind": "pin"})
+        mock_run.assert_called_once_with(self.profile, [], "hello", page=None)

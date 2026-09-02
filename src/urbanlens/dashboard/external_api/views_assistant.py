@@ -132,10 +132,14 @@ class AssistantMessageView(ExternalApiView):
         if lock_token is None:
             return Response({"error": "A previous message is still being processed. Wait for it to finish before sending another."}, status=409)
 
+        from urbanlens.dashboard.services.ai.page_context import page_object_to_dict, resolve_page_context
         from urbanlens.dashboard.services.ai.tasks import run_assistant_turn_task
 
         history = [dict(entry) for entry in data["history"]][-MAX_HISTORY_ENTRIES:]
-        result = safely_enqueue_task(run_assistant_turn_task, profile.pk, history, data["message"], lock_token, expires=120)
+        page_path = data.get("page_path") or ""
+        page_context = resolve_page_context(page_path, profile) if page_path else None
+        page = page_object_to_dict(page_context.object) if page_context else None
+        result = safely_enqueue_task(run_assistant_turn_task, profile.pk, history, data["message"], lock_token, page=page, expires=120)
         if result is None:
             release_turn_lock(profile, lock_token)
             return Response({"error": _QUEUE_FAILED_ERROR}, status=503)

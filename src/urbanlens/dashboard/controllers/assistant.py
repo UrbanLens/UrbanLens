@@ -236,6 +236,7 @@ class AssistantMessageView(LoginRequiredMixin, View):
             response["HX-Trigger"] = json.dumps({"showToast": {"level": "info", "message": _BUSY_MESSAGE}})
             return response
 
+        from urbanlens.dashboard.services.ai.page_context import page_object_to_dict, resolve_page_context
         from urbanlens.dashboard.services.ai.tasks import run_assistant_turn_task
 
         # Prior turns only - the new message is a separate argument to the
@@ -243,7 +244,10 @@ class AssistantMessageView(LoginRequiredMixin, View):
         # split. Pending markers carry no "content" and would corrupt the
         # transcript the task builds.
         history_for_task = [{"role": entry["role"], "content": entry["content"]} for entry in history if not entry.get("pending")]
-        result = safely_enqueue_task(run_assistant_turn_task, profile.pk, history_for_task, message, lock_token, expires=120)
+        page_path = request.POST.get("page_path") or ""
+        page_context = resolve_page_context(page_path, profile) if page_path else None
+        page = page_object_to_dict(page_context.object) if page_context else None
+        result = safely_enqueue_task(run_assistant_turn_task, profile.pk, history_for_task, message, lock_token, page=page, expires=120)
         if result is None:
             release_turn_lock(profile, lock_token)
             history.append({"role": "user", "content": message})

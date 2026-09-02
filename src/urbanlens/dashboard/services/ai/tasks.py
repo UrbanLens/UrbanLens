@@ -34,7 +34,7 @@ _EXPIRED_REPLY = "This request took too long to start and was dropped. Please tr
 
 
 @shared_task(bind=True, queue=_AI_QUEUE, acks_late=False, soft_time_limit=90, time_limit=120)
-def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]], user_message: str, lock_token: str) -> dict[str, Any]:
+def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]], user_message: str, lock_token: str, page: dict[str, Any] | None = None) -> dict[str, Any]:
     """Run one assistant turn on ``ai-worker`` and release its single-flight lock.
 
     ``acks_late=False`` overrides the project default
@@ -56,6 +56,11 @@ def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]]
             :func:`~services.ai.turns.release_turn_lock` is separately
             self-guarding, so even if that check were somehow bypassed the
             release below can't clobber a newer turn's lock.
+        page: ``services.ai.page_context.page_object_to_dict``'s output for
+            whatever the web view resolved before enqueueing, or ``None``.
+            Re-verified against *this* task's own profile via
+            ``verify_page_object`` before use - the web view's earlier
+            resolution is never trusted as-is, only its ``{kind, id}``.
 
     Returns:
         ``{"reply": str, "actions": list[str], "proposals": list[dict]}`` on
@@ -89,9 +94,15 @@ def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]]
         if not assistant_available(profile):
             return {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []}
 
+        from urbanlens.dashboard.services.ai.page_context import page_object_from_dict, verify_page_object
+
+        page_object = page_object_from_dict(page)
+        if page_object is not None and not verify_page_object(profile, page_object):
+            page_object = None
+
         update_task_progress(self, current=0, total=1, message="Thinking…")
         try:
-            turn = run_assistant_turn(profile, history, user_message)
+            turn = run_assistant_turn(profile, history, user_message, page=page_object)
         except AssistantUnavailableError:
             return {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []}
 

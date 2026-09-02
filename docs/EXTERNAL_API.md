@@ -695,8 +695,12 @@ chat turn against the same tool-calling assistant (UL-293) the website's session
 (`services.ai.tasks.run_assistant_turn_task`), but **stateless**: a bearer-token client has no
 session to keep history in, so the client carries `history` in the request body and resends the
 `history` a resolved poll returns as the next call's input. Request:
-`{message, history: [{role:"user"|"assistant", content}]}` — `history` capped to the last 20
-entries server-side. Response: **202** `{turn_id, ready: false, poll_after_seconds}`. **503**
+`{message, history: [{role:"user"|"assistant", content}], page_path}` — `history` capped to the
+last 20 entries server-side. `page_path` is optional — a client-side "screen" path (mirroring the
+web chat's own `window.location.pathname`), resolved server-side under the caller's own access
+rules (`services.ai.page_context`) rather than trusted as-is; unrecognized or inaccessible paths
+resolve to no page context, silently, never an error. Nothing in the assistant's tool set reads
+the resolved page yet. Response: **202** `{turn_id, ready: false, poll_after_seconds}`. **503**
 `{"error": "..."}` when AI is disabled. **409** `{"error": "..."}` when a previous message from
 this caller is still being processed — wait for it to resolve before sending another; own extra
 throttle (`external_api_assistant_message`, default 60/hour) stacked on the standard three, since

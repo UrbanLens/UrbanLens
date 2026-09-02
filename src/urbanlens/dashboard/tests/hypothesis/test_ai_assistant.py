@@ -343,6 +343,22 @@ class AssistantViewTests(TestCase):
         mock_enqueue.assert_not_called()
         self.assertFalse(self.client.session.get("assistant_chat"))
 
+    def test_page_path_resolves_to_a_page_object_on_the_enqueued_task(self) -> None:
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+            self.client.post(reverse("assistant.message"), {"message": "find pins", "page_path": reverse("pin.details", args=[pin.slug])})
+        self.assertEqual(mock_enqueue.call_args.kwargs["page"], {"kind": "pin", "id": pin.pk})
+
+    def test_an_unresolvable_page_path_enqueues_no_page(self) -> None:
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+            self.client.post(reverse("assistant.message"), {"message": "find pins", "page_path": "/not/a/real/route/"})
+        self.assertIsNone(mock_enqueue.call_args.kwargs["page"])
+
+    def test_no_page_path_enqueues_no_page(self) -> None:
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+            self.client.post(reverse("assistant.message"), {"message": "find pins"})
+        self.assertIsNone(mock_enqueue.call_args.kwargs["page"])
+
 
 class AssistantOverlayBodyViewTests(TestCase):
     """GET /assistant/overlay/ - the global overlay's lazily-loaded body."""
@@ -397,6 +413,14 @@ class GlobalAssistantSurfaceTests(TestCase):
         with patch("urbanlens.dashboard.services.ai.access.assistant_available", return_value=True):
             response = self.client.get(reverse("login"))
         self.assertNotContains(response, 'id="ul-assistant-fab"')
+
+    def test_body_carries_page_context_data_attrs(self) -> None:
+        """page_context.py (plan §9) resolves a client-sent path server-side - these are what a future
+        client-side page-help panel (batch 4) would read without a round trip."""
+        with patch("urbanlens.dashboard.services.ai.access.assistant_available", return_value=True):
+            response = self.client.get(reverse("map.view"))
+        self.assertContains(response, 'data-page-name="map-view"')
+        self.assertContains(response, 'data-nav-section="map"')
 
 
 class AssistantProposalConfirmViewTests(TestCase):

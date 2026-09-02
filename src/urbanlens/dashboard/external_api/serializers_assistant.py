@@ -25,6 +25,11 @@ class AssistantMessageRequestSerializer(serializers.Serializer):
 
     message = serializers.CharField(max_length=MAX_MESSAGE_CHARS, allow_blank=False)
     history = AssistantHistoryEntrySerializer(many=True, required=False, default=list)
+    #: Optional client-side "screen" path, resolved server-side under this
+    #: caller's own access rules (services.ai.page_context) - mirrors the web
+    #: chat's own window.location.pathname. No shipped tool reads the result
+    #: yet (needs_page=True starts in batch 4).
+    page_path = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class AssistantProposalSerializer(serializers.Serializer):

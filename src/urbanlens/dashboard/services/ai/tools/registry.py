@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.subscriptions import SiteFeature
+    from urbanlens.dashboard.services.ai.page_context import PageObject
 
 logger = logging.getLogger(__name__)
 
@@ -95,10 +96,11 @@ class ToolContext:
             an arbitrary handler.
         now: A single "current time" for the whole turn, so a multi-tool-call
             turn doesn't see the clock move between calls.
-        page: The resolved page context (``services/ai/page_context.py``,
-            batch 3), or ``None`` when no page was resolved or the client
-            sent none. Untyped for now since that module doesn't exist yet;
-            tools with ``needs_page=True`` don't ship until batch 4.
+        page: The resolved page's own object (``services.ai.page_context.PageObject``),
+            or ``None`` when no page was resolved, the client sent none, or
+            the resolved page has no single object of its own (e.g. the
+            map). No shipped tool declares ``needs_page=True`` yet - that
+            starts in batch 4 - so nothing reads this field today.
         deadline: A ``time.monotonic()`` value the tool must not run past,
             or ``None`` when the caller (e.g. a direct/local test) imposes
             none. Populated by the turn task (batch 2c); tools that call an
@@ -108,7 +110,7 @@ class ToolContext:
 
     profile: Profile
     now: datetime
-    page: Any | None = None
+    page: PageObject | None = None
     deadline: float | None = None
 
 

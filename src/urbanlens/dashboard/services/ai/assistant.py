@@ -46,6 +46,7 @@ from urbanlens.dashboard.services.core.rate_limiter import log_api_call
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.ai.page_context import PageObject
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ def _wire_tools(context: ToolContext) -> list[InferenceToolSpec]:
     return [InferenceToolSpec(name=spec.name, description=spec.description, input_schema=spec.args_model.model_json_schema()) for spec in available_tools(context)]
 
 
-def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_message: str) -> AssistantTurn:
+def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_message: str, *, page: PageObject | None = None) -> AssistantTurn:
     """Process one user message: loop model <-> tools until it replies.
 
     Args:
@@ -124,6 +125,10 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
         history: Prior conversation entries (``{"role", "content"}``), already
             capped by the caller.
         user_message: The new message (truncated to ``MAX_MESSAGE_CHARS``).
+        page: The caller's already-verified page context (see
+            ``services.ai.page_context``), or ``None`` when no page was sent
+            or resolved. Carried straight onto ``ToolContext.page`` - no
+            shipped tool reads it yet (``needs_page=True`` starts in batch 4).
 
     Returns:
         The assistant's reply plus human-readable labels of any actions taken.
@@ -147,7 +152,7 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
     started = time.monotonic()
     deadline = started + TURN_DEADLINE_SECONDS
     succeeded = True
-    context = ToolContext(profile=profile, now=timezone.now(), deadline=deadline)
+    context = ToolContext(profile=profile, now=timezone.now(), page=page, deadline=deadline)
     wire_tools = _wire_tools(context)
     tool_call_count = 0
     actions: list[str] = []
