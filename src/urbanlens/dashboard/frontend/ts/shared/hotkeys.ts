@@ -43,6 +43,11 @@ export const DEFAULT_HOTKEYS = {
         label: "Toggle fullscreen",
         description: "Enter or exit fullscreen while playing a game.",
     },
+    openAssistant: {
+        keys: ["shift+?", "?"],
+        label: "Open assistant",
+        description: "Open the AI assistant.",
+    },
 };
 
 /** Turn a KeyboardEvent into a comparable "ctrl+shift+z"-style combo string. */
@@ -76,6 +81,14 @@ export function matchesHotkey(event: KeyboardEvent, actionId: string): boolean {
     const combos = loadHotkeys()[actionId];
     if (!combos || !combos.length) return false;
     return combos.includes(normalizeCombo(event));
+}
+
+/** Whether `target` is a form control the user could be typing into - a global hotkey listener must not fire while it's focused. */
+export function isTypingTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    const tag = target.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
 const _MAC = typeof navigator !== "undefined" && /mac/i.test(navigator.platform || "");

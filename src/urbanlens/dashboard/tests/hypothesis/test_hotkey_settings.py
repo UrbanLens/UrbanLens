@@ -35,6 +35,12 @@ class HotkeySettingsFormCleaningTests(TestCase):
             {"undo": "ctrl+alt+z", "toggleFullscreen": "g"},
         )
 
+    def test_openassistant_combos_survive(self) -> None:
+        # The default binding's own key ("?") and its shifted form - the
+        # regex was widened for exactly these two, not arbitrary punctuation.
+        self.assertEqual(self._clean(json.dumps({"openAssistant": "?"})), {"openAssistant": "?"})
+        self.assertEqual(self._clean(json.dumps({"openAssistant": "shift+?"})), {"openAssistant": "shift+?"})
+
     def test_an_unknown_action_id_is_dropped(self) -> None:
         self.assertEqual(self._clean(json.dumps({"undo": "ctrl+alt+z", "notARealAction": "x"})), {"undo": "ctrl+alt+z"})
 

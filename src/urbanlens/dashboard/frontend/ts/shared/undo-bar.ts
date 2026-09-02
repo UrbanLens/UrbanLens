@@ -8,7 +8,7 @@
 
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
-import { matchesHotkey } from "./hotkeys";
+import { isTypingTarget, matchesHotkey } from "./hotkeys";
 
 export interface UndoProvider {
     canUndo(): boolean;
@@ -216,13 +216,6 @@ function placeBar(): void {
         }
     }
     root.style.setProperty("--ul-undo-offset-y", `${offset}px`);
-}
-
-function isTypingTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof HTMLElement)) return false;
-    if (target.isContentEditable) return true;
-    const tag = target.tagName;
-    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
 function onKeydown(event: KeyboardEvent): void {

@@ -96,8 +96,12 @@ class MarkupDefaultsForm(ProfileSettingsForm):
 # Kept in sync by hand with DEFAULT_HOTKEYS' keys in frontend/ts/shared/hotkeys.ts -
 # JS and Python don't share a source of truth here, same tradeoff as
 # PIN_CACHE_VERSION's two independent literals (see pin-cache.contract.test.ts).
-_KNOWN_HOTKEY_ACTIONS = frozenset({"undo", "redo", "toggleFullscreen"})
-_HOTKEY_COMBO_RE = re.compile(r"^(ctrl\+)?(shift\+)?(alt\+)?[a-z0-9]+$")
+_KNOWN_HOTKEY_ACTIONS = frozenset({"undo", "redo", "toggleFullscreen", "openAssistant"})
+# [a-z0-9/?] rather than just [a-z0-9]: openAssistant's default binding is the
+# bare "?" key (shift+/ on most layouts, sometimes reported as "/" itself
+# depending on layout/browser) - widened to admit both without opening this up
+# to arbitrary punctuation.
+_HOTKEY_COMBO_RE = re.compile(r"^(ctrl\+)?(shift\+)?(alt\+)?[a-z0-9/?]+$")
 
 
 class HotkeySettingsForm(ProfileSettingsForm):

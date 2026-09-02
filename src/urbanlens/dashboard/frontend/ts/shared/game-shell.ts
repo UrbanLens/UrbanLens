@@ -15,7 +15,7 @@
  *      `body.page-<game>` custom properties keep applying inside it.
  */
 
-import { matchesHotkey } from "./hotkeys";
+import { isTypingTarget, matchesHotkey } from "./hotkeys";
 
 export interface GameShellOptions {
     /** The page root - `.ul-game`, carrying the game's legacy page class. */
@@ -103,16 +103,6 @@ function writeImmersivePreference(on: boolean): void {
     } catch {
         /* Private-mode storage denial is not worth surfacing. */
     }
-}
-
-function isTypingTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof HTMLElement)) {
-        return false;
-    }
-    if (target.isContentEditable) {
-        return true;
-    }
-    return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
 /**
