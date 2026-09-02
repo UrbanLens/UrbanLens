@@ -888,6 +888,38 @@ paid subscription the same as an admin-issued grant. Service layer lives in `ser
   completion notification
 - **Local keyword tagging** — entirely local (no AI or network call), keyword-match auto-categorize / auto-tag / auto-status on pin save; master toggle + per-type sub-toggles in Settings → Connections
 
+## AI Assistant
+
+- A global, tool-calling chat assistant reachable from every authenticated page - a floating
+  bottom-right button and the `?`/Shift+`?` hotkey open an overlay (`window.location.pathname`
+  is sent along, resolved server-side into page context under the same access rules the real
+  page's own view would apply); `/assistant/` remains as a deep link / no-JS fallback. Gated
+  behind a site-wide flag, a per-user entitlement, and a per-profile `ai_enabled`/
+  `external_apis_enabled` pair - an ungated user sees no button, no hotkey binding, and every
+  turn endpoint 404s
+- Runs entirely off an isolated sandbox tier (`ai-worker` draining its own Celery queue, plus a
+  Django-free `ai-inference` service holding only provider API keys), never inline in the web
+  process, and never reachable to REData or the open web except through an allowlisting egress
+  proxy - see `docs/AI_PIPELINE.md` for the full architecture and threat model
+- A typed registry of read-only tools the model can call, each scoped to what the requesting
+  profile can already see: search/list the user's own pins and unvisited pins; list/create trips
+  and add trip activities; look up page help and recently-dismissed onboarding
+  explainers/tooltips (and reopen one on request); peek and undo the user's last undoable action;
+  straight-line distance and (when routing succeeds) drive time between two of the user's pins or
+  coordinates; a weather forecast for one of the user's pins or coordinates; evidence of tunnels
+  or below-grade levels at a pin (floorplan, photo captions/labels, wiki comments); and whether
+  the user has visited a pin (a confirmed logged visit vs. a merely-nearby GPS track or pending
+  visit suggestion, never conflated)
+- Every write the assistant can perform (creating a trip, adding a trip activity, undoing the
+  last action) is proposal-then-confirm: the model can never execute a write directly, only
+  produce a confirm button whose action is bound server-side to the caller's own profile
+- Answers are grounded, never fabricated: page-help text comes from a static per-page dictionary,
+  dismissed-explainer text is exactly what the user's own page rendered (captured client-side,
+  re-validated server-side), and every tool result the model sees is scanned and delimited before
+  being added to its context
+- Turns run asynchronously (enqueue-then-poll) on both the website and the external API - see
+  `docs/EXTERNAL_API.md`'s "AI Assistant" section for the wire protocol
+
 ## REST API
 
 Two separate DRF surfaces - see `dashboard/urls.py` and `dashboard/external_api/__init__.py`
