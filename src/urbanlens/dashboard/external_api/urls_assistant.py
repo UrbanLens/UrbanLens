@@ -39,5 +39,6 @@ if TYPE_CHECKING:
 #: namespace by ``urls.py`` - see this module's docstring before adding to it.
 urlpatterns: list[URLPattern] = [
     path("assistant/message/", views_assistant.AssistantMessageView.as_view(), name="assistant.message"),
+    path("assistant/turn/<str:turn_id>/", views_assistant.AssistantTurnPollView.as_view(), name="assistant.turn"),
     path("assistant/reset/", views_assistant.AssistantResetView.as_view(), name="assistant.reset"),
 ]

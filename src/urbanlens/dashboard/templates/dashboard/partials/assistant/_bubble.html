@@ -1,0 +1,30 @@
+{% comment %}
+One assistant-chat entry. Shared by _messages.html's loop (the full history)
+and AssistantTurnPollView's single-bubble poll response (outerHTML swap) -
+see controllers/assistant.py. A pending entry ({"pending": True, "turn_id"})
+self-polls; anything else (including a resolved turn) is a plain bubble.
+
+Context: entry, and for a pending entry only: next_attempt, poll_delay.
+{% endcomment %}
+{% if entry.pending %}
+<div id="assistant-turn-{{ entry.turn_id }}" class="assistant-msg assistant-msg--assistant assistant-msg--pending"
+     hx-get="{% url 'assistant.turn' entry.turn_id %}?attempt={{ next_attempt|default:1 }}"
+     hx-trigger="load delay:{{ poll_delay|default:1 }}s"
+     hx-swap="outerHTML">
+    <div class="assistant-msg-bubble assistant-msg-bubble--pending">
+        <span class="assistant-typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="sr-only">Thinking&hellip;</span>
+    </div>
+</div>
+{% else %}
+<div class="assistant-msg assistant-msg--{{ entry.role }}">
+    <div class="assistant-msg-bubble">{{ entry.content|linebreaksbr }}</div>
+    {% if entry.actions %}
+    <div class="assistant-msg-actions">
+        {% for action in entry.actions %}
+        <span class="ul-badge ul-badge--neutral"><i class="material-symbols-outlined">check</i>{{ action }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}

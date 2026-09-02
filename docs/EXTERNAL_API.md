@@ -686,9 +686,39 @@ A thin, scope-aware wrapper over the existing Undo History service (`services.un
 
 ## AI Assistant
 
-`POST /assistant/message/` — `AssistantMessageView` — scopes: `assistant:write` — one chat turn against the same tool-calling assistant (UL-293) the website's session-based chat uses (`services.ai.assistant.run_assistant_turn`), but **stateless**: a bearer-token client has no session to keep history in, so the client carries `history` in the request body and resends the `history` this endpoint returns as the next call's input. Request: `{message, history: [{role:"user"|"assistant", content}]}` — `history` capped to the last 20 entries server-side both on the way in and the way out. Response: `{reply, actions[], history}` — `actions` are human-readable labels of anything the assistant actually did (e.g. "Created a trip"); it can only act through a small allowlisted tool set scoped to the caller's own data, never deletes/shares/changes privacy settings, and every tool result it sees is JSON, never raw prose from another account. **503** `{"error": "AI features are currently turned off for your account or this site."}` when AI is disabled — own extra throttle (`external_api_assistant_message`, default 60/hour) stacked on the standard three, since one turn can fan out to several billed model calls.
+The assistant runs on an isolated `ai-worker` (UL-163 sandboxing), never inline in the web
+process — a turn is enqueued, then polled, the same job-shaped request/poll flow every other
+AI-costed endpoint in this API uses (see the [Panels](#panels) 202 pattern).
 
-`POST /assistant/reset/` — `AssistantResetView` — scopes: `assistant:write` — a genuine no-op for this stateless shape (`{"history": []}`) — kept for surface symmetry with the web chat's reset button; a client "resets" by simply discarding its own `history` and sending an empty list next time.
+`POST /assistant/message/` — `AssistantMessageView` — scopes: `assistant:write` — enqueue one
+chat turn against the same tool-calling assistant (UL-293) the website's session-based chat uses
+(`services.ai.tasks.run_assistant_turn_task`), but **stateless**: a bearer-token client has no
+session to keep history in, so the client carries `history` in the request body and resends the
+`history` a resolved poll returns as the next call's input. Request:
+`{message, history: [{role:"user"|"assistant", content}]}` — `history` capped to the last 20
+entries server-side. Response: **202** `{turn_id, ready: false, poll_after_seconds}`. **503**
+`{"error": "..."}` when AI is disabled. **409** `{"error": "..."}` when a previous message from
+this caller is still being processed — wait for it to resolve before sending another; own extra
+throttle (`external_api_assistant_message`, default 60/hour) stacked on the standard three, since
+one turn can fan out to several billed model calls.
+
+`GET /assistant/turn/<turn_id>/` — `AssistantTurnPollView` — scopes: `assistant:write` — poll a
+turn started by the endpoint above. Still running: **202** `{ready: false, poll_after_seconds}` —
+back off and retry after that many seconds, appending `?attempt=N` (0-indexed) so the pacing grows
+the way the web chat's own poll does; a client that gives up polling loses nothing server-side, it
+can simply stop. Resolved: **200** `{reply, actions[], history}` — `actions` are human-readable
+labels of anything the assistant actually did (e.g. "Created a trip"); it can only act through a
+small allowlisted tool set scoped to the caller's own data, never deletes/shares/changes privacy
+settings, and every tool result it sees is JSON, never raw prose from another account. A turn that
+failed or ran too long still resolves **200** with a plain-language `reply` explaining that, rather
+than an error status — a client can render every poll outcome the same way. **404** for an unknown
+or expired turn id, or one that belongs to a different caller — identical either way, so a guessed
+id can't distinguish the two.
+
+`POST /assistant/reset/` — `AssistantResetView` — scopes: `assistant:write` — a genuine no-op for
+this stateless shape (`{"history": []}`) — kept for surface symmetry with the web chat's reset
+button; a client "resets" by simply discarding its own `history` and sending an empty list next
+time.
 
 ---
 

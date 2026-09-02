@@ -1,16 +1,16 @@
-"""Tests for the external API's AI assistant domain.
+"""Tests for the external API's AI assistant domain (async 202+poll shape, batch 2c).
 
-Never calls a real model provider - every test patches ``get_gateway`` at
-``services.ai.assistant`` (the same seam ``test_ai_assistant.py`` patches for
-the internal chat view) with a scripted stub. The one thing worth a dedicated
-regression test here is the bug fixed alongside this domain: ``run_assistant_turn``
-previously never called ``log_api_call``, so AI-assistant spend was invisible
-to the cost-reporting tables every other gateway-backed feature feeds.
+A turn now runs on ai-worker: POST enqueues and returns 202 with a turn id,
+GET polls it. Every test patches ``safely_enqueue_task``/``get_task_progress``
+at ``external_api.views_assistant`` (the same seam ``test_ai_assistant.py``
+patches for the web view) rather than a gateway - the gateway only matters
+inside the task now, which is exercised directly in
+``test_ai_assistant.py``/``test_ai_tasks.py``.
 """
 
 from __future__ import annotations
 
-from decimal import Decimal
+from unittest import mock
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -23,7 +23,7 @@ from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.ai.assistant import MAX_HISTORY_ENTRIES, MAX_MESSAGE_CHARS
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
-from urbanlens_ai.schema import InferenceResponse, TextBlock, ToolUseBlock, Usage
+from urbanlens.dashboard.services.core.celery import TaskProgress
 
 
 def _bearer(raw_key: str) -> dict:
@@ -31,38 +31,26 @@ def _bearer(raw_key: str) -> dict:
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
-class _StubGateway:
-    """Feeds a scripted sequence of native-tool-calling responses to the loop.
-
-    Each step is either ``{"reply": "..."}`` or ``{"tool": name, "args": {...}}``
-    - see ``test_ai_assistant.py``'s own stub for the fuller version. Carries
-    ``model``/``cost`` because ``run_assistant_turn`` reads both - once, in
-    its ``finally`` block - the same shape a real ``LLMGateway`` always
-    provides.
-    """
-
-    def __init__(self, steps: list[dict]) -> None:
-        self.steps = list(steps)
-        self.model = "gpt-5-nano"
-        self.cost = Decimal("0.01")
-
-    def send_with_tools(self, prompt: str, tools: list) -> InferenceResponse | None:
-        if not self.steps:
-            return None
-        step = self.steps.pop(0)
-        if "reply" in step:
-            return InferenceResponse(content=[TextBlock(text=step["reply"])], stop_reason="end_turn", usage=Usage(output_tokens=5))
-        return InferenceResponse(content=[ToolUseBlock(id="tu_1", name=step["tool"], input=step.get("args", {}))], stop_reason="tool_use", usage=Usage(output_tokens=5))
+def _enqueued(task_id: str = "task-abc-123"):
+    return patch("urbanlens.dashboard.external_api.views_assistant.safely_enqueue_task", return_value=mock.Mock(id=task_id))
 
 
 class _AssistantApiTestCase(TestCase):
     """Shared fixture: a key owner with an assistant:write-scoped key."""
 
     def setUp(self) -> None:
+        from urbanlens.dashboard.models.site_settings.model import SiteSettings
+        from urbanlens.dashboard.models.subscriptions import SiteFeature
+
         baker.make(User)  # the first user is auto-promoted to bootstrap site admin
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         self.raw_key = self._key_with_scopes([ApiKeyScope.ASSISTANT_WRITE.value])
+        # assistant_available() requires SiteFeature.AI - unlike the old
+        # test suite, which mocked get_gateway directly and never actually
+        # evaluated that gate.
+        settings_obj = SiteSettings.get_current()
+        SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
 
     def _key_with_scopes(self, scopes: list[str], user: User | None = None) -> str:
         """Issue a key carrying exactly *scopes* and return its raw value."""
@@ -70,31 +58,34 @@ class _AssistantApiTestCase(TestCase):
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=scopes)
         return raw
 
+    def _post_message(self, message: str, history: list | None = None):
+        return self.client.post(
+            reverse("external_api:assistant.message"), {"message": message, "history": history or []}, content_type="application/json", **_bearer(self.raw_key)
+        )
+
+    def _poll(self, turn_id: str, attempt: int | None = None):
+        url = reverse("external_api:assistant.turn", args=[turn_id])
+        if attempt is not None:
+            url += f"?attempt={attempt}"
+        return self.client.get(url, **_bearer(self.raw_key))
+
 
 class AssistantMessageTests(_AssistantApiTestCase):
-    """POST /assistant/message/ - a stateless chat turn."""
+    """POST /assistant/message/ - enqueues a turn; 202 with a turn id to poll."""
 
     def test_missing_scope_is_refused(self) -> None:
         raw_key = self._key_with_scopes([ApiKeyScope.PINS_READ.value])
         response = self.client.post(reverse("external_api:assistant.message"), {"message": "hi"}, content_type="application/json", **_bearer(raw_key))
         self.assertEqual(response.status_code, 403)
 
-    def test_reply_and_history_round_trip(self) -> None:
-        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=_StubGateway([{"reply": "Hi there!"}])):
-            response = self.client.post(reverse("external_api:assistant.message"), {"message": "hi", "history": []}, content_type="application/json", **_bearer(self.raw_key))
-        self.assertEqual(response.status_code, 200, response.content)
+    def test_enqueues_and_returns_a_pollable_turn_id(self) -> None:
+        with _enqueued():
+            response = self._post_message("hi")
+        self.assertEqual(response.status_code, 202, response.content)
         body = response.json()
-        self.assertEqual(body["reply"], "Hi there!")
-        self.assertEqual(body["history"], [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "Hi there!"}])
-
-    def test_history_is_capped_to_max_entries(self) -> None:
-        long_history = [{"role": "user", "content": f"message {i}"} for i in range(MAX_HISTORY_ENTRIES + 10)]
-        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=_StubGateway([{"reply": "ok"}])):
-            response = self.client.post(
-                reverse("external_api:assistant.message"), {"message": "hi", "history": long_history}, content_type="application/json", **_bearer(self.raw_key)
-            )
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(len(response.json()["history"]), MAX_HISTORY_ENTRIES)
+        self.assertFalse(body["ready"])
+        self.assertTrue(body["turn_id"])
+        self.assertGreater(body["poll_after_seconds"], 0)
 
     def test_message_is_required(self) -> None:
         response = self.client.post(reverse("external_api:assistant.message"), {"message": ""}, content_type="application/json", **_bearer(self.raw_key))
@@ -107,30 +98,88 @@ class AssistantMessageTests(_AssistantApiTestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_ai_unavailable_returns_503(self) -> None:
-        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=None):
-            response = self.client.post(reverse("external_api:assistant.message"), {"message": "hi"}, content_type="application/json", **_bearer(self.raw_key))
+        with patch("urbanlens.dashboard.external_api.views_assistant.assistant_available", return_value=False):
+            response = self._post_message("hi")
         self.assertEqual(response.status_code, 503)
         self.assertIn("error", response.json())
 
-    def test_log_api_call_regression_exactly_one_row_with_cost(self) -> None:
-        """The bug this phase fixed: a multi-round-trip turn must log exactly once, with cost."""
-        gateway = _StubGateway([{"tool": "list_trips", "args": {}}, {"reply": "Here are your trips."}])
-        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
-            response = self.client.post(reverse("external_api:assistant.message"), {"message": "what are my trips?"}, content_type="application/json", **_bearer(self.raw_key))
-        self.assertEqual(response.status_code, 200, response.content)
-        rows = list(ApiCallLog.objects.filter(service="assistant"))
-        self.assertEqual(len(rows), 1)
-        self.assertTrue(rows[0].success)
-        self.assertIsNotNone(rows[0].cost_estimate)
+    def test_a_turn_already_in_flight_is_refused_with_409(self) -> None:
+        with _enqueued() as mock_enqueue:
+            first = self._post_message("first")
+            second = self._post_message("second")
+        self.assertEqual(first.status_code, 202)
+        self.assertEqual(second.status_code, 409)
+        self.assertEqual(mock_enqueue.call_count, 1)
 
-    def test_log_api_call_records_failure_when_the_model_gives_up(self) -> None:
-        """A dead gateway (send_with_tools returns None) still logs one failed call, not zero."""
-        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=_StubGateway([])):
-            response = self.client.post(reverse("external_api:assistant.message"), {"message": "hi"}, content_type="application/json", **_bearer(self.raw_key))
+    def test_queue_failure_releases_the_lock_and_returns_503(self) -> None:
+        with patch("urbanlens.dashboard.external_api.views_assistant.safely_enqueue_task", return_value=None):
+            response = self._post_message("hi")
+        self.assertEqual(response.status_code, 503)
+        # The lock was released, not left stuck - a follow-up message can proceed.
+        with _enqueued():
+            retry = self._post_message("hi")
+        self.assertEqual(retry.status_code, 202)
+
+
+class AssistantTurnPollTests(_AssistantApiTestCase):
+    """GET /assistant/turn/<turn_id>/ - poll one enqueued turn."""
+
+    def _start_turn(self, message: str = "hi", history: list | None = None) -> str:
+        with _enqueued():
+            response = self._post_message(message, history)
+        return response.json()["turn_id"]
+
+    def test_still_pending_returns_202(self) -> None:
+        turn_id = self._start_turn()
+        with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=TaskProgress(task_id="task-abc-123", state="PROGRESS")):
+            response = self._poll(turn_id)
+        self.assertEqual(response.status_code, 202)
+        self.assertFalse(response.json()["ready"])
+
+    def test_success_returns_reply_and_history(self) -> None:
+        turn_id = self._start_turn("hi", history=[])
+        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Hi there!", "actions": ["Searched your pins"]})
+        with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=progress):
+            response = self._poll(turn_id)
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body["reply"], "Hi there!")
+        self.assertEqual(body["actions"], ["Searched your pins"])
+        self.assertEqual(body["history"], [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "Hi there!"}])
+
+    def test_history_is_capped_to_max_entries(self) -> None:
+        long_history = [{"role": "user", "content": f"message {i}"} for i in range(MAX_HISTORY_ENTRIES + 10)]
+        turn_id = self._start_turn("hi", history=long_history)
+        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "ok", "actions": []})
+        with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=progress):
+            response = self._poll(turn_id)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(len(response.json()["history"]), MAX_HISTORY_ENTRIES)
+
+    def test_failure_returns_a_friendly_reply_not_an_error_status(self) -> None:
+        turn_id = self._start_turn()
+        progress = TaskProgress(task_id="task-abc-123", state="FAILURE", error="boom")
+        with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=progress):
+            response = self._poll(turn_id)
         self.assertEqual(response.status_code, 200)
-        rows = list(ApiCallLog.objects.filter(service="assistant"))
-        self.assertEqual(len(rows), 1)
-        self.assertFalse(rows[0].success)
+        self.assertIn("expired", response.json()["reply"])
+
+    def test_exhausted_attempts_gives_up_gracefully(self) -> None:
+        turn_id = self._start_turn()
+        response = self._poll(turn_id, attempt=10_000)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("longer than expected", response.json()["reply"])
+
+    def test_unknown_turn_id_is_404(self) -> None:
+        response = self._poll("never-issued")
+        self.assertEqual(response.status_code, 404)
+
+    def test_another_profiles_turn_is_404(self) -> None:
+        turn_id = self._start_turn()
+        other_user = baker.make(User)
+        other_key = self._key_with_scopes([ApiKeyScope.ASSISTANT_WRITE.value], user=other_user)
+        response = self.client.get(reverse("external_api:assistant.turn", args=[turn_id]), **_bearer(other_key))
+        self.assertEqual(response.status_code, 404)
 
 
 class AssistantResetTests(_AssistantApiTestCase):

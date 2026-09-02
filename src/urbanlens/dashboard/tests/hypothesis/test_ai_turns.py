@@ -20,6 +20,7 @@ from urbanlens.dashboard.services.ai.turns import (
     read_turn_record,
     release_turn_lock,
     store_turn_record,
+    turn_lock_is_current,
     turn_poll_delay,
 )
 
@@ -73,6 +74,36 @@ class TurnLockTests(SimpleTestCase):
         release_turn_lock(self.profile, None)
         # Still held - a None token (never acquired) must not release someone else's lock.
         self.assertIsNone(acquire_turn_lock(self.profile))
+
+
+class TurnLockIsCurrentTests(SimpleTestCase):
+    def setUp(self) -> None:
+        cache.clear()
+        self.profile = _FakeProfile(pk=54321)
+
+    def test_true_for_the_current_holder(self) -> None:
+        token = acquire_turn_lock(self.profile)
+        assert token is not None
+        self.assertTrue(turn_lock_is_current(self.profile, token))
+
+    def test_false_once_released(self) -> None:
+        token = acquire_turn_lock(self.profile)
+        assert token is not None
+        release_turn_lock(self.profile, token)
+        self.assertFalse(turn_lock_is_current(self.profile, token))
+
+    def test_false_for_a_foreign_or_stale_token(self) -> None:
+        acquire_turn_lock(self.profile)
+        self.assertFalse(turn_lock_is_current(self.profile, "not-the-real-token"))
+
+    def test_false_once_superseded_by_a_newer_turn(self) -> None:
+        stale_token = acquire_turn_lock(self.profile)
+        assert stale_token is not None
+        release_turn_lock(self.profile, stale_token)
+        fresh_token = acquire_turn_lock(self.profile)
+        assert fresh_token is not None
+        self.assertFalse(turn_lock_is_current(self.profile, stale_token))
+        self.assertTrue(turn_lock_is_current(self.profile, fresh_token))
 
 
 class TurnRecordTests(SimpleTestCase):

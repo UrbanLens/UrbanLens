@@ -104,6 +104,30 @@ def release_turn_lock(profile: Profile, token: str | None) -> None:
     release_lock(_turn_lock_key(profile), token)
 
 
+def turn_lock_is_current(profile: Profile, token: str) -> bool:
+    """Whether ``token`` is still the current holder of the per-profile turn lock.
+
+    The turn task calls this before doing any real work: if the lock has
+    already expired and been re-acquired by a newer turn (the TTL lapsed
+    while this task sat queued, or a prior run of it never released -
+    ``acks_late=False`` means that should not redeliver, but this check
+    does not depend on that guarantee holding), a stale task must not spend
+    a provider call on a turn nothing is polling for anymore, or - if it
+    ran to completion regardless - release a lock a newer turn now owns.
+    :func:`release_turn_lock` is separately self-guarding for that second
+    part (see :func:`~services.core.locks.release_lock`); this check is
+    what avoids doing the work at all.
+
+    Args:
+        profile: The profile whose lock to check.
+        token: The token this caller was given by :func:`acquire_turn_lock`.
+
+    Returns:
+        True if ``token`` is still the current holder.
+    """
+    return cache.get(_turn_lock_key(profile)) == token
+
+
 def _turn_record_key(turn_id: str) -> str:
     return f"ulai:turn:{turn_id}"
 

@@ -169,6 +169,7 @@ urlpatterns = [
     path("billing/webhooks/stripe/", billing_webhooks.StripeWebhookView.as_view(), name="billing.stripe_webhook"),
     path("assistant/", assistant.AssistantView.as_view(), name="assistant"),
     path("assistant/message/", assistant.AssistantMessageView.as_view(), name="assistant.message"),
+    path("assistant/turn/<str:turn_id>/", assistant.AssistantTurnPollView.as_view(), name="assistant.turn"),
     path("assistant/reset/", assistant.AssistantResetView.as_view(), name="assistant.reset"),
     path("games/", games.GamesOverviewView.as_view(), name="games.overview"),
     path(

@@ -35,6 +35,19 @@ class AssistantMessageResponseSerializer(serializers.Serializer):
     history = AssistantHistoryEntrySerializer(many=True, read_only=True)
 
 
+class AssistantTurnPendingSerializer(serializers.Serializer):
+    """Body of a 202 response: the turn was enqueued (or is still running) on ai-worker.
+
+    ``turn_id`` is only present on the initial POST's 202 - the poll
+    endpoint's own URL already carries it, so echoing it back there would be
+    redundant.
+    """
+
+    turn_id = serializers.CharField(read_only=True, required=False)
+    ready = serializers.BooleanField(default=False)
+    poll_after_seconds = serializers.IntegerField(read_only=True)
+
+
 class AssistantResetResponseSerializer(serializers.Serializer):
     """Body of the reset endpoint: always an empty history - see AssistantResetView."""
 

@@ -1,6 +1,8 @@
 {% comment %}
 The assistant chat log. Assistant entries may carry an ``actions`` list -
-human-readable labels of the tools it ran for that turn.
+human-readable labels of the tools it ran for that turn - or, while a turn
+is still running on ai-worker, be a pending entry that self-polls (see
+_bubble.html, which renders each one).
 {% endcomment %}
 <div id="assistant-messages" class="assistant-messages">
     {% if not messages_history %}
@@ -11,15 +13,6 @@ human-readable labels of the tools it ran for that turn.
     </div>
     {% endif %}
     {% for entry in messages_history %}
-    <div class="assistant-msg assistant-msg--{{ entry.role }}">
-        <div class="assistant-msg-bubble">{{ entry.content|linebreaksbr }}</div>
-        {% if entry.actions %}
-        <div class="assistant-msg-actions">
-            {% for action in entry.actions %}
-            <span class="ul-badge ul-badge--neutral"><i class="material-symbols-outlined">check</i>{{ action }}</span>
-            {% endfor %}
-        </div>
-        {% endif %}
-    </div>
+    {% include "dashboard/partials/assistant/_bubble.html" with entry=entry next_attempt=1 poll_delay=first_poll_delay %}
     {% endfor %}
 </div>

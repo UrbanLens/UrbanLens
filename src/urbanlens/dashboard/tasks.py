@@ -22,6 +22,9 @@ from celery import shared_task
 from channels.layers import get_channel_layer
 from django.utils import timezone
 
+from urbanlens.dashboard.services.ai.tasks import (
+    run_assistant_turn_task,
+)
 from urbanlens.dashboard.services.core.celery import update_task_progress
 from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
 from urbanlens.dashboard.services.sandbox import sandbox_queue
