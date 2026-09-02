@@ -16,6 +16,7 @@ from django.test import override_settings
 from hypothesis import given, strategies as st
 from model_bakery import baker
 from pydantic import BaseModel
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.baker_recipes import _make_profile
@@ -124,6 +125,11 @@ class WriteRefusalUnderAiRoleTests(TestCase):
         self.assertNotIn("error", result.data)
 
     @override_settings(UL_PROCESS_ROLE="ai")
+    def test_undo_last_action_is_refused_under_the_ai_role(self) -> None:
+        result = execute("undo_last_action", {"undo_uuid": "not-a-real-uuid"}, _context(self.profile))
+        self.assertIn("error", result.data)
+
+    @override_settings(UL_PROCESS_ROLE="ai")
     def test_read_only_tools_are_unaffected_by_the_ai_role(self) -> None:
         result = execute("list_trips", {}, _context(self.profile))
         self.assertNotIn("error", result.data)
@@ -209,11 +215,22 @@ class RegistrationTests(TestCase):
         def _noop(context: ToolContext, args: _NoArgs) -> dict[str, Any]:
             return {}
 
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError, match="already registered"):
             register(ToolSpec(name="search_pins", description="dup", args_model=_NoArgs, handler=_noop))
 
     def test_real_tools_are_registered(self) -> None:
-        for name in ("search_pins", "find_unvisited_pins", "list_trips", "create_trip", "add_trip_activity"):
+        for name in (
+            "search_pins",
+            "find_unvisited_pins",
+            "list_trips",
+            "create_trip",
+            "add_trip_activity",
+            "get_page_help",
+            "recent_dismissals",
+            "reopen_explainer",
+            "undo_peek",
+            "undo_last_action",
+        ):
             self.assertIn(name, REGISTRY)
 
 

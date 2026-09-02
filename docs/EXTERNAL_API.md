@@ -700,7 +700,10 @@ last 20 entries server-side. `page_path` is optional — a client-side "screen" 
 web chat's own `window.location.pathname`), resolved server-side under the caller's own access
 rules (`services.ai.page_context`) rather than trusted as-is; unrecognized or inaccessible paths
 resolve to no page context, silently, never an error. Nothing in the assistant's tool set reads
-the resolved page yet. Response: **202** `{turn_id, ready: false, poll_after_seconds}`. **503**
+the resolved page yet. There is no `dismissals` field: the web chat's own dismissal ring
+(`recent_dismissals`/`reopen_explainer` - services.ai.dismissals) is captured from explainer/
+onboarding-tour DOM the caller here has no equivalent of, so those two tools always see an empty
+ring over this API. Response: **202** `{turn_id, ready: false, poll_after_seconds}`. **503**
 `{"error": "..."}` when AI is disabled. **409** `{"error": "..."}` when a previous message from
 this caller is still being processed — wait for it to resolve before sending another; own extra
 throttle (`external_api_assistant_message`, default 60/hour) stacked on the standard three, since
@@ -719,7 +722,7 @@ explaining that, rather than an error status — a client can render every poll 
 **404** for an unknown or expired turn id, or one that belongs to a different caller — identical
 either way, so a guessed id can't distinguish the two.
 
-Every write the assistant can perform (`create_trip`, `add_trip_activity`) is confirm-gated: the
+Every write the assistant can perform (`create_trip`, `add_trip_activity`, `undo_last_action`) is confirm-gated: the
 tool call itself only ever produces a **proposal**, never a live write, regardless of which
 process actually ran the model turn. `proposals[]` entries are `{n, tool, confirm_label}` — `n` is
 the proposal's 0-based index within this turn, `confirm_label` is the button/action text (e.g.
