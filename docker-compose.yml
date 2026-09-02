@@ -993,9 +993,11 @@ services:
     volumes:
       - logs:/var/log/urbanlens
     networks:
-      # db/valkey/egress-proxy.
+      # db/valkey, and egress-proxy for outbound tool calls (OSRM, weather).
       - ai_network
-      # ai-inference, reached through egress-proxy's shared membership there.
+      # ai-inference itself - a direct membership, not routed through the
+      # proxy. egress-proxy also sits here, but only for its own outbound
+      # egress; this worker resolves ai-inference by same-network DNS.
       - inference_network
     # No env_file - see x-ai-env's own comment.
     environment:
@@ -1137,12 +1139,13 @@ networks:
     driver: bridge
     internal: true
 
-  # ai-worker's own isolated tier: db, valkey, egress-proxy, and (through
-  # egress-proxy's shared membership) a route to ai-inference over
-  # inference_network. `internal: true` for the same reason as
-  # sandbox_network - no gateway, no NAT, so this worker's only route off the
-  # network is through egress-proxy's allowlist, regardless of what a tool
-  # handler, a misconfigured env var, or a future bug tries to reach.
+  # ai-worker's own isolated tier: db, valkey, and egress-proxy for its
+  # outbound tool calls (ai-worker reaches ai-inference itself over a
+  # separate direct membership on inference_network, not through this one).
+  # `internal: true` for the same reason as sandbox_network - no gateway, no
+  # NAT, so this worker's only route off the network is through
+  # egress-proxy's allowlist, regardless of what a tool handler, a
+  # misconfigured env var, or a future bug tries to reach.
   ai_network:
     driver: bridge
     internal: true
