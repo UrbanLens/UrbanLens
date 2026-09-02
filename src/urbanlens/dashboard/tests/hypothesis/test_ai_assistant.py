@@ -196,6 +196,32 @@ class AssistantLoopTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertFalse(rows[0].success)
 
+    def test_dismissals_reach_the_recent_dismissals_tool(self) -> None:
+        from urbanlens.dashboard.services.ai.dismissals import DismissalEntry
+
+        entries = (DismissalEntry(id="x", kind="explainer", heading="Labels", body="Tag your pins.", page="/organize/"),)
+        gateway = _StubGateway([{"tool": "recent_dismissals", "args": {}}, {"reply": "You dismissed the Labels explainer."}])
+        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
+            turn = run_assistant_turn(self.profile, [], "what did I just dismiss?", dismissals=entries)
+        self.assertIn('"id": "x"', gateway.prompts[1])
+        self.assertEqual(turn.actions, ["Checked what you dismissed"])
+
+    def test_a_successful_client_action_tool_is_collected_on_the_turn(self) -> None:
+        from urbanlens.dashboard.services.ai.dismissals import DismissalEntry
+
+        entries = (DismissalEntry(id="x", kind="explainer", heading="Labels", body="Tag your pins.", page="/organize/"),)
+        gateway = _StubGateway([{"tool": "reopen_explainer", "args": {"id": "x"}}, {"reply": "Reopened it."}])
+        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
+            turn = run_assistant_turn(self.profile, [], "reopen that", dismissals=entries)
+        self.assertEqual(turn.client_actions, [{"action": "reopen_explainer", "status": "reopened", "id": "x", "kind": "explainer", "page": "/organize/", "prefix": None}])
+        self.assertEqual(turn.actions, ["Reopened it"])
+
+    def test_a_failed_client_action_tool_call_is_not_collected(self) -> None:
+        gateway = _StubGateway([{"tool": "reopen_explainer", "args": {"id": "never-dismissed"}}, {"reply": "I couldn't find that."}])
+        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
+            turn = run_assistant_turn(self.profile, [], "reopen that")
+        self.assertEqual(turn.client_actions, [])
+
 
 class AssistantViewTests(TestCase):
     """The chat page and message endpoint."""
@@ -358,6 +384,46 @@ class AssistantViewTests(TestCase):
         with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
             self.client.post(reverse("assistant.message"), {"message": "find pins"})
         self.assertIsNone(mock_enqueue.call_args.kwargs["page"])
+
+    def test_dismissals_json_reaches_the_enqueued_task(self) -> None:
+        import json
+
+        dismissals = json.dumps([{"id": "x", "kind": "explainer", "heading": "H", "body": "B", "page": "/map/"}])
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+            self.client.post(reverse("assistant.message"), {"message": "find pins", "dismissals": dismissals})
+        self.assertEqual(mock_enqueue.call_args.kwargs["dismissals"], [{"id": "x", "kind": "explainer", "heading": "H", "body": "B", "page": "/map/", "prefix": None}])
+
+    def test_malformed_dismissals_json_enqueues_an_empty_list(self) -> None:
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+            self.client.post(reverse("assistant.message"), {"message": "find pins", "dismissals": "not json"})
+        self.assertEqual(mock_enqueue.call_args.kwargs["dismissals"], [])
+
+    def test_no_dismissals_enqueues_an_empty_list(self) -> None:
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+            self.client.post(reverse("assistant.message"), {"message": "find pins"})
+        self.assertEqual(mock_enqueue.call_args.kwargs["dismissals"], [])
+
+    def test_client_actions_fire_an_hx_trigger_on_the_resolved_poll(self) -> None:
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+            self.client.post(reverse("assistant.message"), {"message": "reopen it"})
+        turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
+
+        client_actions = [{"action": "reopen_explainer", "id": "x", "kind": "explainer"}]
+        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Reopened.", "client_actions": client_actions})
+        with patch("urbanlens.dashboard.controllers.assistant.get_task_progress", return_value=progress):
+            response = self.client.get(reverse("assistant.turn", args=[turn_id]))
+        self.assertIn("ulAssistantAction", response["HX-Trigger"])
+        self.assertIn("reopen_explainer", response["HX-Trigger"])
+
+    def test_no_client_actions_means_no_hx_trigger(self) -> None:
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+            self.client.post(reverse("assistant.message"), {"message": "find pins"})
+        turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
+
+        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Found 3 pins."})
+        with patch("urbanlens.dashboard.controllers.assistant.get_task_progress", return_value=progress):
+            response = self.client.get(reverse("assistant.turn", args=[turn_id]))
+        self.assertNotIn("HX-Trigger", response)
 
 
 class AssistantOverlayBodyViewTests(TestCase):

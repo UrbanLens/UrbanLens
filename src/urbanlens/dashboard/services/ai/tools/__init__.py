@@ -8,7 +8,7 @@ discovery mechanism, so a new tool module belongs in this list.
 
 from __future__ import annotations
 
-from urbanlens.dashboard.services.ai.tools import help as _help, pins, trips
+from urbanlens.dashboard.services.ai.tools import dismissals as _dismissals, help as _help, pins, trips
 from urbanlens.dashboard.services.ai.tools.registry import (
     MAX_TOOL_CALLS,
     MAX_TOOL_RESULT_CHARS,

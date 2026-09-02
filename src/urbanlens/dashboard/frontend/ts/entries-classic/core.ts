@@ -23,6 +23,7 @@ import { installGlobalCollapsibleSections } from "../shared/collapsible-sections
 import { installGlobalCommentCompose } from "../shared/comment-compose";
 import { installGlobalConfirmDialog } from "../shared/confirm-dialog";
 import { installGlobalDialogBackdrop } from "../shared/dialog-backdrop";
+import { installGlobalDismissalRing } from "../shared/dismissal-ring";
 import { installGlobalFetchJson } from "../shared/fetch-json";
 import { installGlobalFlyToDismiss } from "../shared/fly-to-dismiss";
 import { installGlobalLabelPicker } from "../shared/label-picker";
@@ -48,6 +49,7 @@ installGlobalCollapsibleSections();
 installGlobalCommentCompose();
 installGlobalConfirmDialog();
 installGlobalDialogBackdrop();
+installGlobalDismissalRing();
 installGlobalFetchJson();
 installGlobalFlyToDismiss();
 installGlobalMentionAutocomplete();

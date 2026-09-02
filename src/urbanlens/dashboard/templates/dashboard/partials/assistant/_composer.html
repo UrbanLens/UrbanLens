@@ -9,10 +9,15 @@ the overlay's own /assistant/ URL never overrides the real page underneath
 it. Server-side resolution (services.ai.page_context) re-derives everything
 else from that path under this profile's own access rules - see that
 module's docstring for why the path itself is the only thing trusted here.
+
+It also sends the client's own dismissal ring (window.ulDismissalRing, see
+shared/dismissal-ring.ts) as a JSON string - what the user has recently
+closed on their own page, re-verified/re-capped server-side
+(services.ai.dismissals) before it ever reaches a prompt.
 {% endcomment %}
 <form class="assistant-input-row"
       hx-post="{% url 'assistant.message' %}"
-      hx-vals='js:{page_path: window.location.pathname}'
+      hx-vals='js:{page_path: window.location.pathname, dismissals: JSON.stringify(window.ulDismissalRing?.list() || [])}'
       hx-target="#assistant-messages" hx-swap="outerHTML"
       hx-disabled-elt="find button, find input"
       hx-indicator="#assistant-typing"

@@ -37,5 +37,6 @@ register(
         features=frozenset({SiteFeature.AI}),
         scope=DataScope.NONE,
         progress_label="Looking up help…",
+        action_label="Looked up page help",
     ),
 )

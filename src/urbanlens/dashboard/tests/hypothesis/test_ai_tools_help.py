@@ -42,6 +42,7 @@ class GetPageHelpToolTests(TestCase):
         self.assertNotIn("error", result.data)
         self.assertEqual(result.data["title"], "Map")
         self.assertTrue(result.data["key_actions"])
+        self.assertEqual(result.summary, "Looked up page help")
 
     def test_an_unknown_page_is_an_error_block_not_a_raise(self) -> None:
         result = execute("get_page_help", {"page": "not.a.real.page"}, _context(self.profile))

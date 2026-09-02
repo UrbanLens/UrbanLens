@@ -1,3 +1,5 @@
+import { pushDismissal } from "./dismissal-ring";
+
 export interface OnboardingCard {
     id: string;
     icon: string;
@@ -53,6 +55,8 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         } catch {
             /* storage unavailable - ignore */
         }
+        const card = config.cards.find((c) => c.id === id);
+        if (card) pushDismissal("tour", card.id, card.title, card.body, config.prefix);
     }
     function later(): void {
         try {
@@ -154,6 +158,25 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         registerAllAutoDismiss();
         setTimeout(tryShow, 250);
     }
+
+    // Fired by assistant-overlay.ts when the model calls reopen_explainer for
+    // a kind:"tour" dismissal - re-dismissing a card the user has since
+    // watched again is expected (the whole point is to show it again), so
+    // this clears every card's dismissed flag rather than just the one that
+    // triggered the ring entry.
+    function restart(): void {
+        config.cards.forEach((card) => {
+            try {
+                localStorage.removeItem(`${config.prefix}_${card.id}_dismissed`);
+            } catch {
+                /* storage unavailable - ignore */
+            }
+        });
+        tryShow();
+    }
+    document.addEventListener("ul:tour-restart", (event) => {
+        if ((event as CustomEvent<{ prefix?: string }>).detail?.prefix === config.prefix) restart();
+    });
 
     registerAllAutoDismiss();
     setTimeout(tryShow, config.initialDelayMs ?? 900);

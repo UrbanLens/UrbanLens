@@ -102,6 +102,34 @@ function onClick(event: MouseEvent): void {
     else if (target.closest("#assistant-overlay-close")) closeAssistantOverlay();
 }
 
+/** One reopen_explainer tool result, forwarded by the poll view's HX-Trigger - see controllers/assistant.py. */
+interface AssistantClientAction {
+    action: string;
+    id?: string;
+    kind?: "explainer" | "tour";
+    prefix?: string;
+}
+
+/**
+ * Turn a resolved turn's client_actions (HX-Trigger ulAssistantAction, see
+ * controllers.assistant.AssistantTurnPollView) into the same document events
+ * _page_explainer_script.html and onboarding-tour.ts already listen for -
+ * reopening something not on the current page is a silent no-op there, not
+ * an error here.
+ */
+function onAssistantAction(event: Event): void {
+    const actions = (event as CustomEvent<{ actions?: AssistantClientAction[] }>).detail?.actions;
+    if (!actions) return;
+    for (const action of actions) {
+        if (action.action !== "reopen_explainer") continue;
+        if (action.kind === "explainer" && action.id) {
+            document.dispatchEvent(new CustomEvent("ul:explainer-reopen", { detail: { id: action.id } }));
+        } else if (action.kind === "tour" && action.prefix) {
+            document.dispatchEvent(new CustomEvent("ul:tour-restart", { detail: { prefix: action.prefix } }));
+        }
+    }
+}
+
 /** Reset module state. Test-only. */
 export function resetAssistantOverlayForTests(): void {
     bodyLoaded = false;
@@ -109,6 +137,7 @@ export function resetAssistantOverlayForTests(): void {
     document.removeEventListener("keydown", onKeydown);
     document.removeEventListener("click", onClick);
     window.removeEventListener("resize", placeFab);
+    document.body.removeEventListener("ulAssistantAction", onAssistantAction);
 }
 
 export function installGlobalAssistantOverlay(): void {
@@ -117,5 +146,6 @@ export function installGlobalAssistantOverlay(): void {
     document.addEventListener("keydown", onKeydown);
     document.addEventListener("click", onClick);
     window.addEventListener("resize", placeFab);
+    document.body.addEventListener("ulAssistantAction", onAssistantAction);
     placeFab();
 }

@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.subscriptions import SiteFeature
+    from urbanlens.dashboard.services.ai.dismissals import DismissalEntry
     from urbanlens.dashboard.services.ai.page_context import PageObject
 
 logger = logging.getLogger(__name__)
@@ -106,12 +107,17 @@ class ToolContext:
             none. Populated by the turn task (batch 2c); tools that call an
             external gateway (OSRM, weather - batch 4) pass it through
             ``call_with_deadline``.
+        dismissals: The explainers/tour cards the client's own ring reported
+            dismissed this turn (``services.ai.dismissals``), already
+            re-verified and re-capped - never a server-side lookup. Empty
+            when the client sent none.
     """
 
     profile: Profile
     now: datetime
     page: PageObject | None = None
     deadline: float | None = None
+    dismissals: tuple[DismissalEntry, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

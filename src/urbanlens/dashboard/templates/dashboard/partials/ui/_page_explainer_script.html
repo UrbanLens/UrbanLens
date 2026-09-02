@@ -136,6 +136,13 @@
         });
     }
 
+    function pushDismissal(explainer, id) {
+        if (!window.ulDismissalRing) return;
+        var heading = explainer.querySelector('.ul-page-explainer__heading');
+        var body = explainer.querySelector('.ul-page-explainer__body');
+        window.ulDismissalRing.push('explainer', id, heading ? heading.textContent.trim() : '', body ? body.textContent.trim() : '');
+    }
+
     function collapse(explainer) {
         if (explainer.classList.contains('is-collapsed') || explainer.dataset.explainerAnimating === '1') return;
 
@@ -143,6 +150,7 @@
         var anchor = getAnchor(explainer);
         if (!anchor) return;
 
+        pushDismissal(explainer, id);
         var toggle = ensureToggle(anchor, explainer);
         var fromRect = measureRect(explainer);
         var toRect = measureToggle(toggle, true);
@@ -245,6 +253,20 @@
     function scan(root) {
         (root || document).querySelectorAll('.ul-page-explainer').forEach(initExplainer);
     }
+
+    // Fired by assistant-overlay.ts when the model calls reopen_explainer
+    // for a kind:"explainer" dismissal. A no-op when the target isn't on the
+    // current page (a spoofed id, or the user navigated away) - querySelector
+    // simply finds nothing.
+    document.addEventListener('ul:explainer-reopen', function (evt) {
+        var id = evt.detail && evt.detail.id;
+        if (!id) return;
+        var explainer = document.querySelector('.ul-page-explainer[data-explainer-id="' + CSS.escape(id) + '"]');
+        if (!explainer || !explainer.classList.contains('is-collapsed') || explainer.dataset.explainerAnimating === '1') return;
+        var anchor = getAnchor(explainer);
+        if (!anchor) return;
+        expand(explainer, ensureToggle(anchor, explainer));
+    });
 
     scan();
     document.body.addEventListener('htmx:afterSettle', function () { scan(); });

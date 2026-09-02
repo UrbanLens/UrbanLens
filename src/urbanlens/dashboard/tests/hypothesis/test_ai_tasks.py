@@ -41,7 +41,7 @@ class RunAssistantTurnTaskTests(TestCase):
         assert token is not None
         with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="Hi!", actions=["Searched your pins"])):
             result = run_assistant_turn_task(self.profile.pk, [], "hello", token)
-        self.assertEqual(result, {"reply": "Hi!", "actions": ["Searched your pins"], "proposals": []})
+        self.assertEqual(result, {"reply": "Hi!", "actions": ["Searched your pins"], "proposals": [], "client_actions": []})
         # Released, not merely unexamined - a fresh acquire must now succeed.
         self.assertFalse(turn_lock_is_current(self.profile, token))
         self.assertIsNotNone(acquire_turn_lock(self.profile))
@@ -108,7 +108,7 @@ class RunAssistantTurnTaskTests(TestCase):
         history = [{"role": "user", "content": "earlier"}]
         with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
             run_assistant_turn_task(self.profile.pk, history, "hello", token)
-        mock_run.assert_called_once_with(self.profile, history, "hello", page=None)
+        mock_run.assert_called_once_with(self.profile, history, "hello", page=None, dismissals=())
 
     def test_a_verified_page_reaches_run_assistant_turn(self) -> None:
         from urbanlens.dashboard.services.ai.page_context import PageObject
@@ -118,7 +118,7 @@ class RunAssistantTurnTaskTests(TestCase):
         assert token is not None
         with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
             run_assistant_turn_task(self.profile.pk, [], "hello", token, page={"kind": "pin", "id": pin.pk})
-        mock_run.assert_called_once_with(self.profile, [], "hello", page=PageObject(kind="pin", id=pin.pk))
+        mock_run.assert_called_once_with(self.profile, [], "hello", page=PageObject(kind="pin", id=pin.pk), dismissals=())
 
     def test_a_page_belonging_to_another_profile_is_dropped_not_trusted(self) -> None:
         """The task re-verifies against its own profile - it never just trusts what the web view enqueued."""
@@ -128,11 +128,36 @@ class RunAssistantTurnTaskTests(TestCase):
         assert token is not None
         with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
             run_assistant_turn_task(self.profile.pk, [], "hello", token, page={"kind": "pin", "id": other_pin.pk})
-        mock_run.assert_called_once_with(self.profile, [], "hello", page=None)
+        mock_run.assert_called_once_with(self.profile, [], "hello", page=None, dismissals=())
 
     def test_a_malformed_page_payload_is_dropped_not_a_raise(self) -> None:
         token = acquire_turn_lock(self.profile)
         assert token is not None
         with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
             run_assistant_turn_task(self.profile.pk, [], "hello", token, page={"kind": "pin"})
-        mock_run.assert_called_once_with(self.profile, [], "hello", page=None)
+        mock_run.assert_called_once_with(self.profile, [], "hello", page=None, dismissals=())
+
+    def test_dismissals_reach_run_assistant_turn(self) -> None:
+        from urbanlens.dashboard.services.ai.dismissals import DismissalEntry
+
+        token = acquire_turn_lock(self.profile)
+        assert token is not None
+        raw = [{"id": "x", "kind": "explainer", "heading": "H", "body": "B", "page": "/organize/"}]
+        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
+            run_assistant_turn_task(self.profile.pk, [], "hello", token, dismissals=raw)
+        mock_run.assert_called_once_with(self.profile, [], "hello", page=None, dismissals=(DismissalEntry(id="x", kind="explainer", heading="H", body="B", page="/organize/"),))
+
+    def test_a_malformed_dismissals_payload_is_dropped_not_a_raise(self) -> None:
+        token = acquire_turn_lock(self.profile)
+        assert token is not None
+        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
+            run_assistant_turn_task(self.profile.pk, [], "hello", token, dismissals=[{"id": "x"}])
+        mock_run.assert_called_once_with(self.profile, [], "hello", page=None, dismissals=())
+
+    def test_client_actions_pass_through_to_the_result(self) -> None:
+        token = acquire_turn_lock(self.profile)
+        assert token is not None
+        client_actions = [{"action": "reopen_explainer", "id": "x", "kind": "explainer"}]
+        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok", client_actions=client_actions)):
+            result = run_assistant_turn_task(self.profile.pk, [], "hello", token)
+        self.assertEqual(result["client_actions"], client_actions)

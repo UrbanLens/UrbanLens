@@ -125,6 +125,42 @@ describe("the global assistant overlay", () => {
         expect(keydownListeners).toBe(1);
     });
 
+    test("an explainer client_action redispatches ul:explainer-reopen with the id", () => {
+        document.body.innerHTML = OVERLAY_MARKUP;
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        installGlobalAssistantOverlay();
+        const seen: unknown[] = [];
+        document.addEventListener("ul:explainer-reopen", (event) => seen.push((event as CustomEvent).detail));
+
+        document.body.dispatchEvent(new CustomEvent("ulAssistantAction", { detail: { actions: [{ action: "reopen_explainer", id: "organize-labels-intro", kind: "explainer" }] } }));
+
+        expect(seen).toEqual([{ id: "organize-labels-intro" }]);
+    });
+
+    test("a tour client_action redispatches ul:tour-restart with the prefix", () => {
+        document.body.innerHTML = OVERLAY_MARKUP;
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        installGlobalAssistantOverlay();
+        const seen: unknown[] = [];
+        document.addEventListener("ul:tour-restart", (event) => seen.push((event as CustomEvent).detail));
+
+        document.body.dispatchEvent(new CustomEvent("ulAssistantAction", { detail: { actions: [{ action: "reopen_explainer", kind: "tour", prefix: "ul_onboarding_v1_organize" }] } }));
+
+        expect(seen).toEqual([{ prefix: "ul_onboarding_v1_organize" }]);
+    });
+
+    test("an unrelated client_action is ignored", () => {
+        document.body.innerHTML = OVERLAY_MARKUP;
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        installGlobalAssistantOverlay();
+        const seen: unknown[] = [];
+        document.addEventListener("ul:explainer-reopen", (event) => seen.push(event));
+        document.addEventListener("ul:tour-restart", (event) => seen.push(event));
+
+        expect(() => document.body.dispatchEvent(new CustomEvent("ulAssistantAction", { detail: { actions: [{ action: "some_other_action" }] } }))).not.toThrow();
+        expect(seen).toEqual([]);
+    });
+
     test("the floating button lifts above another floating control in the same corner", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
         const collider = document.createElement("div");

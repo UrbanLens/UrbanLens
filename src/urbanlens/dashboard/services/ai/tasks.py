@@ -34,7 +34,7 @@ _EXPIRED_REPLY = "This request took too long to start and was dropped. Please tr
 
 
 @shared_task(bind=True, queue=_AI_QUEUE, acks_late=False, soft_time_limit=90, time_limit=120)
-def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]], user_message: str, lock_token: str, page: dict[str, Any] | None = None) -> dict[str, Any]:
+def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]], user_message: str, lock_token: str, page: dict[str, Any] | None = None, dismissals: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Run one assistant turn on ``ai-worker`` and release its single-flight lock.
 
     ``acks_late=False`` overrides the project default
@@ -61,11 +61,19 @@ def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]]
             Re-verified against *this* task's own profile via
             ``verify_page_object`` before use - the web view's earlier
             resolution is never trusted as-is, only its ``{kind, id}``.
+        dismissals: ``services.ai.dismissals.dismissals_to_list``'s output
+            for the client's own dismissal ring at enqueue time, or ``None``.
+            Re-validated (not re-verified against anything - this is
+            client-echoed UI copy, not access-controlled data) via
+            ``dismissals_from_list`` before use.
 
     Returns:
         ``{"reply": str, "actions": list[str], "proposals": list[dict]}`` on
         every handled path (unavailable, expired, or a real turn) - the poll
-        endpoint always has something to show. ``proposals`` (from
+        endpoint always has something to show; a real turn's result also
+        carries ``"client_actions": list[dict]`` (see ``AssistantTurn`` -
+        tool effects, e.g. ``reopen_explainer``, that happen in the browser).
+        ``proposals`` (from
         ``AssistantTurn.proposals``) are write tools the model asked for
         that did *not* run - see ``services.ai.tools.registry.execute``'s
         ``confirmed`` parameter; the poll endpoint that resolves this result
@@ -94,19 +102,21 @@ def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]]
         if not assistant_available(profile):
             return {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []}
 
+        from urbanlens.dashboard.services.ai.dismissals import dismissals_from_list
         from urbanlens.dashboard.services.ai.page_context import page_object_from_dict, verify_page_object
 
         page_object = page_object_from_dict(page)
         if page_object is not None and not verify_page_object(profile, page_object):
             page_object = None
+        dismissal_entries = dismissals_from_list(dismissals)
 
         update_task_progress(self, current=0, total=1, message="Thinking…")
         try:
-            turn = run_assistant_turn(profile, history, user_message, page=page_object)
+            turn = run_assistant_turn(profile, history, user_message, page=page_object, dismissals=dismissal_entries)
         except AssistantUnavailableError:
             return {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []}
 
         update_task_progress(self, current=1, total=1, message="Done")
-        return {"reply": turn.reply, "actions": turn.actions, "proposals": turn.proposals}
+        return {"reply": turn.reply, "actions": turn.actions, "proposals": turn.proposals, "client_actions": turn.client_actions}
     finally:
         release_turn_lock(profile, lock_token)

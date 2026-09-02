@@ -41,11 +41,12 @@ from django.utils import timezone
 
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.inference_client import ToolSpec as InferenceToolSpec, ToolUseBlock
-from urbanlens.dashboard.services.ai.tools import MAX_TOOL_CALLS, ToolContext, available_tools, execute
+from urbanlens.dashboard.services.ai.tools import MAX_TOOL_CALLS, REGISTRY, ToolContext, available_tools, execute
 from urbanlens.dashboard.services.core.rate_limiter import log_api_call
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.ai.dismissals import DismissalEntry
     from urbanlens.dashboard.services.ai.page_context import PageObject
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,12 @@ class AssistantTurn:
     #: from ``ToolResult.proposal`` (``services.ai.tools.registry``); never
     #: executed here - see that module's ``execute(..., confirmed=False)``.
     proposals: list[dict[str, Any]] = field(default_factory=list)
+    #: Tool results whose effect happens in the browser, not the database
+    #: (``ToolSpec.client_action`` - e.g. ``reopen_explainer``), each the
+    #: tool's raw result dict plus ``"action": spec.client_action``. Never
+    #: persisted to session history - the poll view forwards these once, via
+    #: ``HX-Trigger``, and they're gone.
+    client_actions: list[dict[str, Any]] = field(default_factory=list)
 
 
 class AssistantUnavailableError(Exception):
@@ -117,7 +124,7 @@ def _wire_tools(context: ToolContext) -> list[InferenceToolSpec]:
     return [InferenceToolSpec(name=spec.name, description=spec.description, input_schema=spec.args_model.model_json_schema()) for spec in available_tools(context)]
 
 
-def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_message: str, *, page: PageObject | None = None) -> AssistantTurn:
+def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_message: str, *, page: PageObject | None = None, dismissals: tuple[DismissalEntry, ...] = ()) -> AssistantTurn:
     """Process one user message: loop model <-> tools until it replies.
 
     Args:
@@ -129,6 +136,10 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
             ``services.ai.page_context``), or ``None`` when no page was sent
             or resolved. Carried straight onto ``ToolContext.page`` - no
             shipped tool reads it yet (``needs_page=True`` starts in batch 4).
+        dismissals: The client's own dismissal-ring payload for this turn
+            (``services.ai.dismissals``), already re-verified by the caller.
+            Carried onto ``ToolContext.dismissals`` for ``recent_dismissals``/
+            ``reopen_explainer``.
 
     Returns:
         The assistant's reply plus human-readable labels of any actions taken.
@@ -152,11 +163,12 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
     started = time.monotonic()
     deadline = started + TURN_DEADLINE_SECONDS
     succeeded = True
-    context = ToolContext(profile=profile, now=timezone.now(), page=page, deadline=deadline)
+    context = ToolContext(profile=profile, now=timezone.now(), page=page, deadline=deadline, dismissals=dismissals)
     wire_tools = _wire_tools(context)
     tool_call_count = 0
     actions: list[str] = []
     proposals: list[dict[str, Any]] = []
+    client_actions: list[dict[str, Any]] = []
 
     try:
         for _round in range(MAX_ROUNDS):
@@ -164,27 +176,27 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
                 # Reached exactly at the previous round's last call: stop here
                 # rather than spending one more provider call just to discard
                 # whatever it asks for next.
-                return AssistantTurn(reply=_ACTION_LIMIT_REPLY, actions=actions, proposals=proposals)
+                return AssistantTurn(reply=_ACTION_LIMIT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
             if time.monotonic() > deadline:
                 succeeded = False
-                return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions, proposals=proposals)
+                return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
 
             response = gateway.send_with_tools(prompt, wire_tools)
             if response is None:
                 succeeded = False
-                return AssistantTurn(reply=_NO_RESPONSE_REPLY, actions=actions, proposals=proposals)
+                return AssistantTurn(reply=_NO_RESPONSE_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
 
             tool_calls = [block for block in response.content if isinstance(block, ToolUseBlock)]
             if not tool_calls:
                 reply = response.text.strip()
-                return AssistantTurn(reply=reply or "I'm not sure how to answer that.", actions=actions, proposals=proposals)
+                return AssistantTurn(reply=reply or "I'm not sure how to answer that.", actions=actions, proposals=proposals, client_actions=client_actions)
 
             for block in tool_calls:
                 if tool_call_count >= MAX_TOOL_CALLS:
-                    return AssistantTurn(reply=_ACTION_LIMIT_REPLY, actions=actions, proposals=proposals)
+                    return AssistantTurn(reply=_ACTION_LIMIT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
                 if time.monotonic() > deadline:
                     succeeded = False
-                    return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions, proposals=proposals)
+                    return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
 
                 tool_call_count += 1
                 # confirmed=False unconditionally: a write tool never runs
@@ -195,9 +207,12 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
                     actions.append(result.summary)
                 if result.proposal:
                     proposals.append({"n": len(proposals), **result.proposal})
+                spec = REGISTRY.get(block.name)
+                if spec is not None and spec.client_action and "error" not in result.data:
+                    client_actions.append({"action": spec.client_action, **result.data})
                 prompt += f"\nASSISTANT (tool call): {block.name}({json.dumps(block.input, default=str)})\nTOOL RESULT ({block.name}): {json.dumps(result.data, default=str)}"
 
-        return AssistantTurn(reply=_ROUND_LIMIT_REPLY, actions=actions, proposals=proposals)
+        return AssistantTurn(reply=_ROUND_LIMIT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
     finally:
         # One call covering the whole turn, not per gateway.send_with_tools():
         # the gateway accumulates sent/received tokens across every call made
