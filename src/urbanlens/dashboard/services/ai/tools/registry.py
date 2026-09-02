@@ -31,6 +31,7 @@ from enum import StrEnum
 import json
 import logging
 import re
+import time
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ValidationError
@@ -118,6 +119,38 @@ class ToolContext:
     page: PageObject | None = None
     deadline: float | None = None
     dismissals: tuple[DismissalEntry, ...] = ()
+
+
+#: Fallback budget for a tool's external-gateway call when ``context.deadline``
+#: is unset (e.g. a direct/local test) - matches
+#: ``services.core.timeout_utils.EXTERNAL_CALL_DEADLINE``'s own default so a
+#: tool behaves the same as any other request-path caller of that helper.
+DEFAULT_GATEWAY_TIMEOUT_SECONDS = 20.0
+
+
+def remaining_deadline(context: ToolContext, *, cap: float = DEFAULT_GATEWAY_TIMEOUT_SECONDS) -> float:
+    """Seconds a tool may still spend on one external-gateway call, for ``call_with_deadline``.
+
+    Every batch-4 tool that reaches OSRM/weather (never REData - see
+    ``docs/AI_PIPELINE.md``) wraps its gateway call in
+    ``services.core.timeout_utils.call_with_deadline(..., timeout=remaining_deadline(context))``
+    so a turn already close to its own wall-clock budget doesn't let one slow
+    provider blow past it.
+
+    Args:
+        context: The tool's execution context.
+        cap: Upper bound in seconds - never wait longer than this even when
+            ``context.deadline`` is unset or far in the future.
+
+    Returns:
+        ``cap`` when ``context.deadline`` is ``None``; otherwise the time left
+        until it, clamped to ``[0, cap]`` - never negative, so a deadline
+        already passed still gives the gateway call a (zero-length) chance to
+        fail fast through the normal timeout path rather than skipping it.
+    """
+    if context.deadline is None:
+        return cap
+    return max(0.0, min(cap, context.deadline - time.monotonic()))
 
 
 @dataclass(frozen=True, slots=True)

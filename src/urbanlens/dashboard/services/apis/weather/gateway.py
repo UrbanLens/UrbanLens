@@ -19,7 +19,10 @@ class OpenWeatherMapGateway(Gateway):
     service_key: ClassVar[str] = "openweathermap"
     paid_service: ClassVar[bool] = False
 
-    api_key: str | None = settings.openweathermap_api_key
+    # default_factory, not a bare default: a dataclass field's bare default expression is
+    # evaluated once at class-definition/import time, so a later settings change (or test
+    # patch) would never reach subsequent instantiations - default_factory re-reads it fresh.
+    api_key: str | None = field(default_factory=lambda: settings.openweathermap_api_key)
     base_url: str = "http://api.openweathermap.org/data/2.5/forecast"
 
     def __post_init__(self):

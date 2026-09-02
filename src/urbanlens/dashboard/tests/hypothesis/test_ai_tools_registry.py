@@ -230,6 +230,8 @@ class RegistrationTests(TestCase):
             "reopen_explainer",
             "undo_peek",
             "undo_last_action",
+            "distance_and_drive_time",
+            "get_weather",
         ):
             self.assertIn(name, REGISTRY)
 

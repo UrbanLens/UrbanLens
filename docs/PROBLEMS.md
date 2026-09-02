@@ -22,6 +22,33 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-09-02: eight `Gateway` subclasses read a credential setting once at import time, not per-instantiation
+
+Found while adding the assistant's `get_weather` tool (`services/ai/tools/weather.py`), and confirmed as a live bug -
+not just a test artifact - via a real test failure: `test_weather_resolution.py`'s
+`test_openweathermap_configured_takes_priority_over_open_meteo_on_direct_path` started failing once a new,
+unrelated test file (`test_ai_tools_weather.py`) happened to import `services.apis.weather.gateway` earlier in the
+same process while `settings.openweathermap_api_key` was mocked to `None`, poisoning the value for every later
+`OpenWeatherMapGateway()` in that process regardless of what the settings object held afterward.
+
+Root cause: `api_key: str | None = settings.openweathermap_api_key` (and siblings) is a bare `@dataclass` field
+default, evaluated exactly once - at class-definition/module-import time - not per-instantiation. Fixed for
+`OpenWeatherMapGateway` (`services/apis/weather/gateway.py`) by switching to
+`field(default_factory=lambda: settings.openweathermap_api_key)`, which re-reads the current value on every call.
+The same pattern (`base_url`/`api_key` off `settings.redata_api_url`/`settings.redata_api_key`, `twilio_*`, or
+`virustotal_api_key`) still stands, unfixed, in:
+`services/apis/redata_json_gateway.py`, `services/apis/property_records/redata_gateway.py`,
+`services/apis/photos/redata_photos_gateway.py`, `services/apis/locations/google/redata_cid_gateway.py`,
+`services/apis/locations/google/redata_places_gateway.py`, `services/apis/labels/redata_labels_gateway.py`,
+`services/apis/locations/redata_context_gateway.py`, `services/apis/security/virustotal.py`,
+`services/apis/messaging/sms.py`, `services/apis/messaging/whatsapp.py`.
+
+In production this is low-risk (settings are effectively static per worker process, and REData/Twilio/VirusTotal
+keys are rarely rotated without a restart), but it means a live key rotation, a settings reload, or - the case that
+actually bit this session - a test process where mock-patching order and first-import order interact, silently uses
+a stale credential instead of the current one. Left unfixed elsewhere since it's a mechanical but multi-file change
+across REData/Twilio/VirusTotal gateways, out of scope for the weather-tool work that surfaced it.
+
 ## OPEN 2026-09-01: two `Image` import tasks omit `source=`, silently defaulting to `UPLOAD`
 
 Found while wiring VirusTotal-first scanning for externally-fetched images (`services/security/malware_scan.py`'s
