@@ -79,6 +79,11 @@ class _PageResolver:
     page_help_key: str
     #: None for a page with no single object of its own (e.g. the map).
     load_object: _ObjectLoader | None = None
+    #: The "kind" load_object's own PageObject carries, when load_object is
+    #: set. Must have a matching _EXISTENCE_CHECKS entry - a mismatch means
+    #: verify_page_object always refuses this page's object, silently
+    #: dropping it on every turn (see test_every_resolver_with_an_object_kind_has_a_verification_check).
+    object_kind: str | None = None
 
 
 def _load_pin(profile: Profile, kwargs: dict[str, str]) -> PageObject | None:
@@ -115,8 +120,8 @@ def _load_trip(profile: Profile, kwargs: dict[str, str]) -> PageObject | None:
 #: url_name -> resolver. See the module docstring for why this list is short.
 _RESOLVERS: dict[str, _PageResolver] = {
     "map.view": _PageResolver(page_help_key="map"),
-    "pin.details": _PageResolver(page_help_key="pin_detail", load_object=_load_pin),
-    "trips.detail": _PageResolver(page_help_key="trip_detail", load_object=_load_trip),
+    "pin.details": _PageResolver(page_help_key="pin_detail", load_object=_load_pin, object_kind="pin"),
+    "trips.detail": _PageResolver(page_help_key="trip_detail", load_object=_load_trip, object_kind="trip"),
 }
 
 

@@ -6,9 +6,11 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.ai.page_context import (
+    _EXISTENCE_CHECKS,
+    _RESOLVERS,
     PageObject,
     page_object_from_dict,
     page_object_to_dict,
@@ -123,3 +125,24 @@ class PageObjectSerializationTests(TestCase):
         self.assertIsNone(page_object_from_dict({"kind": "pin"}))
         self.assertIsNone(page_object_from_dict({"kind": "pin", "id": "not-an-int"}))
         self.assertIsNone(page_object_from_dict("not-a-dict"))  # type: ignore[arg-type]
+
+
+class RegistryConsistencyTests(SimpleTestCase):
+    """Guards a drift a new resolver could ship without anyone noticing.
+
+    verify_page_object fails closed for an unknown kind (returns False) -
+    safe, but silent: a resolver whose object_kind has no matching
+    _EXISTENCE_CHECKS entry would resolve its page fine and then have that
+    page dropped on every single turn, with nothing visibly wrong until
+    someone asks why a page-aware tool never sees it.
+    """
+
+    def test_every_resolver_with_an_object_kind_has_a_verification_check(self) -> None:
+        for url_name, resolver in _RESOLVERS.items():
+            if resolver.object_kind is not None:
+                self.assertIn(resolver.object_kind, _EXISTENCE_CHECKS, f"{url_name!r} produces kind={resolver.object_kind!r} but verify_page_object has no check for it")
+
+    def test_no_orphaned_verification_checks(self) -> None:
+        """The reverse gap: a check nothing produces is dead code, not a security issue - still worth flagging."""
+        produced_kinds = {resolver.object_kind for resolver in _RESOLVERS.values() if resolver.object_kind is not None}
+        self.assertEqual(set(_EXISTENCE_CHECKS.keys()) - produced_kinds, set())
