@@ -20,6 +20,7 @@ from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip
@@ -370,7 +371,7 @@ class AssistantViewTests(TestCase):
         self.assertFalse(self.client.session.get("assistant_chat"))
 
     def test_page_path_resolves_to_a_page_object_on_the_enqueued_task(self) -> None:
-        pin = baker.make("dashboard.Pin", profile=self.profile)
+        pin: Pin = baker.make(Pin, profile=self.profile)
         with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
             self.client.post(reverse("assistant.message"), {"message": "find pins", "page_path": reverse("pin.details", args=[pin.slug])})
         self.assertEqual(mock_enqueue.call_args.kwargs["page"], {"kind": "pin", "id": pin.pk})
@@ -502,13 +503,13 @@ class AssistantProposalConfirmViewTests(TestCase):
         settings_obj = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
 
-    def _resolve_with_proposal(self, proposal: dict) -> str:
+    def _resolve_with_proposal(self, proposal: dict, message: str = "make me a trip") -> str:
         """Send a message, then resolve its poll to a turn carrying exactly this one proposal."""
         with (
             patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
             patch("urbanlens.dashboard.controllers.assistant.safely_enqueue_task", return_value=mock.Mock(id="task-abc-123")),
         ):
-            self.client.post(reverse("assistant.message"), {"message": "make me a trip"})
+            self.client.post(reverse("assistant.message"), {"message": message})
         turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
 
         progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Confirm to create it.", "actions": [], "proposals": [proposal]})
@@ -574,3 +575,51 @@ class AssistantProposalConfirmViewTests(TestCase):
         response = other_client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
         self.assertEqual(response.status_code, 404)
         self.assertFalse(Trip.objects.filter(name="Not Yours").exists())
+
+    def test_confirm_undoes_through_the_real_view(self) -> None:
+        """undo_last_action end to end: propose (session/cache) -> confirm view -> registry.execute(confirmed=True)."""
+        from urbanlens.dashboard.services.undo.service import stash_for_undo
+
+        pin = baker.make(Pin, profile=self.profile, name="Old Mill")
+        undo_action = stash_for_undo("pin", [pin], self.profile)
+        assert undo_action is not None
+        pin.delete()
+
+        turn_id = self._resolve_with_proposal(
+            {"n": 0, "tool": "undo_last_action", "args": {"undo_uuid": str(undo_action.uuid)}, "confirm_label": "Undo"}, message="undo that"
+        )
+        response = self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
+
+        self.assertEqual(response.status_code, 200)
+        undo_action.refresh_from_db()
+        self.assertIsNotNone(undo_action.undone_at)
+        self.assertTrue(Pin.objects.filter(profile=self.profile, name="Old Mill").exists())
+
+    def test_confirm_refuses_an_undo_proposal_the_stack_has_moved_past(self) -> None:
+        """The security property the plan calls out by name: a stale undo_uuid must not undo whatever is now on top."""
+        from urbanlens.dashboard.services.undo.service import stash_for_undo
+
+        first_pin = baker.make(Pin, profile=self.profile, name="First")
+        first_action = stash_for_undo("pin", [first_pin], self.profile)
+        assert first_action is not None
+        first_pin.delete()
+
+        turn_id = self._resolve_with_proposal(
+            {"n": 0, "tool": "undo_last_action", "args": {"undo_uuid": str(first_action.uuid)}, "confirm_label": "Undo"}, message="undo that"
+        )
+
+        # Something else happens after the proposal was made, before it's confirmed.
+        second_pin = baker.make(Pin, profile=self.profile, name="Second")
+        second_action = stash_for_undo("pin", [second_pin], self.profile)
+        assert second_action is not None
+        second_pin.delete()
+
+        response = self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "no longer the most recent")
+        first_action.refresh_from_db()
+        second_action.refresh_from_db()
+        self.assertIsNone(first_action.undone_at)
+        self.assertIsNone(second_action.undone_at)
+        self.assertFalse(Pin.objects.filter(profile=self.profile, name="First").exists())
