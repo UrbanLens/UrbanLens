@@ -5,11 +5,12 @@ site-wide ``ai_enabled``, the profile's own ``ai_enabled``/``external_apis_enabl
 preferences, and the ``SiteFeature.AI`` subscription entitlement - for every
 AI feature, but answering it there means constructing (and discarding) a
 provider gateway instance. The interactive assistant needs a cheap,
-side-effect-free yes/no it can call on every page load (the context
-processor's ``assistant_enabled``) as well as the web view, the external API,
-and the task itself before it spends a provider call - so it gets its own
-named predicate rather than each of those re-deriving the conjunction or
-paying for a throwaway gateway.
+side-effect-free yes/no it can call on every page load (``dashboard_tags``'s
+``assistant_enabled_flag`` template tag, which drives base.html's hotkey and
+floating button) as well as the web view, the external API, and the task
+itself before it spends a provider call - so it gets its own named predicate
+rather than each of those re-deriving the conjunction or paying for a
+throwaway gateway.
 """
 
 from __future__ import annotations

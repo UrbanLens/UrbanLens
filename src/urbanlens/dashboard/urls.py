@@ -168,6 +168,7 @@ urlpatterns = [
     path("costs/", costs.CostsView.as_view(), name="costs"),
     path("billing/webhooks/stripe/", billing_webhooks.StripeWebhookView.as_view(), name="billing.stripe_webhook"),
     path("assistant/", assistant.AssistantView.as_view(), name="assistant"),
+    path("assistant/overlay/", assistant.AssistantOverlayBodyView.as_view(), name="assistant.overlay"),
     path("assistant/message/", assistant.AssistantMessageView.as_view(), name="assistant.message"),
     path("assistant/turn/<str:turn_id>/", assistant.AssistantTurnPollView.as_view(), name="assistant.turn"),
     path("assistant/turn/<str:turn_id>/confirm/<int:n>/", assistant.AssistantProposalConfirmView.as_view(), name="assistant.proposal.confirm"),

@@ -1,0 +1,9 @@
+{% comment %}
+Shared "AI is off" state - the full /assistant/ page and the overlay body
+both render this when assistant_enabled is False. Context: profile.
+{% endcomment %}
+<div class="assistant-disabled">
+    <i class="material-symbols-outlined">smart_toy</i>
+    <p>AI features are turned off{% if not profile.ai_enabled %} for your account{% endif %}.</p>
+    <a class="btn btn--secondary" href="{% url 'settings.view' %}#ai-settings-section">Open AI settings</a>
+</div>

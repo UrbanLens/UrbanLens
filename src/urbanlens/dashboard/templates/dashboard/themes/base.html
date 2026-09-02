@@ -1,6 +1,7 @@
-{% load vendor_assets %}
+{% load vendor_assets dashboard_tags %}
 <!DOCTYPE html>
 {% load i18n %}{% get_current_language as LANGUAGE_CODE %}
+{% assistant_enabled_flag request.user as assistant_global_enabled %}
 <html id="html-root" lang="{{ LANGUAGE_CODE|default:"en" }}"{% if request.user.is_authenticated %}{% with tm=request.user.profile.theme_mode %}{% if tm == "dark" %} data-theme="dark"{% elif tm == "light" %} data-theme="light"{% endif %}{% endwith %}{% if not request.user.profile.show_hover_tooltips %} class="tooltips-disabled"{% endif %}{% endif %}>
 
 <head>
@@ -66,6 +67,42 @@
             <i class="material-symbols-outlined">redo</i>
         </button>
     </nav>
+    {% endif %}
+
+    {% if assistant_global_enabled %}
+    {% comment %}
+    Global assistant surface (plan §8/UL-293) - present on every page, not
+    just /assistant/. The dialog's body is a loading skeleton until
+    assistant-overlay.ts fetches _overlay_body.html the first time it opens;
+    the composer/message log inside it are the same partials and endpoints
+    /assistant/ itself renders, so there is only ever one chat implementation.
+    {% endcomment %}
+    <button type="button" id="ul-assistant-fab" class="ul-assistant-fab" aria-label="Open assistant"
+            aria-haspopup="dialog" aria-controls="assistant-overlay"
+            data-tooltip="Ask the assistant" data-tooltip-float="true" data-tooltip-pos="above">
+        <i class="material-symbols-outlined">smart_toy</i>
+    </button>
+    <dialog id="assistant-overlay" class="assistant-overlay" aria-label="AI assistant" data-overlay-url="{% url 'assistant.overlay' %}">
+        <div class="assistant-overlay-header">
+            <span class="assistant-overlay-title"><i class="material-symbols-outlined">smart_toy</i> Assistant</span>
+            <div class="assistant-overlay-header-actions">
+                <button type="button" class="btn btn--ghost btn--sm"
+                        hx-post="{% url 'assistant.reset' %}"
+                        hx-target="#assistant-messages" hx-swap="outerHTML"
+                        title="Clear this conversation">
+                    <i class="material-symbols-outlined">mop</i>
+                </button>
+                <button type="button" class="btn btn--ghost btn--sm" id="assistant-overlay-close" aria-label="Close assistant">
+                    <i class="material-symbols-outlined">close</i>
+                </button>
+            </div>
+        </div>
+        <div id="assistant-overlay-body" class="assistant-overlay-body">
+            <div class="assistant-overlay-loading">
+                <span class="assistant-typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+            </div>
+        </div>
+    </dialog>
     {% endif %}
 
     {% comment %}

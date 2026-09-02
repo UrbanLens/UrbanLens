@@ -491,6 +491,25 @@ def tooltip_label(
 
 
 @register.simple_tag
+def assistant_enabled_flag(user) -> bool:
+    """Whether the AI assistant's global surface (hotkey, floating button) should be wired up.
+
+    A template tag rather than a context processor: base.html is the only
+    template that needs this, the same way it's the only one that needs
+    ``tooltip_attrs``/``subscription_role_choices`` above.
+
+    Usage: {% assistant_enabled_flag request.user as assistant_enabled %}
+    """
+    if not user.is_authenticated:
+        return False
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.ai.access import assistant_available
+
+    profile, _ = Profile.objects.get_or_create(user=user)
+    return assistant_available(profile)
+
+
+@register.simple_tag
 def subscription_role_choices():
     """Return every subscription role, for the invite-a-friend dialog's role picker.
 

@@ -344,6 +344,61 @@ class AssistantViewTests(TestCase):
         self.assertFalse(self.client.session.get("assistant_chat"))
 
 
+class AssistantOverlayBodyViewTests(TestCase):
+    """GET /assistant/overlay/ - the global overlay's lazily-loaded body."""
+
+    def setUp(self) -> None:
+        self.user: User = baker.make(User)
+        self.client.force_login(self.user)
+
+    def test_requires_login(self) -> None:
+        self.client.logout()
+        response = self.client.get(reverse("assistant.overlay"))
+        self.assertEqual(response.status_code, 302)
+
+    def test_renders_the_chat_when_available(self) -> None:
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True):
+            response = self.client.get(reverse("assistant.overlay"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="message"')
+        self.assertNotContains(response, "AI features are turned off")
+
+    def test_renders_the_disabled_notice_when_unavailable(self) -> None:
+        """Re-checked here even though the FAB/dialog that link here are themselves gated - defense in depth."""
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=False):
+            response = self.client.get(reverse("assistant.overlay"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "AI features are turned off")
+        self.assertNotContains(response, 'name="message"')
+
+
+class GlobalAssistantSurfaceTests(TestCase):
+    """The FAB/dialog every page renders in themes/base.html, gated by assistant_enabled_flag."""
+
+    def setUp(self) -> None:
+        self.user: User = baker.make(User)
+        self.client.force_login(self.user)
+
+    def test_fab_and_dialog_render_for_an_enabled_profile(self) -> None:
+        with patch("urbanlens.dashboard.services.ai.access.assistant_available", return_value=True):
+            response = self.client.get(reverse("map.view"))
+        self.assertContains(response, 'id="ul-assistant-fab"')
+        self.assertContains(response, 'id="assistant-overlay"')
+        self.assertContains(response, reverse("assistant.overlay"))
+
+    def test_fab_and_dialog_absent_for_a_disabled_profile(self) -> None:
+        with patch("urbanlens.dashboard.services.ai.access.assistant_available", return_value=False):
+            response = self.client.get(reverse("map.view"))
+        self.assertNotContains(response, 'id="ul-assistant-fab"')
+        self.assertNotContains(response, 'id="assistant-overlay"')
+
+    def test_fab_and_dialog_absent_for_an_anonymous_visitor(self) -> None:
+        self.client.logout()
+        with patch("urbanlens.dashboard.services.ai.access.assistant_available", return_value=True):
+            response = self.client.get(reverse("login"))
+        self.assertNotContains(response, 'id="ul-assistant-fab"')
+
+
 class AssistantProposalConfirmViewTests(TestCase):
     """POST /assistant/turn/<turn_id>/confirm/<n>/ - the write's only real execution path."""
 

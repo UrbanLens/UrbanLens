@@ -1,4 +1,5 @@
-// Assistant chat page (UL-293).
+// Assistant chat page (UL-293) and its global overlay (plan §8).
+@use 'variables' as *;
 
 .assistant-page {
     max-width: 760px;
@@ -182,4 +183,81 @@
         font-size: 2.4rem;
         opacity: .5;
     }
+}
+
+// -- Global overlay (hotkey/floating-button-opened, every page) ------------
+
+.ul-assistant-fab {
+    position: fixed;
+    right: 10px;
+    bottom: 10px;
+    // Above map toolbars (1000) and the sticky page footer (9999); below the
+    // undo bar (10050, which lifts above this one when both are visible -
+    // see undo-bar.ts's COLLIDERS) and toasts (10070).
+    z-index: 10045;
+    width: 3rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: var(--ul-primary-color, #3567b1);
+    color: #fff;
+    box-shadow: var(--ul-shadow-md);
+    cursor: pointer;
+    transform: translateY(calc(-1 * var(--ul-assistant-fab-offset-y, 0px)));
+    transition: transform .2s ease;
+
+    .material-symbols-outlined {
+        font-size: 1.6rem;
+    }
+
+    &:hover {
+        filter: brightness(1.08);
+    }
+}
+
+.assistant-overlay {
+    @include dialog-base(28rem);
+    height: min(32rem, 80dvh);
+}
+
+.assistant-overlay-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .6rem .5rem .6rem 1rem;
+    border-bottom: 1px solid var(--ul-surface-border);
+    flex: 0 0 auto;
+}
+
+.assistant-overlay-title {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-weight: 600;
+}
+
+.assistant-overlay-header-actions {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+}
+
+.assistant-overlay-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+
+    .assistant-messages {
+        max-height: none;
+    }
+}
+
+.assistant-overlay-loading {
+    margin: auto;
+    opacity: .6;
 }

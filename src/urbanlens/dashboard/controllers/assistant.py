@@ -181,6 +181,31 @@ class AssistantView(LoginRequiredMixin, View):
         )
 
 
+class AssistantOverlayBodyView(LoginRequiredMixin, View):
+    """Lazily-loaded body of the global assistant overlay dialog (see themes/base.html).
+
+    The overlay's ``<dialog>`` is only rendered server-side for an enabled
+    profile, so this is only ever fetched by one - re-checked here anyway
+    (defense in depth: an entitlement can be revoked mid-session) rather than
+    trusted from that earlier render.
+
+    GET /assistant/overlay/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return render(
+            request,
+            "dashboard/partials/assistant/_overlay_body.html",
+            {
+                "profile": profile,
+                "assistant_enabled": assistant_available(profile),
+                "max_message_chars": MAX_MESSAGE_CHARS,
+                **_messages_context(request),
+            },
+        )
+
+
 class AssistantMessageView(LoginRequiredMixin, View):
     """Enqueue one chat message and return the log with a pending bubble for it.
 

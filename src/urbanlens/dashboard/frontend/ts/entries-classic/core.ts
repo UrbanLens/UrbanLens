@@ -17,6 +17,7 @@
  * classic script preserves the exact head-executes-before-body ordering the
  * site already depends on.
  */
+import { installGlobalAssistantOverlay } from "../shared/assistant-overlay";
 import { installGlobalAutosaveGuard } from "../shared/autosave-guard";
 import { installGlobalCollapsibleSections } from "../shared/collapsible-sections";
 import { installGlobalCommentCompose } from "../shared/comment-compose";
@@ -41,6 +42,7 @@ import { installGlobalScrollToHash } from "../shared/scroll-to-hash";
 import { installUndoBar } from "../shared/undo-bar";
 import { installGlobalUndoMapRefresh } from "../shared/undo-map-refresh";
 
+installGlobalAssistantOverlay();
 installGlobalAutosaveGuard();
 installGlobalCollapsibleSections();
 installGlobalCommentCompose();

@@ -8,6 +8,7 @@
 
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { positionAboveColliders } from "./floating-controls";
 import { isTypingTarget, matchesHotkey } from "./hotkeys";
 
 export interface UndoProvider {
@@ -35,6 +36,7 @@ const COLLIDERS = [
     ".ul-bulk-bar.visible",
     ".page-footer",
     "#toast-container",
+    "#ul-assistant-fab",
 ];
 
 let localProvider: UndoProvider | null = null;
@@ -198,24 +200,10 @@ function syncButtons(): void {
     placeBar();
 }
 
-function inBottomRight(rect: DOMRect): boolean {
-    return rect.right > window.innerWidth - 280 && rect.bottom > window.innerHeight - 220 && rect.width > 0 && rect.height > 0;
-}
-
 function placeBar(): void {
     const root = bar();
     if (!root || root.hidden) return;
-    let offset = 0;
-    for (const selector of COLLIDERS) {
-        for (const node of document.querySelectorAll(selector)) {
-            if (!(node instanceof HTMLElement) || node.hidden || node === root || root.contains(node)) continue;
-            const rect = node.getBoundingClientRect();
-            if (!inBottomRight(rect)) continue;
-            const lift = window.innerHeight - rect.top + 8;
-            if (lift > offset) offset = lift;
-        }
-    }
-    root.style.setProperty("--ul-undo-offset-y", `${offset}px`);
+    positionAboveColliders(root, "--ul-undo-offset-y", COLLIDERS);
 }
 
 function onKeydown(event: KeyboardEvent): void {

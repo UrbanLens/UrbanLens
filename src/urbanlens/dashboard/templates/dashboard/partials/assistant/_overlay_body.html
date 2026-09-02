@@ -1,0 +1,23 @@
+{% comment %}
+Body of the global assistant overlay dialog (see themes/base.html and
+assistant-overlay.ts) - loaded lazily via HTMX the first time the overlay
+opens, not embedded in every page's initial HTML. Reuses the same
+_messages.html/_composer.html partials pages/assistant/index.html renders,
+so the overlay is never a second implementation of the same chat.
+
+Context: same as AssistantOverlayBodyView - assistant_enabled, profile,
+messages_history, first_poll_delay, max_message_chars. Re-checked here (not
+just trusted from the FAB/dialog's own server-side gate in themes/base.html)
+because this endpoint can be reached directly, and an entitlement can be
+revoked between that page render and this one.
+{% endcomment %}
+{% if assistant_enabled %}
+{% include "dashboard/partials/assistant/_messages.html" %}
+{% include "dashboard/partials/assistant/_composer.html" %}
+<p class="assistant-footnote">
+    The assistant only sees and organizes your own pins and trips. It can create trips and
+    add activities for you; it can never delete or share anything.
+</p>
+{% else %}
+{% include "dashboard/partials/assistant/_disabled.html" %}
+{% endif %}
