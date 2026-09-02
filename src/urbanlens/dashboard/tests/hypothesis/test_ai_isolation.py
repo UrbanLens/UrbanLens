@@ -293,6 +293,16 @@ class ComposeTopologyTests(SimpleTestCase):
         compose = _compose()
         self.assertEqual(set(compose["services"]["egress-proxy"]["networks"]), {"ai_network", "inference_network", "ai_egress_network"})
 
+    def test_egress_proxy_starts_as_the_tinyproxy_user(self) -> None:
+        # Not cosmetic: cap_drop: [ALL] means the container can't setuid/setgid
+        # itself away from root at startup, so tinyproxy's own User/Group
+        # directives can't do the drop either - confirmed live on chiron
+        # (2026-09-02): without this, tinyproxy crash-loops with "Unable to
+        # change to group", and neither this repo's tests nor a config-only
+        # review catches it - only an actual `docker compose up` does.
+        compose = _compose()
+        self.assertEqual(compose["services"]["egress-proxy"]["user"], "tinyproxy:tinyproxy")
+
     def test_ai_egress_network_has_no_other_member(self) -> None:
         compose = _compose()
         members = {name for name, service in compose["services"].items() if "ai_egress_network" in service.get("networks", {})}

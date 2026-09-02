@@ -838,6 +838,11 @@ services:
     build:
       context: ./src/urbanlens/config/egress
     restart: unless-stopped
+    # Alpine's tinyproxy package creates this account (uid 100, gid 101) -
+    # starting the container as it directly means tinyproxy never needs to
+    # setuid/setgid itself away from root, which cap_drop: [ALL] below would
+    # otherwise make impossible (no CAP_SETUID/CAP_SETGID left to do it with).
+    user: "tinyproxy:tinyproxy"
     read_only: true
     security_opt:
       - no-new-privileges:true
