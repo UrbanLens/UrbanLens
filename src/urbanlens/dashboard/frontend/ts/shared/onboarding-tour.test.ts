@@ -45,7 +45,7 @@ describe("the onboarding tour", () => {
         initOnboardingTour({ prefix: PREFIX, hostSelector: "#host", cards: [card()], initialDelayMs: 100_000 });
         expect(document.querySelector(".page-onboarding-card")).toBeNull();
 
-        document.dispatchEvent(new CustomEvent("ul:tour-restart", { detail: { prefix: PREFIX } }));
+        document.dispatchEvent(new CustomEvent("ul:tour-restart", { detail: { prefix: PREFIX, id: "step-one" } }));
 
         expect(localStorage.getItem(`${PREFIX}_step-one_dismissed`)).toBeNull();
         expect(document.querySelector(".page-onboarding-card")).not.toBeNull();
@@ -56,9 +56,34 @@ describe("the onboarding tour", () => {
         localStorage.setItem(`${PREFIX}_step-one_dismissed`, "1");
         initOnboardingTour({ prefix: PREFIX, hostSelector: "#host", cards: [card()], initialDelayMs: 100_000 });
 
-        document.dispatchEvent(new CustomEvent("ul:tour-restart", { detail: { prefix: "some_other_prefix" } }));
+        document.dispatchEvent(new CustomEvent("ul:tour-restart", { detail: { prefix: "some_other_prefix", id: "step-one" } }));
 
         expect(localStorage.getItem(`${PREFIX}_step-one_dismissed`)).toBe("1");
         expect(document.querySelector(".page-onboarding-card")).toBeNull();
+    });
+
+    test("ul:tour-restart without an id is ignored, not a whole-tour reset", () => {
+        document.body.innerHTML = '<div id="host"></div><div id="target"></div>';
+        localStorage.setItem(`${PREFIX}_step-one_dismissed`, "1");
+        initOnboardingTour({ prefix: PREFIX, hostSelector: "#host", cards: [card()], initialDelayMs: 100_000 });
+
+        document.dispatchEvent(new CustomEvent("ul:tour-restart", { detail: { prefix: PREFIX } }));
+
+        expect(localStorage.getItem(`${PREFIX}_step-one_dismissed`)).toBe("1");
+        expect(document.querySelector(".page-onboarding-card")).toBeNull();
+    });
+
+    test("restart un-dismisses only the requested card, not every card sharing the prefix", () => {
+        document.body.innerHTML = '<div id="host"></div><div id="target"></div><div id="target-two"></div>';
+        const cards = [card(), card({ id: "step-two", target: "#target-two", title: "Step two" })];
+        localStorage.setItem(`${PREFIX}_step-one_dismissed`, "1");
+        localStorage.setItem(`${PREFIX}_step-two_dismissed`, "1");
+        initOnboardingTour({ prefix: PREFIX, hostSelector: "#host", cards, initialDelayMs: 100_000 });
+
+        document.dispatchEvent(new CustomEvent("ul:tour-restart", { detail: { prefix: PREFIX, id: "step-two" } }));
+
+        expect(localStorage.getItem(`${PREFIX}_step-one_dismissed`)).toBe("1");
+        expect(localStorage.getItem(`${PREFIX}_step-two_dismissed`)).toBeNull();
+        expect(document.querySelector(".page-onboarding-card h2")?.textContent).toBe("Step two");
     });
 });

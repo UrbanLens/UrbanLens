@@ -124,8 +124,8 @@ function onAssistantAction(event: Event): void {
         if (action.action !== "reopen_explainer") continue;
         if (action.kind === "explainer" && action.id) {
             document.dispatchEvent(new CustomEvent("ul:explainer-reopen", { detail: { id: action.id } }));
-        } else if (action.kind === "tour" && action.prefix) {
-            document.dispatchEvent(new CustomEvent("ul:tour-restart", { detail: { prefix: action.prefix } }));
+        } else if (action.kind === "tour" && action.prefix && action.id) {
+            document.dispatchEvent(new CustomEvent("ul:tour-restart", { detail: { prefix: action.prefix, id: action.id } }));
         }
     }
 }

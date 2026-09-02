@@ -160,22 +160,22 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
     }
 
     // Fired by assistant-overlay.ts when the model calls reopen_explainer for
-    // a kind:"tour" dismissal - re-dismissing a card the user has since
-    // watched again is expected (the whole point is to show it again), so
-    // this clears every card's dismissed flag rather than just the one that
-    // triggered the ring entry.
-    function restart(): void {
-        config.cards.forEach((card) => {
-            try {
-                localStorage.removeItem(`${config.prefix}_${card.id}_dismissed`);
-            } catch {
-                /* storage unavailable - ignore */
-            }
-        });
+    // a kind:"tour" dismissal. Un-dismisses only the requested card, not the
+    // whole tour - with several cards sharing one prefix (e.g. Organize's
+    // three), clearing all of them would let tryShow() surface whichever
+    // *other* card is earliest in config.cards instead of the one the user
+    // actually asked to see again.
+    function restart(id: string): void {
+        try {
+            localStorage.removeItem(`${config.prefix}_${id}_dismissed`);
+        } catch {
+            /* storage unavailable - ignore */
+        }
         tryShow();
     }
     document.addEventListener("ul:tour-restart", (event) => {
-        if ((event as CustomEvent<{ prefix?: string }>).detail?.prefix === config.prefix) restart();
+        const detail = (event as CustomEvent<{ prefix?: string; id?: string }>).detail;
+        if (detail?.prefix === config.prefix && detail.id) restart(detail.id);
     });
 
     registerAllAutoDismiss();

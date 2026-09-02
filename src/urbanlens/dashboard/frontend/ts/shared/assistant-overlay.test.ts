@@ -137,7 +137,19 @@ describe("the global assistant overlay", () => {
         expect(seen).toEqual([{ id: "organize-labels-intro" }]);
     });
 
-    test("a tour client_action redispatches ul:tour-restart with the prefix", () => {
+    test("a tour client_action redispatches ul:tour-restart with the prefix and card id", () => {
+        document.body.innerHTML = OVERLAY_MARKUP;
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        installGlobalAssistantOverlay();
+        const seen: unknown[] = [];
+        document.addEventListener("ul:tour-restart", (event) => seen.push((event as CustomEvent).detail));
+
+        document.body.dispatchEvent(new CustomEvent("ulAssistantAction", { detail: { actions: [{ action: "reopen_explainer", id: "drag-priority", kind: "tour", prefix: "ul_onboarding_v1_organize" }] } }));
+
+        expect(seen).toEqual([{ prefix: "ul_onboarding_v1_organize", id: "drag-priority" }]);
+    });
+
+    test("a tour client_action missing an id is not dispatched", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
         window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
         installGlobalAssistantOverlay();
@@ -146,7 +158,7 @@ describe("the global assistant overlay", () => {
 
         document.body.dispatchEvent(new CustomEvent("ulAssistantAction", { detail: { actions: [{ action: "reopen_explainer", kind: "tour", prefix: "ul_onboarding_v1_organize" }] } }));
 
-        expect(seen).toEqual([{ prefix: "ul_onboarding_v1_organize" }]);
+        expect(seen).toEqual([]);
     });
 
     test("an unrelated client_action is ignored", () => {
