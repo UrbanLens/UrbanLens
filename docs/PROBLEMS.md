@@ -22,6 +22,35 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-09-02: `style_suggestions.py`'s own AI-access check was never unified onto `assistant_available()`, and doing so naively would be wrong
+
+Found auditing the AI-assistant sandboxing work (`docs/AI_PIPELINE.md`) for completeness.
+`services/ai/access.py:assistant_available(profile)` was built as the one chokepoint for "may this
+profile use the interactive AI assistant" - checked by the assistant's views, its context
+processor, the external API, and the task itself. `services/labels/style_suggestions.py:40`
+(`suggest_label_style`, unrelated to the assistant - a one-shot label icon/color suggestion via
+`services.ai.factory.get_gateway()`) has its own near-identical, never-migrated check:
+`user_has_feature(profile.user, SiteFeature.AI) and profile.ai_enabled and
+profile.external_apis_enabled`.
+
+Reusing `assistant_available()` here, as originally intended, would be a real behavior change, not
+just a dedup: `assistant_available()` also requires `settings.UL_AI_WORKER_ENABLED` and
+`SiteSettings.get_current().ai_enabled` - both specific to whether the sandboxed interactive
+assistant's own `ai-worker` Celery worker is deployed. `style_suggestions.py` never touches
+`ai-worker` at all; its `get_gateway()` call builds an `LLMGateway`, which resolves an inference
+client via `services.ai.inference_client.get_inference_client()` - the *same* shared `ai-inference`
+tier every LLM-backed feature now uses, assistant or not. So an admin who sets
+`UL_AI_WORKER_ENABLED=false` to turn off the interactive chat assistant specifically (e.g. a
+resource-constrained self-host that still wants auto-tagging/label-styling/import-assist to work)
+would have label-style suggestions silently break too, with no way to keep them on.
+
+Not fixed here: the plan text that called for this reuse didn't account for the inference-tier
+split existing independently of `ai-worker`. The right fix, if this is worth doing, is a narrower
+shared helper (`ai_features_enabled(profile)`, say) covering just the three profile/feature/
+site-settings conjuncts `style_suggestions.py` already checks, with `assistant_available()` calling
+that plus its own `UL_AI_WORKER_ENABLED` check - not folding `style_suggestions.py` onto the
+assistant-specific function as originally planned.
+
 ## OPEN 2026-09-01: two `Image` import tasks omit `source=`, silently defaulting to `UPLOAD`
 
 Found while wiring VirusTotal-first scanning for externally-fetched images (`services/security/malware_scan.py`'s

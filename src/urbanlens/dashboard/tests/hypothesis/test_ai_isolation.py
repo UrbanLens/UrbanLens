@@ -19,10 +19,18 @@ separable claims, each of which fails differently.
    (:class:`ComposeTopologyTests`) - ai-inference holds no DB/cache/secret
    credential and no volumes, and egress-proxy is never reachable from
    app_network.
+5. No module under ``services/ai/tools/`` imports REData, a
+   ``*_resolution`` chokepoint, or a raw HTTP library
+   (:class:`ToolsPackageImportTests`) - the code-level half of the "no
+   REData, no web" guarantee (the network is the real boundary; this is
+   the fail-fast rail that catches a violation even if a reviewer misses it
+   and ``ai_network`` somehow didn't).
 """
 
 from __future__ import annotations
 
+import ast
+import pathlib
 import subprocess
 import sys
 from typing import Any
@@ -399,3 +407,52 @@ class ComposeTopologyTests(SimpleTestCase):
     def test_ai_worker_depends_on_ai_inference_being_healthy(self) -> None:
         compose = _compose()
         self.assertIn("ai-inference", compose["services"]["ai-worker"]["depends_on"])
+
+
+#: A module or submodule name is forbidden if its root matches one of these
+#: exactly (``requests``, ``requests.adapters``, ``urllib.parse``, ...) - see
+#: _is_forbidden_import.
+_FORBIDDEN_IMPORT_ROOTS = {"requests", "httpx", "urllib"}
+
+
+def _imported_module_names(path: pathlib.Path) -> set[str]:
+    """Every module named in a top-level or function-local import in ``path``.
+
+    ``ast.walk`` (not just ``tree.body``) so a local import inside a function
+    body - the pattern every tool module actually uses to defer Django model
+    imports - is caught the same as a module-level one.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names.add(node.module)
+    return names
+
+
+def _is_forbidden_import(module_name: str) -> bool:
+    """Whether ``module_name`` is a REData gateway, a REData-first resolution chokepoint, or raw HTTP."""
+    parts = module_name.split(".")
+    if parts[0] in _FORBIDDEN_IMPORT_ROOTS:
+        return True
+    return any(part.startswith("redata_") or part.endswith("_resolution") for part in parts)
+
+
+class ToolsPackageImportTests(SimpleTestCase):
+    """No module under ``services/ai/tools/`` may import REData or raw HTTP libraries directly.
+
+    ``redata_configured()`` already returns ``False`` under ``ProcessRole.AI``
+    (defense in depth) and the network topology is the real boundary - this
+    is the fastest-failing rail: a violation here is a lint-speed failure
+    instead of something only a running sandbox or a reviewer catches.
+    """
+
+    def test_no_tool_module_imports_redata_resolution_or_raw_http(self) -> None:
+        from urbanlens.dashboard.services.ai import tools
+
+        tools_dir = pathlib.Path(tools.__file__).parent
+        violations = {path.name: bad for path in tools_dir.glob("*.py") if (bad := {name for name in _imported_module_names(path) if _is_forbidden_import(name)})}
+
+        self.assertFalse(violations, f"forbidden imports found in services/ai/tools/: {violations}")
