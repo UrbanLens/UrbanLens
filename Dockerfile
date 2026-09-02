@@ -105,8 +105,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # runs this same image behind an egress-proxy with no such host on its
 # allowlist, so its first AI turn would hang until it timed out.
 ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken
+# --no-project: `uv run` without it re-syncs the project itself first, which
+# needs pyproject.toml's `readme = "README.md"` - not copied into the build
+# context until the full source COPY below, so this step failed outright
+# until it was scoped to just the already-installed dependency environment.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv run python -c "import tiktoken; tiktoken.get_encoding('o200k_base'); tiktoken.get_encoding('cl100k_base')"
+    uv run --no-project python -c "import tiktoken; tiktoken.get_encoding('o200k_base'); tiktoken.get_encoding('cl100k_base')"
 
 # Install JS/TS dependencies (sass, typescript, etc.) from the lockfile only,
 # so this layer is cached independently of unrelated source changes below.
