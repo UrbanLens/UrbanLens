@@ -80,6 +80,51 @@ describe("the global assistant overlay", () => {
         expect(() => document.dispatchEvent(keydown({ key: "?" }))).not.toThrow();
     });
 
+    test("focuses the composer once its body actually loads, not before", async () => {
+        // The real htmx.ajax swaps the fetched HTML into #assistant-overlay-body
+        // and then dispatches htmx:afterSwap - the stub here does the swap by
+        // hand and fires the same event, so this exercises the same listener
+        // the real integration relies on.
+        document.body.innerHTML = OVERLAY_MARKUP;
+        window.htmx = {
+            process: () => undefined,
+            trigger: () => undefined,
+            ajax: () => {
+                const body = document.getElementById("assistant-overlay-body") as HTMLElement;
+                body.innerHTML = '<input type="text" name="message">';
+                body.dispatchEvent(new Event("htmx:afterSwap", { bubbles: true }));
+            },
+        };
+        installGlobalAssistantOverlay();
+
+        openAssistantOverlay();
+
+        for (let attempt = 0; attempt < 200 && document.activeElement?.tagName !== "INPUT"; attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 1));
+        }
+        expect(document.activeElement).toBe(document.querySelector('input[name="message"]'));
+    });
+
+    test("installing twice does not double-register listeners", () => {
+        document.body.innerHTML = OVERLAY_MARKUP;
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        let keydownListeners = 0;
+        const original = document.addEventListener.bind(document);
+        document.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => {
+            if (type === "keydown") keydownListeners += 1;
+            return original(type, listener, options);
+        }) as typeof document.addEventListener;
+
+        try {
+            installGlobalAssistantOverlay();
+            installGlobalAssistantOverlay();
+        } finally {
+            document.addEventListener = original;
+        }
+
+        expect(keydownListeners).toBe(1);
+    });
+
     test("the floating button lifts above another floating control in the same corner", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
         const collider = document.createElement("div");

@@ -32,6 +32,7 @@ const FAB_COLLIDERS = [
 ];
 
 let bodyLoaded = false;
+let installed = false;
 
 function dialog(): HTMLDialogElement | null {
     return document.getElementById("assistant-overlay") as HTMLDialogElement | null;
@@ -47,22 +48,39 @@ function placeFab(): void {
     positionAboveColliders(btn, "--ul-assistant-fab-offset-y", FAB_COLLIDERS);
 }
 
+function focusComposer(dlg: HTMLDialogElement): void {
+    window.requestAnimationFrame(() => {
+        dlg.querySelector<HTMLInputElement>('input[name="message"]')?.focus();
+    });
+}
+
+/** Fetch the overlay's body exactly once. Focuses the composer once it lands - on a first
+ * open the composer doesn't exist yet at showModal() time, so openAssistantOverlay's own
+ * focus attempt would silently find nothing without this. */
 function loadBodyOnce(dlg: HTMLDialogElement): void {
     if (bodyLoaded) return;
     const url = dlg.dataset.overlayUrl;
     if (!url || !window.htmx) return;
     bodyLoaded = true;
+    const onSwap = (event: Event): void => {
+        if ((event.target as HTMLElement | null)?.id !== "assistant-overlay-body") return;
+        document.body.removeEventListener("htmx:afterSwap", onSwap);
+        focusComposer(dlg);
+    };
+    document.body.addEventListener("htmx:afterSwap", onSwap);
     window.htmx.ajax("GET", url, { target: "#assistant-overlay-body", swap: "innerHTML" });
 }
 
 export function openAssistantOverlay(): void {
     const dlg = dialog();
     if (!dlg) return;
+    const alreadyLoaded = bodyLoaded;
     loadBodyOnce(dlg);
     if (!dlg.open) dlg.showModal();
-    window.requestAnimationFrame(() => {
-        dlg.querySelector<HTMLInputElement>('input[name="message"]')?.focus();
-    });
+    // On a first open, loadBodyOnce's own htmx:afterSwap listener focuses the
+    // composer once it actually exists; focusing here too would just find
+    // nothing (the body is still the loading skeleton) and no-op.
+    if (alreadyLoaded) focusComposer(dlg);
 }
 
 function closeAssistantOverlay(): void {
@@ -87,12 +105,15 @@ function onClick(event: MouseEvent): void {
 /** Reset module state. Test-only. */
 export function resetAssistantOverlayForTests(): void {
     bodyLoaded = false;
+    installed = false;
     document.removeEventListener("keydown", onKeydown);
     document.removeEventListener("click", onClick);
     window.removeEventListener("resize", placeFab);
 }
 
 export function installGlobalAssistantOverlay(): void {
+    if (installed) return;
+    installed = true;
     document.addEventListener("keydown", onKeydown);
     document.addEventListener("click", onClick);
     window.addEventListener("resize", placeFab);
