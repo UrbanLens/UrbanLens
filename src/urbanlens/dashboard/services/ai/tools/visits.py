@@ -64,7 +64,7 @@ def _nearby_route(pin: Pin, context: ToolContext) -> bool:
     from urbanlens.dashboard.models.routes.model import Route
 
     point = Point(float(pin.location.longitude), float(pin.location.latitude), srid=4326)
-    return Route.objects.for_profile(context.profile).near_point(point, D(m=_NEARBY_ROUTE_METERS)).exists()
+    return Route.objects.for_profile(context.profile).passing_within(point, D(m=_NEARBY_ROUTE_METERS)).exists()
 
 
 class HaveIBeenHereArgs(BaseModel):

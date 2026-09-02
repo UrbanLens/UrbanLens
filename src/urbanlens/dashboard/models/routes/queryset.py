@@ -62,8 +62,12 @@ class RouteQuerySet(abstract.FrontendDashboardQuerySet):
         bbox.srid = 4326
         return self.filter(path__bboverlaps=bbox)
 
-    def near_point(self, point: Point, distance: Distance) -> Self:
+    def passing_within(self, point: Point, distance: Distance) -> Self:
         """Filter to routes whose path passes within ``distance`` of ``point``.
+
+        Named distinctly from ``PinQuerySet.near_point`` (a different signature -
+        a bare ``radius_km: float`` rather than a ``Distance``) so the two are
+        never mistaken for interchangeable proximity helpers.
 
         Args:
             point: The coordinate to test proximity against (SRID 4326).
