@@ -95,7 +95,7 @@ def get_task_progress(task_id: str) -> TaskProgress:
     return TaskProgress(task_id=task_id, state=state, current=current, total=total, percent=percent, message=message)
 
 
-def safely_enqueue_task(task: Any, *args: Any, countdown: int | None = None, queue: str | None = None, **kwargs: Any) -> AsyncResult | None:
+def safely_enqueue_task(task: Any, *args: Any, countdown: int | None = None, queue: str | None = None, expires: int | None = None, **kwargs: Any) -> AsyncResult | None:
     """Queue a Celery task with consistent logging and broker exception handling.
 
     Args:
@@ -103,6 +103,12 @@ def safely_enqueue_task(task: Any, *args: Any, countdown: int | None = None, que
         *args: Positional arguments passed to the task.
         countdown: Seconds to delay execution, if any.
         queue: Celery queue to dispatch to; None uses the task's default route.
+        expires: Seconds from now after which the broker should drop this task
+            unexecuted, rather than run it late. First-class (not part of
+            ``**kwargs``, which are task arguments, not ``apply_async``
+            options) for the assistant turn task: a turn whose caller has
+            already timed out and shown an error must not still execute and
+            spend a provider call minutes later once a worker slot frees up.
         **kwargs: Keyword arguments passed to the task.
 
     Returns:
@@ -114,6 +120,8 @@ def safely_enqueue_task(task: Any, *args: Any, countdown: int | None = None, que
             apply_kwargs["countdown"] = countdown
         if queue is not None:
             apply_kwargs["queue"] = queue
+        if expires is not None:
+            apply_kwargs["expires"] = expires
         return task.apply_async(args=args, kwargs=kwargs, **apply_kwargs)
     except (KombuError, ConnectionError, OSError, RuntimeError):
         logger.exception("Unable to enqueue Celery task %s", getattr(task, "name", task))

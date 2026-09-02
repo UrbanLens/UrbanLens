@@ -125,6 +125,20 @@ class SafelyEnqueueTaskTests(SimpleTestCase):
         self.assertEqual(safely_enqueue_task(task, 1, queue="panel_fetch"), "async-result")
         task.apply_async.assert_called_once_with(args=(1,), kwargs={}, queue="panel_fetch")
 
+    def test_uses_apply_async_with_expires(self) -> None:
+        # First-class, not folded into **kwargs: those are task arguments, not
+        # apply_async options - see the assistant turn task (batch 2c), the
+        # first caller that needs a stale turn dropped rather than run late.
+        task = mock.Mock()
+        task.apply_async.return_value = "async-result"
+        self.assertEqual(safely_enqueue_task(task, 1, expires=120), "async-result")
+        task.apply_async.assert_called_once_with(args=(1,), kwargs={}, expires=120)
+
+    def test_expires_omitted_when_not_given(self) -> None:
+        task = mock.Mock()
+        safely_enqueue_task(task, 1)
+        self.assertNotIn("expires", task.apply_async.call_args.kwargs)
+
     def test_returns_none_on_broker_exception(self) -> None:
         task = mock.Mock(name="broken_task")
         task.apply_async.side_effect = KombuError("broker down")
