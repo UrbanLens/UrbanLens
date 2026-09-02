@@ -14,6 +14,7 @@
 
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
+import { isTypingTarget } from "../shared/hotkeys";
 import { installUndoBar, registerLocalUndoProvider, syncUndoBar } from "../shared/undo-bar";
 import { PlanProjection, type Pt, distance, interiorPoint, pointInRing, projectOnSegment, rotate } from "../shared/floorplan/coords";
 import {
@@ -3068,7 +3069,7 @@ function boot(): void {
         // the Wall tool on its own "w". The old 1/2/3 keys never had this
         // problem (plan names rarely contain a digit), which is presumably
         // why it went unnoticed until letters were added alongside them.
-        const typing = !!(target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+        const typing = isTypingTarget(target);
 
         // Backtick, not Alt: Alt now means "take less" for a drag, and a key
         // that both detaches a wall and disables snapping is a key whose effect
@@ -3169,8 +3170,7 @@ function boot(): void {
         (raw) => {
             const event = raw as KeyboardEvent;
             if (!event.key.startsWith("Arrow") || !state.selection) return;
-            const target = event.target as HTMLElement | null;
-            if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+            if (isTypingTarget(event.target)) return;
             // A tenth of a metre by default and a whole one with Shift: fine
             // enough to close a gap, coarse enough to cross a room.
             const step = event.shiftKey ? 1 : 0.1;
