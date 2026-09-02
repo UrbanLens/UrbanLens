@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-import io
 import logging
 from typing import TYPE_CHECKING, ClassVar
 
@@ -21,8 +20,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Longest edge (px) of the downscaled copy sent to AI/classifier providers.
-AI_IMAGE_MAX_DIMENSION = 512
+# The copy's dimensions and format belong to the writer that produces it -
+# services.media.images.ANALYSIS_THUMBNAIL_MAX_DIMENSION. Nothing here needs
+# the number: this module reads whatever the sandbox already wrote.
 #: Keywords stored per provider per image; extras are dropped by confidence.
 MAX_KEYWORDS_PER_SOURCE = 30
 
@@ -84,41 +84,36 @@ class PhotoKeywordProvider(ABC):
         raise NotImplementedError
 
 
-def downscaled_jpeg_bytes(image: Image, max_dimension: int = AI_IMAGE_MAX_DIMENSION) -> bytes | None:
-    """Produce a small JPEG copy of an image for AI/classifier calls.
+def analysis_jpeg_bytes(image: Image) -> bytes | None:
+    """The stored 512px JPEG copy of ``image``, for AI/classifier providers.
 
-    Never sends full-resolution uploads to external services: the copy is
-    capped at ``max_dimension`` on its longest edge and re-encoded as a
-    quality-80 JPEG.
+    Reads bytes; never parses them. That is the whole point of this function
+    existing instead of a downscale-on-demand: keywording runs on the ordinary
+    Celery worker, which holds REData, OAuth and database credentials and sits
+    on a network with full egress. Handing an uploaded file to Pillow there -
+    which is what this used to do - would put a decoder exploit exactly where
+    ``media-worker`` exists to keep it out of. The decode happens once, in the
+    sandbox, in ``services.media.images.write_image_analysis_thumbnail``.
 
     Args:
-        image: The Image row whose stored file to downscale.
-        max_dimension: Longest-edge cap in pixels.
+        image: The Image row whose analysis copy to read.
 
     Returns:
-        JPEG bytes, or None when the stored file is missing or unreadable.
+        JPEG bytes, or None when the row has no analysis copy yet or the file
+        cannot be read. A None here means "skip this photo", never "decode it
+        yourself": ``backfill_image_analysis_thumbnails`` writes the missing
+        copy and re-enqueues keywording.
     """
-    from PIL import Image as PILImage
-
-    if not image.image:
+    if not image.analysis_thumbnail:
+        logger.info("Image %s has no analysis copy yet; skipping keyword generation until the backfill writes one", image.pk)
         return None
     try:
-        with image.image.open("rb") as stored_file:
-            img: PILImage.Image = PILImage.open(stored_file)
-            img.load()
-    except (OSError, ValueError, PILImage.DecompressionBombError) as exc:
-        # DecompressionBombError inherits from Exception, not OSError, so it is not
-        # covered by the other two - and PILImage.open() raises it on the header,
-        # before any decode. Without it a single oversized upload aborts keywording.
-        logger.warning("Could not read image %s for keyword downscale: %s", image.pk, exc)
+        with image.analysis_thumbnail.open("rb") as stored_file:
+            data: bytes = stored_file.read()
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not read the analysis copy for image %s: %s", image.pk, exc)
         return None
-
-    img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
-    if img.mode not in ("RGB", "L"):
-        img = img.convert("RGB")
-    buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=80)
-    return buffer.getvalue()
+    return data or None
 
 
 def normalize_keywords(candidates: list[KeywordResult]) -> list[KeywordResult]:

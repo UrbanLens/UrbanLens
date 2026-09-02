@@ -209,10 +209,13 @@ class GalleryMediaApiPayloadTests(TestCase):
     def test_items_serialize_field_for_field(self) -> None:
         """Every MediaItem field survives the trip to JSON.
 
-        ``content_type`` is included even when the provider publishes none: an
-        API client deciding whether it can render an item needs to see the
-        field as empty rather than have to guess whether its absence means
-        "unknown format" or "this server predates the field".
+        ``content_type`` and ``author`` are included even when the provider
+        publishes neither: an API client deciding whether it can render an
+        item needs to see the field as empty rather than have to guess
+        whether its absence means "unknown" or "this server predates the
+        field". Asserting the whole dict field-for-field (rather than a
+        subset) is what makes adding a MediaItem field without deciding how
+        it serializes a test failure.
         """
         item = {
             "url": "https://example.test/a.jpg",
@@ -221,6 +224,7 @@ class GalleryMediaApiPayloadTests(TestCase):
             "source": "Smithsonian",
             "page_url": "https://example.test/a",
             "content_type": "",
+            "author": "",
         }
         LocationCache.set(self.pin.location, self.source.cache_source, {"items": [item]}, query_key="q")
         payload = self.source.api_payload(self.pin)

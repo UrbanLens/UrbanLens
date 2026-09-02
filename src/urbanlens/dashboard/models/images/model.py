@@ -141,6 +141,19 @@ def pin_image_marker_thumbnail_path(instance: Image, filename: str) -> str:
     return f"pin_images/markers/{_random_upload_dir()}/{stem[:100]}{ext[:_UPLOAD_EXT_LIMIT]}"
 
 
+@declares_media_family("pin_images")
+def pin_image_analysis_thumbnail_path(instance: Image, filename: str) -> str:
+    """Storage path for an Image's 512px JPEG copy, the one sent to vision models.
+
+    Same rules as :func:`pin_image_thumbnail_path`, under an ``analysis/``
+    prefix. See :func:`urbanlens.dashboard.services.media.images.write_image_analysis_thumbnail`
+    for where *filename* (``<stem>-analysis.jpg``) comes from, and why this is
+    a separate file rather than a reuse of the grid thumbnail.
+    """
+    stem, ext = posixpath.splitext(filename)
+    return f"pin_images/analysis/{_random_upload_dir()}/{stem[:100]}{ext[:_UPLOAD_EXT_LIMIT]}"
+
+
 class ImageSource(TextChoices):
     """Where a photo originated - drives the Media section's per-source tabs.
 
@@ -243,6 +256,14 @@ class Image(abstract.FrontendDashboardModel):
     # wasted bandwidth on every photo a map page rendered. Same lazy-backfill
     # shape as `thumbnail`; :attr:`marker_thumb_url` falls back through it.
     marker_thumbnail = ImageField(upload_to=pin_image_marker_thumbnail_path, max_length=255, null=True, blank=True)
+    # The copy handed to vision models and the image classifier. Written in
+    # the sandbox worker alongside the two thumbnails above, so that the only
+    # process decoding an upload stays the one built to survive a decoder
+    # exploit - see docs/MEDIA_PIPELINE.md and services.photos.photo_keywords.
+    # Deliberately its own file rather than a reuse of `thumbnail`: that one is
+    # WebP because that is right for the grid, and its size/format are the UI's
+    # to change, whereas this one's are a provider-compatibility decision.
+    analysis_thumbnail = ImageField(upload_to=pin_image_analysis_thumbnail_path, max_length=255, null=True, blank=True)
     # The upload's true filename (e.g. "PXL_20260709_123456.jpg" or a scan's own
     # title), captured in `save()` before the stored file is renamed to an
     # opaque token - see `pin_image_upload_path`. A device/app auto-generated

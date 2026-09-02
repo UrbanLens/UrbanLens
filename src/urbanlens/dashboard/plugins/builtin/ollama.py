@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, PhotoKeywordProvider, downscaled_jpeg_bytes
+from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, PhotoKeywordProvider, analysis_jpeg_bytes
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -54,7 +54,7 @@ class OllamaVisionKeywordProvider(PhotoKeywordProvider):
         """
         from urbanlens.dashboard.services.apis.ai.ollama import OllamaGateway
 
-        small = downscaled_jpeg_bytes(image)
+        small = analysis_jpeg_bytes(image)
         if small is None:
             return []
         return [KeywordResult(keyword=keyword) for keyword in OllamaGateway().describe_photo_keywords(small)]

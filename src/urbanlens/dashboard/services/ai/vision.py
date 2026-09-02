@@ -8,10 +8,10 @@ is the sandbox: like every other provider call in this app, they go through
 holding provider API keys. Nothing in this module builds a provider client or
 reads a provider credential - see ``docs/AI_PIPELINE.md``.
 
-Callers pass an already-downscaled image
-(``photo_keywords.downscaled_jpeg_bytes``, 512px longest edge) - never
-full-resolution uploads. ``urbanlens_ai.policy.MAX_IMAGE_BYTES`` is the
-backstop if one forgets.
+Callers pass the stored 512px copy the sandbox already wrote
+(``photo_keywords.analysis_jpeg_bytes``), never a full-resolution upload and
+never bytes this process decoded itself. ``urbanlens_ai.policy.MAX_IMAGE_BYTES``
+is the backstop if a caller forgets.
 
 Every call is recorded via ``rate_limiter.log_api_call`` and respects the
 admin-configurable per-service limits, with a running cost estimate logged

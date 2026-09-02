@@ -701,6 +701,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
         extract_source_url,
         extract_taken_at,
         is_camera_generated_filename,
+        write_image_analysis_thumbnail,
         write_image_marker_thumbnail,
         write_image_thumbnail,
     )
@@ -866,6 +867,15 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
     except (OSError, ValueError, PILDecompressionBombError) as exc:
         # A miss here is retried by the hourly backfill_image_marker_thumbnails sweep
         logger.warning("Marker thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
+
+    try:
+        if write_image_analysis_thumbnail(image):
+            update_fields["analysis_thumbnail"] = image.analysis_thumbnail.name
+    except (OSError, ValueError, PILDecompressionBombError) as exc:
+        # A miss here is retried by the hourly backfill_image_analysis_thumbnails
+        # sweep. Keywording skips a photo that has no analysis copy rather than
+        # decoding one itself - see services.photos.photo_keywords.
+        logger.warning("Analysis thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
 
     return _UploadProcessResult(update_fields, coords, new_stored_size)
 
@@ -1611,6 +1621,91 @@ def backfill_image_marker_thumbnails(limit: int | None = None) -> int:
     cache.set(_MARKER_THUMBNAIL_BACKFILL_CURSOR_KEY, ids[-1], _MARKER_THUMBNAIL_BACKFILL_CURSOR_TTL)
     safely_enqueue_task(generate_image_marker_thumbnails, ids)
     logger.info("Marker thumbnail backfill queued %d photo(s) after pk %s", len(ids), cursor)
+    return len(ids)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
+def generate_image_analysis_thumbnails(image_ids: list[int]) -> int:
+    """Fill in missing analysis copies for already-stored photos.
+
+    The analysis-copy mirror of :func:`generate_image_thumbnails`. It matters
+    more than the display-thumbnail sweeps: keywording refuses to decode an
+    upload itself, so a photo with no analysis copy gets no AI keywords until
+    this runs. Re-enqueues keywording for every row it fixes, so a write that
+    failed during upload still ends in keywords rather than needing a manual
+    sweep.
+
+    Args:
+        image_ids: Primary keys of :class:`~urbanlens.dashboard.models.images.model.Image` rows.
+
+    Returns:
+        How many analysis copies were written.
+    """
+    from PIL.Image import DecompressionBombError as PILDecompressionBombError
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.images import write_image_analysis_thumbnail
+
+    written = 0
+    for image in Image.objects.filter(pk__in=image_ids, media_type=MediaKind.PHOTO):
+        try:
+            if not write_image_analysis_thumbnail(image):
+                continue
+        except (OSError, ValueError, PILDecompressionBombError) as exc:
+            logger.warning("Analysis thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
+            continue
+        image.save(update_fields=["analysis_thumbnail", "updated"])
+        written += 1
+        # Same gate process_image_upload applies - a profile-less row has no
+        # uploader who opted in, and keywording it would spend a billed call
+        # nobody asked for.
+        if image.profile is not None and image.profile.generate_photo_keywords:
+            safely_enqueue_task(generate_image_keywords, image.pk)
+    return written
+
+
+#: Cache key for the exclusive pk cursor :func:`backfill_image_analysis_thumbnails` walks.
+_ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_KEY = "image-analysis-thumbnail-backfill-cursor"
+#: Long enough that a beat outage does not restart a half-finished walk at pk 0.
+_ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
+
+
+@shared_task
+def backfill_image_analysis_thumbnails(limit: int | None = None) -> int:
+    """Queue analysis-copy generation for photos that still lack one.
+
+    The analysis-copy mirror of :func:`backfill_image_thumbnails` - see its
+    docstring for the walk/cursor behaviour, which this copies exactly. This
+    is also what backfills the library for the field's own introduction: every
+    photo uploaded before it existed has no analysis copy and therefore no AI
+    keywords until this sweep reaches it.
+
+    Args:
+        limit: Override the default batch size. Beat does not pass this;
+            tests do.
+
+    Returns:
+        How many image ids were queued (0 when the library is caught up, or
+        this tick only reset the cursor).
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.images import THUMBNAIL_BACKFILL_BATCH, photos_missing_analysis_thumbnails
+
+    batch = THUMBNAIL_BACKFILL_BATCH if limit is None else max(1, limit)
+    cursor = int(cache.get(_ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_KEY) or 0)
+    ids = photos_missing_analysis_thumbnails(after_pk=cursor, limit=batch)
+    if not ids:
+        if cursor:
+            cache.delete(_ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_KEY)
+            logger.info("Analysis thumbnail backfill wrapped; next tick resumes from the start")
+        return 0
+
+    cache.set(_ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_KEY, ids[-1], _ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_TTL)
+    safely_enqueue_task(generate_image_analysis_thumbnails, ids)
+    logger.info("Analysis thumbnail backfill queued %d photo(s) after pk %s", len(ids), cursor)
     return len(ids)
 
 

@@ -32,9 +32,10 @@ class ImagePart(BaseModel):
     allowlist carries provider hosts and nothing else). The caller reads the
     image itself and sends the bytes inline.
 
-    Callers must send an already-downscaled image
-    (``services.photos.photo_keywords.downscaled_jpeg_bytes`` caps the longest
-    edge at 512px), never a full-resolution upload -
+    Callers must send an already-downscaled image - in this app, the copy
+    the sandbox tier wrote at upload time and
+    ``services.photos.photo_keywords.analysis_jpeg_bytes`` reads back (512px
+    longest edge), never a full-resolution upload.
     :data:`~urbanlens_ai.policy.MAX_IMAGE_BYTES` is the backstop for when
     they don't.
     """

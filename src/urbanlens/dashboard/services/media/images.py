@@ -1158,6 +1158,118 @@ def write_image_marker_thumbnail(image: Image, *, max_dimension: int = MARKER_TH
     return True
 
 
+#: Longest edge of the copy handed to vision models and the image classifier
+#: (:func:`write_image_analysis_thumbnail`). Matches what OpenAI's ``detail:
+#: "low"`` mode actually consumes and is well above ResNet-50's 224px input,
+#: so sending more would cost tokens and bytes without telling a model
+#: anything extra.
+ANALYSIS_THUMBNAIL_MAX_DIMENSION = 512
+
+#: JPEG rather than the WebP the two display thumbnails use, deliberately.
+#: Cloudflare Workers AI is the default vision provider and the only source of
+#: the image classifier, and it takes a bare byte array with no format
+#: negotiation or documented format list; JPEG is the one encoding every
+#: provider accepts. Keeping this separate from ``thumbnail`` also means the
+#: grid thumbnail's size and format stay the UI's to change without silently
+#: changing what a model sees or what a classifier scores.
+_ANALYSIS_THUMBNAIL_QUALITY = 80
+
+
+def photos_missing_analysis_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKFILL_BATCH) -> list[int]:
+    """Primary keys of photos that still need an analysis copy.
+
+    Same shape as :func:`photos_missing_thumbnails` - new uploads get one
+    inside ``process_image_upload``; this is for the periodic backfill that
+    catches rows uploaded before the field existed, and rows whose write
+    failed.
+
+    Args:
+        after_pk: Exclusive lower bound, so a sweep can walk the table in
+            batches without retrying the same unprocessable rows every tick.
+        limit: Maximum ids to return.
+
+    Returns:
+        Image primary keys, ascending.
+    """
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+    qs = Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(analysis_thumbnail="") | Q(analysis_thumbnail__isnull=True)).order_by("pk")
+    if after_pk:
+        qs = qs.filter(pk__gt=after_pk)
+    return list(qs.values_list("pk", flat=True)[:limit])
+
+
+@untrusted_parse("image.decode")
+def write_image_analysis_thumbnail(image: Image, *, max_dimension: int = ANALYSIS_THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
+    """Write a 512px JPEG into ``image.analysis_thumbnail`` for vision models.
+
+    This exists so that nothing outside the sandbox tier ever has to decode an
+    upload. Photo keywording and classification used to call Pillow themselves
+    from an ordinary Celery worker - one holding REData, OAuth and database
+    credentials, on a network with full egress - which is exactly the foothold
+    ``media-worker`` exists to deny a decoder exploit. The decode happens here,
+    under ``@untrusted_parse``, and the consumer reads the stored bytes
+    (``services.photos.photo_keywords.analysis_jpeg_bytes``) without a parser.
+
+    Leaves the stored original and both display thumbnails alone. The caller
+    persists the row.
+
+    Args:
+        image: The Image row whose original to downscale.
+        max_dimension: Longest-edge cap in pixels.
+        force: Replace an existing analysis copy. Default skips rows that
+            already have one, so a retry of the upload-processing task is a
+            no-op.
+
+    Returns:
+        True when an analysis copy was written.
+
+    Raises:
+        OSError: When the original cannot be read from or the copy written to
+            storage.
+    """
+    from urbanlens.dashboard.models.images.model import MediaKind
+
+    if image.media_type != MediaKind.PHOTO:
+        return False
+    if image.analysis_thumbnail and not force:
+        return False
+    old_name = image.image.name if image.image else ""
+    if not old_name:
+        return False
+    with image.image.open("rb") as stored_file:
+        img: PILImage.Image = PILImage.open(stored_file)
+        img.load()
+        img = ImageOps.exif_transpose(img) or img
+
+    img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
+    # JPEG has no alpha channel, so a transparent source must be flattened
+    # rather than converted - RGBA -> RGB alone raises for some modes and
+    # renders transparency as black for the rest.
+    if img.mode in ("RGBA", "LA", "P"):
+        img = img.convert("RGBA")
+        background = PILImage.new("RGB", img.size, (255, 255, 255))
+        background.paste(img, mask=img.split()[-1])
+        img = background
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+
+    buffer = io.BytesIO()
+    img.save(buffer, format="JPEG", quality=_ANALYSIS_THUMBNAIL_QUALITY)
+
+    from django.core.files.base import ContentFile
+
+    stem = posixpath.splitext(posixpath.basename(old_name))[0]
+    previous = image.analysis_thumbnail.name if image.analysis_thumbnail else ""
+    image.analysis_thumbnail.save(f"{stem}-analysis.jpg", ContentFile(buffer.getvalue()), save=False)
+    if previous and previous != image.analysis_thumbnail.name and not file_still_referenced("analysis_thumbnail", previous, exclude_pks=[image.pk]):
+        with contextlib.suppress(OSError):
+            image.analysis_thumbnail.storage.delete(previous)
+    return True
+
+
 def compute_checksum(image_file: IO[bytes]) -> str:
     """Compute the SHA-256 hex digest of an uploaded image file.
 

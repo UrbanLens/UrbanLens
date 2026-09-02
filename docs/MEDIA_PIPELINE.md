@@ -172,6 +172,45 @@ re-encoding; polyglot tricks stop working because the container is rebuilt.
 Video goes through ffmpeg for the same reason, and always has its container
 location tags stripped.
 
+### 3b. Derived copies
+
+Three smaller copies are written from the original, all in the sandbox worker,
+all under `@untrusted_parse`, all stored as ordinary `ImageField`s in the
+`pin_images` media family - so the media origin serves them under the same
+authorization, caching and header rules as the full-size file:
+
+| field | size | format | for |
+|---|---|---|---|
+| `thumbnail` | 400px | WebP | grid display |
+| `marker_thumbnail` | 88px | WebP | map markers |
+| `analysis_thumbnail` | 512px | JPEG | vision models and the image classifier |
+
+`analysis_thumbnail` is the one with a security reason to exist rather than a
+display one. Photo keywording runs on the *ordinary* Celery worker -
+`generate_image_keywords` declares no queue, and legitimately so: it makes a
+network call to a provider, which is not work for a sandbox container. But it
+used to build its 512px copy by calling Pillow on the stored upload, which put
+an image decoder in the process holding REData, OAuth and database credentials
+on a network with full egress. That is precisely the foothold this whole
+pipeline exists to deny.
+
+So the decode moved here, and the consumer
+(`services.photos.photo_keywords.analysis_jpeg_bytes`) now only *reads* bytes.
+A photo with no analysis copy is **skipped**, never decoded on demand - the
+fallback would silently reintroduce the hole. `backfill_image_analysis_thumbnails`
+writes the missing copy in the sandbox and re-enqueues keywording, which is
+also how the library is backfilled for photos uploaded before the field
+existed. `test_photo_keyword_sandboxing.py` asserts the property transitively:
+every *task* that can reach the decode, through any depth of helper, must
+declare `queue=SANDBOX_QUEUE`.
+
+It is a separate file rather than a reuse of `thumbnail` because the two are
+answerable to different things. The grid thumbnail is WebP at 400px because
+that is right for the UI, and the UI must stay free to change it; Cloudflare
+Workers AI - the default vision provider, and the only source of the
+classifier - takes a bare byte array with no format negotiation, and JPEG is
+the one encoding every provider accepts.
+
 ### 4. The media origin
 
 Uploads are served from `media.urbanlens.org`, an origin with no session

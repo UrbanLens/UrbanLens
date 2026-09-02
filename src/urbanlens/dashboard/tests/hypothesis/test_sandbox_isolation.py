@@ -44,6 +44,11 @@ EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
         "process_image_upload",
         "generate_image_thumbnails",
         "generate_image_marker_thumbnails",
+        # The 512px JPEG vision models and the classifier read. Here, not on
+        # the default queue with the keywording task that consumes it: that
+        # task holds REData/OAuth/DB credentials and has full egress, so the
+        # decode must not happen in it. See test_photo_keyword_sandboxing.py.
+        "generate_image_analysis_thumbnails",
         "render_media_preview",
         "scan_comment_image",
         "scan_trip_comment_image",

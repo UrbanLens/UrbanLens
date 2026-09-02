@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, PhotoKeywordProvider, downscaled_jpeg_bytes
+from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, PhotoKeywordProvider, analysis_jpeg_bytes
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -170,7 +170,7 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
         """
         from urbanlens.dashboard.services.ai.vision import describe_photo_keywords
 
-        small = downscaled_jpeg_bytes(image)
+        small = analysis_jpeg_bytes(image)
         if small is None:
             return []
         return [KeywordResult(keyword=keyword) for keyword in describe_photo_keywords(small)]
@@ -238,7 +238,7 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
         """
         from urbanlens.dashboard.services.ai.vision import classify_photo
 
-        small = downscaled_jpeg_bytes(image)
+        small = analysis_jpeg_bytes(image)
         if small is None:
             return []
         results: list[KeywordResult] = []

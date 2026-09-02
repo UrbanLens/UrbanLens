@@ -507,6 +507,15 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.backfill_image_marker_thumbnails",
         "schedule": crontab(minute=34),
     },
+    # Same shape again, for the 512px copy vision models and the classifier
+    # read. This one is not cosmetic the way the other two are: keywording
+    # refuses to decode an upload itself, so a photo with no analysis copy
+    # gets no AI keywords until this sweep writes one and re-enqueues it.
+    # Offset off both other sweeps.
+    "image-analysis-thumbnail-backfill": {
+        "task": "urbanlens.dashboard.tasks.backfill_image_analysis_thumbnails",
+        "schedule": crontab(minute=19),
+    },
     # Daily is plenty: retention is measured in hundreds of days
     # (services.pins.pin_sync.TOMBSTONE_RETENTION), and the pins/deleted/ feed's 410
     # full-resync signal guards clients against any pruning-induced gap.
