@@ -181,6 +181,38 @@ class AssistantTurnPollTests(_AssistantApiTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("expired", response.json()["reply"])
 
+    def test_polling_a_resolved_turn_again_returns_the_same_reply(self) -> None:
+        # A GET must be idempotent. The first poll to see SUCCESS clears the
+        # Celery result (AsyncResult.forget), so a client that retries -
+        # because it lost the response, or simply because its poll loop asks
+        # again - would otherwise find the task id unknown (Celery reports
+        # PENDING) and be told to keep waiting for a reply it can never get.
+        turn_id = self._start_turn("hi", history=[])
+        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Hi there!", "actions": []})
+        with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=progress):
+            first = self._poll(turn_id)
+        self.assertEqual(first.status_code, 200, first.content)
+
+        forgotten = TaskProgress(task_id="task-abc-123", state="PENDING")
+        with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=forgotten) as backend:
+            second = self._poll(turn_id)
+        self.assertEqual(second.status_code, 200, second.content)
+        self.assertEqual(second.json(), first.json())
+        backend.assert_not_called()
+
+    def test_polling_a_failed_turn_again_returns_the_same_error(self) -> None:
+        turn_id = self._start_turn()
+        progress = TaskProgress(task_id="task-abc-123", state="FAILURE", error="boom")
+        with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=progress):
+            first = self._poll(turn_id)
+
+        forgotten = TaskProgress(task_id="task-abc-123", state="PENDING")
+        with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=forgotten) as backend:
+            second = self._poll(turn_id)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json(), first.json())
+        backend.assert_not_called()
+
     def test_exhausted_attempts_gives_up_gracefully(self) -> None:
         turn_id = self._start_turn()
         response = self._poll(turn_id, attempt=10_000)

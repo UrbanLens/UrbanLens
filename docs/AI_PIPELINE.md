@@ -72,14 +72,37 @@ inference through the wrong tier.
 
 `egress-proxy` (tinyproxy, default-deny) is the **only** member of
 `ai_egress_network` - the one network in this whole tier with a real gateway
-to the internet. `ai_network` (app ↔ ai-worker's DB/cache access aside,
-ai-worker ↔ egress-proxy) and `inference_network` (ai-worker/ai-inference ↔
-egress-proxy) are both `internal: true`: no gateway, no NAT, so the *only*
-route either tier has off its network is through the proxy's allowlist -
-regardless of what a tool handler, a misconfigured env var, or a future bug
-tries to reach. The allowlist is exactly the hosts a shipped tool or
-provider adapter calls (provider API hosts, OSRM, Open-Meteo/OpenWeatherMap).
-REData is not on it, deliberately - see below.
+to the internet. Every other network here is `internal: true`: no gateway, no
+NAT, so the *only* route any of these containers has off its network is
+through the proxy's allowlist - regardless of what a tool handler, a
+misconfigured env var, or a future bug tries to reach. The allowlist is
+exactly the hosts a shipped tool or provider adapter calls (provider API
+hosts, OSRM, Open-Meteo/OpenWeatherMap). REData is not on it, deliberately -
+see below.
+
+The proxy reaches its clients over `proxy_network` and joins nothing else.
+That separation is deliberate and worth keeping: the proxy is the one process
+in this tier that parses bytes from the public internet, so it is the most
+likely thing here to be compromised. Putting it on `ai_network` (db, valkey)
+or `inference_network` (app, celery-worker) would mean a tinyproxy bug landed
+an attacker on a network with a datastore on it - turning the component that
+exists to *contain* egress into a route inward. `proxy_network` holds exactly
+egress-proxy, ai-worker and ai-inference, so a foothold in the proxy reaches
+only the two containers that were already allowed to call it.
+
+| network | `internal` | members |
+|---|---|---|
+| `ai_network` | yes | db, valkey, ai-worker |
+| `inference_network` | yes | app, celery-worker, ai-worker, ai-inference |
+| `proxy_network` | yes | egress-proxy, ai-worker, ai-inference |
+| `ai_egress_network` | **no** | egress-proxy |
+
+One fragility to know about: a container's default route comes from the first
+network it attaches to, and Compose orders equal-priority networks by name.
+`ai_egress_network` sorts before `proxy_network`, which is what gives the
+proxy its route out. Renaming either - or adding a third proxy network that
+sorts earlier - would silently cut the proxy's egress, and every AI call with
+it.
 
 ## "No REData, no web", enforced at three levels
 
@@ -251,6 +274,21 @@ section for the wire-level request/response shapes on both surfaces.
   Cloudflare clients directly on `app`, outside `ai-inference` - a second
   provider-key surface on the regular worker, tracked as a deliberate
   residual until it's moved behind `POST /v1/vision`.
+- **Provider keys still reach `app` via `env_file`.** `x-app-env` no longer
+  names `UL_ANTHROPIC_API_KEY`, but `app` and `celery-worker` still load the
+  whole host `.env` (`env_file: [{path: .env, required: false}]`), and that
+  file must define the key because Compose interpolates
+  `${UL_ANTHROPIC_API_KEY}` into `ai-inference`'s own environment from it. So
+  those two containers still *have* every provider key, next to the DB
+  credentials - the "provider keys never sit beside DB creds" property holds
+  today only for `ai-worker` and `ai-inference`, which take no `env_file` at
+  all. Closing it means moving the provider keys out of `.env` into an
+  AI-only env file that only `ai-inference` reads, which is a coordinated
+  deployment change (every environment must create that file before the
+  compose change lands, or `ai-inference` starts with no credentials) and is
+  gated on the vision migration above, since `vision.py` genuinely still
+  needs the OpenAI/Cloudflare keys on `app`. `test_ai_isolation.py` asserts
+  both halves of this so the gap stays visible rather than reading as done.
 - **Read-only Postgres role for `ai-worker`**: the only write the loop
   performs today is `log_api_call`; moving that to a default-queue task
   would let `ai-worker`'s DB role be read-only.

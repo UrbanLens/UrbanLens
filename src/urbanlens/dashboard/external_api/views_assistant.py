@@ -34,15 +34,18 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.services.ai.access import assistant_available
 from urbanlens.dashboard.services.ai.assistant import MAX_HISTORY_ENTRIES
 from urbanlens.dashboard.services.ai.turns import (
+    FAILED_TURN_RESULT,
     MAX_POLL_ATTEMPTS,
     acquire_turn_lock,
     claim_turn_proposal,
     new_turn_id,
     read_turn_proposal,
     read_turn_record,
+    read_turn_result,
     release_turn_lock,
     store_turn_proposals,
     store_turn_record,
+    store_turn_result,
     turn_poll_delay,
 )
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
@@ -91,6 +94,35 @@ def _poll_attempt(request: Request) -> int:
         return max(int(request.query_params.get("attempt", "0")), 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _finished_result(task_id: str, turn_id: str) -> dict[str, Any] | None:
+    """This turn's task result if it has finished, else ``None`` (still running).
+
+    Reads the turn-result cache before the Celery backend, so polling a
+    resolved turn again returns the same reply instead of reporting it
+    pending forever - see ``services.ai.turns.store_turn_result``. That
+    matters more here than on the web: a ``GET`` an HTTP client retries
+    (because it lost the response, or because its poll loop simply asks
+    again) must not consume the reply the first call already fetched.
+    """
+    cached = read_turn_result(turn_id)
+    if cached is not None:
+        return cached
+
+    progress = get_task_progress(task_id)
+    if progress.state == "SUCCESS":
+        result = progress.result if isinstance(progress.result, dict) else {}
+    elif progress.state in {"FAILURE", "REVOKED"}:
+        result = FAILED_TURN_RESULT
+    else:
+        return None
+
+    from celery.result import AsyncResult
+
+    store_turn_result(turn_id, result)
+    AsyncResult(task_id).forget()
+    return result
 
 
 def _api_proposals(proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -172,26 +204,18 @@ class AssistantTurnPollView(ExternalApiView):
         if attempt >= MAX_POLL_ATTEMPTS:
             return Response(AssistantMessageResponseSerializer({"reply": _GAVE_UP_REPLY, "actions": [], "history": _resolved_history(turn_id, _GAVE_UP_REPLY)}).data)
 
-        progress = get_task_progress(record["task_id"])
-        if progress.state == "SUCCESS":
-            from celery.result import AsyncResult
+        result = _finished_result(record["task_id"], turn_id)
+        if result is None:
+            return Response(AssistantTurnPendingSerializer({"ready": False, "poll_after_seconds": turn_poll_delay(attempt)}).data, status=202)
 
-            result = progress.result if isinstance(progress.result, dict) else {}
-            reply = result.get("reply", "")
-            proposals = result.get("proposals") or []
-            if proposals:
-                store_turn_proposals(turn_id, profile_id=profile.pk, proposals=proposals)
-            response = Response(AssistantMessageResponseSerializer({"reply": reply, "actions": result.get("actions", []), "proposals": _api_proposals(proposals), "history": _resolved_history(turn_id, reply)}).data)
-            AsyncResult(record["task_id"]).forget()
-            return response
-        if progress.state in {"FAILURE", "REVOKED"}:
-            from celery.result import AsyncResult
+        if result.get("failed"):
+            return Response(AssistantMessageResponseSerializer({"reply": _EXPIRED_REPLY, "actions": [], "history": _resolved_history(turn_id, _EXPIRED_REPLY)}).data)
 
-            response = Response(AssistantMessageResponseSerializer({"reply": _EXPIRED_REPLY, "actions": [], "history": _resolved_history(turn_id, _EXPIRED_REPLY)}).data)
-            AsyncResult(record["task_id"]).forget()
-            return response
-
-        return Response(AssistantTurnPendingSerializer({"ready": False, "poll_after_seconds": turn_poll_delay(attempt)}).data, status=202)
+        reply = result.get("reply", "")
+        proposals = result.get("proposals") or []
+        if proposals:
+            store_turn_proposals(turn_id, profile_id=profile.pk, proposals=proposals)
+        return Response(AssistantMessageResponseSerializer({"reply": reply, "actions": result.get("actions", []), "proposals": _api_proposals(proposals), "history": _resolved_history(turn_id, reply)}).data)
 
 
 class AssistantProposalConfirmView(ExternalApiView):

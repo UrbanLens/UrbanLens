@@ -853,10 +853,9 @@ services:
     tmpfs:
       - /var/run/tinyproxy:size=1m,mode=1777,noexec,nosuid,nodev
     networks:
-      ai_network:
-        aliases:
-          - urbanlens_egress_proxy
-      inference_network:
+      # Its clients only - deliberately not ai_network/inference_network,
+      # where db/valkey/app/celery-worker sit. See proxy_network's own comment.
+      proxy_network:
         aliases:
           - urbanlens_egress_proxy
       ai_egress_network: {}
@@ -915,6 +914,8 @@ services:
       inference_network:
         aliases:
           - urbanlens_ai_inference
+      # egress-proxy, its only route to a provider API.
+      proxy_network: {}
     # No env_file - see the plan's credentials matrix: this is the one
     # container that must never see the host's full .env.
     environment:
@@ -998,12 +999,13 @@ services:
     volumes:
       - logs:/var/log/urbanlens
     networks:
-      # db/valkey, and egress-proxy for outbound tool calls (OSRM, weather).
+      # db and valkey.
       - ai_network
       # ai-inference itself - a direct membership, not routed through the
-      # proxy. egress-proxy also sits here, but only for its own outbound
-      # egress; this worker resolves ai-inference by same-network DNS.
+      # proxy; this worker resolves ai-inference by same-network DNS.
       - inference_network
+      # egress-proxy, for outbound tool calls (OSRM, weather).
+      - proxy_network
     # No env_file - see x-ai-env's own comment.
     environment:
       <<: *ai-env
@@ -1156,19 +1158,34 @@ networks:
     internal: true
     enable_ipv6: false
 
-  # ai-inference/ai-worker <-> egress-proxy. `internal: true` for the same
-  # reason as sandbox_network: no gateway, no NAT, so this network's only
-  # route to the internet is through the proxy sitting on it - nothing here
-  # can reach anything the proxy's filter doesn't allow, regardless of what a
-  # provider SDK, a misconfigured env var, or a future bug tries to do.
+  # ai-worker/celery-worker/app <-> ai-inference. `internal: true` for the same
+  # reason as sandbox_network: no gateway, no NAT. This is a call path between
+  # our own services only - the proxy is deliberately NOT here (see
+  # proxy_network).
   inference_network:
+    driver: bridge
+    internal: true
+    enable_ipv6: false
+
+  # The proxy's clients reach it here, and nowhere else. egress-proxy is the
+  # one process in this tier that parses bytes from the public internet, so it
+  # gets a network shared with exactly the two containers that must call it
+  # (ai-worker, ai-inference) rather than joining ai_network/inference_network,
+  # where db, valkey, app and celery-worker live: a bug in the proxy is then a
+  # foothold with nothing reachable behind it, which is the whole point of
+  # putting a proxy here. `internal: true` - the proxy's own route out is
+  # ai_egress_network, not this one.
+  proxy_network:
     driver: bridge
     internal: true
     enable_ipv6: false
 
   # The one network with a real gateway in this tier - egress-proxy is its
   # only member, so it is the sole thing in the whole AI sandbox with a route
-  # to the internet at all.
+  # to the internet at all. Sorts first alphabetically among egress-proxy's
+  # networks, which is what makes its gateway the container's default route;
+  # renaming it or adding a proxy network that sorts earlier would silently
+  # cut the proxy's own egress.
   ai_egress_network:
     driver: bridge
     enable_ipv6: false

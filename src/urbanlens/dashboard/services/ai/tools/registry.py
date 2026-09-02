@@ -119,6 +119,14 @@ class ToolContext:
     page: PageObject | None = None
     deadline: float | None = None
     dismissals: tuple[DismissalEntry, ...] = ()
+    #: Per-turn memo for :func:`_has_feature`. ``user_has_feature`` runs
+    #: up to three queries and is asked once per tool by
+    #: :func:`available_tools` and again per :func:`execute` call - roughly
+    #: sixty redundant queries across a full turn, for an answer that cannot
+    #: change inside one. Scoped to the context rather than cached globally so
+    #: an entitlement revoked between turns is still seen immediately. Frozen
+    #: guards rebinding the field, not mutating the dict it holds.
+    _feature_cache: dict[SiteFeature, bool] = field(default_factory=dict, compare=False, repr=False)
 
 
 #: Fallback budget for a tool's external-gateway call when ``context.deadline``
@@ -280,10 +288,18 @@ def register(spec: ToolSpec[Any]) -> None:
 
     Raises:
         ValueError: A tool with this name is already registered - two tool
-            modules picked the same name, which is always a bug.
+            modules picked the same name, which is always a bug - or a write
+            tool (``read_only=False``) did not set ``requires_confirmation``.
+            :func:`execute` gates every write on the confirm flow using
+            ``read_only`` alone, so a spec claiming a write needs no
+            confirmation would be quietly wrong about its own behaviour;
+            rejecting it at registration keeps the two fields from drifting
+            apart rather than letting the docstring and the code disagree.
     """
     if spec.name in REGISTRY:
         raise ValueError(f"Tool {spec.name!r} is already registered")
+    if not spec.read_only and not spec.requires_confirmation:
+        raise ValueError(f"Tool {spec.name!r} is a write (read_only=False) and must set requires_confirmation=True")
     REGISTRY[spec.name] = spec
 
 
@@ -355,7 +371,12 @@ def available_tools(context: ToolContext) -> list[ToolSpec[Any]]:
 
 
 def _is_available(spec: ToolSpec[Any], context: ToolContext) -> bool:
-    if spec.features and not any(_user_has_feature(context.profile, feature) for feature in spec.features):
+    # all(), not any(): ``features`` is every feature the tool requires, so a
+    # tool naming two of them needs both. Every shipped tool names exactly
+    # one, which is why the distinction has not mattered yet - it would the
+    # first time someone gated a tool on an entitlement *pair*, and silently
+    # in the permissive direction.
+    if not all(_has_feature(context, feature) for feature in spec.features):
         return False
     if spec.requires_external_apis and not context.profile.external_apis_enabled:
         return False
@@ -423,7 +444,12 @@ def execute(name: str, raw_args: dict[str, Any] | None, context: ToolContext, *,
     return ToolResult(data=data, summary=None if is_error else spec.action_label)
 
 
-def _user_has_feature(profile: Profile, feature: SiteFeature) -> bool:
+def _has_feature(context: ToolContext, feature: SiteFeature) -> bool:
+    """``user_has_feature``, memoized for the life of ``context`` - see its ``_feature_cache``."""
     from urbanlens.dashboard.models.subscriptions import user_has_feature
 
-    return user_has_feature(profile.user, feature)
+    cached = context._feature_cache.get(feature)  # noqa: SLF001 -- the cache belongs to this module; ToolContext is its data carrier
+    if cached is None:
+        cached = user_has_feature(context.profile.user, feature)
+        context._feature_cache[feature] = cached  # noqa: SLF001 -- as above
+    return cached

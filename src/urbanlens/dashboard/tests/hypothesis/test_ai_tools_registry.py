@@ -218,6 +218,22 @@ class RegistrationTests(TestCase):
         with pytest.raises(ValueError, match="already registered"):
             register(ToolSpec(name="search_pins", description="dup", args_model=_NoArgs, handler=_noop))
 
+    def test_a_write_tool_must_declare_that_it_needs_confirmation(self) -> None:
+        # execute() gates writes on read_only alone, so a spec that set
+        # read_only=False without requires_confirmation would describe itself
+        # as running unconfirmed while actually being proposal-gated. Reject
+        # it at registration rather than let the two fields disagree.
+        def _noop(context: ToolContext, args: _NoArgs) -> dict[str, Any]:
+            return {}
+
+        with pytest.raises(ValueError, match="requires_confirmation"):
+            register(ToolSpec(name="unconfirmed_write", description="test only", args_model=_NoArgs, handler=_noop, read_only=False))
+
+    def test_every_registered_write_tool_requires_confirmation(self) -> None:
+        for spec in REGISTRY.values():
+            if not spec.read_only:
+                self.assertTrue(spec.requires_confirmation, f"{spec.name} is a write but does not require confirmation")
+
     def test_real_tools_are_registered(self) -> None:
         for name in (
             "search_pins",

@@ -288,6 +288,49 @@ class AssistantViewTests(TestCase):
         response = self.client.post(reverse("assistant.reset"))
         self.assertNotContains(response, "Found 3 pins.")
 
+    def test_a_second_poller_still_gets_the_reply_after_the_first_consumed_it(self) -> None:
+        # Two browser tabs poll the same turn. The first to see SUCCESS clears
+        # the Celery result (AsyncResult.forget), so the second finds the task
+        # id unknown - which Celery reports as PENDING, indistinguishable from
+        # "still running". Without the turn-result cache the second tab would
+        # spin until MAX_POLL_ATTEMPTS and show the gave-up message for a turn
+        # that actually succeeded.
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+            self.client.post(reverse("assistant.message"), {"message": "find pins"})
+        turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
+
+        success = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Found 3 pins.", "actions": ["Searched your pins"]})
+        with patch("urbanlens.dashboard.controllers.assistant.get_task_progress", return_value=success):
+            first = self.client.get(reverse("assistant.turn", args=[turn_id]))
+        self.assertContains(first, "Found 3 pins.")
+
+        # The backend no longer knows this task; only the cache does.
+        forgotten = TaskProgress(task_id="task-abc-123", state="PENDING")
+        with patch("urbanlens.dashboard.controllers.assistant.get_task_progress", return_value=forgotten) as progress:
+            second = self.client.get(reverse("assistant.turn", args=[turn_id]))
+        self.assertContains(second, "Found 3 pins.")
+        self.assertNotContains(second, "assistant-msg--pending")
+        progress.assert_not_called()
+
+    def test_a_second_poller_of_a_failed_turn_still_gets_the_error(self) -> None:
+        # Same consumed-once problem on the failure branch: the sentinel the
+        # first poll caches is what keeps the second from reading PENDING off
+        # the forgotten task id and polling on.
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+            self.client.post(reverse("assistant.message"), {"message": "find pins"})
+        turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
+
+        failure = TaskProgress(task_id="task-abc-123", state="FAILURE", error="boom")
+        with patch("urbanlens.dashboard.controllers.assistant.get_task_progress", return_value=failure):
+            self.client.get(reverse("assistant.turn", args=[turn_id]))
+
+        forgotten = TaskProgress(task_id="task-abc-123", state="PENDING")
+        with patch("urbanlens.dashboard.controllers.assistant.get_task_progress", return_value=forgotten) as progress:
+            second = self.client.get(reverse("assistant.turn", args=[turn_id]))
+        self.assertContains(second, "expired")
+        self.assertNotContains(second, "assistant-msg--pending")
+        progress.assert_not_called()
+
     def test_poll_view_renders_an_error_bubble_on_failure(self) -> None:
         with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
             self.client.post(reverse("assistant.message"), {"message": "find pins"})

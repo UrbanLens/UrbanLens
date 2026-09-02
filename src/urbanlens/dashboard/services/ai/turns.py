@@ -166,6 +166,55 @@ def read_turn_record(turn_id: str) -> dict[str, Any] | None:
     return record if isinstance(record, dict) else None
 
 
+def _turn_result_key(turn_id: str) -> str:
+    return f"ulai:turn:{turn_id}:result"
+
+
+def store_turn_result(turn_id: str, result: dict[str, Any]) -> None:
+    """Cache a resolved turn's task result, so polling it again stays idempotent.
+
+    Both poll endpoints call ``AsyncResult.forget()`` once they have read a
+    finished turn, so the reply text does not linger in the Celery result
+    backend past the poll that consumed it. That makes the *backend* a
+    single-read source: a second reader (another browser tab, an API client
+    retrying a request whose response it lost) would find the task id
+    unknown, which Celery reports as ``PENDING`` - indistinguishable from
+    "still running", so that reader would poll until it gave up and never
+    see the reply that already exists.
+
+    This cache is what keeps a poll idempotent across that boundary: the
+    first reader stores the result here before forgetting it, and every
+    later poll of the same turn is served from here without touching the
+    backend at all.
+
+    Args:
+        turn_id: The turn the result belongs to.
+        result: The task's own return value, or :data:`FAILED_TURN_RESULT`
+            for a turn that failed - stored verbatim so the caller's normal
+            rendering path handles a re-poll exactly as it handled the
+            first one.
+    """
+    cache.set(_turn_result_key(turn_id), result, _TURN_RECORD_TTL_SECONDS)
+
+
+def read_turn_result(turn_id: str) -> dict[str, Any] | None:
+    """The result :func:`store_turn_result` cached for ``turn_id``, if any.
+
+    Returns:
+        The stored result, or ``None`` when this turn has not resolved yet
+        (the caller should consult Celery) or its cache entry has expired.
+    """
+    result = cache.get(_turn_result_key(turn_id))
+    return result if isinstance(result, dict) else None
+
+
+#: What :func:`store_turn_result` records for a turn whose task failed or was
+#: revoked - a sentinel rather than the task's own (absent) return value, so a
+#: re-poll renders the same error the first poll did instead of falling
+#: through to the Celery backend and reading ``PENDING`` off a forgotten id.
+FAILED_TURN_RESULT: dict[str, Any] = {"failed": True}
+
+
 def _turn_proposals_key(turn_id: str) -> str:
     return f"ulai:turn:{turn_id}:proposals"
 

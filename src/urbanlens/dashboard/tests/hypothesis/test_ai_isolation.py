@@ -285,13 +285,42 @@ class ComposeTopologyTests(SimpleTestCase):
         compose = _compose()
         self.assertNotIn("app_network", compose["services"]["ai-inference"]["networks"])
 
+    def test_ai_inference_networks_are_exactly_inference_and_proxy(self) -> None:
+        # Its whole reachable world: the callers that send it work, and the
+        # proxy it sends provider calls through. Nothing else.
+        compose = _compose()
+        self.assertEqual(set(compose["services"]["ai-inference"]["networks"]), {"inference_network", "proxy_network"})
+
     def test_egress_proxy_is_never_on_app_network(self) -> None:
         compose = _compose()
         self.assertNotIn("app_network", compose["services"]["egress-proxy"]["networks"])
 
-    def test_egress_proxy_networks_are_exactly_ai_inference_and_egress(self) -> None:
+    def test_egress_proxy_networks_are_exactly_its_clients_and_its_own_egress(self) -> None:
         compose = _compose()
-        self.assertEqual(set(compose["services"]["egress-proxy"]["networks"]), {"ai_network", "inference_network", "ai_egress_network"})
+        self.assertEqual(set(compose["services"]["egress-proxy"]["networks"]), {"proxy_network", "ai_egress_network"})
+
+    def test_proxy_network_holds_only_the_proxy_and_its_two_clients(self) -> None:
+        # The proxy is the one process in this tier that parses bytes from the
+        # public internet. It gets a network with exactly the containers that
+        # must call it - not ai_network (db, valkey) or inference_network
+        # (app, celery-worker), which would make a proxy bug a foothold with
+        # somewhere to go.
+        compose = _compose()
+        members = {name for name, service in compose["services"].items() if "proxy_network" in (service.get("networks") or {})}
+        self.assertEqual(members, {"egress-proxy", "ai-worker", "ai-inference"})
+
+    def test_proxy_network_is_internal(self) -> None:
+        compose = _compose()
+        self.assertTrue(compose["networks"]["proxy_network"]["internal"])
+
+    def test_db_and_valkey_are_not_reachable_from_the_proxy(self) -> None:
+        # The other half of the rule above, asserted from the data side: no
+        # network carries both egress-proxy and a datastore.
+        compose = _compose()
+        proxy_networks = set(compose["services"]["egress-proxy"]["networks"])
+        for service in ("db", "valkey", "app", "celery-worker"):
+            shared = proxy_networks & set(compose["services"][service]["networks"])
+            self.assertEqual(shared, set(), f"egress-proxy shares {shared} with {service}")
 
     def test_egress_proxy_starts_as_the_tinyproxy_user(self) -> None:
         # Not cosmetic: cap_drop: [ALL] means the container can't setuid/setgid
@@ -318,11 +347,28 @@ class ComposeTopologyTests(SimpleTestCase):
         compose = _compose()
         self.assertNotIn("internal", compose["networks"]["ai_egress_network"])
 
-    def test_app_env_no_longer_carries_the_anthropic_key(self) -> None:
-        # AnthropicGateway (pinned for the assistant) now calls providers
-        # through ai-inference - nothing on app needs this key directly.
+    def test_app_env_anchor_no_longer_names_the_anthropic_key(self) -> None:
+        # AnthropicGateway (pinned for the assistant) calls providers through
+        # ai-inference, so nothing on app reads this key any more and the
+        # anchor stopped naming it. NOTE this is weaker than it looks, and
+        # deliberately named for what it actually checks: `app` and
+        # `celery-worker` still load the whole host .env via `env_file`, so
+        # as long as UL_ANTHROPIC_API_KEY is defined there (it must be -
+        # compose interpolates ${UL_ANTHROPIC_API_KEY} into ai-inference's
+        # own environment from it) those containers still *have* it. Only
+        # ai-worker and ai-inference, which take no env_file at all, are
+        # genuinely narrowed. Closing that gap needs the key to move out of
+        # .env into an ai-only env file - see docs/AI_PIPELINE.md's residuals.
         compose = _compose()
         self.assertNotIn("UL_ANTHROPIC_API_KEY", compose["x-app-env"])
+
+    def test_app_and_celery_worker_still_load_the_whole_host_env_file(self) -> None:
+        # The other half of the note above, asserted rather than left implicit:
+        # if either of these ever stops taking env_file, the residual it
+        # documents is gone and that docs section should be revisited.
+        compose = _compose()
+        for service in ("app", "celery-worker"):
+            self.assertIn("env_file", compose["services"][service], f"{service} unexpectedly stopped loading .env")
 
     def test_app_env_still_carries_openai_and_cloudflare_keys(self) -> None:
         # Deferred to the vision.py follow-up (plan Out of scope) - not this batch.
@@ -413,9 +459,9 @@ class ComposeTopologyTests(SimpleTestCase):
         compose = _compose()
         self.assertNotIn("app_network", compose["services"]["ai-worker"]["networks"])
 
-    def test_ai_worker_networks_are_exactly_ai_and_inference(self) -> None:
+    def test_ai_worker_networks_are_exactly_ai_inference_and_proxy(self) -> None:
         compose = _compose()
-        self.assertEqual(set(compose["services"]["ai-worker"]["networks"]), {"ai_network", "inference_network"})
+        self.assertEqual(set(compose["services"]["ai-worker"]["networks"]), {"ai_network", "inference_network", "proxy_network"})
 
     def test_ai_worker_drains_the_ai_queue(self) -> None:
         compose = _compose()

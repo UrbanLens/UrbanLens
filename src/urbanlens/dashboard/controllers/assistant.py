@@ -34,15 +34,18 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.ai.access import assistant_available
 from urbanlens.dashboard.services.ai.assistant import MAX_HISTORY_ENTRIES, MAX_MESSAGE_CHARS
 from urbanlens.dashboard.services.ai.turns import (
+    FAILED_TURN_RESULT,
     MAX_POLL_ATTEMPTS,
     acquire_turn_lock,
     claim_turn_proposal,
     new_turn_id,
     read_turn_proposal,
     read_turn_record,
+    read_turn_result,
     release_turn_lock,
     store_turn_proposals,
     store_turn_record,
+    store_turn_result,
     turn_poll_delay,
 )
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
@@ -133,6 +136,34 @@ def _resolve_turn(request: HttpRequest, turn_id: str, final_entry: dict[str, Any
             break
     _save_history(request, history)
     return final_entry
+
+
+def _finished_result(task_id: str, turn_id: str) -> dict[str, Any] | None:
+    """This turn's task result if it has finished, else ``None`` (still running).
+
+    Reads the turn-result cache first so a repeat poll never depends on the
+    Celery backend, which the first poll to see a finished turn deliberately
+    clears - see ``services.ai.turns.store_turn_result``. A failed or revoked
+    task resolves to :data:`~services.ai.turns.FAILED_TURN_RESULT` rather
+    than ``None``, so the caller can tell "failed" from "not done yet".
+    """
+    cached = read_turn_result(turn_id)
+    if cached is not None:
+        return cached
+
+    progress = get_task_progress(task_id)
+    if progress.state == "SUCCESS":
+        result = progress.result if isinstance(progress.result, dict) else {}
+    elif progress.state in {"FAILURE", "REVOKED"}:
+        result = FAILED_TURN_RESULT
+    else:
+        return None
+
+    from celery.result import AsyncResult
+
+    store_turn_result(turn_id, result)
+    AsyncResult(task_id).forget()
+    return result
 
 
 def _session_proposals(proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -285,36 +316,33 @@ class AssistantTurnPollView(LoginRequiredMixin, View):
             entry = _resolve_turn(request, turn_id, {"role": "assistant", "content": _GAVE_UP_REPLY, "actions": []})
             return render(request, _BUBBLE_PARTIAL, {"entry": entry})
 
-        progress = get_task_progress(record["task_id"])
-        if progress.state == "SUCCESS":
-            from celery.result import AsyncResult
+        result = _finished_result(record["task_id"], turn_id)
+        if result is None:
+            return render(request, _BUBBLE_PARTIAL, {"entry": {"pending": True, "turn_id": turn_id}, "next_attempt": attempt + 1, "poll_delay": turn_poll_delay(attempt)})
 
-            result = progress.result if isinstance(progress.result, dict) else {}
-            proposals = result.get("proposals") or []
-            if proposals:
-                store_turn_proposals(turn_id, profile_id=profile.pk, proposals=proposals)
-            entry = _resolve_turn(
-                request,
-                turn_id,
-                {"role": "assistant", "content": result.get("reply", ""), "actions": result.get("actions", []), "proposals": _session_proposals(proposals)},
-            )
-            AsyncResult(record["task_id"]).forget()
-            response = render(request, _BUBBLE_PARTIAL, {"entry": entry})
-            client_actions = result.get("client_actions") or []
-            if client_actions:
-                # Transient, never stored in session history - a reopened
-                # explainer/tour is a one-time UI nudge, not something a
-                # reloaded transcript should replay.
-                response["HX-Trigger"] = json.dumps({"ulAssistantAction": {"actions": client_actions}})
-            return response
-        if progress.state in {"FAILURE", "REVOKED"}:
-            from celery.result import AsyncResult
-
+        if result.get("failed"):
             entry = _resolve_turn(request, turn_id, {"role": "assistant", "content": _EXPIRED_REPLY, "actions": []})
-            AsyncResult(record["task_id"]).forget()
             return render(request, _BUBBLE_PARTIAL, {"entry": entry})
 
-        return render(request, _BUBBLE_PARTIAL, {"entry": {"pending": True, "turn_id": turn_id}, "next_attempt": attempt + 1, "poll_delay": turn_poll_delay(attempt)})
+        proposals = result.get("proposals") or []
+        if proposals:
+            store_turn_proposals(turn_id, profile_id=profile.pk, proposals=proposals)
+        entry = _resolve_turn(
+            request,
+            turn_id,
+            {"role": "assistant", "content": result.get("reply", ""), "actions": result.get("actions", []), "proposals": _session_proposals(proposals)},
+        )
+        response = render(request, _BUBBLE_PARTIAL, {"entry": entry})
+        client_actions = result.get("client_actions") or []
+        if client_actions:
+            # Transient, never stored in session history - a reopened
+            # explainer/tour is a one-time UI nudge, not something a
+            # reloaded transcript should replay. Re-sent on a repeat poll of
+            # the same turn deliberately: that is a *second client* (another
+            # tab) resolving this turn for the first time, and it needs the
+            # nudge as much as the first one did.
+            response["HX-Trigger"] = json.dumps({"ulAssistantAction": {"actions": client_actions}})
+        return response
 
 
 class AssistantProposalConfirmView(LoginRequiredMixin, View):
