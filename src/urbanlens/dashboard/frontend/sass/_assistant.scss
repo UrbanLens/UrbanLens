@@ -119,6 +119,32 @@
     }
 }
 
+.assistant-msg-proposals {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    margin-top: .4rem;
+}
+
+.assistant-proposal {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .85rem;
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+    }
+
+    &--done {
+        color: var(--ul-color-success-text, #2e7d32);
+    }
+
+    &--error {
+        color: var(--ul-color-danger-text, #dc2626);
+    }
+}
+
 .assistant-input-row {
     display: flex;
     align-items: center;
