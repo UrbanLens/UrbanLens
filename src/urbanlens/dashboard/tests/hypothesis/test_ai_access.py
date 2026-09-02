@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.test import override_settings
 from model_bakery import baker
 import pytest
 
@@ -71,5 +72,20 @@ def test_unavailable_when_site_ai_disabled() -> None:
     profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
     settings_obj = SiteSettings.get_current()
     SiteSettings.objects.filter(pk=settings_obj.pk).update(ai_enabled=False)
+
+    assert assistant_available(profile) is False
+
+
+@pytest.mark.django_db
+@override_settings(UL_AI_WORKER_ENABLED=False)
+def test_unavailable_without_an_ai_worker_deployed() -> None:
+    """Every other condition satisfied, but nothing drains Queue.AI.
+
+    Must fail closed rather than degrade the tool loop onto the regular
+    worker, which holds REData/OAuth credentials the loop must never run
+    alongside - see services.sandbox.queues.ai_queue.
+    """
+    _grant_ai_to_everyone()
+    profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
 
     assert assistant_available(profile) is False

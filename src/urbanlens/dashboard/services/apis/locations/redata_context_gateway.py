@@ -65,7 +65,18 @@ def redata_configured() -> bool:
     geocode, imagery, ...) so "is REData available" is decided identically
     everywhere, matching ``places_resolution.py``/``cid_resolution.py``'s
     existing precedent for the same check.
+
+    Always ``False`` under :attr:`~services.sandbox.guard.ProcessRole.AI`: the
+    assistant's tool loop must never reach REData, regardless of whether
+    ``ai-worker``'s environment happens to carry the credentials (it
+    shouldn't, per the compose anchors). This is defense in depth, not the
+    boundary - the real boundary is the network: ``ai-worker`` sits on
+    ``ai_network``/``inference_network``, neither of which routes to REData.
     """
+    from urbanlens.dashboard.services.sandbox.guard import ProcessRole, current_role
+
+    if current_role() is ProcessRole.AI:
+        return False
     return bool(settings.redata_api_url and settings.redata_api_key)
 
 

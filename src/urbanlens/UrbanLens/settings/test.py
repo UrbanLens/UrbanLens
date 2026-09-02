@@ -86,6 +86,12 @@ UL_SANDBOX_ENABLED = False
 # "deny" with override_settings.
 UL_DIRECT_INFERENCE_POLICY = "allow"
 
+# No ai-worker container drains Queue.AI under pytest either, but the suite
+# exercises assistant availability directly (CELERY_TASK_ALWAYS_EAGER runs the
+# turn task in-process where a test asks for it) - the tests that verify this
+# boundary itself set UL_AI_WORKER_ENABLED = False with override_settings.
+UL_AI_WORKER_ENABLED = True
+
 # model_bakery's default related-object generation collides with the
 # create_user_profile post_save signal (see urbanlens.core.tests.baker).
 BAKER_CUSTOM_CLASS = "urbanlens.core.tests.baker.SignalSafeBaker"

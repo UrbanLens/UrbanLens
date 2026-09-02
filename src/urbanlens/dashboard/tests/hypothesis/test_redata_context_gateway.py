@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.test import override_settings
 import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase
@@ -57,6 +58,22 @@ class RedataConfiguredTests(SimpleTestCase):
             self.assertFalse(redata_configured())
 
     def test_true_when_both_set(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.settings") as mock_settings:
+            mock_settings.redata_api_url = "https://redata.example.test"
+            mock_settings.redata_api_key = "key"
+            self.assertTrue(redata_configured())
+
+    @override_settings(UL_PROCESS_ROLE="ai")
+    def test_false_under_the_ai_role_even_when_both_set(self) -> None:
+        # The assistant's tool loop must never reach REData, regardless of
+        # whether ai-worker's environment happens to carry the credentials.
+        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.settings") as mock_settings:
+            mock_settings.redata_api_url = "https://redata.example.test"
+            mock_settings.redata_api_key = "key"
+            self.assertFalse(redata_configured())
+
+    @override_settings(UL_PROCESS_ROLE="worker")
+    def test_true_under_a_non_ai_role_when_both_set(self) -> None:
         with mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.settings") as mock_settings:
             mock_settings.redata_api_url = "https://redata.example.test"
             mock_settings.redata_api_key = "key"

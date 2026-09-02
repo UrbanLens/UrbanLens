@@ -274,9 +274,9 @@ class ComposeTopologyTests(SimpleTestCase):
         compose = _compose()
         self.assertNotIn("app_network", compose["services"]["egress-proxy"]["networks"])
 
-    def test_egress_proxy_networks_are_exactly_inference_and_egress(self) -> None:
+    def test_egress_proxy_networks_are_exactly_ai_inference_and_egress(self) -> None:
         compose = _compose()
-        self.assertEqual(set(compose["services"]["egress-proxy"]["networks"]), {"inference_network", "ai_egress_network"})
+        self.assertEqual(set(compose["services"]["egress-proxy"]["networks"]), {"ai_network", "inference_network", "ai_egress_network"})
 
     def test_ai_egress_network_has_no_other_member(self) -> None:
         compose = _compose()
@@ -313,3 +313,89 @@ class ComposeTopologyTests(SimpleTestCase):
     def test_ai_inference_depends_on_egress_proxy_being_healthy(self) -> None:
         compose = _compose()
         self.assertIn("egress-proxy", compose["services"]["ai-inference"]["depends_on"])
+
+    def test_ai_network_is_internal(self) -> None:
+        compose = _compose()
+        self.assertTrue(compose["networks"]["ai_network"]["internal"])
+
+    def test_db_and_valkey_are_reachable_from_ai_network(self) -> None:
+        # ai-worker needs both without joining app_network (which would give
+        # it a route to the internet, REData, OAuth).
+        compose = _compose()
+        self.assertIn("ai_network", compose["services"]["db"]["networks"])
+        self.assertIn("ai_network", compose["services"]["valkey"]["networks"])
+
+    def test_ai_worker_has_no_env_file(self) -> None:
+        compose = _compose()
+        self.assertNotIn("env_file", compose["services"]["ai-worker"])
+
+    def test_ai_worker_has_no_media_volume(self) -> None:
+        # logs are fine (every worker gets them); media_volume is the one
+        # this container has no business touching - it never handles an upload.
+        compose = _compose()
+        mounts = " ".join(compose["services"]["ai-worker"]["volumes"])
+        self.assertNotIn("media_volume", mounts)
+
+    def test_ai_worker_env_keys_are_an_explicit_allowlist(self) -> None:
+        # A future "just add this one var" to x-ai-env is a failing test, not
+        # a silent widening of what this container can reach or hold.
+        compose = _compose()
+        allowed = {
+            "UL_DB_USER",
+            "UL_DB_NAME",
+            "UL_DB_PASS",
+            "UL_DB_HOST",
+            "UL_DB_PORT",
+            "UL_ENVIRONMENT",
+            "UL_SITE_URL",
+            "UL_VALKEY_URL",
+            "DJANGO_SECRET_KEY",
+            "UL_FIELD_ENCRYPTION_KEY",
+            "UL_FIELD_ENCRYPTION_KEY_FALLBACKS",
+            "UL_OPENWEATHERMAP_API_KEY",
+            "UL_AI_INFERENCE_URL",
+            "UL_AI_INFERENCE_TOKEN",
+            "UL_AI_INFERENCE_TIMEOUT_SECONDS",
+            "UL_AI_WORKER_ENABLED",
+            "HTTPS_PROXY",
+            "HTTP_PROXY",
+            "NO_PROXY",
+            "UL_PROCESS_ROLE",
+            "UL_UNTRUSTED_PARSE_POLICY",
+        }
+        env = compose["services"]["ai-worker"]["environment"]
+        leaked = set(env) - allowed
+        self.assertEqual(leaked, set())
+
+    def test_ai_worker_env_carries_no_redata_oauth_or_provider_credential(self) -> None:
+        compose = _compose()
+        env = compose["services"]["ai-worker"]["environment"]
+        forbidden_prefixes = ("UL_REDATA_", "UL_GOOGLE_", "UL_DISCORD_", "UL_ANTHROPIC_", "UL_OPENAI_", "UL_CLOUDFLARE_")
+        leaked = [key for key in env if any(key.startswith(prefix) for prefix in forbidden_prefixes)]
+        self.assertEqual(leaked, [])
+
+    def test_ai_worker_process_role_is_the_literal_ai(self) -> None:
+        compose = _compose()
+        self.assertEqual(compose["services"]["ai-worker"]["environment"]["UL_PROCESS_ROLE"], "ai")
+
+    def test_ai_worker_untrusted_parse_policy_is_the_literal_deny(self) -> None:
+        # Not ${UL_UNTRUSTED_PARSE_POLICY:-warn} like every other worker - this
+        # one must never decode untrusted bytes regardless of the host .env.
+        compose = _compose()
+        self.assertEqual(compose["services"]["ai-worker"]["environment"]["UL_UNTRUSTED_PARSE_POLICY"], "deny")
+
+    def test_ai_worker_is_not_on_app_network(self) -> None:
+        compose = _compose()
+        self.assertNotIn("app_network", compose["services"]["ai-worker"]["networks"])
+
+    def test_ai_worker_networks_are_exactly_ai_and_inference(self) -> None:
+        compose = _compose()
+        self.assertEqual(set(compose["services"]["ai-worker"]["networks"]), {"ai_network", "inference_network"})
+
+    def test_ai_worker_drains_the_ai_queue(self) -> None:
+        compose = _compose()
+        self.assertIn("ai", compose["services"]["ai-worker"]["command"])
+
+    def test_ai_worker_depends_on_ai_inference_being_healthy(self) -> None:
+        compose = _compose()
+        self.assertIn("ai-inference", compose["services"]["ai-worker"]["depends_on"])

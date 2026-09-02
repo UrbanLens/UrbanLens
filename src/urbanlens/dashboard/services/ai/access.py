@@ -22,9 +22,13 @@ if TYPE_CHECKING:
 
 def assistant_available(profile: Profile) -> bool:
     """Return whether ``profile`` may open and use the interactive AI assistant."""
+    from django.conf import settings
+
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
+    if not getattr(settings, "UL_AI_WORKER_ENABLED", False):
+        return False
     if not SiteSettings.get_current().ai_enabled:
         return False
     if not profile.ai_enabled or not profile.external_apis_enabled:

@@ -183,11 +183,19 @@ def current_policy() -> UntrustedParsePolicy:
     """How this process should react to an out-of-sandbox parse.
 
     Returns:
-        The configured policy, defaulting to :attr:`UntrustedParsePolicy.WARN`
+        :attr:`UntrustedParsePolicy.DENY` unconditionally under
+        :attr:`ProcessRole.AI`, regardless of ``UL_UNTRUSTED_PARSE_POLICY`` -
+        the AI worker's compose env sets that variable to ``deny`` too, but
+        the tool loop calls arbitrary, registry-dispatched handlers on
+        user-influenced input, so this is a second, code-level rail that
+        doesn't depend on the env var being set correctly. Otherwise the
+        configured policy, defaulting to :attr:`UntrustedParsePolicy.WARN`
         for an unset or unrecognised value - the setting is a safety rail, and
         a typo in it should not silently disable the rail *or* take the site
         down.
     """
+    if current_role() is ProcessRole.AI:
+        return UntrustedParsePolicy.DENY
     raw = str(getattr(settings, "UL_UNTRUSTED_PARSE_POLICY", "") or "").strip().lower()
     try:
         return UntrustedParsePolicy(raw)

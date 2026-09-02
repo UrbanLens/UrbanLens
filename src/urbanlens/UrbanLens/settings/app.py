@@ -207,6 +207,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "processes uploads - without the isolation. Set UL_SANDBOX_ENABLED=false only where no media-worker runs."
         ),
     )
+    ai_worker_enabled: bool = Field(
+        default=False,
+        description=(
+            "Whether an ai-worker container is deployed to drain the 'ai' Celery queue. Unlike "
+            "UL_SANDBOX_ENABLED, this has no degrade-to-default-queue fallback: when false, the assistant "
+            "is simply unavailable (see services.ai.access.assistant_available), because the default "
+            "worker holds REData/OAuth credentials the assistant's tool loop must never run alongside."
+        ),
+    )
     untrusted_parse_policy: str = Field(
         default="warn",
         description=(

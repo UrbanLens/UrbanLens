@@ -12,7 +12,10 @@ Queue                Container                  Reaches
 ``sandbox``          ``media-worker``           DB, broker, media volumes. No internet,
                                                 no third-party API keys, no capabilities
 ``sandbox_batch``    ``media-worker-batch``     identical isolation to ``sandbox``
-``ai_inference``     (not yet deployed)         reserved; see docs/MEDIA_PIPELINE.md
+``ai``               ``ai-worker``              DB, broker, encryption key (tools read
+                                                encrypted content). No REData/OAuth/
+                                                provider keys - model calls go through
+                                                ai-inference. See docs/AI_PIPELINE.md.
 ===================  =========================  ==================================
 
 ``sandbox`` and ``sandbox_batch`` differ in *scheduling*, not in trust: both are
@@ -33,6 +36,12 @@ Resolution is deliberately late and degradable. ``sandbox_queue()`` returns the
 *default* queue when ``UL_SANDBOX_ENABLED`` is off, so an install that never
 started a ``media-worker`` container keeps working (with the isolation it
 didn't ask for absent) rather than accumulating a queue nobody drains.
+
+``ai_queue()`` does not follow that pattern. The regular worker holds REData
+and OAuth credentials and sits on ``app_network``; degrading the assistant's
+tool loop onto it would be a bigger blast radius than the problem it's
+avoiding. When no ``ai-worker`` is deployed the assistant is unavailable
+(see ``services/ai/access.py:assistant_available``), not degraded.
 """
 
 from __future__ import annotations
@@ -53,16 +62,16 @@ class Queue(StrEnum):
         SANDBOX_BATCH: Long-running untrusted-parse batch jobs - archive walks,
             data imports. Same isolation as :attr:`SANDBOX`, its own worker, so
             an hour-long import never queues in front of a photo upload.
-        AI_INFERENCE: Reserved for model inference once it moves to its own
-            container. Nothing routes here yet; the name exists so the split
-            is a compose change rather than a code change.
+        AI: The assistant's tool loop, drained by ``ai-worker``. No REData,
+            OAuth or provider credentials in that container - model calls go
+            out over HTTP to ``ai-inference``. See ``ai_queue()``.
     """
 
     DEFAULT = "celery"
     PANEL_FETCH = "panel_fetch"
     SANDBOX = "sandbox"
     SANDBOX_BATCH = "sandbox_batch"
-    AI_INFERENCE = "ai_inference"
+    AI = "ai"
 
 
 def sandbox_queue(*, batch: bool = False) -> str:
@@ -87,3 +96,22 @@ def sandbox_queue(*, batch: bool = False) -> str:
     if not getattr(settings, "UL_SANDBOX_ENABLED", False):
         return Queue.DEFAULT
     return Queue.SANDBOX_BATCH if batch else Queue.SANDBOX
+
+
+def ai_queue() -> str:
+    """The queue the assistant's tool-loop task should be routed to.
+
+    Read once per task definition, at import time, so it appears in the
+    task's own exec options rather than at each call site - matching
+    :func:`sandbox_queue`.
+
+    Unlike :func:`sandbox_queue`, this never falls back to
+    :attr:`Queue.DEFAULT`. Whether the assistant is reachable at all is
+    decided earlier, by ``services/ai/access.py:assistant_available()``
+    (which checks ``UL_AI_WORKER_ENABLED``) - a task should never be
+    enqueued in the first place if no worker drains :attr:`Queue.AI`.
+
+    Returns:
+        :attr:`Queue.AI`, always.
+    """
+    return Queue.AI

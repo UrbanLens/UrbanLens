@@ -24,6 +24,7 @@ from urbanlens.dashboard.services.sandbox import (
     Queue,
     UnsandboxedParseError,
     UntrustedParsePolicy,
+    ai_queue,
     allow_untrusted_parse,
     check_untrusted_parse,
     current_policy,
@@ -153,6 +154,15 @@ class UntrustedParseGuardTests(SimpleTestCase):
     def test_unknown_policy_falls_back_to_warn(self) -> None:
         self.assertIs(current_policy(), UntrustedParsePolicy.WARN)
         with self.assertLogs("urbanlens.dashboard.services.sandbox.guard", level="WARNING"):
+            check_untrusted_parse("image.decode")
+
+    @override_settings(UL_PROCESS_ROLE="ai", UL_UNTRUSTED_PARSE_POLICY="allow")
+    def test_ai_role_is_denied_even_when_the_env_var_says_allow(self) -> None:
+        # ai-worker's own compose env sets UL_UNTRUSTED_PARSE_POLICY: deny
+        # literally, but the tool loop dispatches on model output, so this is
+        # a second rail that doesn't depend on that var being set correctly.
+        self.assertIs(current_policy(), UntrustedParsePolicy.DENY)
+        with self.assertRaises(UnsandboxedParseError):
             check_untrusted_parse("image.decode")
 
 
@@ -312,3 +322,36 @@ class SandboxQueueRoutingTests(SimpleTestCase):
         from urbanlens.dashboard import tasks
 
         self.assertEqual(tasks.SANDBOX_QUEUE, Queue.DEFAULT)
+
+
+class AiQueueRoutingTests(SimpleTestCase):
+    """``ai_queue()`` always resolves to :attr:`Queue.AI` - no DEFAULT fallback.
+
+    Unlike ``sandbox_queue()``, whether the assistant is reachable at all is
+    decided earlier by ``assistant_available()`` (which checks
+    ``UL_AI_WORKER_ENABLED``); a task should never be enqueued in the first
+    place if nothing drains this queue, so the resolver itself has nothing to
+    degrade.
+    """
+
+    @override_settings(UL_AI_WORKER_ENABLED=True)
+    def test_resolves_to_ai_when_a_worker_is_deployed(self) -> None:
+        self.assertEqual(ai_queue(), Queue.AI)
+
+    @override_settings(UL_AI_WORKER_ENABLED=False)
+    def test_still_resolves_to_ai_without_a_worker_deployed(self) -> None:
+        # No fallback to Queue.DEFAULT - the regular worker holds
+        # REData/OAuth credentials the tool loop must never run alongside.
+        self.assertEqual(ai_queue(), Queue.AI)
+
+    def test_declared_queue_reaches_apply_async(self) -> None:
+        from celery import Celery, shared_task
+
+        @shared_task(name="urbanlens.tests.ai_queue_probe", queue=Queue.AI)
+        def probe() -> None:
+            """A task declaring the ai queue the same way run_assistant_turn_task does."""
+
+        with patch.object(Celery, "send_task") as send_task:
+            probe.apply_async()
+
+        self.assertEqual(send_task.call_args.kwargs.get("queue"), Queue.AI)

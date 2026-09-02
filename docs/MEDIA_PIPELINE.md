@@ -290,13 +290,14 @@ Declare the queue on the task (`@shared_task(..., queue=SANDBOX_QUEUE)`), never
 at the `apply_async` call site - one missed call site is one untrusted parse
 back on the unrestricted worker, and there is nothing to notice it.
 
-## AI inference (not yet deployed)
+## AI inference
 
-`Queue.AI_INFERENCE` exists in `services/sandbox/queues.py` with nothing routed
-to it. The split follows the same shape as `media-worker` but for the opposite
-reason: not "this container must not be trusted", but "this workload wants its
-own resource envelope, and possibly a GPU host". Concretely that means a new
-compose service draining `-Q ai_inference`, an `x-ai-env` anchor carrying only
-the model-provider credentials, and `queue=Queue.AI_INFERENCE` on the AI tasks.
-It stays on `app_network` - inference calls out to model APIs, so it needs
-egress and cannot use `sandbox_network`.
+The assistant's tool loop follows the same shape as `media-worker` but for
+the opposite reason: not "this container must not be trusted", but "this
+workload holds provider credentials that must not sit next to REData/OAuth
+credentials, and must not reach the internet except through an allowlisted
+proxy". `Queue.AI` (`services/sandbox/queues.py`) is drained by `ai-worker`,
+isolated on `ai_network`/`inference_network`; model calls leave that worker
+over HTTP to a separate Django-free `ai-inference` service, which is the only
+container holding provider API keys. See `docs/AI_PIPELINE.md` for the full
+architecture.

@@ -350,6 +350,7 @@ UL_AI_INFERENCE_URL = _app_settings.ai_inference_url
 UL_AI_INFERENCE_TOKEN = _app_settings.ai_inference_token
 UL_AI_INFERENCE_TIMEOUT_SECONDS = _app_settings.ai_inference_timeout_seconds
 UL_DIRECT_INFERENCE_POLICY = _app_settings.direct_inference_policy
+UL_AI_WORKER_ENABLED = _app_settings.ai_worker_enabled
 # Backup defaults. Site admins can override these values in the database-backed settings UI.
 UL_BACKUP_ENABLED = os.getenv("UL_BACKUP_ENABLED", "True").lower() in {"true", "1", "yes"}
 UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
