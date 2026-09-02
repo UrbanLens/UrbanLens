@@ -34,7 +34,7 @@ class Migration(migrations.Migration):
     """Add FriendInvitation.email_normalized and backfill existing rows."""
 
     dependencies = [
-        ("dashboard", "0047_image_copied_from_image_copied_from_label_and_more"),
+        ("dashboard", "0048_image_upload_processed_at"),
     ]
 
     operations = [
