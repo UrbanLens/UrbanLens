@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -95,13 +96,36 @@ class WikiShareServiceTests(TestCase):
         self.assertTrue(new_wiki.aliases.filter(name="Chosen Alias").exists())
 
     def test_photos_only_seeded_when_chosen(self) -> None:
-        image = baker.make("dashboard.Image", pin=self.pin)
+        image = baker.make("dashboard.Image", pin=self.pin, upload_processed_at=timezone.now())
 
         wiki, _created = self._create(image_ids={image.pk})
         image.refresh_from_db()
         self.assertEqual(image.wiki_id, wiki.pk)
         # Still attached to the original pin too.
         self.assertEqual(image.pin_id, self.pin.pk)
+
+    def test_unprocessed_photo_is_enqueued_for_processing_and_skipped_from_this_share(self) -> None:
+        """An unprocessed photo is never attached to the wiki from this request.
+
+        ``process_image_upload`` is decorated ``@untrusted_parse`` and may only run
+        in the sandbox worker (``queue=SANDBOX_QUEUE``), never inline here - so the
+        guarantee is structural: the service hands it to ``safely_enqueue_task``
+        rather than calling it directly, the same pattern every other upload path
+        uses. Assert that dispatch, rather than a mocked return value from the task
+        itself, mirroring ``test_building_wiki_mirror.test_a_wiki_side_failure_does_not_fail_the_import``.
+        """
+        from urbanlens.dashboard.tasks import process_image_upload
+
+        image = baker.make("dashboard.Image", pin=self.pin, upload_processed_at=None)
+
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue:
+            wiki, shared = WikiShareService().share_from_pin(self.pin, image_ids={image.pk})
+
+        image.refresh_from_db()
+        self.assertFalse(shared)
+        self.assertEqual(wiki.location_id, self.location.pk)
+        self.assertIsNone(image.wiki_id)
+        mock_enqueue.assert_called_once_with(process_image_upload, image.pk)
 
     def test_sharing_to_an_existing_wiki_contributes_without_renaming_it(self) -> None:
         """The case that used to be impossible.

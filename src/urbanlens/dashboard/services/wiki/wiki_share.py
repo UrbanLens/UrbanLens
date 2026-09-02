@@ -85,7 +85,8 @@ class WikiShareService:
         include = {f for f in (include_fields or set()) if f in SEEDABLE_FIELDS}
         location: Location = pin.location
 
-        shared = bool(include or alias_ids or image_ids)
+        photo_ids = self._processed_photo_ids(pin, image_ids or set())
+        shared = bool(include or alias_ids or photo_ids)
 
         with transaction.atomic():
             # Ordinarily a no-op: the page was created when the pin was, by
@@ -104,7 +105,7 @@ class WikiShareService:
                 if value:
                     WikiStatVote.objects.update_or_create(wiki=wiki, profile=pin.profile, field=field, defaults={"value": value})
             self._seed_aliases(pin, wiki, alias_ids or set())
-            self._seed_photos(pin, wiki, image_ids or set())
+            self._seed_photos(pin, wiki, photo_ids)
             if created:
                 # Naming stays a creation-time act. Renaming a page other
                 # people read because somebody shared a photo to it would be a
@@ -177,6 +178,32 @@ class WikiShareService:
         """Attach the chosen photos to the wiki's gallery, keeping their pin link intact."""
         if image_ids:
             pin.images.filter(pk__in=image_ids).update(wiki=wiki)
+
+    def _processed_photo_ids(self, pin: Pin, image_ids: set[int]) -> set[int]:
+        """Selected pin photos whose stored bytes have already completed upload processing.
+
+        A photo's wiki link controls who may fetch its file, so an image is only
+        eligible once ``process_image_upload`` has stripped embedded EXIF/location
+        metadata from its stored bytes. That parse is decorated ``@untrusted_parse``
+        and may only run in the sandbox worker (``queue=SANDBOX_QUEUE``) - never
+        inline here in the web process - so an image still missing that pass is
+        (re-)enqueued for next time and left out of this share rather than
+        processed on the spot.
+        """
+        if not image_ids:
+            return set()
+
+        selected = list(pin.images.filter(pk__in=image_ids).only("pk", "upload_processed_at"))
+        processed_ids = {image.pk for image in selected if image.upload_processed_at is not None}
+        skipped = {image.pk for image in selected} - processed_ids
+        if skipped:
+            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+            from urbanlens.dashboard.tasks import process_image_upload
+
+            for image_id in skipped:
+                safely_enqueue_task(process_image_upload, image_id)
+            logger.warning("wiki_share: skipped %d selected photo(s) on pin %s pending upload processing", len(skipped), pin.pk)
+        return processed_ids
 
 
 def seedable_field_values(pin: Pin) -> list[dict]:
