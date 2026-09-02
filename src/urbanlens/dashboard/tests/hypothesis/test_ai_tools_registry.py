@@ -32,6 +32,49 @@ from urbanlens.dashboard.services.ai.tools.registry import (
 )
 
 
+#: Every tool whose :class:`DataScope` is not ``NONE``, mapped to the tests
+#: proving another profile's data never reaches it - as
+#: ``"<test module>::<class>::<test>"``.
+#:
+#: This is the registry-driven guard the design asked for, and it is here for
+#: one reason: a tool that reads user data and ships without a negative-access
+#: test should fail CI, not depend on a reviewer noticing. Adding a tool with
+#: ``scope != NONE`` breaks :meth:`RegistrationTests.test_negative_access_coverage_is_complete`
+#: until its negative case is written and named here, and renaming or deleting
+#: one of those tests breaks
+#: :meth:`RegistrationTests.test_every_named_negative_access_test_exists`.
+#:
+#: The per-tool tests stay hand-written rather than generated: each tool takes
+#: different arguments and reaches different models, so "what would a leak
+#: even look like" is a per-tool question. What is mechanized is that the
+#: question got asked.
+NEGATIVE_CASES: dict[str, tuple[str, ...]] = {
+    "search_pins": ("test_ai_tools_pins::SearchPinsTests::test_another_profiles_pin_never_leaks_through",),
+    "find_unvisited_pins": ("test_ai_tools_pins::FindUnvisitedPinsTests::test_only_sees_own_pins",),
+    "list_trips": ("test_ai_tools_trips::ListTripsTests::test_only_sees_own_trips",),
+    # A write, so its negative case is that the row it creates binds to the
+    # requesting profile rather than anything the model named.
+    "create_trip": ("test_ai_tools_trips::CreateTripTests::test_creates_trip_and_membership",),
+    "add_trip_activity": (
+        "test_ai_tools_trips::AddTripActivityTests::test_foreign_trip_is_rejected",
+        "test_ai_tools_trips::AddTripActivityTests::test_foreign_pin_is_rejected",
+    ),
+    "undo_peek": ("test_ai_tools_undo::UndoPeekToolTests::test_another_profiles_undo_history_is_invisible",),
+    "undo_last_action": ("test_ai_tools_undo::UndoLastActionToolTests::test_another_profiles_real_uuid_cannot_be_used_against_this_profiles_stack",),
+    "has_tunnels": (
+        "test_ai_tools_places::HasTunnelsTests::test_another_profiles_pin_slug_never_resolves",
+        "test_ai_tools_places::HasTunnelsTests::test_another_profiles_personal_floorplan_is_never_evidence",
+        "test_ai_tools_places::HasTunnelsTests::test_another_profiles_unshared_photo_is_never_evidence",
+    ),
+    "have_i_been_here": (
+        "test_ai_tools_visits::HaveIBeenHereTests::test_another_profiles_pin_slug_never_resolves",
+        "test_ai_tools_visits::HaveIBeenHereTests::test_another_profiles_route_is_never_evidence",
+    ),
+    "distance_and_drive_time": ("test_ai_tools_routing::DistanceAndDriveTimeTests::test_another_profiles_pin_slug_never_resolves",),
+    "get_weather": ("test_ai_tools_weather::GetWeatherTests::test_another_profiles_pin_slug_never_resolves",),
+}
+
+
 def _plain_profile():
     """A profile with SiteFeature.AI granted - the gate these tests exercise past, not around.
 
@@ -233,6 +276,35 @@ class RegistrationTests(TestCase):
         for spec in REGISTRY.values():
             if not spec.read_only:
                 self.assertTrue(spec.requires_confirmation, f"{spec.name} is a write but does not require confirmation")
+
+    def test_negative_access_coverage_is_complete(self) -> None:
+        scoped = {name for name, spec in REGISTRY.items() if spec.scope is not DataScope.NONE}
+        missing = scoped - set(NEGATIVE_CASES)
+        self.assertEqual(
+            missing,
+            set(),
+            f"Tools {sorted(missing)} declare a DataScope other than NONE but have no entry in NEGATIVE_CASES. "
+            "Write a test proving a second profile gets nothing from this tool, then name it there.",
+        )
+
+    def test_negative_access_coverage_has_no_stale_entries(self) -> None:
+        stale = set(NEGATIVE_CASES) - set(REGISTRY)
+        self.assertEqual(stale, set(), f"NEGATIVE_CASES names tools that are no longer registered: {sorted(stale)}")
+
+    def test_every_named_negative_access_test_exists(self) -> None:
+        # Without this, NEGATIVE_CASES decays into a list of names that used
+        # to mean something - a renamed or deleted test would leave the
+        # completeness check above passing while the coverage it claims is gone.
+        import importlib
+
+        for tool, cases in sorted(NEGATIVE_CASES.items()):
+            self.assertTrue(cases, f"{tool} has an empty NEGATIVE_CASES entry")
+            for case in cases:
+                module_name, class_name, test_name = case.split("::")
+                module = importlib.import_module(f"urbanlens.dashboard.tests.hypothesis.{module_name}")
+                test_class = getattr(module, class_name, None)
+                self.assertIsNotNone(test_class, f"{tool}: {module_name} has no class {class_name}")
+                self.assertTrue(hasattr(test_class, test_name), f"{tool}: {class_name} has no test {test_name}")
 
     def test_real_tools_are_registered(self) -> None:
         for name in (

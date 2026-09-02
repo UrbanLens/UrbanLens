@@ -201,21 +201,26 @@ that" can't undo something the user did after asking and before confirming.
 ### `DataScope` and negative-access coverage
 
 Every scoped tool declares `scope: DataScope.NONE | OWN_PROFILE |
-VISIBLE_SHARED` - what kind of data its result could contain, for a
-reviewer (and eventually a test) to check against. Of the 14 tools
+VISIBLE_SHARED` - what kind of data its result could contain. Of the 14 tools
 registered today, 11 have `scope != NONE` and each has a hand-written
 negative-access test in its own test file (another profile's pin/trip/undo
-entry/route/floorplan/photo/comment never surfaces). The plan's own
-Verification section describes a registry-driven generic version of this -
-a parametrized test over `REGISTRY.values()` that requires a
-`NEGATIVE_CASES[tool.name]` entry for every scoped tool, failing CI when a
-new one is added without one. **Deliberately still deferred**: building a
-uniform harness across 11 tools with genuinely different argument shapes
-(`pin_slug`, `from_pin_slug`/`to_pin_slug`, `undo_uuid`, trip `slug`, ...) is
-its own design task, not a small addition to a docs batch, and the manual
-discipline it would mechanize has held with zero misses across every tool
-added this project. Worth building as its own step once the registry's
-growth rate suggests the manual discipline is likely to slip - not before.
+entry/route/floorplan/photo/comment never surfaces).
+
+`NEGATIVE_CASES` in `test_ai_tools_registry.py` is what keeps that true.
+It maps every scoped tool to the tests covering it, and three checks run
+against it:
+
+- a tool registered with `scope != NONE` and no entry fails CI;
+- an entry naming a tool that no longer exists fails CI;
+- an entry naming a test that no longer exists fails CI - so the map cannot
+  decay into a list of names that used to mean something.
+
+The per-tool tests stay hand-written rather than generated. The 11 tools take
+genuinely different arguments (`pin_slug`, `from_pin_slug`/`to_pin_slug`,
+`undo_uuid`, trip `slug`, ...) and reach different models, so "what would a
+leak even look like here" is a per-tool question and a uniform harness would
+answer it badly. What is mechanized is that the question got asked - which is
+the part a reviewer's memory was previously carrying.
 
 ## Grounded content
 
@@ -292,7 +297,6 @@ section for the wire-level request/response shapes on both surfaces.
 - **Read-only Postgres role for `ai-worker`**: the only write the loop
   performs today is `log_api_call`; moving that to a default-queue task
   would let `ai-worker`'s DB role be read-only.
-- **Registry-driven `NEGATIVE_CASES` CI guard** - see above.
 - **MCP adapter**: not built. `ToolSpec` maps close to 1:1 onto MCP's `Tool`
   shape (name/description/inputSchema), so an adapter is a cheap follow-up
   if an external agent host (not just this app's own UI) ever needs to
