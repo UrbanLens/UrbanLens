@@ -37,7 +37,6 @@ x-app-env: &app-env
   UL_GOOGLE_SEARCH_CX: ${UL_GOOGLE_SEARCH_CX:-${UL_GOOGLE_SEARCH_TENANT}}
   UL_OPENWEATHERMAP_API_KEY: ${UL_OPENWEATHERMAP_API_KEY}
   UL_NPS_API_KEY: ${UL_NPS_API_KEY}
-  UL_OPENAI_API_KEY: ${UL_OPENAI_API_KEY}
   UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
@@ -54,10 +53,13 @@ x-app-env: &app-env
   UL_MEDIA_BASE_URL: ${UL_MEDIA_BASE_URL:-}
   UL_MEDIA_COOKIE_DOMAIN: ${UL_MEDIA_COOKIE_DOMAIN:-}
   UL_MEDIA_CSP: ${UL_MEDIA_CSP:-}
-  # ai-inference holds the Anthropic key now (UL_ANTHROPIC_API_KEY is
-  # deliberately absent above) - LLMGateway here calls providers through
-  # this HTTP hop instead of in-process. UL_OPENAI_API_KEY/UL_CLOUDFLARE_*
-  # stay above until the vision follow-up moves those calls too.
+  # No provider API key appears anywhere in this anchor, deliberately.
+  # Every provider call this tier makes - LLMGateway's, and vision's since
+  # the vision migration - goes over this HTTP hop to ai-inference, which is
+  # the only container holding those credentials (it reads them from
+  # .env.ai; see its own service entry). Adding one back here would put a
+  # provider key next to the database credentials again, which is the whole
+  # thing this split exists to prevent - test_ai_isolation.py fails if you do.
   UL_AI_INFERENCE_URL: ${UL_AI_INFERENCE_URL:-http://urbanlens_ai_inference:8002}
   UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
   UL_DIRECT_INFERENCE_POLICY: ${UL_DIRECT_INFERENCE_POLICY:-warn}
@@ -916,13 +918,21 @@ services:
           - urbanlens_ai_inference
       # egress-proxy, its only route to a provider API.
       proxy_network: {}
-    # No env_file - see the plan's credentials matrix: this is the one
-    # container that must never see the host's full .env.
+    # Provider keys come from .env.ai, NOT the host .env, and NOT compose
+    # interpolation. That distinction is the whole point: `${VAR}` is
+    # resolved by compose from the root .env, so a key referenced that way
+    # has to *live* in .env - where `env_file: .env` would hand it to app
+    # and celery-worker too, next to the database credentials. Reading a
+    # separate file is what lets the key exist for this container and
+    # nowhere else. See docs/AI_PIPELINE.md and .env.ai-sample.
+    #
+    # required: false so a checkout with no .env.ai still starts; the
+    # service then answers every call with "No <provider> API key
+    # configured", which is a clear failure rather than a silent one.
+    env_file:
+      - path: .env.ai
+        required: false
     environment:
-      UL_ANTHROPIC_API_KEY: ${UL_ANTHROPIC_API_KEY}
-      UL_OPENAI_API_KEY: ${UL_OPENAI_API_KEY}
-      UL_CLOUDFLARE_AI_API_KEY: ${UL_CLOUDFLARE_AI_API_KEY}
-      UL_CLOUDFLARE_WORKER_AI_ENDPOINT: ${UL_CLOUDFLARE_WORKER_AI_ENDPOINT}
       UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
       UL_PROCESS_ROLE: inference
       HTTPS_PROXY: http://urbanlens_egress_proxy:8888

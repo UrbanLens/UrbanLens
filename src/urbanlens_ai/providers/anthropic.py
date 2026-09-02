@@ -9,7 +9,7 @@ from anthropic.types import MessageParam, ToolParam
 
 from urbanlens_ai import policy
 from urbanlens_ai.providers.base import ProviderAdapter, ProviderError
-from urbanlens_ai.schema import InferenceRequest, InferenceResponse, StopReason, TextBlock, ToolUseBlock, Usage
+from urbanlens_ai.schema import ImagePart, InferenceRequest, InferenceResponse, Message, StopReason, TextBlock, ToolUseBlock, Usage
 
 #: Anthropic's own stop_reason values that map onto our normalized set
 #: unchanged; anything else (``stop_sequence``, ``pause_turn``, ``refusal``,
@@ -30,8 +30,21 @@ class AnthropicAdapter(ProviderAdapter):
             max_retries=policy.PROVIDER_MAX_RETRIES,
         )
 
+    @staticmethod
+    def _content(message: Message) -> Any:
+        """Anthropic content for one message: a bare string, or typed blocks when it carries an image."""
+        if isinstance(message.content, str):
+            return message.content
+        blocks: list[dict[str, Any]] = []
+        for part in message.parts:
+            if isinstance(part, ImagePart):
+                blocks.append({"type": "image", "source": {"type": "base64", "media_type": part.media_type, "data": part.data}})
+            else:
+                blocks.append({"type": "text", "text": part.text})
+        return blocks
+
     def send(self, request: InferenceRequest) -> InferenceResponse:
-        messages: list[MessageParam] = [MessageParam(role=message.role, content=message.content) for message in request.messages]
+        messages: list[MessageParam] = [MessageParam(role=message.role, content=self._content(message)) for message in request.messages]
         tools: list[ToolParam] = [ToolParam(name=tool.name, description=tool.description, input_schema=tool.input_schema) for tool in request.tools]
 
         kwargs: dict[str, Any] = {}

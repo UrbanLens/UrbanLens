@@ -243,12 +243,13 @@ class PolicyTests(SimpleTestCase):
             validate_cloudflare_endpoint("https://api.cloudflare.com.evil.example/")  # not actually cloudflare.com
 
 
-def _compose() -> dict[str, Any]:
-    import pathlib
+#: The repo root - parents[5] from src/urbanlens/dashboard/tests/hypothesis/.
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
+_COMPOSE_PATH = _REPO_ROOT / "docker-compose.yml"
 
-    # parents[5] from src/urbanlens/dashboard/tests/hypothesis/ is the repo root.
-    path = pathlib.Path(__file__).resolve().parents[5] / "docker-compose.yml"
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+def _compose() -> dict[str, Any]:
+    return yaml.safe_load(_COMPOSE_PATH.read_text(encoding="utf-8"))
 
 
 class ComposeTopologyTests(SimpleTestCase):
@@ -260,9 +261,16 @@ class ComposeTopologyTests(SimpleTestCase):
     values Compose would only fill in at runtime.
     """
 
-    def test_ai_inference_has_no_env_file(self) -> None:
+    def test_ai_inference_never_loads_the_host_env_file(self) -> None:
+        # It does take an env_file now - .env.ai, holding the provider keys
+        # (see test_ai_inference_reads_provider_keys_from_its_own_env_file).
+        # The rule that has not changed is which file: the host .env carries
+        # database, OAuth and REData credentials, and this container must
+        # never see any of them.
         compose = _compose()
-        self.assertNotIn("env_file", compose["services"]["ai-inference"])
+        env_files = compose["services"]["ai-inference"].get("env_file") or []
+        paths = {entry["path"] if isinstance(entry, dict) else entry for entry in env_files}
+        self.assertNotIn(".env", paths)
 
     def test_ai_inference_has_no_volumes(self) -> None:
         compose = _compose()
@@ -347,39 +355,52 @@ class ComposeTopologyTests(SimpleTestCase):
         compose = _compose()
         self.assertNotIn("internal", compose["networks"]["ai_egress_network"])
 
-    def test_app_env_anchor_no_longer_names_the_anthropic_key(self) -> None:
-        # AnthropicGateway (pinned for the assistant) calls providers through
-        # ai-inference, so nothing on app reads this key any more and the
-        # anchor stopped naming it. NOTE this is weaker than it looks, and
-        # deliberately named for what it actually checks: `app` and
-        # `celery-worker` still load the whole host .env via `env_file`, so
-        # as long as UL_ANTHROPIC_API_KEY is defined there (it must be -
-        # compose interpolates ${UL_ANTHROPIC_API_KEY} into ai-inference's
-        # own environment from it) those containers still *have* it. Only
-        # ai-worker and ai-inference, which take no env_file at all, are
-        # genuinely narrowed. Closing that gap needs the key to move out of
-        # .env into an ai-only env file - see docs/AI_PIPELINE.md's residuals.
+    def test_no_provider_key_reaches_the_app_tier(self) -> None:
+        # The property the whole ai-inference split exists for: a provider
+        # credential must never sit in the same process environment as
+        # UL_DB_PASS and UL_FIELD_ENCRYPTION_KEY. Since the vision migration,
+        # nothing on app or celery-worker reads one.
         compose = _compose()
-        self.assertNotIn("UL_ANTHROPIC_API_KEY", compose["x-app-env"])
+        for env_name in ("x-app-env", "x-sandbox-env", "x-ai-env", "x-beat-env"):
+            keys = set(compose[env_name])
+            leaked = {key for key in keys if any(token in key for token in ("ANTHROPIC", "OPENAI", "CLOUDFLARE_AI", "CLOUDFLARE_WORKER"))}
+            self.assertEqual(leaked, set(), f"{env_name} carries provider credential(s): {sorted(leaked)}")
 
-    def test_app_and_celery_worker_still_load_the_whole_host_env_file(self) -> None:
-        # The other half of the note above, asserted rather than left implicit:
-        # if either of these ever stops taking env_file, the residual it
-        # documents is gone and that docs section should be revisited.
-        compose = _compose()
-        for service in ("app", "celery-worker"):
-            self.assertIn("env_file", compose["services"][service], f"{service} unexpectedly stopped loading .env")
-
-    def test_app_env_still_carries_openai_and_cloudflare_keys(self) -> None:
-        # Deferred to the vision.py follow-up (plan Out of scope) - not this batch.
-        compose = _compose()
-        self.assertIn("UL_OPENAI_API_KEY", compose["x-app-env"])
-
-    def test_ai_inference_env_carries_all_three_provider_keys(self) -> None:
-        compose = _compose()
-        env = compose["services"]["ai-inference"]["environment"]
+    def test_provider_keys_are_not_interpolated_from_the_host_env(self) -> None:
+        # The subtle half. `${UL_OPENAI_API_KEY}` anywhere in this file means
+        # the key has to live in the root .env for compose to resolve it - and
+        # app/celery-worker load that whole file via env_file, so it would
+        # land on them regardless of which service the ${...} appeared under.
+        # ai-inference reads .env.ai directly for exactly this reason.
+        raw = _COMPOSE_PATH.read_text(encoding="utf-8")
         for key in ("UL_ANTHROPIC_API_KEY", "UL_OPENAI_API_KEY", "UL_CLOUDFLARE_AI_API_KEY", "UL_CLOUDFLARE_WORKER_AI_ENDPOINT"):
-            self.assertIn(key, env)
+            self.assertNotIn(
+                "${" + key + "}",
+                raw,
+                f"{key} is interpolated from the host .env, which puts it back on app/celery-worker - it belongs in .env.ai",
+            )
+
+    def test_ai_inference_reads_provider_keys_from_its_own_env_file(self) -> None:
+        compose = _compose()
+        env_files = compose["services"]["ai-inference"]["env_file"]
+        paths = {entry["path"] if isinstance(entry, dict) else entry for entry in env_files}
+        self.assertEqual(paths, {".env.ai"})
+        # Never the host .env - that is the file carrying DB and OAuth secrets.
+        self.assertNotIn(".env", paths)
+
+    def test_ai_inference_env_block_carries_no_provider_key(self) -> None:
+        # Its credentials come from .env.ai; the inline block is only the
+        # bearer token, role, and proxy vars.
+        compose = _compose()
+        env = set(compose["services"]["ai-inference"]["environment"])
+        self.assertEqual(env, {"UL_AI_INFERENCE_TOKEN", "UL_PROCESS_ROLE", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY"})
+
+    def test_env_ai_is_gitignored_and_has_a_sample(self) -> None:
+        # A committed .env.ai would defeat the split entirely; a missing
+        # sample makes the split undiscoverable for whoever deploys next.
+        root = _REPO_ROOT
+        self.assertIn(".env.ai", (root / ".gitignore").read_text(encoding="utf-8").splitlines())
+        self.assertTrue((root / ".env.ai-sample").is_file(), ".env.ai-sample is missing")
 
     def test_ai_inference_depends_on_egress_proxy_being_healthy(self) -> None:
         compose = _compose()

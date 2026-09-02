@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from django.apps import apps
 from django.conf import settings
-from django.core.checks import Error, register
+from django.core.checks import Error, Warning as CheckWarning, register
 from django.db.models import FileField
 
 from urbanlens.dashboard.services.media.access import MEDIA_FAMILY_ATTR, registered_families
@@ -180,3 +180,61 @@ def check_media_origin_cookie_domain(app_configs: Sequence[AppConfig] | None = N
         ]
 
     return []
+
+
+#: The credentials that must exist only in the ai-inference container. Named
+#: here rather than imported from ``AppSettings`` so this check keeps working
+#: if a field is renamed there - a rename that silently emptied this tuple
+#: would turn the check into a no-op, which is worse than a stale name.
+_PROVIDER_KEY_SETTINGS = ("anthropic_api_key", "openai_api_key", "cloudflare_ai_api_key")
+
+
+@register()
+def check_provider_keys_are_not_on_the_app_tier(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """Warn when a provider API key is readable by a process that routes inference remotely.
+
+    ``ai-inference`` exists so provider credentials never sit in the same
+    process as the database credentials and the field-encryption key. The one
+    way that quietly stops being true is a key finding its way back into the
+    root ``.env``, which ``app`` and ``celery-worker`` load wholesale via
+    ``env_file`` - nothing would break, and nothing would say so.
+
+    Deliberately a warning, not an error: the key being present is a
+    misconfiguration, not a failure, and blocking every ``manage.py`` command
+    over it would be worse than the problem. Deliberately silent when
+    ``ai_inference_url`` is unset, because that is a local checkout using
+    ``LocalInferenceClient``, where these keys are exactly where they should be.
+
+    Args:
+        app_configs: Unused; part of Django's check signature.
+        **kwargs: Unused; part of Django's check signature.
+
+    Returns:
+        One warning naming every provider key that should have been in
+        ``.env.ai`` instead, or an empty list.
+    """
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    if not getattr(app_settings, "ai_inference_url", None):
+        # No remote inference tier configured - in-process provider calls are
+        # the intended path here, so the keys belong in this process.
+        return []
+    if getattr(settings, "UL_PROCESS_ROLE", "") == "inference":
+        return []
+
+    present = [name for name in _PROVIDER_KEY_SETTINGS if getattr(app_settings, name, None)]
+    if not present:
+        return []
+    return [
+        CheckWarning(
+            f"Provider API key(s) readable by this process: {', '.join(sorted(present))}.",
+            hint=(
+                "This deployment routes inference through ai-inference, so nothing here reads these. "
+                "They are almost certainly set in the root .env, which app and celery-worker load in full - "
+                "putting a provider credential in the same environment as UL_DB_PASS and "
+                "UL_FIELD_ENCRYPTION_KEY. Move them to .env.ai, which only ai-inference reads. "
+                "See .env.ai-sample and docs/AI_PIPELINE.md."
+            ),
+            id="dashboard.W001",
+        ),
+    ]

@@ -42,7 +42,7 @@ app (web/websocket)  →  ai-worker (Celery, queue=ai)  →  ai-inference (Djang
   happens to be set to elsewhere - this worker never decodes untrusted bytes.
 - **ai-inference** - a Django-free WSGI service (`urbanlens_ai/wsgi.py`,
   `gunicorn -k gthread`) on the same image as everything else, different
-  entrypoint. Holds provider API keys (Anthropic, OpenAI, Cloudflare) and
+  entrypoint. Holds every provider API key (Anthropic, OpenAI, Cloudflare) and
   nothing else - no database, no cache, no secret key, no encryption key, no
   volumes. Normalizes each provider's API into one shape
   (`urbanlens_ai.schema.InferenceRequest`/`InferenceResponse`), and
@@ -110,6 +110,25 @@ it.
    `UL_REDATA_API_KEY` or any OAuth secret. `ai-inference` doesn't carry a
    database URL, the encryption key, or REData/OAuth credentials either -
    only the provider keys it exists to hold.
+
+   Those keys live in **`.env.ai`**, which only `ai-inference` reads
+   (`env_file: .env.ai`; see `.env.ai-sample`). They are deliberately *not*
+   in the root `.env` and are never referenced as `${UL_..._API_KEY}` in
+   `docker-compose.yml`, because both would put them back on `app` and
+   `celery-worker`: Compose resolves `${VAR}` from the root `.env`, and those
+   two services load that whole file via `env_file`. A provider credential
+   there would sit in the same process environment as `UL_DB_PASS` and
+   `UL_FIELD_ENCRYPTION_KEY` - the adjacency this whole tier exists to break.
+   `test_ai_isolation.py` asserts both halves (no provider key in any env
+   anchor, no `${...}` interpolation of one anywhere in the compose file),
+   and Django system check `dashboard.W001` warns at startup if a process
+   that routes inference remotely can still read one.
+
+   A local checkout running without Docker is the exception and is fine:
+   `LocalInferenceClient` calls providers in-process and reads these from
+   `AppSettings`, i.e. from the root `.env`. There is no container boundary
+   there to protect, which is why `dashboard.W001` stays silent when
+   `ai_inference_url` is unset.
 2. **Code** - `services.apis.locations.redata_context_gateway.redata_configured()`
    returns `False` unconditionally when `current_role() is ProcessRole.AI`,
    so every REData-first resolution chokepoint (weather, routing, geocode,
@@ -273,27 +292,40 @@ its call in `services.core.timeout_utils.call_with_deadline` using
 the turn's overall budget. See `docs/EXTERNAL_API.md`'s "AI Assistant"
 section for the wire-level request/response shapes on both surfaces.
 
+## Vision and image classification
+
+Photo keywording and the image classifier were the last provider calls made
+outside this tier: `services/ai/vision.py` used to build an `OpenAI` client
+and POST to Workers AI itself, on whichever worker ran the task. They now go
+through the same `inference_client` seam as everything else, in two shapes:
+
+- **Vision is an ordinary message.** A `Message.content` may be a list of
+  parts instead of a bare string, and one of those parts can be an
+  `ImagePart`. Each adapter translates it into its own provider's form -
+  OpenAI's `image_url` with a `data:` URL, Anthropic's `{type: image,
+  source: {type: base64}}` block, Cloudflare's flat `{image: [...], prompt}`
+  payload (Workers AI vision models take no messages array at all). Vision
+  *is* a chat completion, so it reuses `/v1/messages` rather than getting a
+  parallel endpoint with its own auth, policy and adapter machinery.
+- **Classification is not.** ResNet-50 takes no prompt, holds no
+  conversation and spends no tokens; folding it into `InferenceRequest`
+  would mean a request type where half the fields are meaningless. It gets
+  `POST /v1/classify` and its own `ClassifyRequest`/`ClassifyResponse`.
+
+Images cross the wire as inline base64, never a URL. A URL would be
+something `ai-inference` has to *fetch*, which is exactly the capability the
+egress allowlist exists to deny it - the caller reads the bytes and sends
+them. `policy.MAX_IMAGE_BYTES` caps a single image at 1.5 MB *decoded* (not
+base64 characters, which would let an image a third larger through), and
+`MAX_IMAGES_PER_REQUEST` caps the count; callers send a 512px downscale, so
+both are backstops rather than working limits.
+
+Rate limiting, the service-key buckets and cost accounting stay in
+`vision.py`, on the app side, for the same reason `LLMGateway` keeps its
+own: `ai-inference` has no database and no idea what a service key is.
+
 ## Follow-ups (not yet done)
 
-- **Vision migration**: `services/ai/vision.py` still builds `OpenAI`/
-  Cloudflare clients directly on `app`, outside `ai-inference` - a second
-  provider-key surface on the regular worker, tracked as a deliberate
-  residual until it's moved behind `POST /v1/vision`.
-- **Provider keys still reach `app` via `env_file`.** `x-app-env` no longer
-  names `UL_ANTHROPIC_API_KEY`, but `app` and `celery-worker` still load the
-  whole host `.env` (`env_file: [{path: .env, required: false}]`), and that
-  file must define the key because Compose interpolates
-  `${UL_ANTHROPIC_API_KEY}` into `ai-inference`'s own environment from it. So
-  those two containers still *have* every provider key, next to the DB
-  credentials - the "provider keys never sit beside DB creds" property holds
-  today only for `ai-worker` and `ai-inference`, which take no `env_file` at
-  all. Closing it means moving the provider keys out of `.env` into an
-  AI-only env file that only `ai-inference` reads, which is a coordinated
-  deployment change (every environment must create that file before the
-  compose change lands, or `ai-inference` starts with no credentials) and is
-  gated on the vision migration above, since `vision.py` genuinely still
-  needs the OpenAI/Cloudflare keys on `app`. `test_ai_isolation.py` asserts
-  both halves of this so the gap stays visible rather than reading as done.
 - **Read-only Postgres role for `ai-worker`**: the only write the loop
   performs today is `log_api_call`; moving that to a default-queue task
   would let `ai-worker`'s DB role be read-only.

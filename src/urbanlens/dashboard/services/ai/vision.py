@@ -1,14 +1,23 @@
 """Vision AI helpers: photo keyword description and image classification.
 
-Separate from the text-only ``LLMGateway`` hierarchy because vision requests
-have provider-specific payload shapes (data-URL content parts for OpenAI,
-byte arrays for Cloudflare Workers AI). Callers are expected to pass an
-already-downscaled image (see ``photo_keywords.downscaled_jpeg_bytes``) -
-never full-resolution uploads.
+Separate from the text-only ``LLMGateway`` hierarchy because these calls
+aren't conversations - there is no transcript, no tool loop, and no
+``<ANSWER>`` protocol, just one image and one question. What they *do* share
+is the sandbox: like every other provider call in this app, they go through
+``services.ai.inference_client`` to ``ai-inference``, which is the only tier
+holding provider API keys. Nothing in this module builds a provider client or
+reads a provider credential - see ``docs/AI_PIPELINE.md``.
+
+Callers pass an already-downscaled image
+(``photo_keywords.downscaled_jpeg_bytes``, 512px longest edge) - never
+full-resolution uploads. ``urbanlens_ai.policy.MAX_IMAGE_BYTES`` is the
+backstop if one forgets.
 
 Every call is recorded via ``rate_limiter.log_api_call`` and respects the
 admin-configurable per-service limits, with a running cost estimate logged
-per call (groundwork for API cost reporting).
+per call. That accounting stays here, on the app side, for the same reason
+``LLMGateway`` keeps its own: ``ai-inference`` has no database and no idea
+what a service key or a cost bucket is.
 """
 
 from __future__ import annotations
@@ -17,11 +26,12 @@ import base64
 from decimal import Decimal
 import logging
 import time
-from typing import Any
-
-import requests
+from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.core.rate_limiter import check_rate_limit, log_api_call, service_is_enabled
+
+if TYPE_CHECKING:
+    from urbanlens_ai.schema import Provider
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +43,9 @@ SERVICE_PHOTO_CLASSIFIER = "cloudflare_image_classifier"
 _CF_VISION_MODEL = "@cf/llava-hf/llava-1.5-7b-hf"
 _CF_CLASSIFIER_MODEL = "@cf/microsoft/resnet-50"
 
+#: Response budget for a keyword list - a couple of dozen short phrases.
+_KEYWORD_MAX_TOKENS = 300
+
 _KEYWORD_PROMPT = (
     "Describe this photo as searchable keywords for a photo library. "
     "List 8-15 short keywords or two-word phrases covering the subject, setting, "
@@ -40,9 +53,13 @@ _KEYWORD_PROMPT = (
     "comma-separated, no numbering and no other text."
 )
 
-#: Rough OpenAI vision token estimate for a <=512px image plus prompt/response.
-#: Good enough for a running cost estimate; exact usage is logged when the API
-#: returns it.
+#: Characters stripped from each keyword returned by a model - list
+#: punctuation and quoting it may wrap a phrase in.
+_KEYWORD_STRIP_CHARS = " .;:-*#\"'"
+
+#: Rough OpenAI vision token estimate for a <=512px image plus prompt/response,
+#: used only when the provider's response carries no usage of its own. Good
+#: enough for a running cost estimate.
 _OPENAI_VISION_FALLBACK_TOKENS = (900, 120)
 
 
@@ -61,94 +78,93 @@ def _parse_keyword_text(text: str) -> list[str]:
     """Split a comma/newline-separated keyword response into clean keywords."""
     parts: list[str] = []
     for chunk in text.replace("\n", ",").split(","):
-        keyword = chunk.strip(" .;:-*#\"'")
+        keyword = chunk.strip(_KEYWORD_STRIP_CHARS)
         if keyword:
             parts.append(keyword)
     return parts
 
 
-def _openai_vision_keywords(image_bytes: bytes) -> list[str]:
-    """Ask OpenAI's vision-capable chat API for photo keywords."""
-    from openai import OpenAI
+def _vision_target() -> tuple[Provider, str]:
+    """The ``(provider, model)`` the site's AI settings select for a vision call.
 
+    Mirrors the provider dispatch every other AI feature does through
+    ``services.ai.factory``, but resolved here: this module talks to the
+    inference client directly rather than through an ``LLMGateway``, because
+    there is no conversation for a gateway to manage.
+
+    Returns:
+        The provider name and model identifier to send this call to.
+    """
     from urbanlens.dashboard.models.site_settings import SiteSettings
-    from urbanlens.dashboard.services.ai.openai import DEFAULT_MODEL, OpenAIGateway
-    from urbanlens.UrbanLens.settings.app import settings
+    from urbanlens.dashboard.services.ai.openai import DEFAULT_MODEL
 
     site = SiteSettings.get_current()
-    model = site.openai_model or DEFAULT_MODEL
-    client = OpenAI(api_key=settings.openai_api_key)
-    data_url = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")
+    if site.ai_provider == "openai":
+        return "openai", site.openai_model or DEFAULT_MODEL
+    return "cloudflare", _CF_VISION_MODEL
 
-    started = time.monotonic()
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": _KEYWORD_PROMPT},
-                    {"type": "image_url", "image_url": {"url": data_url, "detail": "low"}},
-                ],
-            },
-        ],
-        max_tokens=300,
-    )
-    elapsed_ms = int((time.monotonic() - started) * 1000)
 
-    sent_tokens, received_tokens = _OPENAI_VISION_FALLBACK_TOKENS
-    usage = getattr(response, "usage", None)
-    if usage is not None:
-        sent_tokens = usage.prompt_tokens or sent_tokens
-        received_tokens = usage.completion_tokens or received_tokens
+def _openai_cost(model: str, input_tokens: int | None, output_tokens: int | None) -> Decimal:
+    """Price one OpenAI vision call from its reported usage, falling back to an estimate.
+
+    Args:
+        model: The model the call actually used.
+        input_tokens: Provider-reported prompt tokens, or None.
+        output_tokens: Provider-reported completion tokens, or None.
+
+    Returns:
+        The estimated dollar cost of the call.
+    """
+    from urbanlens.dashboard.services.ai.openai import OpenAIGateway
+
+    fallback_sent, fallback_received = _OPENAI_VISION_FALLBACK_TOKENS
+    sent = input_tokens or fallback_sent
+    received = output_tokens or fallback_received
     cost_sent, cost_received = OpenAIGateway.MODEL_COSTS.get(model, OpenAIGateway.DEFAULT_COST_PER_THOUSAND)
-    estimated_cost = (Decimal(sent_tokens) * cost_sent + Decimal(received_tokens) * cost_received) / 1000
-    logger.info(
-        "AI photo keywords via OpenAI %s: %d+%d tokens, est. $%s, %dms",
-        model,
-        sent_tokens,
-        received_tokens,
-        round(estimated_cost, 5),
-        elapsed_ms,
+    return (Decimal(sent) * cost_sent + Decimal(received) * cost_received) / 1000
+
+
+def _describe(image_bytes: bytes, prompt: str, *, service_key: str, max_tokens: int) -> str | None:
+    """Ask the configured vision provider one question about one image.
+
+    Args:
+        image_bytes: JPEG bytes, already downscaled.
+        prompt: The instruction to send alongside the image.
+        service_key: Rate-limit/cost bucket to account the call under.
+        max_tokens: Response budget.
+
+    Returns:
+        The model's raw text answer, or None when the call failed (logged).
+    """
+    from urbanlens.dashboard.services.ai.inference_client import ImagePart, InferenceError, InferenceRequest, Message, TextPart, get_inference_client
+
+    provider, model = _vision_target()
+    image = ImagePart(media_type="image/jpeg", data=base64.b64encode(image_bytes).decode("ascii"))
+    request = InferenceRequest(
+        provider=provider,
+        model=model,
+        messages=[Message(role="user", content=[TextPart(text=prompt), image])],
+        max_tokens=max_tokens,
     )
-    # cost_estimate is what cost reporting reads; the log line above is only for
-    # humans tailing the worker. This path prices the call from the response's own
-    # token counts, so it is more accurate than the flat ServiceDefaults.cost_per_call
-    # the HTTP gateway wrapper applies elsewhere - worth actually storing.
-    log_api_call(SERVICE_AI_PHOTO_KEYWORDS, success=True, response_ms=elapsed_ms, endpoint=f"openai:{model}", cost_estimate=estimated_cost)
 
-    body = response.choices[0].message.content or ""
-    return _parse_keyword_text(body)
-
-
-def _cloudflare_post(model: str, payload: dict[str, Any], *, timeout: int = 60) -> dict[str, Any] | None:
-    """POST one Workers AI request, returning the parsed JSON or None."""
-    from urbanlens.UrbanLens.settings.app import settings
-
-    if not settings.cloudflare_worker_ai_endpoint or not settings.cloudflare_ai_api_key:
-        return None
-    url = f"{str(settings.cloudflare_worker_ai_endpoint).rstrip('/')}/{model.lstrip('/')}"
-    response = requests.post(
-        url,
-        headers={"Authorization": f"Bearer {settings.cloudflare_ai_api_key}"},
-        json=payload,
-        timeout=timeout,
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-def _cloudflare_vision_keywords(image_bytes: bytes) -> list[str]:
-    """Ask Cloudflare Workers AI (LLaVA) for photo keywords."""
     started = time.monotonic()
-    data = _cloudflare_post(_CF_VISION_MODEL, {"image": list(image_bytes), "prompt": _KEYWORD_PROMPT, "max_tokens": 256})
+    try:
+        response = get_inference_client().send(request)
+    except InferenceError:
+        logger.exception("AI vision call failed (provider=%s, model=%s)", provider, model)
+        log_api_call(service_key, success=False)
+        return None
     elapsed_ms = int((time.monotonic() - started) * 1000)
-    if data is None:
-        return []
-    log_api_call(SERVICE_AI_PHOTO_KEYWORDS, success=True, response_ms=elapsed_ms, endpoint=f"cloudflare:{_CF_VISION_MODEL}")
-    logger.info("AI photo keywords via Cloudflare %s: %dms (per-request Workers AI pricing)", _CF_VISION_MODEL, elapsed_ms)
-    result = data.get("result") or {}
-    return _parse_keyword_text(str(result.get("description") or result.get("response") or ""))
+
+    # Priced from the provider's own token counts where it reports them -
+    # more accurate than the flat ServiceDefaults.cost_per_call the HTTP
+    # gateway wrapper applies elsewhere, so it is worth storing. Cloudflare
+    # Workers AI bills per request rather than per token, so it records no
+    # estimate at all instead of a fabricated one.
+    cost_estimate = _openai_cost(model, response.usage.input_tokens, response.usage.output_tokens) if provider == "openai" else None
+    log_api_call(service_key, success=True, response_ms=elapsed_ms, endpoint=f"{provider}:{model}", cost_estimate=cost_estimate)
+    logger.info("AI vision via %s %s: est. $%s, %dms", provider, model, round(cost_estimate, 5) if cost_estimate is not None else "n/a", elapsed_ms)
+    return response.text
 
 
 def describe_photo_keywords(image_bytes: bytes) -> list[str]:
@@ -164,84 +180,19 @@ def describe_photo_keywords(image_bytes: bytes) -> list[str]:
     Returns:
         Raw keyword strings (possibly empty on failure - errors are logged).
     """
-    from urbanlens.dashboard.models.site_settings import SiteSettings
-
     if not _rate_limit_gate(SERVICE_AI_PHOTO_KEYWORDS):
         return []
-
-    site = SiteSettings.get_current()
-    try:
-        if site.ai_provider == "openai":
-            return _openai_vision_keywords(image_bytes)
-        return _cloudflare_vision_keywords(image_bytes)
-    except Exception:
-        logger.exception("AI photo keyword generation failed (provider=%s)", site.ai_provider)
-        log_api_call(SERVICE_AI_PHOTO_KEYWORDS, success=False)
-        return []
-
-
-def describe_image_json(image_bytes: bytes, prompt: str, *, service_key: str = SERVICE_AI_PHOTO_KEYWORDS, max_tokens: int = 2000) -> dict | None:
-    """Ask the configured vision provider a JSON-answer question about an image.
-
-    The structured sibling of :func:`generate_photo_keywords`: same provider
-    dispatch, same rate limiting and cost logging, but the caller supplies the
-    prompt and the answer is parsed as one JSON object (tolerantly - see
-    ``json_answer.parse_json_answer``).
-
-    Args:
-        image_bytes: JPEG/PNG bytes, already downscaled if large.
-        prompt: The instruction; must ask for a single JSON object.
-        service_key: Rate-limit/cost bucket to account the call under.
-        max_tokens: Response budget - structure extraction needs far more
-            than keywording.
-
-    Returns:
-        The parsed object, or None when AI is unconfigured, rate-limited,
-        failed, or answered with something unparseable.
-    """
-    from urbanlens.dashboard.models.site_settings import SiteSettings
-    from urbanlens.dashboard.services.ai.json_answer import parse_json_answer
-
-    if not _rate_limit_gate(service_key):
-        return None
-
-    site = SiteSettings.get_current()
-    started = time.monotonic()
-    try:
-        if site.ai_provider == "openai":
-            from openai import OpenAI
-
-            from urbanlens.dashboard.services.ai.openai import DEFAULT_MODEL
-            from urbanlens.UrbanLens.settings.app import settings
-
-            if not settings.openai_api_key:
-                return None
-            model = site.openai_model or DEFAULT_MODEL
-            client = OpenAI(api_key=settings.openai_api_key)
-            data_url = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")
-            response = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": data_url, "detail": "high"}}]}],
-                max_tokens=max_tokens,
-            )
-            body = response.choices[0].message.content or ""
-            log_api_call(service_key, success=True, response_ms=int((time.monotonic() - started) * 1000), endpoint=f"openai:{model}")
-            return parse_json_answer(body)
-
-        data = _cloudflare_post(_CF_VISION_MODEL, {"image": list(image_bytes), "prompt": prompt, "max_tokens": max_tokens})
-        if data is None:
-            return None
-        log_api_call(service_key, success=True, response_ms=int((time.monotonic() - started) * 1000), endpoint=f"cloudflare:{_CF_VISION_MODEL}")
-        answer = (data.get("result") or {}).get("description") or (data.get("result") or {}).get("response") or ""
-        return parse_json_answer(str(answer))
-    except Exception:
-        logger.exception("AI image JSON description failed (provider=%s)", site.ai_provider)
-        log_api_call(service_key, success=False)
-        return None
+    answer = _describe(image_bytes, _KEYWORD_PROMPT, service_key=SERVICE_AI_PHOTO_KEYWORDS, max_tokens=_KEYWORD_MAX_TOKENS)
+    return [] if answer is None else _parse_keyword_text(answer)
 
 
 def classify_photo(image_bytes: bytes) -> list[tuple[str, float]]:
     """Classify a (downscaled) photo's content via Cloudflare's ResNet-50 model.
+
+    Unlike :func:`describe_photo_keywords` this is not a chat completion - no
+    prompt, no tokens - so it takes the inference service's separate classify
+    call. Cloudflare is the only provider offering one, so the site's
+    ``ai_provider`` setting does not apply here.
 
     Args:
         image_bytes: JPEG bytes, already downscaled.
@@ -249,29 +200,25 @@ def classify_photo(image_bytes: bytes) -> list[tuple[str, float]]:
     Returns:
         (label, confidence) pairs, highest confidence first; empty on failure.
     """
+    from urbanlens.dashboard.services.ai.inference_client import ClassifyRequest, ImagePart, InferenceError, get_inference_client
+
     if not _rate_limit_gate(SERVICE_PHOTO_CLASSIFIER):
         return []
 
+    request = ClassifyRequest(
+        provider="cloudflare",
+        model=_CF_CLASSIFIER_MODEL,
+        image=ImagePart(media_type="image/jpeg", data=base64.b64encode(image_bytes).decode("ascii")),
+    )
+
     started = time.monotonic()
     try:
-        data = _cloudflare_post(_CF_CLASSIFIER_MODEL, {"image": list(image_bytes)}, timeout=30)
-    except Exception:
+        response = get_inference_client().classify(request)
+    except InferenceError:
         logger.exception("Photo classification failed")
         log_api_call(SERVICE_PHOTO_CLASSIFIER, success=False)
         return []
     elapsed_ms = int((time.monotonic() - started) * 1000)
-    if data is None:
-        return []
-    log_api_call(SERVICE_PHOTO_CLASSIFIER, success=True, response_ms=elapsed_ms, endpoint=f"cloudflare:{_CF_CLASSIFIER_MODEL}")
 
-    labels: list[tuple[str, float]] = []
-    for entry in data.get("result") or []:
-        label = str(entry.get("label") or "").strip()
-        try:
-            score = float(entry.get("score") or 0.0)
-        except (TypeError, ValueError):
-            score = 0.0
-        if label:
-            labels.append((label, score))
-    labels.sort(key=lambda pair: pair[1], reverse=True)
-    return labels
+    log_api_call(SERVICE_PHOTO_CLASSIFIER, success=True, response_ms=elapsed_ms, endpoint=f"cloudflare:{_CF_CLASSIFIER_MODEL}")
+    return [(label.label, label.score) for label in response.labels]

@@ -15,12 +15,30 @@ import requests
 # Re-exported so gateway.py (and anything else under `dashboard`) can build
 # requests and inspect responses without importing urbanlens_ai directly -
 # this module is the one permitted import site (see the module docstring).
-from urbanlens_ai.schema import InferenceRequest, InferenceResponse, Message, Provider, TextBlock, ToolSpec, ToolUseBlock
+from urbanlens_ai.schema import (
+    ClassificationLabel,
+    ClassifyRequest,
+    ClassifyResponse,
+    ImagePart,
+    InferenceRequest,
+    InferenceResponse,
+    Message,
+    Provider,
+    TextBlock,
+    TextPart,
+    ToolSpec,
+    ToolUseBlock,
+    Usage,
+)
 
 if TYPE_CHECKING:
     from urbanlens_ai.config import InferenceConfig
 
 __all__ = [
+    "ClassificationLabel",
+    "ClassifyRequest",
+    "ClassifyResponse",
+    "ImagePart",
     "InferenceClient",
     "InferenceError",
     "InferenceRequest",
@@ -30,8 +48,10 @@ __all__ = [
     "Provider",
     "RemoteInferenceClient",
     "TextBlock",
+    "TextPart",
     "ToolSpec",
     "ToolUseBlock",
+    "Usage",
     "get_inference_client",
 ]
 
@@ -43,9 +63,19 @@ class InferenceError(RuntimeError):
 
 
 class InferenceClient(Protocol):
-    """Sends a normalized :class:`InferenceRequest` somewhere and returns the answer."""
+    """Sends a normalized request somewhere and returns the answer.
+
+    Two calls, because the inference service has two shapes of work:
+    :meth:`send` is a chat completion (text, or text plus an
+    :class:`~urbanlens_ai.schema.ImagePart` for vision), and
+    :meth:`classify` is an image classifier - no prompt, no tokens, labels
+    out. See ``urbanlens_ai.schema.ClassifyRequest`` for why the second is
+    not folded into the first.
+    """
 
     def send(self, request: InferenceRequest) -> InferenceResponse: ...
+
+    def classify(self, request: ClassifyRequest) -> ClassifyResponse: ...
 
 
 class RemoteInferenceClient:
@@ -62,11 +92,11 @@ class RemoteInferenceClient:
         self._token = token
         self._timeout = timeout_seconds
 
-    def send(self, request: InferenceRequest) -> InferenceResponse:
+    def _post(self, path: str, payload: dict) -> dict:
         try:
             response = requests.post(
-                f"{self._base_url}/v1/messages",
-                json=request.model_dump(mode="json"),
+                f"{self._base_url}{path}",
+                json=payload,
                 headers={"Authorization": f"Bearer {self._token}"},
                 timeout=self._timeout,
             )
@@ -77,7 +107,22 @@ class RemoteInferenceClient:
             raise InferenceError(f"ai-inference returned HTTP {response.status_code}")
 
         try:
-            return InferenceResponse.model_validate(response.json())
+            body = response.json()
+        except ValueError as exc:
+            raise InferenceError(f"ai-inference returned an unparseable response: {exc}") from exc
+        if not isinstance(body, dict):
+            raise InferenceError("ai-inference returned a non-object response")
+        return body
+
+    def send(self, request: InferenceRequest) -> InferenceResponse:
+        try:
+            return InferenceResponse.model_validate(self._post("/v1/messages", request.model_dump(mode="json")))
+        except ValueError as exc:
+            raise InferenceError(f"ai-inference returned an unparseable response: {exc}") from exc
+
+    def classify(self, request: ClassifyRequest) -> ClassifyResponse:
+        try:
+            return ClassifyResponse.model_validate(self._post("/v1/classify", request.model_dump(mode="json")))
         except ValueError as exc:
             raise InferenceError(f"ai-inference returned an unparseable response: {exc}") from exc
 
@@ -109,6 +154,21 @@ class LocalInferenceClient:
             # Normalized to InferenceError so callers (gateway.py) only ever
             # handle one exception type regardless of which client ran -
             # urbanlens_ai's own exception types stay inside this module.
+            raise InferenceError(str(exc)) from exc
+
+    def classify(self, request: ClassifyRequest) -> ClassifyResponse:
+        from urbanlens.dashboard.services.sandbox.guard import check_direct_inference
+
+        check_direct_inference()
+
+        from urbanlens_ai.policy import PolicyError, validate_classify_request
+        from urbanlens_ai.providers import ProviderError, build_adapter
+
+        try:
+            validate_classify_request(request)
+            adapter = build_adapter(request.provider, self._build_config())
+            return adapter.classify(request)
+        except (PolicyError, ProviderError) as exc:
             raise InferenceError(str(exc)) from exc
 
     def _build_config(self) -> InferenceConfig:

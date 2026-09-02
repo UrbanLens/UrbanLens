@@ -16,6 +16,38 @@ Provider = Literal["anthropic", "openai", "cloudflare"]
 StopReason = Literal["end_turn", "max_tokens", "tool_use", "other"]
 
 
+class TextPart(BaseModel):
+    """A run of text inside a multi-part message."""
+
+    type: Literal["text"] = "text"
+    text: str
+
+
+class ImagePart(BaseModel):
+    """An image inside a multi-part message, as base64-encoded bytes.
+
+    Base64 rather than a URL on purpose: a URL would be something the
+    inference service has to *fetch*, which is exactly the capability this
+    tier is built to not have (see ``docs/AI_PIPELINE.md`` - the egress
+    allowlist carries provider hosts and nothing else). The caller reads the
+    image itself and sends the bytes inline.
+
+    Callers must send an already-downscaled image
+    (``services.photos.photo_keywords.downscaled_jpeg_bytes`` caps the longest
+    edge at 512px), never a full-resolution upload -
+    :data:`~urbanlens_ai.policy.MAX_IMAGE_BYTES` is the backstop for when
+    they don't.
+    """
+
+    type: Literal["image"] = "image"
+    media_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"] = "image/jpeg"
+    #: Standard base64 (not a ``data:`` URL) of the raw image bytes.
+    data: str
+
+
+MessagePart = Annotated[TextPart | ImagePart, Field(discriminator="type")]
+
+
 class Message(BaseModel):
     """One user/assistant turn in the conversation.
 
@@ -24,10 +56,30 @@ class Message(BaseModel):
     Anthropic's own API shape. Every provider adapter reconstructs whatever
     its own SDK needs from that (OpenAI folds it back into a leading
     ``system``-role message; Cloudflare does the same).
+
+    ``content`` is a bare string for the ordinary text case and a list of
+    parts when the turn carries an image. Both shapes reach every adapter,
+    which is what lets vision be an ordinary message rather than a second
+    endpoint with its own auth, policy and adapter machinery.
     """
 
     role: Role
-    content: str
+    content: str | list[MessagePart]
+
+    @property
+    def parts(self) -> list[MessagePart]:
+        """``content`` as a part list, wrapping the bare-string form."""
+        return [TextPart(text=self.content)] if isinstance(self.content, str) else self.content
+
+    @property
+    def text(self) -> str:
+        """Just the text of this message, ignoring any images."""
+        return "".join(part.text for part in self.parts if isinstance(part, TextPart))
+
+    @property
+    def images(self) -> list[ImagePart]:
+        """Just the images in this message, in order."""
+        return [part for part in self.parts if isinstance(part, ImagePart)]
 
 
 class ToolSpec(BaseModel):
@@ -95,3 +147,32 @@ class InferenceResponse(BaseModel):
     def text(self) -> str:
         """Concatenated text from every text block; empty if there are none."""
         return "".join(block.text for block in self.content if isinstance(block, TextBlock))
+
+
+class ClassificationLabel(BaseModel):
+    """One label an image classifier returned, with its confidence."""
+
+    label: str
+    score: float
+
+
+class ClassifyRequest(BaseModel):
+    """An image-classification call - image in, scored labels out.
+
+    Deliberately *not* an :class:`InferenceRequest`. A classifier takes no
+    prompt, holds no conversation, spends no tokens and returns labels rather
+    than text; folding it into the chat schema would mean a request type
+    where half the fields are meaningless. Vision *with* a prompt is a chat
+    completion and goes through :class:`InferenceRequest` as an
+    :class:`ImagePart` - see that class.
+    """
+
+    provider: Provider
+    model: str
+    image: ImagePart
+
+
+class ClassifyResponse(BaseModel):
+    """Normalized classifier output, highest confidence first."""
+
+    labels: list[ClassificationLabel] = Field(default_factory=list)

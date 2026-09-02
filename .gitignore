@@ -49,6 +49,9 @@ docs/notes/geocoding-analysis/
 
 # Secrets, authentication, etc
 .env
+# Provider API keys, read only by the ai-inference container. Committing this
+# would defeat the split it exists for - see .env.ai-sample.
+.env.ai
 bin/conf/
 bin/settings.py
 .pgpass
