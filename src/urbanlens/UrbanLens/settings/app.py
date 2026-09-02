@@ -216,6 +216,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "suite calls the parsers directly."
         ),
     )
+    direct_inference_policy: str = Field(
+        default="warn",
+        description=(
+            "How a process reacts when it is about to call an AI provider directly, in-process, instead of "
+            "through ai-inference: 'deny' raises, 'warn' logs and proceeds, 'allow' disables the check. Production "
+            "should be 'deny'; a local checkout with no UL_PROCESS_ROLE set is always allowed regardless of this "
+            "setting, since it has no ai-inference container to talk to. See services.sandbox.guard.check_direct_inference."
+        ),
+    )
     allow_dev_toolbar_for_non_admins: bool = Field(
         default=False,
         description=(
@@ -311,6 +320,30 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     huggingface_ai_api_key: str | None = Field(default=None, description="The huggingface ai key")
     openai_api_key: str | None = Field(default=None, description="The openai key")
     anthropic_api_key: str | None = Field(default=None, description="The anthropic (claude) key")
+    ai_inference_url: str | None = Field(
+        default=None,
+        description=(
+            "Base URL of the sandboxed ai-inference service (e.g. http://ai-inference:8002). When set, "
+            "LLMGateway calls providers through it instead of in-process; when unset, it falls back to "
+            "calling the provider SDKs directly here (LocalInferenceClient) - the pre-sandbox behavior, "
+            "gated by UL_DIRECT_INFERENCE_POLICY so a deployed container can't silently take this path."
+        ),
+    )
+    ai_inference_token: str | None = Field(
+        default=None,
+        description=(
+            "Shared bearer secret presented to ai-inference. Must match that service's own copy of the "
+            "same variable exactly - it is the same credential, not two."
+        ),
+    )
+    ai_inference_timeout_seconds: float = Field(
+        default=90.0,
+        description=(
+            "How long to wait for a single ai-inference HTTP call before giving up. Comfortably above "
+            "that service's own worst case (a 30s provider timeout, one retry) so this client is never "
+            "the one that times out first."
+        ),
+    )
     google_unrestricted_api_key: str | None = Field(default=None, description="The google unrestricted api key")
     google_domain_restricted_api_key: str | None = Field(default=None, description="The google domain restricted api key")
     google_public_api_key: str | None = Field(default=None, description="The google public api key")

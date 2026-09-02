@@ -97,6 +97,17 @@ RUN --mount=type=cache,target=/root/.cache/uv \
         uv sync --frozen --no-install-project; \
     fi
 
+# Bake the BPE encodings services.ai.gateway.LLMGateway.calculate_tokens uses
+# (o200k_base for current models, cl100k_base as tiktoken's own fallback for
+# older ones) at build time, in this early layer so it is cached across every
+# source-only change below. Without this, tiktoken fetches the encoding from
+# its CDN on first use - fine for `app`, which has open egress, but ai-worker
+# runs this same image behind an egress-proxy with no such host on its
+# allowlist, so its first AI turn would hang until it timed out.
+ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv run python -c "import tiktoken; tiktoken.get_encoding('o200k_base'); tiktoken.get_encoding('cl100k_base')"
+
 # Install JS/TS dependencies (sass, typescript, etc.) from the lockfile only,
 # so this layer is cached independently of unrelated source changes below.
 COPY package.json bun.lock ./

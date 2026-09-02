@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from decimal import Decimal
 from functools import singledispatchmethod
 import logging
 import re
-from typing import Any, ClassVar, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import tiktoken
 
+from urbanlens.dashboard.services.ai.inference_client import InferenceError, InferenceRequest, Message
 from urbanlens.dashboard.services.ai.message import MessageQueue
 from urbanlens.dashboard.services.ai.meta import (
     FORMATTING,
@@ -18,15 +19,30 @@ from urbanlens.dashboard.services.ai.meta import (
     SHORTEST_MESSAGE,
 )
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.services.ai.inference_client import InferenceClient, InferenceResponse, Provider
+
 logger = logging.getLogger(__name__)
 
-Response = TypeVar("Response")
 
+class LLMGateway(ABC):
+    """Sends prompts to an AI provider through the sandboxed inference service.
 
-class LLMGateway[Response](ABC):
+    Concrete subclasses (:mod:`services.ai.anthropic`,
+    :mod:`services.ai.openai`, :mod:`services.ai.cloudflare`) declare only
+    what differs per provider - :attr:`PROVIDER`, a default model, and a
+    cost catalog. Everything that talks to a provider goes through
+    :class:`~services.ai.inference_client.InferenceClient`
+    (:func:`~services.ai.inference_client.get_inference_client` picks remote
+    vs. local), never a provider SDK directly - that boundary is what makes
+    this the sandboxed path rather than a second one.
+    """
+
+    #: Set by each subclass; identifies which provider adapter the inference
+    #: service should use for this gateway's requests.
+    PROVIDER: ClassVar[Provider]
+
     _model: str | None
-    _api_url: str | None
-    _api_key: str | None
     extend: bool
     _token_count: dict[str, int]
     formatting: str
@@ -46,9 +62,7 @@ class LLMGateway[Response](ABC):
 
     def __init__(
         self,
-        api_key: str | None = None,
         model: str | None = None,
-        api_url: str | None = None,
         formatting: str = FORMATTING,
         instructions: str = INSTRUCTIONS,
         project_description: str = PROJECT_DESCRIPTION,
@@ -58,18 +72,12 @@ class LLMGateway[Response](ABC):
         self.formatting = formatting
         self.instructions = instructions
         self.project_description = project_description
-        self.api_url = api_url
-        self.api_key = api_key
         self.model = model
+
+        from urbanlens.dashboard.services.ai.inference_client import get_inference_client
+
+        self._inference_client: InferenceClient = get_inference_client()
         self.setup(**kwargs)
-
-    @property
-    def api_key(self) -> str | None:
-        return self._api_key
-
-    @api_key.setter
-    def api_key(self, value: str | None):
-        self._api_key = value
 
     @property
     def model(self) -> str:
@@ -80,14 +88,6 @@ class LLMGateway[Response](ABC):
     @model.setter
     def model(self, value: str | None):
         self._model = self._lookup_model(value)
-
-    @property
-    def api_url(self) -> str | None:
-        return self._api_url
-
-    @api_url.setter
-    def api_url(self, value: str | None):
-        self._api_url = value
 
     @property
     def sent_tokens(self) -> int:
@@ -383,8 +383,9 @@ class LLMGateway[Response](ABC):
         self.send_tokens(queue)
 
         if response := self._get_response(queue):
-            if message := self._parse_response(response):
-                self.receive_tokens(message)
+            message = response.text
+            if message:
+                self._record_received_tokens(response)
                 answer = self._parse_answer(message)
                 if not answer:
                     logger.error("No answer from message queue: %s", queue)
@@ -392,37 +393,45 @@ class LLMGateway[Response](ABC):
 
         return None
 
-    @abstractmethod
-    def _get_response(self, message_queue: MessageQueue) -> Response | None:
+    def _get_response(self, message_queue: MessageQueue) -> InferenceResponse | None:
         """
-        Send the message queue to the AI gateway, and return the response it provides, unmodified.
+        Send the message queue to the inference service and return its response, unmodified.
 
             Args:
                 message_queue (MessageQueue):
-                    The message queue to send to the AI gateway.
+                    The message queue to send.
 
             Returns:
-                Response (Generic type):
-                    The response from the AI gateway.
+                InferenceResponse | None:
+                    The normalized response, or None if the call failed.
 
         """
-        raise NotImplementedError
+        system_prompt = ""
+        messages: list[Message] = []
+        for msg in message_queue.messages:
+            if msg["role"] == "system":
+                system_prompt = msg["content"]
+            else:
+                messages.append(Message(role=msg["role"], content=msg["content"]))
 
-    @abstractmethod
-    def _parse_response(self, response: Response) -> str | None:
+        request = InferenceRequest(provider=self.PROVIDER, model=self.model, system=system_prompt, messages=messages, max_tokens=self.max_tokens)
+
+        try:
+            return self._inference_client.send(request)
+        except InferenceError:
+            logger.exception("Inference call failed for provider %s model %s", self.PROVIDER, self.model)
+            return None
+
+    def _record_received_tokens(self, response: InferenceResponse) -> None:
+        """Prefer the provider's own reported usage; fall back to a tiktoken estimate.
+
+        Args:
+            response: The normalized inference response.
         """
-        Parse the response from the AI Gateway and return the message body.
-
-            Args:
-                response (Response generic type):
-                    The response from the AI Gateway.
-
-            Returns:
-                str:
-                    The parsed response from the AI Gateway.
-
-        """
-        raise NotImplementedError
+        if response.usage.output_tokens is not None:
+            self.receive_tokens(response.usage.output_tokens)
+        else:
+            self.receive_tokens(response.text)
 
     def _parse_answer(self, message_content: str) -> str | None:
         """Parse the first <ANSWER> tag from the response body.
@@ -499,8 +508,9 @@ class LLMGateway[Response](ABC):
         self.send_tokens(queue)
 
         if response := self._get_response(queue):
-            if message := self._parse_response(response):
-                self.receive_tokens(message)
+            message = response.text
+            if message:
+                self._record_received_tokens(response)
                 answers = self._parse_answers(message)
                 if max_results is not None:
                     answers = answers[:max_results]

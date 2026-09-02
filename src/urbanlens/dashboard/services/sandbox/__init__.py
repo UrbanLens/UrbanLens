@@ -8,19 +8,26 @@ Two things live here, and they are two halves of one rule:
   runtime, so "decoding happens in the sandbox" stays a checkable property
   rather than a comment.
 
-Today the only isolated tier is the media/parsing sandbox. Model inference is
-the next one (:attr:`~urbanlens.dashboard.services.sandbox.queues.Queue.AI_INFERENCE`),
-and it wants the same shape for a different reason - a GPU box with its own
-resource envelope rather than a container that must not be trusted with
-network access. Read ``docs/MEDIA_PIPELINE.md`` for the deployment topology.
+A second, differently-shaped tier lives alongside it: AI provider calls run
+in ``ai-inference`` (Django-free, holds provider keys and nothing else) and,
+once ``ai-worker`` exists, the tool loop that calls it - isolated because a
+provider SDK CVE or a compromised model response should have nothing to
+steal, not because the input is untrusted bytes. See
+:func:`~urbanlens.dashboard.services.sandbox.guard.check_direct_inference`
+and ``docs/AI_PIPELINE.md`` for that topology; ``docs/MEDIA_PIPELINE.md``
+covers the media/parsing sandbox this module started with.
 """
 
 from urbanlens.dashboard.services.sandbox.guard import (
+    DirectInferenceError,
+    DirectInferencePolicy,
     ProcessRole,
     UnsandboxedParseError,
     UntrustedParsePolicy,
     allow_untrusted_parse,
+    check_direct_inference,
     check_untrusted_parse,
+    current_direct_inference_policy,
     current_policy,
     current_role,
     untrusted_parse,
@@ -28,12 +35,16 @@ from urbanlens.dashboard.services.sandbox.guard import (
 from urbanlens.dashboard.services.sandbox.queues import Queue, sandbox_queue
 
 __all__ = [
+    "DirectInferenceError",
+    "DirectInferencePolicy",
     "ProcessRole",
     "Queue",
     "UnsandboxedParseError",
     "UntrustedParsePolicy",
     "allow_untrusted_parse",
+    "check_direct_inference",
     "check_untrusted_parse",
+    "current_direct_inference_policy",
     "current_policy",
     "current_role",
     "sandbox_queue",

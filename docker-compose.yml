@@ -38,7 +38,6 @@ x-app-env: &app-env
   UL_OPENWEATHERMAP_API_KEY: ${UL_OPENWEATHERMAP_API_KEY}
   UL_NPS_API_KEY: ${UL_NPS_API_KEY}
   UL_OPENAI_API_KEY: ${UL_OPENAI_API_KEY}
-  UL_ANTHROPIC_API_KEY: ${UL_ANTHROPIC_API_KEY}
   UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
@@ -55,6 +54,13 @@ x-app-env: &app-env
   UL_MEDIA_BASE_URL: ${UL_MEDIA_BASE_URL:-}
   UL_MEDIA_COOKIE_DOMAIN: ${UL_MEDIA_COOKIE_DOMAIN:-}
   UL_MEDIA_CSP: ${UL_MEDIA_CSP:-}
+  # ai-inference holds the Anthropic key now (UL_ANTHROPIC_API_KEY is
+  # deliberately absent above) - LLMGateway here calls providers through
+  # this HTTP hop instead of in-process. UL_OPENAI_API_KEY/UL_CLOUDFLARE_*
+  # stay above until the vision follow-up moves those calls too.
+  UL_AI_INFERENCE_URL: ${UL_AI_INFERENCE_URL:-http://urbanlens_ai_inference:8002}
+  UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
+  UL_DIRECT_INFERENCE_POLICY: ${UL_DIRECT_INFERENCE_POLICY:-warn}
 
 # Environment for the sandbox worker (media-worker), which parses untrusted
 # uploads: images through Pillow, video through ffmpeg, documents through
@@ -188,6 +194,10 @@ services:
       app_network:
         aliases:
           - urbanlens_app
+      # Temporary, batch-1-only: LLMGateway runs here and calls ai-inference
+      # directly until ai-worker exists and takes over the tool loop (see
+      # ai-inference's own comment) - remove this membership once it does.
+      inference_network: {}
 
     env_file: *app-env-file
     environment:
@@ -478,6 +488,8 @@ services:
       - backups:/app/src/backups
     networks:
       - app_network
+      # Temporary, batch-1-only - see the app service's own comment.
+      - inference_network
     env_file: *app-env-file
     environment:
       <<: *app-env
@@ -766,6 +778,121 @@ services:
     cpus: ${CPU_LIMIT__VALKEY:-${CPU_LIMIT:-1}}
     mem_limit: ${MEM_LIMIT__VALKEY:-${MEM_LIMIT:-1g}}
 
+  # --- AI sandbox tier (docs/AI_PIPELINE.md) ----------------------------------
+  # Only outbound route off `inference_network` (itself `internal: true`, no
+  # gateway, no NAT). ai-inference's provider calls are the only traffic that
+  # ever reaches this proxy in this batch; ai-worker joins once it exists.
+  # Never on `app_network` - a bug here must not become a route to db/valkey/app.
+  egress-proxy:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_egress_proxy
+    build:
+      context: ./src/urbanlens/config/egress
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # tinyproxy's PidFile/logging need one writable path; everything else it
+    # touches (its own binary, tinyproxy.conf, filter) is baked into the image.
+    tmpfs:
+      - /var/run/tinyproxy:size=1m,mode=1777,noexec,nosuid,nodev
+    networks:
+      inference_network:
+        aliases:
+          - urbanlens_egress_proxy
+      ai_egress_network: {}
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8888"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: ${CPU_LIMIT__EGRESS_PROXY:-0.25}
+    mem_limit: ${MEM_LIMIT__EGRESS_PROXY:-128m}
+    pids_limit: 32
+
+  # Django-free: no DB, no cache, no secret key, no volumes - see
+  # src/urbanlens_ai/__init__.py and docs/AI_PIPELINE.md. Holds provider API
+  # keys and nothing else. On `inference_network` only, always - `app` and
+  # `celery-worker` are the ones with a temporary extra membership on that
+  # network (see their own comments) until ai-worker exists and becomes the
+  # only caller; this service's own network footprint never needs to change.
+  ai-inference:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_ai_inference
+    build:
+      <<: *app-build
+    restart: unless-stopped
+    entrypoint: ["/docker-entrypoint.sh", "gunicorn"]
+    command:
+      [
+        "urbanlens_ai.wsgi:application",
+        "--bind",
+        "0.0.0.0:8002",
+        "-k",
+        "gthread",
+        "--threads",
+        "8",
+        "-w",
+        "1",
+        "-t",
+        "120",
+      ]
+    user: "1001:1001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      egress-proxy:
+        condition: service_healthy
+    networks:
+      inference_network:
+        aliases:
+          - urbanlens_ai_inference
+    # No env_file - see the plan's credentials matrix: this is the one
+    # container that must never see the host's full .env.
+    environment:
+      UL_ANTHROPIC_API_KEY: ${UL_ANTHROPIC_API_KEY}
+      UL_OPENAI_API_KEY: ${UL_OPENAI_API_KEY}
+      UL_CLOUDFLARE_AI_API_KEY: ${UL_CLOUDFLARE_AI_API_KEY}
+      UL_CLOUDFLARE_WORKER_AI_ENDPOINT: ${UL_CLOUDFLARE_WORKER_AI_ENDPOINT}
+      UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
+      UL_PROCESS_ROLE: inference
+      HTTPS_PROXY: http://urbanlens_egress_proxy:8888
+      HTTP_PROXY: http://urbanlens_egress_proxy:8888
+      NO_PROXY: localhost,127.0.0.1
+    healthcheck:
+      # --noproxy '*': HTTPS_PROXY/HTTP_PROXY above are set for this
+      # container's *outbound provider* calls; NO_PROXY already covers
+      # localhost, but this makes the healthcheck immune to proxy env vars
+      # regardless of casing rather than depending on it.
+      test: ["CMD", "curl", "-f", "--noproxy", "*", "http://localhost:8002/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    # gthread with one worker process and 8 threads: provider SDK calls block
+    # on I/O, so threads (which actually park) are the right model here, not
+    # gevent - see the plan's architecture note. Memory stays low with nothing
+    # cached between requests.
+    cpus: ${CPU_LIMIT__AI_INFERENCE:-0.5}
+    mem_limit: ${MEM_LIMIT__AI_INFERENCE:-512m}
+    pids_limit: 64
+
   # --- Test topology (opt-in: docker compose --profile test ...) -------------
   # pytest's LocalhostOnlyNetwork guard (core/tests/testing_network.py) only
   # permits loopback connections, which the normal service topology can't
@@ -893,3 +1020,20 @@ networks:
   sandbox_network:
     driver: bridge
     internal: true
+
+  # ai-inference <-> egress-proxy only. `internal: true` for the same reason
+  # as sandbox_network: no gateway, no NAT, so ai-inference's only route to
+  # the internet is through the proxy sitting on this network - it cannot
+  # reach anything the proxy's filter doesn't allow, regardless of what a
+  # provider SDK, a misconfigured env var, or a future bug tries to do.
+  inference_network:
+    driver: bridge
+    internal: true
+    enable_ipv6: false
+
+  # The one network with a real gateway in this tier - egress-proxy is its
+  # only member, so it is the sole thing in the whole AI sandbox with a route
+  # to the internet at all.
+  ai_egress_network:
+    driver: bridge
+    enable_ipv6: false

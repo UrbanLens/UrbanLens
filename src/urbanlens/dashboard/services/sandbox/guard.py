@@ -80,6 +80,15 @@ class ProcessRole(StrEnum):
         BEAT: The Celery scheduler.
         SANDBOX: The isolated media/parsing worker. The only role allowed to
             hand untrusted bytes to a parser.
+        AI: The Celery worker draining the AI tool-loop queue. Holds DB and
+            encryption-key credentials (it reads encrypted content) but no
+            REData/OAuth/provider credentials - see
+            ``docs/AI_PIPELINE.md`` and :func:`check_direct_inference`.
+        INFERENCE: The Django-free ``ai-inference`` service. Never runs
+            Django, so this value is never actually read via
+            :func:`current_role` - it exists so ``UL_PROCESS_ROLE=inference``
+            in that service's compose entry documents itself against the
+            same enum every other role is named from.
         UNSPECIFIED: No ``UL_PROCESS_ROLE`` was set - a local checkout, a
             management command, or a container that predates this setting.
     """
@@ -90,6 +99,8 @@ class ProcessRole(StrEnum):
     PANELS = "panels"
     BEAT = "beat"
     SANDBOX = "sandbox"
+    AI = "ai"
+    INFERENCE = "inference"
     UNSPECIFIED = "unspecified"
 
 
@@ -116,6 +127,38 @@ class UnsandboxedParseError(RuntimeError):
     Raised rather than logged so the violation surfaces where it was introduced.
     If the call is genuinely safe - the bytes are this server's own, not a
     user's - wrap it in :func:`allow_untrusted_parse` with a reason.
+    """
+
+
+class DirectInferencePolicy(StrEnum):
+    """How strictly a direct, in-process AI provider call is enforced.
+
+    Mirrors :class:`UntrustedParsePolicy` for the same reason: the boundary
+    is "provider API keys live only in the ``ai-inference`` process", and
+    :class:`~urbanlens.dashboard.services.ai.inference_client.LocalInferenceClient`
+    - the one thing this policy gates - is a deliberate escape hatch for
+    local development, not a code path any deployed container should reach.
+
+    Attributes:
+        ALLOW: No enforcement. What pytest and a bare local checkout run
+            under - there is no ``ai-inference`` container to talk to.
+        WARN: Log a warning naming the role that made the call, then proceed.
+        DENY: Raise :class:`DirectInferenceError`.
+    """
+
+    ALLOW = "allow"
+    WARN = "warn"
+    DENY = "deny"
+
+
+class DirectInferenceError(RuntimeError):
+    """A direct, in-process AI provider call was attempted from a deployed role.
+
+    Raised rather than logged so the violation surfaces where it was
+    introduced: a role-tagged container reaching this path almost always
+    means ``UL_AI_INFERENCE_URL`` was left unset, and the alternative is a
+    provider API key silently loaded into a container that was never meant
+    to hold one.
     """
 
 
@@ -150,6 +193,50 @@ def current_policy() -> UntrustedParsePolicy:
         return UntrustedParsePolicy(raw)
     except ValueError:
         return UntrustedParsePolicy.WARN
+
+
+def current_direct_inference_policy() -> DirectInferencePolicy:
+    """How this process should react to a direct, in-process AI provider call.
+
+    Returns:
+        The configured policy, defaulting to :attr:`DirectInferencePolicy.WARN`
+        for an unset or unrecognised value - same rationale as
+        :func:`current_policy`.
+    """
+    raw = str(getattr(settings, "UL_DIRECT_INFERENCE_POLICY", "") or "").strip().lower()
+    try:
+        return DirectInferencePolicy(raw)
+    except ValueError:
+        return DirectInferencePolicy.WARN
+
+
+def check_direct_inference() -> None:
+    """Enforce that a direct, in-process AI provider call only happens outside a deployed role.
+
+    Every role-tagged container (``web``, ``worker``, ``ai``, ...) is
+    expected to have ``UL_AI_INFERENCE_URL`` configured and go through
+    :class:`~urbanlens.dashboard.services.ai.inference_client.RemoteInferenceClient`
+    instead; :attr:`ProcessRole.UNSPECIFIED` (a local checkout, a management
+    command) is the one role this call is expected from, since it has no
+    ``ai-inference`` container to talk to.
+
+    Raises:
+        DirectInferenceError: The policy is ``deny`` and this process has a
+            real ``UL_PROCESS_ROLE``.
+    """
+    policy = current_direct_inference_policy()
+    if policy is DirectInferencePolicy.ALLOW:
+        return
+
+    role = current_role()
+    if role is ProcessRole.UNSPECIFIED:
+        return
+
+    message = f"A direct, in-process AI provider call ran in the {role.value!r} process instead of going through ai-inference"
+    if policy is DirectInferencePolicy.DENY:
+        raise DirectInferenceError(message)
+
+    logger.warning("%s (policy=warn)", message)
 
 
 @contextmanager

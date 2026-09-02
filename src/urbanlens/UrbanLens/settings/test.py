@@ -80,6 +80,12 @@ UL_UNTRUSTED_PARSE_POLICY = "allow"
 # still runs them in-process where a test asks for it.
 UL_SANDBOX_ENABLED = False
 
+# Same reasoning as UL_UNTRUSTED_PARSE_POLICY above: the suite calls
+# LocalInferenceClient directly (mocking the provider adapters, never a real
+# provider) - the tests that verify this boundary itself raise it back to
+# "deny" with override_settings.
+UL_DIRECT_INFERENCE_POLICY = "allow"
+
 # model_bakery's default related-object generation collides with the
 # create_user_profile post_save signal (see urbanlens.core.tests.baker).
 BAKER_CUSTOM_CLASS = "urbanlens.core.tests.baker.SignalSafeBaker"

@@ -18,8 +18,8 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.ai.cloudflare import DEFAULT_MODEL, CloudflareGateway
 
 
-def _gateway(model: str) -> CloudflareGateway:
-    return CloudflareGateway(api_key="test-key", api_url="https://example.com/ai", model=model)
+def _gateway(model: str | None) -> CloudflareGateway:
+    return CloudflareGateway(model=model)
 
 
 #: cost is rounded to 2 decimal places (see LLMGateway.cost) - a 1000-token
@@ -42,7 +42,7 @@ class CloudflareModelCostsTests(SimpleTestCase):
         DEFAULT_MODEL, so this must price at DEFAULT_MODEL's real rate rather than missing
         MODEL_COSTS and silently using the generic fallback.
         """
-        gw = CloudflareGateway(api_key="test-key", api_url="https://example.com/ai", model=None)
+        gw = _gateway(None)
         self.assertEqual(gw.model, DEFAULT_MODEL)
         gw.send_tokens(_SAMPLE_TOKENS)
         gw.receive_tokens(_SAMPLE_TOKENS)

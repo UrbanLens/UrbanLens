@@ -344,6 +344,12 @@ CELERY_WORKER_MAX_MEMORY_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_MEMORY_
 UL_PROCESS_ROLE = _app_settings.process_role
 UL_SANDBOX_ENABLED = _app_settings.sandbox_enabled
 UL_UNTRUSTED_PARSE_POLICY = _app_settings.untrusted_parse_policy
+# AI inference sandbox tier - see services/sandbox/guard.py's
+# DirectInferencePolicy and docs/AI_PIPELINE.md for the deployment topology.
+UL_AI_INFERENCE_URL = _app_settings.ai_inference_url
+UL_AI_INFERENCE_TOKEN = _app_settings.ai_inference_token
+UL_AI_INFERENCE_TIMEOUT_SECONDS = _app_settings.ai_inference_timeout_seconds
+UL_DIRECT_INFERENCE_POLICY = _app_settings.direct_inference_policy
 # Backup defaults. Site admins can override these values in the database-backed settings UI.
 UL_BACKUP_ENABLED = os.getenv("UL_BACKUP_ENABLED", "True").lower() in {"true", "1", "yes"}
 UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
