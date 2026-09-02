@@ -307,13 +307,20 @@ class AssistantProposalConfirmView(LoginRequiredMixin, View):
         if not claim_turn_proposal(turn_id, n):
             # Already confirmed (a double click, a retried request) - render
             # whatever the earlier confirm already recorded, never run twice.
+            # Only trust that stored copy once it's actually resolved: the
+            # winner claims first and only writes "done"/"error" back to the
+            # session *after* execute() returns, so a loser arriving in that
+            # gap would otherwise re-render a still-"pending" proposal here -
+            # with no ``entry`` in this render's context, _proposal.html's
+            # confirm button would NoReverseMatch on an empty turn_id.
             history = _history(request)
             for entry in history:
                 if entry.get("turn_id") != turn_id:
                     continue
                 for stored in entry.get("proposals") or []:
-                    if stored.get("n") == n:
+                    if stored.get("n") == n and stored.get("status") in {"done", "error"}:
                         return render(request, _PROPOSAL_PARTIAL, {"proposal": stored})
+                break
             return render(request, _PROPOSAL_PARTIAL, {"proposal": {"n": n, "status": "done", "message": "Already confirmed."}})
 
         context = ToolContext(profile=profile, now=timezone.now())

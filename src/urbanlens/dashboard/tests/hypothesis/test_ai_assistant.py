@@ -384,6 +384,25 @@ class AssistantProposalConfirmViewTests(TestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(Trip.objects.filter(name="Confirmed Trip").count(), 1)
 
+    def test_confirm_racing_a_still_executing_claim_does_not_500(self) -> None:
+        """A loser arriving between another request's claim and its session write-back gets a safe reply, not a crash.
+
+        Simulated by claiming the proposal directly (as the winner would)
+        without ever calling ``_update_session_proposal`` - the session's
+        copy is left at ``status: "pending"``, exactly the window this view
+        must not trust when rendering the loser's response.
+        """
+        from urbanlens.dashboard.services.ai.turns import claim_turn_proposal
+
+        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "Racing Trip"}, "confirm_label": "Create trip"})
+        self.assertTrue(claim_turn_proposal(turn_id, 0))
+
+        response = self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Already confirmed.")
+        self.assertFalse(Trip.objects.filter(name="Racing Trip").exists())
+
     def test_confirm_marks_the_session_proposal_resolved(self) -> None:
         turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "Resolved Trip"}, "confirm_label": "Create trip"})
         self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
