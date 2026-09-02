@@ -85,15 +85,33 @@ class AssistantLoopTests(TestCase):
         with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=None), pytest.raises(AssistantUnavailableError):
             run_assistant_turn(self.profile, [], "hello")
 
-    def test_tool_then_reply(self) -> None:
-        gateway = _StubGateway([{"tool": "create_trip", "args": {"name": "Loop Trip"}}, {"reply": "Created your trip!"}])
+    def test_read_only_tool_then_reply(self) -> None:
+        gateway = _StubGateway([{"tool": "list_trips", "args": {}}, {"reply": "You have no trips yet."}])
+        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
+            turn = run_assistant_turn(self.profile, [], "what are my trips?")
+        self.assertEqual(turn.reply, "You have no trips yet.")
+        self.assertEqual(turn.actions, ["Checked your trips"])
+        self.assertEqual(turn.proposals, [])
+        # The second round's prompt must include the tool result for the model to use.
+        self.assertIn("TOOL RESULT (list_trips)", gateway.prompts[1])
+
+    def test_write_tool_produces_a_proposal_without_executing(self) -> None:
+        """A write tool never runs inside the loop - it becomes a proposal for the user to confirm."""
+        gateway = _StubGateway([{"tool": "create_trip", "args": {"name": "Loop Trip"}}, {"reply": "I've proposed creating that trip - just confirm it."}])
         with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
             turn = run_assistant_turn(self.profile, [], "make me a trip")
-        self.assertEqual(turn.reply, "Created your trip!")
-        self.assertEqual(turn.actions, ["Created a trip"])
-        self.assertTrue(Trip.objects.filter(name="Loop Trip").exists())
-        # The second round's prompt must include the tool result for the model to use.
-        self.assertIn("TOOL RESULT (create_trip)", gateway.prompts[1])
+        self.assertEqual(turn.reply, "I've proposed creating that trip - just confirm it.")
+        # Not executed - no action to log, no Trip row.
+        self.assertEqual(turn.actions, [])
+        self.assertFalse(Trip.objects.filter(name="Loop Trip").exists())
+        self.assertEqual(len(turn.proposals), 1)
+        proposal = turn.proposals[0]
+        self.assertEqual(proposal["n"], 0)
+        self.assertEqual(proposal["tool"], "create_trip")
+        self.assertEqual(proposal["args"], {"name": "Loop Trip", "description": ""})
+        self.assertEqual(proposal["confirm_label"], "Create trip")
+        # The model must see that it was proposed, not silently ignored.
+        self.assertIn("proposed", gateway.prompts[1])
 
     def test_unknown_tool_feeds_error_back(self) -> None:
         gateway = _StubGateway([{"tool": "drop_database", "args": {}}, {"reply": "ok"}])
@@ -183,10 +201,16 @@ class AssistantViewTests(TestCase):
     """The chat page and message endpoint."""
 
     def setUp(self) -> None:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature
+
         baker.make("auth.User")
         self.user: User = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         self.client.force_login(self.user)
+        # Confirming a real proposal (AssistantProposalConfirmViewTests) runs
+        # a real tool through registry.execute(), which gates on this.
+        settings_obj = SiteSettings.get_current()
+        SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
 
     def _enqueued(self, task_id: str = "task-abc-123"):
         """A patched safely_enqueue_task returning a fake AsyncResult with this id."""
@@ -318,3 +342,71 @@ class AssistantViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         mock_enqueue.assert_not_called()
         self.assertFalse(self.client.session.get("assistant_chat"))
+
+
+class AssistantProposalConfirmViewTests(TestCase):
+    """POST /assistant/turn/<turn_id>/confirm/<n>/ - the write's only real execution path."""
+
+    def setUp(self) -> None:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature
+
+        baker.make("auth.User")
+        self.user: User = baker.make(User)
+        self.profile = Profile.objects.get(user=self.user)
+        self.client.force_login(self.user)
+        settings_obj = SiteSettings.get_current()
+        SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
+
+    def _resolve_with_proposal(self, proposal: dict) -> str:
+        """Send a message, then resolve its poll to a turn carrying exactly this one proposal."""
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            patch("urbanlens.dashboard.controllers.assistant.safely_enqueue_task", return_value=mock.Mock(id="task-abc-123")),
+        ):
+            self.client.post(reverse("assistant.message"), {"message": "make me a trip"})
+        turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
+
+        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Confirm to create it.", "actions": [], "proposals": [proposal]})
+        with patch("urbanlens.dashboard.controllers.assistant.get_task_progress", return_value=progress):
+            self.client.get(reverse("assistant.turn", args=[turn_id]))
+        return turn_id
+
+    def test_confirm_runs_the_write_exactly_once(self) -> None:
+        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "Confirmed Trip"}, "confirm_label": "Create trip"})
+        self.assertFalse(Trip.objects.filter(name="Confirmed Trip").exists())
+
+        response = self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Trip.objects.filter(name="Confirmed Trip").exists())
+
+        # A second confirm (double click, retry) must not create a second trip.
+        second = self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(Trip.objects.filter(name="Confirmed Trip").count(), 1)
+
+    def test_confirm_marks_the_session_proposal_resolved(self) -> None:
+        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "Resolved Trip"}, "confirm_label": "Create trip"})
+        self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
+
+        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True):
+            response = self.client.get(reverse("assistant"))
+        # Resolved - no more live confirm button for this proposal.
+        self.assertContains(response, "assistant-proposal--done")
+        self.assertNotContains(response, reverse("assistant.proposal.confirm", args=[turn_id, 0]))
+        entries = self.client.session["assistant_chat"]
+        self.assertEqual(entries[-1]["proposals"][0]["status"], "done")
+
+    def test_confirm_404s_for_an_unknown_or_out_of_range_proposal(self) -> None:
+        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "X"}, "confirm_label": "Create trip"})
+        self.assertEqual(self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 5])).status_code, 404)
+        self.assertEqual(self.client.post(reverse("assistant.proposal.confirm", args=["never-issued", 0])).status_code, 404)
+
+    def test_confirm_404s_for_another_profiles_proposal(self) -> None:
+        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "Not Yours"}, "confirm_label": "Create trip"})
+
+        other_user: User = baker.make(User)
+        other_client = self.client_class()
+        other_client.force_login(other_user)
+        response = other_client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Trip.objects.filter(name="Not Yours").exists())

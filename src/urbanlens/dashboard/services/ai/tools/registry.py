@@ -124,10 +124,12 @@ class ToolResult:
             existing convention.
         summary: A short past-tense description of what happened
             (``spec.action_label``), for the turn's action log - ``None``
-            when ``data`` is an error.
-        proposal: Set by the confirm flow (batch 2d) when this result
-            represents a write awaiting confirmation, never by
-            :func:`execute` itself in this batch.
+            when ``data`` is an error or a proposal (nothing happened yet).
+        proposal: Set by :func:`execute` when ``confirmed=False`` and the
+            tool is a write (``read_only=False``) - the write was *not* run;
+            this is what the confirm endpoint needs to run it for real later:
+            ``{"tool", "args", "confirm_label"}``. ``None`` for a read-only
+            tool, an error, or a real (``confirmed=True``) execution.
         sources: Evidence kinds the result is grounded on (``visits``,
             ``comments``, ``osrm``, ...) - populated by the grounded tools
             added in batch 4. Always empty for a tool that IS the source of
@@ -194,11 +196,13 @@ class ToolSpec[ArgsT: BaseModel]:
         progress_label: Shown in the pending bubble while this tool runs.
         action_label: A past-tense summary for a completed execution
             (``ToolResult.summary``), shown in the turn's action log - e.g.
-            "Created a trip". A tool with ``requires_confirmation=True`` gets
-            its own imperative confirm-button label when that flow ships
-            (batch 2d); this field is the log entry, not that button.
-            ``None`` only makes sense when a caller intends to override the
-            summary itself.
+            "Created a trip". This is the log entry, not the confirm button -
+            see :attr:`confirm_label` for that.
+        confirm_label: The confirm button's imperative text for a tool with
+            ``requires_confirmation=True`` (e.g. "Create trip") - carried on
+            :attr:`ToolResult.proposal` so the UI has something to put on the
+            button. Meaningless (and unused) for a tool that doesn't require
+            confirmation.
     """
 
     name: str
@@ -215,6 +219,7 @@ class ToolSpec[ArgsT: BaseModel]:
     scope: DataScope = DataScope.NONE
     progress_label: str = ""
     action_label: str | None = None
+    confirm_label: str | None = None
 
 
 #: Every registered tool, keyed by name. Populated by each tool module's
@@ -316,7 +321,7 @@ def _is_available(spec: ToolSpec[Any], context: ToolContext) -> bool:
     return not (spec.needs_page and context.page is None)
 
 
-def execute(name: str, raw_args: dict[str, Any] | None, context: ToolContext) -> ToolResult:
+def execute(name: str, raw_args: dict[str, Any] | None, context: ToolContext, *, confirmed: bool = True) -> ToolResult:
     """Run ``name`` with ``raw_args``, enforcing every rule in the module docstring.
 
     Never raises for a tool-level problem (unknown name, bad args, a
@@ -328,9 +333,18 @@ def execute(name: str, raw_args: dict[str, Any] | None, context: ToolContext) ->
         name: The tool name the model asked for.
         raw_args: The model's raw (untrusted) JSON arguments.
         context: The scoped execution context.
+        confirmed: Whether this call is allowed to actually run a write.
+            The assistant loop (``services/ai/assistant.py``) always passes
+            ``confirmed=False`` - a write tool never runs inside the loop,
+            regardless of role; it becomes a :attr:`ToolResult.proposal`
+            instead, which the confirm endpoint later replays through this
+            same function with ``confirmed=True`` (the default, so every
+            other existing caller - tests, and any read-only tool - is
+            unaffected). A read-only tool ignores this entirely.
 
     Returns:
-        The tool's result, or an error result explaining why it didn't run.
+        The tool's result: real data, a proposal awaiting confirmation, or
+        an error result explaining why it didn't run.
     """
     spec = REGISTRY.get(name)
     if spec is None:
@@ -338,8 +352,6 @@ def execute(name: str, raw_args: dict[str, Any] | None, context: ToolContext) ->
 
     if not _is_available(spec, context):
         return ToolResult(data={"error": "This tool isn't available for this user or context right now."})
-    if not spec.read_only and current_role() is ProcessRole.AI:
-        return ToolResult(data={"error": "This action needs the user's confirmation and cannot run automatically."})
 
     try:
         args = spec.args_model.model_validate(raw_args or {})
@@ -348,6 +360,15 @@ def execute(name: str, raw_args: dict[str, Any] | None, context: ToolContext) ->
 
     if _contains_url(args.model_dump()):
         return ToolResult(data={"error": "Arguments may not contain a URL."})
+
+    if not spec.read_only and not confirmed:
+        label = spec.confirm_label or spec.action_label or spec.name
+        return ToolResult(
+            data={"status": "proposed", "message": f"{label!r} was proposed for the user to confirm - it has not run yet."},
+            proposal={"tool": spec.name, "args": args.model_dump(mode="json"), "confirm_label": label},
+        )
+    if not spec.read_only and current_role() is ProcessRole.AI:
+        return ToolResult(data={"error": "This action needs the user's confirmation and cannot run automatically."})
 
     try:
         data = spec.handler(context, args)

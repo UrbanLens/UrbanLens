@@ -706,14 +706,31 @@ one turn can fan out to several billed model calls.
 turn started by the endpoint above. Still running: **202** `{ready: false, poll_after_seconds}` —
 back off and retry after that many seconds, appending `?attempt=N` (0-indexed) so the pacing grows
 the way the web chat's own poll does; a client that gives up polling loses nothing server-side, it
-can simply stop. Resolved: **200** `{reply, actions[], history}` — `actions` are human-readable
-labels of anything the assistant actually did (e.g. "Created a trip"); it can only act through a
-small allowlisted tool set scoped to the caller's own data, never deletes/shares/changes privacy
-settings, and every tool result it sees is JSON, never raw prose from another account. A turn that
-failed or ran too long still resolves **200** with a plain-language `reply` explaining that, rather
-than an error status — a client can render every poll outcome the same way. **404** for an unknown
-or expired turn id, or one that belongs to a different caller — identical either way, so a guessed
-id can't distinguish the two.
+can simply stop. Resolved: **200** `{reply, actions[], proposals[], history}` — `actions` are
+human-readable labels of anything the assistant actually did (e.g. "Created a trip"); it can only
+act through a small allowlisted tool set scoped to the caller's own data, never deletes/shares/
+changes privacy settings, and every tool result it sees is JSON, never raw prose from another
+account. A turn that failed or ran too long still resolves **200** with a plain-language `reply`
+explaining that, rather than an error status — a client can render every poll outcome the same way.
+**404** for an unknown or expired turn id, or one that belongs to a different caller — identical
+either way, so a guessed id can't distinguish the two.
+
+Every write the assistant can perform (`create_trip`, `add_trip_activity`) is confirm-gated: the
+tool call itself only ever produces a **proposal**, never a live write, regardless of which
+process actually ran the model turn. `proposals[]` entries are `{n, tool, confirm_label}` — `n` is
+the proposal's 0-based index within this turn, `confirm_label` is the button/action text (e.g.
+"Create trip"). Deliberately absent: the tool's arguments — those stay server-side, bound to the
+turn and the caller's profile, until confirmed.
+
+`POST /assistant/turn/<turn_id>/confirm/<n>/` — `AssistantProposalConfirmView` — scopes:
+`assistant:write` — execute proposal `n` from that turn for real. **200** `{status: "done"|
+"error", message}` on success or on a handler-level failure (e.g. invalid state at execution
+time) — both are 200 because the *request* succeeded; `message` is what to show the user either
+way. Confirming the same proposal twice (a retry, a double-tap) is a safe no-op: the second call
+returns `{"status": "done", "message": "Already confirmed."}` rather than running the write again
+— claimed atomically, not by re-checking after the fact, so two concurrent confirms can't both
+win. **404** when the proposal id is unknown, out of range, expired (proposals share the turn's
+TTL), or belongs to a different caller's turn — identical either way.
 
 `POST /assistant/reset/` — `AssistantResetView` — scopes: `assistant:write` — a genuine no-op for
 this stateless shape (`{"history": []}`) — kept for surface symmetry with the web chat's reset

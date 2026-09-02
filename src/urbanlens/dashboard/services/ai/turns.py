@@ -164,3 +164,73 @@ def read_turn_record(turn_id: str) -> dict[str, Any] | None:
     """
     record = cache.get(_turn_record_key(turn_id))
     return record if isinstance(record, dict) else None
+
+
+def _turn_proposals_key(turn_id: str) -> str:
+    return f"ulai:turn:{turn_id}:proposals"
+
+
+def _turn_proposal_claim_key(turn_id: str, n: int) -> str:
+    return f"ulai:turn:{turn_id}:proposal:{n}:claimed"
+
+
+def store_turn_proposals(turn_id: str, *, profile_id: int, proposals: list[dict[str, Any]]) -> None:
+    """Record the write-tool proposals a resolved turn produced (``AssistantTurn.proposals``).
+
+    Called once a turn's poll resolves successfully - never by the turn task
+    itself, which has no reason to know its own turn_id (see
+    ``run_assistant_turn_task``'s own docstring). Safe to call more than
+    once with the same content (two browser tabs both resolving the same
+    turn): this just overwrites the same cache entry with identical data,
+    unlike the session-history append it sits alongside, which does need a
+    consume gate.
+
+    Args:
+        turn_id: The turn these proposals belong to.
+        profile_id: The requesting profile's id - checked by
+            :func:`read_turn_proposal` before a confirm attempt runs anything.
+        proposals: ``AssistantTurn.proposals`` - each already carries its own
+            ``n`` (index within the turn).
+    """
+    cache.set(_turn_proposals_key(turn_id), {"profile_id": profile_id, "proposals": proposals}, _TURN_RECORD_TTL_SECONDS)
+
+
+def read_turn_proposal(turn_id: str, n: int) -> dict[str, Any] | None:
+    """The stored proposal ``n`` for ``turn_id``, or ``None`` if unknown or out of range.
+
+    Args:
+        turn_id: The turn the proposal belongs to.
+        n: The proposal's index within that turn.
+
+    Returns:
+        ``{"profile_id", "tool", "args", "confirm_label"}`` - the caller
+        must still compare ``profile_id`` against the requesting profile
+        itself (this function does not, so a mismatch and a genuinely
+        unknown turn read identically to callers that want that).
+    """
+    record = cache.get(_turn_proposals_key(turn_id))
+    if not isinstance(record, dict):
+        return None
+    proposals = record.get("proposals") or []
+    if not (0 <= n < len(proposals)):
+        return None
+    return {"profile_id": record.get("profile_id"), **proposals[n]}
+
+
+def claim_turn_proposal(turn_id: str, n: int) -> bool:
+    """Atomically claim proposal ``n`` for execution, exactly once.
+
+    Backed by ``cache.add``, the same compare-and-set primitive
+    :func:`acquire_turn_lock` uses - a genuine atomic claim, not a
+    read-modify-write that two simultaneous confirm requests (a double
+    click, a client retry) could both pass.
+
+    Args:
+        turn_id: The turn the proposal belongs to.
+        n: The proposal's index within that turn.
+
+    Returns:
+        True for the first caller to claim it; False for every subsequent
+        one, which must not run the write again.
+    """
+    return cache.add(_turn_proposal_claim_key(turn_id, n), 1, _TURN_RECORD_TTL_SECONDS)

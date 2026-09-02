@@ -16,9 +16,12 @@ from urbanlens.dashboard.services.ai.turns import (
     MAX_POLL_ATTEMPTS,
     TURN_POLL_INTERVAL_SECONDS,
     acquire_turn_lock,
+    claim_turn_proposal,
     new_turn_id,
+    read_turn_proposal,
     read_turn_record,
     release_turn_lock,
+    store_turn_proposals,
     store_turn_record,
     turn_lock_is_current,
     turn_poll_delay,
@@ -104,6 +107,38 @@ class TurnLockIsCurrentTests(SimpleTestCase):
         assert fresh_token is not None
         self.assertFalse(turn_lock_is_current(self.profile, stale_token))
         self.assertTrue(turn_lock_is_current(self.profile, fresh_token))
+
+
+class TurnProposalTests(SimpleTestCase):
+    def setUp(self) -> None:
+        cache.clear()
+        self.turn_id = new_turn_id()
+        self.proposal = {"n": 0, "tool": "create_trip", "args": {"name": "X"}, "confirm_label": "Create trip"}
+
+    def test_round_trips_with_profile_id(self) -> None:
+        store_turn_proposals(self.turn_id, profile_id=42, proposals=[self.proposal])
+        self.assertEqual(read_turn_proposal(self.turn_id, 0), {"profile_id": 42, **self.proposal})
+
+    def test_unknown_turn_id_returns_none(self) -> None:
+        self.assertIsNone(read_turn_proposal("never-issued", 0))
+
+    def test_out_of_range_index_returns_none(self) -> None:
+        store_turn_proposals(self.turn_id, profile_id=42, proposals=[self.proposal])
+        self.assertIsNone(read_turn_proposal(self.turn_id, 1))
+        self.assertIsNone(read_turn_proposal(self.turn_id, -1))
+
+    def test_claim_succeeds_exactly_once(self) -> None:
+        self.assertTrue(claim_turn_proposal(self.turn_id, 0))
+        self.assertFalse(claim_turn_proposal(self.turn_id, 0))
+
+    def test_claims_are_independent_per_index(self) -> None:
+        self.assertTrue(claim_turn_proposal(self.turn_id, 0))
+        self.assertTrue(claim_turn_proposal(self.turn_id, 1))
+
+    def test_claims_are_independent_per_turn(self) -> None:
+        other_turn_id = new_turn_id()
+        self.assertTrue(claim_turn_proposal(self.turn_id, 0))
+        self.assertTrue(claim_turn_proposal(other_turn_id, 0))
 
 
 class TurnRecordTests(SimpleTestCase):

@@ -4,6 +4,11 @@ and AssistantTurnPollView's single-bubble poll response (outerHTML swap) -
 see controllers/assistant.py. A pending entry ({"pending": True, "turn_id"})
 self-polls; anything else (including a resolved turn) is a plain bubble.
 
+A resolved entry may also carry ``proposals`` - write tools the model asked
+for that need the user's explicit confirmation before they run (see
+_proposal.html, which renders each one - a live confirm button, or its
+already-resolved state if this bubble is being re-rendered on reload).
+
 Context: entry, and for a pending entry only: next_attempt, poll_delay.
 {% endcomment %}
 {% if entry.pending %}
@@ -23,6 +28,13 @@ Context: entry, and for a pending entry only: next_attempt, poll_delay.
     <div class="assistant-msg-actions">
         {% for action in entry.actions %}
         <span class="ul-badge ul-badge--neutral"><i class="material-symbols-outlined">check</i>{{ action }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% if entry.proposals %}
+    <div class="assistant-msg-proposals">
+        {% for proposal in entry.proposals %}
+        {% include "dashboard/partials/assistant/_proposal.html" with proposal=proposal entry=entry %}
         {% endfor %}
     </div>
     {% endif %}

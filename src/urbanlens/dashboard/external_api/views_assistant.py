@@ -24,6 +24,7 @@ from urbanlens.dashboard.external_api.serializers import ErrorSerializer
 from urbanlens.dashboard.external_api.serializers_assistant import (
     AssistantMessageRequestSerializer,
     AssistantMessageResponseSerializer,
+    AssistantProposalConfirmResponseSerializer,
     AssistantResetResponseSerializer,
     AssistantTurnPendingSerializer,
 )
@@ -32,7 +33,18 @@ from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.services.ai.access import assistant_available
 from urbanlens.dashboard.services.ai.assistant import MAX_HISTORY_ENTRIES
-from urbanlens.dashboard.services.ai.turns import MAX_POLL_ATTEMPTS, acquire_turn_lock, new_turn_id, read_turn_record, release_turn_lock, store_turn_record, turn_poll_delay
+from urbanlens.dashboard.services.ai.turns import (
+    MAX_POLL_ATTEMPTS,
+    acquire_turn_lock,
+    claim_turn_proposal,
+    new_turn_id,
+    read_turn_proposal,
+    read_turn_record,
+    release_turn_lock,
+    store_turn_proposals,
+    store_turn_record,
+    turn_poll_delay,
+)
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 
 if TYPE_CHECKING:
@@ -79,6 +91,11 @@ def _poll_attempt(request: Request) -> int:
         return max(int(request.query_params.get("attempt", "0")), 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _api_proposals(proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The client-facing shape of a turn's proposals - never ``args`` (see AssistantProposalSerializer)."""
+    return [{"n": proposal["n"], "tool": proposal["tool"], "confirm_label": proposal["confirm_label"]} for proposal in proposals]
 
 
 class AssistantMessageView(ExternalApiView):
@@ -157,7 +174,10 @@ class AssistantTurnPollView(ExternalApiView):
 
             result = progress.result if isinstance(progress.result, dict) else {}
             reply = result.get("reply", "")
-            response = Response(AssistantMessageResponseSerializer({"reply": reply, "actions": result.get("actions", []), "history": _resolved_history(turn_id, reply)}).data)
+            proposals = result.get("proposals") or []
+            if proposals:
+                store_turn_proposals(turn_id, profile_id=profile.pk, proposals=proposals)
+            response = Response(AssistantMessageResponseSerializer({"reply": reply, "actions": result.get("actions", []), "proposals": _api_proposals(proposals), "history": _resolved_history(turn_id, reply)}).data)
             AsyncResult(record["task_id"]).forget()
             return response
         if progress.state in {"FAILURE", "REVOKED"}:
@@ -168,6 +188,47 @@ class AssistantTurnPollView(ExternalApiView):
             return response
 
         return Response(AssistantTurnPendingSerializer({"ready": False, "poll_after_seconds": turn_poll_delay(attempt)}).data, status=202)
+
+
+class AssistantProposalConfirmView(ExternalApiView):
+    """POST: confirm (and actually run) one write-tool proposal from a resolved turn.
+
+    The write itself never ran inside the turn loop - it ran on ai-worker,
+    where ``registry.execute()`` refuses every write outright, and even off
+    ai-worker the loop always calls ``execute(..., confirmed=False)``. This
+    is that write's only real execution path: it runs here, on the ordinary
+    web process, only once the caller explicitly confirms it.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.ASSISTANT_WRITE}),
+    }
+    throttle_classes: ClassVar[list] = [ExternalApiBurstThrottle, ExternalApiWriteThrottle]
+
+    @extend_schema(request=None, responses={200: AssistantProposalConfirmResponseSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, turn_id: str, n: int) -> Response:
+        """Run the proposal for real, exactly once."""
+        from django.utils import timezone
+
+        from urbanlens.dashboard.services.ai.tools.registry import ToolContext, execute
+
+        profile = request.user.profile
+        proposal = read_turn_proposal(turn_id, n)
+        if proposal is None or proposal.get("profile_id") != profile.pk:
+            # Unknown, expired, or someone else's - identical response
+            # either way, matching this API's usual anti-enumeration policy.
+            return Response({"error": "No such proposal."}, status=404)
+
+        if not claim_turn_proposal(turn_id, n):
+            # Already confirmed (a client retry, a double tap) - a no-op,
+            # never a second execution.
+            return Response(AssistantProposalConfirmResponseSerializer({"status": "done", "message": "Already confirmed."}).data)
+
+        context = ToolContext(profile=profile, now=timezone.now())
+        result = execute(proposal["tool"], proposal["args"], context, confirmed=True)
+        is_error = "error" in result.data
+        message = str(result.data.get("error")) if is_error else (result.summary or "Done.")
+        return Response(AssistantProposalConfirmResponseSerializer({"status": "error" if is_error else "done", "message": message}).data)
 
 
 class AssistantResetView(ExternalApiView):

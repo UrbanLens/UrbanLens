@@ -58,9 +58,15 @@ def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]]
             release below can't clobber a newer turn's lock.
 
     Returns:
-        ``{"reply": str, "actions": list[str]}`` on every handled path
-        (unavailable, expired, or a real turn) - the poll endpoint always
-        has something to show. An unhandled exception (including
+        ``{"reply": str, "actions": list[str], "proposals": list[dict]}`` on
+        every handled path (unavailable, expired, or a real turn) - the poll
+        endpoint always has something to show. ``proposals`` (from
+        ``AssistantTurn.proposals``) are write tools the model asked for
+        that did *not* run - see ``services.ai.tools.registry.execute``'s
+        ``confirmed`` parameter; the poll endpoint that resolves this result
+        is what persists them (``services.ai.turns.store_turn_proposals``)
+        for a later confirm request to look up, since this task has no
+        reason to know its own turn_id. An unhandled exception (including
         ``SoftTimeLimitExceeded`` if the in-loop deadline check in
         ``run_assistant_turn`` somehow doesn't catch a hang first) still
         propagates as a Celery ``FAILURE``, which the poll endpoint renders
@@ -73,23 +79,23 @@ def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]]
         # Deleted between enqueue and pickup - vanishingly rare, and there is
         # no one left to poll for a reply. The lock's own TTL reclaims it;
         # not worth a lookup-then-release for a profile that no longer exists.
-        return {"reply": _UNAVAILABLE_REPLY, "actions": []}
+        return {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []}
 
     if not turn_lock_is_current(profile, lock_token):
         logger.info("Assistant turn for profile %s lost its lock before executing; skipping", profile_id)
-        return {"reply": _EXPIRED_REPLY, "actions": []}
+        return {"reply": _EXPIRED_REPLY, "actions": [], "proposals": []}
 
     try:
         if not assistant_available(profile):
-            return {"reply": _UNAVAILABLE_REPLY, "actions": []}
+            return {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []}
 
         update_task_progress(self, current=0, total=1, message="Thinking…")
         try:
             turn = run_assistant_turn(profile, history, user_message)
         except AssistantUnavailableError:
-            return {"reply": _UNAVAILABLE_REPLY, "actions": []}
+            return {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []}
 
         update_task_progress(self, current=1, total=1, message="Done")
-        return {"reply": turn.reply, "actions": turn.actions}
+        return {"reply": turn.reply, "actions": turn.actions, "proposals": turn.proposals}
     finally:
         release_turn_lock(profile, lock_token)

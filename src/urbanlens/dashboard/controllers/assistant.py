@@ -33,7 +33,18 @@ from django.views import View
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.ai.access import assistant_available
 from urbanlens.dashboard.services.ai.assistant import MAX_HISTORY_ENTRIES, MAX_MESSAGE_CHARS
-from urbanlens.dashboard.services.ai.turns import MAX_POLL_ATTEMPTS, acquire_turn_lock, new_turn_id, read_turn_record, release_turn_lock, store_turn_record, turn_poll_delay
+from urbanlens.dashboard.services.ai.turns import (
+    MAX_POLL_ATTEMPTS,
+    acquire_turn_lock,
+    claim_turn_proposal,
+    new_turn_id,
+    read_turn_proposal,
+    read_turn_record,
+    release_turn_lock,
+    store_turn_proposals,
+    store_turn_record,
+    turn_poll_delay,
+)
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 
 if TYPE_CHECKING:
@@ -44,6 +55,7 @@ logger = logging.getLogger(__name__)
 _SESSION_KEY = "assistant_chat"
 _MESSAGES_PARTIAL = "dashboard/partials/assistant/_messages.html"
 _BUBBLE_PARTIAL = "dashboard/partials/assistant/_bubble.html"
+_PROPOSAL_PARTIAL = "dashboard/partials/assistant/_proposal.html"
 #: Every reply the web tier itself can produce without ever reaching the
 #: task - the task's own equivalents (services.ai.tasks) are separate
 #: strings so the two layers stay decoupled.
@@ -104,9 +116,13 @@ def _resolve_turn(request: HttpRequest, turn_id: str, final_entry: dict[str, Any
         final_entry: The entry to store in place of the pending marker.
 
     Returns:
-        ``final_entry``, unchanged - always what the caller should render,
-        regardless of which tab won the gate.
+        ``final_entry`` with ``turn_id`` set - the caller's own render needs
+        it too (a proposal's confirm button builds its URL from
+        ``entry.turn_id``), not just the session copy, and the pending
+        marker's own ``turn_id`` would otherwise be lost the moment
+        ``entry.clear()`` wipes it below.
     """
+    final_entry = {**final_entry, "turn_id": turn_id}
     if not cache.add(f"ulai:turn:{turn_id}:consumed", 1, _CONSUME_GATE_TTL_SECONDS):
         return final_entry
     history = _history(request)
@@ -117,6 +133,31 @@ def _resolve_turn(request: HttpRequest, turn_id: str, final_entry: dict[str, Any
             break
     _save_history(request, history)
     return final_entry
+
+
+def _session_proposals(proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The session-visible shape of a turn's proposals - never ``args``.
+
+    ``args`` only ever needs to be read back by the confirm view, from the
+    cache-backed store (``store_turn_proposals``) - the session copy exists
+    purely to render a confirm button (or its resolved state) and has no
+    reason to carry it.
+    """
+    return [{"n": proposal["n"], "tool": proposal["tool"], "confirm_label": proposal["confirm_label"], "status": "pending"} for proposal in proposals]
+
+
+def _update_session_proposal(request: HttpRequest, turn_id: str, n: int, *, status: str, message: str) -> None:
+    """Mark proposal ``n`` of ``turn_id`` resolved in session, so a reload doesn't offer it again."""
+    history = _history(request)
+    for entry in history:
+        if entry.get("turn_id") != turn_id:
+            continue
+        for proposal in entry.get("proposals") or []:
+            if proposal.get("n") == n:
+                proposal["status"] = status
+                proposal["message"] = message
+        break
+    _save_history(request, history)
 
 
 class AssistantView(LoginRequiredMixin, View):
@@ -218,7 +259,14 @@ class AssistantTurnPollView(LoginRequiredMixin, View):
             from celery.result import AsyncResult
 
             result = progress.result if isinstance(progress.result, dict) else {}
-            entry = _resolve_turn(request, turn_id, {"role": "assistant", "content": result.get("reply", ""), "actions": result.get("actions", [])})
+            proposals = result.get("proposals") or []
+            if proposals:
+                store_turn_proposals(turn_id, profile_id=profile.pk, proposals=proposals)
+            entry = _resolve_turn(
+                request,
+                turn_id,
+                {"role": "assistant", "content": result.get("reply", ""), "actions": result.get("actions", []), "proposals": _session_proposals(proposals)},
+            )
             AsyncResult(record["task_id"]).forget()
             return render(request, _BUBBLE_PARTIAL, {"entry": entry})
         if progress.state in {"FAILURE", "REVOKED"}:
@@ -229,6 +277,56 @@ class AssistantTurnPollView(LoginRequiredMixin, View):
             return render(request, _BUBBLE_PARTIAL, {"entry": entry})
 
         return render(request, _BUBBLE_PARTIAL, {"entry": {"pending": True, "turn_id": turn_id}, "next_attempt": attempt + 1, "poll_delay": turn_poll_delay(attempt)})
+
+
+class AssistantProposalConfirmView(LoginRequiredMixin, View):
+    """Confirm (and actually run) one write-tool proposal from a resolved turn.
+
+    The write itself never ran inside the turn loop - it ran on ai-worker,
+    where ``registry.execute()`` refuses every write outright, and even
+    off ai-worker the loop always calls ``execute(..., confirmed=False)``.
+    This view is that write's only real execution path: it runs here, on
+    the ordinary web process, only once the user has explicitly clicked
+    confirm.
+
+    POST /assistant/turn/<turn_id>/confirm/<n>/
+    """
+
+    def post(self, request: HttpRequest, turn_id: str, n: int) -> HttpResponse:
+        from django.utils import timezone
+
+        from urbanlens.dashboard.services.ai.tools.registry import ToolContext, execute
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        proposal = read_turn_proposal(turn_id, n)
+        if proposal is None or proposal.get("profile_id") != profile.pk:
+            # Unknown, expired, or someone else's - identical response
+            # either way, matching every other turn/proposal lookup here.
+            raise Http404
+
+        if not claim_turn_proposal(turn_id, n):
+            # Already confirmed (a double click, a retried request) - render
+            # whatever the earlier confirm already recorded, never run twice.
+            history = _history(request)
+            for entry in history:
+                if entry.get("turn_id") != turn_id:
+                    continue
+                for stored in entry.get("proposals") or []:
+                    if stored.get("n") == n:
+                        return render(request, _PROPOSAL_PARTIAL, {"proposal": stored})
+            return render(request, _PROPOSAL_PARTIAL, {"proposal": {"n": n, "status": "done", "message": "Already confirmed."}})
+
+        context = ToolContext(profile=profile, now=timezone.now())
+        result = execute(proposal["tool"], proposal["args"], context, confirmed=True)
+        is_error = "error" in result.data
+        message = str(result.data.get("error")) if is_error else (result.summary or "Done.")
+        status = "error" if is_error else "done"
+        _update_session_proposal(request, turn_id, n, status=status, message=message)
+
+        response = render(request, _PROPOSAL_PARTIAL, {"proposal": {"n": n, "status": status, "message": message}})
+        if not is_error:
+            response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": message}})
+        return response
 
 
 class AssistantResetView(LoginRequiredMixin, View):

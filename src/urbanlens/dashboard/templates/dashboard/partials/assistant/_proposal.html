@@ -1,0 +1,30 @@
+{% comment %}
+One write-tool proposal from a resolved turn - a live confirm button, or its
+resolved (done/error) state. Rendered both inline from _bubble.html (a
+still-pending proposal, which needs entry.turn_id to build its confirm URL)
+and as AssistantProposalConfirmView's own outerHTML swap response (always
+already resolved by then, so entry is never needed there).
+
+Context: proposal ({"n", "confirm_label"?, "status", "message"?}), and -
+only for a still-pending one - entry (for entry.turn_id).
+{% endcomment %}
+{% if proposal.status == "done" %}
+<div class="assistant-proposal assistant-proposal--done">
+    <i class="material-symbols-outlined">check_circle</i>
+    <span>{{ proposal.message|default:"Done." }}</span>
+</div>
+{% elif proposal.status == "error" %}
+<div class="assistant-proposal assistant-proposal--error">
+    <i class="material-symbols-outlined">error</i>
+    <span>{{ proposal.message|default:"Couldn't complete this action." }}</span>
+</div>
+{% else %}
+<div class="assistant-proposal">
+    <button type="button" class="btn btn--sm btn--primary"
+            hx-post="{% url 'assistant.proposal.confirm' entry.turn_id proposal.n %}"
+            hx-target="closest .assistant-proposal" hx-swap="outerHTML"
+            hx-disabled-elt="this">
+        {{ proposal.confirm_label|default:"Confirm" }}
+    </button>
+</div>
+{% endif %}

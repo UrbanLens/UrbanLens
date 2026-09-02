@@ -102,6 +102,7 @@ register(
         scope=DataScope.OWN_PROFILE,
         progress_label="Creating a trip…",
         action_label="Created a trip",
+        confirm_label="Create trip",
     ),
 )
 
@@ -182,5 +183,6 @@ register(
         scope=DataScope.VISIBLE_SHARED,
         progress_label="Adding a pin to a trip…",
         action_label="Added a pin to a trip",
+        confirm_label="Add to trip",
     ),
 )

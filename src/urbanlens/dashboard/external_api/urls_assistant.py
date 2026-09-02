@@ -40,5 +40,6 @@ if TYPE_CHECKING:
 urlpatterns: list[URLPattern] = [
     path("assistant/message/", views_assistant.AssistantMessageView.as_view(), name="assistant.message"),
     path("assistant/turn/<str:turn_id>/", views_assistant.AssistantTurnPollView.as_view(), name="assistant.turn"),
+    path("assistant/turn/<str:turn_id>/confirm/<int:n>/", views_assistant.AssistantProposalConfirmView.as_view(), name="assistant.proposal.confirm"),
     path("assistant/reset/", views_assistant.AssistantResetView.as_view(), name="assistant.reset"),
 ]

@@ -90,6 +90,12 @@ class AssistantTurn:
 
     reply: str
     actions: list[str] = field(default_factory=list)
+    #: Write tools the model asked for but that did not run - each
+    #: ``{"n", "tool", "args", "confirm_label"}``, ``n`` the index a client
+    #: confirms by (``POST /assistant/turn/<turn_id>/confirm/<n>/``). Built
+    #: from ``ToolResult.proposal`` (``services.ai.tools.registry``); never
+    #: executed here - see that module's ``execute(..., confirmed=False)``.
+    proposals: list[dict[str, Any]] = field(default_factory=list)
 
 
 class AssistantUnavailableError(Exception):
@@ -138,13 +144,14 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
     user_message = user_message.strip()[:MAX_MESSAGE_CHARS]
     transcript = _history_block(history)
     prompt = (f"{transcript}\n" if transcript else "") + f"USER: {user_message}"
-    actions: list[str] = []
     started = time.monotonic()
     deadline = started + TURN_DEADLINE_SECONDS
     succeeded = True
     context = ToolContext(profile=profile, now=timezone.now(), deadline=deadline)
     wire_tools = _wire_tools(context)
     tool_call_count = 0
+    actions: list[str] = []
+    proposals: list[dict[str, Any]] = []
 
     try:
         for _round in range(MAX_ROUNDS):
@@ -152,35 +159,40 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
                 # Reached exactly at the previous round's last call: stop here
                 # rather than spending one more provider call just to discard
                 # whatever it asks for next.
-                return AssistantTurn(reply=_ACTION_LIMIT_REPLY, actions=actions)
+                return AssistantTurn(reply=_ACTION_LIMIT_REPLY, actions=actions, proposals=proposals)
             if time.monotonic() > deadline:
                 succeeded = False
-                return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions)
+                return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions, proposals=proposals)
 
             response = gateway.send_with_tools(prompt, wire_tools)
             if response is None:
                 succeeded = False
-                return AssistantTurn(reply=_NO_RESPONSE_REPLY, actions=actions)
+                return AssistantTurn(reply=_NO_RESPONSE_REPLY, actions=actions, proposals=proposals)
 
             tool_calls = [block for block in response.content if isinstance(block, ToolUseBlock)]
             if not tool_calls:
                 reply = response.text.strip()
-                return AssistantTurn(reply=reply or "I'm not sure how to answer that.", actions=actions)
+                return AssistantTurn(reply=reply or "I'm not sure how to answer that.", actions=actions, proposals=proposals)
 
             for block in tool_calls:
                 if tool_call_count >= MAX_TOOL_CALLS:
-                    return AssistantTurn(reply=_ACTION_LIMIT_REPLY, actions=actions)
+                    return AssistantTurn(reply=_ACTION_LIMIT_REPLY, actions=actions, proposals=proposals)
                 if time.monotonic() > deadline:
                     succeeded = False
-                    return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions)
+                    return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions, proposals=proposals)
 
                 tool_call_count += 1
-                result = execute(block.name, block.input, context)
+                # confirmed=False unconditionally: a write tool never runs
+                # here regardless of role - see registry.execute()'s own
+                # docstring. A read-only tool ignores the flag entirely.
+                result = execute(block.name, block.input, context, confirmed=False)
                 if result.summary:
                     actions.append(result.summary)
+                if result.proposal:
+                    proposals.append({"n": len(proposals), **result.proposal})
                 prompt += f"\nASSISTANT (tool call): {block.name}({json.dumps(block.input, default=str)})\nTOOL RESULT ({block.name}): {json.dumps(result.data, default=str)}"
 
-        return AssistantTurn(reply=_ROUND_LIMIT_REPLY, actions=actions)
+        return AssistantTurn(reply=_ROUND_LIMIT_REPLY, actions=actions, proposals=proposals)
     finally:
         # One call covering the whole turn, not per gateway.send_with_tools():
         # the gateway accumulates sent/received tokens across every call made

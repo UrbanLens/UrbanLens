@@ -41,14 +41,22 @@ class RunAssistantTurnTaskTests(TestCase):
         assert token is not None
         with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="Hi!", actions=["Searched your pins"])):
             result = run_assistant_turn_task(self.profile.pk, [], "hello", token)
-        self.assertEqual(result, {"reply": "Hi!", "actions": ["Searched your pins"]})
+        self.assertEqual(result, {"reply": "Hi!", "actions": ["Searched your pins"], "proposals": []})
         # Released, not merely unexamined - a fresh acquire must now succeed.
         self.assertFalse(turn_lock_is_current(self.profile, token))
         self.assertIsNotNone(acquire_turn_lock(self.profile))
 
+    def test_successful_turn_passes_proposals_through(self) -> None:
+        token = acquire_turn_lock(self.profile)
+        assert token is not None
+        proposal = {"n": 0, "tool": "create_trip", "args": {"name": "X"}, "confirm_label": "Create trip"}
+        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok", proposals=[proposal])):
+            result = run_assistant_turn_task(self.profile.pk, [], "hello", token)
+        self.assertEqual(result["proposals"], [proposal])
+
     def test_missing_profile_is_handled_without_raising(self) -> None:
         result = run_assistant_turn_task(999_999_999, [], "hello", "some-token")
-        self.assertEqual(result, {"reply": _UNAVAILABLE_REPLY, "actions": []})
+        self.assertEqual(result, {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []})
 
     def test_stale_lock_skips_execution_entirely(self) -> None:
         # This token was never actually granted the profile's current lock
@@ -57,7 +65,7 @@ class RunAssistantTurnTaskTests(TestCase):
         with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn") as mock_run:
             result = run_assistant_turn_task(self.profile.pk, [], "hello", "not-the-real-token")
         mock_run.assert_not_called()
-        self.assertEqual(result, {"reply": _EXPIRED_REPLY, "actions": []})
+        self.assertEqual(result, {"reply": _EXPIRED_REPLY, "actions": [], "proposals": []})
 
     def test_lock_superseded_by_a_newer_turn_is_left_alone(self) -> None:
         """A stale task holding an old token must never release a newer turn's lock."""
@@ -74,7 +82,7 @@ class RunAssistantTurnTaskTests(TestCase):
             result = run_assistant_turn_task(self.profile.pk, [], "hello", stale_token)
 
         mock_run.assert_not_called()
-        self.assertEqual(result, {"reply": _EXPIRED_REPLY, "actions": []})
+        self.assertEqual(result, {"reply": _EXPIRED_REPLY, "actions": [], "proposals": []})
         # The newer turn's lock is untouched.
         self.assertTrue(turn_lock_is_current(self.profile, fresh_token))
 
@@ -83,7 +91,7 @@ class RunAssistantTurnTaskTests(TestCase):
         assert token is not None
         with patch("urbanlens.dashboard.services.ai.tasks.assistant_available", return_value=False):
             result = run_assistant_turn_task(self.profile.pk, [], "hello", token)
-        self.assertEqual(result, {"reply": _UNAVAILABLE_REPLY, "actions": []})
+        self.assertEqual(result, {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []})
         self.assertFalse(turn_lock_is_current(self.profile, token))
 
     def test_assistant_unavailable_error_from_the_loop_releases_the_lock(self) -> None:
@@ -91,7 +99,7 @@ class RunAssistantTurnTaskTests(TestCase):
         assert token is not None
         with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", side_effect=AssistantUnavailableError("off")):
             result = run_assistant_turn_task(self.profile.pk, [], "hello", token)
-        self.assertEqual(result, {"reply": _UNAVAILABLE_REPLY, "actions": []})
+        self.assertEqual(result, {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []})
         self.assertFalse(turn_lock_is_current(self.profile, token))
 
     def test_history_and_message_reach_run_assistant_turn(self) -> None:

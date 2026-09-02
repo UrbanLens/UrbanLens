@@ -27,12 +27,35 @@ class AssistantMessageRequestSerializer(serializers.Serializer):
     history = AssistantHistoryEntrySerializer(many=True, required=False, default=list)
 
 
+class AssistantProposalSerializer(serializers.Serializer):
+    """One write-tool proposal awaiting the caller's confirmation.
+
+    Never carries the tool's ``args`` - those stay server-side
+    (``services.ai.turns.store_turn_proposals``) until a confirm request
+    replays them for real; this is only what a client needs to render a
+    confirm control and address it (``n``, this domain's own
+    ``POST /assistant/turn/<turn_id>/confirm/<n>/``).
+    """
+
+    n = serializers.IntegerField(read_only=True)
+    tool = serializers.CharField(read_only=True)
+    confirm_label = serializers.CharField(read_only=True)
+
+
 class AssistantMessageResponseSerializer(serializers.Serializer):
     """The assistant's reply to one chat turn, plus the history to resend next time."""
 
     reply = serializers.CharField(read_only=True)
     actions = serializers.ListField(child=serializers.CharField(), read_only=True)
+    proposals = AssistantProposalSerializer(many=True, read_only=True, default=list)
     history = AssistantHistoryEntrySerializer(many=True, read_only=True)
+
+
+class AssistantProposalConfirmResponseSerializer(serializers.Serializer):
+    """Result of confirming one proposal - the write either ran or it didn't."""
+
+    status = serializers.ChoiceField(choices=["done", "error"], read_only=True)
+    message = serializers.CharField(read_only=True)
 
 
 class AssistantTurnPendingSerializer(serializers.Serializer):
