@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import tiktoken
 
-from urbanlens.dashboard.services.ai.inference_client import InferenceError, InferenceRequest, Message
+from urbanlens.dashboard.services.ai.inference_client import InferenceError, InferenceRequest, Message, ToolSpec
 from urbanlens.dashboard.services.ai.message import MessageQueue
 from urbanlens.dashboard.services.ai.meta import (
     FORMATTING,
@@ -393,13 +393,17 @@ class LLMGateway(ABC):
 
         return None
 
-    def _get_response(self, message_queue: MessageQueue) -> InferenceResponse | None:
+    def _get_response(self, message_queue: MessageQueue, *, tools: list[ToolSpec] | None = None) -> InferenceResponse | None:
         """
         Send the message queue to the inference service and return its response, unmodified.
 
             Args:
                 message_queue (MessageQueue):
                     The message queue to send.
+                tools:
+                    Provider-native tools the model may call this turn, or
+                    None for the ordinary no-tools call every other AI
+                    feature makes. See :meth:`send_with_tools`.
 
             Returns:
                 InferenceResponse | None:
@@ -414,7 +418,7 @@ class LLMGateway(ABC):
             else:
                 messages.append(Message(role=msg["role"], content=msg["content"]))
 
-        request = InferenceRequest(provider=self.PROVIDER, model=self.model, system=system_prompt, messages=messages, max_tokens=self.max_tokens)
+        request = InferenceRequest(provider=self.PROVIDER, model=self.model, system=system_prompt, messages=messages, tools=tools or [], max_tokens=self.max_tokens)
 
         try:
             return self._inference_client.send(request)
@@ -517,3 +521,52 @@ class LLMGateway(ABC):
                 return answers
 
         return []
+
+    def send_with_tools(self, prompt: str, tools: list[ToolSpec]) -> InferenceResponse | None:
+        """Send a prompt with provider-native tools available, and return the raw response.
+
+        Unlike :meth:`send_prompt`, this does not parse an ``<ANSWER>`` tag -
+        there is no text protocol to parse. The caller (the assistant's tool
+        loop) inspects the returned :class:`~urbanlens_ai.schema.InferenceResponse`
+        directly: a ``ToolUseBlock`` in ``response.content`` means the model
+        wants to call a tool; ``response.stop_reason == "end_turn"`` with a
+        ``TextBlock`` means it's done and ``response.text`` is the reply.
+        Construct this gateway with ``formatting=""`` - the ``<ANSWER>``
+        wrapping instruction has nothing to do with native tool calling and
+        would only confuse a model being offered real tools instead.
+
+        Args:
+            prompt: The full prompt for this round - the caller owns
+                whatever transcript/tool-result text it has accumulated so
+                far and passes it fresh each call, same as :meth:`send_prompt`.
+            tools: The tools available this round, already converted to the
+                wire schema (``services.ai.tools.registry.ToolSpec`` is a
+                different type - the caller converts).
+
+        Returns:
+            The raw response, or None if the call failed or returned no content.
+        """
+        from urbanlens.dashboard.services.ai.scanner import scan as _scan_injection
+
+        scan_result = _scan_injection(prompt, source="user")
+        if scan_result.risk_score >= 0.3:
+            logger.warning(
+                "Prompt injection risk=%.2f for model '%s'; sending sanitized prompt",
+                scan_result.risk_score,
+                self.model,
+            )
+            prompt = scan_result.sanitized
+
+        try:
+            queue = self.construct_messages(prompt)
+        except ValueError:
+            logger.warning("Prompt exceeds token limit for model '%s'; skipping AI call", self.model)
+            return None
+
+        self.send_tokens(queue)
+
+        response = self._get_response(queue, tools=tools)
+        if response is None or not response.content:
+            return None
+        self._record_received_tokens(response)
+        return response
