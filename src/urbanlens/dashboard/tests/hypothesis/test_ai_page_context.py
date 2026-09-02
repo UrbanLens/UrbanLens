@@ -38,7 +38,6 @@ class ResolvePageContextTests(TestCase):
         self.assertIsNotNone(context)
         assert context is not None
         self.assertEqual(context.url_name, "map.view")
-        self.assertEqual(context.page_help_key, "map")
         self.assertIsNone(context.object)
 
     def test_query_string_is_stripped_before_resolution(self) -> None:
@@ -50,7 +49,7 @@ class ResolvePageContextTests(TestCase):
         context = resolve_page_context(reverse("pin.details", args=[pin.slug]), self.profile)
         self.assertIsNotNone(context)
         assert context is not None
-        self.assertEqual(context.page_help_key, "pin_detail")
+        self.assertEqual(context.url_name, "pin.details")
         self.assertEqual(context.object, PageObject(kind="pin", id=pin.pk))
 
     def test_another_profiles_pin_resolves_with_no_object(self) -> None:
@@ -59,7 +58,7 @@ class ResolvePageContextTests(TestCase):
         context = resolve_page_context(reverse("pin.details", args=[other_pin.slug]), self.profile)
         self.assertIsNotNone(context)
         assert context is not None
-        self.assertEqual(context.page_help_key, "pin_detail")
+        self.assertEqual(context.url_name, "pin.details")
         self.assertIsNone(context.object)
 
     def test_a_spoofed_pin_slug_resolves_with_no_object(self) -> None:
@@ -73,7 +72,7 @@ class ResolvePageContextTests(TestCase):
         context = resolve_page_context(reverse("trips.detail", args=[trip.slug]), self.profile)
         self.assertIsNotNone(context)
         assert context is not None
-        self.assertEqual(context.page_help_key, "trip_detail")
+        self.assertEqual(context.url_name, "trips.detail")
         self.assertEqual(context.object, PageObject(kind="trip", id=trip.pk))
 
     def test_another_profiles_private_trip_resolves_with_no_object(self) -> None:

@@ -55,10 +55,10 @@ class PageContext:
     """What :func:`resolve_page_context` returns for a URL path.
 
     Attributes:
-        url_name: The resolved Django URL name (e.g. ``"pin.details"``).
-        page_help_key: Key into ``services.ai.page_help.PAGE_HELP`` (batch 4)
-            - carried here now so that module's registration doesn't also
-            need to touch this one.
+        url_name: The resolved Django URL name (e.g. ``"pin.details"``) -
+            also the lookup key into ``services.ai.page_help.PAGE_HELP``
+            (batch 4's ``get_page_help`` tool), so no separate key is kept
+            here.
         object: The page's own object, re-loaded under the requesting
             profile's access rules, or ``None`` for a page with none (the
             map) or where the URL's own object doesn't exist / isn't visible
@@ -66,7 +66,6 @@ class PageContext:
     """
 
     url_name: str
-    page_help_key: str
     object: PageObject | None = None
 
 
@@ -76,7 +75,6 @@ class _ObjectLoader(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class _PageResolver:
-    page_help_key: str
     #: None for a page with no single object of its own (e.g. the map).
     load_object: _ObjectLoader | None = None
     #: The "kind" load_object's own PageObject carries, when load_object is
@@ -119,9 +117,9 @@ def _load_trip(profile: Profile, kwargs: dict[str, str]) -> PageObject | None:
 
 #: url_name -> resolver. See the module docstring for why this list is short.
 _RESOLVERS: dict[str, _PageResolver] = {
-    "map.view": _PageResolver(page_help_key="map"),
-    "pin.details": _PageResolver(page_help_key="pin_detail", load_object=_load_pin, object_kind="pin"),
-    "trips.detail": _PageResolver(page_help_key="trip_detail", load_object=_load_trip, object_kind="trip"),
+    "map.view": _PageResolver(),
+    "pin.details": _PageResolver(load_object=_load_pin, object_kind="pin"),
+    "trips.detail": _PageResolver(load_object=_load_trip, object_kind="trip"),
 }
 
 
@@ -151,7 +149,7 @@ def resolve_page_context(path: str, profile: Profile) -> PageContext | None:
     if resolver is None:
         return None
     page_object = resolver.load_object(profile, match.kwargs) if resolver.load_object else None
-    return PageContext(url_name=url_name, page_help_key=resolver.page_help_key, object=page_object)
+    return PageContext(url_name=url_name, object=page_object)
 
 
 def _pin_still_visible(profile: Profile, obj_id: int) -> bool:
