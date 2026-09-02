@@ -44,6 +44,29 @@ class SendWithToolsTests(SimpleTestCase):
         request = gateway._inference_client.send.call_args.args[0]
         self.assertEqual(request.tools, _TOOLS)
 
+    def test_ignores_a_gateway_constructed_with_the_answer_formatting(self) -> None:
+        # Even a caller that forgot formatting="" must not leak the <ANSWER>
+        # wrapping instruction into a native tool-calling call - it has
+        # nothing to do with real tool use and would only confuse the model.
+        gateway = AnthropicGateway(instructions="test instructions")  # default formatting, not ""
+        gateway._inference_client = mock.Mock()
+        gateway._inference_client.send.return_value = InferenceResponse(content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=5))
+
+        gateway.send_with_tools("hello", _TOOLS)
+
+        request = gateway._inference_client.send.call_args.args[0]
+        self.assertNotIn("<FORMATTING>", request.system)
+        self.assertNotIn("ANSWER", request.system)
+
+    def test_formatting_is_restored_after_the_call(self) -> None:
+        gateway = AnthropicGateway(formatting="custom formatting", instructions="test instructions")
+        gateway._inference_client = mock.Mock()
+        gateway._inference_client.send.return_value = InferenceResponse(content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=5))
+
+        gateway.send_with_tools("hello", _TOOLS)
+
+        self.assertEqual(gateway.formatting, "custom formatting")
+
     def test_returns_the_raw_response_unparsed(self) -> None:
         gateway = self._gateway()
         response = InferenceResponse(content=[ToolUseBlock(id="tu_1", name="search_pins", input={"query": "steel"})], stop_reason="tool_use", usage=Usage(output_tokens=10))

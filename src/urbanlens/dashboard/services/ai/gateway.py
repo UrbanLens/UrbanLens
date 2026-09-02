@@ -531,9 +531,11 @@ class LLMGateway(ABC):
         directly: a ``ToolUseBlock`` in ``response.content`` means the model
         wants to call a tool; ``response.stop_reason == "end_turn"`` with a
         ``TextBlock`` means it's done and ``response.text`` is the reply.
-        Construct this gateway with ``formatting=""`` - the ``<ANSWER>``
-        wrapping instruction has nothing to do with native tool calling and
-        would only confuse a model being offered real tools instead.
+        This method ignores whatever ``formatting`` the gateway was
+        constructed with - the ``<ANSWER>`` wrapping instruction is specific
+        to that text protocol and would only confuse a model being offered
+        real tools instead, so it is never worth sending here regardless of
+        what a caller passed to ``__init__``.
 
         Args:
             prompt: The full prompt for this round - the caller owns
@@ -557,11 +559,18 @@ class LLMGateway(ABC):
             )
             prompt = scan_result.sanitized
 
+        # Force no <ANSWER> instruction for this call regardless of how the
+        # gateway was constructed - restored afterward in case the same
+        # instance is later reused for an ordinary send_prompt call.
+        original_formatting = self.formatting
+        self.formatting = ""
         try:
             queue = self.construct_messages(prompt)
         except ValueError:
             logger.warning("Prompt exceeds token limit for model '%s'; skipping AI call", self.model)
             return None
+        finally:
+            self.formatting = original_formatting
 
         self.send_tokens(queue)
 
