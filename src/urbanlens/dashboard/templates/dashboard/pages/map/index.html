@@ -9,7 +9,7 @@
 {% vendor_asset "leaflet_markercluster_js" %}
 {% endblock %}
 
-{% block title %}Map{% endblock %}
+{% block page_title %}Map{% endblock %}
 
 {% block content %}
 <div id="map" data-map-style="{% if map_dark_mode == 'dark' %}dark{% else %}light{% endif %}" hx-boost="true">
