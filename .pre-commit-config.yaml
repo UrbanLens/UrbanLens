@@ -3,7 +3,12 @@ default_language_version:
     python: python3.12
 
 default_install_hook_types: [pre-commit]
-files: '^(.+\.(py|ts|js|tsx|jsx|yaml|toml|html|txt))$'
+# `yml` as well as `yaml`: this repo has 16 of the former and 2 of the latter,
+# so listing only `yaml` meant docker-compose.yml was checked by nothing at all
+# - not check-yaml, not mixed-line-ending. That is how it was silently committed
+# with CRLF endings. Note `exclude` below still drops .github/ and .devcontainer/
+# (anything starting with `.` or `_`), so the workflow files remain unchecked.
+files: '^(.+\.(py|ts|js|tsx|jsx|yaml|yml|toml|html|txt))$'
 exclude: '(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)'
 
 # GITHUB
@@ -41,6 +46,16 @@ repos:
 # REPOSITORY CONSISTENCY
 -   repo: local
     hooks:
+      - id: line-endings
+        name: every tracked text file is stored with LF
+        entry: python3 bin/check_line_endings.py
+        language: system
+        # always_run, because the point is to see files the global `files:`
+        # pattern above does not match - which is exactly how the CRLF this
+        # guards against got in. Reads via `git ls-files --eol` and only
+        # reports; it never rewrites, so it cannot damage a binary.
+        always_run: true
+        pass_filenames: false
       - id: imports-tracked
         name: every urbanlens.* import resolves to a committed file
         entry: python3 bin/check_imports_tracked.py

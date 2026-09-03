@@ -642,7 +642,7 @@ services:
         max-file: "10"
     # --pool=threads: one process, so memory isn't multiplied per concurrent
     # task the way celery-worker's prefork pool is - idle is ~242MB with
-    # GDAL/GeoPandas/Pillow already resident. 
+    # GDAL/GeoPandas/Pillow already resident.
     cpus: ${CPU_LIMIT__CELERY_PANELS:-${CPU_LIMIT:-1}}
     mem_limit: ${MEM_LIMIT__CELERY_PANELS:-${MEM_LIMIT:-1g}}
 
@@ -782,7 +782,7 @@ services:
         max-file: "10"
     # Scheduler only - never executes a task body, so none of the heavy
     # per-task-type lazy imports (GeoPandas/Shapely/Pillow/...) that inflate
-    # the actual workers ever trigger here. 
+    # the actual workers ever trigger here.
     cpus: ${CPU_LIMIT__CELERY_BEAT:-${CPU_LIMIT:-0.5}}
     mem_limit: ${MEM_LIMIT__CELERY_BEAT:-${MEM_LIMIT:-512m}}
 
@@ -818,7 +818,7 @@ services:
     # Measured steady-state (clamd loads its full signature DB into RAM at
     # startup) is already 950MB-1020MB
     # with zero headroom for the ~2x transient spike SelfCheck's daily
-    # signature reload can cause while the old DB is still resident. 
+    # signature reload can cause while the old DB is still resident.
     cpus: ${CPU_LIMIT__CLAMAV:-${CPU_LIMIT:-2}}
     mem_limit: ${MEM_LIMIT__CLAMAV:-${MEM_LIMIT:-2g}}
 
@@ -1105,7 +1105,7 @@ services:
     # pytest-xdist spawns real subprocesses (execnet), not fork+COW - each
     # worker independently pays the full Django+GDAL+GeoPandas+Shapely+Pillow
     # import cost. Only started on-demand (--profile test), so more
-    # generosity than the always-on services is acceptable. 
+    # generosity than the always-on services is acceptable.
     cpus: ${CPU_LIMIT__TEST_RUNNER:-${CPU_LIMIT:-6}}
     mem_limit: ${MEM_LIMIT__TEST_RUNNER:-${MEM_LIMIT:-6g}}
 
@@ -1133,7 +1133,7 @@ services:
         max-size: "200k"
         max-file: "10"
     # Fixture-scale data, no persistent volume - covers several xdist
-    # per-worker databases running DDL/DML concurrently. 
+    # per-worker databases running DDL/DML concurrently.
     cpus: ${CPU_LIMIT__TEST_DB:-${CPU_LIMIT:-2}}
     mem_limit: ${MEM_LIMIT__TEST_DB:-${MEM_LIMIT:-2g}}
 
@@ -1168,7 +1168,7 @@ services:
         max-size: "200k"
         max-file: "10"
     # --maxmemory 256mb (above) already hard-caps this one, same reasoning as
-    # the production valkey service. 
+    # the production valkey service.
     cpus: ${CPU_LIMIT__TEST_VALKEY:-${CPU_LIMIT:-1}}
     mem_limit: ${MEM_LIMIT__TEST_VALKEY:-${MEM_LIMIT:-512m}}
 
