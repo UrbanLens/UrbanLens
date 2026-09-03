@@ -149,20 +149,6 @@ compiled assets instead of scripts. Not fixed here: unlike copying `bin/`, rebui
 frontend on every sync has a real time cost worth deciding on deliberately rather than
 defaulting into.
 
-## OPEN 2026-09-01: a source-scan regression guard is one reference short of its own threshold
-
-`test_friend_accepted_source_profile.py::EveryFriendAcceptedSiteSetsSourceProfileTests.
-test_the_scan_still_finds_the_sites` counts occurrences of the literal string
-`NotificationType.FRIEND_ACCEPTED` across `services/social/friendship.py` and
-`controllers/friendship.py`, asserting at least 3 ("Guard against the check passing because it
-matched nothing"). It currently finds 2 - both in `friendship.py`; `controllers/friendship.py`
-has none. `git log` on both files shows nothing recent enough to explain it (the last commit
-touching either predates this branch), so this is not a regression from anything here - either a
-third call site was consolidated away at some point without the test's threshold being lowered
-to match, or one is missing and has been for a while. Not investigated further: distinguishing
-"stale threshold" from "a friend-accepted notification stopped firing somewhere it used to"
-needs more history on the notification call sites than a source scan alone gives.
-
 ## RESOLVED 2026-09-01: `/app/src/backups` was never in the entrypoint's chown loop
 
 Found bringing up the full stack to verify this session's sandbox-tier work: `celery-worker`'s
@@ -4971,22 +4957,6 @@ somewhere between the DB and what's served. Didn't chase further (out of scope f
 keeps failing on this specific test: check for an orphaned/stuck row in this account's photo library,
 or a thumbnail-generation task that errored silently.
 
-## OPEN 2026-08-31: opening the lightbox mid-scroll can inject a broken skeleton-placeholder item
-
-Found reviewing Batch 5 (Vault Documents) - pre-existing in Vault Photos since Batch 2, unrelated to
-Batch 5, which faithfully reproduces the identical pattern rather than introducing a new instance.
-`window.photosOpenLightbox`/`window.documentsOpenLightbox` (pages/vault/photos.html,
-pages/vault/documents.html) build the lightbox's item list from every `.photo-tile`/`.document-tile`
-currently in the DOM, with no guard against an in-flight skeleton placeholder - `renderVaultSkeletonTile`/
-`renderVaultDocumentSkeletonTile` (shared/vault-photo-grid.ts, shared/vault-document-grid.ts) give a
-skeleton tile the *same* base class (`photo-tile photo-tile--skeleton` / `document-tile
-document-tile--skeleton`) as a real one, distinguished only by the modifier class and the absence of
-`data-id`. Opening the lightbox while a page fetch is in flight (a plausible click during
-infinite-scroll) includes the skeleton(s) in the built item array with `imageId: NaN` (from
-`parseInt(undefined, 10)`) and empty url/caption, producing a broken, empty lightbox entry reachable
-via prev/next navigation. Worth filtering the tile query to `:not(.photo-tile--skeleton)` (and the
-document equivalent) in both open functions.
-
 ## OPEN 2026-08-31: `vault-photos.spec.ts`'s "changing sort re-fetches the grid in the new order" test flakes on a persistent dev DB
 
 Found running the Vault Photos/albums Playwright specs against the `ae97b86` ephemeral dev
@@ -5057,65 +5027,6 @@ someone confirms what the now-passing code path actually is.
   robustness fix, not just a type appeasement, since `upload_to` can be any callable (a callable
   class instance, `functools.partial`, ...), not only a plain function guaranteed to have one.
   Verified via `test_media_family_registry.py`.
-
-## OPEN 2026-08-31: album detail resolves photo visibility four times per request
-
-Found in a fresh-eyes performance review of the Vault feature; **pre-existing in the shared album
-code** (`controllers/albums.py`), not introduced by the Vault, but the Vault made it reachable with a
-much wider scope (a vault album's owner is a `Profile`, so its candidate set is the user's entire
-library rather than one pin's photos). Measured with `CaptureQueriesContext` against the dev DB: a
-30-photo vault album costs **60 queries**.
-
-`_album_detail_context` (`controllers/albums.py:335-354`) resolves the same visibility set four
-separate times - `visible_album_item_pairs` at :335, then again inside `album_images_page` at :337,
-then `eligible_images_for` at :342, then `_picker_album_payload` -> `albums_listing` ->
-`_visible_image_ids` at :354. `ImageQuerySet.visible_to` is documented as eager
-(`models/images/queryset.py:100-106`) and costs ~9 queries a time (two friendship queries, pinned
-locations, trip ids, the uploader/visibility scan, and `visible_wiki_location_ids`' three
-place-domain queries). Roughly 36 of the 60 are the same work repeated. `album_images_page` should
-take the already-computed pairs, and `_picker_album_payload` should reuse the listing.
-
-Two related unbounded reads in the same function:
-
-- `:342` `row["available_images"] = list(eligible_images_for(owner, viewer).exclude(...).only(...))`
-  has no limit. `.only()` trims columns, not rows. `_album_detail.html:174` renders one `<li>`+`<img>`
-  per row into the add-to-album dialog, so a user with 5000 photos ships ~5000 tiles of HTML every
-  time they open any vault album. Needs the offset/limit treatment the album grid itself already has.
-- `:350` `map_images` loads **every** visible photo in the album (not the current page) with a
-  `Location` join and serializes them all via `json_script`, immediately after `album_images_page`
-  deliberately avoided hydrating them.
-
-And in `services/photos/albums.py:266`, `albums_listing` materializes every `AlbumItem` plus every
-joined `Image` only to derive a count, a cover id, and a min/max timestamp (lines 276-283) - all
-expressible as one `values("album_id").annotate(...)`. Line 285 then re-fetches covers that
-`select_related("image")` had already loaded.
-
-Left alone deliberately: these are all in long-standing shared album code that pin and wiki albums
-depend on, and the safe fix is a focused refactor with its own test pass rather than a drive-by edit
-during a Vault review.
-
-## OPEN 2026-08-31: `dashboard_images` has no index supporting the Vault's hot query
-
-Found in the same review, verified against the live dev database (`pg_indexes` on `dashboard_images`,
-18 rows): **no index contains `created`**, and none pairs `profile_id` with `media_type`. The only
-declared indexes (`models/images/model.py:552-560`) are `(location, media_source_key, media_item_key)`
-and `(profile, quota_exempt_reason)`.
-
-Every Vault gallery page runs `WHERE profile_id = X AND media_type = 'photo' ORDER BY created DESC,
-id DESC LIMIT 24 OFFSET n` (`models/images/queryset.py:269/275`, ordering from `models/images/sort.py:61-64`).
-With only `dashboard_images_profile_id_c6ff6357` usable, Postgres reads every row the profile owns,
-filters `media_type` on the heap, and sorts the whole set to return 24. That repeats per scroll page,
-and again for the `.count()` each page fetch issues (`controllers/vault_photos.py:292-294`,
-`controllers/vault_documents.py:110-112` - `total` is only needed once, on the first page).
-
-The attention queue has the same gap: `needs_attention` (`queryset.py:301-308`) filters
-`profile + visit IS NULL + organize_dismissed + pin IS NULL + wiki IS NULL + pin_suggestion IS NULL`
-ordered by `-created`, on every Vault Photos load and every `refreshQueue`.
-
-Suggested: `Index(fields=["profile", "media_type", "-created", "-id"])` plus a partial index for the
-attention queue. Not added here because index creation must go last in any migration chain (see the
-migration conventions in CLAUDE.md) and this deserves its own migration reviewed on real data
-volumes, not a tail-end addition to a feature branch.
 
 ## OPEN 2026-08-31: Vault album bulk actions (delete, send-to-wiki, share) are silently unavailable
 
