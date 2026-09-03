@@ -36,36 +36,58 @@ nginx's.
 
 ### The cross-host problem
 
-The observability stack's `docker-labeled` scrape job uses **local**
-`docker_sd_configs`, so it only discovers containers on the host Prometheus
-itself runs on. Prometheus runs on jungu; UrbanLens runs on chiron. That job
-cannot discover these containers no matter what labels are set - which the
-handoff note that prompted this work caught, and which is why the
-`prometheus_scrape` / `prometheus_port` / `prometheus_path` labels on the `app`
-service are necessary but not sufficient.
+Prometheus runs on jungu; UrbanLens runs on chiron. chiron is a VM *on* jungu,
+which makes it tempting to assume jungu can just discover these containers. It
+cannot, for two independent reasons (verified on chiron, 2026-09-03):
 
-The labels are set anyway (tracking `UL_METRICS_ENABLED`, so a container never
-advertises an endpoint it does not serve), because they are what any
-*local*-to-chiron discovery would relabel on. The remaining half is a scraper on
-chiron:
+1. **Separate kernel, separate Docker daemon.** `docker_sd_configs` enumerates
+   whatever daemon it is pointed at, and jungu's own socket knows only jungu's
+   containers. Being a guest VM changes nothing. chiron exposes no Docker API
+   either (nothing listening on 2375/2376), so remote `docker_sd` is not
+   available - and opening one would hand out root-equivalent access to the
+   host, which is a bad trade for a scrape target.
+2. **Even if discovery worked, the addresses would be wrong.** `docker_sd`
+   yields container bridge IPs - the app sits on `172.30.0.5` - which are
+   routable only inside chiron's Docker networks.
 
-**Recommended: chiron's Alloy scrapes locally and remote-writes to jungu.**
-Alloy already runs there for logs, it is on the same host as the containers, and
-it removes the need to publish any new port. Roughly:
+Note that plain network reachability between the two hosts is fine, and is not
+the problem: jungu already scrapes chiron's cadvisor and node-exporter over
+published host ports (33880, 33910). That works because those are
+`static_configs`-style targets on *published* ports, not label discovery of
+container-internal ones.
+
+**The fix belongs on chiron, in the observability stack - not in this repo.**
+`observability-agent-alloy` already runs here and already mounts
+`/var/run/docker.sock`, so it can do the local `docker_sd` that jungu cannot,
+relabelling on exactly the labels the `app` service now carries. Two changes:
 
 ```alloy
+discovery.docker "local" { host = "unix:///var/run/docker.sock" }
+
+discovery.relabel "urbanlens" {
+  targets = discovery.docker.local.targets
+  rule {
+    source_labels = ["__meta_docker_container_label_prometheus_scrape"]
+    regex         = "true"
+    action        = "keep"
+  }
+}
+
 prometheus.scrape "urbanlens" {
-  targets    = [{__address__ = "urbanlens_app:8000", __metrics_path__ = "/metrics"}]
+  targets      = discovery.relabel.urbanlens.output
   bearer_token = env("UL_METRICS_TOKEN")
-  forward_to = [prometheus.remote_write.jungu.receiver]
+  forward_to   = [prometheus.remote_write.jungu.receiver]
 }
 ```
 
-Alloy's container must join `app_network` for that address to resolve.
+Alloy is on `observability-agent_default` and the app is on
+`<project>_app_network`, so **Alloy's container must also join the app network**
+(`docker network connect`, or declared in the observability stack's compose) or
+the discovered address will not resolve.
 
-The alternative - publishing a host port for the app container - exposes the
-whole Django app on that port, bypassing nginx, to gain one path. Prefer the
-scraper-side fix.
+The alternative - publishing a host port for the app container so jungu can
+reach it directly - exposes the whole Django app on that port, bypassing nginx,
+to gain one path. Prefer the scraper-side fix.
 
 ## Multiprocess mode, and why it is not optional
 

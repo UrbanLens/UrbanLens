@@ -17,6 +17,20 @@ Runs pytest inside the test container with the sync this repo requires: copy the
 tree in, chown it to `appuser`, prune `.py` files the host has deleted, then
 verify host and container agree **by checksum** before running anything.
 
+The sync covers `src/`, `bin/`, `sample_data/`, and the deployment files at the
+repo root (`docker-compose.yml`, `docker-entrypoint.sh`, `gunicorn.conf.py`,
+`pyproject.toml`, `uv.lock`, `.gitignore`, `.env*-sample`). The last group is
+there because several suites assert on topology rather than on Python -
+`test_ai_isolation`, `test_sandbox_isolation`, `test_metrics_endpoint` - and
+resolve those files by path off the repo root. They are baked into the image, so
+before this they were read at whatever the image was last built with **while the
+checksum line still printed `tree matches`**: on 2026-09-03 that failed all 42
+`ComposeTopologyTests` against a compose file predating ai-inference, which
+reads as a broken branch rather than as an unsynced file.
+
+Note the parity check still only covers `src/`. A new test reading some *other*
+repo-root path will hit the same trap; add it to `sync_tree` when you write it.
+
 ```bash
 bin/run_tests.sh src/urbanlens/dashboard/tests/hypothesis/test_billing_banking.py -q
 bin/run_tests.sh --fast <paths>      # reuse a persistent database

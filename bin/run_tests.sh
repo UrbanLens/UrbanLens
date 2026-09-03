@@ -133,6 +133,28 @@ sync_tree() {
     # whatever the image was last built with, which reads as a broken test
     # rather than as missing coverage.
     docker cp bin/. "$CONTAINER":/app/bin/
+
+    # Deployment files, for the same reason bin/ is here: a growing set of tests
+    # asserts on the topology rather than on Python (test_ai_isolation,
+    # test_sandbox_isolation, test_metrics_endpoint), resolving these by path off
+    # the repo root. They are baked into the image, not bind-mounted, so without
+    # this they are read at whatever the image was last built with.
+    #
+    # That failure is worse than a plain stale-code one, because the sync above
+    # still prints "tree matches" and the run still looks verified: on
+    # 2026-09-03 a runner whose image predated the ai-inference work failed all
+    # 42 ComposeTopologyTests against a compose file with no ai-inference in it,
+    # which reads as "the branch broke the sandbox topology" rather than as
+    # "this file was never synced".
+    #
+    # Dotfiles are listed individually because `docker cp` on a directory does
+    # not glob them, and .gitignore/.env*-sample are read by those same tests.
+    for f in docker-compose.yml docker-entrypoint.sh gunicorn.conf.py \
+        pyproject.toml uv.lock .gitignore .env-sample .env.ai-sample; do
+        [ -e "$f" ] && docker cp "$f" "$CONTAINER":/app/"$f"
+    done
+    docker cp sample_data/. "$CONTAINER":/app/sample_data/ 2>/dev/null || true
+
     # Not optional: docker cp preserves host ownership, and the app runs as appuser.
     docker exec -u root "$CONTAINER" chown -R appuser:appuser /app/src /app/bin
 
