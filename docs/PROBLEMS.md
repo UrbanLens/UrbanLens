@@ -4320,6 +4320,12 @@ thirteen failures and left three genuine ones, each a different rule:
   on the same settings template (`.settings-help`, ~lines 762/809) have the
   identical defect under a different selector and were deliberately left
   untouched - worth a follow-up pass rather than one-off patches per selector.
+  **That follow-up done 2026-09-03**: `.settings-help a:not(.btn)`, which also
+  covers the inline links in `_immich_account.html`. Scoped off `.btn` because
+  a link styled as a control is already distinguishable without an underline.
+  Cascade checked rather than assumed - in the compiled sheet exactly one other
+  declaration sets `text-decoration` on a bare `a` (the reset at line 143,
+  specificity 0,0,1), and this rule beats it on both specificity and order.
 
 Both fixes were verified against the deployment: the Private Pin page's scan is
 now clean. The home page's is not, because clearing `button-name` uncovered a

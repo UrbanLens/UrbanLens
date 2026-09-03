@@ -700,6 +700,14 @@
     font-size: 0.8rem;
     color: var(--ul-grey-6);
     margin: 0 0 0.5rem;
+
+    // Same running-text problem .settings-section-desc has (axe:
+    // link-in-text-block): colour alone cannot distinguish an inline link from
+    // the prose around it. Scoped off .btn, which is a link styled as a control
+    // and is already distinguishable without one.
+    a:not(.btn) {
+        text-decoration: underline;
+    }
 }
 
 .settings-error {
