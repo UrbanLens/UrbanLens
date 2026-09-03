@@ -22,70 +22,6 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
-## OPEN 2026-09-02: `OSRMGateway.base_url` has no production override - every deployment routes through the public demo server
-
-Found while adding the egress-proxy filter entries the assistant's `distance_and_drive_time` tool
-needs (`router.project-osrm.org` - see the entry above on the tools-import sweep and the sandbox
-egress filter, same audit). `services/apis/routing/osrm.py`'s own docstring says "production
-installs should point `base_url` at a self-hosted instance", but nothing actually wires that up:
-`base_url: str = _DEMO_BASE_URL` is a bare dataclass default with no `settings.*`/env-var source,
-and every caller (`services/ai/tools/routing.py`'s `_distance_and_drive_time`, and anywhere else
-`OSRMGateway()` is constructed) always gets the demo server, with no way to override it short of
-passing `base_url=` explicitly at each call site. The demo server is documented upstream as
-dev/test-only (rate-limited, no uptime guarantee), so any real deployment's drive-time answers
-depend on a service OSRM itself doesn't promise to keep available. Fix would be a
-`ul_osrm_base_url: str | None` pydantic setting (mirroring `ul_openweathermap_api_key`'s pattern)
-threaded into `OSRMGateway`'s `default_factory` the same way the weather gateway fix in this same
-session's work handles `api_key` - not done here since it's a new setting plus deployment-docs
-change, not a fix to code already touched this session.
-
-## OPEN 2026-09-02: `style_suggestions.py`'s own AI-access check was never unified onto `assistant_available()`, and doing so naively would be wrong
-
-Found auditing the AI-assistant sandboxing work (`docs/AI_PIPELINE.md`) for completeness.
-`services/ai/access.py:assistant_available(profile)` was built as the one chokepoint for "may this
-profile use the interactive AI assistant" - checked by the assistant's views, its context
-processor, the external API, and the task itself. `services/labels/style_suggestions.py:40`
-(`suggest_label_style`, unrelated to the assistant - a one-shot label icon/color suggestion via
-`services.ai.factory.get_gateway()`) has its own near-identical, never-migrated check:
-`user_has_feature(profile.user, SiteFeature.AI) and profile.ai_enabled and
-profile.external_apis_enabled`.
-
-Reusing `assistant_available()` here, as originally intended, would be a real behavior change, not
-just a dedup: `assistant_available()` also requires `settings.UL_AI_WORKER_ENABLED` and
-`SiteSettings.get_current().ai_enabled` - both specific to whether the sandboxed interactive
-assistant's own `ai-worker` Celery worker is deployed. `style_suggestions.py` never touches
-`ai-worker` at all; its `get_gateway()` call builds an `LLMGateway`, which resolves an inference
-client via `services.ai.inference_client.get_inference_client()` - the *same* shared `ai-inference`
-tier every LLM-backed feature now uses, assistant or not. So an admin who sets
-`UL_AI_WORKER_ENABLED=false` to turn off the interactive chat assistant specifically (e.g. a
-resource-constrained self-host that still wants auto-tagging/label-styling/import-assist to work)
-would have label-style suggestions silently break too, with no way to keep them on.
-
-Not fixed here: the plan text that called for this reuse didn't account for the inference-tier
-split existing independently of `ai-worker`. The right fix, if this is worth doing, is a narrower
-shared helper (`ai_features_enabled(profile)`, say) covering just the three profile/feature/
-site-settings conjuncts `style_suggestions.py` already checks, with `assistant_available()` calling
-that plus its own `UL_AI_WORKER_ENABLED` check - not folding `style_suggestions.py` onto the
-assistant-specific function as originally planned.
-
-## OPEN 2026-09-01: two `Image` import tasks omit `source=`, silently defaulting to `UPLOAD`
-
-Found while wiring VirusTotal-first scanning for externally-fetched images (`services/security/malware_scan.py`'s
-`VIRUSTOTAL_ELIGIBLE_SOURCES`). `tasks.import_immich_photos` and `tasks.import_google_photos` both build their
-`Image.objects.create(...)` call without a `source=` kwarg (unlike `import_flickr_photos`/`import_flickr_album_photos`,
-which explicitly set `source=ImageSource.FLICKR`), so every row they create defaults to `ImageSource.UPLOAD` -
-indistinguishable, to every `source`-keyed consumer, from an ordinary manual upload. That's wrong: these are picker-dialog
-imports from a user's own connected Immich server / Google Photos account, not the upload form.
-
-Doesn't affect VirusTotal eligibility either way - both `UPLOAD` and the correct `IMMICH`/`GOOGLE_PHOTOS` values are
-excluded from `VIRUSTOTAL_ELIGIBLE_SOURCES` (see that constant's docstring: a user's own connected photo library is
-private content, scanned by ClamAV only, regardless of how it's labeled). It does affect the Media gallery's per-source
-tabs (these rows show under "Upload" instead of their own tab), `services/achievements/metrics.py`'s `UPLOAD`-filtered
-upload counts, and `services/reputation/builtin_rules.py`'s `UPLOAD`-gated reputation logic - all silently miscounting
-Immich/Google-Photos imports as manual uploads. Left unfixed here since it's orthogonal to the scanning change and
-touches achievement/reputation counting, which deserves its own look at whether retroactively recategorizing existing
-rows is warranted.
-
 ## OPEN 2026-09-01: `has_sent_join_email` doesn't share `FriendInvitation`'s Gmail-variant normalization
 
 Found alongside the fix for `FriendInvitation.email_normalized` (see the friend-invite/visit-invite email-canonicalization
@@ -704,23 +640,6 @@ so an image rebuild felt too disruptive to force unilaterally). Whoever next has
 should rebuild `urbanlens_development_main_test_runner` (`docker compose build test_runner` or
 equivalent) so `test_query_records.py` runs again; until then that one file's coverage is silently
 absent from every `bin/run_tests.sh` run, not just this one.
-
-## OPEN 2026-08-31: `Wiki.get_unique_search_name` is dead code
-
-Found while adding ancestor-name qualification to `Pin.get_unique_search_name` (child pins like
-"Superintendent's Cottage" now pull in the parent parcel's name/aliases so external media/web
-searches stay tied to the right site - see `Pin.ancestor_search_names`).
-
-`Wiki.get_unique_search_name` (`models/wiki/model.py`) has no callers anywhere in the codebase,
-including tests - not `controllers/wiki_media.py`, not any Media-gallery provider. Every live
-caller of the `get_unique_search_name` family (`services/pins/external_data.py`,
-`services/apis/flickr/search.py`, `plugins/builtin/searxng_images.py`,
-`plugins/builtin/gdelt.py`, `controllers/pin.py`, `tasks.py`, `controllers/spotguessr.py`,
-`external_api/views_games.py`) goes through `Pin.get_unique_search_name` - the wiki media gallery
-apparently resolves a viewing user's own pin at the place rather than searching from the Wiki
-directly. Left unfixed here since it isn't reachable by anything, so it can't be the site of the
-reported behavior; worth either wiring it up (and giving it the same ancestor-chain treatment via
-`parent_wiki`/`child_wikis`) or deleting it.
 
 ## OPEN 2026-08-25: forms submit and save every field, not the ones that changed
 
@@ -5084,22 +5003,6 @@ tie (e.g. by explicitly seeding one photo with a caption that sorts alphabetical
 different, more recent one) rather than relying on randomness against an unbounded, growing dataset.
 mypy policy.
 
-## OPEN 2026-08-31: 12 non-Vault page templates declare `{% block title %}`, a block name `themes/base.html` never defines
-
-Found reviewing Batch 6 (Vault home page) - adversarial review flagged the identical mistake newly
-copy-pasted into `pages/vault/index.html`, which led to checking the rest of the codebase. `themes/
-base.html`'s `<title>` tag is `{% block page_title %}{{ site_title|default:"UrbanLens" }}{% endblock %}`
-(line 10) - there is no `{% block title %}` anywhere in the inheritance chain. Django silently drops a
-child block whose name matches nothing in its ancestor (not an error), so every page below always
-shows the site default title, never its own. Fixed the 3 Vault pages this batch touches (`vault/
-index.html`, `vault/photos.html`, `vault/documents.html` - all three renamed to `page_title`), but the
-same dead `{% block title %}` also sits, unfixed, in: `memories/sharing.html`, `memories/journal.html`,
-`memories/maps.html`, `memories/visits.html`, `memories/locations.html`, `memories/index.html`,
-`floorplans/editor.html`, `notifications/index.html`, `pin_share/detail.html`, `map/index.html`,
-`map_share/detail.html`, `messages/index.html`. Fixing those is a one-line rename each
-(`s/{% block title %}/{% block page_title %}/`) but touches unrelated pages/features, out of scope
-for this PR - worth a dedicated small pass.
-
 ## RESOLVED 2026-09-01: 11 pre-existing mypy errors outside the Vault feature, surfaced by the first full-tree run this session
 
 Batch 7's cleanup step ran `mypy /app/src/urbanlens` (880 files) for the first time this session -
@@ -5264,21 +5167,6 @@ owns Leaflet lifecycle across dialog opens, does its own bbox fetch, builds popu
 concatenation, and defines an `_esc()` helper found nowhere else under `templates/`. Extracting it to
 `shared/photo-pin-confirm.ts` and the uploader to a shared `initVaultUploader` would bring the whole
 Vault client surface under typecheck and test.
-
-## OPEN 2026-08-31: `ulSectionCollapsed` is not a function - hx-trigger races the core bundle on pin detail
-
-Seen as 28 identical console errors during a Playwright run against the dev environment:
-`TypeError: (intermediate value)(intermediate value)(intermediate value).ulSectionCollapsed is not a function`.
-`window.ulSectionCollapsed` is assigned by `shared/collapsible-sections.ts:231` (bundled into
-`core.js`), and is read from `hx-trigger="load[!window.ulSectionCollapsed('pin','...')]"` attributes
-in `partials/pins/_pin_location_data_tabs.html:35`, `_pin_plugin_tabs.html:40`,
-`pages/location/index.html` (×8) and `pages/location/wiki.html` (×4). When htmx evaluates those
-`load` triggers before `core.js` has executed, every one of them throws and the section silently
-never loads its content.
-
-Unrelated to the Vault (the string appears in no Vault or album template) - surfaced only because a
-Vault album spec navigates to a Private Pin page. Worth guarding the trigger expression
-(`window.ulSectionCollapsed && !window.ulSectionCollapsed(...)`) or asserting load order.
 
 ## OPEN 2026-08-31: the integration suite's login setup fails after a *successful* sign-in
 
@@ -5607,32 +5495,3 @@ what makes the missing row-level state worth fixing now rather than before.
 Likely shape: a `task_failure` receiver (or a shared task base class) that
 records the failure on the row, plus a UI state for it. Wants a decision on
 whether failed uploads are retryable by the user or discarded.
-
-## OPEN 2026-09-03: `UL_METRICS_ENABLED=true` on an image without django-prometheus crash-loops every Django process
-
-Reproduced, not theorised: `docker exec urbanlens_development_main_celery_worker
-python -c "import django; django.setup()"` on an image built before
-`django-prometheus` entered `pyproject.toml` dies with a bare
-`ModuleNotFoundError: No module named 'django_prometheus'`.
-
-`settings/base.py` appends the app to `INSTALLED_APPS` and its two middlewares
-whenever `UL_METRICS_ENABLED` is on, with no guard on whether the package is
-importable and none on process role. That is fine when image and settings ship
-together, which is the normal path. It is not fine because **the env var is
-routinely changed independently of an image build** - flipping metrics on for an
-existing deployment takes down app, app-ws, beat and all four workers at once,
-with an error that names a missing module rather than the setting that required
-it.
-
-Two separable fixes, neither done:
-
-1. Raise `ImproperlyConfigured` naming `UL_METRICS_ENABLED` when the import
-   fails, so the operator sees the cause instead of the symptom.
-2. Gate the app and middleware on process role. Only web processes serve
-   `/metrics`; workers register the middleware and never run it. `UL_PROCESS_ROLE`
-   already exists for exactly this kind of distinction, but is defined further
-   down the settings file than the `INSTALLED_APPS` block, so this needs a small
-   reordering rather than a one-line change.
-
-Found while verifying the Celery requeue fix, from the metrics work in
-`7b5c55236` - i.e. this is a gap in that change, not a pre-existing one.

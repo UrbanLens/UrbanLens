@@ -11,6 +11,199 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-03: the test-runner container kept templates the repo had deleted
+
+Found by the new block-name scan, which reported a thirteenth offending template that does not
+exist on disk: `pages/memories/photos.html`, deleted on 2026-08-30 by `96180858a` ("move Memories >
+Photos to a new Vault section"), was still sitting in `urbanlens_development_main_test_runner` four
+days later, along with five `partials/memories/_photo_*.html` siblings from the same commit.
+
+`bin/run_tests.sh`'s prune step existed and was correct as far as it went - but it only ever
+matched `*.py`, because the reasoning behind it was about Python modules and scratch test files.
+`docker cp` never deletes, so every other kind of deleted source file accumulated in the container
+indefinitely. That is worse than untidy: Django's loader resolves a template *by name*, so anything
+rendering `dashboard/pages/memories/photos.html` in the container kept getting a page that no longer
+exists in the repository, and would have passed.
+
+The prune and the parity check now share one `find` expression, `SOURCE_FILES`, covering `*.py`
+plus `*.html` under any `templates/` directory. Deliberately not "every file": the container's tree
+legitimately holds build output the host does not (compiled bytecode, collected and compressed
+static assets), and an earlier attempt at pruning everything extra removed ~19,700 of them.
+
+Same class as the still-open entry on the test-runner's compiled JS bundles going stale - that one
+is the *build output* half of this, and is not addressed by this change.
+
+## RESOLVED 2026-09-02: `OSRMGateway.base_url` has no production override - every deployment routes through the public demo server
+
+Found while adding the egress-proxy filter entries the assistant's `distance_and_drive_time` tool
+needs (`router.project-osrm.org` - see the entry above on the tools-import sweep and the sandbox
+egress filter, same audit). `services/apis/routing/osrm.py`'s own docstring says "production
+installs should point `base_url` at a self-hosted instance", but nothing actually wires that up:
+`base_url: str = _DEMO_BASE_URL` is a bare dataclass default with no `settings.*`/env-var source,
+and every caller (`services/ai/tools/routing.py`'s `_distance_and_drive_time`, and anywhere else
+`OSRMGateway()` is constructed) always gets the demo server, with no way to override it short of
+passing `base_url=` explicitly at each call site. The demo server is documented upstream as
+dev/test-only (rate-limited, no uptime guarantee), so any real deployment's drive-time answers
+depend on a service OSRM itself doesn't promise to keep available. Fix would be a
+`ul_osrm_base_url: str | None` pydantic setting (mirroring `ul_openweathermap_api_key`'s pattern)
+threaded into `OSRMGateway`'s `default_factory` the same way the weather gateway fix in this same
+session's work handles `api_key` - not done here since it's a new setting plus deployment-docs
+change, not a fix to code already touched this session.
+
+**Fixed 2026-09-02 (2026-09-03).** `UL_OSRM_BASE_URL` (`app.py`'s `osrm_base_url`) now feeds `base_url`'s `default_factory`, the same shape the weather gateway uses for `api_key` and for the same reason - a bare dataclass default is evaluated once at import, so no later settings change reaches it. Unset, it still falls back to the demo server.
+
+One consequence worth knowing before self-hosting: the assistant's `distance_and_drive_time` tool runs in `ai-worker` behind a deny-by-default egress proxy, so a self-hosted OSRM host has to be added to `src/urbanlens/config/egress/filter` as well. Both `.env-sample` and that file's own comment now say so.
+
+## RESOLVED 2026-09-02: `style_suggestions.py`'s own AI-access check was never unified onto `assistant_available()`, and doing so naively would be wrong
+
+Found auditing the AI-assistant sandboxing work (`docs/AI_PIPELINE.md`) for completeness.
+`services/ai/access.py:assistant_available(profile)` was built as the one chokepoint for "may this
+profile use the interactive AI assistant" - checked by the assistant's views, its context
+processor, the external API, and the task itself. `services/labels/style_suggestions.py:40`
+(`suggest_label_style`, unrelated to the assistant - a one-shot label icon/color suggestion via
+`services.ai.factory.get_gateway()`) has its own near-identical, never-migrated check:
+`user_has_feature(profile.user, SiteFeature.AI) and profile.ai_enabled and
+profile.external_apis_enabled`.
+
+Reusing `assistant_available()` here, as originally intended, would be a real behavior change, not
+just a dedup: `assistant_available()` also requires `settings.UL_AI_WORKER_ENABLED` and
+`SiteSettings.get_current().ai_enabled` - both specific to whether the sandboxed interactive
+assistant's own `ai-worker` Celery worker is deployed. `style_suggestions.py` never touches
+`ai-worker` at all; its `get_gateway()` call builds an `LLMGateway`, which resolves an inference
+client via `services.ai.inference_client.get_inference_client()` - the *same* shared `ai-inference`
+tier every LLM-backed feature now uses, assistant or not. So an admin who sets
+`UL_AI_WORKER_ENABLED=false` to turn off the interactive chat assistant specifically (e.g. a
+resource-constrained self-host that still wants auto-tagging/label-styling/import-assist to work)
+would have label-style suggestions silently break too, with no way to keep them on.
+
+Not fixed here: the plan text that called for this reuse didn't account for the inference-tier
+split existing independently of `ai-worker`. The right fix, if this is worth doing, is a narrower
+shared helper (`ai_features_enabled(profile)`, say) covering just the three profile/feature/
+site-settings conjuncts `style_suggestions.py` already checks, with `assistant_available()` calling
+that plus its own `UL_AI_WORKER_ENABLED` check - not folding `style_suggestions.py` onto the
+assistant-specific function as originally planned.
+
+**Fixed 2026-09-02 (2026-09-03)**, along the narrower line this entry argued for rather than the one originally planned. `services/ai/access.py` now exposes `ai_features_enabled(profile)` - site-wide `ai_enabled`, both profile preferences, and the `SiteFeature.AI` entitlement - and `assistant_available()` is that plus its own `UL_AI_WORKER_ENABLED` check. `style_suggestions.py` calls the shared predicate.
+
+The conjunct it gains is the site-wide toggle, which is not a behaviour change: `get_gateway` already refused on it, one provider-gateway construction later. What it does *not* gain is `UL_AI_WORKER_ENABLED`, which is the whole point - `test_suggest_label_style_does_not_need_the_assistant_worker` and `test_ai_worker_absence_does_not_disable_other_ai_features` pin that down so a later dedup cannot quietly reintroduce it.
+
+## RESOLVED 2026-09-01: two `Image` import tasks omit `source=`, silently defaulting to `UPLOAD`
+
+Found while wiring VirusTotal-first scanning for externally-fetched images (`services/security/malware_scan.py`'s
+`VIRUSTOTAL_ELIGIBLE_SOURCES`). `tasks.import_immich_photos` and `tasks.import_google_photos` both build their
+`Image.objects.create(...)` call without a `source=` kwarg (unlike `import_flickr_photos`/`import_flickr_album_photos`,
+which explicitly set `source=ImageSource.FLICKR`), so every row they create defaults to `ImageSource.UPLOAD` -
+indistinguishable, to every `source`-keyed consumer, from an ordinary manual upload. That's wrong: these are picker-dialog
+imports from a user's own connected Immich server / Google Photos account, not the upload form.
+
+Doesn't affect VirusTotal eligibility either way - both `UPLOAD` and the correct `IMMICH`/`GOOGLE_PHOTOS` values are
+excluded from `VIRUSTOTAL_ELIGIBLE_SOURCES` (see that constant's docstring: a user's own connected photo library is
+private content, scanned by ClamAV only, regardless of how it's labeled). It does affect the Media gallery's per-source
+tabs (these rows show under "Upload" instead of their own tab), `services/achievements/metrics.py`'s `UPLOAD`-filtered
+upload counts, and `services/reputation/builtin_rules.py`'s `UPLOAD`-gated reputation logic - all silently miscounting
+Immich/Google-Photos imports as manual uploads. Left unfixed here since it's orthogonal to the scanning change and
+touches achievement/reputation counting, which deserves its own look at whether retroactively recategorizing existing
+rows is warranted.
+
+**Fixed forward 2026-09-01 (2026-09-03).** `import_immich_photos` and `import_google_photos` now pass `source=ImageSource.IMMICH` / `ImageSource.GOOGLE_PHOTOS`, with a regression test each.
+
+**Existing rows are not backfilled, and one of the two cannot be reliably.** A Google Photos row is identifiable after the fact by its `source_url` prefix; an Immich row's `source_url` is the user's own self-hosted server, which is an arbitrary host, so no query separates those from genuine uploads. A backfill would therefore be partial by construction. Left for a decision on whether recategorising the identifiable half is worth the asymmetry - it moves achievement and reputation counts, which is why it was not done unilaterally.
+
+## RESOLVED 2026-08-31: `Wiki.get_unique_search_name` is dead code
+
+Found while adding ancestor-name qualification to `Pin.get_unique_search_name` (child pins like
+"Superintendent's Cottage" now pull in the parent parcel's name/aliases so external media/web
+searches stay tied to the right site - see `Pin.ancestor_search_names`).
+
+`Wiki.get_unique_search_name` (`models/wiki/model.py`) has no callers anywhere in the codebase,
+including tests - not `controllers/wiki_media.py`, not any Media-gallery provider. Every live
+caller of the `get_unique_search_name` family (`services/pins/external_data.py`,
+`services/apis/flickr/search.py`, `plugins/builtin/searxng_images.py`,
+`plugins/builtin/gdelt.py`, `controllers/pin.py`, `tasks.py`, `controllers/spotguessr.py`,
+`external_api/views_games.py`) goes through `Pin.get_unique_search_name` - the wiki media gallery
+apparently resolves a viewing user's own pin at the place rather than searching from the Wiki
+directly. Left unfixed here since it isn't reachable by anything, so it can't be the site of the
+reported behavior; worth either wiring it up (and giving it the same ancestor-chain treatment via
+`parent_wiki`/`child_wikis`) or deleting it.
+
+**Removed 2026-09-03.** Confirmed unreachable a second time before deleting: every live call site (`services/pins/external_data.py`, `services/apis/flickr/search.py`, `plugins/builtin/searxng_images.py`, `plugins/builtin/gdelt.py`, `controllers/pin.py`, `controllers/spotguessr.py`, `external_api/views_games.py`, `tasks.py`) goes through `Pin.get_unique_search_name`, and no dynamic lookup reaches the Wiki one. The two signatures had already drifted - Pin's grew `quote_name`, `include_address` and `quote_locality`, none of which the Wiki copy ever had - which is what a shadow implementation looks like just before someone calls the wrong one.
+
+## RESOLVED 2026-08-31: 12 non-Vault page templates declare `{% block title %}`, a block name `themes/base.html` never defines
+
+Found reviewing Batch 6 (Vault home page) - adversarial review flagged the identical mistake newly
+copy-pasted into `pages/vault/index.html`, which led to checking the rest of the codebase. `themes/
+base.html`'s `<title>` tag is `{% block page_title %}{{ site_title|default:"UrbanLens" }}{% endblock %}`
+(line 10) - there is no `{% block title %}` anywhere in the inheritance chain. Django silently drops a
+child block whose name matches nothing in its ancestor (not an error), so every page below always
+shows the site default title, never its own. Fixed the 3 Vault pages this batch touches (`vault/
+index.html`, `vault/photos.html`, `vault/documents.html` - all three renamed to `page_title`), but the
+same dead `{% block title %}` also sits, unfixed, in: `memories/sharing.html`, `memories/journal.html`,
+`memories/maps.html`, `memories/visits.html`, `memories/locations.html`, `memories/index.html`,
+`floorplans/editor.html`, `notifications/index.html`, `pin_share/detail.html`, `map/index.html`,
+`map_share/detail.html`, `messages/index.html`. Fixing those is a one-line rename each
+(`s/{% block title %}/{% block page_title %}/`) but touches unrelated pages/features, out of scope
+for this PR - worth a dedicated small pass.
+
+**Fixed 2026-09-03.** All twelve renamed to `page_title`. Each one extends `themes/base.html`; `themes/auth_base.html` *does* define a `title` block, so the rename had to be checked per file rather than applied by pattern.
+
+A scan now guards the general case: `BlockNameTests.test_every_declared_block_is_defined_by_an_ancestor` (`test_page_template_integrity.py`) resolves each template's `extends` chain and fails on a top-level block name no ancestor defines. Only top-level - a block nested inside one the ancestor *does* define renders normally, and declaring a new name there is how `errors/404.html` offers `error_title`/`error_body` to `pin_not_found.html`.
+
+The scan found a thirteenth instance that does not exist: `pages/memories/photos.html`, deleted from the repo on 2026-08-30, was still present in the test-runner container. See the entry below on the stale-template prune.
+
+## RESOLVED 2026-08-31: `ulSectionCollapsed` is not a function - hx-trigger races the core bundle on pin detail
+
+Seen as 28 identical console errors during a Playwright run against the dev environment:
+`TypeError: (intermediate value)(intermediate value)(intermediate value).ulSectionCollapsed is not a function`.
+`window.ulSectionCollapsed` is assigned by `shared/collapsible-sections.ts:231` (bundled into
+`core.js`), and is read from `hx-trigger="load[!window.ulSectionCollapsed('pin','...')]"` attributes
+in `partials/pins/_pin_location_data_tabs.html:35`, `_pin_plugin_tabs.html:40`,
+`pages/location/index.html` (×8) and `pages/location/wiki.html` (×4). When htmx evaluates those
+`load` triggers before `core.js` has executed, every one of them throws and the section silently
+never loads its content.
+
+Unrelated to the Vault (the string appears in no Vault or album template) - surfaced only because a
+Vault album spec navigates to a Private Pin page. Worth guarding the trigger expression
+(`window.ulSectionCollapsed && !window.ulSectionCollapsed(...)`) or asserting load order.
+
+**Fixed 2026-09-03**, across all 20 call sites in four templates.
+
+The guard's polarity is the part worth recording. The obvious form - `window.ulSectionCollapsed && !window.ulSectionCollapsed(...)` - evaluates falsy when the global is missing, which converts a thrown error into a section that silently never loads: the same broken page, minus the console evidence. The shipped form is `!(window.ulSectionCollapsed && window.ulSectionCollapsed(...))`, so an absent global reads as *not collapsed* and the section loads. A section that fetches while collapsed is invisible and correct; one that never fetches is a blank panel.
+
+`collapsible-sections.contract.test.ts` scans the template tree for both the unguarded call and the inverted guard, and checks each filter's parentheses balance (htmx tracks bracket depth when splitting a trigger spec).
+
+## RESOLVED 2026-09-03: `UL_METRICS_ENABLED=true` on an image without django-prometheus crash-loops every Django process
+
+Reproduced, not theorised: `docker exec urbanlens_development_main_celery_worker
+python -c "import django; django.setup()"` on an image built before
+`django-prometheus` entered `pyproject.toml` dies with a bare
+`ModuleNotFoundError: No module named 'django_prometheus'`.
+
+`settings/base.py` appends the app to `INSTALLED_APPS` and its two middlewares
+whenever `UL_METRICS_ENABLED` is on, with no guard on whether the package is
+importable and none on process role. That is fine when image and settings ship
+together, which is the normal path. It is not fine because **the env var is
+routinely changed independently of an image build** - flipping metrics on for an
+existing deployment takes down app, app-ws, beat and all four workers at once,
+with an error that names a missing module rather than the setting that required
+it.
+
+Two separable fixes, neither done:
+
+1. Raise `ImproperlyConfigured` naming `UL_METRICS_ENABLED` when the import
+   fails, so the operator sees the cause instead of the symptom.
+2. Gate the app and middleware on process role. Only web processes serve
+   `/metrics`; workers register the middleware and never run it. `UL_PROCESS_ROLE`
+   already exists for exactly this kind of distinction, but is defined further
+   down the settings file than the `INSTALLED_APPS` block, so this needs a small
+   reordering rather than a one-line change.
+
+Found while verifying the Celery requeue fix, from the metrics work in
+`7b5c55236` - i.e. this is a gap in that change, not a pre-existing one.
+
+**Fixed 2026-09-03.** Both halves, in `settings/_metrics.py`. `instrumentation_wanted()` narrows registration to the roles whose Django stack is actually scraped (`web`, and `unspecified` for a local checkout or `runserver`), so app-ws, beat and the four workers no longer import a package they have no use for; `require_django_prometheus()` turns a missing package into an `ImproperlyConfigured` naming `UL_METRICS_ENABLED`. No reordering was needed after all - `INSTALLED_APPS` is built after `_app_settings` is imported, so the role was already readable there.
+
+Verified in the container rather than only in tests, with `django_prometheus` blocked by a meta-path finder: `UL_PROCESS_ROLE=worker` now reaches `django.setup()` (`instrumented=False`), and `UL_PROCESS_ROLE=web` raises the named error. `UL_METRICS_INSTRUMENTED` is the derived setting the middleware block reads; `settings/test.py` pins it off alongside the flag it is derived from.
+
 ## RESOLVED 2026-09-02: nine `Gateway` subclasses read a credential setting once at import time, not per-instantiation
 
 Found while adding the assistant's `get_weather` tool (`services/ai/tools/weather.py`), and confirmed as a live bug -
