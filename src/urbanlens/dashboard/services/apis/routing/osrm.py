@@ -57,7 +57,7 @@ class OSRMGateway(Gateway):
             raise ValueError("get_route requires at least two waypoints")
 
         coordinates = ";".join(f"{longitude},{latitude}" for latitude, longitude in waypoints)
-        url = f"{self.base_url}/route/v1/{profile}/{coordinates}"
+        url = f"{self.base_url.rstrip('/')}/route/v1/{profile}/{coordinates}"
         try:
             response = self.session.get(url, params={"overview": "false", "alternatives": "false", "steps": "false"}, timeout=15)
             response.raise_for_status()

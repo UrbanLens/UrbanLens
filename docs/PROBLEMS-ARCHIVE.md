@@ -171,6 +171,14 @@ The guard's polarity is the part worth recording. The obvious form - `window.ulS
 
 `collapsible-sections.contract.test.ts` scans the template tree for both the unguarded call and the inverted guard, and checks each filter's parentheses balance (htmx tracks bracket depth when splitting a trigger spec).
 
+Confirmed against real htmx 1.9.11 rather than by reading, in a throwaway harness that loaded the
+pinned bundle into a DOM and watched the requests it did and did not issue: the guarded filter
+parses, fires when the global is absent, defers when it reports collapsed, fires when it reports
+expanded, and leaves the sibling `ul:unhide` trigger in the same spec working. The same harness
+reproduced the original failure exactly - the unguarded form raises
+`ulSectionCollapsed is not a function`, and htmx swallows it into "do not fire", which is why the
+symptom was a blank panel rather than an error the user could see.
+
 ## RESOLVED 2026-09-03: `UL_METRICS_ENABLED=true` on an image without django-prometheus crash-loops every Django process
 
 Reproduced, not theorised: `docker exec urbanlens_development_main_celery_worker
