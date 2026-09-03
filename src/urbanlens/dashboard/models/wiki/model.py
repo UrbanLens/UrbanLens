@@ -422,26 +422,6 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
             return self.date_abandoned - timedelta(days=1)
         return None
 
-    def get_unique_search_name(self, *, include_country: bool = True) -> str | None:
-        """Name to use when searching for this place in external APIs."""
-        name = self.official_name or self.name
-        if not name:
-            return None
-
-        parts = [name]
-        if self.address_basic and self.address_basic != name:
-            parts.append(self.address_basic)
-
-        if self.city:
-            parts.append(self.city)
-        elif self.county:
-            parts.append(self.county)
-        if self.state:
-            parts.append(self.state)
-        if include_country and self.country:
-            parts.append(self.country)
-        return " ".join(parts)
-
     # ------------------------------------------------------------------
     # Serialisation / display
     # ------------------------------------------------------------------
