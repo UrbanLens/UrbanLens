@@ -1,22 +1,24 @@
 """OSRM gateway - free, open-source routing.
 
 http://project-osrm.org/ - self-hostable routing engine over OpenStreetMap
-data. ``base_url`` defaults to the public demo server
-(router.project-osrm.org), which the OSRM project itself documents as
-dev/testing use only; production installs should point ``base_url`` at a
-self-hosted instance (``docker run osrm/osrm-backend`` with a pre-processed
-``.osrm`` extract). No API key is required either way.
+data. ``base_url`` comes from ``UL_OSRM_BASE_URL`` and falls back to the public
+demo server (router.project-osrm.org), which the OSRM project itself documents
+as dev/testing use only - rate-limited, with no uptime guarantee. A deployment
+whose drive-time answers matter should set that variable to a self-hosted
+instance (``docker run osrm/osrm-backend`` with a pre-processed ``.osrm``
+extract). No API key is required either way.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from typing import Any, ClassVar, Literal
 
 import requests
 
 from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,10 @@ class OSRMGateway(Gateway):
     service_key: ClassVar[str] = "osrm"
     paid_service: ClassVar[bool] = False
 
-    base_url: str = _DEMO_BASE_URL
+    # default_factory rather than a bare default, for the same reason the weather
+    # gateway's api_key uses one: a bare default is evaluated once at import, so a
+    # settings change or a test patch would never reach later instantiations.
+    base_url: str = field(default_factory=lambda: settings.osrm_base_url or _DEMO_BASE_URL)
 
     def get_route(self, waypoints: list[tuple[float, float]], *, profile: OsrmProfile = "driving") -> dict[str, Any] | None:
         """Return the routed distance/duration between an ordered list of waypoints.

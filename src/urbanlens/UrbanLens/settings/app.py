@@ -399,6 +399,16 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     ollama_base_url: str | None = Field(default=None, description="Base URL of a self-hosted Ollama server (e.g. http://localhost:11434) for local, free AI photo-keyword generation")
     ollama_vision_model: str = Field(default="llava", description="Ollama vision model name used for photo keyword generation")
     openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
+    osrm_base_url: str | None = Field(
+        default=None,
+        description=(
+            "Base URL of an OSRM routing server, no trailing slash (e.g. http://osrm:5000). Unset (the default) "
+            "uses OSRM's public demo instance, which the OSRM project documents as dev/testing only - rate-limited, "
+            "with no uptime guarantee. Any deployment whose drive-time answers matter should self-host "
+            "(docker run osrm/osrm-backend over a pre-processed .osrm extract) and point this at it. No API key "
+            "either way."
+        ),
+    )
     redata_api_url: str | None = Field(default=None, description="Base URL of the REData property-records service (e.g. https://redata.example.com), no trailing slash needed")
     redata_api_key: str | None = Field(default=None, description="Bearer API key for REData's external API - needs at least the parcels:read scope")
     virustotal_api_key: str | None = Field(

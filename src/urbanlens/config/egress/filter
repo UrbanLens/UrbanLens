@@ -3,10 +3,11 @@
 ^api\.cloudflare\.com$
 # ai-worker's own outbound tool calls (services/ai/tools/routing.py,
 # weather.py) - added when those tools shipped; this file otherwise only
-# ever needed ai-inference's provider hosts above. router.project-osrm.org
-# is OSRM's public demo server - OSRMGateway.base_url has no production
-# override wired up yet (see docs/PROBLEMS.md, 2026-09-02), so this is the
-# only OSRM host reachable today regardless of deployment.
+# ever needed ai-inference's provider hosts above. router.project-osrm.org is
+# OSRM's public demo server, which is what UL_OSRM_BASE_URL falls back to. A
+# deployment that sets that variable to a self-hosted OSRM has to add that
+# host here too, or the assistant's distance_and_drive_time tool is the one
+# caller that cannot reach it.
 ^router\.project-osrm\.org$
 ^api\.open-meteo\.com$
 ^api\.openweathermap\.org$

@@ -20,7 +20,7 @@ class OSRMPlugin(UrbanLensPlugin):
     name: ClassVar[str] = "osrm"
     verbose_name: ClassVar[str] = "OSRM"
     description: ClassVar[str] = (
-        "Free, open-source routing engine (project-osrm.org) over OpenStreetMap data. Uses the public demo server by default - point OSRMGateway.base_url at a self-hosted instance for production load, per the OSRM project's own guidance."
+        "Free, open-source routing engine (project-osrm.org) over OpenStreetMap data. Uses the public demo server unless UL_OSRM_BASE_URL points at a self-hosted instance, which is what the OSRM project's own guidance asks for under production load."
     )
     author: ClassVar[str] = "UrbanLens"
 
