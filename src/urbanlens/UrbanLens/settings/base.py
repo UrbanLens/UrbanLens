@@ -364,7 +364,32 @@ CELERY_TASK_SEND_SENT_EVENT = True
 # transition, and with nothing consuming them they would just be discarded.
 CELERY_WORKER_SEND_TASK_EVENTS = UL_METRICS_ENABLED
 CELERY_TASK_ACKS_LATE = True
-CELERY_TASK_REJECT_ON_WORKER_LOST = True
+# reject_on_worker_lost governs exactly one case: the child died and the parent
+# survived to observe it. That is an OOM kill or a segfault inside a C decoder -
+# deterministic and caused by the task itself - so handing the same message back
+# reproduces the same death. Celery requeues unconditionally here
+# (worker/request.py sets `requeue = True` with no check of the `redelivered`
+# flag kombu does set when it restores the message), and the Redis/Valkey
+# transport re-queues at once rather than after visibility_timeout, so the retry
+# runs as fast as the task can reach peak RSS. Nothing bounds it: max_retries
+# counts task.retry() calls, not broker redeliveries, and this transport has no
+# delivery limit. One such task pins a concurrency slot indefinitely.
+#
+# That branch also sets send_failed_event = False and skips mark_as_failure, so
+# a looping task stores no result, sends no task_failure signal and emits no
+# task-failed event - invisible to services/core/celery_events.py, which is
+# where it would otherwise surface. Off, the same loss acks once and reports.
+#
+# Keeping it on is usually argued for on the grounds that an infrastructure
+# event would otherwise lose a task, but that is a different code path: when the
+# whole worker goes away no parent remains to reject anything, and the message
+# returns via kombu's restore_unacked_once (clean shutdown) or the visibility
+# timeout (SIGKILL). Both still work with this off.
+CELERY_TASK_REJECT_ON_WORKER_LOST = False
+# Celery's own default, pinned because the same unbounded-requeue branch fires
+# for any task exceeding CELERY_TASK_TIME_LIMIT when this is False - a far more
+# reachable trigger than an OOM. dashboard.E007/E008 guard both combinations.
+CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_SOFT_TIME_LIMIT", "2700"))
 CELERY_TASK_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_TIME_LIMIT", "3600"))

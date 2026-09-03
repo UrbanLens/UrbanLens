@@ -666,3 +666,51 @@ Two consequences worth knowing before editing that module:
   point at. Keys live for one document and are never emitted on read.
 
 `labels` is the one field we add, per item, and it is invisible to the upstream shape.
+
+## A lost Celery child fails once; it is not redelivered forever
+
+`CELERY_TASK_ACKS_LATE` stays on — a task is acknowledged after it finishes, so
+a worker that dies mid-run does not swallow the job. `CELERY_TASK_REJECT_ON_WORKER_LOST`
+is off, which is the part worth understanding, because "reject on worker lost"
+sounds like the safer of the two settings and is not.
+
+That setting governs one narrow case: **the child died and the parent survived
+to observe it.** In a prefork worker that means an OOM kill or a segfault inside
+a C decoder — deterministic, caused by the task's own payload, and therefore
+reproduced exactly on the next attempt. Celery's failure handler rejects such a
+message *with requeue*, and nothing bounds the redelivery:
+
+- `max_retries` counts `task.retry()` calls. This redelivery comes from the
+  broker, so no counter is touched.
+- The time limits never engage. A cgroup OOM kill takes seconds.
+- `visibility_timeout` does not pace it. That governs a message whose worker
+  vanished *without* rejecting it; kombu's `_restore` re-queues a rejected
+  message immediately.
+- The Redis/Valkey transport enforces no delivery limit. kombu does stamp
+  `redelivered = True` on the restored message, and Celery currently ignores it.
+
+The loop is also silent: that branch sets `send_failed_event = False` and skips
+`mark_as_failure`, so a task looping on this stores no result, sends no
+`task_failure` signal, and emits no `task-failed` event. It is invisible to the
+exporter in `services/core/celery_events.py` — the one place it would otherwise
+show up — while permanently occupying a concurrency slot.
+
+**The usual argument for keeping it on does not apply**, and this is the piece
+that is easy to get wrong: losing a task to an infrastructure event is a
+different code path. When the *whole* worker goes away there is no parent left
+to reject anything, and the message returns via kombu's `restore_unacked_once`
+(clean shutdown) or the visibility timeout (SIGKILL). Both still work with this
+setting off. So the setting's only real domain is the case where retrying is
+wrong by construction.
+
+`CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT` is pinned to Celery's default of True
+for the same reason: set to False it reaches the same unbounded branch for any
+task exceeding `CELERY_TASK_TIME_LIMIT`, which is far easier to hit than an OOM.
+`dashboard.E007` and `dashboard.E008` refuse both combinations at startup, and
+`tests/hypothesis/test_celery_worker_lost.py` drives the real Celery `Request`
+so a version bump that changes this surfaces as a test failure rather than a
+silently different runtime.
+
+This is the bound on *how many times*; whether a second run is safe at all is a
+separate question, answered per task — the duplicate-delivery survey in
+`docs/reports/2026-08-11-codebase-audit.md` covers the side-effecting families.

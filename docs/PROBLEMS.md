@@ -5581,3 +5581,29 @@ errors, not the 13 the 2026-08-31 "11 pre-existing mypy errors" entry (above) ac
 
 All 15 errors this run found are now fixed - a full-tree `mypy src/urbanlens` run reports
 **zero errors** for the first time this project has run one.
+
+## OPEN 2026-09-03: a permanently failed media task leaves the upload silently unfinished
+
+Found while closing the Celery requeue loop (`CELERY_TASK_REJECT_ON_WORKER_LOST`,
+see `docs/NOTES-celery-acks.md`), not caused by it.
+
+`process_image_upload` and its siblings set `Image.upload_processed_at` on
+success. Nothing sets anything on permanent failure: there is no `task_failure`
+receiver and no per-task `on_failure`, so a row whose task dies keeps
+`upload_processed_at = None` forever. The uploader sees a photo that never
+finishes processing, with no error and no retry affordance, and nothing
+server-side distinguishes "still running" from "died three days ago".
+
+`autoretry_for=(OSError,)` does not cover it — those retries run *inside* the
+child, so any failure that kills the child (OOM, decoder segfault) never reaches
+them.
+
+This predates the requeue change and is not made worse by it: under the old
+settings such a task looped forever, so the row was equally never marked *and* a
+concurrency slot was consumed indefinitely. The change makes the failure
+terminal and visible in `urbanlens_celery_tasks_total{state="failed"}`, which is
+what makes the missing row-level state worth fixing now rather than before.
+
+Likely shape: a `task_failure` receiver (or a shared task base class) that
+records the failure on the row, plus a UI state for it. Wants a decision on
+whether failed uploads are retryable by the user or discarded.

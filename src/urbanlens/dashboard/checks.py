@@ -281,3 +281,63 @@ def check_metrics_endpoint_is_guarded(app_configs: Sequence[AppConfig] | None = 
             id="dashboard.E006",
         ),
     ]
+
+
+@register()
+def check_celery_failures_cannot_requeue_forever(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """Refuse the two settings combinations that turn a task failure into a loop.
+
+    With ``task_acks_late`` on, Celery's failure handler has one branch that
+    rejects the message *with requeue* instead of acknowledging it. Nothing
+    bounds the redelivery - ``max_retries`` counts ``task.retry()`` calls rather
+    than broker deliveries, and the Redis/Valkey transport enforces no delivery
+    limit - so a deterministic failure is handed straight back to a worker that
+    fails the same way, occupying a concurrency slot until someone notices.
+
+    Noticing is the hard part: that branch suppresses the failure event and the
+    stored result, so the loop is invisible to the metrics in
+    :mod:`~urbanlens.dashboard.services.core.celery_events` and to anything
+    reading task results.
+
+    Two settings reach that branch, and both are checked here because they fail
+    identically and only one of them is obvious:
+
+    - ``task_reject_on_worker_lost`` covers a child dying mid-task (an OOM kill,
+      or a segfault in an image or video decoder).
+    - ``task_acks_on_failure_or_timeout`` set to False covers any task exceeding
+      ``task_time_limit`` - a much easier condition to reach than an OOM.
+
+    Neither is read from the environment, so this fires only for an edit to
+    ``settings``, which is exactly the regression it exists to catch.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        One error per settings combination that can requeue without bound.
+    """
+    if not getattr(settings, "CELERY_TASK_ACKS_LATE", False):
+        return []
+
+    errors: list[CheckMessage] = []
+    if getattr(settings, "CELERY_TASK_REJECT_ON_WORKER_LOST", False):
+        errors.append(
+            Error(
+                "CELERY_TASK_REJECT_ON_WORKER_LOST is on together with CELERY_TASK_ACKS_LATE, so a task whose child is "
+                "killed mid-run (an OOM kill, or a decoder segfault) is requeued unconditionally and immediately, to a "
+                "worker that will die the same way. The loop is unbounded and emits no failure event, so it silently "
+                "consumes a concurrency slot. Set it to False, so the loss is acknowledged and reported once.",
+                id="dashboard.E007",
+            ),
+        )
+    if not getattr(settings, "CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT", True):
+        errors.append(
+            Error(
+                "CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT is off together with CELERY_TASK_ACKS_LATE, so any task that "
+                "exceeds CELERY_TASK_TIME_LIMIT is requeued unconditionally rather than failed, and will exceed the "
+                "limit again on every redelivery. Leave it at Celery's default of True.",
+                id="dashboard.E008",
+            ),
+        )
+    return errors
