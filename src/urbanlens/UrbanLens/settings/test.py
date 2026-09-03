@@ -92,12 +92,37 @@ UL_DIRECT_INFERENCE_POLICY = "allow"
 # boundary itself set UL_AI_WORKER_ENABLED = False with override_settings.
 UL_AI_WORKER_ENABLED = True
 
-# Pinned off so the suite is deterministic whatever the developer's .env says.
-# It is read at import time to decide whether /metrics is routed and whether the
-# django-prometheus middleware is installed, so a machine with metrics enabled
-# would otherwise run the suite against a different URLconf and middleware stack
-# than CI does. The tests that need it on flip it explicitly.
+# Pinned off so the suite is deterministic whatever the developer's .env says -
+# otherwise a machine with metrics enabled runs against a different URLconf,
+# middleware stack and Celery config than CI does. The tests that need it on
+# flip it explicitly.
+#
+# Assigning the Django setting is not sufficient on its own, and the reason is
+# import order: `DJANGO_SETTINGS_MODULE=...settings.test` imports the *package*
+# first, whose __init__ already does `from .base import *`. Everything base
+# derives from the environment is therefore fixed before this file's body runs,
+# and `from .base import *` below re-exports the cached module rather than
+# re-executing it. So each derived value is undone explicitly here.
 UL_METRICS_ENABLED = False
+# urls.py registers the /metrics route from the pydantic settings object, not
+# from the Django setting - and it is a singleton, so this reaches it. Same
+# idiom as clamav_enabled and virustotal_api_key above.
+_app_settings.metrics_enabled = False
+# Events cost a broker publish per task transition; base ties this to the flag.
+CELERY_WORKER_SEND_TASK_EVENTS = False
+# django_prometheus is appended to INSTALLED_APPS and wraps MIDDLEWARE on both
+# ends when metrics are on. Left in place, the suite would exercise a middleware
+# stack CI never sees.
+INSTALLED_APPS = [app for app in INSTALLED_APPS if app != "django_prometheus"]  # noqa: F405
+MIDDLEWARE = [middleware for middleware in MIDDLEWARE if not middleware.startswith("django_prometheus.")]  # noqa: F405
+# Read by prometheus_client rather than Django, and it tests for the key's
+# *presence*, not its value - so this is popped, not blanked. In multiprocess
+# mode every sample is backed by an mmap keyed on metric name and labels and
+# shared by every registry in the process, which makes a fresh CollectorRegistry
+# report increments from whichever test ran before it. Popping it here (safe:
+# prometheus_client is not imported until well after settings load) gives each
+# registry its own values, so a per-test registry actually isolates.
+os.environ.pop("PROMETHEUS_MULTIPROC_DIR", None)
 
 # model_bakery's default related-object generation collides with the
 # create_user_profile post_save signal (see urbanlens.core.tests.baker).

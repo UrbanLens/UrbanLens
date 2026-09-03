@@ -822,6 +822,12 @@ services:
     environment:
       <<: *app-env
       UL_PROCESS_ROLE: metrics
+      # Cleared, having been inherited from *app-env. This is a single process
+      # holding its counters in memory, so multiprocess mode buys nothing here
+      # and costs the mmap files a restart then has to be trusted to clear. The
+      # exporter is written for the plain in-process registry; leaving the
+      # variable set silently put it in the other mode.
+      PROMETHEUS_MULTIPROC_DIR:
       # Follows `app`. The command exits rather than binding an unguarded port,
       # so this service simply restarts in a loop if metrics are off - hence
       # deploying it is conditional on the same flag.
@@ -839,10 +845,14 @@ services:
         max-size: "200k"
         max-file: "10"
     # One event-loop process holding counters in memory. It never imports a task
-    # body, so none of the GeoPandas/Shapely/Pillow weight the real workers
-    # carry applies here.
+    # body, so none of the GeoPandas/Shapely/Pillow weight the real workers carry
+    # applies here - but it is still a Django process, and `django.setup()` alone
+    # measured 178 MiB, with the running exporter at 216 MiB. The 256m this was
+    # first given left ~15% headroom, which an event receiver that retains task
+    # state can cross; the earlier figure only counted what the exporter adds on
+    # top of Django rather than the total.
     cpus: ${CPU_LIMIT__CELERY_METRICS:-${CPU_LIMIT:-0.5}}
-    mem_limit: ${MEM_LIMIT__CELERY_METRICS:-${MEM_LIMIT:-256m}}
+    mem_limit: ${MEM_LIMIT__CELERY_METRICS:-${MEM_LIMIT:-512m}}
 
   # clamd daemon every upload is scanned through before
   # it's ever written to permanent storage

@@ -3,10 +3,12 @@
 Response to the handoff note "one Celery setting in the UrbanLens app repo"
 (2026-09-03). **Implemented — Celery is unblocked from our side.**
 
-Your diagnosis was right, and it was right for a reason your note understates.
-We verified it independently against the running image rather than taking it on
-trust, which turned up one correction that should change how you weigh the two
-options, plus a second instance of the same bug that the note did not cover.
+Your diagnosis was right, and it was right for reasons your note understates. We
+verified it against the running image rather than taking it on trust, which
+turned up four things worth sending back: a correction that changes how you
+should weigh the two options, a second route into the same unbounded branch that
+the note does not cover, a reason the failure was cheaper to trigger than
+"an extreme image" suggests, and one number for your memory sizing.
 
 Durable version of all of this lives in [`NOTES.md`](NOTES.md) under "A lost
 Celery child fails once"; this file is the reply.

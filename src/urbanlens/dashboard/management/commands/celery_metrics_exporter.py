@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PORT = 8002
 
+#: How many tasks Celery's event state retains for uuid-to-name resolution.
+STATE_TASK_LIMIT = 2000
+
 
 class Command(BaseCommand):
     """Run the Celery event receiver and the metrics HTTP server."""
@@ -72,7 +75,7 @@ class Command(BaseCommand):
         if getattr(settings, "IS_PRODUCTION", False) and not gates_configured():
             raise CommandError("UL_METRICS_ENABLED is on with neither UL_METRICS_TOKEN nor UL_METRICS_ALLOWED_CIDRS set. Refusing to expose an unguarded metrics port.")
 
-        metrics = CeleryEventMetrics(known_tasks=current_app.tasks.keys(), registry=prometheus_client.REGISTRY)
+        metrics = CeleryEventMetrics(registry=prometheus_client.REGISTRY)
         self._serve(options["bind"], options["port"], metrics)
         self._consume(metrics)
 
@@ -101,7 +104,12 @@ class Command(BaseCommand):
         Args:
             metrics: The metric set to feed.
         """
-        state = current_app.events.State()
+        # Bounded explicitly. This state exists only to answer "what task is
+        # uuid X?" between a task-received and its terminal event, but Celery
+        # retains 10_000 tasks by default, which is a lot of retained objects for
+        # a container sized for an exporter. Large enough that a long-running
+        # task's name survives everything that completes while it runs.
+        state = current_app.events.State(max_tasks_in_memory=STATE_TASK_LIMIT)
 
         def on_event(event: dict[str, Any]) -> None:
             state.event(event)

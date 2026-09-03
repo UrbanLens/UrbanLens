@@ -227,10 +227,25 @@ Two details worth knowing:
   time to the exception, which is not comparable to a successful run - folding
   the two together drags the latency percentiles toward whatever the failure
   mode happened to cost.
-- **Task names are checked against the local registry**, and anything
-  unrecognised collapses to `task="unregistered"`. Names come from workers, not
-  from requests, but a rolling deploy can still introduce values, and an
-  unbounded label set is how a Prometheus instance falls over.
+- **Task names are capped, not validated.** The first 200 distinct names get
+  their own series; past that everything shares `task="other"`, and an event
+  whose name could not be resolved is `task="unknown"`. An unbounded label set is
+  how a Prometheus instance falls over, so something has to bound it - but
+  checking names against the app's task registry, which is what this did first,
+  is not affordable in this process: populating that registry imports every task
+  module and measured at +167 MiB, against a container sized for an exporter.
+  The cap bounds the same risk without importing anything, and 200 sits
+  comfortably above the ~95 names this deployment actually registers.
+
+One deployment trap, because it fails in a way that looks unrelated: the exporter
+is a single process and wants prometheus_client's plain in-process values, so
+`PROMETHEUS_MULTIPROC_DIR` must be **absent** from its environment, not empty.
+prometheus_client tests for the key's *presence*, not its value, so setting it to
+`""` still selects multiprocess mode - with no directory to write to, which
+crash-loops the container on `PermissionError: gauge_all_1.db`. In compose that
+means a bare `PROMETHEUS_MULTIPROC_DIR:` (null, which unsets it) rather than
+`PROMETHEUS_MULTIPROC_DIR: ""`, since the service inherits the variable from the
+shared app environment anchor.
 
 `CELERY_WORKER_SEND_TASK_EVENTS` follows `UL_METRICS_ENABLED`, so a deployment
 not collecting metrics does not pay a broker publish per task transition. Note

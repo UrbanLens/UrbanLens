@@ -482,15 +482,26 @@ class CeleryQueueDepthCollectorTests(SimpleTestCase):
 class CeleryEventMetricsTests(SimpleTestCase):
     """Translating Celery's event stream into metrics."""
 
-    def _metrics(self, known=("urbanlens.tasks.real_task",)):
+    def _metrics(self, max_task_labels=200):
+        # A per-test registry only isolates because settings/test.py pops
+        # PROMETHEUS_MULTIPROC_DIR: in multiprocess mode prometheus_client backs
+        # every sample with an mmap keyed on metric name and labels, shared by
+        # every registry in the process, and two tests touching task="other"
+        # would see each other's increments.
         from prometheus_client import CollectorRegistry
 
         from urbanlens.dashboard.services.core.celery_events import CeleryEventMetrics
 
-        return CeleryEventMetrics(known_tasks=known, registry=CollectorRegistry())
+        return CeleryEventMetrics(registry=CollectorRegistry(), max_task_labels=max_task_labels)
 
     def _value(self, metrics, name, **labels):
         return metrics.registry.get_sample_value(name, labels) or 0.0
+
+    def test_metric_values_are_isolated_per_registry(self) -> None:
+        """Guards the isolation the assertions in this class depend on."""
+        from prometheus_client import values
+
+        self.assertEqual(values.ValueClass.__qualname__, "MutexValue", "tests are running in prometheus multiprocess mode, where counters bleed across registries")
 
     def test_succeeded_records_outcome_and_runtime(self) -> None:
         m = self._metrics()
@@ -522,27 +533,58 @@ class CeleryEventMetricsTests(SimpleTestCase):
         # ...but they are still counted as events, so the stream is observable.
         self.assertEqual(self._value(m, "urbanlens_celery_events_total", type="task-started"), 1.0)
 
-    def test_unknown_task_names_collapse_to_one_bucket(self) -> None:
-        # Cardinality guard: a worker on a different build mid-deploy must not
-        # be able to mint a new series per name it reports.
-        from urbanlens.dashboard.services.core.celery_events import UNREGISTERED
-
+    def test_real_task_names_are_reported_under_their_own_name(self) -> None:
+        # The regression this replaced a registry allowlist to fix: the exporter
+        # cannot afford to import the task registry, so an allowlist built from
+        # it was empty and every real task collapsed into one useless bucket.
         m = self._metrics()
-        for name in ("some.task.a", "some.task.b", "some.task.c"):
+        for name in ("urbanlens.dashboard.tasks.sweep_achievements", "urbanlens.dashboard.tasks.run_scheduled_database_backup"):
             m.on_task_event({"type": "task-succeeded", "runtime": 1.0}, name)
-        self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task=UNREGISTERED, state="succeeded"), 3.0)
-        for name in ("some.task.a", "some.task.b", "some.task.c"):
             with self.subTest(name=name):
+                self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task=name, state="succeeded"), 1.0)
+
+    def test_task_names_past_the_cap_collapse_to_one_bucket(self) -> None:
+        # Cardinality guard: an unbounded label set is how a Prometheus falls
+        # over, so past the cap everything shares a series.
+        from urbanlens.dashboard.services.core.celery_events import OVERFLOW
+
+        m = self._metrics(max_task_labels=2)
+        for name in ("task.a", "task.b", "task.c", "task.d"):
+            m.on_task_event({"type": "task-succeeded", "runtime": 1.0}, name)
+
+        for name in ("task.a", "task.b"):
+            with self.subTest(admitted=name):
+                self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task=name, state="succeeded"), 1.0)
+        self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task=OVERFLOW, state="succeeded"), 2.0)
+        for name in ("task.c", "task.d"):
+            with self.subTest(rejected=name):
                 self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task=name, state="succeeded"), 0.0)
+
+    def test_a_name_already_admitted_keeps_its_series_after_the_cap(self) -> None:
+        # The cap freezes the label set; it must not start dropping tasks that
+        # were already being reported, which would make a series go silent
+        # rather than simply not gain new ones.
+        m = self._metrics(max_task_labels=1)
+        for _ in range(3):
+            m.on_task_event({"type": "task-succeeded", "runtime": 1.0}, "task.first")
+        m.on_task_event({"type": "task-succeeded", "runtime": 1.0}, "task.second")
+        self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task="task.first", state="succeeded"), 3.0)
 
     def test_a_none_task_name_does_not_crash(self) -> None:
         # Only task-received carries the name; an event arriving before it (or
         # after a restart dropped the state) resolves to None.
+        from urbanlens.dashboard.services.core.celery_events import UNKNOWN
+
         m = self._metrics()
         m.on_task_event({"type": "task-succeeded", "runtime": 1.0}, None)
-        from urbanlens.dashboard.services.core.celery_events import UNREGISTERED
+        self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task=UNKNOWN, state="succeeded"), 1.0)
 
-        self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task=UNREGISTERED, state="succeeded"), 1.0)
+    def test_a_missing_name_is_distinguishable_from_the_overflow_bucket(self) -> None:
+        # Two different problems - "the worker never told us" and "we hit the
+        # cap" - want different answers when reading the metric.
+        from urbanlens.dashboard.services.core.celery_events import OVERFLOW, UNKNOWN
+
+        self.assertNotEqual(UNKNOWN, OVERFLOW)
 
     def test_runtime_buckets_cover_the_task_time_limit(self) -> None:
         # CELERY_TASK_TIME_LIMIT is where a task is killed, so that boundary is

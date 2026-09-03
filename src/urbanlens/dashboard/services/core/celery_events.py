@@ -12,29 +12,43 @@ the HTTP server) lives in the ``celery_metrics_exporter`` management command, so
 the interesting logic here is exercisable without a broker or a socket.
 
 Cardinality is the thing to be careful about: ``task`` is a label, and an
-unbounded set of label values is how a Prometheus instance falls over. Task
-names come from the worker, not from a request, but a rolling deploy or a
-renamed task can still introduce values, so names are checked against this
-deployment's own registry and anything unrecognised collapses to a single
-``unregistered`` bucket rather than minting a new series.
+unbounded set of label values is how a Prometheus instance falls over. Names are
+therefore learned from the stream but capped - the first
+:data:`MAX_TASK_LABELS` distinct names get their own series and everything after
+that collapses into :data:`OVERFLOW`.
+
+Checking names against the app's own task registry would be the more precise
+guard, and is what this did first, but it is not affordable here: populating that
+registry means importing every task module (GDAL, Pillow, GeoPandas and the rest
+arrive with them), which measured at +167 MiB against an exporter whose whole
+container budget is a few hundred. Doubling a process's memory to learn ninety-
+odd strings is the wrong trade when a counter bounds the same risk for free.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
-if TYPE_CHECKING:
-    from collections.abc import Iterable
-
 logger = logging.getLogger(__name__)
 
-#: Label value for a task name this deployment does not have registered. Keeping
-#: one bucket rather than the raw name bounds cardinality against a worker
-#: running a different build mid-deploy.
-UNREGISTERED = "unregistered"
+#: Label value for an event whose task name could not be resolved - only
+#: ``task-received`` carries the name, so an event arriving before it, or after a
+#: restart dropped the receiver's state, has nothing to report.
+UNKNOWN = "unknown"
+
+#: Label value for every task name past :data:`MAX_TASK_LABELS`. Distinct from
+#: :data:`UNKNOWN`: this one means the cap was hit, which is worth being able to
+#: see rather than blending into "name missing".
+OVERFLOW = "other"
+
+#: How many distinct task names get their own series. Comfortably above the ~95
+#: this deployment registers, so the cap is a backstop against a worker on a
+#: different build or a dynamically-named task rather than a limit reached in
+#: normal operation.
+MAX_TASK_LABELS = 200
 
 #: Buckets for task runtime. Wider at the top than the HTTP histogram: a request
 #: that takes a minute is broken, whereas an archive import legitimately runs for
@@ -52,16 +66,17 @@ class CeleryEventMetrics:
     module-level metrics awkward to test.
     """
 
-    def __init__(self, known_tasks: Iterable[str], registry: CollectorRegistry | None = None) -> None:
+    def __init__(self, registry: CollectorRegistry | None = None, max_task_labels: int = MAX_TASK_LABELS) -> None:
         """Build the metric families.
 
         Args:
-            known_tasks: Task names this deployment has registered. Any other
-                name seen on the wire is reported as :data:`UNREGISTERED`.
             registry: Registry to attach to; a fresh one when omitted.
+            max_task_labels: How many distinct task names may hold their own
+                series before the rest collapse into :data:`OVERFLOW`.
         """
         self.registry = registry if registry is not None else CollectorRegistry()
-        self._known = frozenset(known_tasks)
+        self._max_task_labels = max_task_labels
+        self._seen_tasks: set[str] = set()
 
         self.tasks_total = Counter(
             "urbanlens_celery_tasks_total",
@@ -96,12 +111,21 @@ class CeleryEventMetrics:
                 the event arrived before the name was known.
 
         Returns:
-            The name when this deployment has it registered, else
-            :data:`UNREGISTERED`.
+            :data:`UNKNOWN` when there is no name, the name itself while fewer
+            than ``max_task_labels`` distinct names have been seen, and
+            :data:`OVERFLOW` once that cap is reached. Names already admitted
+            keep their series, so the cap freezes the label set rather than
+            starting to drop tasks that were already being reported.
         """
-        if name and name in self._known:
+        if not name:
+            return UNKNOWN
+        if name in self._seen_tasks:
             return name
-        return UNREGISTERED
+        if len(self._seen_tasks) >= self._max_task_labels:
+            logger.warning("Celery task-name cardinality cap (%d) reached; reporting %r as %r", self._max_task_labels, name, OVERFLOW)
+            return OVERFLOW
+        self._seen_tasks.add(name)
+        return name
 
     def on_task_event(self, event: dict[str, Any], task_name: str | None) -> None:
         """Record one task event.
