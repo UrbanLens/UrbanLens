@@ -848,4 +848,15 @@ class Image(abstract.FrontendDashboardModel):
             # Serves ImageQuerySet.copied_from_others() - "photos I own that were
             # copied from someone else" - which always filters by profile first.
             Index(fields=["profile", "copied_from_profile"], name="idxdb_img_profile_copied_from"),
+            # The Vault gallery's every page: WHERE profile_id = ? AND media_type = ?
+            # ORDER BY created DESC, id DESC LIMIT 24 OFFSET n. Before this, the
+            # only usable index was profile alone, so Postgres read every row the
+            # profile owns, filtered media_type on the heap and sorted the whole
+            # set to return 24 - once per scroll page.
+            #
+            # Declared descending because that is the default sort; the oldest-first
+            # sort reads the same index backwards, which Postgres does at the same
+            # cost. The date-taken and name sorts order by an expression
+            # (Coalesce/Lower, see models/images/sort.py) and cannot use it.
+            Index(fields=["profile", "media_type", "-created", "-id"], name="idxdb_img_profile_kind_recent"),
         ]
