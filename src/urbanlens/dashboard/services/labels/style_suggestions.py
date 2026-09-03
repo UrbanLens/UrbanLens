@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
-from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.ai.access import ai_features_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def suggest_label_style(name: str, profile: Profile) -> LabelStyleSuggestion:
     appearance when subscription, profile preference, site settings, or the AI gateway
     prevents a suggestion.
     """
-    if not user_has_feature(profile.user, SiteFeature.AI) or not profile.ai_enabled or not profile.external_apis_enabled:
+    if not ai_features_enabled(profile):
         return LabelStyleSuggestion()
 
     prompt = _build_prompt(name)

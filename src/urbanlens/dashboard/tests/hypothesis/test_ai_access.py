@@ -1,4 +1,4 @@
-"""Tests for services.ai.access.assistant_available - the assistant's single access chokepoint."""
+"""Tests for services.ai.access - the AI access chokepoints, and the one conjunct that separates them."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pytest
 from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions import SiteFeature
-from urbanlens.dashboard.services.ai.access import assistant_available
+from urbanlens.dashboard.services.ai.access import ai_features_enabled, assistant_available
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -89,3 +89,59 @@ def test_unavailable_without_an_ai_worker_deployed() -> None:
     profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
 
     assert assistant_available(profile) is False
+
+
+@pytest.mark.django_db
+@override_settings(UL_AI_WORKER_ENABLED=False)
+def test_ai_worker_absence_does_not_disable_other_ai_features() -> None:
+    """The whole reason the two predicates are separate.
+
+    ``UL_AI_WORKER_ENABLED`` describes the sandboxed ``ai-worker`` container,
+    which only the interactive assistant runs in. Label styling, auto-tagging
+    and import assist resolve an inference client through the shared
+    ``ai-inference`` tier instead, so a resource-constrained self-host that
+    turns the chat assistant off must keep them.
+    """
+    _grant_ai_to_everyone()
+    profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
+
+    assert assistant_available(profile) is False
+    assert ai_features_enabled(profile) is True
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("ai_enabled", "external_apis_enabled"),
+    [(False, True), (True, False), (False, False)],
+)
+def test_features_disabled_by_either_profile_preference(ai_enabled: bool, external_apis_enabled: bool) -> None:
+    _grant_ai_to_everyone()
+    profile = _make_profile(ai_enabled=ai_enabled, external_apis_enabled=external_apis_enabled)
+
+    assert ai_features_enabled(profile) is False
+
+
+@pytest.mark.django_db
+def test_features_disabled_without_the_subscription_entitlement() -> None:
+    assert ai_features_enabled(_plain_profile()) is False
+
+
+@pytest.mark.django_db
+def test_features_disabled_when_site_ai_is_off() -> None:
+    # style_suggestions used to reach get_gateway before learning this, which
+    # is the check the shared predicate pulls forward.
+    _grant_ai_to_everyone()
+    profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
+    SiteSettings.objects.filter(pk=SiteSettings.get_current().pk).update(ai_enabled=False)
+
+    assert ai_features_enabled(profile) is False
+
+
+@pytest.mark.django_db
+def test_assistant_is_a_strict_subset_of_features() -> None:
+    """Anything the assistant allows, the general predicate allows too."""
+    _grant_ai_to_everyone()
+    profile = _make_profile(ai_enabled=True, external_apis_enabled=True)
+
+    assert assistant_available(profile) is True
+    assert ai_features_enabled(profile) is True
