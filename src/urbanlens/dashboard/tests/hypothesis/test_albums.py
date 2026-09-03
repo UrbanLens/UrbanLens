@@ -337,12 +337,18 @@ class AlbumBatchingTests(TestCase):
         ``visible_to`` issues several queries of its own to build the viewer's
         allowed-uploader set, and that's free to change - what must not change
         is that resolving eight albums costs the same as resolving two.
+
+        Those setup queries are memoised on the profile instance, so the first
+        call in a process pays for them and later ones do not. Both measurements
+        therefore have to start warm, or the comparison is between a cold call
+        and a warm one rather than between two and eight albums.
         """
         pin, images = _pin_with_photos(4)
         for index in range(2):
             album = Album.objects.create(name=f"A{index}", profile=pin.profile, parent_pin=pin)
             add_images_to_album(album, images, pin.profile)
 
+        albums_with_images(pin, pin.profile)
         with CaptureQueriesContext(connection) as two_albums:
             self.assertEqual(len(albums_with_images(pin, pin.profile)), 2)
 
@@ -395,6 +401,9 @@ class AlbumListingTests(TestCase):
             album = Album.objects.create(name=f"A{index}", profile=pin.profile, parent_pin=pin)
             add_images_to_album(album, images, pin.profile)
 
+        # Warm the viewer-scoped memo first - see the sibling test in
+        # AlbumBatchingTests for why both measurements have to start warm.
+        albums_listing(pin, pin.profile)
         with CaptureQueriesContext(connection) as two_albums:
             self.assertEqual(len(albums_listing(pin, pin.profile)), 2)
 

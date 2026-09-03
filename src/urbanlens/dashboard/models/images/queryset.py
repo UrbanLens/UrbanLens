@@ -9,6 +9,8 @@ from django.db.models import Case, IntegerField, Q, Sum, Value, When
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
@@ -75,9 +77,13 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     Returns:
         A ``Q`` matching photos in containers within this viewer's reach.
     """
-    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
+    # The memoised variant: this is called once per `visible_to`, and a page can
+    # call that several times for the same viewer - the album detail view does it
+    # four times. The underlying answer is three queries (pins, the aggregate
+    # fixpoint, locations) and cannot change mid-request.
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
 
-    return Q(wiki__location_id__in=visible_wiki_location_ids(viewer_profile))
+    return Q(wiki__location_id__in=visible_wiki_location_ids_cached(viewer_profile))
 
 
 class ImageQuerySet(abstract.FrontendDashboardQuerySet):
@@ -174,21 +180,63 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
 
     # -- Helpers ----------------------------------------------------------------
 
-    def _get_friend_ids(self, profile: Profile) -> set[int]:
-        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+    @staticmethod
+    def _viewer_scoped(profile: Profile, attribute: str, compute: Callable[[], set[int]]) -> set[int]:
+        """Memoise a viewer-scoped id set on the profile instance.
 
-        accepted = FriendshipStatus.ACCEPTED
-        return set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=profile, status=accepted).values_list("from_profile_id", flat=True))
+        These three sets describe the *viewer*, not the queryset, so they are the
+        same for every ``visible_to`` call in a request - and a page can make
+        several. The album detail view resolves the same visibility four times
+        (`visible_album_item_pairs`, `album_images_page`, `eligible_images_for`,
+        and the picker payload), which cost four copies of all three lookups.
+
+        Cached on the instance for the reason
+        :func:`services.wiki.wiki_access.visible_wiki_location_ids_cached`
+        already uses: a ``Profile`` is loaded fresh per request, so an entry
+        cannot outlive the request that made it, and nothing has to invalidate
+        it when a friendship or pin changes. Callers that should share the
+        answer must pass the *same* instance - which the album view does.
+
+        Args:
+            profile: The viewing profile the set describes.
+            attribute: Instance attribute to hang the cached value on.
+            compute: Builds the set when nothing is cached yet.
+
+        Returns:
+            The viewer's id set, computed at most once per profile instance.
+        """
+        cached = getattr(profile, attribute, None)
+        if cached is None:
+            cached = compute()
+            # setattr rather than direct assignment: the attribute is not
+            # declared on Profile, and django-stubs is right to flag that.
+            setattr(profile, attribute, cached)
+        return cached
+
+    def _get_friend_ids(self, profile: Profile) -> set[int]:
+        def compute() -> set[int]:
+            from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+            accepted = FriendshipStatus.ACCEPTED
+            return set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=profile, status=accepted).values_list("from_profile_id", flat=True))
+
+        return self._viewer_scoped(profile, "_ul_visible_friend_ids", compute)
 
     def _get_location_ids(self, profile: Profile) -> set[int]:
-        from urbanlens.dashboard.models.pin.model import Pin
+        def compute() -> set[int]:
+            from urbanlens.dashboard.models.pin.model import Pin
 
-        return set(Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True))
+            return set(Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True))
+
+        return self._viewer_scoped(profile, "_ul_visible_pinned_location_ids", compute)
 
     def _get_trip_ids(self, profile: Profile) -> set[int]:
-        from urbanlens.dashboard.models.trips.model import TripMembership
+        def compute() -> set[int]:
+            from urbanlens.dashboard.models.trips.model import TripMembership
 
-        return set(TripMembership.objects.trip_ids_for(profile))
+            return set(TripMembership.objects.trip_ids_for(profile))
+
+        return self._viewer_scoped(profile, "_ul_visible_trip_ids", compute)
 
     def _relationship_allows(
         self,
