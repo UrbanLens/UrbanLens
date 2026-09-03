@@ -193,7 +193,7 @@
 
             {# -- Aliases ----------------------------------------------------- #}
             <div hx-get="{% url 'location.wiki.aliases' location.slug %}"
-                 hx-trigger="load[!window.ulSectionCollapsed('wiki','aliases')], ul:unhide"
+                 hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('wiki','aliases'))], ul:unhide"
                  hx-swap="outerHTML"
                  id="location-aliases-panel"
                  class="card wiki-card aliases-panel"
@@ -207,7 +207,7 @@
 
             {# -- Ownership ------------------------------------------------------ #}
             <div hx-get="{% url 'location.wiki.ownership' location.slug %}"
-                 hx-trigger="load[!window.ulSectionCollapsed('wiki','ownership')], ul:unhide"
+                 hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('wiki','ownership'))], ul:unhide"
                  hx-swap="outerHTML"
                  id="location-ownership-panel"
                  class="card wiki-card ownership-panel"
@@ -221,7 +221,7 @@
 
             {# -- Building Attributes (REData building number/name/year built) -- #}
             <div hx-get="{% url 'location.wiki.building_attributes' location.slug %}"
-                 hx-trigger="load[!window.ulSectionCollapsed('wiki','building_attributes')], ul:unhide"
+                 hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('wiki','building_attributes'))], ul:unhide"
                  hx-swap="outerHTML"
                  id="location-building-attributes-panel"
                  class="card wiki-card"
@@ -236,7 +236,7 @@
 
             {# -- Buildings on this property (REData / OSM) --------------------- #}
             <div hx-get="{% url 'location.wiki.buildings' location.slug %}"
-                 hx-trigger="load[!window.ulSectionCollapsed('wiki','parcel_buildings')], ul:unhide"
+                 hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('wiki','parcel_buildings'))], ul:unhide"
                  hx-swap="outerHTML"
                  id="location-parcel-buildings-panel"
                  class="card wiki-card"
