@@ -104,6 +104,9 @@ UL_AI_WORKER_ENABLED = True
 # and `from .base import *` below re-exports the cached module rather than
 # re-executing it. So each derived value is undone explicitly here.
 UL_METRICS_ENABLED = False
+# Derived from the flag *and* UL_PROCESS_ROLE in base; both halves have to be
+# undone, since base computed this before this file's body ran.
+UL_METRICS_INSTRUMENTED = False
 # urls.py registers the /metrics route from the pydantic settings object, not
 # from the Django setting - and it is a singleton, so this reaches it. Same
 # idiom as clamav_enabled and virustotal_api_key above.

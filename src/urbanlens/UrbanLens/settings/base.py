@@ -80,6 +80,7 @@ DEBUG = _env_bool("DJANGO_DEBUG", _is_dev)
 # ALLOWED_HOSTS: AppSettings is the source of truth (override via UL_ALLOWED_HOSTS,
 # a comma-separated list). Local environment defaults to wildcard-friendly hosts so
 # developers can access the site immediately without any configuration.
+from urbanlens.UrbanLens.settings import _metrics  # noqa: E402
 from urbanlens.UrbanLens.settings._env import env_bool  # noqa: E402
 from urbanlens.UrbanLens.settings.app import settings as _app_settings  # noqa: E402
 
@@ -126,7 +127,13 @@ UL_METRICS_ENABLED = _app_settings.metrics_enabled
 UL_METRICS_TOKEN = _app_settings.metrics_token
 UL_METRICS_ALLOWED_CIDRS = _app_settings.metrics_allowed_cidrs
 
-if UL_METRICS_ENABLED:
+# The flag reaches every process that shares the .env, but only some of them are
+# scraped - and it is flipped on running deployments, independently of the image
+# that would have to carry django-prometheus. See settings/_metrics.py.
+UL_METRICS_INSTRUMENTED = _metrics.instrumentation_wanted(metrics_enabled=UL_METRICS_ENABLED, process_role=_app_settings.process_role)
+
+if UL_METRICS_INSTRUMENTED:
+    _metrics.require_django_prometheus()
     INSTALLED_APPS.append("django_prometheus")
 
 # Routes the websocket protocol (see UrbanLens/asgi.py); HTTP keeps using
@@ -164,7 +171,7 @@ MIDDLEWARE = [
     "urbanlens.dashboard.middleware.WriteSourceMiddleware",
 ]
 
-if UL_METRICS_ENABLED:
+if UL_METRICS_INSTRUMENTED:
     # Outermost and innermost respectively, which is what django-prometheus
     # documents and what makes the pair meaningful: the difference between the
     # two timers is the time the rest of this stack costs. Anything registered

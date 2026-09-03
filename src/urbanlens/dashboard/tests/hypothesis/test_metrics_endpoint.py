@@ -29,17 +29,20 @@ import ipaddress
 import os
 import pathlib
 import re
+import sys
 import tempfile
 from unittest import mock
 
 from django.conf import settings
 from django.core.checks import Error
+from django.core.exceptions import ImproperlyConfigured
 from django.test import RequestFactory, override_settings
 from django.urls import NoReverseMatch, reverse
 import prometheus_client
 import yaml
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.UrbanLens.settings import _metrics
 from urbanlens.dashboard.checks import check_metrics_endpoint_is_guarded
 from urbanlens.dashboard.controllers.metrics import MULTIPROC_DIR_ENV, MetricsController, _build_registry
 from urbanlens.dashboard.services.security.client_ip import address_in_networks, client_ip, parse_networks
@@ -307,6 +310,75 @@ class MetricsStartupCheckTests(SimpleTestCase):
         from django.core.checks import registry
 
         self.assertIn(check_metrics_endpoint_is_guarded, registry.registry.get_checks())
+
+
+class MetricsInstrumentationGateTests(SimpleTestCase):
+    """Who registers django-prometheus, and what happens when it is absent.
+
+    ``UL_METRICS_ENABLED`` is an operator switch flipped on running deployments,
+    independently of the image build that would carry the package. It reaches
+    every process sharing the ``.env``, so both halves matter: only scraped
+    processes should pay for the middleware, and a process that cannot import
+    the package should say which setting asked for it.
+    """
+
+    def test_only_scraped_roles_are_instrumented(self) -> None:
+        # Every role that appears in docker-compose.yml, so a new one added
+        # there has to be considered here rather than silently instrumented.
+        for role in ("websocket", "worker", "panels", "beat", "metrics", "sandbox", "inference", "ai"):
+            with self.subTest(role=role):
+                self.assertFalse(_metrics.instrumentation_wanted(metrics_enabled=True, process_role=role), f"{role!r} is never scraped; instrumenting it costs a middleware pair whose counters nothing reads.")
+
+    def test_the_web_role_is_instrumented(self) -> None:
+        self.assertTrue(_metrics.instrumentation_wanted(metrics_enabled=True, process_role="web"))
+
+    def test_an_unspecified_role_is_instrumented(self) -> None:
+        # What a local checkout, `runserver` and this suite report. Reading the
+        # endpoint with curl while working on it is the point of enabling it.
+        self.assertTrue(_metrics.instrumentation_wanted(metrics_enabled=True, process_role="unspecified"))
+
+    def test_the_flag_still_gates_the_web_role(self) -> None:
+        self.assertFalse(_metrics.instrumentation_wanted(metrics_enabled=False, process_role="web"))
+
+    def test_a_missing_package_names_the_setting(self) -> None:
+        # The failure being replaced: a bare ModuleNotFoundError for a module the
+        # operator never heard of, crash-looping every Django process at once.
+        with mock.patch.dict(sys.modules, {"django_prometheus": None}):
+            with self.assertRaises(ImproperlyConfigured) as caught:
+                _metrics.require_django_prometheus()
+        self.assertIn("UL_METRICS_ENABLED", str(caught.exception))
+        self.assertIsInstance(caught.exception.__cause__, ImportError)
+
+    def test_an_installed_package_is_accepted(self) -> None:
+        self.assertIsNone(_metrics.require_django_prometheus())
+
+    def test_the_derived_setting_exists(self) -> None:
+        # override_settings invents any name it is given; the middleware block in
+        # base.py reads this one, so a suite that only overrode it would pass
+        # against a settings module that never defined it.
+        self.assertTrue(hasattr(settings, "UL_METRICS_INSTRUMENTED"))
+        self.assertFalse(settings.UL_METRICS_INSTRUMENTED)
+
+    def test_every_django_prometheus_registration_is_behind_the_role_gate(self) -> None:
+        # Not the flag: gating these on UL_METRICS_ENABLED alone is what made a
+        # worker import a package it does not ship. Each registration line is
+        # matched to the `if` that most recently opened above it.
+        base = (REPO_ROOT / "src/urbanlens/UrbanLens/settings/base.py").read_text().splitlines()
+        gate: str | None = None
+        registrations = 0
+        for line in base:
+            opened = re.match(r"^if (.+):$", line)
+            if opened:
+                gate = opened.group(1)
+            elif line and not line[0].isspace():
+                gate = None
+            if "django_prometheus" not in line or line.lstrip().startswith("#"):
+                continue
+            self.assertEqual(gate, "UL_METRICS_INSTRUMENTED", f"{line.strip()!r} is registered under {gate!r}, which does not account for UL_PROCESS_ROLE.")
+            # The quote is what separates a registration from the import guard
+            # that shares the name (`_metrics.require_django_prometheus()`).
+            registrations += '"django_prometheus' in line
+        self.assertEqual(registrations, 3, "Expected the INSTALLED_APPS entry and both middlewares; adjust this count deliberately.")
 
 
 class MetricsDeploymentWiringTests(SimpleTestCase):
