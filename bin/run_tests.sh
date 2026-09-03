@@ -89,6 +89,18 @@ ALLOW_DRIFT=0
 PARALLEL=""
 SHUFFLE=0
 
+# A `find` expression naming the files whose container copy must match the host
+# exactly - the hand-written source a test run reads. Python, plus the template
+# tree, which tests render by name and which nothing generates.
+#
+# Deliberately not "every file": the container's tree legitimately holds
+# artefacts the host does not (compiled bytecode, collected and compressed
+# static assets), and an early version that pruned every extra file removed
+# ~19,700 of them. Nothing broke, because those regenerate - but deleting build
+# output is not this script's job. `__pycache__` is excluded for the same
+# reason. Used unquoted via `eval`, so it must stay a literal constant.
+SOURCE_FILES="\\( -name '*.py' -o \\( -path '*/templates/*' -name '*.html' \\) \\) -not -path '*/__pycache__/*'"
+
 args=()
 for arg in "$@"; do
     case "$arg" in
@@ -158,25 +170,22 @@ sync_tree() {
     # Not optional: docker cp preserves host ownership, and the app runs as appuser.
     docker exec -u root "$CONTAINER" chown -R appuser:appuser /app/src /app/bin
 
-    # `docker cp` only ever adds and overwrites - a Python file deleted on the host
-    # stays in the container forever. That is not cosmetic: a scratch test file
-    # deleted after use is still collected there, and a module deleted in a refactor
-    # still satisfies the import that should have broken.
-    #
-    # Only `.py` files are pruned, and never `__pycache__`. The container's tree
-    # legitimately holds artefacts the host does not - compiled bytecode, collected
-    # and compressed static assets - and an early version of this that pruned every
-    # extra file removed ~19,700 of them. Nothing broke, because those regenerate,
-    # but deleting build output is not this script's job.
+    # `docker cp` only ever adds and overwrites - a file deleted on the host stays
+    # in the container forever. That is not cosmetic: a scratch test file deleted
+    # after use is still collected there, a module deleted in a refactor still
+    # satisfies the import that should have broken, and a template deleted in one
+    # still resolves by name for anything that renders it. All three were real:
+    # `pages/memories/photos.html`, deleted on 2026-08-30 when Memories > Photos
+    # moved to the Vault, was still being served to the loader four days later.
     local host_list container_list
     host_list=$(mktemp); container_list=$(mktemp)
-    (cd src && find . -name '*.py' -not -path '*/__pycache__/*' | sort) > "$host_list"
-    docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' -not -path '*/__pycache__/*' | sort" > "$container_list"
+    (cd src && eval "find . $SOURCE_FILES" | sort) > "$host_list"
+    docker exec "$CONTAINER" sh -c "cd /app/src && find . $SOURCE_FILES | sort" > "$container_list"
     local stale
     stale=$(comm -13 "$host_list" "$container_list" || true)
     rm -f "$host_list" "$container_list"
     if [ -n "$stale" ]; then
-        echo "    pruning $(echo "$stale" | wc -l) stale .py file(s) the host no longer has:"
+        echo "    pruning $(echo "$stale" | wc -l) stale source file(s) the host no longer has:"
         echo "$stale" | sed 's|^|      |'
         echo "$stale" | sed 's|^|/app/src/|' | tr '\n' '\0' | xargs -0 -r docker exec -u root "$CONTAINER" rm -f
     fi
@@ -189,8 +198,8 @@ verify_parity() {
     container_list=$(mktemp)
     trap 'rm -f "$host_list" "$container_list"' RETURN
 
-    (cd src && find . -name '*.py' | sort) > "$host_list"
-    docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' | sort" > "$container_list"
+    (cd src && eval "find . $SOURCE_FILES" | sort) > "$host_list"
+    docker exec "$CONTAINER" sh -c "cd /app/src && find . $SOURCE_FILES | sort" > "$container_list"
 
     if ! diff -q "$host_list" "$container_list" >/dev/null; then
         echo "error: host and container differ - the run would test the wrong code:" >&2
@@ -201,8 +210,8 @@ verify_parity() {
     # File lists matching is not enough: a stale *content* copy has the same
     # names. Compare a checksum of the tree, which is what actually gets run.
     local host_sum container_sum
-    host_sum=$( (cd src && find . -name '*.py' -exec md5sum {} +) | sort -k2 | md5sum | cut -d' ' -f1)
-    container_sum=$(docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' -exec md5sum {} +" | sort -k2 | md5sum | cut -d' ' -f1)
+    host_sum=$( (cd src && eval "find . $SOURCE_FILES -exec md5sum {} +") | sort -k2 | md5sum | cut -d' ' -f1)
+    container_sum=$(docker exec "$CONTAINER" sh -c "cd /app/src && find . $SOURCE_FILES -exec md5sum {} +" | sort -k2 | md5sum | cut -d' ' -f1)
     if [ "$host_sum" != "$container_sum" ]; then
         echo "error: host and container file lists match but contents differ - re-run without --no-sync." >&2
         return 1
