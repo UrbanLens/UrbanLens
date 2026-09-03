@@ -78,6 +78,33 @@ Two things are needed to light it up, and both are on our side:
    | A dev slot on chiron | `ul-<slug>_app_network` |
    | Production / staging | `urbanlens-production_app_network` / `urbanlens-staging_app_network` |
 
+### Scrape the hyphenated alias, not the underscored one
+
+`__address__` must resolve to **`urbanlens-app:8000`**, not `urbanlens_app:8000`
+and not a container IP.
+
+Prometheus and Alloy derive the `Host` header from `__address__`, and Django
+validates `Host` against `^([a-z0-9.-]+|\[...\])(?::([0-9]+))?$` *before* it
+ever consults `ALLOWED_HOSTS`. An underscore is not legal in a hostname, so the
+compose alias `urbanlens_app` fails that regex and the endpoint returns **400 for
+every request** - with a correct token, correct labels, correct network, and no
+hint in the metrics pipeline as to why. A container IP fails the same way unless
+the IP is in `ALLOWED_HOSTS`, and it changes on every recreate.
+
+The `app` service therefore carries a second network alias, `urbanlens-app`,
+which is a legal hostname; it must also appear in `UL_ALLOWED_HOSTS`. Relabel
+`__address__` to it:
+
+```alloy
+rule {
+  target_label = "__address__"
+  replacement  = "urbanlens-app:8000"
+}
+```
+
+`celery-metrics` is unaffected - it serves from a bare `http.server` with no
+Host validation, so its underscored container name works as a target.
+
 **Production and staging run on damballa, not chiron.** chiron's Alloy discovers
 containers on chiron only, so wiring the dev network up does not get production
 metrics - that needs an agent on damballa, which is a separate piece of work in

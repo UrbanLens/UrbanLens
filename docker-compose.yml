@@ -253,6 +253,15 @@ services:
       app_network:
         aliases:
           - urbanlens_app
+          # Hyphenated twin of the alias above, for anything that reaches this
+          # service over HTTP with a Host header - which today means a metrics
+          # scraper. Django validates Host against
+          # `^([a-z0-9.-]+|\[...\])(?::([0-9]+))?$` *before* consulting
+          # ALLOWED_HOSTS, and an underscore is not legal in a hostname, so
+          # `urbanlens_app` fails that regex and returns 400 no matter what
+          # ALLOWED_HOSTS contains. Scrape this name instead, and list it in
+          # UL_ALLOWED_HOSTS.
+          - urbanlens-app
       # Permanent, not just until ai-worker exists: only the assistant's tool
       # loop moves to ai-worker. The other AI features (trivia moderation,
       # trip suggestions, label style suggestions, document import, link

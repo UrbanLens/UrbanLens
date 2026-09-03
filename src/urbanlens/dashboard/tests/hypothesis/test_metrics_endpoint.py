@@ -607,3 +607,25 @@ class CeleryMetricsExporterServiceTests(SimpleTestCase):
         # Events cost a broker publish per task transition; a deployment not
         # collecting metrics should not pay for them.
         self.assertEqual(settings.CELERY_WORKER_SEND_TASK_EVENTS, settings.UL_METRICS_ENABLED)
+
+
+class MetricsScrapeTargetHostTests(SimpleTestCase):
+    """The scrape target has to be a name Django will accept as a Host."""
+
+    def test_app_has_a_hostname_legal_network_alias(self) -> None:
+        # Found the hard way on a real deploy: Prometheus/Alloy derive the Host
+        # header from __address__, and Django validates Host against a regex
+        # that has no underscore in it *before* consulting ALLOWED_HOSTS. So
+        # scraping the `urbanlens_app` alias returns 400 for every request -
+        # correct token, correct labels, correct network, no clue why.
+        compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
+        aliases = compose["services"]["app"]["networks"]["app_network"]["aliases"]
+        legal = [a for a in aliases if "_" not in a]
+        self.assertTrue(legal, f"app needs a network alias that is a legal hostname; got {aliases}. A scraper cannot use an underscored one.")
+
+    def test_django_really_rejects_the_underscored_alias(self) -> None:
+        # Pins the reason the alias above exists, so nobody 'simplifies' it away.
+        from django.http.request import split_domain_port
+
+        self.assertEqual(split_domain_port("urbanlens_app:8000"), ("", ""))
+        self.assertEqual(split_domain_port("urbanlens-app:8000"), ("urbanlens-app", "8000"))
