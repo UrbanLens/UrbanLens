@@ -27,18 +27,17 @@ Multiprocess aggregation is the subtle part; see :func:`_build_registry`.
 
 from __future__ import annotations
 
-import hmac
 import logging
 import os
 from typing import TYPE_CHECKING
 
-from django.conf import settings
 from django.http import HttpResponse
 from django.views import View
 import prometheus_client
 from prometheus_client import multiprocess
 
-from urbanlens.dashboard.services.security.client_ip import address_in_networks, client_ip, parse_networks
+from urbanlens.dashboard.services.core.metrics_auth import network_ok, token_ok
+from urbanlens.dashboard.services.security.client_ip import client_ip
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -165,10 +164,7 @@ class MetricsController(View):
             ``True`` when no allowlist is configured (the gate is off) or the
             resolved client address falls inside one of its networks.
         """
-        raw = settings.UL_METRICS_ALLOWED_CIDRS
-        if not raw:
-            return True
-        return address_in_networks(client_ip(request), parse_networks(raw))
+        return network_ok(client_ip(request))
 
     @staticmethod
     def _token_valid(request: HttpRequest) -> bool:
@@ -179,15 +175,6 @@ class MetricsController(View):
 
         Returns:
             ``True`` when no token is configured (the gate is off) or the
-            presented token matches. ``compare_digest`` keeps the comparison
-            constant-time, so a wrong token leaks nothing about how much of it
-            was right.
+            presented token matches.
         """
-        expected = settings.UL_METRICS_TOKEN
-        if not expected:
-            return True
-        header = request.headers.get("Authorization", "")
-        scheme, _, presented = header.partition(" ")
-        if scheme.lower() != "bearer":
-            return False
-        return hmac.compare_digest(presented.strip(), expected)
+        return token_ok(request.headers.get("Authorization", ""))

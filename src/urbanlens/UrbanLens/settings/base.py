@@ -357,6 +357,12 @@ CELERY_TIMEZONE = os.getenv("UL_CELERY_TIMEZONE", "UTC")
 CELERY_TASK_ALWAYS_EAGER = os.getenv("UL_CELERY_TASK_ALWAYS_EAGER", "False").lower() in {"true", "1", "yes"}
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SEND_SENT_EVENT = True
+# Workers publish task-received/started/succeeded/failed to the event stream,
+# which is what the celery-metrics exporter consumes. Off by default in Celery.
+# Tied to UL_METRICS_ENABLED so a deployment that is not collecting metrics does
+# not pay for the events: each one is an extra broker publish per task
+# transition, and with nothing consuming them they would just be discarded.
+CELERY_WORKER_SEND_TASK_EVENTS = UL_METRICS_ENABLED
 CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1

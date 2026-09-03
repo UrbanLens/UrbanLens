@@ -194,7 +194,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     process_role: str = Field(
         default="unspecified",
         description=(
-            "What this process is: web, websocket, worker, panels, beat, or sandbox. Set per service in "
+            "What this process is: web, websocket, worker, panels, beat, metrics, or sandbox. Set per service in "
             "docker-compose.yml. Only 'sandbox' may hand untrusted uploaded bytes to a parser (Pillow, ffmpeg, "
             "LibreOffice, GDAL, zipfile); see UL_UNTRUSTED_PARSE_POLICY."
         ),

@@ -350,14 +350,15 @@ class MetricsDeploymentWiringTests(SimpleTestCase):
         conf = (REPO_ROOT / "src/urbanlens/config/nginx/django.conf").read_text()
         self.assertRegex(conf, r"location\s*=\s*/metrics\s*\{[^}]*return\s+404", "The public vhost proxies /metrics to the app.")
 
-    def test_only_the_web_service_opts_in(self) -> None:
-        # Enabling it per service is the point: app-ws serves only /ws/, so its
-        # HTTP metrics would be empty, and a worker has no HTTP surface at all.
+    def test_each_service_that_could_serve_metrics_decides_explicitly(self) -> None:
+        # Enabling it per service is the point, and every service that *could*
+        # serve an endpoint has to say which way - including the ones saying no.
         compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
         declared = {name: (service.get("environment") or {}).get("UL_METRICS_ENABLED") for name, service in compose["services"].items() if "UL_METRICS_ENABLED" in (service.get("environment") or {})}
         self.assertEqual(declared.get("app"), "${UL_METRICS_ENABLED:-false}", "The web service should follow the env var, defaulting off.")
+        self.assertEqual(declared.get("celery-metrics"), "${UL_METRICS_ENABLED:-false}", "The Celery exporter follows the same flag: it exits rather than binding an unguarded port, so deploying it while metrics are off is a restart loop.")
         self.assertEqual(declared.get("app-ws"), "false", "app-ws must pin this off explicitly - it shares .env with app, and environment: outranks env_file:, so merely omitting it would let a UL_METRICS_ENABLED meant for app enable a second endpoint here.")
-        self.assertEqual(set(declared), {"app", "app-ws"})
+        self.assertEqual(set(declared), {"app", "app-ws", "celery-metrics"})
 
     def test_every_service_sharing_the_env_file_decides_explicitly(self) -> None:
         # The trap this guards: `environment:` outranks `env_file:`, so a service
@@ -476,3 +477,133 @@ class CeleryQueueDepthCollectorTests(SimpleTestCase):
             registry = _build_registry()
         names = {type(c).__name__ for c in registry._collector_to_names}
         self.assertIn("CeleryQueueDepthCollector", names)
+
+
+class CeleryEventMetricsTests(SimpleTestCase):
+    """Translating Celery's event stream into metrics."""
+
+    def _metrics(self, known=("urbanlens.tasks.real_task",)):
+        from prometheus_client import CollectorRegistry
+
+        from urbanlens.dashboard.services.core.celery_events import CeleryEventMetrics
+
+        return CeleryEventMetrics(known_tasks=known, registry=CollectorRegistry())
+
+    def _value(self, metrics, name, **labels):
+        return metrics.registry.get_sample_value(name, labels) or 0.0
+
+    def test_succeeded_records_outcome_and_runtime(self) -> None:
+        m = self._metrics()
+        m.on_task_event({"type": "task-succeeded", "runtime": 2.5}, "urbanlens.tasks.real_task")
+        self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task="urbanlens.tasks.real_task", state="succeeded"), 1.0)
+        self.assertEqual(self._value(m, "urbanlens_celery_task_runtime_seconds_count", task="urbanlens.tasks.real_task"), 1.0)
+        self.assertEqual(self._value(m, "urbanlens_celery_task_runtime_seconds_sum", task="urbanlens.tasks.real_task"), 2.5)
+
+    def test_failed_records_outcome_but_no_runtime(self) -> None:
+        # A failed task's duration is the time to the exception, which is not
+        # comparable to a successful run - folding it in would drag the latency
+        # percentiles toward whatever the failure happened to cost.
+        m = self._metrics()
+        m.on_task_event({"type": "task-failed", "runtime": 99.0}, "urbanlens.tasks.real_task")
+        self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task="urbanlens.tasks.real_task", state="failed"), 1.0)
+        self.assertEqual(self._value(m, "urbanlens_celery_task_runtime_seconds_count", task="urbanlens.tasks.real_task"), 0.0)
+
+    def test_transitions_are_not_counted_as_outcomes(self) -> None:
+        # task-received and task-started precede every task. Counting them
+        # would double- or triple-count each one against its real outcome.
+        m = self._metrics()
+        for event_type in ("task-sent", "task-received", "task-started"):
+            m.on_task_event({"type": event_type}, "urbanlens.tasks.real_task")
+        total = sum(
+            self._value(m, "urbanlens_celery_tasks_total", task="urbanlens.tasks.real_task", state=state)
+            for state in ("succeeded", "failed", "rejected", "revoked", "retried")
+        )
+        self.assertEqual(total, 0.0)
+        # ...but they are still counted as events, so the stream is observable.
+        self.assertEqual(self._value(m, "urbanlens_celery_events_total", type="task-started"), 1.0)
+
+    def test_unknown_task_names_collapse_to_one_bucket(self) -> None:
+        # Cardinality guard: a worker on a different build mid-deploy must not
+        # be able to mint a new series per name it reports.
+        from urbanlens.dashboard.services.core.celery_events import UNREGISTERED
+
+        m = self._metrics()
+        for name in ("some.task.a", "some.task.b", "some.task.c"):
+            m.on_task_event({"type": "task-succeeded", "runtime": 1.0}, name)
+        self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task=UNREGISTERED, state="succeeded"), 3.0)
+        for name in ("some.task.a", "some.task.b", "some.task.c"):
+            with self.subTest(name=name):
+                self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task=name, state="succeeded"), 0.0)
+
+    def test_a_none_task_name_does_not_crash(self) -> None:
+        # Only task-received carries the name; an event arriving before it (or
+        # after a restart dropped the state) resolves to None.
+        m = self._metrics()
+        m.on_task_event({"type": "task-succeeded", "runtime": 1.0}, None)
+        from urbanlens.dashboard.services.core.celery_events import UNREGISTERED
+
+        self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task=UNREGISTERED, state="succeeded"), 1.0)
+
+    def test_runtime_buckets_cover_the_task_time_limit(self) -> None:
+        # CELERY_TASK_TIME_LIMIT is where a task is killed, so that boundary is
+        # a bucket - otherwise "slow" and "hit the limit" land together in +Inf.
+        from urbanlens.dashboard.services.core.celery_events import RUNTIME_BUCKETS
+
+        self.assertIn(float(settings.CELERY_TASK_TIME_LIMIT), RUNTIME_BUCKETS)
+        self.assertEqual(list(RUNTIME_BUCKETS), sorted(RUNTIME_BUCKETS))
+
+
+class MetricsAuthSharedGateTests(SimpleTestCase):
+    """The web view and the Celery exporter must use one gate, not two."""
+
+    def test_controller_delegates_to_the_shared_gate(self) -> None:
+        # The failure this prevents: a second copy of "is this scraper
+        # authorized" drifting, so one endpoint ends up open and nothing says so.
+        source = (REPO_ROOT / "src/urbanlens/dashboard/controllers/metrics.py").read_text()
+        exporter = (REPO_ROOT / "src/urbanlens/dashboard/management/commands/celery_metrics_exporter.py").read_text()
+        for name, text in (("controller", source), ("exporter", exporter)):
+            with self.subTest(module=name):
+                self.assertIn("from urbanlens.dashboard.services.core.metrics_auth import", text)
+                self.assertNotIn("compare_digest", text, "The token comparison belongs in metrics_auth, not here.")
+
+    @override_settings(UL_METRICS_TOKEN="tok", UL_METRICS_ALLOWED_CIDRS="")
+    def test_token_gate(self) -> None:
+        from urbanlens.dashboard.services.core.metrics_auth import token_ok
+
+        self.assertTrue(token_ok("Bearer tok"))
+        self.assertTrue(token_ok("bearer tok"))
+        self.assertFalse(token_ok("Bearer to"))
+        self.assertFalse(token_ok("Basic tok"))
+        self.assertFalse(token_ok(""))
+
+    @override_settings(UL_METRICS_TOKEN="", UL_METRICS_ALLOWED_CIDRS="10.2.0.0/24")
+    def test_network_gate(self) -> None:
+        from urbanlens.dashboard.services.core.metrics_auth import network_ok
+
+        self.assertTrue(network_ok("10.2.0.9"))
+        self.assertFalse(network_ok("203.0.113.7"))
+        self.assertFalse(network_ok("garbage"))
+
+    @override_settings(UL_METRICS_TOKEN="", UL_METRICS_ALLOWED_CIDRS="")
+    def test_gates_configured_is_false_when_both_empty(self) -> None:
+        from urbanlens.dashboard.services.core.metrics_auth import gates_configured
+
+        self.assertFalse(gates_configured())
+
+
+class CeleryMetricsExporterServiceTests(SimpleTestCase):
+    """The exporter service's deployment shape."""
+
+    def test_exporter_port_is_not_published(self) -> None:
+        # It must be reachable only on the compose network; the scraping agent
+        # joins that network rather than the port being exposed to the host.
+        compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
+        service = compose["services"]["celery-metrics"]
+        self.assertNotIn("ports", service, "celery-metrics must not publish its port to the host.")
+        self.assertEqual(service["labels"]["prometheus_port"], "8002")
+        self.assertEqual(service["labels"]["prometheus_scrape"], service["environment"]["UL_METRICS_ENABLED"])
+
+    def test_worker_task_events_follow_the_metrics_flag(self) -> None:
+        # Events cost a broker publish per task transition; a deployment not
+        # collecting metrics should not pay for them.
+        self.assertEqual(settings.CELERY_WORKER_SEND_TASK_EVENTS, settings.UL_METRICS_ENABLED)

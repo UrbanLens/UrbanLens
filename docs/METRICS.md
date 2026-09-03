@@ -3,9 +3,9 @@
 The `app` service can expose a Prometheus scrape endpoint at `/metrics`. It is
 off by default and unrouted when off.
 
-Scope: HTTP request metrics for the gunicorn web process. Celery task metrics
-and WebSocket metrics are deliberately not part of this - see
-[What is not here](#what-is-not-here).
+Scope: HTTP request metrics for the gunicorn web process, Celery queue depth,
+and Celery task outcomes from a dedicated exporter service. WebSocket metrics
+are deliberately not part of this - see [What is not here](#what-is-not-here).
 
 ## Turning it on
 
@@ -176,6 +176,47 @@ fire. Alert on `urbanlens_celery_broker_up == 0` as well as on depth.
 Each queue is drained by exactly one container, so a rising depth names the
 container to look at - see `services/sandbox/queues.py`.
 
+### Celery task outcomes (`celery-metrics` service)
+
+A second endpoint, on its own service, port 8002, **not published to the host**.
+
+| Series | What it answers |
+|---|---|
+| `urbanlens_celery_tasks_total{task,state}` | Success/failure rate per task |
+| `urbanlens_celery_task_runtime_seconds{task}` | How long tasks take |
+| `urbanlens_celery_workers_online` | How many workers are heartbeating |
+| `urbanlens_celery_events_total{type}` | Whether the event stream itself is flowing |
+
+Its own process, deliberately. A thread in the web tier would run once per
+gunicorn worker and triple-count every event; and the Celery workers cannot be
+scraped at all, because `media-worker` and `media-worker-batch` run
+`cap_drop: ALL` on an isolated network precisely so they have no inbound
+surface. Every worker already publishes to the broker, so one consumer covers
+all six.
+
+Two details worth knowing:
+
+- **`runtime` is recorded for successes only.** A failed task's duration is the
+  time to the exception, which is not comparable to a successful run - folding
+  the two together drags the latency percentiles toward whatever the failure
+  mode happened to cost.
+- **Task names are checked against the local registry**, and anything
+  unrecognised collapses to `task="unregistered"`. Names come from workers, not
+  from requests, but a rolling deploy can still introduce values, and an
+  unbounded label set is how a Prometheus instance falls over.
+
+`CELERY_WORKER_SEND_TASK_EVENTS` follows `UL_METRICS_ENABLED`, so a deployment
+not collecting metrics does not pay a broker publish per task transition. Note
+`urbanlens_celery_workers_online` and the heartbeat events work regardless of
+that flag - only the per-task series need it.
+
+The gate is the same code as the web endpoint
+(`services/core/metrics_auth.py`), reached from a bare `http.server` handler
+rather than a Django view. One implementation, two transports: a second copy is
+how one endpoint ends up open while the other is guarded and nothing says so.
+The command refuses to start rather than binding an unguarded port on a
+deployed environment.
+
 `PROMETHEUS_EXPORT_MIGRATIONS` is off: it runs a `MigrationExecutor` plan against
 the database on every scrape, and `/health/ready` already reports migration state
 to the prober that acts on it.
@@ -185,20 +226,6 @@ Database and cache instrumentation would need `DATABASES["ENGINE"]` swapped to
 it puts a third-party wrapper in the path of every PostGIS query.
 
 ## What is not here
-
-- **Celery *task* metrics** - per-task success, failure and duration. Queue
-  depth is covered (see above); this is not. It needs the worker to report what
-  it did, which means either an event-stream consumer or a push, and that is a
-  separate piece of infrastructure rather than a bigger version of the
-  collector. Note `django-prometheus` does **not** help here: it ships no Celery
-  instrumentation at all, contrary to the handoff note that prompted this work -
-  checked against 2.5.0.
-
-  The constraint that decides the design: `media-worker` and `media-worker-batch`
-  run `cap_drop: ALL` on an isolated network specifically so they have no
-  inbound surface. Giving every worker its own scrape endpoint would undo that,
-  so a broker-side consumer (or a push) is the option that covers all six worker
-  containers uniformly.
 
 - **`app-ws` (Daphne).** Left off deliberately. nginx routes only `/ws/` there,
   so its HTTP request metrics would be an empty set of series; what would

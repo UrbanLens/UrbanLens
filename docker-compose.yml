@@ -786,6 +786,55 @@ services:
     cpus: ${CPU_LIMIT__CELERY_BEAT:-${CPU_LIMIT:-0.5}}
     mem_limit: ${MEM_LIMIT__CELERY_BEAT:-${MEM_LIMIT:-512m}}
 
+  # Consumes the Celery event stream and exposes it as Prometheus metrics.
+  #
+  # Its own process, not a thread in an existing one: the web tier runs
+  # WEB_CONCURRENCY gunicorn workers and each would open its own receiver and
+  # triple-count every event, and the Celery workers cannot be scraped at all -
+  # the two media-workers run cap_drop: ALL on an isolated network precisely so
+  # they have no inbound surface. Every worker already publishes to the broker,
+  # so one consumer here covers all six of them.
+  celery-metrics:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_metrics
+    build:
+      <<: *app-build
+    entrypoint:
+      ["/docker-entrypoint.sh", "python", "src/urbanlens/manage.py"]
+    command: ["celery_metrics_exporter", "--port", "8002"]
+    restart: unless-stopped
+    depends_on:
+      valkey:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log/urbanlens
+    networks:
+      - app_network
+    env_file: *app-env-file
+    environment:
+      <<: *app-env
+      UL_PROCESS_ROLE: metrics
+      # Follows `app`. The command exits rather than binding an unguarded port,
+      # so this service simply restarts in a loop if metrics are off - hence
+      # deploying it is conditional on the same flag.
+      UL_METRICS_ENABLED: ${UL_METRICS_ENABLED:-false}
+    labels:
+      prometheus_scrape: "${UL_METRICS_ENABLED:-false}"
+      prometheus_port: "8002"
+      prometheus_path: "/metrics"
+    # No ports: - deliberately unpublished. Only the compose network reaches
+    # 8002, and the scraping agent joins that network. The bearer-token gate
+    # applies anyway; this is the second layer, not the only one.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    # One event-loop process holding counters in memory. It never imports a task
+    # body, so none of the GeoPandas/Shapely/Pillow weight the real workers
+    # carry applies here.
+    cpus: ${CPU_LIMIT__CELERY_METRICS:-${CPU_LIMIT:-0.5}}
+    mem_limit: ${MEM_LIMIT__CELERY_METRICS:-${MEM_LIMIT:-256m}}
+
   # clamd daemon every upload is scanned through before
   # it's ever written to permanent storage
   clamav:
