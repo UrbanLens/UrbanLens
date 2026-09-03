@@ -623,9 +623,20 @@ Worked around for this merge by running with `--ignore=src/urbanlens/dashboard/t
 test_query_records.py` rather than rebuilding the shared container mid-session (another agent was
 concurrently using the same branch/host - see [[verify-attribution-before-reverting-shared-diffs]] -
 so an image rebuild felt too disruptive to force unilaterally). Whoever next has a quiet window
-should rebuild `urbanlens_development_main_test_runner` (`docker compose build test_runner` or
-equivalent) so `test_query_records.py` runs again; until then that one file's coverage is silently
-absent from every `bin/run_tests.sh` run, not just this one.
+should rebuild `urbanlens_development_main_test_runner` (`docker compose --profile test up -d
+--build test-runner`) so `test_query_records.py` runs again; until then that one file's coverage is
+silently absent from every `bin/run_tests.sh` run, not just this one.
+
+**Still open 2026-09-03, and it is five packages, not one.** `bin/run_tests.sh` now checks the
+container's venv against `pyproject.toml`'s dev group on every run and warns rather than letting a
+test blame the branch. Pointed at this container it reports:
+
+    diff-cover  django-perf-rec  pytest-randomly  pytest-xdist  schemathesis
+
+`pytest-randomly` and `pytest-xdist` back this script's own `--shuffle` and `--parallel` flags, so
+those two have been advertised and broken in this container for as long as they have existed -
+worth knowing before trusting either. The rebuild is still the fix, and is still an operator action
+on a shared container rather than something a session should force.
 
 ## OPEN 2026-08-25: forms submit and save every field, not the ones that changed
 
@@ -1335,7 +1346,29 @@ branch that has not received it yet, and merging forward is enough to stop it re
 (An earlier draft of this entry claimed the checker lacked a leaf check. That was wrong - verified by
 running it against the cloned main checkout.)
 
+**The named conflict is gone as of 2026-09-03.** `0002_v0_4_0b0` no longer exists on `origin/main`
+at all - the migrations were renumbered, and `0002` is now
+`0002_boundary_emailsendlog_externalvisitparticipant_and_more`. Walking the `dependencies` of all 31
+migration files on `origin/main` finds a **single** leaf, `0031_v0_7_0_indexes`, and "multiple leaf
+nodes" is precisely what that error reports - so it cannot fire.
+
+That is narrower than this entry's headline, which is left open deliberately: it says `main` cannot
+*start from an empty database*, and one leaf only rules out this particular cause. Confirming the
+whole claim means what found it - `bin/dev_env.py create --branch main` - since a data migration
+that fails on empty tables would look nothing like this and is not visible from the graph.
+
 ## ⚠ Dev environment `devs1` is down - read this before restarting anything (2026-08-14)
+
+**Checked 2026-09-03: no `urbanlens_devs1_*` container exists on this host any more**, so the
+runbook below has nothing to act on and the two entries it points at (`the dev database is 18
+migrations behind the code`, `the dev stack's app container has been unhealthy`) describe a stack
+that is gone. The checkout at `/projects/environments/dev/s1` is still on disk and belongs to
+another user, so this is recorded rather than archived - someone could bring the stack back, and
+these would then be true again of a database 18 months of migrations further behind.
+
+**The one part that outlives the environment is item 4**, the `chown` after every `docker cp`. That
+is a property of uid 568 on the host versus uid 1001 in the image, not of `devs1`, and it still
+applies to every container here - `bin/run_tests.sh` does it for exactly this reason.
 
 Four entries below describe one situation. They were filed in discovery order; this is the order
 they must be *acted* on, because fixing the visible problem first breaks something currently healthy.
