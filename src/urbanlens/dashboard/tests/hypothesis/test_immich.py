@@ -32,7 +32,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.fields import EncryptedTextField
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.immich.gateway import GatewayRequestError, ImmichGateway, MapMarker, SearchAsset
@@ -525,6 +525,14 @@ class ImportImmichPhotosTaskTests(TestCase):
         image = Image.objects.get(pin=self.pin, profile=self.profile)
         self.assertEqual(image.source_url, self.account.asset_web_url("a1"))
         self.assertTrue(PinVisit.objects.filter(pin=self.pin, source=VisitSource.PHOTO).exists())
+
+    def test_imported_rows_are_labelled_immich_not_upload(self) -> None:
+        # Omitting source= defaults the row to UPLOAD, which is indistinguishable
+        # from the upload form to every source-keyed consumer: the Media gallery's
+        # per-source tabs, achievements' UPLOAD-filtered counts, and the
+        # UPLOAD-gated reputation rules all silently miscount these.
+        self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
+        self.assertEqual(Image.objects.get(pin=self.pin, profile=self.profile).source, ImageSource.IMMICH)
 
     def test_skips_asset_already_imported_by_checksum(self) -> None:
         content = b"already-here"

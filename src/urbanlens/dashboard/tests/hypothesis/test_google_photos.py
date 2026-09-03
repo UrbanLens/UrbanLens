@@ -25,7 +25,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.photos.google import GooglePhotosGateway, PickedMediaItem, PickerSession, media_item_web_url
 
@@ -223,6 +223,11 @@ class ImportGooglePhotosTaskTests(TestCase):
         image = Image.objects.get(pin=self.pin, profile=self.profile)
         self.assertEqual(image.source_url, media_item_web_url("item1"))
         self.assertTrue(PinVisit.objects.filter(pin=self.pin, source=VisitSource.PHOTO).exists())
+        # Omitting source= defaults the row to UPLOAD, which is indistinguishable
+        # from the upload form to every source-keyed consumer: the Media gallery's
+        # per-source tabs, achievements' UPLOAD-filtered counts, and the
+        # UPLOAD-gated reputation rules all silently miscount these.
+        self.assertEqual(image.source, ImageSource.GOOGLE_PHOTOS)
 
     def test_skips_item_already_imported_by_checksum(self) -> None:
         content = b"already-here"

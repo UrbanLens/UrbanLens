@@ -2023,7 +2023,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
 
     from django.core.files.base import ContentFile
 
-    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.model import Image, ImageSource
     from urbanlens.dashboard.models.immich.model import ImmichAccount
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -2073,6 +2073,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
                 pin=pin,
                 location=pin.location,
                 profile=profile,
+                source=ImageSource.IMMICH,
                 checksum=checksum,
                 file_size=len(content),
                 source_url=account.asset_web_url(asset_id),
@@ -2809,7 +2810,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
     from django.core.files.base import ContentFile
 
     from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
-    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.model import Image, ImageSource
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.photos.google import GooglePhotosGateway, media_item_web_url, session_items_cache_key
@@ -2867,6 +2868,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
                 pin=pin,
                 location=pin.location,
                 profile=profile,
+                source=ImageSource.GOOGLE_PHOTOS,
                 checksum=checksum,
                 file_size=len(content),
                 source_url=media_item_web_url(item_id),
