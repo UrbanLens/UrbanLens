@@ -77,6 +77,26 @@ have been blind to exactly this. With the setting off the same loss emits one
 `task-failed`, so **`urbanlens_celery_tasks_total{state="failed"}` is now a real
 alerting signal for it** — you may want a rule on it.
 
+## This was cheaper to trigger than "an extreme image"
+
+Your note scopes the risk to an accident — "plausible for an extreme image, not
+for a typical one" — and concludes it is not urgent. That holds for the OOM
+path. It does not hold once the input is chosen rather than encountered.
+
+`media-worker` exists to decode bytes a stranger uploaded, and its whole stated
+threat model (`services/sandbox/guard.py`, `docs/MEDIA_PIPELINE.md`) is decoder
+**memory-corruption bugs** — which is to say, inputs that kill the child. A
+segfault in libwebp or libtiff produces the same `WorkerLostError` as an OOM and
+took the same unbounded branch. It runs `--concurrency=2`.
+
+So: one upload that reliably crashes the decoder permanently consumed one of two
+slots, emitting no event and storing no result. Two consumed the entire
+interactive media queue, and the container never restarted, so there was no
+`restartCount`, no crash-loop, and nothing in either repo watching. That is a
+two-request denial of service against media processing with no signal attached,
+which is a different urgency than the accidental case. It is closed now, but it
+is the reason we treated this as worth doing immediately rather than queueing.
+
 ## Why not option 2 (a dedicated queue with `acks_late = False`)
 
 Not because it was more work — it would have been nearly free. We already run
@@ -117,8 +137,12 @@ the call explicitly.
 ## Still yours
 
 - **Raise Celery off `replicas: 0`.** Nothing in this repo blocks it now.
-- **Backup leg 2** should start running on its schedule once workers are up.
-  Worth confirming it actually does — it has never run, so it is unexercised
-  rather than merely idle.
+- **Backup leg 2** is wired and will fire on its own once beat and a worker are
+  up: `CELERY_BEAT_SCHEDULE["scheduled-database-backup-check"]` runs
+  `run_scheduled_database_backup` at `crontab(minute=2)`, i.e. hourly, and the
+  task itself decides whether a dump is actually due from `UL_BACKUP_ENABLED`
+  and `UL_BACKUP_FREQUENCY_HOURS` (default 24). Nothing further is needed from
+  either repo. Still worth watching the first run land rather than assuming it —
+  it has never executed, so it is unexercised rather than merely idle.
 - **Consider alerting on `urbanlens_celery_tasks_total{state="failed"}`**, per
   correction 4. A task that now fails once is visible; nothing yet watches it.

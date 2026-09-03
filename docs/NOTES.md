@@ -711,6 +711,13 @@ task exceeding `CELERY_TASK_TIME_LIMIT`, which is far easier to hit than an OOM.
 so a version bump that changes this surfaces as a test failure rather than a
 silently different runtime.
 
+Worth being concrete about the cost, because "a task fails twice" undersells it:
+`media-worker` decodes bytes a stranger uploaded and runs `--concurrency=2`, and
+its threat model is decoder memory-corruption bugs - inputs that kill the child.
+A segfault raises the same `WorkerLostError` as an OOM. Under the old settings
+one such upload permanently held one of two slots, silently; two held the whole
+interactive media queue, with the container still reporting healthy.
+
 This is the bound on *how many times*; whether a second run is safe at all is a
 separate question, answered per task — the duplicate-delivery survey in
 `docs/reports/2026-08-11-codebase-audit.md` covers the side-effecting families.

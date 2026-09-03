@@ -5607,3 +5607,32 @@ what makes the missing row-level state worth fixing now rather than before.
 Likely shape: a `task_failure` receiver (or a shared task base class) that
 records the failure on the row, plus a UI state for it. Wants a decision on
 whether failed uploads are retryable by the user or discarded.
+
+## OPEN 2026-09-03: `UL_METRICS_ENABLED=true` on an image without django-prometheus crash-loops every Django process
+
+Reproduced, not theorised: `docker exec urbanlens_development_main_celery_worker
+python -c "import django; django.setup()"` on an image built before
+`django-prometheus` entered `pyproject.toml` dies with a bare
+`ModuleNotFoundError: No module named 'django_prometheus'`.
+
+`settings/base.py` appends the app to `INSTALLED_APPS` and its two middlewares
+whenever `UL_METRICS_ENABLED` is on, with no guard on whether the package is
+importable and none on process role. That is fine when image and settings ship
+together, which is the normal path. It is not fine because **the env var is
+routinely changed independently of an image build** - flipping metrics on for an
+existing deployment takes down app, app-ws, beat and all four workers at once,
+with an error that names a missing module rather than the setting that required
+it.
+
+Two separable fixes, neither done:
+
+1. Raise `ImproperlyConfigured` naming `UL_METRICS_ENABLED` when the import
+   fails, so the operator sees the cause instead of the symptom.
+2. Gate the app and middleware on process role. Only web processes serve
+   `/metrics`; workers register the middleware and never run it. `UL_PROCESS_ROLE`
+   already exists for exactly this kind of distinction, but is defined further
+   down the settings file than the `INSTALLED_APPS` block, so this needs a small
+   reordering rather than a one-line change.
+
+Found while verifying the Celery requeue fix, from the metrics work in
+`7b5c55236` - i.e. this is a gap in that change, not a pre-existing one.
