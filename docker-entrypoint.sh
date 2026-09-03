@@ -42,6 +42,40 @@ for dir in \
     fi
 done
 
+# Prometheus multiprocess directory. Deliberately NOT one of the shared volumes
+# above, and deliberately not added to that loop: every path in it is a named
+# volume mounted into several services at once, and prometheus_client aggregates
+# every .db file it finds in this directory into one scrape. Sharing it would
+# blend app, app-ws and all four celery workers into a single set of numbers
+# attributed to whichever container was scraped. This path is plain container
+# filesystem, so each service gets its own.
+#
+# Cleared, not just created: the files are keyed by pid, they outlive the
+# processes that wrote them across a `docker restart` of the same container, and
+# a stale one is summed into every later scrape. gunicorn clears it again in its
+# on_starting hook, after migrations have run - see gunicorn.conf.py.
+#
+# Every step here is non-fatal, unlike the loop above, and that asymmetry is
+# deliberate. Those directories are the app's ability to serve; this one is
+# observability. A container that cannot write metrics must still start - and
+# the failure mode being guarded against is on record: `set -e` plus an
+# unprivileged container turned a failing chown into a crash loop whose only
+# symptom was "Operation not permitted". `/var/run` is root-owned, so mkdir here
+# fails for exactly the services that declare `user:` and drop CAP_CHOWN. They
+# are not given PROMETHEUS_MULTIPROC_DIR today, which makes this belt and
+# braces rather than load-bearing - which is the point.
+if [ -n "${PROMETHEUS_MULTIPROC_DIR:-}" ]; then
+    if mkdir -p "${PROMETHEUS_MULTIPROC_DIR}" 2>/dev/null; then
+        rm -f "${PROMETHEUS_MULTIPROC_DIR}"/*.db 2>/dev/null || true
+        if [ "$(id -u)" = "0" ]; then
+            chown -R appuser:appuser "${PROMETHEUS_MULTIPROC_DIR}" 2>/dev/null ||
+                echo "entrypoint: chown of ${PROMETHEUS_MULTIPROC_DIR} failed; metrics may be unavailable" >&2
+        fi
+    else
+        echo "entrypoint: could not create ${PROMETHEUS_MULTIPROC_DIR}; metrics will be unavailable" >&2
+    fi
+fi
+
 # Decided here, not in the image, so one image can run as either environment.
 # staging/production bake the source in and should keep the bytecode they
 # compile - discarding it makes every worker recompile whatever the build-time

@@ -133,6 +133,19 @@ if app_settings.demo_mode:
 
     urlpatterns += [path("demo/start/", DemoLoginView.as_view(), name="demo.start")]
 
+# Prometheus scrape endpoint, registered for the same reason the demo route is:
+# an instance that has not opted in has no such URL, rather than a view that
+# decides to refuse. What it serves is a map of the application - every view
+# name that has served a request, with its rate, error rate and latency - so it
+# is guarded by token and/or network allowlist on top of this (see
+# controllers/metrics.py), and nginx blocks the path on the public vhost.
+# No trailing slash: that is the conventional path, and it is what Prometheus's
+# own default metrics_path expects.
+if app_settings.metrics_enabled:
+    from urbanlens.dashboard.controllers.metrics import MetricsController
+
+    urlpatterns += [path("metrics", MetricsController.as_view(), name="metrics")]
+
 urlpatterns += [
     # 404 catch-all - must be last. Anything not explicitly routed above (including
     # Django/library default URLs we haven't deliberately wired up) lands here.

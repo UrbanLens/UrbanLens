@@ -117,6 +117,18 @@ INSTALLED_APPS = [
     "drf_spectacular",
 ]
 
+# Prometheus instrumentation, registered only on a process that serves /metrics.
+# Its middleware is what populates the counters, so a process that cannot be
+# scraped has nothing to gain from paying for them - and leaving them out keeps
+# the default configuration (and the test suite) on exactly the middleware
+# stack it had before.
+UL_METRICS_ENABLED = _app_settings.metrics_enabled
+UL_METRICS_TOKEN = _app_settings.metrics_token
+UL_METRICS_ALLOWED_CIDRS = _app_settings.metrics_allowed_cidrs
+
+if UL_METRICS_ENABLED:
+    INSTALLED_APPS.append("django_prometheus")
+
 # Routes the websocket protocol (see UrbanLens/asgi.py); HTTP keeps using
 # WSGI_APPLICATION in production (gunicorn) - only the dedicated `app-ws`
 # daphne container and local `runserver` actually serve ASGI traffic.
@@ -151,6 +163,31 @@ MIDDLEWARE = [
     # viewer the request is actually acting as.
     "urbanlens.dashboard.middleware.WriteSourceMiddleware",
 ]
+
+if UL_METRICS_ENABLED:
+    # Outermost and innermost respectively, which is what django-prometheus
+    # documents and what makes the pair meaningful: the difference between the
+    # two timers is the time the rest of this stack costs. Anything registered
+    # between them is measured; anything outside the first is not.
+    MIDDLEWARE.insert(0, "django_prometheus.middleware.PrometheusBeforeMiddleware")
+    MIDDLEWARE.append("django_prometheus.middleware.PrometheusAfterMiddleware")
+
+# Buckets for the per-view latency histogram. Deliberately narrower than
+# django-prometheus's default: every bucket is a stored time series per view and
+# method, and the defaults spend their resolution below 100ms, which is finer
+# than anything here resolves. These straddle what this app actually serves -
+# cached fragments in tens of milliseconds, map and pin pages in hundreds, an
+# import or an AI-backed panel in seconds.
+#
+# The 120 is nginx's proxy_read_timeout (config/nginx/django.conf), so requests
+# the proxy gave up on fall in their own bucket instead of being lumped into
+# +Inf with everything else slow. Keep the two in step if that timeout moves.
+PROMETHEUS_LATENCY_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, float("inf"))
+
+# Off deliberately. django-prometheus's migration gauges run a MigrationExecutor
+# plan against the database on every scrape, and /health/ready already reports
+# migration state to the prober that acts on it.
+PROMETHEUS_EXPORT_MIGRATIONS = False
 
 AUTHENTICATION_BACKENDS = [
     "social_core.backends.google.GoogleOAuth2",

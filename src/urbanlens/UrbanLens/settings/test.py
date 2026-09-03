@@ -92,6 +92,13 @@ UL_DIRECT_INFERENCE_POLICY = "allow"
 # boundary itself set UL_AI_WORKER_ENABLED = False with override_settings.
 UL_AI_WORKER_ENABLED = True
 
+# Pinned off so the suite is deterministic whatever the developer's .env says.
+# It is read at import time to decide whether /metrics is routed and whether the
+# django-prometheus middleware is installed, so a machine with metrics enabled
+# would otherwise run the suite against a different URLconf and middleware stack
+# than CI does. The tests that need it on flip it explicitly.
+UL_METRICS_ENABLED = False
+
 # model_bakery's default related-object generation collides with the
 # create_user_profile post_save signal (see urbanlens.core.tests.baker).
 BAKER_CUSTOM_CLASS = "urbanlens.core.tests.baker.SignalSafeBaker"

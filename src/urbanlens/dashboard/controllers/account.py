@@ -39,6 +39,7 @@ from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.services.admin.site_admin import should_redirect_to_site_admin
 from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT as _WEBAUTHN_PENDING_REDIRECT_KEY, SESSION_WEBAUTHN_PENDING_USER as _WEBAUTHN_PENDING_USER_KEY
 from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
+from urbanlens.dashboard.services.security.client_ip import client_ip
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -257,7 +258,7 @@ def _is_ip_locked_out(request: HttpRequest) -> bool:
     max_attempts = SiteSettings.get_current().login_ip_max_attempts
     if max_attempts <= 0:
         return False
-    attempts = int(cache.get(_login_ip_attempts_key(_client_ip(request))) or 0)
+    attempts = int(cache.get(_login_ip_attempts_key(client_ip(request))) or 0)
     return attempts >= max_attempts
 
 
@@ -282,11 +283,11 @@ def _record_login_ip_failure(request: HttpRequest) -> int:
     if max_attempts <= 0:
         return 0
 
-    key = _login_ip_attempts_key(_client_ip(request))
+    key = _login_ip_attempts_key(client_ip(request))
     attempts = _bump_counter(key, settings.login_lockout_minutes * 60)
 
     if attempts >= max_attempts:
-        logger.warning("Login throttled for IP %r after %d failed attempts", _client_ip(request), attempts)
+        logger.warning("Login throttled for IP %r after %d failed attempts", client_ip(request), attempts)
 
     return attempts
 
@@ -1309,33 +1310,6 @@ def _process_pending_invitations(user: User, invite_token: str | None = None) ->
 # -- Passphrase suggestions --------------------------------------------------
 
 
-def _client_ip(request: HttpRequest) -> str:
-    """Client IP for per-IP rate limiting (login, passphrases, password checks).
-
-    Counted from the right of ``X-Forwarded-For``, one place per proxy in
-    ``TRUSTED_PROXY_COUNT``. The leftmost entries arrive from the
-    client and are forgeable, so keying on them let an attacker mint a fresh
-    counter per request and spray passwords through the throttle untouched;
-    only the entries our own proxies appended mean anything. A chain shorter
-    than the configured hop count means the request did not come through them,
-    so it falls back to the socket address.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        A string suitable for use as a cache-key fragment.
-    """
-    remote_addr = request.META.get("REMOTE_ADDR") or "unknown"
-    hops = django_settings.TRUSTED_PROXY_COUNT
-    if hops <= 0:
-        return remote_addr
-    chain = [entry.strip() for entry in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",") if entry.strip()]
-    if len(chain) < hops:
-        return remote_addr
-    return chain[-hops]
-
-
 @require_GET
 def suggest_passphrases(request: HttpRequest) -> JsonResponse:
     """Return five strong passphrase suggestions for signup / password reset.
@@ -1350,7 +1324,7 @@ def suggest_passphrases(request: HttpRequest) -> JsonResponse:
     """
     from urbanlens.dashboard.services.auth.passphrases import generate_passphrases
 
-    key = _PASSPHRASE_RATE_KEY.format(ip=_client_ip(request))
+    key = _PASSPHRASE_RATE_KEY.format(ip=client_ip(request))
     hits = int(cache.get(key) or 0)
     if hits >= _PASSPHRASE_RATE_LIMIT:
         return JsonResponse({"error": "Too many requests. Try again in a few minutes."}, status=429)
@@ -1396,7 +1370,7 @@ def validate_password_policy(request: HttpRequest) -> JsonResponse:
     """
     from django.contrib.auth.password_validation import validate_password
 
-    key = _PASSWORD_CHECK_RATE_KEY.format(ip=_client_ip(request))
+    key = _PASSWORD_CHECK_RATE_KEY.format(ip=client_ip(request))
     hits = int(cache.get(key) or 0)
     if hits >= _PASSWORD_CHECK_RATE_LIMIT:
         return JsonResponse({"error": "Too many requests. Try again in a few minutes."}, status=429)

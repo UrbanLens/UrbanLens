@@ -24,6 +24,9 @@ Files in `docs/`
 and the separate origin it is served from. Read before touching anything that
 parses user-supplied bytes.
 
+`METRICS.md` - the `/metrics` Prometheus endpoint: how it is gated, why
+multiprocess mode is not optional under gunicorn, and how a scraper reaches it.
+
 `TEST_COVERAGE_GAPS.md` - every defect the integration/contract suites found
 that the pytest suite did not
 

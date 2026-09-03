@@ -263,6 +263,37 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
 
+    metrics_enabled: bool = Field(
+        default=False,
+        description=(
+            "Expose Prometheus metrics at /metrics on this process. Off by default, and the route is "
+            "not registered at all when off - an absent URL cannot be misconfigured open, whereas a "
+            "guard inside a view is a line somebody can move. Set per service in docker-compose.yml: "
+            "the gunicorn 'app' service wants it, and every other role is a separate decision (app-ws "
+            "serves only /ws/, so its HTTP metrics would be empty). Enabling this in staging or "
+            "production without UL_METRICS_TOKEN or UL_METRICS_ALLOWED_CIDRS is a startup error - see "
+            "dashboard.checks.check_metrics_endpoint_is_guarded."
+        ),
+    )
+    metrics_token: str = Field(
+        default="",
+        description=(
+            "Bearer token a scraper must present as 'Authorization: Bearer <token>' to read /metrics. "
+            "Compared in constant time. Empty disables token authentication, which is only acceptable "
+            "when UL_METRICS_ALLOWED_CIDRS is set instead. Prometheus sends this via a scrape job's "
+            "'authorization' block."
+        ),
+    )
+    metrics_allowed_cidrs: str = Field(
+        default="",
+        description=(
+            "Comma-separated CIDRs (IPv4 or IPv6) permitted to read /metrics, e.g. "
+            "'10.2.0.0/24,127.0.0.1/32'. Empty disables the network check. The client address is "
+            "resolved the same way the rate limiters resolve it, honouring UL_TRUSTED_PROXY_COUNT, so "
+            "a forged X-Forwarded-For cannot spoof its way into the allowlist. Combine with "
+            "UL_METRICS_TOKEN for defense in depth; either alone satisfies the startup check."
+        ),
+    )
     demo_mode: bool = Field(
         default=False,
         description=(

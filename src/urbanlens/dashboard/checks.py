@@ -238,3 +238,46 @@ def check_provider_keys_are_not_on_the_app_tier(app_configs: Sequence[AppConfig]
             id="dashboard.W001",
         ),
     ]
+
+
+@register()
+def check_metrics_endpoint_is_guarded(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """Refuse to serve /metrics to anyone who asks.
+
+    ``UL_METRICS_ENABLED`` registers a URL that describes the running
+    application: every view name that has served a request, how often, how
+    slowly, and how often it failed. Two gates can restrict who reads that - a
+    bearer token and a network allowlist - and each is independently optional,
+    because either alone is a reasonable posture. Both being empty is not a
+    third posture, it is the endpoint being public, and on a deployment that
+    faces the internet that is a mistake nobody would make deliberately.
+
+    Local and development instances are exempt: they are the case where reading
+    ``/metrics`` with curl while working on it is the point, and they are not
+    reachable from anywhere that matters.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        One error when the endpoint is enabled, unguarded, and on a deployment
+        that counts as production.
+    """
+    if not getattr(settings, "UL_METRICS_ENABLED", False):
+        return []
+    if getattr(settings, "UL_METRICS_TOKEN", "") or getattr(settings, "UL_METRICS_ALLOWED_CIDRS", ""):
+        return []
+    # is_production_environment() classifies staging - and any name it does not
+    # recognise - as production, which is the direction this check wants to err.
+    if not getattr(settings, "IS_PRODUCTION", False):
+        return []
+
+    return [
+        Error(
+            "UL_METRICS_ENABLED is on with neither UL_METRICS_TOKEN nor UL_METRICS_ALLOWED_CIDRS set, so /metrics "
+            "would answer any request that reaches it with a description of every view this deployment serves. "
+            "Set a token for the scraper to present, or the CIDRs it scrapes from (or both), or turn the endpoint off.",
+            id="dashboard.E006",
+        ),
+    ]

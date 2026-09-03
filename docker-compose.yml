@@ -53,6 +53,23 @@ x-app-env: &app-env
   UL_MEDIA_BASE_URL: ${UL_MEDIA_BASE_URL:-}
   UL_MEDIA_COOKIE_DOMAIN: ${UL_MEDIA_COOKIE_DOMAIN:-}
   UL_MEDIA_CSP: ${UL_MEDIA_CSP:-}
+
+  # Prometheus. UL_METRICS_ENABLED is deliberately NOT here - exposing /metrics
+  # is a decision about one process, not about the image, so it is set per
+  # service. Only `app` opts in.
+  #
+  # The endpoint is guarded by a bearer token, a network allowlist, or both;
+  # enabling it on staging/production with neither is a startup error
+  # (dashboard.E006). Both empty is only for a local checkout.
+  UL_METRICS_TOKEN: ${UL_METRICS_TOKEN:-}
+  UL_METRICS_ALLOWED_CIDRS: ${UL_METRICS_ALLOWED_CIDRS:-}
+  # Read by prometheus_client itself, not by Django. A path on the container's
+  # own filesystem and never a shared volume: everything in this directory is
+  # aggregated wholesale into one scrape, so sharing it between services would
+  # report all of their numbers as whichever one was scraped. The entrypoint
+  # creates and clears it; gunicorn clears it again after migrations and retires
+  # each worker's files as that worker exits.
+  PROMETHEUS_MULTIPROC_DIR: /var/run/urbanlens/prometheus
   # No provider API key appears anywhere in this anchor, deliberately.
   # Every provider call this tier makes - LLMGateway's, and vision's since
   # the vision migration - goes over this HTTP hop to ai-inference, which is
@@ -247,6 +264,23 @@ services:
     environment:
       <<: *app-env
       UL_PROCESS_ROLE: web
+      # The gunicorn web process is the one worth scraping: it serves the
+      # request path, and multiprocess aggregation across its WEB_CONCURRENCY
+      # workers is wired for it specifically (gunicorn.conf.py). app-ws is
+      # deliberately left off - nginx routes only /ws/ there, so its HTTP
+      # metrics would be an empty set of series; instrumenting Channels
+      # consumers is separate work, as are Celery task metrics.
+      UL_METRICS_ENABLED: ${UL_METRICS_ENABLED:-false}
+
+    # Labels a Prometheus docker_sd_configs job relabels on. Harmless when
+    # nothing is watching, and they are only half the story: a docker_sd job
+    # discovers containers on the host Prometheus itself runs on, so a
+    # Prometheus on another machine needs a static/file_sd target pointed at
+    # this host's published port instead. See docs/METRICS.md.
+    labels:
+      prometheus_scrape: "${UL_METRICS_ENABLED:-false}"
+      prometheus_port: "8000"
+      prometheus_path: "/metrics"
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
@@ -325,6 +359,13 @@ services:
     environment:
       <<: *app-env
       UL_PROCESS_ROLE: websocket
+      # Explicitly off, not merely unset. This service reads the same .env as
+      # `app`, and `environment:` outranks `env_file:` - so without this line a
+      # UL_METRICS_ENABLED=true meant for `app` would quietly enable a second
+      # /metrics here as well. nginx routes only /ws/ to this process, so its
+      # HTTP metrics would be an empty set of series anyway; the numbers worth
+      # having are Channels-level and need their own instrumentation.
+      UL_METRICS_ENABLED: "false"
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health/"]
