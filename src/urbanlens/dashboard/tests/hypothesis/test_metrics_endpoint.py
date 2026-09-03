@@ -413,3 +413,66 @@ class MetricsDeploymentWiringTests(SimpleTestCase):
         self.assertIsNotNone(match, "Could not find proxy_read_timeout for the main location block.")
         timeout = float(match.group(1))
         self.assertIn(timeout, settings.PROMETHEUS_LATENCY_BUCKETS, f"nginx times out at {timeout}s but no latency bucket matches it; proxy-timed-out requests would be indistinguishable from merely slow ones.")
+
+
+class CeleryQueueDepthCollectorTests(SimpleTestCase):
+    """Queue depth, and the distinction between empty and unreachable."""
+
+    def _samples(self, collector) -> dict:
+        out = {}
+        for family in collector.collect():
+            for sample in family.samples:
+                key = (sample.name, sample.labels.get("queue"))
+                out[key] = sample.value
+        return out
+
+    def test_every_queue_is_reported(self) -> None:
+        from urbanlens.dashboard.services.core.celery_metrics import CeleryQueueDepthCollector
+        from urbanlens.dashboard.services.sandbox.queues import Queue
+
+        collector = CeleryQueueDepthCollector()
+        with mock.patch.object(CeleryQueueDepthCollector, "_read_depths", return_value={q.value: 3 for q in Queue}):
+            samples = self._samples(collector)
+        for queue in Queue:
+            with self.subTest(queue=queue.value):
+                self.assertEqual(samples[("urbanlens_celery_queue_depth", queue.value)], 3.0)
+        self.assertEqual(samples[("urbanlens_celery_broker_up", None)], 1.0)
+
+    def test_unreachable_broker_reports_down_and_emits_no_depths(self) -> None:
+        # The failure this guards: publishing 0 for every queue when the broker
+        # is unreachable reads as a healthy idle system on a dashboard, and
+        # silences exactly the alert that should fire.
+        from urbanlens.dashboard.services.core.celery_metrics import CeleryQueueDepthCollector
+
+        collector = CeleryQueueDepthCollector()
+        with mock.patch.object(CeleryQueueDepthCollector, "_read_depths", return_value=None):
+            samples = self._samples(collector)
+        self.assertEqual(samples[("urbanlens_celery_broker_up", None)], 0.0)
+        depth_samples = [key for key in samples if key[0] == "urbanlens_celery_queue_depth"]
+        self.assertEqual(depth_samples, [], "An unreachable broker must not publish zeroed depths.")
+
+    def test_a_broker_error_is_swallowed_into_broker_down(self) -> None:
+        # A raised exception here would fail the whole /metrics response, so a
+        # Celery problem would become a total observability outage.
+        from urbanlens.dashboard.services.core import celery_metrics
+
+        with mock.patch.object(celery_metrics.current_app, "connection_for_read", side_effect=OSError("broker gone")):
+            self.assertIsNone(celery_metrics.CeleryQueueDepthCollector()._read_depths())
+
+    def test_label_values_come_from_the_queue_enum(self) -> None:
+        # Cardinality is fixed by the code, not by anything a request influences.
+        from urbanlens.dashboard.services.core.celery_metrics import CeleryQueueDepthCollector
+        from urbanlens.dashboard.services.sandbox.queues import Queue
+
+        self.assertEqual(set(CeleryQueueDepthCollector.QUEUES), set(Queue))
+
+    def test_collector_is_attached_to_the_multiprocess_registry(self) -> None:
+        # The failure being avoided: MultiProcessCollector reads only the
+        # workers' sample files, so a collector left on the default registry
+        # works under runserver and silently vanishes in production.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        with mock.patch.dict(os.environ, {MULTIPROC_DIR_ENV: directory.name}):
+            registry = _build_registry()
+        names = {type(c).__name__ for c in registry._collector_to_names}
+        self.assertIn("CeleryQueueDepthCollector", names)

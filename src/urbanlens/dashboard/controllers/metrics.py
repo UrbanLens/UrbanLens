@@ -50,6 +50,13 @@ logger = logging.getLogger(__name__)
 #: and the gunicorn hooks have to agree with it exactly.
 MULTIPROC_DIR_ENV = "PROMETHEUS_MULTIPROC_DIR"
 
+#: Whether the scrape-time collectors have been attached to the *default*
+#: registry yet. Only the single-process path needs this: that registry is a
+#: module global that outlives the request, so a second registration would raise
+#: Duplicated timeseries. The multiprocess path builds a fresh registry per
+#: scrape and has nothing to guard against.
+_DEFAULT_REGISTRY_EXTRAS: list[bool] = []
+
 
 def _build_registry() -> prometheus_client.CollectorRegistry:
     """Return the registry to serialize for this scrape.
@@ -74,10 +81,35 @@ def _build_registry() -> prometheus_client.CollectorRegistry:
     """
     multiproc_dir = os.environ.get(MULTIPROC_DIR_ENV)
     if not multiproc_dir:
-        return prometheus_client.REGISTRY
+        registry = prometheus_client.REGISTRY
+        # Registered once on the default registry, which persists for the life
+        # of the process - registering per scrape would raise Duplicated.
+        if not _DEFAULT_REGISTRY_EXTRAS:
+            _register_scrape_time_collectors(registry)
+            _DEFAULT_REGISTRY_EXTRAS.append(True)
+        return registry
+
     registry = prometheus_client.CollectorRegistry()
     multiprocess.MultiProcessCollector(registry, path=multiproc_dir)
+    # MultiProcessCollector reads the workers' sample files and nothing else, so
+    # a collector registered on the default registry is invisible in
+    # multiprocess mode - the failure being avoided is a collector that works
+    # under runserver and silently disappears in production. These are
+    # scrape-time reads with no per-process state, so building them fresh on
+    # this registry is correct rather than a workaround.
+    _register_scrape_time_collectors(registry)
     return registry
+
+
+def _register_scrape_time_collectors(registry: prometheus_client.CollectorRegistry) -> None:
+    """Attach collectors that compute their values during the scrape.
+
+    Args:
+        registry: The registry this scrape will serialize.
+    """
+    from urbanlens.dashboard.services.core.celery_metrics import CeleryQueueDepthCollector
+
+    registry.register(CeleryQueueDepthCollector())
 
 
 class MetricsController(View):

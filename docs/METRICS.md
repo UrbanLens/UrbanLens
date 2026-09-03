@@ -56,38 +56,38 @@ published host ports (33880, 33910). That works because those are
 `static_configs`-style targets on *published* ports, not label discovery of
 container-internal ones.
 
-**The fix belongs on chiron, in the observability stack - not in this repo.**
-`observability-agent-alloy` already runs here and already mounts
-`/var/run/docker.sock`, so it can do the local `docker_sd` that jungu cannot,
-relabelling on exactly the labels the `app` service now carries. Two changes:
+**This half is built.** The observability stack's Alloy on chiron now does the
+local `docker_sd` that jungu cannot, relabelling on the `prometheus_scrape`
+label the `app` service carries, and pushes to jungu via `remote_write`. It is
+live and inert: it discovers nothing until a container on chiron actually
+advertises the label.
 
-```alloy
-discovery.docker "local" { host = "unix:///var/run/docker.sock" }
+Two things are needed to light it up, and both are on our side:
 
-discovery.relabel "urbanlens" {
-  targets = discovery.docker.local.targets
-  rule {
-    source_labels = ["__meta_docker_container_label_prometheus_scrape"]
-    regex         = "true"
-    action        = "keep"
-  }
-}
+1. **Deploy a build that has this branch**, with `UL_METRICS_ENABLED=true` and
+   `UL_METRICS_TOKEN` set. Until then no container on chiron sets
+   `prometheus_scrape=true` and there is nothing to find.
+2. **Tell them the app network name** to add to their `UL_SCRAPE_NETWORKS`.
+   Alloy lives on `observability-agent_default` and has to join the app's
+   network for a discovered container address to resolve. The name is derived
+   from the compose project:
 
-prometheus.scrape "urbanlens" {
-  targets      = discovery.relabel.urbanlens.output
-  bearer_token = env("UL_METRICS_TOKEN")
-  forward_to   = [prometheus.remote_write.jungu.receiver]
-}
-```
+   | Deployment | Network |
+   |---|---|
+   | Shared dev on chiron | `urbanlens-development_main_app_network` |
+   | A dev slot on chiron | `ul-<slug>_app_network` |
+   | Production / staging | `urbanlens-production_app_network` / `urbanlens-staging_app_network` |
 
-Alloy is on `observability-agent_default` and the app is on
-`<project>_app_network`, so **Alloy's container must also join the app network**
-(`docker network connect`, or declared in the observability stack's compose) or
-the discovered address will not resolve.
+**Production and staging run on damballa, not chiron.** chiron's Alloy discovers
+containers on chiron only, so wiring the dev network up does not get production
+metrics - that needs an agent on damballa, which is a separate piece of work in
+the observability repo.
 
-The alternative - publishing a host port for the app container so jungu can
-reach it directly - exposes the whole Django app on that port, bypassing nginx,
-to gain one path. Prefer the scraper-side fix.
+One deviation from that stack's usual rule, agreed deliberately: this pushes
+rather than being scraped. The "a dead agent shows as `up == 0`" property is
+moved rather than lost - jungu still scrapes that Alloy as `chiron-alloy`, so
+`AgentDown` fires if it dies, and `AlloyComponentUnhealthy` covers Alloy being
+up while this pipeline is broken.
 
 ## Multiprocess mode, and why it is not optional
 
@@ -153,6 +153,29 @@ here resolves - and its top finite bucket sits above nginx's
 `proxy_read_timeout` so a timed-out request is still counted somewhere other
 than `+Inf`.
 
+### Celery queue depth
+
+| Series | What it answers |
+|---|---|
+| `urbanlens_celery_queue_depth{queue=...}` | How far behind each queue is |
+| `urbanlens_celery_broker_up` | Whether the broker answered this scrape |
+
+Read from the broker at scrape time rather than instrumented in the workers,
+which is what lets it cover the sandbox workers: they run `cap_drop: ALL` on an
+isolated network precisely so they have no inbound surface, and an HTTP endpoint
+to scrape would undo that. They already talk to the broker, so that is where
+their backlog is visible. Labels come from the `Queue` enum, so cardinality is
+fixed by code.
+
+`urbanlens_celery_broker_up` exists to keep two states apart that otherwise look
+identical and mean opposite things: when the broker cannot be reached the
+collector emits **no depth samples at all** rather than zeros, because a row of
+zeros reads as a healthy idle system and would silence the alert that should
+fire. Alert on `urbanlens_celery_broker_up == 0` as well as on depth.
+
+Each queue is drained by exactly one container, so a rising depth names the
+container to look at - see `services/sandbox/queues.py`.
+
 `PROMETHEUS_EXPORT_MIGRATIONS` is off: it runs a `MigrationExecutor` plan against
 the database on every scrape, and `/health/ready` already reports migration state
 to the prober that acts on it.
@@ -163,12 +186,20 @@ it puts a third-party wrapper in the path of every PostGIS query.
 
 ## What is not here
 
-- **Celery task metrics.** A real gap, and independently useful:
-  `django-prometheus` has task-signal instrumentation. It needs its own
-  multiprocess story (workers are separate processes on separate containers) and
-  its own decision about which of the seven queues to instrument, so it is
-  separate work rather than something to bundle into "give the web process a
-  `/metrics` endpoint" and ship neither cleanly.
+- **Celery *task* metrics** - per-task success, failure and duration. Queue
+  depth is covered (see above); this is not. It needs the worker to report what
+  it did, which means either an event-stream consumer or a push, and that is a
+  separate piece of infrastructure rather than a bigger version of the
+  collector. Note `django-prometheus` does **not** help here: it ships no Celery
+  instrumentation at all, contrary to the handoff note that prompted this work -
+  checked against 2.5.0.
+
+  The constraint that decides the design: `media-worker` and `media-worker-batch`
+  run `cap_drop: ALL` on an isolated network specifically so they have no
+  inbound surface. Giving every worker its own scrape endpoint would undo that,
+  so a broker-side consumer (or a push) is the option that covers all six worker
+  containers uniformly.
+
 - **`app-ws` (Daphne).** Left off deliberately. nginx routes only `/ws/` there,
   so its HTTP request metrics would be an empty set of series; what would
   actually be worth having - active connections, message rate - means
