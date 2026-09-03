@@ -219,12 +219,53 @@ verify_parity() {
     echo "    tree matches ($host_sum)"
 }
 
+verify_venv() {
+    # The sync only ever covers /app/src. /app/.venv is baked into the image, so
+    # a dependency added to pyproject.toml after the last build is simply absent
+    # - and the way that surfaces is a collection error naming a module, which
+    # reads as a broken import in the branch rather than as a stale container.
+    # django-perf-rec cost a whole pre-merge run that way on 2026-08-31.
+    #
+    # Checked by distribution name against pyproject's dev group, which is what
+    # `uv sync` installs. Cheap: one interpreter start, no imports of the
+    # packages themselves.
+    local missing
+    # -i, or the heredoc never reaches the interpreter and this reports nothing.
+    missing=$(docker exec -i "$CONTAINER" /app/.venv/bin/python - <<'PY' 2>/dev/null
+import re
+import tomllib
+from importlib.metadata import PackageNotFoundError, version
+
+with open("/app/pyproject.toml", "rb") as handle:
+    groups = tomllib.load(handle).get("dependency-groups", {})
+
+for spec in groups.get("dev", []):
+    name = re.split(r"[<>=!~\[; ]", spec, maxsplit=1)[0].strip()
+    if not name:
+        continue
+    try:
+        version(name)
+    except PackageNotFoundError:
+        print(name)
+PY
+)
+    if [ -n "$missing" ]; then
+        echo "warning: the container's venv predates these dev dependencies:" >&2
+        echo "$missing" | sed 's|^|      |' >&2
+        echo "    A test importing one fails at collection, naming the module rather than the cause." >&2
+        echo "    Rebuild: docker compose --profile test up -d --build test-runner" >&2
+    fi
+}
+
 [ "$SYNC" -eq 1 ] && sync_tree
 if [ "$ALLOW_DRIFT" -eq 1 ]; then
     echo "==> skipping parity check (--allow-drift): the container is expected to differ"
 else
     verify_parity
 fi
+# A warning, not an error: most runs touch none of the missing packages, and
+# refusing to run would be worse than a confusing failure in the few that do.
+verify_venv
 [ "$VERIFY_ONLY" -eq 1 ] && exit 0
 
 if [ "$FAST" -eq 1 ]; then
