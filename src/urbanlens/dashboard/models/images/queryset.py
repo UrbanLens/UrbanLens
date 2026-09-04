@@ -45,6 +45,54 @@ def _own_contribution_q() -> Q:
     return Q(profile__isnull=False) & Q(source__in=ImageSource.personal_library()) & (Q(media_source_key__isnull=True) | Q(media_source_key=""))
 
 
+#: Instance attributes :func:`prime_viewer_scope` fills in, and
+#: ``ImageQuerySet._viewer_scoped`` reads.
+_FRIEND_IDS_ATTR = "_ul_visible_friend_ids"
+_PINNED_LOCATION_IDS_ATTR = "_ul_visible_pinned_location_ids"
+_TRIP_IDS_ATTR = "_ul_visible_trip_ids"
+
+
+def prime_viewer_scope(profile: Profile) -> None:
+    """Resolve a viewer's relationship sets once, for a caller about to reuse them.
+
+    ``visible_to`` is eager: it resolves the viewer's friends, pinned locations,
+    trip memberships and reachable wikis before it can build its filter. A page
+    that calls it several times for one viewer pays for all four each time -
+    album detail does it four times, measured at 60 queries for a 30-photo vault
+    album.
+
+    Explicit rather than automatic, and this is the important part: caching on
+    first read would change what ``visible_to`` means for every caller,
+    including one that creates a pin and then asks about visibility in the same
+    breath. Priming says "I am about to ask the same question repeatedly and
+    nothing between the asks will change the answer", which is a claim only the
+    caller can make.
+
+    The primed values live on the ``Profile`` instance, so they cannot outlive
+    the request that loaded it and nothing has to invalidate them. Every caller
+    that should share them must be passed the *same* instance.
+
+    Args:
+        profile: The viewer whose sets to resolve.
+    """
+    from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.trips.model import TripMembership
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
+
+    accepted = FriendshipStatus.ACCEPTED
+    friends = set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True)) | set(
+        Friendship.objects.filter(to_profile=profile, status=accepted).values_list("from_profile_id", flat=True),
+    )
+    # setattr rather than direct assignment: these are not declared on Profile,
+    # and django-stubs is right to flag that.
+    setattr(profile, _FRIEND_IDS_ATTR, friends)
+    setattr(profile, _PINNED_LOCATION_IDS_ATTR, set(Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True)))
+    setattr(profile, _TRIP_IDS_ATTR, set(TripMembership.objects.trip_ids_for(profile)))
+    # Fills the same instance attribute _shared_within_reach_of reads through.
+    visible_wiki_location_ids_cached(profile)
+
+
 def _named_this_viewer(viewer_profile: Profile) -> Q:
     """Containers whose membership *is* the consent, so settings do not apply.
 
@@ -107,13 +155,16 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     Returns:
         A ``Q`` matching photos in containers within this viewer's reach.
     """
-    # The memoised variant: this is called once per `visible_to`, and a page can
-    # call that several times for the same viewer - the album detail view does it
-    # four times. The underlying answer is three queries (pins, the aggregate
-    # fixpoint, locations) and cannot change mid-request.
-    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
+    # Uses a primed value when a caller has said it is about to resolve this
+    # viewer repeatedly (see prime_viewer_scope), and reads fresh otherwise.
+    # Never populates: reading through the self-caching variant would make every
+    # caller a cacher, and a request that pins a place and then asks what it can
+    # see would get the answer from before the pin.
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids, visible_wiki_location_ids_if_primed
 
-    return Q(wiki__location_id__in=visible_wiki_location_ids_cached(viewer_profile))
+    primed = visible_wiki_location_ids_if_primed(viewer_profile)
+    location_ids = visible_wiki_location_ids(viewer_profile) if primed is None else primed
+    return Q(wiki__location_id__in=location_ids)
 
 
 class ImageQuerySet(abstract.FrontendDashboardQuerySet):
@@ -212,36 +263,35 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
 
     @staticmethod
     def _viewer_scoped(profile: Profile, attribute: str, compute: Callable[[], set[int]]) -> set[int]:
-        """Memoise a viewer-scoped id set on the profile instance.
+        """Read a viewer-scoped id set, using a primed value when there is one.
 
-        These three sets describe the *viewer*, not the queryset, so they are the
-        same for every ``visible_to`` call in a request - and a page can make
-        several. The album detail view resolves the same visibility four times
-        (`visible_album_item_pairs`, `album_images_page`, `eligible_images_for`,
-        and the picker payload), which cost four copies of all three lookups.
+        These three sets describe the *viewer*, not the queryset, so every
+        ``visible_to`` call in one render wants the same answer - and a page can
+        make several. Album detail resolves the same visibility four times
+        (``visible_album_item_pairs``, ``album_images_page``,
+        ``eligible_images_for``, and the picker payload), which cost four copies
+        of all three lookups.
 
-        Cached on the instance for the reason
-        :func:`services.wiki.wiki_access.visible_wiki_location_ids_cached`
-        already uses: a ``Profile`` is loaded fresh per request, so an entry
-        cannot outlive the request that made it, and nothing has to invalidate
-        it when a friendship or pin changes. Callers that should share the
-        answer must pass the *same* instance - which the album view does.
+        **Opt-in, and never self-populating.** An earlier version cached on
+        first read, which silently changed what ``visible_to`` means: a caller
+        that creates a pin and then asks about visibility got the answer from
+        before the pin existed. That is not a hypothetical -
+        ``test_gaining_a_pin_at_the_far_place_grants_the_photo`` is exactly that
+        sequence, and its docstring says the gate must track reachability rather
+        than anything cached earlier. So a value is used only when a caller has
+        explicitly said it is about to resolve the same viewer repeatedly, via
+        :func:`prime_viewer_scope`, and the default stays a fresh read.
 
         Args:
             profile: The viewing profile the set describes.
-            attribute: Instance attribute to hang the cached value on.
-            compute: Builds the set when nothing is cached yet.
+            attribute: Instance attribute a primed value would be under.
+            compute: Builds the set when nothing is primed.
 
         Returns:
-            The viewer's id set, computed at most once per profile instance.
+            The viewer's id set.
         """
-        cached = getattr(profile, attribute, None)
-        if cached is None:
-            cached = compute()
-            # setattr rather than direct assignment: the attribute is not
-            # declared on Profile, and django-stubs is right to flag that.
-            setattr(profile, attribute, cached)
-        return cached
+        primed = getattr(profile, attribute, None)
+        return compute() if primed is None else primed
 
     def _get_friend_ids(self, profile: Profile) -> set[int]:
         def compute() -> set[int]:
@@ -250,7 +300,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
             accepted = FriendshipStatus.ACCEPTED
             return set(Friendship.objects.filter(from_profile=profile, status=accepted).values_list("to_profile_id", flat=True)) | set(Friendship.objects.filter(to_profile=profile, status=accepted).values_list("from_profile_id", flat=True))
 
-        return self._viewer_scoped(profile, "_ul_visible_friend_ids", compute)
+        return self._viewer_scoped(profile, _FRIEND_IDS_ATTR, compute)
 
     def _get_location_ids(self, profile: Profile) -> set[int]:
         def compute() -> set[int]:
@@ -258,7 +308,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
 
             return set(Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True))
 
-        return self._viewer_scoped(profile, "_ul_visible_pinned_location_ids", compute)
+        return self._viewer_scoped(profile, _PINNED_LOCATION_IDS_ATTR, compute)
 
     def _get_trip_ids(self, profile: Profile) -> set[int]:
         def compute() -> set[int]:
@@ -266,7 +316,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
 
             return set(TripMembership.objects.trip_ids_for(profile))
 
-        return self._viewer_scoped(profile, "_ul_visible_trip_ids", compute)
+        return self._viewer_scoped(profile, _TRIP_IDS_ATTR, compute)
 
     def _relationship_allows(
         self,

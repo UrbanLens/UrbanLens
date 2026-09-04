@@ -359,6 +359,24 @@ def visible_wiki_location_ids_cached(profile: Profile) -> set[int]:
     return cached
 
 
+def visible_wiki_location_ids_if_primed(profile: Profile) -> set[int] | None:
+    """The memoised set, but only when somebody has already asked for it.
+
+    For a caller that wants the saving when it is available and a fresh read
+    otherwise - unlike :func:`visible_wiki_location_ids_cached`, this never
+    populates. Reading through that one turns every caller into a cacher, which
+    silently changes the answer for a request that pins a place and then asks
+    what it can see.
+
+    Args:
+        profile: The viewing profile.
+
+    Returns:
+        The primed set, or None when nothing has primed it.
+    """
+    return getattr(profile, _CACHE_ATTR, None)
+
+
 def wikis_hidden_by_pin_move(pin: Pin, latitude: float, longitude: float) -> list[Wiki]:
     """Wikis the owner can see now but would lose by moving *pin* to this point.
 

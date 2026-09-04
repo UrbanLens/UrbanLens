@@ -331,6 +331,15 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
         Template context for ``_album_detail.html``.
     """
     from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.queryset import prime_viewer_scope
+
+    # This view resolves the same viewer's photo visibility four times below -
+    # visible_album_item_pairs, album_images_page, eligible_images_for, and the
+    # picker payload - and each resolution costs the viewer's friends, pinned
+    # locations, trip memberships and reachable wikis. Nothing here writes any
+    # of those, so one resolution serves all four; see prime_viewer_scope for
+    # why that claim has to be made explicitly rather than cached into.
+    prime_viewer_scope(viewer)
 
     pairs = visible_album_item_pairs(album, viewer, owner)
     visible_ids = [image_id for _item_id, image_id in pairs]
