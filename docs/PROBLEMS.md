@@ -737,36 +737,6 @@ The only real consideration is timing, and it is mild: a full-repo format touche
 people may have open. Commit or stash in-flight work first if that matters, then run it and keep
 the result. Do not hand-revert formatting to keep a diff small.
 
-## OPEN 2026-08-20: the mobile panel's `unpinned_count` still counts what the import won't create
-
-`ParcelBuildingsPanelSource.api_payload` derives `unpinned_count` as
-`sum(1 for row in rows if not row["child_name"])`, and its own comment says that is meant to count
-"what the 'add buildings' dialog would actually offer ... see pin_restructure.missing_buildings".
-Those two answers have now diverged: `missing_buildings` also excludes a building standing on a point
-the owner has already pinned with a *non-child* pin, because `resolve_child_pin_location` refuses to
-create a second pin there (the web-side bug fixed 2026-08-20 - the button offered a building that
-could never be created, and every attempt silently skipped it).
-
-The web panel's count was repointed at `missing_buildings`; this one was not, deliberately. The
-payload ships its `buildings` rows *alongside* the count, so deriving the count from anything but
-those rows makes the two disagree inside one response with no way for a client to tell which rows the
-number refers to. Fixing it properly means deciding what a blocked building should look like in the
-row list - probably a third state alongside pinned/unpinned, since "someone's top-level pin is on it"
-is neither - rather than only changing the total.
-
-Until then a mobile client can advertise one more unpinned building than the dialog will offer, and
-importing will report having created fewer than advertised.
-
-**Re-investigated 2026-08-25, confirmed still open and still deliberate**, not an oversight to
-sweep up in passing: the payload ships its `buildings` rows *alongside* the count, so any fix that
-changes what the count derives from without also changing the row shape (a third state alongside
-pinned/unpinned) makes the two disagree inside one response with no way for a client to tell which
-rows the number refers to. That's a mobile API contract change, which is exactly the shortcut a
-prior pass already considered and rejected for this reason - re-applying it now would reintroduce
-the same disagreement. No existing test exercises the blocked-building scenario
-(`test_panel_api_interface.py::ParcelBuildingsApiPayloadTests`). Needs a product decision on the
-row shape before this can move, not another attempt at the same one-line fix.
-
 ## OPEN 2026-08-19: performance and ops defects found but not fixed
 
 Found during the 2026-08-19 sweep, verified by reading both the query definition and every call

@@ -11,6 +11,46 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-08-20: the mobile panel's `unpinned_count` still counts what the import won't create
+
+`ParcelBuildingsPanelSource.api_payload` derives `unpinned_count` as
+`sum(1 for row in rows if not row["child_name"])`, and its own comment says that is meant to count
+"what the 'add buildings' dialog would actually offer ... see pin_restructure.missing_buildings".
+Those two answers have now diverged: `missing_buildings` also excludes a building standing on a point
+the owner has already pinned with a *non-child* pin, because `resolve_child_pin_location` refuses to
+create a second pin there (the web-side bug fixed 2026-08-20 - the button offered a building that
+could never be created, and every attempt silently skipped it).
+
+The web panel's count was repointed at `missing_buildings`; this one was not, deliberately. The
+payload ships its `buildings` rows *alongside* the count, so deriving the count from anything but
+those rows makes the two disagree inside one response with no way for a client to tell which rows the
+number refers to. Fixing it properly means deciding what a blocked building should look like in the
+row list - probably a third state alongside pinned/unpinned, since "someone's top-level pin is on it"
+is neither - rather than only changing the total.
+
+Until then a mobile client can advertise one more unpinned building than the dialog will offer, and
+importing will report having created fewer than advertised.
+
+**Re-investigated 2026-08-25, confirmed still open and still deliberate**, not an oversight to
+sweep up in passing: the payload ships its `buildings` rows *alongside* the count, so any fix that
+changes what the count derives from without also changing the row shape (a third state alongside
+pinned/unpinned) makes the two disagree inside one response with no way for a client to tell which
+rows the number refers to. That's a mobile API contract change, which is exactly the shortcut a
+prior pass already considered and rejected for this reason - re-applying it now would reintroduce
+the same disagreement. No existing test exercises the blocked-building scenario
+(`test_panel_api_interface.py::ParcelBuildingsApiPayloadTests`). Needs a product decision on the
+row shape before this can move, not another attempt at the same one-line fix.
+
+**Fixed 2026-09-04.** The entry's objection to fixing it was right and is what shaped the fix: the payload ships its `buildings` rows beside the count, so deriving the count from anything but those rows makes the two disagree inside one response with no way for a client to tell which rows the number refers to.
+
+So the rows got the answer rather than the count getting a second rule. Each row carries **`can_create`**, and `unpinned_count` is exactly the rows carrying it. `missing_buildings` and the payload now share one rule (`pin_restructure.importable_building_indexes`); having two was how they drifted in the first place.
+
+Correlation between a rendered row and the record it came from is **positional** (`record_index` into `buildings_on_property`), not hashed - two building records can be duplicates of one another, and a hash-keyed correlation folds them together. It is internal and never reaches the client.
+
+The `not child_name` conjunct is deliberate and must not be simplified away: the row loop and the importable loop consume child markers in different orders (the first matches before the boundary check, the second filters before matching), so requiring *both* to call a building free is what keeps the count from ever exceeding what the import will do.
+
+Worth knowing: the repo's own fixture already reproduced this. `test_panel_api_interface.py`'s "Tool Shed" sits at the parcel pin's own coordinates - not contrived, since a parcel's coordinate is frequently one of its buildings' centroids - and the existing test asserted `unpinned_count == 2` where the import creates 1. That assertion was the bug, written down.
+
 ## RESOLVED 2026-09-03: a permanently failed media task leaves the upload silently unfinished
 
 Found while closing the Celery requeue loop (`CELERY_TASK_REJECT_ON_WORKER_LOST`,
