@@ -11,9 +11,28 @@ default_install_hook_types: [pre-commit]
 files: '^(.+\.(py|ts|js|tsx|jsx|yaml|yml|toml|html|txt))$'
 exclude: '(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)'
 
+# AUTO-FIX
+# One hook, first in the chain, replacing five that rewrote files without
+# staging them (ruff --fix, ruff-format, end-of-file-fixer, trailing-whitespace,
+# mixed-line-ending). pre-commit calls a hook failed when the worktree stops
+# matching the index, so each of those cost a wasted commit: the first attempt
+# fixed and failed, the second succeeded. This one stages what it fixes, so a
+# normal commit passes on the first run with the fixes already in it.
+#
+# It deliberately leaves a partially staged file (`git add -p`) untouched:
+# staging a fix into one turns pre-commit's stash rollback into data loss.
+# See the module docstring, which records the experiment.
+repos:
+-   repo: local
+    hooks:
+      - id: autofix
+        name: auto-fix formatting, whitespace and safe lint fixes
+        entry: python3 bin/precommit_autofix.py
+        language: system
+        types_or: [python, javascript, ts, tsx, jsx, yaml, toml, html, text]
+
 # GITHUB
 # See https://pre-commit.com/hooks.html for more hooks
-repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
@@ -25,25 +44,9 @@ repos:
     -   id: check-merge-conflict
     -   id: check-toml
     -   id: detect-private-key
-    -   id: end-of-file-fixer
-    -   id: trailing-whitespace
-    -   id: mixed-line-ending
-        args: [--fix=lf]
     -   id: debug-statements
 
-# RUFF
--   repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.20
-    hooks:
-      # Run the linter.
-      - id: ruff
-        args: [ --fix ]
-      # Run the formatter.
-      - id: ruff-format
-        always_run: true
-        pass_filenames: false
-
-# REPOSITORY CONSISTENCY
+# REPOSITORY CONSISTENCY - fast enough to run on every commit
 -   repo: local
     hooks:
       - id: line-endings
@@ -56,39 +59,9 @@ repos:
         # reports; it never rewrites, so it cannot damage a binary.
         always_run: true
         pass_filenames: false
-      - id: imports-tracked
-        name: every urbanlens.* import resolves to a committed file
-        entry: python3 bin/check_imports_tracked.py
-        language: system
-        files: '\.py$'
-        pass_filenames: false
-      - id: outage-not-cached
-        name: no fetch caches a swallowed failure as a result
-        entry: python3 bin/check_outage_not_cached.py
-        language: system
-        files: '\.py$'
-        pass_filenames: false
       - id: notification-choke-point
         name: every notification write honours the mute preference
         entry: python3 bin/check_notification_choke_point.py
-        language: system
-        files: '\.py$'
-        pass_filenames: false
-      - id: versioned-writes
-        name: a model that versions fields records every write path
-        entry: python3 bin/check_versioned_writes.py
-        language: system
-        files: '\.py$'
-        pass_filenames: false
-      - id: signal-reachable
-        name: no post_save subscription waits on a field only update() sets
-        entry: python3 bin/check_signal_reachable.py
-        language: system
-        files: '\.py$'
-        pass_filenames: false
-      - id: concealed-writes
-        name: a wiki resolved for reading is never saved
-        entry: python3 bin/check_concealed_writes.py
         language: system
         files: '\.py$'
         pass_filenames: false
@@ -98,6 +71,85 @@ repos:
         language: system
         files: '\.(html|txt)$'
         pass_filenames: false
+
+# REPOSITORY CONSISTENCY - whole-tree scans, manual only
+# Each of these re-reads all ~3100 tracked files regardless of what changed, so
+# together they added ~27s to every commit - including a one-line one. They are
+# whole-repo invariants, so per-commit granularity bought nothing: a violation
+# is equally true before and after any single edit.
+#
+# Nothing is lost by moving them here. `.github/workflows/ci.yml` runs every one
+# of them as its own step on every push and PR, which is the backstop that
+# actually matters - a pre-commit hook is defeated by `--no-verify` or by a
+# checkout where nobody ran `pre-commit install`.
+#
+# Run them yourself with:  bun run check   (or: pre-commit run --hook-stage manual --all-files)
+-   repo: local
+    hooks:
+      - id: imports-tracked
+        name: every urbanlens.* import resolves to a committed file
+        entry: python3 bin/check_imports_tracked.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: outage-not-cached
+        name: no fetch caches a swallowed failure as a result
+        entry: python3 bin/check_outage_not_cached.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: versioned-writes
+        name: a model that versions fields records every write path
+        entry: python3 bin/check_versioned_writes.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: signal-reachable
+        name: no post_save subscription waits on a field only update() sets
+        entry: python3 bin/check_signal_reachable.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: concealed-writes
+        name: a wiki resolved for reading is never saved
+        entry: python3 bin/check_concealed_writes.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      # The three below existed in bin/ but were registered nowhere at all.
+      - id: pin-not-published-to-wiki
+        name: a private pin's fields never reach a community wiki
+        entry: python3 bin/check_pin_not_published_to_wiki.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: migration-graph
+        name: no migration depends on one the committed tree will not have
+        entry: python3 bin/check_migration_graph.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: doc-line-refs
+        name: no documentation citation points past the end of its file
+        entry: python3 bin/check_doc_line_refs.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: ruff-format-check
+        name: the whole tree matches the formatter
+        entry: python3 bin/precommit_autofix.py --check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
 
 # CODEQL
 # Manual-only. It was a pre-push hook, which made `git push` fail: the analysis

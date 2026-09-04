@@ -41,8 +41,11 @@ src/urbanlens/logs/*
 .favorites.json
 .coverage
 CLAUDE.local.md
-.claude/*.json
-.vscode/settings.json
+# Only the per-machine file. `settings.json` registers the hooks that protect
+# CLAUDE.md and auto-format Python on write, and `.claude/agents/` holds the
+# docs-finder/docs-writer definitions - CLAUDE.md promises all of that, so it
+# has to be in the tree rather than on one laptop.
+.claude/settings.local.json
 .cursor/
 docs/notes/ai/
 docs/notes/geocoding-analysis/

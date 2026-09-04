@@ -1,80 +1,83 @@
 {
-    "name": "urbanlens",
-    "version": "0.8.0b0",
-    "description": "Mapping for Urban Explorers",
-    "main": "index.js",
-    "scripts": {
-        "db": "python3 src/bin/db.py start",
-        "migrate": "python3 -m urbanlens.manage makemigrations & python3 -m urbanlens.manage migrate",
-        "sass": "bun node_modules/sass/sass.js --style=compressed --no-source-map src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
-        "sass:dev": "bun node_modules/sass/sass.js --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
-        "sass:watch": "bun node_modules/sass/sass.js --watch --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
-        "build": "bun run bin/build-frontend.ts",
-        "deploy": "bun run bin/build-frontend.ts --minify",
-        "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent -c gunicorn.conf.py",
-        "up": "git pull && sudo docker compose build && sudo docker compose up",
-        "typecheck": "tsc --noEmit -p tsconfig.json",
-        "lint": "pyright src/urbanlens",
-        "check:templates": "python3 bin/check_template_comments.py",
-        "pre-commit": "pre-commit run --all-files &> /dev/null || true && pre-commit run --all-files",
-        "test": "python3 -m coverage run --source='src' src/urbanlens/manage.py test",
-        "test:ts": "bun test src/urbanlens/dashboard/frontend/ts",
-        "test:browser": "bun test --timeout 60000 src/urbanlens/dashboard/frontend/browser",
-	"test:full": "bun run pre-commit && bun run test",
-        "coverage": "python3 -m coverage report",
-        "codeql": "python3 bin/run_codeql.py",
-        "codeql:gate": "python3 bin/run_codeql.py --gate",
-        "codeql:install": "python3 bin/run_codeql.py --install",
-        "uninstall": "echo \"docker compose down && docker volume ls -q | grep '^urbanlens_' | xargs -r docker volume rm\"",
-        "clean:js": "rm -rf src/urbanlens/dashboard/frontend/static/dashboard/js",
-        "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start"
-    },
-    "author": "Jess Mann",
-    "license": "N/A",
-    "devDependencies": {
-        "@happy-dom/global-registrator": "^20.11.1",
-        "@types/google.maps": "^3.65.4",
-        "@types/leaflet": "^1.9.21",
-        "@types/leaflet-draw": "^1.0.13",
-        "@types/libsodium-wrappers-sumo": "^0.8.2",
-        "@types/sortablejs": "^1.15.9",
-        "@types/wicg-file-system-access": "^2023.10.7",
-        "bun-types": "latest",
-        "playwright": "^1.62.1",
-        "sass": "^1.101.0",
-        "typescript": "^6.0.3"
-    },
-    "peerDependencies": {
-        "typescript": "^6.0.3"
-    },
-    "dependencies": {
-        "@tiptap/core": "^3.28.0",
-        "@tiptap/extension-bubble-menu": "^3.28.0",
-        "@tiptap/extension-floating-menu": "^3.28.0",
-        "@tiptap/extension-image": "^3.28.0",
-        "@tiptap/extension-placeholder": "^3.28.0",
-        "@tiptap/extension-table": "^3.28.0",
-        "@tiptap/starter-kit": "^3.28.0",
-        "@tiptap/suggestion": "^3.28.0",
-        "exifr": "^7.1.3",
-        "libsodium-wrappers-sumo": "^0.8.4",
-        "sortablejs": "^1.15.7",
-        "tiptap-markdown": "^0.9.0"
-    },
-    "browserslist": {
-        "production": [
-            ">0.2%",
-            "not dead",
-            "not op_mini all"
-        ],
-        "development": [
-            "last 2 chrome versions",
-            "last 2 firefox versions",
-            "last 2 safari versions",
-            "last 2 ios versions",
-            "last 1 android version",
-            "last 1 chromeandroid version",
-            "ie 11"
-        ]
-    }
+  "name": "urbanlens",
+  "version": "0.8.0b0",
+  "description": "Mapping for Urban Explorers",
+  "main": "index.js",
+  "scripts": {
+    "db": "python3 src/bin/db.py start",
+    "migrate": "python3 -m urbanlens.manage makemigrations & python3 -m urbanlens.manage migrate",
+    "sass": "bun node_modules/sass/sass.js --style=compressed --no-source-map src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
+    "sass:dev": "bun node_modules/sass/sass.js --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
+    "sass:watch": "bun node_modules/sass/sass.js --watch --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
+    "build": "bun run bin/build-frontend.ts",
+    "deploy": "bun run bin/build-frontend.ts --minify",
+    "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent -c gunicorn.conf.py",
+    "up": "git pull && sudo docker compose build && sudo docker compose up",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "ruff check --fix src/urbanlens",
+    "check:templates": "python3 bin/check_template_comments.py",
+    "pre-commit": "pre-commit run --all-files",
+    "test": "bash bin/run_tests.sh",
+    "test:ts": "bun test src/urbanlens/dashboard/frontend/ts",
+    "test:browser": "bun test --timeout 60000 src/urbanlens/dashboard/frontend/browser",
+    "test:full": "bun run pre-commit && bun run check && bun run typecheck && bun run test:ts && bun run test",
+    "codeql": "python3 bin/run_codeql.py",
+    "codeql:gate": "python3 bin/run_codeql.py --gate",
+    "codeql:install": "python3 bin/run_codeql.py --install",
+    "uninstall": "echo \"docker compose down && docker volume ls -q | grep '^urbanlens_' | xargs -r docker volume rm\"",
+    "clean:js": "rm -rf src/urbanlens/dashboard/frontend/static/dashboard/js",
+    "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start",
+    "check": "pre-commit run --hook-stage manual --all-files imports-tracked outage-not-cached versioned-writes signal-reachable concealed-writes pin-not-published-to-wiki migration-graph doc-line-refs ruff-format-check",
+    "coverage": "python3 -m coverage report",
+    "format:check": "python3 bin/precommit_autofix.py --check",
+    "format": "python3 bin/precommit_autofix.py --format"
+  },
+  "author": "Jess Mann",
+  "license": "N/A",
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^20.11.1",
+    "@types/google.maps": "^3.65.4",
+    "@types/leaflet": "^1.9.21",
+    "@types/leaflet-draw": "^1.0.13",
+    "@types/libsodium-wrappers-sumo": "^0.8.2",
+    "@types/sortablejs": "^1.15.9",
+    "@types/wicg-file-system-access": "^2023.10.7",
+    "bun-types": "latest",
+    "playwright": "^1.62.1",
+    "sass": "^1.101.0",
+    "typescript": "^6.0.3"
+  },
+  "peerDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@tiptap/core": "^3.28.0",
+    "@tiptap/extension-bubble-menu": "^3.28.0",
+    "@tiptap/extension-floating-menu": "^3.28.0",
+    "@tiptap/extension-image": "^3.28.0",
+    "@tiptap/extension-placeholder": "^3.28.0",
+    "@tiptap/extension-table": "^3.28.0",
+    "@tiptap/starter-kit": "^3.28.0",
+    "@tiptap/suggestion": "^3.28.0",
+    "exifr": "^7.1.3",
+    "libsodium-wrappers-sumo": "^0.8.4",
+    "sortablejs": "^1.15.7",
+    "tiptap-markdown": "^0.9.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 2 chrome versions",
+      "last 2 firefox versions",
+      "last 2 safari versions",
+      "last 2 ios versions",
+      "last 1 android version",
+      "last 1 chromeandroid version",
+      "ie 11"
+    ]
+  }
 }
