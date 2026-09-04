@@ -8994,5 +8994,14 @@ attempt at that check ran `docker exec` without it, got a passing build as root,
 "verified" a container that was still broken. That is the same misreading the entry above records
 for `pytest`, reproduced live while fixing it.
 
+A second hazard in the same documented command, found reviewing the fix rather than by hitting it:
+the app container mounts `urbanlens/frontend/static`, `urbanlens/media` and `backups` as volumes
+*inside* the tree being copied, so a plain `docker cp src/.` writes the host's collected static
+over the volume nginx serves. The host's `staticfiles.json` was 14,166 bytes against the
+container's 16,769, and under `ManifestStaticFilesStorage` an asset present in the container but
+missing from the manifest is a render-time error rather than a stale file. `bin/sync_app.sh` skips
+those paths (via `tar --exclude`, since `docker cp` cannot); none of them hold Python or templates,
+so the parity check is unaffected.
+
 Still worth doing separately: `CLAUDE.local.md` documents the bare `docker cp` form and should
 point at `bin/sync_app.sh` instead. It is untracked, so it is the operator's to change.

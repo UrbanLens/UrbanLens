@@ -46,6 +46,16 @@ CONTAINER="${UL_APP_CONTAINER:-urbanlens_development_main_app}"
 FRONTEND=0
 RESTART=0
 
+# The app container mounts volumes *inside* the tree being copied, and copying
+# into them is worse than pointless. `frontend/static` is the collectstatic
+# output shared with nginx: the host's copy is whatever was collected there
+# last, so a plain sync replaces the manifest nginx is serving with an older,
+# shorter one, and every asset the container has but the manifest does not
+# becomes a render-time error rather than a stale file. `media` holds uploads
+# that exist only in the volume. Neither contains Python or templates, so
+# leaving them out changes nothing the parity check looks at.
+SYNC_EXCLUDES=(urbanlens/frontend/static urbanlens/media backups)
+
 for arg in "$@"; do
     case "$arg" in
         --frontend) FRONTEND=1 ;;

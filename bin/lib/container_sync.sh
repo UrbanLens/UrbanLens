@@ -37,6 +37,13 @@
 # reason. Used unquoted via `eval`, so it must stay a literal constant.
 SOURCE_FILES="\\( -name '*.py' -o \\( -path '*/templates/*' -name '*.html' \\) \\) -not -path '*/__pycache__/*'"
 
+# Paths under src/ the copy must not write into, relative to src/. Empty by
+# default - the test runner mounts nothing under /app/src, so everything there
+# is the container's own to overwrite. A caller that syncs into a container with
+# volumes mounted inside the tree sets this; see bin/sync_app.sh for why that is
+# not optional there.
+SYNC_EXCLUDES=()
+
 # Copy the working tree into a container and leave it owned by the app user.
 #
 # Args:
@@ -44,7 +51,15 @@ SOURCE_FILES="\\( -name '*.py' -o \\( -path '*/templates/*' -name '*.html' \\) \
 sync_tree_into() {
     local container="$1"
     echo "==> syncing working tree into $container"
-    docker cp src/. "$container":/app/src/
+    # tar rather than `docker cp src/.`, only because docker cp cannot exclude a
+    # path and some containers mount volumes inside the tree being copied. With
+    # no excludes set the two are equivalent.
+    local tar_args=() path
+    for path in ${SYNC_EXCLUDES[@]+"${SYNC_EXCLUDES[@]}"}; do
+        tar_args+=(--exclude="./$path")
+        echo "    leaving $path alone (mounted volume)"
+    done
+    tar -C src -cf - "${tar_args[@]}" . | docker exec -i "$container" tar -xf - -C /app/src
     # bin/ is synced too. It was dropped when bin/opslib and the ops-tooling
     # tests that reached it by path moved to the separate `infrastructure` repo,
     # on the grounds that nothing under tests/ read it anymore - but three

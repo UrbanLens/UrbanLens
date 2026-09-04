@@ -106,6 +106,15 @@ manual `bun run build` succeeds while the served site is down — reading as
 "permissions are fine", which is the exact opposite of the truth for the process
 that matters. Reproduce as the account that actually runs: `docker exec -u appuser`.
 
+The sync deliberately skips `urbanlens/frontend/static`, `urbanlens/media` and
+`backups`, which the app container mounts as volumes *inside* the tree being
+copied. Writing into the first is actively harmful: it replaces the
+`staticfiles.json` nginx is serving with whatever the host last collected, and
+under `ManifestStaticFilesStorage` an asset missing from the manifest is a
+render-time error, not a stale file. Measured on 2026-09-04, a plain copy
+swapped a 16,769-byte container manifest for a 14,166-byte host one. None of the
+skipped paths hold Python or templates, so the parity check is unaffected.
+
 `--frontend` is a separate flag because copying built assets in does not reach
 what nginx serves. `collectstatic` populates a *volume* mounted at
 `/app/src/urbanlens/frontend/static`; the package directory the sync writes to
