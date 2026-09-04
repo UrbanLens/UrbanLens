@@ -14,8 +14,8 @@ record. Read the index before reading anything else here.
 
 ```bash
 grep -E '^\| P7 ' docs/INDEX.md          # one record by id
-grep -i 'denominator' docs/INDEX.md      # by keyword
-grep -E '\| blocking ' docs/INDEX.md     # everything blocking
+grep -i 'encryption' docs/INDEX.md       # by keyword
+grep -E '\| open ' docs/INDEX.md         # everything still open
 ```
 
 ## The ID prefixes
