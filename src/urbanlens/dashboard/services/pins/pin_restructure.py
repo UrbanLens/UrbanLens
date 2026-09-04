@@ -324,17 +324,50 @@ def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
     Returns:
         Uncovered building records, or ``[]``.
     """
+    from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
+
+    cached = site_scope.parcel_buildings(pin.location) or []
+    children = list(pin.detail_pins.select_related("location"))
+    importable = importable_building_indexes(pin, cached, children, property_polygon(pin))
+    if not importable:
+        return []
+    on_property = buildings_on_property(cached)
+    return [on_property[index] for index in sorted(importable)]
+
+
+def importable_building_indexes(pin: Pin, cached: list[dict[str, Any]], children: list, boundary: GEOSGeometry | None) -> frozenset[int]:
+    """Which of this parcel's buildings the import could actually create a pin for.
+
+    The rule behind :func:`missing_buildings`, expressed as *positions in*
+    ``buildings_on_property(cached)`` rather than as records. Publishing
+    positions is what lets a surface that has already rendered its rows label
+    them without recomputing a second, drifting rule - which is exactly how the
+    mobile panel's ``unpinned_count`` came to disagree with the web button's,
+    advertising buildings the import would silently skip.
+
+    Positional rather than keyed on the record: two entries can be duplicates of
+    one another, and a hash-based correlation would fold them together.
+
+    Args:
+        pin: The parent pin.
+        cached: The parcel's cached building records, unfiltered.
+        children: The pin's direct child markers, to match against.
+        boundary: The property's real (non-circle) boundary, or None.
+
+    Returns:
+        Positions in ``buildings_on_property(cached)``, possibly empty.
+    """
     from urbanlens.dashboard.models.location.queryset import quantize_coordinate
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_within_boundary, buildings_on_property, countable_buildings
 
     # The panel filters the same way; an unfiltered dialog would offer to
     # create a child pin per building in a county-scale sensitivity zone.
-    cached = site_scope.parcel_buildings(pin.location) or []
+    #
     # Gate on distinct buildings, offer every real one: a building that contains
     # others is still a building, and nesting a pin under it is the point.
     if len(countable_buildings(cached)) < site_scope.MULTI_BUILDING_THRESHOLD:
-        return []
-    buildings = buildings_on_property(cached)
+        return frozenset()
+
     # is_on_property is the provider's own opinion, not ours - it isn't
     # guaranteed to agree with our own parcel boundary (see
     # building_within_boundary). Suggesting a building outside it is worse
@@ -343,15 +376,27 @@ def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
     # only gates the *suggestion* - a building already pinned by hand keeps
     # showing on the property panel regardless of where the parcel data says
     # it sits (building_rows applies the same check the same way).
-    boundary = property_polygon(pin)
-    if boundary is not None:
-        buildings = [building for building in buildings if building_within_boundary(building, boundary)]
-    missing = unmatched_buildings(buildings, list(pin.detail_pins.select_related("location")))
+    candidates = [(index, building) for index, building in enumerate(buildings_on_property(cached)) if boundary is None or building_within_boundary(building, boundary)]
 
-    blocked = already_pinned_points(pin, missing)
+    # The body of unmatched_buildings, carrying positions. Kept in step with it
+    # deliberately rather than calling it: one marker may cover at most one
+    # building, so the answer depends on iteration order and cannot be
+    # reconstructed by matching the returned records back up afterwards.
+    available = list(children)
+    missing: list[tuple[int, dict[str, Any]]] = []
+    for index, building in candidates:
+        if building.get("latitude") is None or building.get("longitude") is None:
+            continue
+        covering = match_marker(building, available)
+        if covering is not None:
+            available.remove(covering)
+            continue
+        missing.append((index, building))
+
+    blocked = already_pinned_points(pin, [building for _index, building in missing])
     if not blocked:
-        return missing
-    return [building for building in missing if (quantize_coordinate(building["latitude"], "latitude"), quantize_coordinate(building["longitude"], "longitude")) not in blocked]
+        return frozenset(index for index, _building in missing)
+    return frozenset(index for index, building in missing if (quantize_coordinate(building["latitude"], "latitude"), quantize_coordinate(building["longitude"], "longitude")) not in blocked)
 
 
 def should_offer(pin: Pin) -> bool:

@@ -279,17 +279,32 @@ class PinDetailHeroSubnavTests(TestCase):
         # route used everywhere else - just triggered by a click, not page load.
         self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "census_tigerweb"]))
 
+    #: The autoload trigger as rendered. Guarded against the global being absent
+    #: - htmx can evaluate a `load` filter before core.js has run, and an
+    #: unguarded call threw and left the section permanently blank. Built here
+    #: rather than spelled out twice so the two assertions below cannot end up
+    #: testing different strings, and so a change to the guard fails loudly
+    #: instead of turning the negative one into a vacuous pass.
+    @staticmethod
+    def _autoload_trigger(key: str) -> str:
+        return f"hx-trigger=\"load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','{key}'))]"
+
     def test_condensed_panels_no_longer_have_an_autoload_trigger(self) -> None:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         content = response.content.decode()
         for condensed_key in ("census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes"):
-            self.assertNotIn(f"hx-trigger=\"load[!window.ulSectionCollapsed('pin','{condensed_key}')]", content)
+            self.assertNotIn(self._autoload_trigger(condensed_key), content)
 
     def test_epa_exact_site_detail_panel_still_has_an_autoload_trigger(self) -> None:
-        """Unlike epa_echo (nearby list), epa_echo_detail is not tab-gated - it's a normal auto-loading card."""
+        """Unlike epa_echo (nearby list), epa_echo_detail is not tab-gated - it's a normal auto-loading card.
+
+        Also what keeps the negative test above honest: if the trigger's spelling
+        changes and this helper is not updated, this fails rather than letting
+        that one pass by matching nothing.
+        """
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         content = response.content.decode()
-        self.assertIn("hx-trigger=\"load[!window.ulSectionCollapsed('pin','epa_echo_detail')]", content)
+        self.assertIn(self._autoload_trigger("epa_echo_detail"), content)
 
     def test_tab_body_carries_the_chrome_stripping_class(self) -> None:
         """Regression guard: the nested-card-chrome-stripping CSS rule

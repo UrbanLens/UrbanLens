@@ -388,7 +388,63 @@ class ParcelBuildingsApiPayloadTests(TestCase):
         rows = payload[PanelApiKind.BUILDINGS.value]
         self.assertEqual(len(rows), 2)
         self.assertTrue(all(row["child_pin_uuid"] is None and row["child_pin_name"] is None for row in rows))
-        self.assertEqual(payload["unpinned_count"], 2)
+
+    def test_a_building_on_the_parent_pins_own_point_is_not_creatable(self) -> None:
+        """Unpinned is not the same as creatable, and the count follows creatable.
+
+        This fixture's Tool Shed sits at the parcel pin's own coordinates, which
+        is not contrived - a parcel's coordinate is frequently one of its
+        buildings' centroids. ``resolve_child_pin_location`` refuses a second
+        pin of the same profile at one exact point, so the import would skip it.
+        Counting it advertised "add 2 buildings" where pressing the button
+        created 1 and silently dropped the other.
+        """
+        self._cache()
+        payload = self.source.api_payload(self.pin)
+        assert payload is not None
+        rows = {row["name"]: row for row in payload[PanelApiKind.BUILDINGS.value]}
+
+        self.assertIsNone(rows["Tool Shed"]["child_pin_name"], "it really is unpinned")
+        self.assertFalse(rows["Tool Shed"]["can_create"], "but the import cannot create it")
+        self.assertTrue(rows["Powerhouse"]["can_create"])
+        self.assertEqual(payload["unpinned_count"], 1)
+
+    def test_the_count_is_exactly_the_rows_flagged_creatable(self) -> None:
+        """The invariant that makes the number and the list one answer.
+
+        Deriving them separately is how they came to disagree inside a single
+        response, with no way for a client to tell which rows the number meant.
+        """
+        self._cache()
+        payload = self.source.api_payload(self.pin)
+        assert payload is not None
+
+        self.assertEqual(payload["unpinned_count"], sum(1 for row in payload[PanelApiKind.BUILDINGS.value] if row["can_create"]))
+
+    def test_the_count_matches_what_the_web_dialog_would_add(self) -> None:
+        """The two surfaces must not answer this differently.
+
+        The web button asks ``missing_buildings``; this asks the same rule
+        through ``importable_building_indexes``. They were separate rules until
+        now, and drifted.
+        """
+        from urbanlens.dashboard.services.pins import pin_restructure
+
+        self._cache()
+        payload = self.source.api_payload(self.pin)
+        assert payload is not None
+
+        self.assertEqual(payload["unpinned_count"], len(pin_restructure.missing_buildings(self.pin)))
+
+    def test_no_internal_correlation_handle_reaches_the_client(self) -> None:
+        """``record_index`` pairs a row with its record server-side, and stops there."""
+        self._cache()
+        payload = self.source.api_payload(self.pin)
+        assert payload is not None
+
+        for row in payload[PanelApiKind.BUILDINGS.value]:
+            self.assertNotIn("record_index", row)
+            self.assertNotIn("selection_key", row)
 
     def test_covering_child_pin_is_reported_by_uuid_and_name(self) -> None:
         """The pairing a client cannot compute for itself, resolved server-side.
@@ -404,7 +460,10 @@ class ParcelBuildingsApiPayloadTests(TestCase):
         powerhouse = next(row for row in payload[PanelApiKind.BUILDINGS.value] if row["name"] == "Powerhouse")
         self.assertEqual(powerhouse["child_pin_uuid"], str(child.uuid))
         self.assertEqual(powerhouse["child_pin_name"], child.effective_name)
-        self.assertEqual(payload["unpinned_count"], 1)
+        self.assertFalse(powerhouse["can_create"], "a pinned building is not on offer")
+        # Tool Shed sits on the parent pin's own point, so it is not creatable
+        # either - see test_a_building_on_the_parent_pins_own_point_is_not_creatable.
+        self.assertEqual(payload["unpinned_count"], 0)
 
     def test_real_footprint_is_flagged_and_included(self) -> None:
         """A client that draws outlines gets one; the flag saves it from looking."""

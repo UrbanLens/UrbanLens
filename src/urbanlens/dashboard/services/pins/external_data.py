@@ -153,7 +153,18 @@ class PanelApiKind(StrEnum):
             provenance a client needs to decide whether drawing it is honest.
         BUILDINGS: ``{"buildings": [{...}, ...]}`` - one row per structure
             standing on the pin's parcel, each already paired with the child
-            pin (if any) that covers it.
+            pin (if any) that covers it. A row carries ``name``,
+            ``building_number``, ``year_built``, ``source``, ``source_label``,
+            ``latitude``, ``longitude``, ``has_geometry``, ``geometry``,
+            ``child_pin_uuid``, ``child_pin_name`` and ``can_create``.
+
+            ``can_create`` is the one a client must not try to derive. Having no
+            ``child_pin_name`` does not mean a pin can be made: a building
+            standing on a point the owner has already pinned with a *non-child*
+            pin is unpinned and uncreatable at the same time, because a profile
+            may not hold two pins at one point. The payload's
+            ``unpinned_count`` is exactly the rows carrying it, so the number
+            and the list can never disagree.
     """
 
     INFO = "info"

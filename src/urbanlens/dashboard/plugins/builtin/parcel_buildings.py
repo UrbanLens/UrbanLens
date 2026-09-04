@@ -391,7 +391,7 @@ def match_buildings_to_children(
 
     rows: list[dict[str, Any]] = []
     unmatched = list(children)
-    for building in buildings_on_property(buildings):
+    for record_index, building in enumerate(buildings_on_property(buildings)):
         child = match_marker(building, unmatched)
         if child is not None:
             # One child can only stand for one building - on a dense campus
@@ -418,6 +418,12 @@ def match_buildings_to_children(
                 "child_refs": list(building.get("child_refs") or []),
                 "depth": 0,
                 "selection_key": building.get("_selection_key") or "",
+                # This row's position in buildings_on_property(buildings) - the
+                # handle a caller uses to pair a rendered row with the record it
+                # came from, after tree-ordering and boundary drops have
+                # reordered and thinned the list. Not a substitute for
+                # selection_key, which is what a POST correlates by.
+                "record_index": record_index,
                 "origin": "external",
                 "child_name": _marker_name(child) if child is not None else "",
                 "child_uuid": str(child.uuid) if child is not None and getattr(child, "uuid", None) else "",
@@ -678,38 +684,50 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         if not buildings:
             return None
 
-        from urbanlens.dashboard.services.pins.pin_restructure import property_polygon
+        from urbanlens.dashboard.services.pins.pin_restructure import importable_building_indexes, property_polygon
 
-        rows = building_rows(buildings, list(pin.detail_pins.select_related("location")), boundary_polygon=property_polygon(pin))
+        children = list(pin.detail_pins.select_related("location"))
+        boundary = property_polygon(pin)
+        importable = importable_building_indexes(pin, buildings, children, boundary)
+        rows = building_rows(buildings, children, boundary_polygon=boundary)
+        serialized = [
+            {
+                "name": row["name"],
+                "building_number": row["building_number"],
+                "year_built": row["year_built"],
+                "source": row["source"],
+                "source_label": row["source_label"],
+                "latitude": row["latitude"],
+                "longitude": row["longitude"],
+                "has_geometry": row["has_geometry"],
+                "geometry": row["geometry"],
+                # Renamed from building_rows' marker-neutral child_* keys:
+                # on this surface the children really are pins, and a uuid
+                # (not the slug the web panel links by) is what the mobile
+                # pin endpoints address a pin with.
+                "child_pin_uuid": row["child_uuid"] or None,
+                "child_pin_name": row["child_name"] or None,
+                # Whether "add this building" would actually produce a pin.
+                # Unpinned is not the same as creatable: a building standing on
+                # a point the owner has already pinned with a *non-child* pin
+                # has no child_pin_name here, and resolve_child_pin_location
+                # still refuses it (a profile may not hold two pins at one
+                # point). The two conjuncts are both needed - the row loop and
+                # the importable loop consume markers in different orders, so
+                # requiring both to call a building free is what keeps this from
+                # ever advertising work the import will skip.
+                "can_create": not row["child_name"] and row["record_index"] in importable,
+            }
+            for row in rows
+        ]
         return {
-            PanelApiKind.BUILDINGS.value: [
-                {
-                    "name": row["name"],
-                    "building_number": row["building_number"],
-                    "year_built": row["year_built"],
-                    "source": row["source"],
-                    "source_label": row["source_label"],
-                    "latitude": row["latitude"],
-                    "longitude": row["longitude"],
-                    "has_geometry": row["has_geometry"],
-                    "geometry": row["geometry"],
-                    # Renamed from building_rows' marker-neutral child_* keys:
-                    # on this surface the children really are pins, and a uuid
-                    # (not the slug the web panel links by) is what the mobile
-                    # pin endpoints address a pin with.
-                    "child_pin_uuid": row["child_uuid"] or None,
-                    "child_pin_name": row["child_name"] or None,
-                }
-                for row in rows
-            ],
+            PanelApiKind.BUILDINGS.value: serialized,
             "provider": data.get("provider") or "",
-            # Counts what the "add buildings" dialog would actually offer, which
-            # is every unmatched on-property record including envelope parents -
-            # see pin_restructure.missing_buildings, "offer every real one".
-            # Excluding parents here (as this did until 2026-08-19) made the
-            # mobile panel advertise fewer buildings than the web panel on the
-            # subdivided campuses reconciliation exists for.
-            "unpinned_count": sum(1 for row in rows if not row["child_name"]),
+            # Exactly the rows flagged can_create, so the number and the list it
+            # ships beside can never disagree inside one response. Deriving it
+            # independently is how this came to advertise "add 2 buildings"
+            # where the import created 1 and silently skipped the other.
+            "unpinned_count": sum(1 for entry in serialized if entry["can_create"]),
         }
 
 
