@@ -22,6 +22,25 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-09-04: `BootstrapAdminGuardTests` cannot pass against a reused test database
+
+`test_integration_provisioning.py::BootstrapAdminGuardTests` asserts about *the first user in the
+database* - that an ordinary first account is promoted to bootstrap site admin and a provisioned one
+is not. Against a database any other test file has already written to, the "first user" is somebody
+else's fixture, and all three tests fail with a mismatched pk.
+
+Reproduced both ways on 2026-09-04: 3 failures under `--reuse-db` in a session that had run other
+files first, 30/30 passing against a fresh `UL_TEST_DB_NAME`.
+
+This is not flakiness and not order-dependence within the file - it is a property the file needs
+that `--fast` cannot provide. It matters because `bin/run_tests.sh --fast` is the documented tight
+edit-run loop, and the failure reads as a regression in whatever you were working on. It cost one
+diagnosis here.
+
+The fix is probably for the file to establish its own premise rather than assume an empty table -
+`SiteSettings`' bootstrap-admin slot is what it actually reads, so a `setUp` that clears it would do
+- rather than a marker excluding the file from `--fast`, which just moves the surprise.
+
 ## OPEN 2026-09-01: `has_sent_join_email` doesn't share `FriendInvitation`'s Gmail-variant normalization
 
 Found alongside the fix for `FriendInvitation.email_normalized` (see the friend-invite/visit-invite email-canonicalization
@@ -2823,33 +2842,6 @@ Nothing on the remaining task list clears the bar of "worth doing without those 
 #38 would re-test surfaces verified correct, #32 is churn with no bug attached, #29's last
 blocks are template-coupled or need a Leaflet stub. Stated per the standing instruction to
 say so plainly rather than manufacture work.
-
-## OPEN 2026-08-12: a password reset does not evict an intruder who minted an API key
-
-Resetting a password invalidates every session (Django rotates the session auth hash), which is
-what makes "reset your password" the standard response to a suspected compromise. It does **not**
-touch `ApiKey` or django-oauth-toolkit `AccessToken` rows, and nothing else does either - there is
-no revocation hook on password change anywhere in the codebase.
-
-That matters because of a second gap: `controllers/api_keys.py::ApiKeyCreateView` mints a key
-behind `LoginRequiredMixin` alone, with **no current-password proof**. So a session-only compromise
-- a stolen cookie, a borrowed unlocked laptop - is enough to mint a long-lived credential, and the
-victim's natural remedy does not remove it. The key keeps working with whatever scopes it was
-given until someone notices it in the settings list and revokes it by hand.
-
-Neither half is unusual on its own, and reasonable products differ (GitHub notifies rather than
-revoking PATs on reset). What makes this worth recording is the asymmetry: this codebase *already*
-demands a current-password proof for the three E2EE key-replacing endpoints - see
-`test_e2ee_dual_auth.py::CurrentPasswordProofUnderCredentialAuthTests`, whose rationale is exactly
-"an OAuth2 token grants send-and-read-messages, not replace this account's key material". The same
-reasoning applies to minting a credential that can read the account's pins, photos and location
-history.
-
-**Not fixed here because both remedies are product decisions.** Revoking on password change is the
-stronger option and silently breaks any legitimate integration the user has set up; requiring a
-password proof to mint a key is the smaller change and matches the existing E2EE precedent, but it
-is still a UX change to a settings flow. A middle option is to notify on both events, which this
-app already has the notification machinery for.
 
 ## OPEN 2026-08-12: bulk-import paths skip the upload quota lock, which is fail-open anyway
 

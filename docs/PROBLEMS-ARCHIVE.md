@@ -11,6 +11,43 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-08-12: a password reset does not evict an intruder who minted an API key
+
+Resetting a password invalidates every session (Django rotates the session auth hash), which is
+what makes "reset your password" the standard response to a suspected compromise. It does **not**
+touch `ApiKey` or django-oauth-toolkit `AccessToken` rows, and nothing else does either - there is
+no revocation hook on password change anywhere in the codebase.
+
+That matters because of a second gap: `controllers/api_keys.py::ApiKeyCreateView` mints a key
+behind `LoginRequiredMixin` alone, with **no current-password proof**. So a session-only compromise
+- a stolen cookie, a borrowed unlocked laptop - is enough to mint a long-lived credential, and the
+victim's natural remedy does not remove it. The key keeps working with whatever scopes it was
+given until someone notices it in the settings list and revokes it by hand.
+
+Neither half is unusual on its own, and reasonable products differ (GitHub notifies rather than
+revoking PATs on reset). What makes this worth recording is the asymmetry: this codebase *already*
+demands a current-password proof for the three E2EE key-replacing endpoints - see
+`test_e2ee_dual_auth.py::CurrentPasswordProofUnderCredentialAuthTests`, whose rationale is exactly
+"an OAuth2 token grants send-and-read-messages, not replace this account's key material". The same
+reasoning applies to minting a credential that can read the account's pins, photos and location
+history.
+
+**Not fixed here because both remedies are product decisions.** Revoking on password change is the
+stronger option and silently breaks any legitimate integration the user has set up; requiring a
+password proof to mint a key is the smaller change and matches the existing E2EE precedent, but it
+is still a UX change to a settings flow. A middle option is to notify on both events, which this
+app already has the notification machinery for.
+
+**Fixed 2026-09-04**, with the owner's ruling: ask via a dialog, default to *not* revoking, and do not ask at all when the account has no active keys.
+
+Asked on the reset POST, because `post_reset_login` is False - that request is the only moment in the flow where the account is identified, so a prompt on the next page would have no principal to act as.
+
+The dialog is backed by a hidden field rather than driven by one. No JavaScript, or JavaScript that throws, submits the form exactly as before and revokes nothing - the safe answer is the one that survives failure. The submit listener is on the form rather than on `document` (a capturing document-level handler would silence every other submit handler on the page) and is registered before `wireResetConfirmForm`, so the E2EE credential derivation waits for the choice and then replays via `requestSubmit()`.
+
+**One thing to know before touching this page again**: the key count is gated on `validlink`, not on `self.user`. Django resolves `self.user` from the uidb64 *before* checking the token, and a uidb64 is an encoded integer pk - so anything rendered from `self.user` alone is readable for any account by anyone who can count. Confirmed load-bearing: weakening the guard to `user is not None` fails `test_an_expired_link_for_a_real_account_reveals_nothing`. Key *names* are never rendered at all; the count is enough to phrase the question, and names are user-authored text.
+
+**The second half of this entry is still open**: `ApiKeyCreateView` still mints a key behind `LoginRequiredMixin` alone, with no current-password proof. That is what makes a session-only compromise enough to create the credential in the first place, and it is a separate decision (re-auth on mint, or notify-on-mint) rather than part of this one.
+
 ## RESOLVED 2026-08-21: Consensus points are awarded for reverting someone else's edit, and never retracted
 
 Found while surveying scoring infrastructure for UL-397, not while working on Consensus — so this
