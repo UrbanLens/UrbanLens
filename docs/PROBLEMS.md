@@ -5,7 +5,7 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > **Referencing this file from code:** name the entry, not just the file. There are 33 source
 > references reading `see docs/PROBLEMS.md`, and this document is over 7,000 lines - a bare pointer
 > costs the reader a full-text search and, in practice, they do not do it. Prefer
-> `see "the documented docker cp resync breaks the app container" in docs/PROBLEMS.md`. Cite **every**
+> `see "forms submit and save every field, not the ones that changed" in docs/PROBLEMS.md`. Cite **every**
 > relevant entry, not the nearest one - `Friendship.muted` had two (wrong shape, and never read; both
 > now in the archive), and a pointer to one implies it is the whole story where a bare pointer at
 > least led to both. Headings
@@ -22,36 +22,25 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
-## OPEN 2026-09-04: `BootstrapAdminGuardTests` cannot pass against a reused test database
+## RESOLVED 2026-09-04: a hypothesis property in `test_email_safety.py` fails a few runs in a hundred
 
-`test_integration_provisioning.py::BootstrapAdminGuardTests` asserts about *the first user in the
-database* - that an ordinary first account is promoted to bootstrap site admin and a provisioned one
-is not. Against a database any other test file has already written to, the "first user" is somebody
-else's fixture, and all three tests fail with a mismatched pk.
+`HashEmailTests::test_hash_does_not_contain_address` asserted that the local part of a generated
+address never appears inside its own SHA-256 digest. The digest is 64 hex characters, and
+`st.emails()` happily generates local parts made only of hex digits - so a four-character all-hex
+local turns up inside its own digest by coincidence roughly once in 270 qualifying examples, and
+the test fails on an address it was never making a claim about.
 
-Reproduced both ways on 2026-09-04: 3 failures under `--reuse-db` in a session that had run other
-files first, 30/30 passing against a fresh `UL_TEST_DB_NAME`.
+Found by running the file while checking an unrelated entry: one failure, and a clean pass on the
+very next run of the same file, including with the seed the failure printed. Confirmed
+deterministically rather than by re-rolling - brute-forcing four-character hex locals finds
+counterexamples immediately (`0846@a.com` hashes to `5ece20846df4...`).
 
-This is not flakiness and not order-dependence within the file - it is a property the file needs
-that `--fast` cannot provide. It matters because `bin/run_tests.sh --fast` is the documented tight
-edit-run loop, and the failure reads as a regression in whatever you were working on. It cost one
-diagnosis here.
+Fixed by `assume`-ing the local part is not entirely hex, with the counterexample named in the
+docstring so the exclusion does not later read as unexplained. Five seeds green afterwards.
 
-The fix is probably for the file to establish its own premise rather than assume an empty table -
-`SiteSettings`' bootstrap-admin slot is what it actually reads, so a `setUp` that clears it would do
-- rather than a marker excluding the file from `--fast`, which just moves the surprise.
-
-## OPEN 2026-09-01: `has_sent_join_email` doesn't share `FriendInvitation`'s Gmail-variant normalization
-
-Found alongside the fix for `FriendInvitation.email_normalized` (see the friend-invite/visit-invite email-canonicalization
-work, same date). `services/security/email_safety.has_sent_join_email` dedupes by `hash_email(email)` - a hash of the
-*raw* address, not the normalized one `normalize_email` would produce. So a join-the-site invite email to
-`johndoe3@gmail.com` and a second one to `John.Doe.3+invite@gmail.com` from the same inviter are not recognized as the
-same mailbox: the second send is not suppressed, and the recipient gets two "invited you to join UrbanLens" emails
-instead of one. `FriendInvitation`'s own row-level dedup (fixed) is unaffected - it now matches on `email_normalized`
-regardless of what `has_sent_join_email` decides - so this is a duplicate-email annoyance, not a data-integrity or
-enumeration issue. Fix would be normalizing before hashing in `hash_email`/`has_sent_join_email`, which touches every
-existing `EmailSendLog` row's hash semantics and so deserves its own pass rather than folding into an unrelated change.
+Worth noting for other property tests here: "the output does not contain the input" is a weak
+proxy for "the input was not stored" whenever the output alphabet is small, and it gets weaker as
+the assertion gets shorter.
 
 ## OPEN 2026-09-01: VirusTotal fast-path scanning is hash-lookup-only, never submits an unknown file
 
@@ -3580,44 +3569,6 @@ silent logs are the anomaly to chase, since a failing child should print somethi
 `py-spy dump` on both pids would still name the frame in about a minute, and is the recommended next
 step. Note that `/proc/<pid>/io` is not readable even via `docker exec -u root` here, so measure CPU
 via `/proc/<pid>/stat` fields 14+15 rather than IO counters.
-
-## OPEN 2026-08-14: the documented `docker cp` resync breaks the app container
-
-**Root cause of the unhealthy-container entry above.** `CLAUDE.local.md` documents
-
-```
-docker cp src/urbanlens/. urbanlens_devs1_app:/app/src/urbanlens/   # resync without a rebuild
-```
-
-as the way to sync host changes into the container. The host tree contains
-`src/urbanlens/logs/`, owned by the host user `apps` (**uid 568**). The container's app runs as
-`appuser` (**uid 1001**). `docker cp` preserves the *source* ownership, so every resync hands the log
-directory to uid 568 with mode `rw-rw-r--` - no write bit for others - and `appuser` can no longer
-open it.
-
-Django's logging config then fails at startup:
-
-```
-PermissionError: [Errno 13] Permission denied: '/app/src/urbanlens/logs/django.log'
-ValueError: Unable to configure handler 'file'
-```
-
-which raises **before** `runserver` binds. That accounts for every symptom recorded above: no
-listener on 8000, silent `docker logs` (the file handler never configures), sustained ~2% CPU (the
-autoreloader retrying), and a process that is sleeping rather than blocked.
-
-**Why it took so long to see.** `docker exec` defaults to **root**, so every diagnostic and every
-`pytest` run in this session wrote to that log file successfully - `django.log` had a fresh
-timestamp minutes before the investigation, which reads as "permissions are fine" and is the exact
-opposite of the truth for the process that matters.
-
-Ownership has been restored (`chown -R appuser:appuser /app/src/urbanlens/logs`), but the running
-`runserver` will not recover on its own - it needs `docker compose restart app`.
-
-**The workflow itself still needs fixing**, or the next resync reintroduces it. Options: exclude
-`logs/` from the copy, `chown` after every `docker cp`, move the log directory outside the synced
-tree, or make the log path configurable so the container writes somewhere it owns. Until then the
-documented command should carry the `chown` as a second line.
 
 ## OPEN 2026-08-14: the dev database is 18 migrations behind the code
 

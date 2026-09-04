@@ -8870,3 +8870,129 @@ isinstance(row, dict)]` first; `external_api/views.py:2119` is fixed by the `cle
 described above. `warn_unused_ignores=true` is on and not disabled, so the zero-error run also
 proves the `conftest.py` ignore is not dead - it is actively suppressing the real error its comment
 names.
+
+## RESOLVED 2026-09-04: `BootstrapAdminGuardTests` cannot pass against a reused test database
+
+`test_integration_provisioning.py::BootstrapAdminGuardTests` asserts about *the first user in the
+database* - that an ordinary first account is promoted to bootstrap site admin and a provisioned one
+is not. Against a database any other test file has already written to, the "first user" is somebody
+else's fixture, and all three tests fail with a mismatched pk.
+
+Reproduced both ways on 2026-09-04: 3 failures under `--reuse-db` in a session that had run other
+files first, 30/30 passing against a fresh `UL_TEST_DB_NAME`.
+
+This is not flakiness and not order-dependence within the file - it is a property the file needs
+that `--fast` cannot provide. It matters because `bin/run_tests.sh --fast` is the documented tight
+edit-run loop, and the failure reads as a regression in whatever you were working on. It cost one
+diagnosis here.
+
+The fix is probably for the file to establish its own premise rather than assume an empty table -
+`SiteSettings`' bootstrap-admin slot is what it actually reads, so a `setUp` that clears it would do
+- rather than a marker excluding the file from `--fast`, which just moves the surprise.
+
+**Fixed 2026-09-04.** The class now has a `setUp` that establishes the state it reads instead
+of assuming it: it deletes every `User` and clears the `SiteSettings` bootstrap slot. Both writes
+are inside the test's own transaction, so they roll back - verified by leaving a deliberately
+dirtied row in the database, running the file, and confirming the row was still there afterwards.
+That property is the whole safety argument: a `TestCase` that really deleted every user would
+sabotage every other file sharing the same `--fast` database.
+
+**The fix suggested above would not have worked**, which is worth recording because it is the
+plausible one. `promote_first_user_if_needed` reads *two* pieces of global state - the bootstrap
+slot and whether any other `User` row exists - and clearing the slot only addresses the first.
+Reproduced deterministically rather than by waiting for a dirty database: inserting a single
+leftover `auth_user` row failed exactly one test (`test_an_ordinary_first_user_is_still_promoted`,
+`AssertionError: None != 59`), and only after *also* setting the bootstrap slot did all three fail
+as originally reported. Slot-clearing alone leaves the first failure in place.
+
+## NOT A DEFECT 2026-09-01: `has_sent_join_email` doesn't share `FriendInvitation`'s Gmail-variant normalization
+
+Found alongside the fix for `FriendInvitation.email_normalized` (see the friend-invite/visit-invite email-canonicalization
+work, same date). `services/security/email_safety.has_sent_join_email` dedupes by `hash_email(email)` - a hash of the
+*raw* address, not the normalized one `normalize_email` would produce. So a join-the-site invite email to
+`johndoe3@gmail.com` and a second one to `John.Doe.3+invite@gmail.com` from the same inviter are not recognized as the
+same mailbox: the second send is not suppressed, and the recipient gets two "invited you to join UrbanLens" emails
+instead of one. `FriendInvitation`'s own row-level dedup (fixed) is unaffected - it now matches on `email_normalized`
+regardless of what `has_sent_join_email` decides - so this is a duplicate-email annoyance, not a data-integrity or
+enumeration issue. Fix would be normalizing before hashing in `hash_email`/`has_sent_join_email`, which touches every
+existing `EmailSendLog` row's hash semantics and so deserves its own pass rather than folding into an unrelated change.
+
+**Not reproducible; the entry was wrong when it was filed (checked 2026-09-04).** `hash_email`
+does not hash the raw address - it hashes `normalize_email(email)`, which is the same function
+`FriendInvitation.email_normalized` uses and which performs exactly the Gmail dot/plus collapsing
+the entry says is missing. Both the read (`has_sent_join_email`) and the write
+(`record_email_sent`) go through it, so the two spellings produce one hash and the second send is
+suppressed.
+
+This was not a later fix that overtook the entry. `hash_email` has normalized since the function
+first appeared (`55a527c12`, 2026-07-11, then at `services/email_safety.py`), so there are also no
+pre-normalization `EmailSendLog` rows to worry about - which was the entry's stated reason for
+deferring. `test_gmail_variant_blocked_too` in `test_email_safety.py` already asserts the exact
+scenario described, and passes.
+
+## RESOLVED 2026-09-04: the documented `docker cp` resync breaks the app container
+
+**Root cause of the unhealthy-container entry above.** `CLAUDE.local.md` documents
+
+```
+docker cp src/urbanlens/. urbanlens_devs1_app:/app/src/urbanlens/   # resync without a rebuild
+```
+
+as the way to sync host changes into the container. The host tree contains
+`src/urbanlens/logs/`, owned by the host user `apps` (**uid 568**). The container's app runs as
+`appuser` (**uid 1001**). `docker cp` preserves the *source* ownership, so every resync hands the log
+directory to uid 568 with mode `rw-rw-r--` - no write bit for others - and `appuser` can no longer
+open it.
+
+Django's logging config then fails at startup:
+
+```
+PermissionError: [Errno 13] Permission denied: '/app/src/urbanlens/logs/django.log'
+ValueError: Unable to configure handler 'file'
+```
+
+which raises **before** `runserver` binds. That accounts for every symptom recorded above: no
+listener on 8000, silent `docker logs` (the file handler never configures), sustained ~2% CPU (the
+autoreloader retrying), and a process that is sleeping rather than blocked.
+
+**Why it took so long to see.** `docker exec` defaults to **root**, so every diagnostic and every
+`pytest` run in this session wrote to that log file successfully - `django.log` had a fresh
+timestamp minutes before the investigation, which reads as "permissions are fine" and is the exact
+opposite of the truth for the process that matters.
+
+Ownership has been restored (`chown -R appuser:appuser /app/src/urbanlens/logs`), but the running
+`runserver` will not recover on its own - it needs `docker compose restart app`.
+
+**The workflow itself still needs fixing**, or the next resync reintroduces it. Options: exclude
+`logs/` from the copy, `chown` after every `docker cp`, move the log directory outside the synced
+tree, or make the log path configurable so the container writes somewhere it owns. Until then the
+documented command should carry the `chown` as a second line.
+
+**It happened again on 2026-09-04, with a wider blast radius than recorded above**, and that is
+what finally got it fixed. After a host reboot, `urbanlens_development_main_app` crash-looped:
+`docker cp` had handed `dashboard/frontend/static/dashboard/js` to uid 3300 (an agent's host-side
+`bun run build` had created it), the entrypoint's own `bun run build` could not `rm -rf` its output
+directory, `init.py` raised `UnrecoverableError`, and the container never bound a port. So it is
+not only `logs/` - it is any directory in the synced tree whose host owner is not the container's
+`appuser`.
+
+That state is also self-sealing: a crash-looping container refuses `docker exec` with "container is
+restarting", so the one command that repairs it is the one you cannot run without timing the
+restart window.
+
+**Fixed** by `bin/sync_app.sh`, which does the copy, the chown, the deletion prune and the parity
+check as one command, so the sequence cannot be typed wrong - the same reason `bin/run_tests.sh`
+exists. Both now share `bin/lib/container_sync.sh` rather than keeping two copies of a sequence
+whose whole problem is that a step is easy to omit. It waits out a restart loop instead of
+reporting the daemon's refusal, and its `--frontend` flag rebuilds and runs `collectstatic`, which
+a plain copy never reaches (that output lives in a volume shared with nginx, at a different path).
+
+Verified by breaking it and repairing it: a raw `docker cp src/urbanlens/.` left the js directory
+owned by 3300 and `docker exec -u appuser ... bun run build` failed with the same `EACCES`; after
+`bin/sync_app.sh`, the identical command succeeded. **`-u appuser` is the whole trick** - the first
+attempt at that check ran `docker exec` without it, got a passing build as root, and would have
+"verified" a container that was still broken. That is the same misreading the entry above records
+for `pytest`, reproduced live while fixing it.
+
+Still worth doing separately: `CLAUDE.local.md` documents the bare `docker cp` form and should
+point at `bin/sync_app.sh` instead. It is untracked, so it is the operator's to change.
