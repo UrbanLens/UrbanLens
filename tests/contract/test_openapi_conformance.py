@@ -22,7 +22,6 @@ from collections import defaultdict
 
 from hypothesis import HealthCheck, settings
 import pytest
-
 from schema_source import generate_schema_document, live_base_url, load_schema, max_examples, response_checks
 
 pytestmark = pytest.mark.contract
@@ -105,16 +104,27 @@ class TestDocumentShape:
         # `_2`-suffixed ids are the *evidence* of a collision drf-spectacular
         # already resolved, so report them alongside rather than treating the
         # resolved pair as unique.
-        resolved = sorted(operation_id for operation_id in seen if operation_id.rstrip("0123456789").rstrip("_") in seen and operation_id[-1].isdigit())
+        resolved = sorted(
+            operation_id
+            for operation_id in seen
+            if operation_id.rstrip("0123456789").rstrip("_") in seen and operation_id[-1].isdigit()
+        )
 
-        detail = "\n".join(f"  {operation_id}: {', '.join(locations)}" for operation_id, locations in sorted(collisions.items()))
+        detail = "\n".join(
+            f"  {operation_id}: {', '.join(locations)}" for operation_id, locations in sorted(collisions.items())
+        )
         if resolved:
             detail += "\n  auto-suffixed (the other half of a collision): " + ", ".join(resolved)
         assert not collisions and not resolved, f"operationId collisions rename generated client methods:\n{detail}"
 
     def test_every_operation_declares_a_response(self, document: dict) -> None:
         """An operation with no documented response describes nothing to generate against."""
-        undocumented = [f"{method.upper()} {path}" for path, operations in document["paths"].items() for method, operation in operations.items() if isinstance(operation, dict) and not operation.get("responses")]
+        undocumented = [
+            f"{method.upper()} {path}"
+            for path, operations in document["paths"].items()
+            for method, operation in operations.items()
+            if isinstance(operation, dict) and not operation.get("responses")
+        ]
         assert not undocumented, "operations with no declared responses:\n  " + "\n  ".join(sorted(undocumented))
 
     def test_authenticated_operations_declare_their_security(self, document: dict) -> None:
@@ -130,7 +140,12 @@ class TestDocumentShape:
         schemes = document.get("components", {}).get("securitySchemes", {})
         assert schemes, "the document declares no security schemes at all - the API reads as fully anonymous."
 
-        secured = [path for path, operations in document["paths"].items() for operation in operations.values() if isinstance(operation, dict) and operation.get("security")]
+        secured = [
+            path
+            for path, operations in document["paths"].items()
+            for operation in operations.values()
+            if isinstance(operation, dict) and operation.get("security")
+        ]
         assert secured, "no operation declares `security`; every endpoint reads as anonymous to a generated client."
 
     def test_authenticated_operations_document_rejection(self, document: dict) -> None:
@@ -149,6 +164,14 @@ class TestDocumentShape:
         ``extend_schema(responses=...)`` on the shared base view.
         """
         missing = sorted(
-            f"{method.upper()} {path}" for path, operations in document["paths"].items() for method, operation in operations.items() if isinstance(operation, dict) and operation.get("security") and "401" not in (operation.get("responses") or {})
+            f"{method.upper()} {path}"
+            for path, operations in document["paths"].items()
+            for method, operation in operations.items()
+            if isinstance(operation, dict)
+            and operation.get("security")
+            and "401" not in (operation.get("responses") or {})
         )
-        assert not missing, f"{len(missing)} authenticated operations never document a 401, though every one of them returns it.\n  First few:\n    " + "\n    ".join(missing[:8])
+        assert not missing, (
+            f"{len(missing)} authenticated operations never document a 401, though every one of them returns it.\n  First few:\n    "
+            + "\n    ".join(missing[:8])
+        )

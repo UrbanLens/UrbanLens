@@ -2,7 +2,7 @@
 
 Generated 2026-08-25, by reading the actual implementation for concrete claims in
 `docs/FEATURES.md` (a codebase-generated feature inventory, last verified/expanded 2026-07-29) -
-not by reading other docs. This is a different kind of check than `docs/GOALS_CODE_AUDIT.md`:
+not by reading other docs. This is a different kind of check than `docs/audits/GOALS_CODE_AUDIT.md`:
 `FEATURES.md` describes what the code currently does rather than what it's obligated to do, so
 most drift here is the doc falling behind fast-moving feature work, not the code violating an
 intent. Several findings were live security/privacy gaps regardless.

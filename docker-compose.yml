@@ -385,7 +385,7 @@ services:
 
     # Bounds this service's own stdout/stderr (startup, errors) - the per-request
     # access log is deliberately routed to the logs volume above instead, and
-    # still needs its own rotation (tracked separately, see docs/GOALS_CODE_AUDIT.md
+    # still needs its own rotation (tracked separately, see docs/audits/GOALS_CODE_AUDIT.md
     # "Backups and logs" - this block does not cover that file).
     logging:
       driver: "json-file"

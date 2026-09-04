@@ -2,8 +2,8 @@
 
 Generated 2026-08-25, by reading the actual code and TypeScript specs for every concrete claim in
 `docs/LOCATION_DATA_TESTS.md` - the opt-in Hudson River State Hospital suite, and the sixth and
-(for now) final surface in this series, after `docs/GOALS_CODE_AUDIT.md`, `docs/FEATURES_CODE_AUDIT.md`,
-`docs/TEST_INFRA_DOCS_AUDIT.md` and `docs/TOOLING_AUDIT.md`. This doc is different in kind from the
+(for now) final surface in this series, after `docs/audits/GOALS_CODE_AUDIT.md`, `docs/audits/FEATURES_CODE_AUDIT.md`,
+`docs/audits/TEST_INFRA_DOCS_AUDIT.md` and `docs/archive/TOOLING_AUDIT.md`. This doc is different in kind from the
 other four: most of it is deliberately self-aware methodology (bounds not values, questions not
 verdicts), not simple factual claims - so the audit targeted the parts that *are* falsifiable: the
 three-defect boundary-invention fix it documents as already fixed, the fixture/spec structure it
@@ -64,7 +64,7 @@ row" was true as of `HEAD` (commit `86e55aa1`) and is **not** true of the workin
 there's an uncommitted, in-progress change to `community_counts.py` that makes the count
 Place-aware (aggregating across every `Location` sharing the wiki's `Place`), which is precisely
 the fix that would close the gap this doc describes. The change ships with its own uncommitted
-test class and cites `docs/GOALS_CODE_AUDIT.md` as its source - almost certainly another concurrent
+test class and cites `docs/audits/GOALS_CODE_AUDIT.md` as its source - almost certainly another concurrent
 agent session working one of that doc's open items, per the project's own note that multiple agents
 edit this repo at once. Not touched, and the doc's claim was left as-is (it's accurate against the
 last commit, which is the right reference point for documentation) rather than edited to describe

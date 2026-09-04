@@ -1,48 +1,34 @@
 # PROBLEMS
 
-Bugs or quirks identified during other work but out of scope to investigate/fix at the time.
+> **Written by a Claude agent. Not authoritative.**
+>
+> This records what one automated session measured or believed on the date
+> below. It was not independently reviewed, its numbers may be stale, and the
+> code may have moved. Re-run the measurement before relying on it, and
+> **rewrite this file** when you do — do not add a correction underneath the
+> old claim. When this file and the code disagree, the code wins.
 
-> **Referencing this file from code:** name the entry, not just the file. There are 33 source
-> references reading `see docs/PROBLEMS.md`, and this document is over 7,000 lines - a bare pointer
-> costs the reader a full-text search and, in practice, they do not do it. Prefer
-> `see "forms submit and save every field, not the ones that changed" in docs/PROBLEMS.md`. Cite **every**
-> relevant entry, not the nearest one - `Friendship.muted` had two (wrong shape, and never read; both
-> now in the archive), and a pointer to one implies it is the whole story where a bare pointer at
-> least led to both. Headings
-> are stable here; line numbers are not. **A date works nearly as well as a heading** - `external_api/
-> serializers.py` cites "docs/PROBLEMS.md, 2026-07-28" and that alone locates the entry unambiguously,
-> because entry headings carry their date. A **distinctive identifier** in the surrounding prose works
-> just as well - `external_api/views.py` says only "Recorded in docs/PROBLEMS.md" but names
-> `MapController.resolve_place`, which locates the entry immediately. What fails is a bare reference
-> whose comment describes the problem only in general words (this file is append-only and grew by ~800 lines on 2026-08-14
-> alone).
+Defects found during other work and left unfixed at the time. Every entry here
+is still open, still partial, or still worth knowing before touching the area it
+describes. Resolved ones live in [`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md);
+search there before concluding a defect is new.
 
----
+Each entry carries a `P#` id, allocated from [`INDEX.md`](INDEX.md) and never
+reused. `grep -E '^\| P12 ' docs/INDEX.md` finds one; `grep '^## P12 ' docs/PROBLEMS.md`
+opens it.
 
-> Resolved entries live in [`archive/PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
-> still open, still partial, or still worth knowing before touching the area it describes.
+**Citing an entry from code:** name the id *and* enough words to survive a
+retitle — `see P12 ("forms post every field") in docs/PROBLEMS.md`. A bare
+`see docs/PROBLEMS.md` costs the reader a full-text search of a 3,000-line file,
+and in practice they do not do it. There are 33 such bare references in `src/`.
+Cite **every** relevant entry, not the nearest one. Ids and dates are stable
+here; line numbers are not.
 
-## RESOLVED 2026-09-04: a hypothesis property in `test_email_safety.py` fails a few runs in a hundred
+## P1 — VirusTotal scanning is hash-lookup-only, so a file VirusTotal has never seen falls back to ClamAV forever
 
-`HashEmailTests::test_hash_does_not_contain_address` asserted that the local part of a generated
-address never appears inside its own SHA-256 digest. The digest is 64 hex characters, and
-`st.emails()` happily generates local parts made only of hex digits - so a four-character all-hex
-local turns up inside its own digest by coincidence roughly once in 270 qualifying examples, and
-the test fails on an address it was never making a claim about.
+`id: P1` · `status: open` · `updated: 2026-09-01`
 
-Found by running the file while checking an unrelated entry: one failure, and a clean pass on the
-very next run of the same file, including with the seed the failure printed. Confirmed
-deterministically rather than by re-rolling - brute-forcing four-character hex locals finds
-counterexamples immediately (`0846@a.com` hashes to `5ece20846df4...`).
-
-Fixed by `assume`-ing the local part is not entirely hex, with the counterexample named in the
-docstring so the exclusion does not later read as unexplained. Five seeds green afterwards.
-
-Worth noting for other property tests here: "the output does not contain the input" is a weak
-proxy for "the input was not stored" whenever the output alphabet is small, and it gets weaker as
-the assertion gets shorter.
-
-## OPEN 2026-09-01: VirusTotal fast-path scanning is hash-lookup-only, never submits an unknown file
+Previously titled "VirusTotal fast-path scanning is hash-lookup-only, never submits an unknown file".
 
 `services/security/virustotal_scan.py` (see also `services/apis/security/virustotal.py`) only calls VirusTotal's
 `GET /files/{sha256}` hash-lookup endpoint before falling back to ClamAV - it never calls `POST /files` to submit a
@@ -57,390 +43,11 @@ smaller than hoped, the next step is submit-and-don't-wait (fire the upload so a
 hit, without blocking or polling for the current one) - deferred rather than built speculatively, since it adds a
 32MB size gate and competes with the same daily quota the lookups use for no benefit to the request that pays for it.
 
-## RESOLVED 2026-09-01: `--fresh-db` dropped another session's live database mid-run
+## P2 — `parse_for_preview` parses archives and KML in the request, blocking `UL_UNTRUSTED_PARSE_POLICY=deny`
 
-This session's own broad regression sweep (`run14`, everything in `dashboard/tests/hypothesis/`
-except a dozen already-covered areas, ~9500 tests) was roughly two-thirds through when a
-`bin/run_tests.sh --fresh-db` invocation from *this same session* - checking two failing tests
-in isolation, without setting `UL_TEST_DB_NAME` - defaulted to the same name the sweep was
-using (`ul_fast`). `--fresh-db` terminates every connection to its target and drops it
-unconditionally, by design, to recover a database left half-built by an interrupted prior run of
-the script itself; the sweep's hours-long connection was one of those it terminated instead. The
-rebuild then itself deadlocked partway through migrating (a known-separate contention risk this
-file already documented for `--parallel`, triggered here by two independent sessions instead),
-leaving `ul_fast` part-migrated - some tables from a fresh `0001` onward, most not.
+`id: P2` · `status: open` · `updated: 2026-08-31`
 
-Final tally: 1050 failed, 173 errors, out of ~9500. Manually classifying every failure's
-traceback for a database/connection signature accounted for 1163 directly (a missing column
-cascading into "transaction aborted" on every later query in the same test; `auth_user.username`
-still `varchar(30)` because `auth.0009` never got to re-run; Channels/websocket and concurrent
-"race" tests disproportionately hit, since they depend on multiple simultaneous connections
-surviving the same window). The remaining 60 needed individual tracing - all but a handful
-reduced to the same cause with a different symptom (a migration-seeded row missing, `flush`'s
-TRUNCATE dependency order breaking against a mismatched schema, a `varchar(30)` username no
-current model declares). None were code regressions; the small number of real, independent
-findings mixed in are the other entries dated 2026-09-01 in this file.
-
-Fixed two ways. `bin/run_tests.sh --fresh-db` now checks for other active connections to the
-target database first and refuses unless `--force` is passed, restoring the old unconditional
-behaviour only for what the original comment actually described - recovering your *own*
-abandoned run, not someone else's live one. And the `UL_TEST_DB_NAME` doc comment, which read as
-"a unique name is generated when unset" with no caveat that this is false for
-`--fast`/`--fresh-db` specifically (their default is the fixed, deliberately-shared `ul_fast`),
-now says so.
-
-Verified two ways. Every one of the 133 files touched by any failure or error, re-run in full
-against a fresh, uniquely-named throwaway database: 1698 passed, 6 failed - all 6 already
-explained (two are the OPEN entries below; four were `test_write_route_smoke.py`, a real,
-independent, pre-existing fixture bug this re-check happened to be the first run to actually
-exercise to completion - see the next entry). And `ul_fast` itself, rebuilt clean with the new
-guard in place.
-
-## RESOLVED 2026-09-01: the write-route smoke sweep's own fixture violated a constraint it should have satisfied
-
-`test_write_route_smoke.py` sweeps every discoverable write route with a minimal request,
-asserting none answers with a 5xx - the coverage the entry above's re-check happened to exercise
-to completion for what looks like the first time. Its own `setUp()` fixture failed before any
-route was ever swept: `baker.make("dashboard.Album", profile=profile, name="Smoke Album")` sets
-`profile` (the album's creator, always required) but none of
-`parent_pin`/`parent_wiki`/`parent_profile` - the three the `ck_album_exactly_one_owner`
-constraint requires exactly one of - and Model Bakery does not fill optional foreign keys on its
-own, so all three came back null and Postgres correctly rejected the row. Fixed by adding
-`parent_profile=profile`, making it a Vault album like the rest of this fixture's single-user
-scope. Swept clean once it could run: 4 passed in 369s, no crashing route found among the ~390
-in reach.
-
-## RESOLVED 2026-09-01: a CRIS preview test still asserted the pre-async-rework contract
-
-`test_pin_redata_media_proxy.py::CrisAttachmentPreviewModeTests.test_a_tiff_attachment_is_converted`
-asserted a single request to `?preview=1` returns `200` with a converted JPEG - true before this
-session's async-preview rework, false after: `RedataMediaProxyMixin.serve_media` now calls
-`previews.request_sandbox_render()` and returns 404 immediately for anything that is not already
-web-safe, the same as `MediaPreviewView`. Missed when `test_media_previews.py`'s equivalent test
-was updated for the same change, because this is a different view reusing the same mixin from a
-different test file - `run14` (a broad sweep, not a targeted run) is what caught it. Fixed the
-same way: patch `safely_enqueue_task` to capture the queued args, call
-`tasks.render_media_preview()` directly to do what the sandbox worker would, then request again
-and expect the real response.
-
-## RESOLVED 2026-09-01: two endpoints logged the specific validation error and returned a generic one
-
-`controllers/floorplans.py`'s `FloorplanValidationError` handler and `controllers/maps.py`'s
-`infrastructure_features` bbox handler both did the same thing: `logger.warning("...: %s",
-str(exc))` followed by `JsonResponse({"error": "<hardcoded generic phrase>"}, status=400)` -
-discarding the specific, already-logged, already-safe message (`FloorplanValidationError`'s
-messages are all deliberately-authored field/limit text, same as `parse_infrastructure_bbox`'s;
-neither ever echoes anything unvalidated) and replacing it with text that names nothing. Two
-existing floorplan tests (`test_a_bad_number_is_a_400_naming_the_field`,
-`test_a_missing_wall_coordinate_is_a_400_naming_the_defect`) and one map test
-(`test_rejects_oversized_viewport`) already asserted the specific message should reach the
-client and were failing against the real endpoints, surfaced by `run14`. Both fixed the same
-way: return `str(exc)` instead of the generic literal. Contrast with the `ValueError` branch
-beside the floorplan one, which deliberately does *not* do this and explains why in its own
-comment - its text is not known to be safe, unlike a validation exception's.
-
-## RESOLVED 2026-09-01: `/app/src/backups` was never in the entrypoint's chown loop
-
-Found bringing up the full stack to verify this session's sandbox-tier work: `celery-worker`'s
-scheduled `run_database_backup` failed with
-
-```
-pg_dump: error: could not open output file ".../backup_20260901_015636.sql.tmp": Permission denied
-```
-
-`docker-entrypoint.sh` chowns `/var/log/urbanlens`, `/app/src/urbanlens/frontend/static`, and
-`/app/src/urbanlens/media` to `appuser` at container start (root only) - but never
-`/app/src/backups`, the fourth volume `app` and `celery-worker` both mount. On this checkout the
-directory itself was owned by uid 568, mode `775` (group-writable, not other-writable), while the
-`.sql` files already inside it were `appuser:appuser` - so a backup had written there successfully
-before, just not through this directory's current ownership. `appuser` (1001) is neither the owner
-nor a group member, so read+execute only. Same shape as the `logs/` ownership drift documented
-under "the documented `docker cp` resync breaks the app container" below - a volume whose
-top-level ownership diverges from the files a properly-chowned process already put inside it.
-
-Fixed by adding `/app/src/backups` to the loop, same as the other three. Verified on a fresh boot:
-`stat` on the directory shows `appuser:appuser`, and calling `tasks.run_database_backup()` directly
-produced `Backup completed successfully: backup_20260901_020514.sql` where it previously raised.
-
-## RESOLVED 2026-09-01: `app`'s healthcheck couldn't survive a from-scratch migration
-
-A genuinely empty database's first `migrate` applies `dashboard.0030_v0_7_0` - a squashed migration
-with ~200 operations - which measured 3m14s wall clock, almost entirely Python-side (Django rebuilds
-its migration state after each operation; the DB round-trips themselves are fast against an empty
-schema). `app`'s healthcheck gave `start_period: 30s` plus `retries: 5` * `interval: 30s` = 180s of
-total grace before Compose marks it unhealthy - short of the measured time, so `docker compose up`
-failed with `dependency failed to start: container app is unhealthy` and never created `app-ws`,
-`nginx`, `media-nginx`, either celery worker, `celery-beat`, or either media worker - all of which
-wait on `app: condition: service_healthy`.
-
-Only reachable on a database with none of the schema yet - every environment this project actually
-runs today (dev, staging, prod, the pytest suite's per-run database) already has it applied, so
-`migrate` is a no-op and health returns in seconds. Surfaced now because verifying this session's
-sandbox-tier work meant bringing up the full stack against a fresh database rather than reusing one
-of those - see "the dev database is 18 migrations behind the code" below for why reusing the real
-one wasn't an option either.
-
-Fixed by raising `start_period` to 300s - a from-scratch boot now gets enough grace, and every other
-boot is unaffected (a successful check during `start_period` marks the container healthy
-immediately; the period is a ceiling on tolerated failures, not a fixed wait).
-
-## RESOLVED 2026-08-31: `PlaceAccessGrant.reason` had an unmigrated field alteration
-
-Noticed while checking this session's own migration; fixed independently by
-`0038_sync_placeaccessgrant_reason_choices`. Note that migration and `0038_image_pending_scan`
-were both generated against `0037`, leaving the graph with two leaf nodes and breaking every
-`migrate` on the branch - `0040_merge_...` rejoins them. Worth knowing when two people touch
-models in the same window: `makemigrations` numbers from what is on disk, so a second 0038 is
-silently produced rather than refused, and nothing complains until something runs `migrate`.
-
-## RESOLVED 2026-09-01: `bin/` stopped being synced into the test container, silently removing 11 tests
-
-`bin/run_tests.sh` synced only `src/`, with a comment explaining that nothing under `tests/` reads
-`bin/` anymore since `bin/opslib` moved to the `infrastructure` repo. That stopped being true:
-`test_template_comments.py`, `test_run_codeql.py` and `test_ops_tooling_contract.py` each resolve a
-checker by path off the repo root. Every containerised run errored all 11 of `test_template_comments`
-at setup with `FileNotFoundError: /app/bin/check_template_comments.py`, against whatever the image
-was last built with - which reads as a broken test rather than as absent coverage, and is the same
-shape as the `django-perf-rec` gap recorded above.
-
-Restored, the way the old comment said to: `docker cp bin/.` plus the chown. 25 pass where 11 errored.
-
-Worth generalising: this class of failure (a container copy that has drifted from the tree) does not
-announce itself as missing coverage. `bin/run_tests.sh` verifies host/container parity for `src/`
-after each sync and would have caught it there; it does not for `bin/`.
-
-## RESOLVED 2026-09-01: six defects a second review found, all in the first round of fixes
-
-A review of the *fix* commit, not of the original work. Every one of these was introduced by, or
-left incomplete in, the previous round - worth recording because it is the more useful lesson: the
-recovery sweep added to close a gap was itself the largest new hazard in that commit.
-
-1. **`STALLED_UPLOAD_AGE` was shorter than a single legitimate run.** One hour, measured from
-   `Image.created` - which starts before the task is even queued - against a
-   `CELERY_TASK_TIME_LIMIT` of one hour. A 200MB video queued behind another on a two-slot worker
-   would be re-enqueued while still transcoding, starting a second ffmpeg pass over the same file
-   on a container explicitly sized so two large transcodes do not fit. Now six hours, and the
-   docstring no longer misstates the retry ladder as "about half an hour" (it is about seven
-   minutes, and queue wait was never part of it).
-2. **The sweep re-enqueued deduplicated siblings.** `attach_deduped_copy` deliberately keeps them
-   out of `process_image_upload` - they point at a file another row owns, and re-running it
-   re-encodes that shared file underneath the original, defeating the dedup. Excluded now; a
-   sibling whose original no longer exists (so `_sync_deduped_siblings` will never reach it) is
-   cleared in place rather than run through the task.
-3. **Dropping `max_dimension` on requeue skipped the EXIF strip, not just the resize.**
-   `downscale_stored_image` is what removes EXIF; with no policy the call was skipped entirely and
-   the shared tail cleared `pending_scan` anyway, publishing a recovered Street View or Places
-   photo as the provider's untouched original, GPS included. Two fixes: the cap is recoverable from
-   `ImageSource` (`photo_enrichment.enriched_max_dimension`) so the sweep passes the right one, and
-   a profile-less row with no cap now falls back to a default rather than skipping the call.
-4. **`_reject_image_upload` could raise on exactly the file that got it there.**
-   `delete_stored_file` suppressed `OSError` on the thumbnails but not on the original, so a
-   `PermissionError` escaped after the "your upload was removed" notification had already been
-   sent - leaving the row pending, to be rejected and notified about again every sweep, forever.
-   The unlink is now logged and tolerated: an orphaned file is a storage problem, a stranded
-   pending row is a user-visible one.
-5. **Making the root chown fatal traded one crash loop for another.** `chown -R` exits non-zero
-   when a file vanishes mid-traversal, and these volumes are shared with containers that are live
-   and deleting files - so restarting `celery-worker` during ordinary traffic could loop. Retried
-   once before giving up: a race passes the second attempt, a real permission problem fails both.
-6. **No index for the sweep's query.** `filter(pending_scan=True, created__lt=...)` seq-scanned
-   `dashboard_images` hourly. Migration 0043 adds a partial index on `created WHERE pending_scan`,
-   partial because the qualifying set is almost always empty and a full index would cost a write on
-   every upload.
-
-The review also confirmed the parts that were right: `task.retry()` composes correctly with
-`autoretry_for`, `created` is `auto_now_add`, the staged-source descriptor cannot cause a permanent
-404, `Path(name).name` blocks traversal, the write-then-rename is atomic, `preview_sources/` is
-unreachable through every route and both nginx vhosts, and the `queue_photo_submission` removals
-lose no submission.
-
-## RESOLVED 2026-08-31: nine defects an adversarial review found in the async-scan work
-
-Each of these was in the two commits that moved the malware scan off the request, found by a
-review pass over that diff rather than by a test. Recorded because the *pattern* is the useful
-part: making `pending_scan` load-bearing turned a field almost nothing read into one that several
-long-standing queries needed to and did not.
-
-1. **The `OSError` branch published an unscanned document or video.** `_scan_pending_upload`
-   returned True ("continue") when the stored file could not be opened, with a comment saying the
-   media-type branch below owns the retry-then-reject policy for that. Only the *photo* branch has
-   one: `_process_document_upload` catches its own `OSError` and `extract_pdf_text` swallows
-   everything, so a document always produces a result, always reached the shared tail, and always
-   cleared `pending_scan` - publishing bytes clamd had never seen and never would, since nothing
-   re-enqueues. Same for a video when `ffmpeg_available()` is False. Now retried and then rejected,
-   because an unreadable file is exactly "not scanned".
-2. **SpotGuessr picked `pending_scan` photos.** `_eligible_photo_filter` was `Q(wiki__isnull=False)`
-   with no scan gate, and enrichment photos are profile-less, so a pending one is servable to *no
-   one* - the round rendered a broken image with no fallback, permanently if the enqueue was lost.
-3. **The Media gallery preferred an unservable local copy over a working provider thumbnail.**
-   `local_images_for_gallery_items` did not filter, and the template's `{% firstof entry.local_url
-   ... item.thumb_url %}` puts `local_url` first. A materialized-but-pending row therefore replaced
-   a tile that worked with one that 404s.
-4. **Nothing recovered a lost enqueue.** `safely_enqueue_task` returns None rather than raising when
-   the broker is unreachable, and every call site ignores it. Before this work a photo lost that way
-   was merely un-downscaled; after it, the row is invisible to everyone but its uploader forever.
-   Now swept hourly by `requeue_stalled_pending_uploads` (rows pending for more than an hour - past
-   the task's own ~30-minute retry ladder, so it cannot re-queue underneath a run still working).
-5. **The staged preview source was written but never read.** The view cached it for 5 minutes but
-   only ever consulted the *preview* key, so once `RENDER_QUEUED` expired at 2 minutes the next
-   request re-downloaded up to 60MB and queued a duplicate render - repeatedly, for as long as the
-   sandbox was behind, competing with the backlog that caused the delay.
-6. **60MB blobs through a 512MB Valkey.** The preview hand-off used the Django cache, which is the
-   same instance as the Celery broker, sessions and Channels, with `--maxmemory-policy volatile-lru`.
-   One gallery page of large scanned PDFs could write over a gigabyte of TTL-bearing keys, evicting
-   sessions, `LocationCache`, and - self-defeatingly - the very sources the workers were about to
-   read. Now staged on the media volume with only a descriptor in the cache.
-7. **Routing enrichment photos through `process_image_upload` added per-photo AI spend.** Its tail
-   reads `if image.profile is None or image.profile.generate_photo_keywords`, a branch only ever
-   exercised by rows that *had* a profile - so every hourly Street View and satellite image would
-   have started a vision pass. It also submits to REData, which `materialize_media_item` and the
-   Places enrichment branch were doing themselves, so both submitted twice. Keyword generation now
-   requires an uploader; the two duplicate submissions are gone (the task's is the better one - it
-   runs after the downscale, so REData is offered the file that will actually be served).
-8. **Making the entrypoint chown non-fatal removed a loud signal.** The fix for the crash-looping
-   sandbox worker (`cap_drop: ALL` removes CAP_CHOWN) made every chown best-effort - including for
-   the root containers, where a failing chown means the app dies later and *silently*, in the
-   file-log-handler failure already recorded in this file. Now tolerated only when already
-   unprivileged.
-9. **`services/pins/pin_suggestions.attach_suggestion_photos`** created `Image` rows from bytes at a
-   url an external caller submitted, with no `pending_scan` and no processing task - the sixth
-   provider path, missed because the structural test walks only `tasks.py` and the call-site test
-   only inspects `image_upload_error` callers.
-
-All nine have regression tests (`tests/hypothesis/test_async_malware_scan.py`). The review also
-confirmed what was already right: all nine `skip_malware_scan=True` sites do quarantine and enqueue,
-the four synchronous ones genuinely have no task behind them, `attach_deduped_copy` is sound,
-`SafetyContactPhotoView` does filter, and the sentinels cannot collide with a real cached value.
-
-## RESOLVED 2026-08-31: media-worker never started - `cap_drop: ALL` killed the entrypoint
-
-The whole sandbox tier was inert. `docker-entrypoint.sh` chowns three volume-mounted directories
-under `set -e` and then `exec gosu appuser`; `cap_drop: ALL` removes `CAP_CHOWN` *and*
-`CAP_SETUID`, so the first `chown` returned "Operation not permitted", `set -e` aborted the
-script, and the container restart-looped without ever reaching celery. Found by reading
-`docker ps` in a sibling agent's environment running this same branch - `Restarting (1)`, exit
-code 1, restart count 18.
-
-Worth dwelling on how invisible this was. Every earlier verification of this tier had been done
-by `docker run`-ing the image with an overridden command, which skips the entrypoint's chown
-loop entirely, so all of it passed against a container configuration that could not actually
-boot. [[verify-behavior-not-code]] again, one level up: the *code* was fine and the *service*
-was dead.
-
-Fix: chowns are best-effort (`2>/dev/null || true`) and `gosu` is skipped when already
-unprivileged; the sandbox services declare `user: "1001:1001"` and `depends_on: app`, so the one
-container that *can* chown the shared volumes has done so first. Verified by actually running it
-- hardened container (`--cap-drop ALL`, `--user 1001:1001`, `no-new-privileges`, noexec tmpfs)
-against a real broker: `celery@... ready`, `[queues] .> sandbox`, and a socket to 1.1.1.1 still
-refused.
-
-## RESOLVED 2026-08-31: media-nginx added a second unrotated access log
-
-Was: `media-nginx` inherits `access_log /tmp/nginx-requests.log` from the shared `nginx.conf`,
-so the media origin wrote its own unrotated copy - and media requests are the highest-volume
-request class on the site. Same problem the main nginx's log already had, now in two places.
-
-Fix: log to `/var/log/nginx/access.log` instead, which the nginx image symlinks to `/dev/stdout`
-- so request logs go through Docker's json-file driver, whose `max-size`/`max-file` is the only
-rotator either container has. Both nginx services get a `20m x 5` budget (up from `200k x 10`,
-which was sized for error output only). Nothing had ever read the `/tmp` file.
-
-The original comment in `nginx.conf` argued *against* the stdout symlink on the grounds that
-anything written there "always lands in `docker logs`" - which was the objection, and is now the
-point. Verified with a probe (nginx container, real config): the access line appears in
-`docker logs`, `/tmp/nginx-requests.log` is gone, and `if=$loggable` still filters the healthcheck
-out.
-
-## RESOLVED 2026-08-31: a long data import could stall all media processing on the sandbox queue
-
-`run_user_data_import` was routed to the `sandbox` queue alongside photo/video/document
-processing, and `media-worker` runs `--concurrency=2`. That task accepts ZIPs up to 500MB, has
-no per-profile concurrency guard, and inherits `CELERY_TASK_TIME_LIMIT = 3600` - so two
-simultaneous imports occupy both slots and every upload on the site waits behind them, for up
-to an hour. Before the split it held 1 of `celery-worker`'s 4 slots, sharing them with
-unrelated housekeeping rather than with the live upload path.
-
-The routing itself is right - an import archive is exactly the untrusted-parse workload the
-container exists for. What is wrong is that a minutes-to-an-hour batch job and a
-sub-second interactive one share a two-slot pool. Give imports their own queue (drained by a
-second worker on the same isolated network, or by the same container with `-Q sandbox,import`
-and more slots), so a photo upload is never queued behind an archive walk.
-
-Worth knowing while sizing that: ETA-delayed retries do *not* hold a slot despite
-`CELERY_WORKER_PREFETCH_MULTIPLIER = 1` (Celery calls `qos.increment_eventually()` when it
-defers an ETA message), so `process_image_upload`'s retry backoff is not itself a contributor.
-
-Fix: `Queue.SANDBOX_BATCH` plus a `media-worker-batch` service draining it at `--concurrency=1`,
-and `run_user_data_import` routed there via `sandbox_queue(batch=True)`. Both workers merge the
-new `x-sandbox-worker` compose anchor, so the isolation is written once and cannot drift between
-them - the anchor is what keeps the two services' `environment`/`cap_drop`/`networks` identical,
-not a test. What the tests pin is which task declares which queue, read from the AST because
-under test settings both constants resolve to the same string and the routing is
-indistinguishable at runtime.
-
-## RESOLVED 2026-08-31: `pending_scan` was photo-only, and one serving surface bypassed it
-
-Found reviewing the `pending_scan` work itself. Neither is a regression - both are places the
-new gate simply does not reach - but both are one-line-ish to close with machinery that now
-exists, and the second becomes a real hole the moment the ClamAV entry above is done.
-
-1. **Video and document uploads never get `pending_scan`.** `services/photos/photo_upload.py`
-   calls `prepare_photo_upload` only `if media_type == MediaKind.PHOTO`, so a video or document
-   is stored raw and immediately visible while `process_image_upload` transcodes/converts it -
-   exactly the window that was just closed for photos, except *longer*, since an ffmpeg
-   transcode takes minutes where a photo decode takes milliseconds. Videos do carry location
-   metadata (`process_uploaded_video` strips the container's location tags, in the task), so
-   the GPS exposure is real. Both `_process_video_upload` and `_process_document_upload` always
-   return a result (never `None`), so they cannot hit the reject branch - setting
-   `pending_scan=True` for them is safe and the shared tail already clears it.
-
-2. **`controllers/safety.py::SafetyContactPhotoView` bypasses the gate.** It authenticates by
-   magic-link token (an emergency contact usually has no account) and calls `resolve_media_path`
-   + `serve_media_file` directly, never `authorize_image` - so it serves a still-pending photo.
-   Today that is defensible and arguably correct: the audience is a contact the uploader named,
-   showing them the location *is* the feature, and blocking the photo would show a broken image
-   during exactly the minutes that matter most. It is also currently harmless because ClamAV
-   still runs synchronously before the row exists, so those bytes are scanned.
-
-   **That stops being true the moment the malware scan moves async.** At that point this view
-   would hand an unscanned upload to an emergency contact. Treat it as a blocker on that work,
-   not a follow-up to it.
-
-Fix for (1): `upload_photo` now sets `pending_scan=True` for every media type, not only where
-`prepare_photo_upload` supplied it. Fix for (2): `SafetyContactPhotoView` and the two check-in
-photo listings filter `pending_scan=False`. The tradeoff is now the other way round - a contact
-sees a broken image for the seconds until the scan clears - which is the correct side to err on
-once the scan is asynchronous, and it is the reason (2) was a blocker on that work rather than a
-follow-up to it.
-
-## RESOLVED 2026-08-31: several Image-creating paths bypassed `pending_scan` and/or never processed at all
-
-Found while auditing every `Image.objects.create`/`Image(...)` call site for this session's
-`pending_scan` work (see the resolved entry below) - none of these are caused by that work,
-and none are fixed by it either:
-
-- **`tasks.import_immich_photos`/`import_flickr_photos`/`import_flickr_album_photos`/
-  `import_google_photos`** each create the row directly with raw bytes fetched from a
-  third-party API, unconditionally `pending_scan=False` (the field's default - these predate
-  it and were never updated), then enqueue `process_image_upload` same as an ordinary upload.
-  The row is visible (per ordinary `photo_upload_visibility`) with its raw, unstripped bytes
-  for however long that enqueue takes to run - the exact window `pending_scan` exists to close
-  for a direct upload, just not applied here. Fix shape: set `pending_scan=True` on create, same
-  as `prepare_photo_upload`'s metadata dict does.
-- **`services/media/media_materialize.materialize_media_item`** (the Media-gallery "send to
-  wiki"/cache path, `QuotaExemption.EXTERNAL_MEDIA`) never enqueues `process_image_upload` at
-  all - grep confirms no reference to it in that file. A materialized photo's EXIF is never read,
-  the file is never downscaled or thumbnailed, and it is served exactly as fetched from the
-  provider, indefinitely. Separate from the `pending_scan` question entirely (nothing to gate:
-  it just never processes).
-
-Fix: all five create with `pending_scan=True`, and `materialize_media_item` enqueues
-`process_image_upload` like every other path. Provider bytes are not more trustworthy than a
-user's - the URL was still chosen by a user. The four import tasks are pinned structurally (an
-AST walk over every `Image.objects.create` in `tasks.py`) rather than by four near-identical
-runtime tests, because the failure mode is a *fifth* importer added later without the flag.
-
-## RESOLVED 2026-08-31: `prepare_photo_upload` no longer decodes in the request
+Previously titled "`prepare_photo_upload` no longer decodes in the request".
 
 Was: `prepare_photo_upload` called the `extract_*` helpers (Pillow decode) inside the upload
 request for every one of its ~9 call sites, so a crafted upload's header parser ran in gunicorn
@@ -523,66 +130,11 @@ complete worklist now rather than a partial one, which it did not before: an und
 is invisible to the guard, so "no warnings" meant "nothing decorated is misplaced", not "nothing
 is misplaced".
 
-## RESOLVED 2026-08-31: ClamAV scanned synchronously in the upload request
+## P3 — The pin-detail hero no longer links to `PinRelinkView.get`, orphaning the `pin.link` wiki picker
 
-Was: `image_upload_error` blocked on a clamd round-trip before `Image.objects.create`, with a 15s
-socket timeout. Correct, but also the upload latency users notice.
+`id: P3` · `status: open` · `updated: 2026-08-31`
 
-The `pending_scan` plumbing this now needs already exists (see the resolved entry above -
-`Image.pending_scan`, the `pin_images` authorizer gate, `ImageQuerySet.visible_to`), built for the
-EXIF-read window and equally usable for a scan window. What is still missing:
-
-- Every one of `prepare_photo_upload`'s ~9 call sites calls `image_upload_error(file_obj,
-  MediaKind.PHOTO)` **without** `skip_malware_scan=True` - the scan still blocks the request.
-  Passing it through is mechanical but touches all 9 (`controllers/tools.py`, `article.py`,
-  `consensus.py`, `maps.py`, `direct_messages.py`, `visits.py`, `safety.py`,
-  `services/photos/uploads.py`, `services/photos/photo_upload.py`).
-- `tasks.process_image_upload` needs to run the scan itself, first, mirroring
-  `_run_comment_image_scan`: on `MalwareScanUnavailableError`, retry with backoff (the task is
-  already `bind=True`, just needs the retry call added); on infected, reject rather than continue
-  into metadata/downscale.
-- A rejection needs an `Image`-specific version of `_reject_comment_upload`: delete the row and
-  file, call `record_photo_upload_failure` (already exists, already used for every *synchronous*
-  rejection - `services/photos/uploads.py`) so it surfaces in the Vault's Memories retry list, and
-  add a `NotificationType.PHOTO_UPLOAD_FAILED` (mirroring `COMMENT_UPLOAD_FAILED`) so it also
-  reaches the user as a live toast/notification - a synchronous rejection gets one for free from
-  the request response; an async one needs it pushed.
-
-No gallery/template change needed for the "processing" state: `ImageQuerySet.visible_to` already
-hides a `pending_scan` row from everyone but its uploader, and the uploader's own gallery already
-falls back through `thumb_url`/`display_url` to the raw stored file while thumbnails are pending -
-the same fallback this reuses, not a new one.
-
-Fix: all of the above, as `tasks._scan_pending_upload`, called first thing in
-`process_image_upload`.
-
-Two decisions in it worth keeping:
-
-- **Gated on `pending_scan`, not run unconditionally.** So a call site missed when the synchronous
-  scan was removed scans *twice* (wasteful) rather than not at all (a hole). The nine sites that
-  now pass `skip_malware_scan=True` all create an `Image`; the four that still scan synchronously
-  (avatars, marker icons, achievement art) store a file on something that is not an `Image` row,
-  so nothing will ever run `process_image_upload` over it and there is no `pending_scan` to gate
-  it with. `test_async_malware_scan.py` pins that split from both directions by walking the AST
-  for every `image_upload_error` call - asserting only that the set of non-skipping sites is
-  exactly the four, so a new upload path shows up as a failure either way.
-- **A clamd outage retries; only exhausted retries reject.** Rejecting on the first hiccup would
-  cost users their uploads during a clamd restart. But an upload that could never be scanned is
-  still not published - the fail-closed half survives the move.
-
-## RESOLVED 2026-08-31: `test_upload_strips_metadata_before_storing` was asserting against the wrong EXIF tag
-
-Fixed in passing, recorded because the class of mistake will recur. The fixture defined
-`_ARTIST_TAG = 0x010F` and wrote `"A Photographer"` there, then asserted it came back as
-`Image.author`. `0x010F` is **Make**; **Artist** is `0x013B`, which is what `extract_author`
-reads - correctly. So the test had been failing on `main` against correct implementation code.
-`test_metadata_strip.py` had the same misnamed constant but only asserts the tag is *stripped*,
-so its assertions held regardless; it is renamed to `_MAKE_TAG` rather than repointed.
-
-Three other test modules define `_MAKE_TAG = 0x010F` and use it correctly. When adding an EXIF
-fixture, take the tag number from `PIL.ExifTags.TAGS` rather than from a neighbouring test.
-
-## OPEN 2026-08-31: the pin-detail "switch wiki" GET picker is now UI-orphaned
+Previously titled "the pin-detail "switch wiki" GET picker is now UI-orphaned".
 
 Replacing the pin-detail hero's single-wiki-plus-switch-button with a list of every linked wiki
 (`_pin_detail_hero_body.html`, `services.places.ambiguity.linked_wiki_locations`) removed the
@@ -597,7 +149,11 @@ Left as-is rather than removed: a separate, not-yet-actioned note already flags 
 was surfacing inappropriate suggestions, e.g. a building's own parent parcel) - resolving that
 should also decide this route's fate rather than deleting it unilaterally here.
 
-## OPEN 2026-08-31: `urbanlens_development_main_test_runner`'s baked image is missing `django-perf-rec`
+## P4 — `urbanlens_development_main_test_runner`'s venv is missing five dev deps, silently dropping coverage
+
+`id: P4` · `status: open` · `updated: 2026-08-31`
+
+Previously titled "`urbanlens_development_main_test_runner`'s baked image is missing `django-perf-rec`".
 
 Found while running the full suite before merging PR #143 (`bin/run_tests.sh`, no `--fast`, per
 repo convention for a PR merge). Collection aborts the entire run with `ModuleNotFoundError: No
@@ -628,7 +184,11 @@ those two have been advertised and broken in this container for as long as they 
 worth knowing before trusting either. The rebuild is still the fix, and is still an operator action
 on a shared container rather than something a session should force.
 
-## OPEN 2026-08-25: forms submit and save every field, not the ones that changed
+## P5 — Dialog forms post every field and handlers save every column, so untouched values overwrite and re-attribute
+
+`id: P5` · `status: open` · `updated: 2026-08-25`
+
+Previously titled "forms submit and save every field, not the ones that changed".
 
 Surfaced by the concealment work, where it caused real data loss, but the concealment case is one
 instance of a general pattern and fixing that instance did not fix the pattern.
@@ -673,7 +233,11 @@ it can send only what differs), and make writes field-scoped (`update_fields`, w
 codebase already does). The second is the safety net for anything that still posts everything, and
 is the cheaper half to finish first.
 
-## OPEN 2026-08-21: production REData 404s on `/api/v1/public-locations/` (and `/capabilities/`)
+## P6 — Production REData still 404s `/api/v1/public-locations/`, so a fresh dev environment seeds no catalog pins
+
+`id: P6` · `status: open` · `updated: 2026-08-21`
+
+Previously titled "production REData 404s on `/api/v1/public-locations/` (and `/capabilities/`)".
 
 Verified live against a fresh dev environment (`a962bf8`, `--redata production`, the default as of
 this session): `bin/dev_env.py create` correctly reported credentials (`demo / demo-a962bf8`,
@@ -694,21 +258,11 @@ catalog pins - not a UrbanLens-repo defect, but worth knowing before trusting a 
 seeded pin count. Resolves itself once REData's production deployment picks up the commit that adds
 these routes; nothing to do here in the meantime beyond this note.
 
-## NOT A DEFECT 2026-08-21: `ruff-format` formats the whole repo on any pre-commit run
+## P7 — nginx pins its app upstream at config load and REData's `ref` is stored as permanent identity
 
-Recorded because an agent hit this, wrote it up as a hazard, and reverted the formatting - all of
-which was wrong, so the correction is worth keeping.
+`id: P7` · `status: open` · `updated: 2026-08-19`
 
-The `ruff-format` hook is declared `always_run: true` with `pass_filenames: false`, so
-`pre-commit run --files <a few files>` still formats everything ruff does not exclude. That is
-deliberate, and **running `pre-commit` or `ruff-format` is always fine** (Jess, 2026-08-21):
-formatting the repository is the intended behaviour and its output should be kept, not reverted.
-
-The only real consideration is timing, and it is mild: a full-repo format touches files other
-people may have open. Commit or stash in-flight work first if that matters, then run it and keep
-the result. Do not hand-revert formatting to keep a diff small.
-
-## OPEN 2026-08-19: performance and ops defects found but not fixed
+Previously titled "performance and ops defects found but not fixed".
 
 Found during the 2026-08-19 sweep, verified by reading both the query definition and every call
 site. The three worst (`group_conversations_for` materialising every message in every group,
@@ -764,7 +318,7 @@ The containers were never the main cost. REData exposes almost no write surfaces
 "write" operations do not store what we send, they make REData go *fetch* external data about a
 location - so a throwaway instance spends third-party quota pulling data that is destroyed with the
 environment. Production serves most of the same calls from its cache without contacting anything,
-and caches whatever is genuinely new for good. See `docs/OPS_TOOLING.md` for the modes and
+and caches whatever is genuinely new for good. See `../infrastructure/docs/OPS_TOOLING.md` for the modes and
 `REDATA_MODES` in `bin/opslib/devenv.py` for the reasoning next to the code.
 
 **The cold-boot fix is unexercised.** `docker compose up -d` exits non-zero when a dependent service
@@ -897,100 +451,11 @@ the current tree - re-verified 2026-08-19. `_resolved_flag` reads the `attribute
 falls back to the top level, and has since commit `8bf86daf`; the finding described the code before
 that.
 
-## 2026-08-20: bug hunt over the highest fix-density modules - 9 confirmed, 8 fixed, 1 open
+## P8 — `Friendship.unique_together` permits both `A->B` and `B->A`, so "one row per pair" is convention only
 
-`bin/report_defect_history.py` ranks files by the share of their commits that are fixes, on the
-premise that where bugs have been found is where bugs are. Five parallel readers took the top of
-that list (`controllers/account.py` 53%, `controllers/labels.py` 45%, `pin_restructure.py` 43%,
-`saved_filters.py` 43%, `trip_activities.py` 60%), each capped at its two strongest findings, and
-every finding was then handed to an adversarial verifier told to refute it and to default to
-refuted when uncertain. 10 findings, 9 survived. **Each of the four fixed below was re-verified by
-hand before being believed** - two of them turned out to differ from the report.
+`id: P8` · `status: open` · `updated: 2026-08-20`
 
-### Fixed
-
-**Editing any trip activity that has a location returned a 500.** `resolve_activity_place` handed
-its `location_uuid` value straight to a `UUIDField` filter, which raises `ValidationError` from the
-ORM - and a plain view does not turn that into a 400. Confirmed by running the filter: `['"x" is
-not a valid UUID.']`. The pin branch six lines above already converts with `try/except` for exactly
-this reason; the location branch did not.
-
-The report blamed the edit dialog, and it is worse than that: `location_slug` - the documented
-field, named for what it holds - hit the same path, because the lookup tried `uuid=` *first* with
-whatever it was given. So every caller was affected, not just the dialog. The root cause is a
-naming lie: the itinerary row's attribute was `data-act-location-uuid` and had always carried the
-location's **slug**. Renamed to `data-act-location-ref` on both sides, and the lookup now tries the
-slug first and the uuid form only once it parses.
-
-**The label create view stored an uploaded icon with none of the validation the edit view applies.**
-No size check, no content-type check, no malware scan - while the same file posted to the edit URL
-is refused with a 400. That matters more than "unvalidated upload" usually does here:
-`_resize_custom_icon` deliberately returns the file untouched when PIL cannot open it (an SVG, say),
-`label_icons/` is served to any authenticated user, and `MediaGateView` deletes the Content-Type so
-nginx derives it from the extension. Both paths now go through one `_validated_custom_icon`, and a
-test pins the call-site count so a third path cannot skip it.
-
-**The 2FA lockout counter was read-then-write** (`attempts = (cache.get(key) or 0) + 1`), while the
-two login counters directly above it use the atomic `_bump_counter` - it was left behind when they
-were converted. It is the only brake on TOTP guessing for someone who already has the password.
-The verifier's correction is worth keeping: the reporter claimed the lockout "never fires", which is
-arithmetically wrong - a batch advances the counter by one, so the limit is still reached, just
-after N x concurrency guesses instead of N. Medium, not high.
-
-**A hidden trip activity leaked its location into the DOM.** The visible label was correctly swapped
-for "Secret Location", and the real name and slug went out in the row's own data attributes and the
-RSVP `aria-label`, where view-source and a screen reader both find them. Two further details found
-while fixing: `effective_title` *falls back to the location's name*, so the title is itself the leak
-for any activity whose author typed none; and `data-act-location-hidden` emitted the raw
-`location_hidden`, so a viewer hidden by the owner's visibility *setting* was told the location was
-not hidden. `build_activity_rows` now puts already-masked `display_title`/`display_location_name`/
-`display_location_ref` on the row, and a test forbids the panel from mentioning `act.location.` or
-`act.effective_title` at all - the leak was a template reaching past the guard, so the guard has to
-be somewhere a template cannot reach past.
-
-### Confirmed, not yet fixed
-
-- **Building-place provisioning passes REData's *unfiltered* parcel cache** (`pin_restructure.py`
-  :385 and :503): the dialog filters to `buildings_on_property`, the POST does not, so off-property
-  records - up to ~2,500 for a parcel inside a broad survey zone - become Places inside this
-  parcel's wiki access domain. Needs a re-read of the wiki-domain consequence before fixing; the
-  provisioning side was rewritten on 2026-08-19 and this entry has not been re-checked against it.
-
-### Fixed, 2026-08-25
-
-- **`merge_pins` cannot complete when the survivor is the loser's direct child** (`pin_merge.py`
-  :230): `_reparent_children` skipped the survivor rather than detaching it, so the survivor kept
-  `parent_pin = loser` and the loser's delete CASCADEd it away - a 500, every time. **Fixed**
-  (`7d019e0c`): re-points the survivor at the loser's own parent, raising `PinMergeCollisionError`
-  on a unique-constraint collision exactly as the cycle branch beside it already did. 4 new tests.
-- **Smart lists evaluate a saved filter's criteria without `root_pins()`** (`pin_list_membership.py`
-  :222) - **already fixed, stale entry.** `_pin_matches_filter`/`filter_matching_ids` both already
-  chain `.root_pins()` before `.filter_by_criteria(criteria)`, landed in commit `88707a2d`
-  (2026-07-30) without this doc being reconciled afterward. Every other `filter_by_criteria(` call
-  site was cross-checked and already does the same.
-- **`prime_total_pin_counts` fetches the whole site's label-hierarchy edge table** with no filter,
-  three times per Organize page load. **Half fixed** (`ee18ee2f`): the query is now scoped to the
-  rendered labels' own profile(s) plus global labels instead of the whole site. **The "three times
-  per page load" half does not reproduce**: the Organize page's initial GET defers every kind's
-  real pin-count query entirely (`OrganizeStatsDeferralTests`), and each of the three label-kind
-  panels only fires its `hx-get` on a genuine user-initiated tab switch (`revealed` trigger, one
-  panel unhidden at a time) - not redundant work within one page load. Deduping across those
-  separate requests would need a new cross-request cache invalidated on label/hierarchy edits, a
-  materially larger change not clearly justified since the query is already cheap and profile-scoped.
-- **Undoing a deleted saved filter drops its colour and opacity** - `_RESTORABLE_FIELDS` omitted
-  them, so the filter returned untinted. **Fixed** (`59f9f55b`): both fields added to
-  `_RESTORABLE_FIELDS`. Its own round-trip sweep couldn't see this class of bug because
-  model_bakery leaves default-valued fields unset (default compares equal to default); a dedicated
-  `test_saved_filter_undo.py` builds a filter with explicit non-default values instead.
-
-### Refuted, and worth recording
-
-One finding claimed the resend-verification page defeats its own anti-enumeration guarantee by
-echoing the account's email back. The verifier established that both facts it allegedly discloses
-are already disclosed to anonymous requesters deliberately, so there is nothing to leak. Recorded
-so the next reader of that endpoint does not re-derive it.
-
-## OPEN 2026-08-20: reciprocal `Friendship` rows are permitted, and "one row per pair" is only a convention
+Previously titled "reciprocal `Friendship` rows are permitted, and "one row per pair" is only a convention".
 
 `Friendship.Meta.unique_together` is `("from_profile", "to_profile")`, which stops a duplicate in
 *one* direction and permits `A->B` **and** `B->A` to both exist. Every reader assumes they cannot:
@@ -1025,10 +490,14 @@ mechanical: the two rows can hold different `status` values (one `Accepted`, one
 which one is right depends on history nothing records. Worth doing with a real look at production
 data rather than a guess. Until then, a reciprocal pair is a warning in the logs, not an exception.
 
-## OPEN 2026-08-19: REData consumption gaps left after this session's sweep
+## P9 — REData gaps remain - `?limit=` is inert, 15 routes unwired, and a `tile_template` slide is a single 256px tile
+
+`id: P9` · `status: open` · `updated: 2026-08-19`
+
+Previously titled "REData consumption gaps left after this session's sweep".
 
 A full cross-repo sweep of UrbanLens's REData integration on 2026-08-19 (both repos read end to end:
-REData's `api/urls.py`, every serializer, `docs/api-reference.md`, `docs/fields-available.md` and the
+REData's `api/urls.py`, every serializer, `../REData/docs/api-reference.md`, `docs/fields-available.md` and the
 whole `CHANGELOG.md` `[Unreleased]` section, against all ~32 `redata_*` gateways and 8 panels).
 Everything that was *wrong* was fixed in the same pass - four panels reading keys REData has never
 emitted, the places gateway parsing a `{count, results}` envelope as a bare array, `?is_aerial=true`
@@ -1254,7 +723,11 @@ An earlier draft of this entry said `yelp` is billable, as a reason to curate. I
 `billable=True` appears 11 times in REData and none are in this registry. The real cost is upstream
 queries and quota, not money.
 
-## OPEN 2026-08-19: `main` cannot start from an empty database - conflicting migrations
+## P10 — `main` is untested against an empty database; the multiple-leaf migration conflict that broke it is gone
+
+`id: P10` · `status: open` · `updated: 2026-08-19`
+
+Previously titled "`main` cannot start from an empty database - conflicting migrations".
 
 Found by the new dev-environment tooling on its first clean run: `bin/dev_env.py create --branch
 main` builds the stack, and the app container dies during init with
@@ -1291,43 +764,11 @@ That is narrower than this entry's headline, which is left open deliberately: it
 whole claim means what found it - `bin/dev_env.py create --branch main` - since a data migration
 that fails on empty tables would look nothing like this and is not visible from the graph.
 
-## ⚠ Dev environment `devs1` is down - read this before restarting anything (2026-08-14)
+## P11 — ~40 raw `fetch()` calls bypass `fetch-json.ts` and fail silently; Organize's Media tab is unwired dead UI
 
-**Checked 2026-09-03: no `urbanlens_devs1_*` container exists on this host any more**, so the
-runbook below has nothing to act on and the two entries it points at (`the dev database is 18
-migrations behind the code`, `the dev stack's app container has been unhealthy`) describe a stack
-that is gone. The checkout at `/projects/environments/dev/s1` is still on disk and belongs to
-another user, so this is recorded rather than archived - someone could bring the stack back, and
-these would then be true again of a database 18 months of migrations further behind.
+`id: P11` · `status: open` · `updated: 2026-08-15`
 
-**The one part that outlives the environment is item 4**, the `chown` after every `docker cp`. That
-is a property of uid 568 on the host versus uid 1001 in the image, not of `devs1`, and it still
-applies to every container here - `bin/run_tests.sh` does it for exactly this reason.
-
-Four entries below describe one situation. They were filed in discovery order; this is the order
-they must be *acted* on, because fixing the visible problem first breaks something currently healthy.
-
-1. **Snapshot the database.** Three of the pending migrations carry data
-   (`0027_places_backfill`, `0039_encrypt_contact_and_note_fields`, `0042_label_merge_duplicates`).
-2. **`manage.py migrate`** - the dev DB is **18 migrations behind** (`0026`-`0043`). See
-   *"the dev database is 18 migrations behind the code"*.
-3. **Then** `docker compose restart app`. Not before: Celery workers do not autoreload, so they are
-   currently running old code that matches the old schema and are **healthy**. A restart makes them
-   load current code against a stale database.
-4. **Keep the `chown` on every `docker cp`** - see *"the documented `docker cp` resync breaks the
-   app container"*. Without it the app cannot write `logs/django.log`, Django's logging config
-   raises, and `runserver` dies before binding port 8000. The ownership has been repaired once
-   already; the next unguarded resync undoes it.
-
-Why this needed a summary: the underlying drift was recorded in `CLAUDE.local.md` on 2026-08-06 as a
-*stale-files* problem and went unrecognised as a *database* problem for eight days. The information
-was never missing - it was filed under a heading nobody would search when the site stopped serving.
-
----
-Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
-to pick up without re-discovering the problem from scratch.
-
-## OPEN 2026-08-15: frontend TypeScript audit - remaining findings
+Previously titled "frontend TypeScript audit - remaining findings".
 
 Full-tree audit of `dashboard/frontend/ts/` (every file read, eight passes). The four
 security/safety items were fixed in the same pass; everything below was found but **not** fixed.
@@ -1532,194 +973,11 @@ inline JavaScript across 131 template `<script>` blocks - `map/index.html` alone
 `location/index.html` 1,284, `base.html` 1,116. Several audited bugs sit on the inline side of a
 TS/template seam; that is where bugs collect, because the types stop there.
 
-## Coverage note (not a defect): 20 of 32 notification types have no per-type delivery control
+## P12 — ~10 SCSS files use undefined `--ul-accent`/`--ul-border`/`--text` vars, so dark mode never reaches those rules
 
-Measured 2026-08-11: 32 `NotificationType` values, 13 preference stems, 12 of which match a type.
-The uncovered 20 include `safety_ci_due`, `safety_ci_overdue`, `pin_import_complete`,
-`friend_suggestion`, `spotguessr_invite`, `trivia_invite`, `consensus_invite`, `map_shared`,
-`ai_extraction` and the generic `error`/`warning`/`info`.
+`id: P12` · `status: open` · `updated: 2026-07-25`
 
-This is deliberate and documented in `preference_field_names()`'s docstring ("Callers must expose
-exactly these and must not invent defaults for the types that are missing"), and some of them -
-the safety escalation chain in particular - are arguably *right* to be non-silenceable. Recorded
-only so the gap is visible when someone asks why a given notification has no setting.
-
-## OPEN 2026-07-27: ~46 pre-existing test failures on `feature/external-api-mobile-v2` (baseline-verified)
-
-A broad sweep (`-k "pin or wiki or location or boundary or import or share or detail or merge or
-restructure or undo or map"`) over `src/urbanlens/dashboard/tests` gives **46 failed, 3484 passed**.
-None are regressions from the Place-consolidation phase-0 work: the four files whose failures
-could plausibly have been caused by it were run with that change set `git stash`ed and again with
-it applied, giving **byte-identical results both ways (12 failed, 117 passed, same test IDs)**.
-
-**33 of the 46 are now FIXED** (2026-07-27, same session). Two patterns dominate:
-*tests that depend on ambient machine state or on an implementation shape that has since changed*
-(1-6, 11-14 below - they pass on a bare CI box with no credentials and fail on a dev box that has
-them, or vice versa), and *test-harness behavior leaking into the thing under test* (7-8). Only two
-of the 33 turned out to be product bugs (9-10).
-
-Fixed:
-
-1. `test_legacy_cid_coordinate_fix.py::RepairLegacyPinCoordinatesTests` (7) - the helper's
-   `location.cid = ...` goes through `Location.cid`'s setter, which calls `GooglePlaceService`
-   with `fetch_if_missing=True` and hits REData's nearby-places search live. Now calls
-   `set_cid_for_entity(..., fetch_if_missing=False)`, the service's own bulk-path flag. **Note the
-   sharp edge that caused this: assigning a plain model attribute performs synchronous network
-   I/O.** Worth revisiting on its own merits.
-2. `test_websocket_auth.py` (1) - not a consumer bug at all. Tests ran Django's default PBKDF2
-   (~1.2M iterations) because nothing overrode `PASSWORD_HASHERS`; hashing inside the connection
-   handshake exceeded `WebsocketCommunicator.connect()`'s 1-second default. `settings/test.py` now
-   sets MD5, which also speeds up every test that bakes a User.
-3. `test_pin_redata_media_proxy.py` (2) - asserted "unconfigured gateway returns 404 not 500" while
-   *assuming* the machine had no REData credentials. With credentials present the gateway built
-   fine, made a real call, and died on a DB write from a `SimpleTestCase`. Now forces the
-   unconfigured state by patching `__post_init__`.
-4. `test_flickr_album_import.py` (1) - same shape: every sibling patches `flickr_is_configured`,
-   this one didn't, so it saw "not configured" and never reached the blank-URL branch.
-5. `test_property_records_plugin.py` (1) - assigned to `Location.address`, which is a read-only
-   composed property; now sets the component fields.
-6. `test_pin_model_extra.py::PinEffectiveColorTests` (2) - test/implementation drift.
-   `icon_source_label()` sorts in Python via `sorted(self.labels.exclude(kind="user"))` and no
-   longer calls `.order_by()`, but the mock still stubbed `exclude().order_by()`. The real call
-   iterated a bare MagicMock and got nothing, so the expects-a-colour cases failed and the
-   expects-None cases passed **without exercising anything**.
-
-**A further 19 across ten files are now also FIXED** (2026-07-27, same session). That set was
-previously listed here as "genuine failures reproducible in isolation" - **that label was wrong for
-more than half of them**, and the correction is the useful part. Those ten files now give
-**344 passed, 0 failed**. Two systemic causes accounted for twelve:
-
-7. **`@given` + a row-writing `setUp` leaked rows across an entire test class** (10 failures:
-   `RoundTripCommentsTests` 8, `ArbitraryChainDepthPropertyTests` 2). `hypothesis.extra.django`'s
-   mixin routes `@given` tests through `unittest.TestCase.__call__`, bypassing Django's
-   `_pre_setup`/`_post_teardown` wrapper; hypothesis instead calls those per *example*. `setUp` is
-   still called once by `unittest`'s `run()` - before the first example, so **outside every
-   per-example transaction**. Its rows landed in the class-level atomic and survived to
-   `tearDownClass`, so the *next* test in the class died in its own `setUp` on
-   `dashboard_locations_latitude_longitude_uniq`. Fixed once for the whole repo in
-   `core/tests/testcase.py`: `TestCase` now defers `setUp`/`tearDown` (and drains cleanups) into
-   `setup_example`/`teardown_example`. **Any class mixing a `@given` test with a row-writing
-   `setUp` was affected**, which is most of `tests/hypothesis/`.
-8. **`UL_CELERY_TASK_ALWAYS_EAGER=True` turns "dispatched to a worker" into "ran inline"** (2
-   failures). Needed for local non-Docker pytest, but it silently invalidates any test asserting
-   that a request *didn't* do background work.
-   - `test_direct_messages.py::...::test_second_message_in_same_streak_is_debounced` -
-     `create_direct_message` schedules the alert task, which ran eagerly *outside* the test's patch
-     and claimed the debounce marker, so both explicit calls were no-ops.
-   - `test_location_place_name_lazy.py::...::test_page_render_never_calls_the_live_resolver` - the
-     view correctly dispatches `resolve_location_place_name`; eager mode then resolved *during the
-     request*, which is exactly what the test forbids. It was **order-dependent, not
-     isolation-clean**: it passed when the whole file ran (the preceding class masked it) and
-     failed when run alone.
-   Both now stub `safely_enqueue_task` so they measure the request path, which is the actual claim.
-
-Two were **real product bugs**, both fixed:
-
-9. `services/map_pin_share_detection.arrow_points_toward` returned a garbage answer when a pin sat
-   on an arrow's tail. The boundary centroid lands ~1e-14 degrees off the tail through ordinary
-   float error, and `bearing_degrees` turns that ~1-nanometre displacement into a confident angle -
-   measured at `106.29` vs the arrow's own `89.36`, inside the 35-degree tolerance. An arrow drawn
-   *from* a pin and pointing away therefore recorded a **DETECTED `PinShare` the sender never
-   intended**. Now guarded by `_DEGENERATE_TAIL_SEPARATION_DEGREES` (1e-7, far below the 1e-6
-   coordinate storage precision), with a property test over arrow headings.
-10. Creating a pin through the map's add-pin dialog never set `name_is_user_provided`, so a
-    hand-typed name was eligible for the `tasks.upgrade_placeholder_pin_names` sweep that clears
-    non-user-provided names - despite that task's own docstring defining the flag as "a user
-    actually typed something". `create_pin_for_profile` now takes an explicit
-    `name_is_user_provided` (default False, preserving importer/offline-sync semantics) and
-    `maps.post_add_pin` passes it. **Left deliberately unchanged:** the external API's pin-create
-    still defaults to False, so a name typed in the mobile app is not protected until edited -
-    inconsistent with its own PATCH path (`external_api/views.py:746`), and worth a decision.
-
-The remaining five were test bugs of one shape: **substring assertions against a whole page, where
-the string also appears inside the page's own inline `<script>`**.
-
-11. `test_pin_edit_controller.py::PinDescriptionEditableTests` (2) - asserted description *markup*
-    against the full page, but `#pin-overview` is `hx-get`-loaded, so the markup is only in the
-    partial. Both classes' docstrings already documented this split. The assertions moved to
-    `PinOverviewEditableDescriptionTests`, which renders the partial. Note
-    `assertNotIn("pin-description--empty", full_page)` could **never** pass - the click-to-edit
-    script toggles that class by name.
-12. `test_profile_hero_meta_editable.py` (2) - same thing; the wiring script builds
-    `>Add when you started exploring...</span>` as a string literal, so even the `>...<` idiom the
-    file already used elsewhere was insufficient. Now strips `<script>` blocks and asserts against
-    the markup.
-13. `test_trip_controller.py::...::test_outsider_gets_404_indistinguishable_from_a_missing_trip` -
-    compared two responses byte-for-byte including the CSRF token. Django re-masks the token per
-    call, so a page holds several *different* strings for one secret and no two renders ever match.
-    Now normalizes token-shaped runs before comparing.
-14. `test_pin_media_endpoints.py` (1) - a bare `mock.Mock()` has a truthy `is_redirect`, sending
-    `fetch_with_revalidated_redirects` down its redirect branch and handing `urljoin` a Mock
-    (`TypeError` -> 500). The sibling `test_media_materialize._ok_response` sets it correctly. Also
-    removed the test's real-DNS dependency.
-
-15. **`test_external_api_wiki_oracle.py::WikiDiscoveryOracleTests` was 429ing, not 404ing** (12
-    SUBFAILEDs). An earlier revision of this file claimed it "passes cleanly in isolation" -
-    **that was wrong**; it fails alone too. The class walks all 24 `WIKI_ROUTES` once per
-    invisibility case over a single credential (72 requests), which blows past
-    `ExternalApiBurstThrottle`, so the tail of the list came back **429 instead of 404**. The four
-    routes at the end of `WIKI_ROUTES` are the comment writes, which is why the failures looked
-    suspiciously like a comments-specific security hole. It was not one: all three cases returned
-    429 *identically*, so the anti-enumeration property held throughout. `setUp` now calls
-    `disable_throttling(self)`.
-
-    **The part worth keeping:** because those four routes never got past the throttle, the oracle
-    guarantee for `POST comments/`, `DELETE comments/1/` and both reaction routes was **silently
-    unverified** - the test looked like it covered them and did not. It now genuinely does, and
-    they pass. When a sub-resource is appended to `WIKI_ROUTES`, check it is actually reached.
-
-Measured on `-k "external_api or api_key"` (2026-07-27): **59 failed / 668 passed** before this
-session's fixes, **12 failed / 715 passed** once causes 7-8 landed, and **715 passed / 435 subtests
-passed / 0 failed** once 15 did. Note the original 59-failure figure was only partially itemized at
-the time: the capture had been truncated by a `Select-Object` filter, so ~45 of those were never
-inspected individually; they stopped failing across causes 7-8.
-
-Still open:
-
-- The friend-invite privacy cluster documented below (7).
-
-Reproduce a baseline cheaply with `pytest <files> -q --reuse-db` after `git stash`, rather than
-re-running the whole 41-minute sweep. Set `UL_TEST_DB_NAME` to something unique per agent and
-`UL_CELERY_TASK_ALWAYS_EAGER=True` (see cause 8 for what that costs you).
-
-## Historical detail from the original 2026-07-26 report
-
-Found while building the external-API social domain. **Not caused by that work** - verified by
-reverting `controllers/friendship.py` and `controllers/notifications.py` to `f529b0f4` and
-re-running the identical selection: 9 failures before the change, and the same 9 after.
-
-```
-test_friend_invite_privacy.py::InviteByEmailPrivacyTests::test_existing_user_actually_receives_friend_request
-test_friend_invite_privacy.py::InviteByEmailPrivacyTests::test_gmail_variant_of_existing_email_is_matched
-test_friend_invite_privacy.py::InviteByEmailPrivacyTests::test_response_identical_regardless_of_target_friend_request_visibility
-test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_pending_cards_are_structurally_identical_across_kinds
-test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_pending_cards_carry_no_type_revealing_urls_or_ids
-test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_registered_and_unregistered_pending_entries_render_identically
-test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_registered_target_identity_is_hidden_in_the_pending_widget
-test_friend_request_message.py::EmailInviteMessageTests::test_message_is_stored_on_the_friendship_for_an_existing_user
-test_external_api.py::PinSyncViewTests::test_child_pins_are_served_with_their_parent_uuid
-```
-
-The eight friend-invite ones share a likely root cause: the invite path now gates the
-registered-account branch on `Profile.visibility_permits(to_profile.friend_request_visibility,
-to_profile, inviter)` (a deliberate security fix - a bare `!= NO_ONE` check previously let
-anyone who knew an address bypass a restricted visibility setting). `friend_request_visibility`
-defaults to `ANYTHING_IN_COMMON`, and a freshly-baked target profile has no pin/friend/trip in
-common with the inviter, so the gate now correctly refuses - but these tests still assert that a
-`Friendship` row *is* created. The tests appear to predate the gate and were never updated;
-they need to set the target's `friend_request_visibility` to `ANYONE` (or establish something in
-common) in setUp.
-
-`PinSyncViewTests::test_child_pins_are_served_with_their_parent_uuid` is unrelated and fails
-with `PinCreationError: You already have a pin at this location.` - it looks like the test
-creates two pins at coordinates that resolve to the same `Location`.
-
-Whoever picks this up should confirm the intended behaviour before editing the assertions:
-if the gate is right, the tests are stale; if the tests encode a real product requirement
-("an emailed invite should reach anyone regardless of their visibility setting"), then the
-gate needs a documented exception instead.
-
-## Full-codebase audit (2026-07-25): curated high-severity findings
+Previously titled "Full-codebase audit (2026-07-25): curated high-severity findings".
 
 A systematic full-codebase audit (every model/controller/service/template/TS/SCSS file, all
 migrations, the full test suite) ran 2026-07-25, tracked in `docs/notes/ai/codebase-audit.md` (35
@@ -1840,7 +1098,11 @@ instance of the color-token issue the 2026-07-23 `_explainer`/`_map`/`_e2ee` rev
 
 ---
 
-## UL-277: pin-detail external-data freshness window is one global knob, not per-source
+## P13 — Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source
+
+`id: P13` · `status: open` · `updated: 2026-07-23`
+
+Previously titled "UL-277: pin-detail external-data freshness window is one global knob, not per-source".
 
 **PARKED 2026-07-23 at Jess's request ("skip over this one for right now. I need to reassess
 this another day").**
@@ -1856,7 +1118,9 @@ reporter considers too slow to refresh.
 
 ---
 
-## Authenticated media gate - residual per-family risk (2026-07-23)
+## P14 — Authenticated media gate - residual per-family risk (2026-07-23)
+
+`id: P14` · `status: open` · `updated: 2026-07-23`
 
 `/media/...` is now served through `dashboard.controllers.media.MediaGateView` (nginx `location
 /media/` proxies to Django; authorized responses hand back to the `internal`-only
@@ -1937,21 +1201,11 @@ a disclosure one), and a review of safety check-in photo audience rules.
 
 ---
 
-## Internet Archive: uploader-supplied `subject` tags are a residual noise floor (found 2026-07-22)
+## P15 — openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for
 
-The relevance fix matches the location name against `title` OR `subject`. `subject` is
-uploader-supplied and unmoderated, so an item tagged with a landmark it isn't actually about still
-passes - a live search for `Eastern State Penitentiary` kept `WWE Studio Shots 2006` on a subject
-match. Precision is vastly better than before (the same pin previously returned Voice of America
-radio broadcasts via full-text matching), and dropping `subject` from `_NAME_FIELDS` would lose
-genuine untitled photographs, so this was accepted rather than tightened.
+`id: P15` · `status: open` · `updated: 2026-07-22`
 
-**Suggested next step**: if it proves noisy in practice, rank title matches above subject-only
-matches rather than excluding the latter.
-
----
-
-## Overpass deploy-side follow-up: raise the openresty 90s proxy cap (found 2026-07-22; edge box located 2026-07-23)
+Previously titled "Overpass deploy-side follow-up: raise the openresty 90s proxy cap (found 2026-07-22; edge box located 2026-07-23)".
 
 The self-hosted Overpass instance (`overpass.osm.urbanlens.org`, now the primary endpoint) sits
 behind an openresty reverse proxy that cuts every connection at exactly 90s, regardless of the
@@ -1969,7 +1223,11 @@ access only Jess has.
 
 ---
 
-## Deferred from 2026-07-22: aliases/labels aggregation, and boundary voting
+## P16 — Aliases and label membership are still strictly per-pin, with no aggregation across child pins
+
+`id: P16` · `status: open` · `updated: 2026-07-22`
+
+Previously titled "aliases/labels aggregation, and boundary voting".
 
 The ROADMAP's "Pin Restructure" section asks for two more things deliberately not attempted as
 riders on other work:
@@ -1993,7 +1251,11 @@ bullet, which specifies the weighting rule in detail).
 
 ---
 
-## `docker compose exec app pytest` can't reach Valkey in the `s1`/`s2`/`s3` dev environments (found 2026-07-24)
+## P17 — `docker compose exec app pytest` trips the localhost-only network guard because Valkey is a bridge IP
+
+`id: P17` · `status: open` · `updated: 2026-07-24`
+
+Previously titled "`docker compose exec app pytest` can't reach Valkey in the `s1`/`s2`/`s3` dev environments (found 2026-07-24)".
 
 Running the hypothesis suite via `docker compose exec app python -m pytest ...` inside any of
 the `~/dev/s1|s2|s3/UrbanLens` environments on chiron fails almost every test that touches a
@@ -2025,7 +1287,11 @@ profile). Until fixed, verify backend changes on these dev machines via direct D
 tests (no Django test client, no `realtime.broadcast`) plus a manual browser walkthrough against
 the running `docker compose up` stack, rather than the full `pytest` suite.
 
-## Setup wizard sidebar reuses inverting `--ul-grey-N` tokens on an always-dark panel (found 2026-07-25)
+## P18 — The setup wizard's always-dark sidebar uses inverting `--ul-grey-N` text tokens, unreadable in dark mode
+
+`id: P18` · `status: open` · `updated: 2026-07-25`
+
+Previously titled "Setup wizard sidebar reuses inverting `--ul-grey-N` tokens on an always-dark panel (found 2026-07-25)".
 
 `_setup.scss`'s `.setup-wizard__sidebar` sets `background: rgba(0,0,0,0.3)` on top of whatever
 the parent `@include surface()` background is - like the map filter panel and a few other
@@ -2043,7 +1309,11 @@ tokens to a fixed light-on-dark scheme (like `_tokens.scss`'s `$ui-fp-*`/`$ui-li
 pattern for the map filter panel) or making the sidebar itself genuinely theme-aware. Worth a
 manual dark-mode check of `/setup` before shipping.
 
-## Full-codebase audit: re-verification pass (2026-07-25)
+## P19 — Audit re-verification's residual gaps remain: dead ownership re-check, 1,100-line `_dark.scss`, stub AI gateway
+
+`id: P19` · `status: open` · `updated: 2026-07-25`
+
+Previously titled "Full-codebase audit: re-verification pass (2026-07-25)".
 
 After the initial 35-unit audit (above) was worked through fix-by-fix in an earlier session, six
 independent re-verification passes re-read every finding in `docs/notes/ai/codebase-audit.md`
@@ -2161,56 +1431,11 @@ All of the above are maintainability/completeness gaps, not active security or c
 (those categories were the ones fixed directly, above) - reasonable to pick up as a dedicated
 follow-up rather than blocking this pass.
 
-## `docker compose up`'s app container fails `manage.py migrate`'s implicit check with a PinViewSet `AssertionError` on `s2` (found 2026-07-25, not root-caused)
+## P20 — The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()` resolves it wrongly for everyone
 
-While standing up the Consensus game feature (new models/services/consumer/URLs), tried to verify
-against a live stack on the `s2` dev environment (`~/dev/s2/UrbanLens` on chiron). The full
-`docker compose up -d --build` failed - the `app` container's entrypoint init script runs
-`manage.py migrate`, which runs Django's implicit system checks first, and that failed with:
+`id: P20` · `status: open` · `updated: 2026-07-25`
 
-```
-File ".../dashboard/urls.py", line 93, in <module>
-    router.register("pins", PinViewSet, basename=PinViewSet.basename)
-File ".../rest_framework/routers.py", line 170, in get_default_basename
-    assert queryset is not None, '`basename` argument not specified, and could ...'
-AssertionError: `basename` argument not specified, and could not automatically determine the name...
-```
-
-`PinViewSet.basename = "pins"` is a plain class attribute and `dashboard/urls.py:93` passes it
-explicitly (`basename=PinViewSet.basename`) - by inspection this should never reach
-`get_default_basename` at all, since DRF's `SimpleRouter.register()` only calls that when
-`basename` is `None`. Confirmed installed `djangorestframework==3.17.1` is identical on both `s2`'s
-container and the local Windows venv, where the equivalent `manage.py check` (run directly, not via
-`migrate`) passes cleanly every time. Root cause not found - ran out of scope budget chasing it
-while `s2` was also independently blocked on an unrelated stale-migration-graph issue (below), which
-was the one actually relevant to this session's work.
-
-Worked around entirely by bypassing the custom entrypoint (`docker compose run --rm --entrypoint ''
-app .venv/bin/python -m pytest ...`), which never imports the full URLconf (pytest doesn't eagerly
-resolve URLs unless a test actually calls `reverse()`/hits a view) - this is how the Consensus
-DB-backed test suite ended up getting verified despite this. Not confirmed whether this also affects
-a genuinely fresh checkout with no other changes (an `s3` attempt at the same thing got stuck at
-container state `Created` with zero log output before this could be isolated) - worth a fresh,
-focused repro next time someone needs `docker compose up`'s full stack (not just `docker compose
-run`) on one of these dev boxes.
-
-## Dev environments (`s1`/`s2`/`s3` on chiron) can silently drift behind `origin` (found 2026-07-25)
-
-`~/dev/s2/UrbanLens` was one full commit behind `origin/@release/v0.6.0` (missing
-`0017_spotguessr_participant_rating_delta.py` and everything else in the "Implement multiplayer
-enhancements... for SpotGuessr" commit) despite `git status` reporting clean - a `git fetch`/`log`
-comparison is needed to actually notice this, since "clean working tree" says nothing about how
-current the checked-out commit is. This produced a confusing
-`NodeNotFoundError: ... dependencies reference nonexistent parent node ('dashboard',
-'0017_spotguessr_participant_rating_delta')` when testing a new migration that (correctly, per this
-same file's `makemigrations`-dependency gotcha) depended on the latest *committed* migration - the
-dependency was fine, the dev box just didn't have it yet. Fixed for this session by `git fetch` +
-`git pull --ff-only` (stashing/resolving trivial conflicts in files also touched by the missed
-commit, e.g. `CELERY_BEAT_SCHEDULE` dict entries landing near each other) - worth checking `git log
-origin/<branch> -1` vs. local `HEAD` up front, not just `git status`, when picking a "free" dev
-environment for migration-touching work.
-
-## Residues left by the TEMPORARY legacy-CID coordinate repair (found 2026-07-25)
+Previously titled "Residues left by the TEMPORARY legacy-CID coordinate repair (found 2026-07-25)".
 
 `services/apis/locations/legacy_cid_coordinate_fix.py` lets a re-import move a user's
 pre-2026-07-25 pins off the coordinates the old S2-decode guess put them on. Two known gaps
@@ -2235,7 +1460,11 @@ but re-check them then rather than assuming:
    the route and `import_pins_streaming` with it - a live URL that silently mis-places pins is
    worse than no URL.
 
-## Messaging / external API (noted 2026-07-26, during the mobile v2 messaging API build)
+## P21 — `LocationWikiEditView.post` drops invalid wiki field edits and still answers `{"ok": true}`
+
+`id: P21` · `status: open` · `updated: 2026-07-26`
+
+Previously titled "Messaging / external API (noted 2026-07-26, during the mobile v2 messaging API build)".
 
 - **WebSocket credential auth does no per-scope check.** ~~`ApiKeyAuthMiddleware`... authenticates
   a WebSocket connection from any valid, unrevoked credential and then grants blanket access -
@@ -2383,106 +1612,11 @@ but re-check them then rather than assuming:
   signal that could prove a row is actually inverted, so an automated migration was never on the
   table. 9 new tests.
 
-## 2026-07-28: `services/consensus/fields.py` - 9 pre-existing `[has-type]` mypy errors
+## P22 — REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron
 
-Found while running a full `mypy src/urbanlens/dashboard` sweep as part of the external-API P2
-parity-polish pass's Phase 8 prep (Games polish - SpotGuessr/Trivia/Consensus). Not caused by this
-pass - nothing in this session touches `services/consensus/fields.py`, and `git log` shows it
-predates this branch's work (Consensus was built 2026-07-25, per a separate session).
+`id: P22` · `status: open` · `updated: 2026-07-31`
 
-All nine errors are `Cannot determine type of "<field>"  [has-type]` on lines 315/316 (`name`),
-322/323 (`description`), 329/330 (`indoor_outdoor`), 338/339/339 (`pin_type`,
-`pin_type_is_user_provided`) - each inside a lambda (`current_value=lambda w: w.name`, etc.) passed
-as a keyword argument to `_wiki_field_strategy(...)` while building the `_STRATEGIES` dict. `w` is a
-`Wiki` instance and every one of these is an ordinary model field, so this isn't an obviously wrong
-runtime assumption the way the boundary/queryset.py and forms/search.py entries above are - it looks
-like a mypy inference limitation on the lambda's implicit parameter type when `_wiki_field_strategy`
-itself is generic/`Callable`-typed, rather than a real bug. Left uninvestigated because Phase 8 does
-not touch `_STRATEGIES` or the field-strategy machinery, only Consensus's session/eligibility/vote
-services - fixing this would mean guessing at `_wiki_field_strategy`'s intended generic signature
-without the context of whoever wrote it.
-
-## 2026-07-30: `test_media_auth_mixin.py::MediaAuthResolutionTests::test_session_wins_over_a_credential_header` is flaky (PK off-by-one)
-
-Found while running the media/search/public-pins suites for an unrelated PR #126 review-comment pass
-(scoping fixes in `external_api/views_search.py`, `controllers/media.py`, `services/pins/public_pins.py`
-- this test file was never touched). Fails both in isolation and alongside other files, non-
-deterministically off by exactly one: `AssertionError: '17' != '16'` in one run, `'194' != '193'` in
-another. The assertion is `self.assertEqual(response.content.decode(), str(self.profile.pk))` -
-comparing the profile pk baked in `setUp` against whatever pk the view actually resolved, so either
-an extra `Profile`/`User` row is being created somewhere between `setUp` and the assertion (shifting
-the auto-increment sequence out from under the hardcoded expectation), or the mixin under test is
-genuinely resolving the wrong profile. Needs a session review of `MediaAuthResolutionTests.setUp`
-and `resolve_media_profile`/`CredentialOrSessionMediaMixin` to tell which; not investigated further
-since it's unrelated to the search/media/public-pins scoping fixes this session was making.
-
-## 2026-07-30: Two Google API keys are HTTP-referrer-restricted but only ever called server-side - every request gets a 403
-
-Found from production logs: `google_images.py`'s `GoogleImageSearchGateway` (`customsearch.googleapis.com`)
-and REData's `redata_places_gateway.py` (`places.googleapis.com`) both started failing with
-`403 Requests from referer <empty> are blocked. (forbidden)`. Neither gateway sends or fakes a
-`Referer` header - `google.py`/`google_images.py` just does a plain `self.session.get(...)`, and
-REData's gateway passes its key via the `X-Goog-Api-Key` header (see
-`../REData/src/redata/parcels/services/google_places_details/gateway.py:189-193`) - both textbook-
-correct for a server-side key. The 403 is Google's API itself rejecting the request, because
-whichever key backs `settings.google_domain_restricted_api_key` (UrbanLens) and `RD_GOOGLE_MAPS_API_KEY`
-(REData) is configured in Google Cloud Console with an **HTTP referrers (websites)** application
-restriction. That restriction type only works for browser-side calls (Maps JS API, embedded widgets)
-where a real `Referer` header is present - a Celery worker calling Google's REST API directly never
-sends one, so Google always sees `<empty>` and blocks unconditionally, independent of the key being
-otherwise valid/enabled/correctly configured in env vars.
-
-Not fixable in code on either side - short of literally fabricating a `Referer` header to spoof a
-browser origin, which would be actively wrong to do. The real fix is a Google Cloud Console change:
-open each key's Credentials page and change "Application restrictions" from "HTTP referrers" to
-"IP addresses" (the production egress IP(s)) or "None", leaving "API restrictions" (which Google
-APIs the key may call) untouched. Requires Cloud Console access neither this session nor the
-REData session had. Confirm both keys - UrbanLens's Custom Search/Image Search key and REData's
-Places API (New) key may or may not be the same underlying Google Cloud project/key.
-
-### Follow-up (2026-08-25): fixed - wrong key was being called, not a Console misconfiguration
-
-Got Cloud Console access (`gcloud`, project `urban-lens`, number `940182089833` - both keys live
-in the same project, confirmed by key-string lookup against the production `.env` values on
-Damballa). `google_images.py`/`GoogleImageSearchGateway`, the caller originally cited above, no
-longer exists in the codebase; today the only live caller on the UrbanLens side is
-`maps.py::streetview_check`.
-
-**First attempt was wrong and was reverted.** Read `UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY` and
-`RD_GOOGLE_MAPS_API_KEY` as *the* two keys, and "fixed" the 403 by stripping the domain-restricted
-key's referrer restriction in Console. That defeats the point of a domain-restricted key existing
-at all and was caught in review. Reverted it back to its original `HTTP referrers: *.urbanlens.org`
-restriction and original four API targets - untouched, as it should be.
-
-**Actual root cause**: `UL_GOOGLE_MAPS_API_KEY` naming aside, UrbanLens already has a correctly-
-configured unrestricted server key - `UL_GOOGLE_UNRESTRICTED_API_KEY` - and it turns out to be the
-*same underlying Google key* as REData's `RD_GOOGLE_MAPS_API_KEY` (identical key string). It
-already had no application restriction and already listed both
-`street-view-image-backend.googleapis.com` and `customsearch.googleapis.com` among its API
-targets - nothing to fix in Console on that key. Renamed its Console display name from generic
-"Places / Search API Key (no referrer restrictions)" to "UrbanLens/REData Server-Side Key
-(unrestricted, no referrer)" so its purpose reads unambiguously next to the domain-restricted one.
-
-The bug was purely in `maps.py::streetview_check`: `api_key = settings.google_domain_restricted_api_key
-or settings.google_unrestricted_api_key` tried the wrong key first for a server-to-server call.
-Fixed to use `settings.google_unrestricted_api_key` directly. Also fixed `setup.py`'s "Google
-Street View" and "Google Search" integration-status entries, which pointed at
-`UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY` - both are server-side features and were documenting the
-wrong key from the start, which is presumably how this bug got written in the first place.
-
-Live-verified with the production key values directly against Google: unrestricted key ->
-`streetview/metadata` returns `status: OK`; domain-restricted key against the same endpoint
-correctly comes back `REQUEST_DENIED` (never had that API in its target list - proof it was never
-the right key for this call, referrer restriction aside).
-
-**Still open, unrelated to key selection**: the "Google Search" (Custom Search) feature has no
-calling code yet, and independently 403s (`PERMISSION_DENIED: This project does not have the
-access to Custom Search JSON API`) with *either* key, even with `customsearch.googleapis.com`
-enabled project-wide - reproduced against both keys, so it isn't an API-key config problem at all.
-Likely a Programmable Search Engine (cx `85435ec2...`) linkage issue. Not investigated further
-since nothing in production calls it yet.
-
-## 2026-07-31: REData's `/api/v1/parcels/lookup/` is in an OOM/WORKER-TIMEOUT crash loop on chiron
+Previously titled "2026-07-31: REData's `/api/v1/parcels/lookup/` is in an OOM/WORKER-TIMEOUT crash loop on chiron".
 
 Found while investigating the `resolve_deferred_pin_locations` retry-forever bug below - unrelated
 endpoint, noticed in the same gunicorn log sweep on `redata-production-app-1`. Repeated `WORKER
@@ -2493,7 +1627,11 @@ investigated further - REData is a separate codebase/service another agent maint
 contributed to or is independent of the CID-resolution backlog (both endpoints share the same
 gunicorn workers, so one starving the other for memory is plausible) was not determined.
 
-## 2026-07-31: Production celery worker's `.env` has `UL_REDATA_API_URL`... but check `UL_SITE_URL=staging.urbanlens.org`
+## P23 — The production celery worker's env sets `UL_SITE_URL=staging.urbanlens.org`, so built URLs point at staging
+
+`id: P23` · `status: open` · `updated: 2026-07-31`
+
+Previously titled "2026-07-31: Production celery worker's `.env` has `UL_REDATA_API_URL`... but check `UL_SITE_URL=staging.urbanlens.org`".
 
 Noticed while inspecting `redata-production-app-1`'s environment (via scoped, non-secret-exposing
 `grep` - see below) during the CID-resolution investigation: a variable read off what's supposed to
@@ -2506,70 +1644,11 @@ container/host it was inspecting) and not fixed - purely operational (an env var
 deployed host, not a code change) and outside this session's remit. Worth a human checking the
 actual production `.env` deploy config directly.
 
-## 2026-07-31: `resolve_deferred_pin_locations` retried every 120s forever against a REData cid stuck behind its own 30-day cache floor - fixed
+## P24 — A campus pin aggregates only the nearest CRIS building's media, not the survey's full USN roster
 
-Root cause of a production incident: importing `sample_data/Google Takeout.csv` deferred ~700 cids
-to REData's `POST /places/resolve-cids/` for resolution. REData's `StaggeredCachePolicy`
-(`core.services.staggered_cache.py`, `min_ttl_hours=720` i.e. 30 days by default) has a hard floor -
-`should_refresh()` returns `False` unconditionally for any row younger than `min_ttl_hours`,
-regardless of quota utilization. `needs_refresh(place)` is just `should_refresh(place.last_checked_at)`,
-so the instant a `GooglePlace` row gets checked even once (`last_checked_at` stamped) without reaching
-the 3-attempt `confirmed_no_location` terminal state, REData will not queue another resolution attempt
-for it for weeks - but keeps reporting it as `pending` (HTTP 200, no error) on every subsequent
-`resolve-cids` call, since it's neither `resolved` nor `confirmed_no_location`. Confirmed via direct
-DB query on chiron: 441 of 723 `GooglePlace` rows stuck `resolved=False, confirmed_no_location=False`
-with zero `last_checked_at` activity for 10+ hours.
+`id: P24` · `status: open` · `updated: 2026-08-05`
 
-UrbanLens's `resolve_deferred_pin_locations` (`dashboard/tasks.py`) treated "still pending, REData
-responded fine" as forward progress and retried every 120s with `max_retries=None` and no ceiling -
-the existing `consecutive_request_failures` cap (added in an earlier pass, commit `e7a10584`) only
-covers whole-batch *request* failures, not "REData responded successfully but nothing moved." Fixed
-by adding a second, independent `consecutive_no_progress` counter/cap (`_MAX_CONSECUTIVE_NO_PROGRESS_RETRIES`)
-that only increments when a retry's `result.pending` is the exact same size as the batch it was given
-(i.e. zero cids resolved that round) and `request_failed` is `False`; resets to 0 the moment any cid
-resolves or is confirmed unresolvable, so a batch still genuinely working through REData's queue is
-never cut off early. See tests in
-`dashboard/tests/hypothesis/test_resolve_deferred_pin_locations_no_progress.py`.
-
-### Follow-up (same day): REData's active-request fallback - first attempt was wrong, corrected after live testing
-
-The user separately asked REData to stop leaving an *actively-requested* cid stuck behind its own
-30-day staggered floor for weeks - fine for a background prewarm sweep to wait that long, not fine
-for a live caller blocked on `resolve-cids`'s response right now. First attempt (this session, same
-day): a `GoogleLegacyCidLookupGateway` calling the legacy Place Details endpoint with
-`place_id=cid:{cid}` - a real, if undocumented, convention for passing a bare Maps CID that this
-session had reason to believe still worked. Shipped with full unit-test coverage (mocked HTTP) but
-**never verified against a live Google API before being reported done** - a real gap, caught directly
-by the user rebooting both services with the new code and pasting production logs showing every
-single lookup failing with `INVALID_REQUEST`.
-
-Live testing on both REData's and UrbanLens's real production API keys (REData's `diagnose_places_api`-
-style probing plus UrbanLens's own pre-existing `manage.py diagnose_places_api` command, run live on
-jungu) confirmed this decisively: `place_id=cid:{cid}` fails with `INVALID_REQUEST`/"Invalid 'placeid'
-parameter"; the older bare `?cid=NUMBER` form (what UrbanLens's `GoogleGeocodingGateway.get_coordinates_by_cid`
-used **before** REData's scrape-based resolution existed - confirming the user's recollection that this
-used to work) now fails with `NOT_FOUND`/"The provided Place ID is no longer valid. Please refresh cached
-Place IDs..." - Google's own wording for a real, external deprecation of old-style Place ID acceptance,
-not a request-shape bug either agent could fix. Both UrbanLens's dormant fallback and REData's new one
-were affected by the same dead mechanism; UrbanLens's had simply never been exercised in production
-recently enough for anyone to notice.
-
-**Corrected fix (REData)**: no working faster official API exists for a bare, never-before-resolved
-CID - Places API (New) has no CID lookup at all. Replaced the dead paid-API gateway with a bounded,
-forced *synchronous* run of the same real headless-Chromium scrape the async Celery path already uses
-(`google_places.lookup.resolve_synchronously_for_active_request`), called directly from
-`ResolvePlaceCidsView.post()` for a cid stuck behind `needs_refresh`. Capped at exactly 1 forced scrape
-per request (`_MAX_FORCED_SCRAPES_PER_REQUEST`) with an 8-second timeout
-(`_ACTIVE_REQUEST_TIMEOUT_MS`, vs. the background path's 20s default) - REData's gunicorn config
-(`gunicorn.conf.py`) sets no explicit `timeout`, so its 30s default applies, and that browser
-navigation is fully synchronous (not gevent-cooperative), meaning it blocks the *entire* worker
-process, not just one request, for its duration; exceeding 30s would SIGKILL the worker mid-response,
-dropping the whole batch rather than just leaving one cid pending. 1 call at an 8s cap leaves
-comfortable headroom even in the worst realistic case. Removed the dead `GoogleLegacyCidLookupGateway`
-and its `google_places_legacy_cid_lookup` rate-limit entry entirely rather than leaving unreachable
-code behind.
-
-## CRIS media on a multi-building campus is still only partial coverage (2026-08-05)
+Previously titled "CRIS media on a multi-building campus is still only partial coverage (2026-08-05)".
 
 Fixed this session (see `plugins/builtin/cris_buildings.py`): the CRIS Media gallery was
 returning nothing at all because `RedataGateway.fetch_cultural_resource_detail` handed back
@@ -2594,71 +1673,11 @@ fan-out with its own paging/rate story, not another field-name correction.
 just `:read` - a read-only key 403s on all three and therefore yields zero attachments no
 matter how correct this code is.
 
-## `bun run build` fails as a package script on some hosts (2026-08-06)
+## P25 — `Comment.profile` CASCADEs but `TripComment.author` SET_NULLs, so account deletion erases only some comments
 
-Not a project bug, and not reproducible where it matters - but it costs an afternoon to
-rediscover, so: on a host with Bun installed via `curl -fsSL https://bun.sh/install | bash`,
-running the frontend build **through the package script** fails with
+`id: P25` · `status: open` · `updated: 2026-08-07`
 
-```
-TypeError: Formats besides 'esm' are not implemented
-```
-
-...while the exact same build succeeds when the script file is invoked directly:
-
-```bash
-bun run bin/build-frontend.ts        # works
-bun run build                        # fails
-docker exec -w /app <app-container> bun run build   # works
-```
-
-Both Bun installs report 1.3.14, and the container (`oven/bun:1`) runs the identical script
-happily - so this is something about how that particular Bun build executes a package.json
-script, not about `bin/build-frontend.ts` or the `entries-classic` IIFE group it dies on.
-Rewriting the script to use `Bun.build({format: "iife"})` instead of shelling out to
-`bun build --format iife` does *not* help: the JS API accepts the format fine in a standalone
-probe and still throws inside the package-script context, which is what rules the script
-itself out as the cause.
-
-**If you hit this, invoke the file directly or build in the container.** Do not "fix" the
-build script - it is not what is broken.
-
-## The plugin/panel extension surface, from an author's point of view (2026-08-07)
-
-- **`docs/designs/plugins.md` does not exist.** It is at `docs/designs/plugins.md`, moved there by an
-  earlier "clean, organize" commit that left every reference behind: CLAUDE.md (the project
-  instructions themselves), `docs/FEATURES.md`, `docs/ROADMAP.md`, a design draft, and two source
-  docstrings - seven dead paths, so an author following the instructions lands nowhere. Updated all
-  seven to the real location rather than moving the file back, since the move looks deliberate.
-
-- **The doc never shows how to write the panel.** Its worked example contributes
-  `NpsPanelSource()` and then never defines it, so the one class an author actually has to write is
-  the one part not demonstrated. Recorded rather than fixed here - writing that section properly is
-  its own piece of work, and worth doing.
-
-- **Three of a panel's required attributes fail quietly when omitted.** `section_id` and `title`
-  default to `""` on the base class, and `cache_source` is meaningful only by convention. Get any
-  of them wrong and nothing raises: you get a section with no DOM id for HTMX to swap against, a
-  panel with no heading, or - the quietest - a cache-backed panel whose fetch writes one key while
-  its read looks for another, so it polls forever and never renders. Added
-  `panel_source_problems()`, reported once per key from `panel_sources()`, plus a test asserting
-  every panel this repo ships is well-formed. That test is the useful half: it turns a silent
-  runtime absence into a loud CI failure and keeps working as panels are added.
-
-**The validation had to be calibrated against reality twice, which is the interesting part.** The
-first rule demanded `section_id`/`title` of every panel and immediately flagged nine shipped media
-panels. They were right and the rule was wrong: gallery media providers render as tabs *inside* the
-combined Media gallery, which supplies the surrounding markup. The second rule exempted those and
-flagged the core `boundary` panel - also correct, and also not a section: it fetches boundary data
-the map and the external API consume, rendering nothing. The rule that survives is the precise one:
-only `InfoPanelSource` and `SlidesPanelSource` render their own section, so only they need the
-presentation attributes.
-
-Had I "fixed" the nine panels the first run flagged, I would have added meaningless attributes to
-correct code and called it an improvement. A validation rule asserted against the whole existing
-codebase gets corrected by it; one asserted against a couple of hand-picked examples does not.
-
-## Account deletion and the constraint-recreate class: both clean (2026-08-07)
+Previously titled "Account deletion and the constraint-recreate class: both clean (2026-08-07)".
 
 Two checks this unit, both negative.
 
@@ -2692,7 +1711,11 @@ two is probably not what was intended, but which one is a data-policy question -
 deletion means "erase what I wrote" or "keep the conversation readable" - and not a call to
 make from inside an audit. Recorded here for the owner.
 
-## E2EE group messages: the cryptographic membership boundary depends on the server (2026-08-07)
+## P26 — `create_group_message` never validates `key_version`, so a sender can use a key a removed member holds
+
+`id: P26` · `status: open` · `updated: 2026-08-07`
+
+Previously titled "E2EE group messages: the cryptographic membership boundary depends on the server (2026-08-07)".
 
 `models/e2ee/group_key.py` states the design claim plainly: "Versioning is what enforces
 membership boundaries **cryptographically**" - a removed member "is excluded from every later
@@ -2736,7 +1759,11 @@ lagging or offline client, which is a decision for the owner rather than an audi
 already documents a related deliberate trade (recoverability over forward secrecy), so there is
 precedent for either answer being the intended one.
 
-## Filter-view defects cluster: triaged, 3 of 5 already resolved (2026-08-08)
+## P27 — Saved-filter regions use leaflet-draw's transactional remove tool, so deleted polygons resurrect on the next draw
+
+`id: P27` · `status: open` · `updated: 2026-08-08`
+
+Previously titled "Filter-view defects cluster: triaged, 3 of 5 already resolved (2026-08-08)".
 
 Roadmap Tier-1 item 5 listed five defects and prescribed one agent owning the page. Static
 triage shows the list is mostly stale:
@@ -2768,23 +1795,11 @@ real browser to verify; the roadmap entry carries the design.
 **Page overflows footer** - CSS-level, needs a browser to reproduce; nothing checkable
 statically.
 
-## Where the audit stands (2026-08-08)
+## P28 — The upload quota check is fail-open under a cache lock, so a bulk import's fan-out can still exceed the quota
 
-Every area reachable from this environment has now been covered. What remains needs something
-this environment does not have:
+`id: P28` · `status: open` · `updated: 2026-08-12`
 
-- **The owner's decision**: share-quota treatment (#37), comment deletion semantics (#39),
-  E2EE rotation enforcement (#40), the 12 unresolvable doc references, UL-34's vague repro,
-  and unparking UL-277.
-- **A browser**: the leaflet-draw immediate-commit deletion fix (designed, in the roadmap),
-  the saved-filter page's footer overflow, and UL-353/UL-271's repro detail.
-
-Nothing on the remaining task list clears the bar of "worth doing without those inputs" -
-#38 would re-test surfaces verified correct, #32 is churn with no bug attached, #29's last
-blocks are template-coupled or need a Leaflet stub. Stated per the standing instruction to
-say so plainly rather than manufacture work.
-
-## OPEN 2026-08-12: bulk-import paths skip the upload quota lock, which is fail-open anyway
+Previously titled "bulk-import paths skip the upload quota lock, which is fail-open anyway".
 
 `per_profile_upload_lock` exists because `quota_error_for_upload` reads current usage and the
 caller creates the `Image` row afterwards - "N concurrent uploads from the same profile can each
@@ -2829,7 +1844,11 @@ Jess's 2026-08-25 sign-off on this entry said she didn't follow the "running-tot
 proposal and wants it re-explained before any implementation, so that half stays open pending that
 conversation.
 
-## OPEN 2026-08-13: ~187 write routes have no test that names them
+## P29 — 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx
+
+`id: P29` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "~187 write routes have no test that names them".
 
 **Widened again 2026-08-16 (chunks 553-554): the sweep now reaches 486 of 647 named routes (75%),
 up from 160.** Chunk 553's parameter measurement drove it - the cheap wins first (`label_kind`,
@@ -2954,7 +1973,11 @@ Worth doing because the one route from this set that *was* investigated - `pin.l
 endpoint - turned out to fail with a 500 on every request (see the entry above). An untested write
 route is not merely unverified; it is where a permanently broken feature can sit unnoticed.
 
-## Database backups have no restore path, and their format defeats the only example
+## P30 — Backups are plain-SQL with no restore path, and the repo's only `pg_restore` example cannot read them
+
+`id: P30` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "Database backups have no restore path, and their format defeats the only example".
 
 `core/controllers/backups/db.py` produces **plain-SQL** dumps: `pg_dump -U ... -f <path>`, no
 `-Fc`, written as `backup_<YYYYMMDD>_<HHMMSS>.sql`. Creation, retention, scheduling, the atomic
@@ -2966,7 +1989,7 @@ Restoring one is not implemented, not documented, and not tested.
 - No code path in `src/` or `bin/` restores a scheduled backup.
 - The only `pg_restore` anywhere is the `infrastructure` repo's
   `bin/clone_prod_to_staging.sh:158` (moved there from this repo's own `bin/`
-  since it was written; see `docs/OPS_TOOLING.md` there), which restores
+  since it was written; see `../infrastructure/docs/OPS_TOOLING.md` there), which restores
   `/tmp/clone.dump` - a *different* dump that script creates for itself with its own flags. It has
   nothing to do with the backup directory.
 - That mismatch is a trap rather than a mere omission. `pg_restore` **cannot read a plain-format
@@ -2994,7 +2017,11 @@ system that matters on the worst day has never been exercised.
 
 ---
 
-## Session chat WebSockets have no rate limit or frame-size cap
+## P31 — Session and DM chat sockets have no rate limit and cap frame size only after the whole frame is parsed
+
+`id: P31` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "Session chat WebSockets have no rate limit or frame-size cap".
 
 `dashboard/consumers.py` accepts inbound frames on four sockets (`DirectMessageConsumer`,
 `SafetyCheckinChatConsumer`, and the three game sessions via `_ParticipantSessionConsumer`). The
@@ -3034,7 +2061,11 @@ truncation above is the only bound and it happens too late to matter.
 
 ---
 
-## The API rate limiter fails open, which uncaps spend rather than availability
+## P32 — `check_rate_limit` returns True on a `DatabaseError`, so a database failure uncaps paid-API spend
+
+`id: P32` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "The API rate limiter fails open, which uncaps spend rather than availability".
 
 `services/core/rate_limiter.check_rate_limit` returns `True` (allowed) when it cannot determine
 whether a call is within budget. As of the 2026-08-14 audit chunk the handlers are narrowed to
@@ -3065,7 +2096,11 @@ side effect of an exception handler. If fail-closed is chosen, the same question
 
 ---
 
-## Colour values interpolated into `style="…"` - fixed at every entry point; the model fields still have no validators
+## P33 — `Label.color` has no `save()`-level coercion, so a value bypassing form validation is stored unvalidated
+
+`id: P33` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "Colour values interpolated into `style="…"` - fixed at every entry point; the model fields still have no validators".
 
 **Superseded note (corrected 2026-08-14).** An earlier version of this entry listed
 `markup-engine.ts:66/84/150` and `markup-toolbar.ts:297/299` as unfixed because a hex-only
@@ -3122,21 +2157,11 @@ entry's title still applies to that one field.
 
 ---
 
-## Inline template JavaScript is structurally untested
+## P34 — 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers
 
-`pages/map/index.html` contains several thousand lines of JavaScript inside a single `<script>`
-block. `bun test` covers `frontend/ts/`, so none of it can be imported, mocked or exercised - the
-helpers added there in the 2026-08-14 audit had to be verified by extracting the functions into a
-scratch file and running them separately.
+`id: P34` · `status: open` · `updated: 2026-08-13`
 
-This is why bugs like the two above survive: the code is invisible to every automated check the
-project has. Moving that script into `frontend/ts/` (where it would get `tsc --noEmit`, bun tests,
-and the same review as the rest of the frontend) is a large job, but the map page is the single
-biggest concentration of untested logic in the codebase.
-
----
-
-## Inline template JS: 21,543 lines, 14 escaping helpers, zero test coverage
+Previously titled "Inline template JS: 21,543 lines, 14 escaping helpers, zero test coverage".
 
 Measured 2026-08-14. `dashboard/templates/` contains **21,543 lines of inline JavaScript across
 101 templates**, versus 22,684 lines in `frontend/ts/` which `tsc --noEmit` and 394 bun tests
@@ -3172,7 +2197,11 @@ one instance fixes nothing else.
 
 ---
 
-## Nine named routes with no discoverable caller (candidates for review, not confirmed dead)
+## P35 — Seven named routes still have no discoverable caller and remain unreviewed authorised surface
+
+`id: P35` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "Nine named routes with no discoverable caller (candidates for review, not confirmed dead)".
 
 From a 2026-08-14 sweep of all 753 named routes. 61 have no static reference outside `urls.py`;
 30 are reached via `reverse(f"{prefix}.{suffix}")` and 34 live in `external_api/urls.py` where the
@@ -3203,7 +2232,11 @@ category this sweep touched.
 
 ---
 
-## 46 BEM modifiers applied in templates with no CSS rule
+## P36 — 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
+
+`id: P36` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "46 BEM modifiers applied in templates with no CSS rule".
 
 Measured 2026-08-14 against the compiled `style.css` (current at the time - no `.scss`
 was newer). Each base class *is* styled, so each of these was written to create a visual
@@ -3267,7 +2300,11 @@ from the template is as valid a resolution as writing the rule.
 
 ---
 
-## 1,217 statements of write handlers that no test executes
+## P37 — 100 write handlers totalling 1,217 statements never execute under the test suite
+
+`id: P37` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "1,217 statements of write handlers that no test executes".
 
 Measured 2026-08-14 with `coverage.py` over the full suite; full list in
 `docs/reports/2026-08-14-view-coverage.md`.
@@ -3297,7 +2334,11 @@ handler may itself be well tested.
 
 ---
 
-## The category-on-pin methods have no production callers
+## P38 — `Pin.change_category`, `Pin.add_category` and `Wiki.add_category` have no production callers, so their tests fake coverage
+
+`id: P38` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "The category-on-pin methods have no production callers".
 
 Categories became a `Label` kind (`KIND_CATEGORY`), managed generically by the organize/bulk-edit
 paths (`controllers/pin_bulk.py`, `controllers/pin_suggestions.py`). The older per-pin category
@@ -3326,7 +2367,11 @@ already do this and have a UI.
 
 ---
 
-## API behaviour change: non-hex colours are no longer stored
+## P39 — `clean_color` coerces invalid colours to the default, so API clients lose the value silently instead of a 400
+
+`id: P39` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "API behaviour change: non-hex colours are no longer stored".
 
 From 2026-08-14, every colour write path runs through `services/core/colors.clean_color`, which
 accepts `#rgb`/`#rrggbb` (plus the literal `none` where a border legitimately means "no border")
@@ -3354,7 +2399,11 @@ once, in `clean_color`'s callers rather than in the helper.
 
 ---
 
-## Two dead queryset methods
+## P40 — `Pin.by_category` and `Wiki.by_category` have no callers and omit `distinct()`, so any caller inherits duplicate rows
+
+`id: P40` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "Two dead queryset methods".
 
 `Pin.by_category()` and `Wiki.by_category()` have no callers anywhere - Python, templates or tests.
 Both filter `labels__name=<category>` without `distinct()`, so they would return duplicates if used.
@@ -3370,7 +2419,11 @@ worst combination, since the next caller inherits the bug.
 
 ---
 
-## Queryset API with no production caller: 70 of 251 (candidate count)
+## P41 — 70 of 251 public queryset methods have no production caller, so their logic may be duplicated inline elsewhere
+
+`id: P41` · `status: open` · `updated: 2026-08-13`
+
+Previously titled "Queryset API with no production caller: 70 of 251 (candidate count)".
 
 From a 2026-08-14 sweep of every public method on a `*/queryset.py` class:
 
@@ -3397,281 +2450,11 @@ look unused.
 
 ---
 
-## `Image` carries labels but does not inherit `LabelledModel`
+## P42 — `_apply_trip_list_identity_masking`'s docstring cites a `docs/PROBLEMS.md` gap entry that does not exist
 
-`Pin` and `Wiki` both inherit `abstract.LabelledModel`, which supplies `categories`/`tags`/
-`statuses` as prefetch-friendly properties over `self.labels.all()`. `Image` declares its own
-`labels = ManyToManyField(...)` and does not inherit the mixin.
+`id: P42` · `status: open` · `updated: 2026-08-14`
 
-**Not a defect.** Checked 2026-08-14: `Image` does not reimplement those accessors badly - it does
-not have them at all, and no code filters an image's labels by kind inline. Nothing is paying a
-per-row query because of this.
-
-It is an inconsistency worth resolving *if* image label access grows: the next person needing
-"an image's media labels" will write `image.labels.filter(kind=...)`, which bypasses any prefetch,
-rather than inheriting the version that does not. That is precisely how `Pin.to_json()` acquired
-the bug fixed earlier the same day.
-
-Care required if adopted: `LabelledModel` may declare the `labels` field itself, in which case
-`Image`'s own declaration has to be reconciled rather than simply adding the base class - a
-migration question, not a refactor.
-
----
-
-## Workflow: Django logic can be checked on the host without the container
-
-Found 2026-08-14 (audit chunk 320-321). `CLAUDE.local.md` correctly notes that pytest needs the
-`app` container, because the project's settings import GeoDjango and this host has no GDAL. That
-is true, and it is easy to over-generalise into "no Django at all on the host", which is false.
-
-`django.conf.settings.configure(...)` + `django.setup()` builds a minimal Django without loading
-the project settings, so nothing imports `django.contrib.gis`:
-
-```python
-from django.conf import settings
-settings.configure(USE_TZ=True, TIME_ZONE="UTC", DATABASES={}, INSTALLED_APPS=[])
-django.setup()
-```
-
-Useful for anything not touching the ORM or geo models - timezone behaviour, template filters,
-form/field validation logic, signal wiring, pure service functions. Seconds instead of a
-multi-minute container cycle.
-
-It caught a real error this way: a test asserting `date.today()` is unaffected by
-`override_settings(TIME_ZONE=...)`, which is wrong because Django's `setting_changed` receiver
-also rewrites `os.environ["TZ"]` and calls `time.tzset()`.
-
-## Note: NotificationLog receivers self-guard on `created`
-
-Recorded 2026-08-14 (audit chunk 343) because it is easy to get backwards. The three
-`NotificationLog` `post_save` receivers - `push_notification_to_browser`, `enqueue_text_alerts`,
-`enqueue_native_push` - all begin `if created and instance.profile_id`. Marking a notification read
-via `queryset.update()` is therefore safe for a reason that has nothing to do with `update()`
-skipping signals: a plain `save()` would be equally safe. Anyone converting those call sites to
-`save()` for signal-correctness reasons should know they are not fixing a re-push hazard, because
-there isn't one.
-
-## Note: inline template JS defeats source searches of `frontend/ts`
-
-Recorded 2026-08-14 (audit chunk 347) as concrete evidence for the inline-JS migration item.
-Searching `dashboard/frontend/ts` for readers of the `ul_pins_dirty` cache-invalidation flag returns
-**zero production hits**, which reads as a dead code path. The actual consumer is inline JS in
-`templates/dashboard/pages/map/index.html` (lines ~1444 and ~2012), and two of the five writers are
-inline in other templates.
-
-Any audit, refactor, or dead-code sweep scoped to the TypeScript tree will draw wrong conclusions
-about client behaviour while looking thorough. Until the inline JS is migrated, searches for
-client-side behaviour must cover `templates/**/*.html` as well.
-
-## PARTIAL 2026-08-14: the dev stack's `app` container has been unhealthy for its entire uptime (one branch resolved)
-
-Found by a runtime check (audit chunk 351) rather than by reading code - the first finding in this
-audit that no static analysis could have produced.
-
-```
-urbanlens_devs1_app   Up 10 days (unhealthy)   FailingStreak=23150
-curl http://localhost:$UL_APP_PORT/dashboard/login/  ->  HTTP 000 (connection refused)
-```
-
-**The streak count matters for attribution.** 23,150 consecutive failures is on the order of the
-container's whole 10-day uptime, so this is not a side effect of this session's activity (a
-70-minute test suite and repeated `docker cp` into the same container), which was the obvious
-suspicion and is wrong.
-
-What still works: Django itself runs fine *inside* the container - the full 10,781-test suite
-executed there. So this is the serving/healthcheck path, not the application code.
-
-Two consequences worth noting:
-
-- `nginx` reports **healthy** while `app` does not, even though `CLAUDE.local.md` documents nginx as
-  waiting on `app`'s healthcheck. Either the dependency is not actually gating, or it gated once at
-  startup and never re-evaluated. Both are misleading in the same direction: the stack *looks*
-  serviceable.
-- The documented workflow - "full stack reachable at `http://localhost:$UL_APP_PORT` once healthy" -
-  cannot succeed in this checkout. Anyone following it gets a refused connection with no error to
-  read, since the app log has been silent for at least 6 hours.
-
-Also noticed: `.env` has `UL_APP_PORT=21810`, while `CLAUDE.local.md` states this slot's port is
-21811. One of the two is stale; the connection is refused on 21810 regardless.
-
-**Diagnosed one level further (chunk 352).** The cause is not a missing route or a dead process:
-
-- healthcheck is `curl -f http://localhost:8000/health/`;
-- the `health/` route **exists** (`UrbanLens/urls.py:109`, `HealthController.check`);
-- `manage.py runserver 0.0.0.0:8000` **is running** (two processes - the reloader parent from Aug 04
-  and a child);
-- yet `curl` from *inside* the container returns **HTTP 000 for both `/health/` and `/`**.
-
-So the dev server is wedged: alive, consuming CPU, not accepting connections. That rules out the
-three cheap explanations (route missing, process crashed, port misconfigured) and leaves a genuine
-hang.
-
-One complication for anyone picking this up: the child `runserver` process restarted at 00:33 today,
-which is when this session began `docker cp`-ing source into the container - the autoreloader will
-have fired on those syncs. The **10-day failing streak predates all of that**, so the wedge is not
-caused by the syncs, but the *currently running* process is one they restarted. A clean
-`docker compose restart app` is the first thing to try, and would also confirm whether the wedge
-reproduces from a fresh start.
-
-**Pinned precisely (chunk 353): port 8000 is never bound.** Reading `/proc/net/tcp` inside the
-container, no socket is listening on 8000 (hex `1F40`); the only listening port is `0xAA29` (43561),
-an ephemeral socket. So `runserver` is not hung *serving* requests - it has never reached
-`bind()`. With ~33 minutes of accumulated CPU on the child process, it is stuck **before** the
-server starts: imports, system checks, migration checks, or the staticfiles/frontend build the
-Dockerfile runs at boot.
-
-That narrows the search a great deal. The next step is not networking - it is finding what runs
-before the bind and can block indefinitely. `docker exec ... py-spy dump --pid <child>` (or
-`faulthandler`) would name the exact frame.
-
-**Chunk 354 complicates that story - record the evidence, not a tidy narrative.** Both processes are
-`S (sleeping)` with `wchan 0` (an ordinary sleep, not blocked in a kernel call), each with **8
-threads**, and the child has accumulated ~33 minutes of CPU since 00:33 - roughly 3% sustained.
-
-That does not fit a single blocking call during startup:
-
-- a process stuck early in imports would not have 8 threads;
-- a one-time hang would not burn CPU steadily for 18 hours.
-
-A polling loop fits better - Django's `StatReloader` scans every file each second, and a
-crash-reload-crash cycle would keep the inner server from ever holding a binding. But **the app log
-has been empty for at least 6 hours**, and a repeatedly crashing `runserver` should be printing
-tracebacks. Either output is not reaching `docker logs`, or nothing is crashing.
-
-**Resolved one branch (chunk 355).** Sampling `/proc/<pid>/stat` utime+stime twice, five seconds
-apart, the child consumes **11 ticks in 5s - about 2.2% of one core, sustained**. The process is
-genuinely *working*, not blocked. That eliminates the single-blocking-call explanation and matches
-a poll loop, which is consistent with the ~33 minutes of CPU accumulated over 18 hours.
-
-So the state is: **actively looping, never binding, silent logs.** The most likely remaining
-explanation is Django's `StatReloader` polling while the inner server process fails to start or
-repeatedly exits - the reloader survives, the child never holds port 8000. Under that reading the
-silent logs are the anomaly to chase, since a failing child should print something.
-
-`py-spy dump` on both pids would still name the frame in about a minute, and is the recommended next
-step. Note that `/proc/<pid>/io` is not readable even via `docker exec -u root` here, so measure CPU
-via `/proc/<pid>/stat` fields 14+15 rather than IO counters.
-
-## OPEN 2026-08-14: the dev database is 18 migrations behind the code
-
-Found by reading Celery worker logs (audit chunk 359) - another finding no source analysis could
-produce.
-
-`manage.py showmigrations dashboard` inside `urbanlens_devs1_app` reports **18 unapplied
-migrations**. The consequence is already visible in the worker log, 16 `django.db.utils.
-ProgrammingError`s dated **2026-08-04**:
-
-```
-column dashboard_wikis.officially_created does not exist
-column dashboard_site_settings.public_costs_page_enabled does not exist
-column dashboard_profiles.photo_taking_preference does not exist
-```
-
-Same date the `app` container went unhealthy, so the two may share a cause (a boot sequence that
-stopped part-way through migrate/collectstatic) or merely a trigger.
-
-**Why the test suite cannot catch this.** pytest builds a *fresh* database from the migration files,
-so a full green suite - 10,781 passing, run today - says nothing about whether the long-lived dev
-database has had those migrations applied. The two are independent, and only the dev DB serves the
-running app.
-
-Fix is `manage.py migrate` in the container, but check first whether the boot sequence failing on
-2026-08-04 left anything half-applied; the entry above about the wedged `runserver` is the likely
-reason migrations stopped running at all.
-
-**The 18 are `0026`-`0043`, and running them is not a routine catch-up (chunk 360).** Most are
-schema, but at least three carry data:
-
-- `0027_places_backfill` - backfills the whole `Place` hierarchy;
-- `0039_encrypt_contact_and_note_fields` - **encrypts existing column data**, and per
-  `docs/DATA_ENCRYPTION.md` key handling here is unforgiving; running it against a database whose
-  `UL_FIELD_ENCRYPTION_KEY` differs from the one in use when rows were written is how data is
-  orphaned;
-- `0042_label_merge_duplicates` - merges duplicate labels, i.e. deletes rows, immediately before
-  `0043_label_unique_constraint` adds the constraint that requires it.
-
-**Corrected 2026-08-14 (chunk 364) after reading the migrations rather than their names.** The
-claim that `0042`/`0043` "cannot be half-run" was wrong: neither sets `atomic = False`, so on
-Postgres Django wraps each in its own transaction - `0042` either fully applies or fully rolls back,
-and a failure in `0043` leaves merged data without the constraint, which is retryable.
-
-The real risk is **irreversibility, not partial application**. `0042`'s reverse is a documented
-no-op:
-
-> "Merging cannot be undone - the dropped rows are gone. Reversing the migration removes the
-> constraint, which is enough to get the schema back; the merged data stays merged."
-
-So `migrate` forward is safe to attempt, but there is no way back to the pre-merge label data via
-`migrate` at all. **Take a database snapshot** - that advice stands, for this reason rather than the
-one originally given.
-
-**`0039` verified too (chunk 365), and here the original warning was right.** `_encrypt_column`
-rewrites each value in place through `_field.get_prep_value()` - i.e. under whatever
-`UL_FIELD_ENCRYPTION_KEY` is active *at migrate time* - across 9+ columns including
-`dashboard_profiles.phone_number`, `.bio`, `.signal_username`, `.matrix_handle`, `.discord_username`,
-`.area`, both Google account tables' emails, and `dashboard_safety_contact_defaults.email`. Its
-`reverse_code` is `migrations.RunPython.noop`.
-
-**So both data migrations in the pending batch are irreversible**, which is the single strongest
-argument for the snapshot: `migrate` forward is attemptable, but neither `0039` nor `0042` can be
-walked back, and between them they rewrite personal contact data and delete label rows.
-
-Confirm the encryption key in the container's environment is the one you intend to keep *before*
-running this - per `docs/DATA_ENCRYPTION.md`, changing it afterwards outside the documented rotation
-procedure orphans every row this migration writes.
-
-**Ordering matters, and the safe order is not the obvious one (chunk 361).** Celery workers do not
-autoreload, so they are still running the code they started with on 2026-08-04 - which matches the
-*old* schema, which is why no `ProgrammingError` has appeared since. The container's `/app/src` has
-since been resynced with current code, so **the moment the stack is restarted the workers pick up
-new code against the old database and the schema errors return**.
-
-So: `migrate` (after snapshotting) **before** `docker compose restart`, not after. Restarting first
-to fix the wedged `app` container will also break the workers, which are currently healthy and
-processing their hourly tasks normally.
-
-**Update 2026-08-30:** still unresolved and has drifted further. `showmigrations dashboard` in
-`urbanlens_development_main_app` now shows only through `0029_saved_filter_color_opacity` applied
-(0030-0036 unapplied - fewer pending than the "18" above only because migration numbering moved on,
-not because anything was fixed). Ran `manage.py migrate dashboard` here (read-only intent - was
-trying to verify an unrelated feature end-to-end against the running dev app) and it failed
-immediately on `0030_v0_7_0` with `column "show_supporter_badge" of relation "dashboard_profiles"
-already exists` - a column the unapplied migration is supposed to be the one adding. That means the
-actual schema and the `django_migrations` bookkeeping have already diverged in the other direction
-(schema ahead of what's recorded), on top of the "recorded state is behind the code" problem this
-entry already describes. Did not investigate further or attempt anything else - this needs someone
-who can safely reconcile `django_migrations` against the real schema, not another blind `migrate`.
-No damage from this attempt: Postgres wraps each migration in its own transaction, and the failure
-was on the very first statement of the very first pending migration, confirmed via `showmigrations`
-immediately after (still shows 0030 onward as unapplied). Batch 2 of the Vault feature (see
-`docs/prompts/` or ask for context) was verified against the pytest suite's own fresh-built test
-database instead, which is unaffected by this - not against this dev app.
-
-This range matches the container-drift note already in `CLAUDE.local.md` ("30 tracked files behind -
-missing `models/place`, `models/album`, `models/map_overlay` ... and migrations 0026-0038", dated
-2026-08-06), so the drift has been known for over a week in one form and unrecognised as a
-*database* problem.
-
-**Update 2026-09-01:** confirmed still broken, and confirmed to be exactly this drift rather than
-something new - a full `docker compose up --build` (verifying this session's sandbox-tier work)
-failed identically on `dashboard.0030_v0_7_0` with the same `column "show_supporter_badge" of
-relation "dashboard_profiles" already exists`, which blocks `app`'s healthcheck and therefore every
-service that waits on it (`app-ws`, `nginx`, `media-nginx`, both celery workers, `celery-beat`, both
-media workers) - not just an unrelated feature check this time, the entire stack. Did not attempt a
-fix, for the same reason the 2026-08-30 update gave: two of the pending migrations are irreversible
-(`0039` encrypts columns in place under whatever key is active at migrate time; `0042` deletes
-duplicate label rows) and this needs deliberate reconciliation, not another blind `migrate`.
-
-Verified the rest of the stack instead against a scratch database on the same Postgres server
-(`UL_DB_NAME=urbanlens_verify_sandbox docker compose up -d`) - a fresh `CREATE DATABASE` never
-touches this one, migrated clean in about three minutes (see the `app` healthcheck entry above),
-and confirmed every service - including the two new sandbox workers - starts, stays up, and runs as
-non-root. That database was left in place afterward, and the running containers currently point at
-it via that override: a plain `docker compose up`/`restart` later, without the override, will
-recreate them pointed back at this drifted database and reproduce the crash loop until it's
-resolved.
-
-## Note 2026-08-14: `trip.py`'s masking docstring cites an entry that is not here
+Previously titled "`trip.py`'s masking docstring cites an entry that is not here".
 
 `controllers/trip.py:135` (`_mask_trip_identities`, or its equivalent) opens:
 
@@ -3692,49 +2475,11 @@ second.
 Recorded rather than resolved - deciding which requires the history behind that function, and the
 answer changes whether this is a stale pointer or an unfiled gap.
 
-## Note 2026-08-14: "remove `docs/notes/ai/` committed secrets" does not describe this repository
+## P43 — Tracked source cites `docs/notes/ai/completed.md`, which is gitignored, so those references cannot be resolved
 
-`docs/designs/rejected-and-deferred/split-architecture.md` (phase 8, Hardening) lists "remove
-`docs/notes/ai/` committed secrets and rotate...". That line will alarm anyone who reads it, so:
-**verified, and it does not apply to this repository's history.**
+`id: P43` · `status: open` · `updated: 2026-08-14`
 
-- `git log --all -- 'docs/notes/ai/*'` returns nothing - no file under that path has ever been
-  committed on any branch.
-- `git ls-files docs/notes/` shows only `mobile_app_notes.md` and `mobile_app_requirements.md`; the
-  `ai/` subdirectory is ignored (`.gitignore:49`) and untracked.
-
-So there are no committed secrets from that path here. The line is most likely written against the
-*post-split* repository the document is proposing, or it is stale. Either way it currently reads as
-an unaddressed security item in this repo and is not one.
-
-Worth leaving the line alone until someone who knows the split plan can date it - but worth having
-the verification recorded next to it, because the natural reaction to "committed secrets" is to start
-rewriting history, and there is nothing here to rewrite.
-
-## Reference 2026-08-14: where per-viewer visibility is enforced (six mechanisms, six places)
-
-Not a defect - an inventory, recorded because audit chunk 394 established that this codebase
-enforces visibility **per subsystem** rather than through one convention. That is a reasonable design
-(each subsystem's notion of "who may see this" genuinely differs), but it means no single grep finds
-them all, and a reviewer who learns one mechanism will not recognise the others.
-
-| mechanism | where | guards |
-|---|---|---|
-| `visible()` queryset method | `models/device_scan/queryset.py` | device-scan markers |
-| `viewer_hidden_activity_ids` | `services/trips/trip_visibility.py` | trip activity locations |
-| `display_identity_for` | `services/messaging/direct_messages.py` | sender names in DMs/group chats |
-| `*_for_viewer` helpers | `controllers/safety.py`, `services/trips/trip_access.py` | safety + trip per-viewer reads |
-| masking helpers | `services/profile/identity_visibility.py` | profile identity across surfaces |
-| place-domain access | `services/wiki/wiki_access.py` | wiki visibility by place domain |
-
-**Adding a new surface that returns another user's data means picking the right one of these six**, and
-the audit found at least one historical bug in each of the first four categories' problem space
-(reply/reaction notifications naming masked people, the Google Calendar export leaking hidden
-coordinates, trip location visibility re-implementing the shared gate more strictly, the data export
-disclosing masked members). Those are the recurring shape: a *new* surface that did not consult the
-gate its subsystem already had.
-
-## Reference 2026-08-14: audit of all 26 code references to this file
+Previously titled "audit of all 26 code references to this file".
 
 Every source file citing `docs/PROBLEMS.md` was checked (audit chunks 370-405).
 
@@ -3762,72 +2507,11 @@ describing the problem in general words ("the report", "option (a)", "the trips 
 best example in the codebase is `services/messaging/direct_message_shares.py`, which quotes its
 entry's title verbatim.
 
-## Reference 2026-08-16: why two callers of one function legitimately catch different exceptions
+## P44 — `isMouseContextMenu` misreads a keyboard context menu as touch, so the next Enter activation may be swallowed
 
-Chunk 537 worked the rest of chunk 536's divergence list - the sweep that found the archived
-safety-chat 500 by comparing what each caller of a function catches. Six more candidates read, **six
-false positives**, and the reasons are different enough that the list is worth keeping: it is what
-makes that sweep re-runnable without re-deriving the same judgements.
+`id: P44` · `status: open` · `updated: 2026-08-16`
 
-Divergence is *expected*, not suspicious. A caller catches less than its sibling when:
-
-1. **It guards before the call instead of after it.** `controllers/visits.py` checks
-   `visit_logging_allowed(...)` and answers 403 before ever calling `create_manual_visit`, so
-   `VisitLoggingDisabledError` is unreachable - and its comment says exactly why the redundant
-   service-side check stays ("403 rather than a confusing 400"). `controllers/userprofile.py` bounds
-   the trust rating to the valid range before calling `set_trust`, routing anything else to
-   `clear_trust` - out-of-range is that widget's "clear" signal, not an error.
-2. **It constructs the payload itself, so the raising branch cannot be reached.** The HTML pin
-   editor builds `edits` from a fixed key set, all within `EDITABLE_PIN_FIELDS`, and never passes
-   `visited`, so neither of `apply_pin_edits`' two `PinEditError` branches can fire. The API accepts
-   a client-supplied field set and must catch.
-3. **The arguments make the branch impossible.** `views_messaging.py`'s self-leave endpoint calls
-   `remove_group_member(group, profile, profile)`; the `GroupChatPermissionError` branch is about
-   removing *other* members, so only the validation branch is reachable - and it catches the shared
-   `ValueError` base anyway, which is broader than its sibling's two named types, not narrower.
-4. **The catch is doing a different job.** `controllers/pin_suggestions.py` wraps
-   `accept_pin_suggestion` in a bare `except Exception` *inside a loop*, to stop one bad suggestion
-   aborting a bulk action. The API endpoint handles a single suggestion, where there is nothing to
-   isolate it from. `accept_pin_suggestion` declares no `Raises:` at all.
-5. **The scan crossed a function boundary.** `join_trip` raises nothing; the `Raises:` attributed to
-   it belonged to `leave_trip`, the next function in the file, inside a `grep -A 40` window. The
-   same artifact class recorded earlier in this audit.
-
-Add the one from chunk 536 - a handler in a **base class**, one frame above the call, which an
-intra-function scan cannot see - and that is six ways to be correct while looking divergent.
-
-The sweep is still worth re-running; it found a real 500 on a safety path. But its yield is roughly
-one in ten, and every one of the nine needs reading rather than triage by shape.
-
-## Enforced 2026-08-16 (chunk 557): a view's handlers must accept every parameter its routes supply
-
-Three chunks in a row produced the same shape, and the third made it a class worth sweeping rather
-than a coincidence worth noting:
-
-| route | handler | missing | found in |
-| --- | --- | --- | --- |
-| `saved_filters.new` | `SavedFilterEditView.post` | `filter_uuid` was *required*, only `edit/` supplies it | chunk 552 |
-| `pin.link.to` | `PinRelinkView.get` | `location_slug` absent entirely | chunk 556 |
-| `pin.link` | `PinRelinkView.post` | (the filed detach product decision, not a signature fault; the action was removed 2026-08-30 and the route now answers 405) | chunk 551 |
-
-Django resolves handler arguments at **request** time, so the failure is a `TypeError` that only
-appears when somebody requests the mismatched route - and both real instances were on routes no UI
-path exercises, which is exactly why they survived.
-
-Swept directly: for every view class wired to two or more routes, does each handler accept the union
-of the parameters those routes can pass? **753 view classes, 48 of them multi-route, zero
-mismatches.** The class is closed.
-
-`test_view_signature_route_guard.py` keeps it closed, because adding a route to an existing view
-re-opens it silently - nothing at import time or in review notices. **Verified to bind**: restoring
-`PinRelinkView.get`'s pre-fix signature makes it report exactly that method and parameter.
-
-Two details it inherits from earlier mistakes here: parameters accumulate down the resolver tree
-(reading only leaf patterns is what made `test_route_query_scaling`'s second version blind to most
-parameterised routes, per its own docstring), and a handler taking `**kwargs` is skipped because it
-accepts anything by construction.
-
-## Keyboard-invoked context menu may swallow the next activation (unverified)
+Previously titled "Keyboard-invoked context menu may swallow the next activation (unverified)".
 
 `label-picker.ts`'s `isMouseContextMenu` decides whether to arm click-suppression after a
 `contextmenu` event:
@@ -3851,7 +2535,11 @@ rather than observing. Worth ten minutes with DevTools on the Organize page labe
 Menu key on a label chip, then try to activate any chip with Enter, and see whether the first
 Enter is swallowed.
 
-## The planning and handoff documents referenced across the docs do not exist
+## P45 — Five documents cite a root `TODO.md` deleted in `3f12e875`, and `docs/prompts/` was never tracked at all
+
+`id: P45` · `status: open` · `updated: 2026-08-16`
+
+Previously titled "The planning and handoff documents referenced across the docs do not exist".
 
 Three different paths are cited for "what is planned" and "what previous agents did", and none of
 them is in the tree:
@@ -3904,7 +2592,9 @@ Not actioned here because recreating 416 lines of someone else's planning docume
 four documents' cross-references, is a decision about the project's own record rather than a defect
 in its code.
 
-## A group message can still be sent under a key version a removed member holds
+## P46 — A group message can still be sent under a key version a removed member holds
+
+`id: P46` · `status: open` · `updated: 2026-08-16`
 
 Removing a member from an encrypted group correctly flags `needs_rotation` (the group-key GET
 compares envelope holders against current members with `!=`, so removals and additions both trip
@@ -3932,7 +2622,9 @@ Options, roughly in increasing cost: have the send path warn/log when it accepts
 have clients re-check rotation state before send rather than on poll; or reject stale-version sends
 only when the group is fully enrolled (so the 409 case cannot arise).
 
-## A deleted message's preview survives in the recipient's notification list
+## P47 — A deleted message's preview survives in the recipient's notification list
+
+`id: P47` · `status: open` · `updated: 2026-08-16`
 
 Fixed in chunk 572: the *delayed email* and *delayed WhatsApp/SMS alert* for a direct message now
 skip a message the app would show as a tombstone, so unsending inside the 120-second delay window
@@ -3965,31 +2657,11 @@ Options:
 Worth deciding rather than leaving implicit, because the app currently promises "Message deleted" in
 one surface while quoting the message in another.
 
-## An export whose cleanup fails to enqueue is never swept
+## P48 — Logging out leaves every decrypted E2EE key cached in IndexedDB, and nothing clears it
 
-`run_export` schedules `cleanup_export_artifacts_task` in a `finally`, so every path - success, a
-failed user load, an exception mid-export - asks for cleanup. Worker loss is covered too: the Celery
-settings deliberately reconcile `visibility_timeout` against the longest countdown this app
-schedules, which is this one at 3600s, so an unacked cleanup is redelivered.
+`id: P48` · `status: open` · `updated: 2026-08-17`
 
-The uncovered path is the enqueue itself. `schedule_export_cleanup` uses `safely_enqueue_task`, and
-when that returns None (broker unreachable, which the settings above are tuned to fail *fast* on) it
-logs `"Unable to schedule cleanup for export directory %s"` and returns. Nothing else ever looks at
-that directory, so a ZIP containing the user's entire account - pins, photos, messages, profile -
-stays on disk indefinitely, and the only record is one warning line.
-
-Low frequency, but the retention story is "it is deleted an hour later" and in this case it is not.
-This codebase already uses periodic backstops for exactly this kind of single-mechanism dependency:
-`sync_stripe_subscriptions` is described as a "safety net for missed Stripe webhook deliveries", and
-`SafetyCheckinChatConsumer` revalidates every 60 seconds "as a backstop for a dropped
-partner_access_revoked broadcast".
-
-The matching fix would be a periodic sweep of export/import working directories older than their
-TTL, which needs no per-job bookkeeping - the directory's own mtime is enough. Filed rather than
-added because it means introducing a beat task, and how aggressively to reap those directories is
-an operational choice.
-
-## Should logging out wipe the cached E2EE keys? (product decision, filed 2026-08-17)
+Previously titled "Should logging out wipe the cached E2EE keys? (product decision, filed 2026-08-17)".
 
 `frontend/ts/shared/e2ee-store.ts` caches decrypted E2EE material in IndexedDB - the identity private
 key, and every unsealed conversation and group key - so day-to-day use never prompts for a password
@@ -4016,7 +2688,11 @@ feature exists anywhere in the codebase - worth correcting whichever way this is
 owner decisions, but never written here until now - which is what made it worth catching: a filed
 item that lives only in a narrative report is not filed.)
 
-## `npm run git-squash` is a force-deploy with none of `deploy.sh`'s guards (minor)
+## P49 — `npm run git-squash` is a force-deploy with none of `deploy.sh`'s dirty-tree guards
+
+`id: P49` · `status: open` · `updated: 2026-08-17`
+
+Previously titled "`npm run git-squash` is a force-deploy with none of `deploy.sh`'s guards (minor)".
 
 Noted 2026-08-17 while confirming that `gunicorn.conf.py` is actually loaded. `package.json` defines:
 
@@ -4072,16 +2748,22 @@ they can't be repaired mechanically, and they split into two kinds:
   `hard_delete_expired_direct_messages` (now line 374) is cited via its entry in the beat-schedule
   dict, and `tasks.py:1629` for `RUN_LOCK_CACHE_KEY` via an import. Renumbering these is safe but
   needs a human to confirm which usage was meant.
-- **The symbol no longer exists at all.** `controllers/trip.py:135` cites `_mask_trip_identities`
-  and `services/ai/anthropic.py:117` cites `send_prompt`/`send_prompt_list`; neither name appears
-  anywhere in the tree now. The repair is rewriting the sentence around whatever replaced them, not
+- **The symbol no longer exists at all.** `controllers/trip.py` line 135 cites `_mask_trip_identities`
+  and `services/ai/anthropic.py` line 117 cites `send_prompt`/`send_prompt_list`; neither name appears
+  anywhere in the tree now. (Written without the usual `file.py:line` punctuation on purpose: these
+  are quoted *examples* of broken citations, and `bin/check_doc_line_refs.py` cannot tell a quoted
+  one from a live one.) The repair is rewriting the sentence around whatever replaced them, not
   changing the number - and guessing at that would put invented history into the record.
 
 The eight that *were* mechanically provable (anchored on a `def`/`class` the tool could locate
 uniquely) are fixed, and `check_doc_line_refs.py` now runs in CI to keep past-end-of-file citations
 at zero.
 
-## Two tests fail only under a randomized full-suite run (2026-08-18)
+## P50 — `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order
+
+`id: P50` · `status: open` · `updated: 2026-08-18`
+
+Previously titled "Two tests fail only under a randomized full-suite run (2026-08-18)".
 
 The full suite on `810edd7b` reported three failures. One was real and is fixed
 (`test_share_pin_copy_fidelity` - `Pin.buildings_auto_nested_at` was added without being
@@ -4101,7 +2783,11 @@ Worth fixing properly rather than pinning the seed: an order-dependent test is a
 fail on someone else's machine for no visible reason. When picking it up, run the full suite with
 `-p randomly --randomly-seed=<n>` and bisect with `pytest --randomly-seed=<n> -x`.
 
-## Native `<select>` popup stays light-on-light in dark mode despite `color-scheme: dark` (2026-08-22)
+## P51 — Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark`
+
+`id: P51` · `status: open` · `updated: 2026-08-22`
+
+Previously titled "Native `<select>` popup stays light-on-light in dark mode despite `color-scheme: dark` (2026-08-22)".
 
 The floorplan editor's opening-type `<select class="form-input">` (and likely every other bare
 `<select>` on the site) is illegible in dark mode: unselected `<option>` rows render as light grey
@@ -4131,24 +2817,11 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
-## NOT A DEFECT (premise stale, corrected 2026-08-25): a native client can edit a wiki but can never start one
+## P52 — `.app-nav-right` runs 40px past a 390px viewport, so every page scrolls sideways at phone width
 
-~~The published API exposes `GET` and `PATCH` on `wikis/{location_slug}/` and no `POST`... a
-mobile user who pins somewhere new has no way to start its wiki without opening a browser.~~
+`id: P52` · `status: open` · `updated: 2026-08-24`
 
-**Jess, 2026-08-25 (decision-doc item 21): "'Creating a wiki' is now a deprecated concept. Wikis
-are automatically created for places in the background, without any user interaction. This is not
-a gap, and no new REST API endpoints should exist to create wikis."** This entry's premise -
-that wiki creation is a user-initiated action a client should be able to reach - no longer holds;
-do not build a `POST` create-wiki endpoint.
-
-**Follow-up still needed, not done here** (re-scoping test code is a separate piece of work from
-a docs cleanup pass): the five tests in `tests/integration/specs/api/wiki.spec.ts` that skip on a
-fresh deployment assumed a create-wiki endpoint should exist to manufacture their precondition.
-They test an outdated assumption and need to be re-scoped against however a wiki actually becomes
-visible now (background auto-creation, not a client action) - not simply un-skipped.
-
-## OPEN 2026-08-24: the nav bar, not the map, is what overflows at phone width
+Previously titled "the nav bar, not the map, is what overflows at phone width".
 
 The 2026-08-23 entry recorded "the map page scrolls sideways at 390px" and
 guessed the map. It is not the map. Once the overflow probe was taught to ignore
@@ -4166,7 +2839,11 @@ other pages clip it somewhere up the tree. Fixing it is a CSS change to
 `.app-nav-right`'s layout at narrow widths, which wants doing in front of a
 browser rather than blind - but the element is now named.
 
-## OPEN (ratcheted) 2026-08-24: one Private Pin page load can exhaust the database connection pool
+## P53 — One Private Pin page load fires dozens of concurrent panel requests and can exhaust the DB connection pool
+
+`id: P53` · `status: open` · `updated: 2026-08-24`
+
+Previously titled "one Private Pin page load can exhaust the database connection pool".
 
 Found by `tests/integration/` on 2026-08-24, and only visible because the
 console/network guard watches every request a page makes rather than just the
@@ -4222,199 +2899,11 @@ Related: this is the concrete instance of the load-testing gap recorded in
 `docs/TOOLING.md` under "Evaluated, not adopted" - the integration suite found
 it by accident, which is not a substitute for looking on purpose.
 
-## PARTIALLY RESOLVED 2026-08-23: four findings from the integration suite's first real run
+## P54 — `docker-compose.hot-reload.yml` crash-loops when the checkout is not the container's uid
 
-**Status as of 2026-08-24: four of the five fixed; the map's horizontal overflow
-is the one still open.** Each fix is described inline below.
+`id: P54` · `status: open` · `updated: 2026-08-23`
 
-Found by `tests/integration/` (see `docs/INTEGRATION_TESTS.md`) run against a dev-environment
-stack built from `feat/multi-site-health-probes`. Each is a true positive that the pytest suite
-structurally cannot see, because each is about the deployed page or the deployed proxy rather than
-about a function's behaviour. Recorded here rather than fixed, because they are application and
-infrastructure changes and the work that found them was test infrastructure.
-
-**`<html>` carries no `lang` attribute, on every page.** `themes/base.html` and
-`themes/auth_base.html` both open `<html id="html-root">`. axe reports `html-has-lang` at
-`serious` on all ten scanned pages; it is WCAG 3.1.1, and its practical effect is that a screen
-reader guesses which language to pronounce the page in. The fix is one attribute in each template,
-but the *value* is a decision - the app runs `gettext`, so `{% get_current_language %}` may be more
-correct than a hardcoded `en`.
-
-**FIXED 2026-08-24.** Both templates now carry `lang="{{ LANGUAGE_CODE|default:"en" }}"` from
-`{% get_current_language %}`, which follows the active translation rather than freezing English into
-the markup. Guarded in CI by `test_page_template_integrity.py::PageLanguageTests` - a static check
-on the template source, because neither property depends on rendering and the integration suite
-that found it runs by hand.
-
-**HTMX is loaded from a CDN with no subresource integrity.** `themes/base.html` loads
-`https://unpkg.com/htmx.org@1.9.11` with no `integrity`/`crossorigin`, while the jQuery and toastr
-tags immediately around it both have one. HTMX drives essentially every interaction in this
-application, so whoever controls that CDN response controls the app for every visitor. The
-stylesheets nearby (font-awesome, toastr's CSS) are also unpinned but are a much narrower problem;
-Google Fonts cannot be pinned at all, since it serves a different stylesheet per user agent.
-
-**FIXED 2026-08-24**, with `integrity="sha384-0gxUXCCR8yv9FM2b+U3FDbsKthCI66oH5IA9fHppQq9DDMHuMauqq1ZHBpJxQ0J0"`
-and `crossorigin="anonymous"` - computed from the bytes unpkg actually serves for that version
-(which redirects to `dist/htmx.min.js`, 48036 bytes), not guessed. **A stale hash blocks the script
-outright and the site stops responding**, so recompute it if the version ever moves.
-`test_page_template_integrity.py::SubresourceIntegrityTests` now asserts over *every* cross-origin
-`<script>` in both themes rather than that one URL, so the next unpinned tag fails too. Stylesheets
-stay out of scope for the reason given above.
-
-**A freshly created pin's detail page intermittently 404s two of its own panels.** Opening
-`/dashboard/map/pin/<slug>/` shortly after creating the pin sometimes fetches
-`.../wikipedia/` and `.../comments/` and gets 404 from both. Both routes exist and both succeed on
-a retry, so it is a race rather than a missing route. It is user-visible: `themes/base.html`'s
-global `htmx:responseError` handler raises an error toast for every non-2xx HTMX response, so the
-user sees two error toasts on a pin they have just made.
-
-**DIAGNOSED AND FIXED 2026-08-24.** The route is fine; the *slug* moves. `tasks.py`'s
-`upgrade_placeholder_pin_names` sweep calls `Pin.refresh_placeholder_slug()`, which replaces a
-slug that still reads as a placeholder (`unnamed-location`, `dropped-pin`, ...) once the pin finally
-has a real name. A pin created moments ago is exactly that case: it is created unnamed, background
-enrichment names it, the sweep reslugs it - and the detail page the user is *already looking at* has
-the old slug baked into every HTMX panel URL it rendered. Those panels 404, and the global handler
-turns each into a toast.
-
-The sweep's own comment claimed "so no working link changes", which is true of links that are
-stored and false of a link that is open. It is a **legacy-data backfill** by its docstring, so the
-fix makes that literal: it now skips pins younger than `_RESLUG_MIN_AGE` (1 hour). The pin still
-heals, just after nobody is holding a page rendered before the rename. Guarded by
-`test_placeholder_slug_refresh.py::test_the_sweep_will_not_reslug_a_pin_somebody_may_be_looking_at`,
-plus a companion asserting the guard is a delay and not an exemption.
-
-Worth knowing for any future fix here: **there is no slug history**, and ~60 call sites resolve pins
-with a bare `get_object_or_404(Pin, slug=pin_slug, ...)`. Making an old slug keep working in general
-therefore needs a stored previous slug *and* a choke point, which is why the narrow age guard was
-preferred - it removes the observed race without a migration or a 60-site sweep.
-
-**The map page scrolls sideways at phone width. STILL OPEN.** At a 390px viewport,
-`/dashboard/map/`'s `document.documentElement.scrollWidth` exceeds its `clientWidth` by 40px.
-Not fixed here: pinning down an overflow means looking at the rendered box model, and guessing at
-SCSS without a browser produces plausible edits that do not fix it. Instead the *test* was upgraded
-to do the expensive half of the diagnosis - `specs/ui/navigation.spec.ts` now enumerates every
-visible element whose right edge crosses the viewport, innermost last, and prints them in the
-failure message. The next run names the culprit instead of the symptom.
-
-One smaller deployment note from the same run, not a code defect:
-
-- nginx answers with `Server: nginx/1.31.3`. A precise version is free reconnaissance.
-  **FIXED 2026-08-24**: `server_tokens off;` in `src/urbanlens/config/nginx/nginx.conf`'s `http`
-  block - the config is in this repo, not the infrastructure one, which the original note assumed.
-  It also drops the version from nginx's own error pages. Guarded by the integration suite's
-  `services › the server does not advertise what it is running`.
-- **No `Strict-Transport-Security`, and it is the edge rather than the app.** Django's
-  `SECURE_HSTS_SECONDS` is gated on `SECURE_SSL_REDIRECT`, which `UL_UNSAFE_ALLOW_HTTP` turns off -
-  correct for an app served over plain HTTP behind a TLS terminator. But the deployment *as a
-  whole* does redirect HTTP to HTTPS (the terminator does it), and sends no HSTS with that
-  redirect, so a first visit is still strippable. The test now establishes which case it is by
-  asking whether plain HTTP is redirected before demanding the header, so it stays quiet on a
-  genuinely HTTP-only deployment and fails on this one. The fix belongs at whatever terminates
-  TLS, not in Django.
-- Colour-contrast violations are widespread (secondary text, the social sign-in buttons) and are
-  real WCAG AA failures. The suite routes that one rule to advisory rather than failing - see
-  `ADVISORY_RULES` in `tests/integration/lib/a11y.ts` - so that the accessibility project is not red
-  on every run before anyone has had a chance to act on it. Findings still land in each run's
-  `a11y-advisory.txt`.
-## Every drag frame rebuilds every Leaflet layer - measured, and deliberately not refactored (2026-08-23)
-
-`render()` clears all four layer groups and recreates every polyline, polygon,
-marker and handle, and a drag calls it on each pointermove. The obvious answer is
-to reuse layers - `setLatLngs` on the ones that exist, create and destroy only
-what changed. **That was designed in full, adversarially reviewed, and rejected on
-the evidence.** What shipped instead was one line.
-
-**Where a 312-wall drag frame actually goes** (22.1 ms of JS): `deriveFaces` 7.7,
-wall polylines 6.0, the four `clearLayers` 4.1, room polygons 3.9, floor tabs 0.4,
-joint handles 0.00, markers 0.00.
-
-That last figure is the interesting one, and it was a lie of omission: the perf
-fixture carried `markers: []`, so every published number for this editor excluded
-markers entirely - and `markerPopupContent()` was called *eagerly* at bind time,
-building a real DOM subtree per marker per frame for a panel almost no marker is
-ever asked to show.
-
-Binding the popup lazily (`bindPopup(() => markerPopupContent(marker), ...)`) is
-one line. Measured on the same gesture with 30 markers now in the fixture:
-
-| | 4 walls | 312 walls |
-|---|---|---|
-| eager popups | 41.5 ms/move | 73.6 ms/move |
-| lazy popups | 35.7 ms/move | 58.3 ms/move |
-
-Roughly what the entire layer-reuse refactor was projected to buy, for one line
-and no new failure modes.
-
-Read those as a *pair*, not as absolutes. They were taken back to back on an
-otherwise idle machine; the same gesture inside a full `bun run test:browser`
-measures 45.1 / 67.1 because the numbers include Playwright's own per-move pipe
-cost and whatever else the machine is doing. The gap between the two rows is the
-finding, not either row on its own.
-
-**Why the refactor is not being done.** Three independent adversarial reviews of
-the design each returned *fatal*, and each on the same step:
-
-- `wallLayer` is not the wall-bodies layer. `renderOpenings()` adds door-swing
-  leaves and the opening line to it as well, and `wallLayer.clearLayers()` is the
-  only thing that ever removes those. Dropping that clear - which reuse requires -
-  leaks a set of opening paths every frame.
-- Reuse cannot extend to room fills: `deriveFaces` allocates a fresh `Face` per
-  call, whose `wallIds` are traversal-ordered and collide between the two halves
-  of a partitioned rectangle, so there is no identity to key a polygon on.
-- `handleLayer` measures 0.00 ms during a wall drag because joint handles are
-  already gated off, so reuse there buys nothing.
-- `setStyle` *merges*, so translating the current conditional style spreads into
-  it leaves a once-selected wall permanently teal; `Path.onAdd` reallocates
-  `layer._path`, so remove-and-re-add silently drops the DOM `pointerdown` and the
-  drag dies with no error.
-
-And the payoff does not justify that surface: a 40-wall plan - larger than most
-real floors - already sits inside frame budget. Reuse would recover construction
-only; `setLatLngs` still reprojects and rewrites the `d` attribute for every path
-every frame.
-
-If this is picked up again, the entry conditions are: a realistic plan (markers
-and openings included, not the walls-only fixture) measurably missing frame
-budget, and a first step that splits openings out of `wallLayer` into their own
-group **before** any clear is removed. Anything that begins by deleting
-`wallLayer.clearLayers()` is wrong.
-## Third-party CDNs: one table, and an operator switch (2026-08-23)
-
-Every third-party script and stylesheet was written out inline in whichever
-template wanted it - 77 references across 27 templates, five CDNs. Absent, each
-is a feature that silently does not work, and the guards for that were being
-added one instance at a time (toastr's missing-library fallback, the floorplan
-editor's "the map didn't load" notice).
-
-`services/core/vendor_assets.py` is now the single table, and
-`{% vendor_asset "leaflet_js" %}` the only way a template names one. Set
-`UL_VENDOR_ASSET_BASE_URL` and every asset resolves to that mirror; leave it
-unset and they resolve to the same public CDNs as before. The decision is made
-when the page is rendered, so nothing branches per call and nothing waits for a
-request to fail before trying elsewhere - a failover would mean the page has
-already paid for the timeout.
-
-Making it a table immediately surfaced three things that inline URLs had hidden:
-
-- One template asked unpkg for `leaflet/dist/leaflet.js` with **no version**,
-  which is a different library on any day the CDN publishes one.
-- Leaflet's default marker artwork was fetched from **1.7.1** while the library
-  was 1.9.4.
-- leaflet-draw was requested from **cdnjs in some templates and unpkg in
-  others** - two CDNs, one library.
-
-All three are asserted against now (`test_vendor_assets.py`), along with a
-structural check that no template names a CDN host directly, so the pattern
-cannot quietly come back.
-
-**Still outstanding, and it is deliberately not a code change.** The mirrored
-files are other projects' releases with their own licences, so they are not
-vendored into this repository; hosting them is an operator step, and until an
-instance sets `UL_VENDOR_ASSET_BASE_URL` it is still loading from public CDNs
-with the same exposure as before. What has changed is that pointing an instance
-somewhere else is now one environment variable rather than an edit to 27
-templates.
-## docker-compose.hot-reload.yml crash-loops when the checkout is not the container's uid (2026-08-23)
+Previously titled "docker-compose.hot-reload.yml crash-loops when the checkout is not the container's uid (2026-08-23)".
 
 Bringing an agent dev environment up with the hot-reload overlay puts `app` into
 a restart loop and the site answers 502:
@@ -4446,7 +2935,11 @@ Until then, updating a `dev_env.py` environment means the documented
 not `dashboard/frontend/static`) served by whitenoise even with `DEBUG=True`,
 so a copied-in JS bundle is not served until `collectstatic` runs.
 
-## A community quota bonus survives un-sharing the photo that earned it (2026-08-23)
+## P55 — A community quota bonus survives un-sharing the photo that earned it
+
+`id: P55` · `status: open` · `updated: 2026-08-23`
+
+Previously titled "A community quota bonus survives un-sharing the photo that earned it (2026-08-23)".
 
 `services/media/quota_rewards.py` stamps `QuotaExemption.COMMUNITY_CONTRIBUTION`
 on an image once it is on a wiki, has an owner, is not cached external media, and
@@ -4480,42 +2973,11 @@ bonus as an amount tied to the wiki relationship (rather than a flag on the imag
 would make withdrawal a cascade rather than a sweep, and would let the UI show a
 contributor what their contributions have earned them.
 
-## Consensus photo rounds do not honour the uploader's photo visibility (2026-08-23)
+## P56 — `Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed to set it does not exist
 
-`services/consensus/fields.py`'s `_photo_build_round` and `_photo_build_check_round`
-pick a photo with `wiki.images.filter(...).order_by("?").first()` and never call
-`ImageQuerySet.visible_to`. So a photo whose uploader restricted who may see it
-can still be handed to a stranger as a consensus round to place on the map.
+`id: P56` · `status: open` · `updated: 2026-08-28`
 
-This is the same class as two defects fixed the same day - `PhotoSearchProvider`
-and `OverlayMediaPickerView` - and one already recorded for
-`services.spotguessr.photos.pick_photo`. Four surfaces, one omission: a queryset
-that reaches other people's photos without asking the filter.
-
-**Its exposure shrank considerably on the same day and is worth stating.** Until
-`_owner_fields` stopped stamping the location's wiki onto every pin upload, this
-population was "every photo at this location". It is now "photos somebody
-deliberately contributed to this wiki", which is a much smaller and much more
-defensible set - the residual is that contributing a photo does not withdraw what
-its uploader said about who may see it, which the wiki gallery honours and this
-does not.
-
-**Why it is written down rather than fixed.** `build_round` is a protocol -
-`Callable[[Wiki], RoundContent | None]` on `ConsensusFieldStrategy` - so the
-viewer is not in scope at the point the photo is chosen. Honouring visibility
-means threading a viewer profile through the strategy protocol and every
-implementation of it, which is a real refactor rather than adding a call, and one
-that deserves its own change with the consensus tests watched rather than being
-folded into a privacy sweep at the end of a long session.
-
-~~Related, smaller, and found alongside it: `WikiMediaVoteView` scopes a submitted `image_id` to
-the location rather than to photos on the wiki, so a caller can record a relevance vote against a
-pin-owned photo at that location.~~ **Fixed 2026-08-25** (`8bd766a3`): the lookup now filters on
-`wiki=wiki` instead of `location=location`. Guarded by
-`test_voting_with_a_pin_owned_image_id_at_the_same_location_is_ignored`. The main entry above
-(Consensus photo rounds ignoring uploader visibility) is unrelated and still open.
-
-## Nuclei scan follow-ups (2026-08-28)
+Previously titled "Nuclei scan follow-ups (2026-08-28)".
 
 **`Cross-Origin-Embedder-Policy` is not set.** `require-corp` would block every third-party image
 and script that doesn't send its own CORP/CORS header - the Street View iframe, the OSM/ArcGIS/
@@ -4525,7 +2987,9 @@ do and don't send CORP.
 `cross-origin-embedder-policy` is the fourth thing this template flagged and
 is not fixe
 
-## Test-quality audit follow-ups (2026-08-29)
+## P57 — Test-quality audit follow-ups (2026-08-29)
+
+`id: P57` · `status: open` · `updated: 2026-08-29`
 
 Found while auditing existing unit tests for real positive/negative coverage (see
 `docs/notes/ai/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
@@ -4730,48 +3194,11 @@ permission gate (author or trip creator), but no test file anywhere in the suite
 `TripCommentDeleteView` or `delete_comment` at all - not the basic delete, the permission gate, or
 image cleanup. Would need a full TripComment/Trip fixture setup, not a surgical addition.
 
-## RESOLVED 2026-09-01: `PhotoMetadataConflictResolveView.post`'s manual-POST branch mistypes form values as possibly a list
+## P58 — A photo's grid tile can 404/500 for seconds after upload while async processing renames its file
 
-Found by mypy while moving this view from `controllers/photos.py` to `controllers/vault_photos.py`
-(the Memories → Vault Photos move) - pre-existing, unrelated to that move. In the
-`request.POST.items()` fallback branch (used when the request body isn't JSON), `int(value)` is
-called on a POST field value that mypy infers as `str | list[object]`. The surrounding
-`try/except (TypeError, ValueError): continue` already guards the runtime call, so this is a type
-hygiene gap rather than a live bug - but worth a real fix (narrow `body`'s type properly, or read
-`request.POST` through a helper that always returns `str`) rather than a `cast`, per the project's
-mypy policy.
+`id: P58` · `status: open` · `updated: 2026-08-31`
 
-**Fix**: confirmed via Django's own source that `QueryDict.items()` (a `MultiValueDict`) always
-yields the *last single value* per key, never a list - the `list[object]` in the stub's typing
-reflects `__getitem__`'s deliberately wider (and stub-acknowledged, `# type: ignore[override]`)
-override, not anything `.items()` can actually produce. Added an explicit `isinstance(value, str)`
-guard before `int(value)` (dropping the now-unreachable `TypeError` from the except clause, since a
-guaranteed `str` can only raise `ValueError`) - a real type-narrowing fix, not a `cast`, and it
-documents the actual runtime contract instead of relying on `int()`'s exception type as an
-accidental filter. This endpoint had **zero test coverage** before (neither its JSON nor
-form-encoded body shape) - added `PhotoMetadataConflictResolveViewTests` in
-`test_album_cover_move_dedupe.py` covering both, plus the malformed-choice path.
-
-## RESOLVED 2026-09-01: `apply_image_map_update`'s `stash_photo_fields` call mistypes a nullable Profile as required
-
-Found by mypy while adding `image_associations` to `services/media/images.py` (Batch 4 of the
-Vault feature - lightbox pin/wiki/album association display) - pre-existing, unrelated to that
-addition (confirmed via `git stash`). `services/media/images.py:191`, inside
-`apply_image_map_update`: `stash_photo_fields(image.profile, image, before=before, after=...)`
-passes `image.profile`, typed `Profile | None`, into a parameter mypy has typed as requiring a
-non-optional `Profile`. Same class of issue as the already-logged
-`PhotoMetadataConflictResolveView` finding - a type hygiene gap, not a currently-reachable crash
-(worth checking whether `image.profile` can actually be null in the codepaths that call this, and
-either narrowing the type at the call site or the parameter, rather than a `cast`, per the
-project's mypy policy).
-
-**Fix**: the guard above the call checked `if image.profile_id:` (the FK column, always loaded) but
-then passed `image.profile` (the related object, a separate attribute as far as mypy is concerned)
-to `stash_photo_fields`. Changed the guard to `if image.profile is not None:` - same runtime
-behavior (a non-null `profile_id` and a resolvable `.profile` agree in practice) and correctly
-narrows the actual object being passed. Verified via `test_undo_mutations.py`.
-
-## OPEN 2026-08-31: A photo's grid tile can 404/500 for a few seconds right after upload while async processing renames its file
+Previously titled "A photo's grid tile can 404/500 for a few seconds right after upload while async processing renames its file".
 
 Found live-verifying Batch 4 (lightbox pin/wiki/album associations) against the `ae97b86` dev
 environment - pre-existing (Batch 2's upload/grid work), unrelated to Batch 4 itself, and not a
@@ -4800,7 +3227,11 @@ than deleting eagerly.
 way (`guard.allow()` in `tests/integration/specs/ui/vault-documents.spec.ts`). Not a new instance to
 fix separately; the eventual fix above covers both.
 
-## OPEN 2026-08-31: a specific `ae97b86` dev-account thumbnail (`lightbox-associations.webp`) is durably broken, not just racing
+## P59 — A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing
+
+`id: P59` · `status: open` · `updated: 2026-08-31`
+
+Previously titled "a specific `ae97b86` dev-account thumbnail (`lightbox-associations.webp`) is durably broken, not just racing".
 
 Found live-verifying Batch 5's regression run of the pre-existing `vault-photos.spec.ts` pruning
 test (`scrolling loads further pages and prunes off-screen thumbnails`) - unrelated to Batch 5's
@@ -4818,7 +3249,11 @@ somewhere between the DB and what's served. Didn't chase further (out of scope f
 keeps failing on this specific test: check for an orphaned/stuck row in this account's photo library,
 or a thumbnail-generation task that errored silently.
 
-## OPEN 2026-08-31: `vault-photos.spec.ts`'s "changing sort re-fetches the grid in the new order" test flakes on a persistent dev DB
+## P60 — `vault-photos.spec.ts`'s sort test can tie on a persistent dev DB because it relies on random captions
+
+`id: P60` · `status: open` · `updated: 2026-08-31`
+
+Previously titled "`vault-photos.spec.ts`'s "changing sort re-fetches the grid in the new order" test flakes on a persistent dev DB".
 
 Found running the Vault Photos/albums Playwright specs against the `ae97b86` ephemeral dev
 environment after a Batch 3 (Vault albums) fix pass - pre-existing (Batch 2), unrelated to that
@@ -4834,62 +3269,11 @@ tie (e.g. by explicitly seeding one photo with a caption that sorts alphabetical
 different, more recent one) rather than relying on randomness against an unbounded, growing dataset.
 mypy policy.
 
-## RESOLVED 2026-09-01: 11 pre-existing mypy errors outside the Vault feature, surfaced by the first full-tree run this session
+## P61 — Vault album bulk delete, send-to-wiki and share render hidden forever, because only a `Pin` owner gets URLs
 
-Batch 7's cleanup step ran `mypy /app/src/urbanlens` (880 files) for the first time this session -
-every earlier check was scoped to individual touched files. 13 errors total; 2 were already known
-and logged separately (`PhotoMetadataConflictResolveView`'s `int()` call, `apply_image_map_update`'s
-`stash_photo_fields` call, both above). None of the remaining 11 are in any file this session's
-Vault work touched (`tasks.py`, `services/undo/*`, `checks.py`) - confirmed pre-existing, not a
-regression, but not investigated further (out of scope for this PR):
+`id: P61` · `status: open` · `updated: 2026-08-31`
 
-- `tasks.py:3791` (`cache_media_item_into_album`) - `wiki=None if isinstance(owner, Pin) else owner`
-  passes `Wiki | Profile | None` where `materialize_media_item` expects `Wiki | None`; `owner` is
-  typed wider than this call site actually handles.
-- `services/undo/handlers/label_membership.py:37` (`_target`) - returns `Pin | Wiki | Image | None`
-  where the signature promises non-`None`; `:44` also carries a stale `type: ignore` that mypy now
-  flags unused.
-- `services/undo/handlers/pin_mutation.py:25`, `photo_mutation.py:27,74,97`, `wiki_mutation.py:26` -
-  five more stale `type: ignore[return-value]` comments mypy now flags as unused (whatever error
-  they were suppressing no longer reproduces, likely from an upstream type-narrowing fix elsewhere
-  in the undo service).
-- `services/undo/service.py:73` (`_repr_limit`) - `UndoAction._meta.get_field("object_repr").max_length`
-  is `int | None` per Django's stubs; the function's return type claims plain `int`.
-- `checks.py:44` (`_declared_family`) - `upload_to.__qualname__` on a `_UploadToCallable[Any]` isn't
-  guaranteed by that type's stub, even though every real `upload_to` in this codebase is a plain
-  function.
-
-Worth a dedicated mypy-hygiene pass; the `type: ignore` cleanups in particular are likely quick once
-someone confirms what the now-passing code path actually is.
-
-**Fix, all confirmed root causes rather than suppressions:**
-- `cache_media_item_into_album`: `owner`'s real type is `Pin | Wiki | Profile` (a Vault album can
-  be Profile-owned), not `Pin | Wiki` as the code's own comment assumed - so `isinstance(owner,
-  Pin)`'s `else` branch was `Wiki | Profile`, and a Profile-owned album's `owner` could have been
-  passed as `wiki`. Not reachable today only because `Profile` happens to have no `.location`
-  attribute, so `getattr(owner, "location", None)` always returned `None` for that case and exited
-  early first - fixed properly with an explicit `isinstance(owner, Pin | Wiki)` guard and two
-  independent `isinstance` narrows, rather than relying on that accident. Verified via
-  `test_albums.py`.
-- The five stale `type: ignore[return-value]`/`[arg-type]` comments: the real fix mypy's own
-  "unused-ignore" was pointing at - each handler's local `_expired(message: str) -> None` helper
-  always raises, but wasn't typed `NoReturn`, so mypy's narrowing after `if x is None: _expired(...)`
-  was fragile (worked for a single plain assignment, silently didn't for an explicitly-annotated or
-  multi-branch one - confirmed with an isolated repro either way). Typed every handler's `_expired`
-  as `-> NoReturn` instead, which narrows robustly regardless of shape; removed the now-redundant
-  `type: ignore`s and one now-dead `raise AssertionError`. Verified via `test_undo.py`,
-  `test_undo_round_trip.py`, `test_undo_redo_is_single_use.py`,
-  `test_undo_photo_reattachment_coverage.py`.
-- `_repr_limit`: `CharField(max_length=255)` genuinely always sets a `max_length` - django-stubs
-  just types the general case (`max_length: int | None`) since not every field has one. Added an
-  explicit `if max_length is None: raise TypeError(...)` guard (not a bare `assert`- `S101` is only
-  test-file-exempted in this project's ruff config).
-- `_declared_family`: switched to `getattr(upload_to, "__qualname__", repr(upload_to))` - a real
-  robustness fix, not just a type appeasement, since `upload_to` can be any callable (a callable
-  class instance, `functools.partial`, ...), not only a plain function guaranteed to have one.
-  Verified via `test_media_family_registry.py`.
-
-## OPEN 2026-08-31: Vault album bulk actions (delete, send-to-wiki, share) are silently unavailable
+Previously titled "Vault album bulk actions (delete, send-to-wiki, share) are silently unavailable".
 
 `controllers/albums.py:513-519` sets `gallery_bulk_url`/`pin_share_dialog_url` only when the album
 owner is a `Pin`; a `Profile` (vault) owner falls into the `else` and gets empty strings. Downstream,
@@ -4907,7 +3291,9 @@ carry an explicit "a vault album has none" rationale in the source, this one has
 it deliberate - it reads as an oversight from widening `Pin | Wiki` to `Pin | Wiki | Profile`. Needs a
 decision (wire up a profile-scoped bulk endpoint, or document the refusal) rather than a silent gap.
 
-## OPEN 2026-08-31: video uploads are charged to quota but appear nowhere in the Vault
+## P62 — Video uploads are charged to quota but appear nowhere in the Vault
+
+`id: P62` · `status: open` · `updated: 2026-08-31`
 
 `MediaKind.VIDEO` exists (`models/images/model.py:136`), `_resolve_media_type` classifies and
 feature-gates videos (`services/photos/photo_upload.py:83-86`), and `tasks.py:913` processes them -
@@ -4920,7 +3306,9 @@ The user is billed for storage they cannot see, browse, or delete from the Vault
 Either add a Videos page (the third instance of the same copy-paste - see the note below) or, at
 minimum, surface videos in the Vault home counts and storage explanation so the number reconciles.
 
-## OPEN 2026-08-31: adding a third Vault media type means copying ~600 lines for ~90 lines of difference
+## P63 — Adding a third Vault media type means copying ~600 lines for ~90 lines of difference
+
+`id: P63` · `status: open` · `updated: 2026-08-31`
 
 `controllers/vault_documents.py` is largely a rename of `controllers/vault_photos.py`'s gallery
 half (`:32-36 / :80-120 / :123-156` vs `:38-50 / :261-302 / :305-332`), `pages/vault/documents.html`
@@ -4940,7 +3328,11 @@ concatenation, and defines an `_esc()` helper found nowhere else under `template
 `shared/photo-pin-confirm.ts` and the uploader to a shared `initVaultUploader` would bring the whole
 Vault client surface under typecheck and test.
 
-## OPEN 2026-08-31: the integration suite's login setup fails after a *successful* sign-in
+## P64 — The integration suite's login setup fails after a successful sign-in, and `diagnose()` hides why
+
+`id: P64` · `status: open` · `updated: 2026-08-31`
+
+Previously titled "the integration suite's login setup fails after a *successful* sign-in".
 
 Cost most of an hour during the Vault review, and the error message actively misleads. `auth.setup.ts`
 reported `Sign-in as "e2e-primary" did not happen`, but the attached diagnosis contradicts itself:
@@ -4972,7 +3364,11 @@ routine during this session, turning 3-second tests into 8-minute ones. Check `/
 concluding a browser failure is a code regression; a direct `curl` of the same page returning in ~1s
 while Playwright times out at 30s is the tell.
 
-## OPEN 2026-08-31: perf test tooling has no wall-clock/render-time check - only query count
+## P65 — Perf tooling measures query count only, so a 12-second render passes every scaling test
+
+`id: P65` · `status: open` · `updated: 2026-08-31`
+
+Previously titled "perf test tooling has no wall-clock/render-time check - only query count".
 
 Root cause behind every finding below, and worth fixing once rather than per-finding. The Organize
 Labels page was reported "still slow" despite `Label.prime_total_pin_counts` already having cut its
@@ -4999,7 +3395,11 @@ rows, assert wall time doesn't grow past a tolerance), but timing `time.perf_cou
 request instead of counting queries - so this class of bug fails a test instead of shipping. None of
 the entries below have one; each was found by hand.
 
-## OPEN 2026-08-31: Organize's *active* label tab still renders its full card list unpaginated
+## P66 — Organize's active label tab still renders its full card list unpaginated
+
+`id: P66` · `status: open` · `updated: 2026-08-31`
+
+Previously titled "Organize's *active* label tab still renders its full card list unpaginated".
 
 The tab-deferral fix (see the entry above) stopped the other five tabs from rendering, but did
 nothing to cap the *active* tab's own row count - `controllers/labels.py:370-406`
@@ -5017,7 +3417,11 @@ like Vault's `photo-virtual-grid.ts`/`bindPhotoGrid` - see the tooling entry abo
 wasn't reused as-is: it's built for JSON tile grids, not server-rendered card rows wired into the
 existing bulk-select/merge/convert machinery in `organize-tab-manager.ts`).
 
-## OPEN 2026-08-31: "Organize this property" dialog fans out ~6-7 queries per candidate pin, uncapped to 500
+## P67 — "Organize this property" fans out ~6-7 queries per candidate pin, uncapped to 500
+
+`id: P67` · `status: open` · `updated: 2026-08-31`
+
+Previously titled ""Organize this property" dialog fans out ~6-7 queries per candidate pin, uncapped to 500".
 
 `controllers/pin_restructure.py:83-111` (`_nestable_rows`) calls
 `services/pins/pin_merge.py:158-207`'s `plan_merge_conflicts()` once per nestable candidate with no
@@ -5033,7 +3437,11 @@ property" dialog - so it never got the query-scaling scrutiny an older path woul
 `test_pin_restructure.py` covers correctness only; no `QueryScalingMixin`/`assertNumQueries` test
 covers this path.
 
-## OPEN 2026-08-31: N+1s elsewhere with no perf-test coverage
+## P68 — N+1s in the site-admin user list, the achievement icon picker and Memories > Maps still have no perf test
+
+`id: P68` · `status: open` · `updated: 2026-08-31`
+
+Previously titled "N+1s elsewhere with no perf-test coverage".
 
 Found by the same survey as the entries above, each independently confirmed against its source:
 
@@ -5062,7 +3470,11 @@ Found by the same survey as the entries above, each independently confirmed agai
 
 None of the four appear in any `QueryScalingMixin` subclass or `django_perf_rec` record.
 
-## OPEN 2026-08-31: unbounded lists with no pagination, found across most of the site
+## P69 — Unbounded lists with no pagination across most of the site, from album pickers to Immich imports
+
+`id: P69` · `status: open` · `updated: 2026-08-31`
+
+Previously titled "unbounded lists with no pagination, found across most of the site".
 
 Same survey, same shape each time: a collection that grows with account age/usage, rendered via a
 plain `{% for %}` with no `.filter()[:N]`, `Paginator`, or HTMX-deferred/windowed loading. Grouped
@@ -5126,118 +3538,36 @@ at this app's beta scale (~2 users):
   on the overview map with no cap, unlike the near-identical `SavedFilterPreviewView`'s explicit
   `_PREVIEW_MAP_PIN_LIMIT = 500`).
 
-## RESOLVED 2026-09-01: `bun run typecheck` failed on `hotkeys.test.ts`/`hotkeys.contract.test.ts`
+## P70 — `settings/test.py` pops `PROMETHEUS_MULTIPROC_DIR` too late, so 8 metrics tests fail wherever it is set
 
-Found while typechecking after an unrelated fix (map overlay pane z-index,
-`map-image-overlays.ts`) - these two failures were pre-existing on the branch, unrelated to that
-change: `hotkeys.contract.test.ts:33` - `TS2554: Expected 0-1 arguments, but got 2.`;
-`hotkeys.test.ts:61` - `TS18048: 'DEFAULT_HOTKEYS.redo' is possibly 'undefined'.` Fixed: the first
-was bun's `expect()` not accepting a second (custom-message) argument at all - the check now
-throws its own descriptive `Error` before the assertion instead. The second was the real bug
-`hotkeys.ts` pointed at - `DEFAULT_HOTKEYS` was annotated `Record<string, HotkeyDefault>`, which
-widens every property access to `T | undefined` even though the object is a fixed literal whose
-keys (`undo`/`redo`/`toggleFullscreen`) are always present; dropped the annotation so the literal
-infers its own precise type instead. Nothing indexes `DEFAULT_HOTKEYS` with a dynamic string (only
-`Object.entries()` and lookups into `loadHotkeys()`'s own already-generic return value), so
-nothing needed the wider type in the first place.
+`id: P70` · `status: open` · `updated: 2026-09-04`
 
-## RESOLVED 2026-09-01: clicking any photo in the wiki page's Media section throws - no lightbox ever opens
+`CeleryEventMetricsTests` (8 tests in `tests/hypothesis/test_metrics_endpoint.py`)
+fail with `TypeError: expected str, bytes or os.PathLike object, not NoneType`
+raised from `posixpath` inside `CollectorRegistry()`.
 
-Found while wiring a wiki-photo "copy to my pin" feature into the lightbox. `pin_media_items.html`
-(shared by the pin and wiki pages' Media sections) renders every tile with
-`onclick="window.mediaOpenLightbox(this)"`, but `window.mediaOpenLightbox` is only ever defined in
-`pages/location/index.html:1935` (the Private Pin page's own inline script) - `pages/location/wiki.html`
-never defines it. Confirmed live: on a wiki page, calling `window.mediaOpenLightbox(btn)` for any
-rendered `.media-item-thumb-btn` throws `TypeError: window.mediaOpenLightbox is not a function`,
-caught nowhere, so a click on any Media-section photo (any provider tab, including the "photos"
-source showing real uploaded/shared Image rows) silently does nothing - no lightbox, no error
-shown to the user.
+The test helper's own comment states the contract: "A per-test registry only
+isolates because `settings/test.py` pops `PROMETHEUS_MULTIPROC_DIR`". That pop
+is real - `settings/test.py:128` - but it happens too late.
+`prometheus_client/values.py:95` reads `os.environ.get("PROMETHEUS_MULTIPROC_DIR")`
+when `ValueClass` is first resolved, and latches multiprocess mode on. If
+anything imports `prometheus_client` before Django settings are loaded, the
+library is already in multiprocess mode by the time the pop runs, and every
+later registry tries to join a path against `None`.
 
-Separately, the specific `.media-item` tested had `getBoundingClientRect().height === 0` and no
-`offsetParent` despite its containing `[data-tab-panel="photos"]` panel reporting `hidden: false` -
-worth checking whether the Media section's own provider/source-tab filtering also has a default-tab
-visibility issue independent of the missing lightbox opener, once that's fixed and items are
-actually clickable to test against.
+The failure is therefore conditional on the environment, which is why it is not
+seen everywhere: it needs `PROMETHEUS_MULTIPROC_DIR` to be *set* in the
+process environment. It is set in the app container
+(`/var/run/urbanlens/prometheus`), so `docker exec ... pytest` - the documented
+way to run tests on a host without GDAL - hits it every time, while
+`bin/run_tests.sh` does not set it and so does not.
 
-**Fix**: extracted the pin page's previously inline, page-local `window.mediaOpenLightbox` into a
-new shared module (`frontend/ts/shared/media-lightbox.ts`), exposed identically by
-`entries/map-annotations.ts` (loaded by both the pin and wiki pages) instead of either page's own
-inline `<script>` - so both pages get the same opener by construction rather than by remembering to
-duplicate it. It reads the containing grid by the shared `.media-gallery-grid` class rather than
-either page's own id, and gates the lightbox's relevance thumbs-up/down on the grid actually
-carrying a `data-relevance-url` (only the pin page's grid does - the wiki has its own separate
-per-tile vote UI instead), which the old pin-only implementation never needed to distinguish.
-Separately, `_photo_lightbox.html` is now included eagerly at the top of `wiki.html` instead of only
-inside the wiki's lazily-htmx-loaded "Manage" gallery partial - the Media section's tiles need the
-dialog to exist before "Manage" is ever opened. Ownership/copy-provenance now flows through explicit
-`is_mine`/`copied_from_label` keys added server-side (`wiki_media.py`, `pin.py`), including an
-explicit `is_mine: None` for external-provider results (never-materialized search results, where
-ownership isn't meaningful) - a plain missing key would have been indistinguishable from `None` at
-the Python level but resolves to `''` in Django's template layer, which would have made
-`{% if entry.is_mine is not None %}` wrongly true for every external result.
+Verified pre-existing, not a regression: the same 8 tests fail identically on the
+unmodified file from `HEAD` (`git show HEAD:...test_metrics_endpoint.py`, copied
+into the container and run alone: `8 failed, 70 passed`).
 
-Added 14 unit tests for the new module (`media-lightbox.test.ts`) - it had zero coverage before,
-which is exactly how the original bug shipped unnoticed in the first place.
+Not fixed here because it is unrelated to the tooling cleanup that found it. The
+likely fix is popping the variable before `prometheus_client` can be imported -
+`src/urbanlens/conftest.py` or the settings package `__init__` - rather than in
+`settings/test.py`, which runs too late to win the race.
 
-**The `getBoundingClientRect().height === 0` question above is a confirmed testing artifact, not a
-product bug.** Re-tested live once the lightbox worked: clicking the wiki's "Photos" subnav tab
-(`data-tab="photos"`) actually opens the unrelated **Albums** panel, which hides "Overview" - and
-`#wiki-media-section`/`#wiki-media-grid` live inside Overview, not Photos. In normal page flow
-(default Overview tab, no extra clicks) Media-section tiles render at real size (257x254,
-`display:flex`) and are genuinely clickable. Whatever tested this originally almost certainly had
-the wrong tab open.
-
-**A second, real bug found live while verifying the fix above, also fixed here**: a copied photo's
-author never rendered in the Media-gallery lightbox, even though `Image.author` was populated
-correctly by `copy_wiki_photo_to_pin` - directly undercutting half of the original feature request's
-own example ("Jill should see it was copied by **and authored by** John"). Root cause:
-`services/apis/assets/base.py`'s `MediaItem` dataclass (the shared shape for every Media-gallery
-tile, external-provider results included) had no `author` field at all, so
-`frontend/ts/shared/media-lightbox.ts` hardcoded `author: ""` for every item on this path - a
-separate, older lightbox path (`_photo_gallery.html`/`photo-tile.ts`, used by the Photos tab and
-Albums) was unaffected; only this newly-shared-correctly Media-gallery path was silently dropping
-it. Fixed by adding `author: str = ""` to `MediaItem` (populated from `Image.author` at both
-Image-backed call sites, left blank for external-provider results exactly as before) and threading
-it through `pin_media_items.html`'s `data-media-author` and the TS parser, with a regression test.
-
-Verifying this fix also surfaced a deployment-only gotcha, unrelated to the code itself: this dev
-stack's compiled static assets live in a Docker volume that only `manage.py collectstatic`
-populates, so a `docker cp` of a fresh frontend build into the container's source tree (which is
-sufficient for Python) silently does not reach what's actually served. Documented in
-`CLAUDE.local.md`'s Docker section with the correct rebuild+collectstatic sequence.
-
-## RESOLVED 2026-09-01: two more pre-existing mypy errors, plus one found-and-fixed in the same run
-
-A full-tree `mypy src/urbanlens` run while closing out the Media-lightbox fix above found 15
-errors, not the 13 the 2026-08-31 "11 pre-existing mypy errors" entry (above) accounted for
-(11 there + the 2 logged as their own separate entries). Cross-checked line by line:
-
-- 12 of the 15 are exactly the ones already covered by those existing entries (line numbers in
-  `tasks.py`/`checks.py` shifted by a few lines from unrelated intervening edits, but same
-  function, same error).
-- One, `services/undo/base.py:67` (`UndoHandler.redo_delete`), was new but is now **fixed**:
-  `cls.model.objects.filter(pk__in=pks).delete()` doesn't type-check because django-stubs only
-  adds `.objects` to a concrete model subclass via its mypy plugin, never to a bare `type[Model]`
-  classvar like `UndoHandler.model`. Swapped to `cls.model._default_manager` (`# noqa: SLF001`),
-  which django-stubs types directly on `Model` for exactly this reason - the same pattern already
-  used in `controllers/account.py:681`. Verified via the full undo/redo hypothesis suite
-  (`test_undo.py`, `test_undo_round_trip.py`, `test_undo_redo_is_single_use.py`,
-  `test_undo_photo_reattachment_coverage.py` - 40 passed, 3 subtests) - unchanged behavior, one
-  fewer mypy error (15 -> 14).
-- Two more were investigated and fixed, in files unrelated to any work this session had otherwise touched:
-  - `services/photos/photo_enrichment.py:75` (`enriched_max_dimension`) - `{ImageSource.X: n, ...}.get(source, DEFAULT)` didn't match any `dict.get` overload. Not `dict[ImageSource, int]`
-    as first guessed above - `source` is a plain `str` (a raw `.values_list()` column, never an
-    `ImageSource` instance), so the correct annotation is `dict[str, int]`: `ImageSource` members
-    are `str` subclasses (`TextChoices`) at runtime, and this makes the dict's declared key type
-    match what it's actually looked up with.
-  - `services/visits/visits.py:222` (`resolve_location_for_point`) - fixed at the source rather than
-    the call site: `services/locations/naming.py`'s `is_meaningful_name(name: str | None) -> bool`
-    is now `-> TypeGuard[str]`. Purely additive (same runtime `True`/`False`, ~40 existing call
-    sites elsewhere are unaffected since TypeGuard only adds narrowing when the checked and later-used
-    expression match) - fixed this call site with zero changes to `visits.py` itself, and also
-    retired an already-stale `# type: ignore[union-attr]` one call site over in `controllers/maps.py`
-    that the same narrowing newly makes unnecessary. Verified via `test_place_name_meaning.py`,
-    `test_location_area_names.py`.
-
-All 15 errors this run found are now fixed - a full-tree `mypy src/urbanlens` run reports
-**zero errors** for the first time this project has run one.

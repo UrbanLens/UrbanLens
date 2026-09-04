@@ -35,11 +35,11 @@ just present as scripts nobody runs - is true. All five are invoked unconditiona
 1. **`bin/run_integration_tests.sh` "refuses to start against production"** - true as worded, but
    the refusal isn't implemented in the bash wrapper itself; it lives one layer down in
    `tests/integration/lib/env.ts` (`UL_E2E_PRODUCTION_HOSTS` vs. `UL_E2E_ALLOW_PRODUCTION`, covered
-   by `docs/TEST_INFRA_DOCS_AUDIT.md`'s own production-guard section). The doc says "the config
+   by `docs/audits/TEST_INFRA_DOCS_AUDIT.md`'s own production-guard section). The doc says "the config
    refuses," not "the script refuses" - accurate, just easy to misread as bash-level enforcement.
 2. **`notify-bypass-ok:` marker** (`check_notification_choke_point.py`) - the escape-hatch
    mechanism is real and correctly implemented, but has zero current call sites using it (confirmed
-   by grep, and independently noted in `docs/FEATURES_CODE_AUDIT.md:71`). Untested in anger, not
+   by grep, and independently noted in `docs/audits/FEATURES_CODE_AUDIT.md:71`). Untested in anger, not
    broken.
 3. **Pre-commit vs. CI parity** - `.pre-commit-config.yaml` only wires 3 of the 5 structural
    checkers (`imports_tracked`, `outage_not_cached`, `notification_choke_point`); `check_migration_graph.py`

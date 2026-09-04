@@ -38,7 +38,7 @@
  * answers. A unit test supplies the provider's answer itself, so it can only
  * ever confirm the arrangement it already assumes; nothing in-process can
  * notice "REData had six candidates and we drew none of them". That is the
- * structural gap `docs/TEST_COVERAGE_GAPS.md` exists to record, and it is why
+ * structural gap `docs/audits/TEST_COVERAGE_GAPS.md` exists to record, and it is why
  * these assertions live here rather than there.
  *
  * The counterpart unit tests - which pin the precedence rules themselves, and

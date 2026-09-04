@@ -1126,7 +1126,7 @@ so a new answerable field is a registry entry rather than new game code.
   across sessions, and the `PENDING → APPLIED/DISMISSED` lifecycle the model defines is otherwise
   dead code (no controller, task, or admin path ever drives it past `PENDING`). An unsettled
   disagreement today just accumulates support forever rather than ever resolving. See
-  `docs/FEATURES_CODE_AUDIT.md`'s Consensus section for the open question this raises.
+  `docs/audits/FEATURES_CODE_AUDIT.md`'s Consensus section for the open question this raises.
 - **Trust, tracked but not yet gating the write.** `ConsensusProfile` carries a real Beta-Bernoulli
   posterior (`trust_alpha`/`trust_beta`) updated from trust-check rounds — rounds whose answer is
   already known — starting from a weakly-informative prior so a new player is neither trusted nor

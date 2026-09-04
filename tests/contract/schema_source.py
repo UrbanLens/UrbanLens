@@ -179,7 +179,11 @@ def response_checks() -> list:
         Check callables to pass to ``call_and_validate``.
     """
     from schemathesis.checks import not_a_server_error
-    from schemathesis.specs.openapi.checks import content_type_conformance, response_schema_conformance, status_code_conformance
+    from schemathesis.specs.openapi.checks import (
+        content_type_conformance,
+        response_schema_conformance,
+        status_code_conformance,
+    )
 
     checks = [not_a_server_error, response_schema_conformance]
     if strict_enabled():
@@ -271,7 +275,9 @@ def manifest_api_key() -> str | None:
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
-        raise ContractConfigurationError(f"{ACCOUNTS_FILE_ENV} points at {path}, which could not be read as JSON: {error}") from error
+        raise ContractConfigurationError(
+            f"{ACCOUNTS_FILE_ENV} points at {path}, which could not be read as JSON: {error}"
+        ) from error
 
     accounts = manifest.get("accounts") or []
     for account in accounts:

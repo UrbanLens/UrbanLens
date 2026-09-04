@@ -4999,16 +4999,16 @@ re-derived.
 
 The docs were reorganised into `designs/`, `designs/drafts/`, `reports/` and `notes/` at some
 point without updating the links pointing at the old locations. **Ten references across seven
-files** pointed at paths that had simply moved — `docs/plugins.md`, `docs/e2ee.md`,
-`docs/api-expansion-candidates.md`, `docs/overpass-mirror-test.md`, `docs/import_formats.md`,
-`docs/redata-cid-resolution.md`, `docs/designs/spotguessr.md`,
-`docs/designs/mobile-app-stack-r2.md`, `docs/designs/public-pins-by-vote.md`,
-`docs/external_app_api_plan.md`. Each target was located before rewriting, and the rewrite was
+files** pointed at paths that had simply moved — `docs/designs/plugins.md`, `docs/designs/e2ee.md`,
+`docs/reports/api-expansion-candidates.md`, `docs/reports/overpass-mirror-test.md`, `docs/archive/import_formats.md`,
+`docs/designs/redata-cid-resolution.md`, `docs/designs/drafts/spotguessr.md`,
+`docs/designs/drafts/mobile-app-stack-r2.md`, `docs/designs/drafts/public-pins-by-vote.md`,
+`docs/archive/external_app_api_plan.md`. Each target was located before rewriting, and the rewrite was
 anchored so an already-correct path could not be double-prefixed.
 
 **Deliberately left alone** — these reference documents that do not exist anywhere, so repointing
 them would mean inventing a target. They are either deleted or never written, and deciding which
-is the author's call: `docs/api-reference.md`, `docs/architecture/server-agent-split.md`,
+is the author's call: `../REData/docs/api-reference.md`, `docs/architecture/server-agent-split.md`,
 `docs/BACKEND_CHANGES.md`, `docs/migration-0.6.md`, `docs/PARITY.md`, `docs/notes/ai/*.md`
 (three), `docs/prompts/*.md` (two, from `CLAUDE.local.md`). One — `docs/PROBLEMS.md/completed.md`
 — is a malformed path in the source text rather than a missing file.

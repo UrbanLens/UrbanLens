@@ -2,7 +2,7 @@
 
 Generated 2026-08-24, updated 2026-08-25, by reading the actual implementation and actual test
 suite for each `docs/GOALS.md` topic — not by reading other docs (that pass is
-`docs/GOALS_AUDIT.md`). Each entry below records the defect (or confirms the match) with
+`docs/audits/GOALS_AUDIT.md`). Each entry below records the defect (or confirms the match) with
 file:line evidence, so it does not have to be re-derived. All thirteen topics from the first
 audit round completed as of 2026-08-25 (pin-to-wiki-sharing initially failed structured-output
 validation and was re-run). A second round is auditing six topics/sub-claims the first round
@@ -26,7 +26,7 @@ architectural choice differs from the goal's literal wording. `GAP` = nothing bu
 |---|---|---|
 | [Safety check-ins](#safety-check-ins) | ~~CONTRADICTS~~ **fixed** | Token portal showed the full plan/location/photos to anyone holding the link, before an incident — no `escalated_at` check |
 | [Trip activities](#trip-activities-sourcing) | ~~CONTRADICTS~~ **fixed** | Sharer's live private pin name/coords leaked via the external API, both map endpoints, and the Memories→Sharing page — all four fixed |
-| [DM/group-chat encryption](#dm-group-chat-encryption) | CONTRADICTS | Plaintext body is a fully supported, unenforced path everywhere (server, WS, external API) — same conclusion as `docs/GOALS_AUDIT.md` #1, now code-confirmed |
+| [DM/group-chat encryption](#dm-group-chat-encryption) | CONTRADICTS | Plaintext body is a fully supported, unenforced path everywhere (server, WS, external API) — same conclusion as `docs/audits/GOALS_AUDIT.md` #1, now code-confirmed |
 | [Pin privacy default](#pin-privacy-default) | ~~PARTIAL~~ **fixed** | Ownership scoping was solid everywhere except the pin-share detail page, which read the sender's live `pin.description` (private notes) regardless of share status — fixed |
 | [Pin-to-pin sharing](#pin-to-pin-sharing) | PARTIAL | Photo "copy" is still a storage-key alias, reference-counted at delete time rather than actually copied |
 | [Pin-to-wiki sharing](#pin-to-wiki-sharing) | ~~PARTIAL~~ **partly fixed** | Field/alias copying is solid; shared photos are the *same row* re-pointed at the wiki, not copied — deleting it from either side now unlinks instead of destroying (fixed); repositioning it from either side still mutates what the other side shows (open) |
@@ -105,7 +105,7 @@ Also flagged, not yet acted on:
 
 **Goal:** trip activities source display data from the Wiki (or a consented copy), never a live
 pin; `record_share_exposure` tracking is correct and should be kept, but per Jess's own
-clarification (`docs/GOALS_AUDIT.md` #3) it should reference a Place/Boundary/Wiki, not a
+clarification (`docs/audits/GOALS_AUDIT.md` #3) it should reference a Place/Boundary/Wiki, not a
 private pin.
 
 **What's broken, concretely, in three places:**
@@ -154,7 +154,7 @@ exist yet):
 
 **Goal:** E2EE "as close to unconditionally enforced as possible — no way to turn it off."
 
-**Confirms `docs/GOALS_AUDIT.md` #1 at the code level, precisely.** The key-management
+**Confirms `docs/audits/GOALS_AUDIT.md` #1 at the code level, precisely.** The key-management
 infrastructure itself is excellent (X25519 identity keys, Argon2id wrapping, passkey/PRF unlock,
 per-conversation/per-group keys, auto-enrollment on every password login and silently for OAuth).
 But `DirectMessage.body` (`models/direct_messages/model.py:34`) is a real, non-deprecated
@@ -451,7 +451,7 @@ user base grows.
 
 ## Backups and logs
 
-**Backup encryption: total gap, matches `docs/GOALS_AUDIT.md` #4 exactly.**
+**Backup encryption: total gap, matches `docs/audits/GOALS_AUDIT.md` #4 exactly.**
 `DatabaseBackup.run()` shells out to plain `pg_dump ... -f temp_path` — no encryption step
 anywhere. Retention/purge (30-cycle, oldest-first) is real and tested. `docs/DATA_ENCRYPTION.md`
 already documents this gap in prose and lists it as open Follow-up #6.
@@ -644,7 +644,7 @@ tree, so every visible string (nav, buttons, dialogs, toasts) is hardcoded Engli
 files touch `django.utils.translation` at all, all backend-only validation/choice-label strings.
 Independently corroborated two ways: `docs/PROBLEMS.md` explains the *only* two `{% load i18n %}`
 usages were added for an accessibility fix (`html-has-lang`), not a translation effort; and
-`docs/GOALS_AUDIT.md`'s separate, doc-based audit pass reached the identical conclusion. **Uptime
+`docs/audits/GOALS_AUDIT.md`'s separate, doc-based audit pass reached the identical conclusion. **Uptime
 monitoring:** no alerting/monitoring integration of any kind exists (`health.py` is unauthenticated
 liveness/readiness probes only, not alerting). A real internal Gotify admin-alert channel exists
 but is wired to exactly one event (`PIN_IMPORT_ERROR`), explicitly not-yet-generalized per

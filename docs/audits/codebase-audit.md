@@ -955,7 +955,7 @@ Clean: authentication precedence/revocation checks, key storage/verification, th
 
 **Health**: Unusually mature — E2EE key management (opportunistic per-pair/per-group encryption,
 canonical-ordered conversation keys, opaque rotation tokens, atomic reset-with-rewrap) is carefully
-reasoned and cross-referenced with docs/e2ee.md; most tricky concerns (masking on live WS payloads,
+reasoned and cross-referenced with docs/designs/e2ee.md; most tricky concerns (masking on live WS payloads,
 existence-oracle prevention, ReDoS-safe regexes, disappearing-message hard-delete) already have
 documented fixes from a prior audit pass. Remaining gaps are N+1s concentrated in the group-chat
 notification/broadcast path — ironic since a neighboring function in the same file explicitly
@@ -1247,7 +1247,7 @@ synchronous LLM calls violating the project's non-instant-operation rule.
    `receive_tokens` itself, then the base `send_prompt`/`send_prompt_list` calls it again on the
    same string) — Cloudflare's parser correctly doesn't double-call, proving this is a regression.
    Roughly doubles every cost/token estimate for Anthropic and OpenAI calls.
-2. **[bug]** `services/ai/openai.py:100-102` — `_get_response` only catches `openai.BadRequestError`;
+2. **[bug]** `services/ai/openai.py` (lines 100-102 as audited) — `_get_response` only catches `openai.BadRequestError`;
    `RateLimitError`/`AuthenticationError`/`InternalServerError`/`APIConnectionError` are siblings
    under `APIError`, not subclasses of `BadRequestError`, so none are caught — a routine OpenAI rate
    limit surfaces as an unhandled 500 instead of degrading gracefully like the Anthropic path does.
@@ -1264,7 +1264,7 @@ synchronous LLM calls violating the project's non-instant-operation rule.
    unconditionally with genuine setup code sitting dead below the raise; not wired into
    `factory.py`'s dispatch or `AiProviderChoice` at all — pure dead code suggesting a 4th provider
    that doesn't actually work.
-7. **[bug]** `services/ai/assistant.py:283` (docstring at line 40) — loop runs
+7. **[bug]** `services/ai/assistant.py` (line 283 as audited, docstring at line 40) — loop runs
    `range(MAX_TOOL_CALLS + 1)`, an off-by-one letting 7 tool executions occur when 6 is documented
    as the budget — including side-effecting `create_trip`/`add_trip_activity`.
 8. **[bug]** `services/ai/link_extraction.py:390-403,504-519` + `assistant.py:165-178`

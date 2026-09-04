@@ -30,7 +30,6 @@ from __future__ import annotations
 import os
 
 import pytest
-
 from schema_source import (
     API_KEY_ENV,
     ContractConfigurationError,
@@ -63,7 +62,9 @@ def _assert_on_a_test_database() -> None:
 
     if configured:
         if name != configured:
-            raise ContractConfigurationError(f"Connected to {name!r}, but UL_TEST_DB_NAME asks for {configured!r}. Refusing to run.")
+            raise ContractConfigurationError(
+                f"Connected to {name!r}, but UL_TEST_DB_NAME asks for {configured!r}. Refusing to run."
+            )
         return
     # Django's default when TEST.NAME is unset.
     if not str(name).startswith("test_"):

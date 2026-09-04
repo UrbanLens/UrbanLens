@@ -302,7 +302,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
   the plugin contract rather than hardcoding a registry — the cost is small and it keeps
   third-party parity.
 - **Import/export formats** live in `services/import_formats/` with documented formats
-  (`docs/designs/drafts/import_formats.md`); new formats (XLS UL-162, KML/GPX/GeoJSON/CSV *export* UL-382,
+  (`docs/archive/import_formats.md`); new formats (XLS UL-162, KML/GPX/GeoJSON/CSV *export* UL-382,
   targeted/filtered exports UL-377) should slot into that framework symmetrically.
 - **AI gateway** is pluggable (OpenAI/Cloudflare/HF/Ollama). New AI features (trip suggestions
   UL-60, chat assistant UL-293, county-strategy property lookup UL-46) go through the gateway
