@@ -516,6 +516,13 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
             if isinstance(diff, dict) and "to" in diff:
                 purge_recorded_value(target, field_name, diff["to"])
 
+        # Take back what this edit paid before the row carrying that amount is
+        # gone. Compare-and-swap, so an edit already reverted (and so already
+        # retracted) is a no-op rather than a double charge.
+        from urbanlens.dashboard.services.consensus.points import retract_wiki_edit_award
+
+        retract_wiki_edit_award(target_edit)
+
         revert_record = target_edit.reverted_by
         if revert_record is not None:
             revert_record.delete()

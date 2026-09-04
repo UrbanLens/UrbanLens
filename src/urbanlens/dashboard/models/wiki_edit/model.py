@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, SET_NULL, BooleanField, ForeignKey, Index, JSONField
+from django.db.models import CASCADE, SET_NULL, BooleanField, ForeignKey, Index, JSONField, PositiveSmallIntegerField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.wiki_edit.queryset import WikiEditManager
@@ -32,6 +32,23 @@ class WikiEdit(abstract.DashboardModel):
     changes = JSONField()
     # True when this edit has been superseded by a revert.
     reverted = BooleanField(default=False)
+    # True when this edit IS a revert of another one. Undoing somebody's work is
+    # not itself a contribution to pay for: paying both sides of an edit war was
+    # a standing invitation to farm points by reverting back and forth. Stored
+    # rather than derived from `reverts` because the award decision happens in a
+    # post_save handler, before the reverting row's `reverted_by` back-reference
+    # on the target has been written.
+    is_revert = BooleanField(default=False)
+    # What this row actually paid its editor, and whether that payment has since
+    # been taken back. Recorded rather than recomputed on demand because the
+    # weights in services.consensus.points are a first cut expected to be
+    # retuned, and a retraction has to return exactly what was paid, not what
+    # the same edit would earn today. `consensus_points_retracted` is the
+    # compare-and-swap flag that makes retraction idempotent - the same shape
+    # ReputationEvent.retracted uses, and for the same reason: reverting a
+    # revert has to put the points back.
+    consensus_points = PositiveSmallIntegerField(default=0)
+    consensus_points_retracted = BooleanField(default=False)
 
     wiki = ForeignKey(
         "dashboard.Wiki",

@@ -381,9 +381,12 @@ location_edit: Recipe[WikiEdit] = Recipe(
     "dashboard.WikiEdit",
     wiki=foreign_key("dashboard.wiki"),
     editor=_make_profile,
-    changes={"name": {"old": "Old Name", "new": "New Name"}},
+    # "from"/"to", matching every production writer - "old"/"new" made this
+    # recipe's rows invisible to anything that reads a real diff.
+    changes={"name": {"from": "Old Name", "to": "New Name"}},
     reverted=False,
     reverted_by=None,
+    is_revert=False,
 )
 
 # -- Authentication ------------------------------------------------------------

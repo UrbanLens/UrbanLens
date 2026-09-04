@@ -291,9 +291,15 @@ def revert_wiki_edit(location: Location, wiki: Wiki, profile: Profile, target_ed
         wiki=wiki,
         editor=profile,
         changes=revert_changes,
+        # Earns nothing. Set at creation rather than inferred from the
+        # back-reference below, because the points handler runs on this row's
+        # post_save - before `target_edit.reverted_by` has been written.
+        is_revert=True,
     )
     target_edit.reverted = True
     target_edit.reverted_by = revert_edit
+    # Saved rather than update()d so the points handler watching `reverted`
+    # sees it; retraction is compare-and-swap, so a second writer is a no-op.
     target_edit.save(update_fields=["reverted", "reverted_by", "updated"])
 
     # Reverting a *revert* puts the original edit's content back in force, so
@@ -307,6 +313,10 @@ def revert_wiki_edit(location: Location, wiki: Wiki, profile: Profile, target_ed
         if undone_ids:
             WikiEdit.objects.filter(pk__in=undone_ids).update(reverted=False, reverted_by=None)
             _restore_reputation_for(undone_ids)
+            # Same queryset-update blind spot, same remedy - see that function.
+            from urbanlens.dashboard.services.consensus.points import restore_consensus_points_for
+
+            restore_consensus_points_for(undone_ids)
 
     return revert_edit, skipped_fields
 

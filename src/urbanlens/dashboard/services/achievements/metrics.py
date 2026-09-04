@@ -384,13 +384,13 @@ def _trips_attended_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
 def _wiki_edits(profile: Profile) -> int:
     from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
 
-    return WikiEdit.objects.filter(editor=profile, reverted=False).count()
+    return WikiEdit.objects.filter(editor=profile, reverted=False, is_revert=False).count()
 
 
 def _wiki_edits_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
     from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
 
-    return _grouped_count(WikiEdit.objects.filter(editor_id__in=profile_ids, reverted=False), "editor_id")
+    return _grouped_count(WikiEdit.objects.filter(editor_id__in=profile_ids, reverted=False, is_revert=False), "editor_id")
 
 
 def _comments_written(profile: Profile) -> int:
