@@ -522,7 +522,14 @@ class EgressFilterTests(SimpleTestCase):
         expected_hosts = {
             "api.anthropic.com",
             "api.openai.com",
+            # Both Cloudflare Workers AI hosts. A deployment picks one with
+            # UL_CLOUDFLARE_WORKER_AI_ENDPOINT, and chiron's picks the AI
+            # Gateway - which this list originally missed, so the default
+            # vision provider and the only image classifier were both
+            # unreachable while every test here passed. That is the exact
+            # failure this class's docstring describes.
             "api.cloudflare.com",
+            "gateway.ai.cloudflare.com",
             "router.project-osrm.org",
             "api.open-meteo.com",
             "api.openweathermap.org",
