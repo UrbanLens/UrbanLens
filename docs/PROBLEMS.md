@@ -19,7 +19,7 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 
 ---
 
-> Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
+> Resolved entries live in [`archive/PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
 ## RESOLVED 2026-09-04: a hypothesis property in `test_email_safety.py` fails a few runs in a hundred
