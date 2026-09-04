@@ -145,6 +145,39 @@ def revoke_api_key(user: User, api_key_id: int) -> bool:
     return updated > 0
 
 
+def active_api_key_count(user: User) -> int:
+    """How many of ``user``'s API keys still work.
+
+    Args:
+        user: The owner.
+
+    Returns:
+        The number of unrevoked keys.
+    """
+    return ApiKey.objects.for_user(user).active().count()
+
+
+def revoke_all_api_keys(user: User) -> int:
+    """Revoke every one of ``user``'s active API keys at once.
+
+    Revoked, not deleted: ``ApiKeyUsageLog`` rows hang off the key, and the
+    settings page shows a revoked key so its owner can see it went away.
+
+    Already-revoked keys are untouched, so their original ``revoked_at`` still
+    records when they actually stopped working rather than when this ran.
+
+    Args:
+        user: The owner. Scoping by user is what keeps a caller from revoking
+            somebody else's keys - do not lift this into a queryset method that
+            re-filters internally, or ``ApiKey.objects.all()`` becomes a way to
+            revoke every key on the site.
+
+    Returns:
+        How many keys this revoked.
+    """
+    return ApiKey.objects.for_user(user).active().update(revoked_at=timezone.now())
+
+
 def api_keys_settings_context(user: User, request: HttpRequest, **extra: object) -> dict:
     """Context for the Security section's API Keys subsection.
 

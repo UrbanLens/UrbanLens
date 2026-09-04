@@ -15,8 +15,9 @@ from django import forms
 
 # Aliased: several functions here bind a local `settings` to SiteSettings.
 from django.conf import settings as django_settings
+from django.contrib import messages
 from django.contrib.auth import REDIRECT_FIELD_NAME, get_user_model, login as auth_login, views as auth_views
-from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, SetPasswordForm, UserCreationForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
@@ -644,6 +645,31 @@ def sso_provider_hint(user: User) -> str:
     return {"google-oauth2": "Google", "discord": "Discord"}.get(provider or "", "a social account")
 
 
+class ResetPasswordWithApiKeyChoiceForm(SetPasswordForm):
+    """The reset form, plus the offer to revoke API keys along with the password.
+
+    Resetting a password invalidates every session, which is what makes it the
+    standard response to a suspected compromise - but it does not touch
+    ``ApiKey`` rows, and a key can be minted from a session alone. So the
+    remedy a victim reaches for leaves the intruder's long-lived credential
+    working.
+
+    Asked here rather than after the reset because ``post_reset_login`` is
+    False: this POST is the only moment in the flow where the account is
+    identified. A prompt on the next page would have no principal to act as.
+
+    Not required, and default off. Revoking is the destructive answer, most
+    resets are ordinary forgetfulness, and a key that stops working without the
+    owner choosing that is a broken integration they have to debug.
+    """
+
+    revoke_api_keys = forms.BooleanField(
+        required=False,
+        label="Also revoke my API keys",
+        help_text="Choose this if you think somebody else had access to your account.",
+    )
+
+
 class SsoAwarePasswordResetForm(PasswordResetForm):
     """PasswordResetForm that tells SSO-only accounts how to sign in (UL-257).
 
@@ -733,20 +759,31 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
       falls back to the recovery key.
     """
 
+    form_class = ResetPasswordWithApiKeyChoiceForm
+
     def get_context_data(self, **kwargs) -> dict:
-        """Add ``e2ee_mode`` so the template's JS knows whether to derive.
+        """Add ``e2ee_mode`` and the API-key count the template's prompt needs.
 
         Args:
             **kwargs: Base context kwargs.
 
         Returns:
-            The template context with ``e2ee_mode`` (``derived``/``legacy``).
+            The template context with ``e2ee_mode`` (``derived``/``legacy``)
+            and ``active_api_key_count``.
         """
         from urbanlens.dashboard.models.account import AccountKdf
+        from urbanlens.dashboard.services.auth.api_keys import active_api_key_count
 
         context = super().get_context_data(**kwargs)
         user = getattr(self, "user", None)
         context["e2ee_mode"] = "derived" if user is not None and AccountKdf.objects.for_user(user).exists() else "legacy"
+        # Gated on validlink, not on `user`. Django resolves self.user from the
+        # uidb64 *before* checking the token, and a uidb64 is an encoded integer
+        # pk - so keying on `user` alone would publish any account's key count on
+        # the unauthenticated "Link expired" page. The count only, never the key
+        # names: those are user-authored text on a page that today reveals
+        # nothing about the account, and the settings page already lists them.
+        context["active_api_key_count"] = active_api_key_count(user) if self.validlink and user is not None else 0
         return context
 
     def form_valid(self, form) -> HttpResponse:
@@ -770,6 +807,15 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
         else:
             AccountKdf.objects.for_user(user).delete()
         MessagingKeyBundle.objects.filter(profile__user=user).exclude(password_wrapped_secret="").update(password_wrap_stale=True)  # nosec B106 - "" is a field-emptiness filter, not a credential
+
+        if form.cleaned_data.get("revoke_api_keys"):
+            from urbanlens.dashboard.services.auth.api_keys import revoke_all_api_keys
+
+            revoked = revoke_all_api_keys(user)
+            # auth_base.html renders messages, and password_reset_complete
+            # extends it - so this is the one surface that can confirm it, the
+            # account having no session to land in.
+            messages.success(self.request, f"Revoked {revoked} API key{'' if revoked == 1 else 's'}. Any app using one will need a new key.")
         return response
 
 

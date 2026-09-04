@@ -214,9 +214,9 @@ def provision_account(role: str, *, password: str, with_api_keys: bool = True, e
 
     api_key = restricted_key = None
     if with_api_keys:
-        # Revoked, not deleted: ApiKeyUsageLog rows hang off the key, and the
-        # settings page shows a revoked key so its owner can see it went away.
-        ApiKey.objects.for_user(user).active().update(revoked_at=timezone.now())
+        from urbanlens.dashboard.services.auth.api_keys import revoke_all_api_keys
+
+        revoke_all_api_keys(user)
         api_key = _mint_key(user, name=f"integration-suite-{role}", scopes=_FULL_SCOPES)
         restricted_key = _mint_key(user, name=f"integration-suite-{role}-restricted", scopes=_RESTRICTED_SCOPES)
 
