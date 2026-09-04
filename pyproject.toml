@@ -143,9 +143,7 @@ ignore = [
     "manage.py",
     "logs",
     "downloads",
-    "logs",
     "node_modules",
-    "settings",
     "migrations",
 ]
 
