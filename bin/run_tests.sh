@@ -89,17 +89,11 @@ ALLOW_DRIFT=0
 PARALLEL=""
 SHUFFLE=0
 
-# A `find` expression naming the files whose container copy must match the host
-# exactly - the hand-written source a test run reads. Python, plus the template
-# tree, which tests render by name and which nothing generates.
-#
-# Deliberately not "every file": the container's tree legitimately holds
-# artefacts the host does not (compiled bytecode, collected and compressed
-# static assets), and an early version that pruned every extra file removed
-# ~19,700 of them. Nothing broke, because those regenerate - but deleting build
-# output is not this script's job. `__pycache__` is excluded for the same
-# reason. Used unquoted via `eval`, so it must stay a literal constant.
-SOURCE_FILES="\\( -name '*.py' -o \\( -path '*/templates/*' -name '*.html' \\) \\) -not -path '*/__pycache__/*'"
+# The copy-into-a-container sequence, and the file list it is checked against,
+# are shared with bin/sync_app.sh - the app container needs exactly the same
+# three steps and broke on 2026-09-04 for missing one of them.
+# shellcheck source=bin/lib/container_sync.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/container_sync.sh"
 
 args=()
 for arg in "$@"; do
@@ -133,91 +127,8 @@ if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
     exit 2
 fi
 
-sync_tree() {
-    echo "==> syncing working tree into $CONTAINER"
-    docker cp src/. "$CONTAINER":/app/src/
-    # bin/ is synced again. It was dropped when bin/opslib and the ops-tooling
-    # tests that reached it by path moved to the separate `infrastructure` repo,
-    # on the grounds that nothing under tests/ read it anymore - but three
-    # modules do (test_template_comments.py, test_run_codeql.py,
-    # test_ops_tooling_contract.py), each resolving a checker by path off the
-    # repo root. Without this they error at setup with FileNotFoundError against
-    # whatever the image was last built with, which reads as a broken test
-    # rather than as missing coverage.
-    docker cp bin/. "$CONTAINER":/app/bin/
-
-    # Deployment files, for the same reason bin/ is here: a growing set of tests
-    # asserts on the topology rather than on Python (test_ai_isolation,
-    # test_sandbox_isolation, test_metrics_endpoint), resolving these by path off
-    # the repo root. They are baked into the image, not bind-mounted, so without
-    # this they are read at whatever the image was last built with.
-    #
-    # That failure is worse than a plain stale-code one, because the sync above
-    # still prints "tree matches" and the run still looks verified: on
-    # 2026-09-03 a runner whose image predated the ai-inference work failed all
-    # 42 ComposeTopologyTests against a compose file with no ai-inference in it,
-    # which reads as "the branch broke the sandbox topology" rather than as
-    # "this file was never synced".
-    #
-    # Dotfiles are listed individually because `docker cp` on a directory does
-    # not glob them, and .gitignore/.env*-sample are read by those same tests.
-    for f in docker-compose.yml docker-entrypoint.sh gunicorn.conf.py \
-        pyproject.toml uv.lock .gitignore .env-sample .env.ai-sample; do
-        [ -e "$f" ] && docker cp "$f" "$CONTAINER":/app/"$f"
-    done
-    docker cp sample_data/. "$CONTAINER":/app/sample_data/ 2>/dev/null || true
-
-    # Not optional: docker cp preserves host ownership, and the app runs as appuser.
-    docker exec -u root "$CONTAINER" chown -R appuser:appuser /app/src /app/bin
-
-    # `docker cp` only ever adds and overwrites - a file deleted on the host stays
-    # in the container forever. That is not cosmetic: a scratch test file deleted
-    # after use is still collected there, a module deleted in a refactor still
-    # satisfies the import that should have broken, and a template deleted in one
-    # still resolves by name for anything that renders it. All three were real:
-    # `pages/memories/photos.html`, deleted on 2026-08-30 when Memories > Photos
-    # moved to the Vault, was still being served to the loader four days later.
-    local host_list container_list
-    host_list=$(mktemp); container_list=$(mktemp)
-    (cd src && eval "find . $SOURCE_FILES" | sort) > "$host_list"
-    docker exec "$CONTAINER" sh -c "cd /app/src && find . $SOURCE_FILES | sort" > "$container_list"
-    local stale
-    stale=$(comm -13 "$host_list" "$container_list" || true)
-    rm -f "$host_list" "$container_list"
-    if [ -n "$stale" ]; then
-        echo "    pruning $(echo "$stale" | wc -l) stale source file(s) the host no longer has:"
-        echo "$stale" | sed 's|^|      |'
-        echo "$stale" | sed 's|^|/app/src/|' | tr '\n' '\0' | xargs -0 -r docker exec -u root "$CONTAINER" rm -f
-    fi
-}
-
-verify_parity() {
-    echo "==> verifying host and container agree"
-    local host_list container_list
-    host_list=$(mktemp)
-    container_list=$(mktemp)
-    trap 'rm -f "$host_list" "$container_list"' RETURN
-
-    (cd src && eval "find . $SOURCE_FILES" | sort) > "$host_list"
-    docker exec "$CONTAINER" sh -c "cd /app/src && find . $SOURCE_FILES | sort" > "$container_list"
-
-    if ! diff -q "$host_list" "$container_list" >/dev/null; then
-        echo "error: host and container differ - the run would test the wrong code:" >&2
-        diff "$host_list" "$container_list" | head -20 >&2
-        return 1
-    fi
-
-    # File lists matching is not enough: a stale *content* copy has the same
-    # names. Compare a checksum of the tree, which is what actually gets run.
-    local host_sum container_sum
-    host_sum=$( (cd src && eval "find . $SOURCE_FILES -exec md5sum {} +") | sort -k2 | md5sum | cut -d' ' -f1)
-    container_sum=$(docker exec "$CONTAINER" sh -c "cd /app/src && find . $SOURCE_FILES -exec md5sum {} +" | sort -k2 | md5sum | cut -d' ' -f1)
-    if [ "$host_sum" != "$container_sum" ]; then
-        echo "error: host and container file lists match but contents differ - re-run without --no-sync." >&2
-        return 1
-    fi
-    echo "    tree matches ($host_sum)"
-}
+sync_tree() { sync_tree_into "$CONTAINER"; }
+verify_parity() { verify_parity_with "$CONTAINER"; }
 
 verify_venv() {
     # The sync only ever covers /app/src. /app/.venv is baked into the image, so

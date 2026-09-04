@@ -78,6 +78,41 @@ container's copy on purpose and expecting failures. Without it the parity guard
 refuses the run, which is otherwise exactly what you want — a file restored on
 the host but not re-copied is how the audit's only red consolidation happened.
 
+### `bin/sync_app.sh`
+
+The same copy-into-a-container sequence as `run_tests.sh`, pointed at a running
+**app** container instead of the test runner — they share `bin/lib/container_sync.sh`
+so the two cannot drift apart.
+
+```bash
+bin/sync_app.sh               # copy src/ + bin/, chown, prune deletions, verify
+bin/sync_app.sh --frontend    # also rebuild SCSS/TS and run collectstatic
+bin/sync_app.sh --restart     # also restart the container afterwards
+UL_APP_CONTAINER=... bin/sync_app.sh     # a slot other than development_main
+```
+
+Use it instead of a hand-typed `docker cp`. The hand-typed form omits the chown,
+and `docker cp` preserves *source* ownership while the container runs as
+`appuser` — so the copy takes away the app's ability to write what it was just
+given. That has taken the container down twice, both times without saying so:
+once on the logs directory (Django's logging config raises before `runserver`
+binds a port) and once on `dashboard/frontend/static/dashboard/js`, where the
+entrypoint's `bun run build` could not remove its own output directory and the
+container crash-looped.
+
+**`docker exec` defaults to root, and that is what makes this hard to see.**
+Root can write everything, so every diagnostic, every `pytest` run, and every
+manual `bun run build` succeeds while the served site is down — reading as
+"permissions are fine", which is the exact opposite of the truth for the process
+that matters. Reproduce as the account that actually runs: `docker exec -u appuser`.
+
+`--frontend` is a separate flag because copying built assets in does not reach
+what nginx serves. `collectstatic` populates a *volume* mounted at
+`/app/src/urbanlens/frontend/static`; the package directory the sync writes to
+is a different path. Without it the site keeps serving the bundle that was live
+at last boot, and a browser check of a fresh TS change silently verifies the old
+one.
+
 ### `bin/run_integration_tests.sh`
 
 Drives a **deployed** instance over HTTP - real database, real Valkey, real
