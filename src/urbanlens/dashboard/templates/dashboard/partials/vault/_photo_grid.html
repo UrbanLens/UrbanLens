@@ -11,7 +11,7 @@ Context:
 {% for img in images %}
 <li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="{{ img.display_url }}"
     data-thumb-url="{{ img.thumb_url }}"
-    data-caption="{{ img.caption|default:'' }}"
+    data-caption="{{ img.display_caption|default:'' }}"
     data-author="{{ img.author|default:'' }}"
     data-copyright="{{ img.copyright|default:'' }}"
     data-source-url="{{ img.source_url|default:'' }}"
@@ -20,8 +20,8 @@ Context:
     See _widget_recent_photos.html: the image's alt disappears when the
     thumbnail falls back to an icon, so the name lives on the button.
     {% endcomment %}
-    <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.caption|default:'untitled' }}" onclick="photosOpenLightbox({{ img.pk }})">
-        <img src="{{ img.thumb_url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy"
+    <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.display_caption|default:'untitled' }}" onclick="photosOpenLightbox({{ img.pk }})">
+        <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy"
              onload="this.classList.add('is-loaded')"
              onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
         {% if img.latitude and img.longitude %}

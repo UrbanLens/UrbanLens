@@ -83,7 +83,7 @@
         {% for photo in share.images.all %}
         <li class="gallery-item">
           <a class="gallery-thumb-btn" href="{{ photo.image.url }}" target="_blank" rel="noopener noreferrer">
-            <img src="{{ photo.image.url }}" alt="{{ photo.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
+            <img src="{{ photo.image.url }}" alt="{{ photo.display_caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
           </a>
         </li>
         {% endfor %}

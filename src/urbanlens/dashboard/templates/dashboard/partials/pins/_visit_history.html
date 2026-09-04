@@ -133,10 +133,10 @@
                 <div class="visit-photos">
                     {% for img in visit_images %}
                     <a href="{{ img.image.url }}" class="visit-photo-thumb"
-                       data-full="{{ img.image.url }}" data-caption="{{ img.caption|default:'' }}"
-                       title="{{ img.caption|default:'Photo' }}"
+                       data-full="{{ img.image.url }}" data-caption="{{ img.display_caption|default:'' }}"
+                       title="{{ img.display_caption|default:'Photo' }}"
                        onclick="visitOpenLightbox(event, this)">
-                        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy">
+                        <img src="{{ img.image.url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy">
                     </a>
                     {% endfor %}
                 </div>

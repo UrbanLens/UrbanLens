@@ -48,11 +48,11 @@
             {% for photo in profile_photos %}
             <button type="button" class="profile-photo-strip-item" id="profile-photo-{{ photo.pk }}"
                     data-photo-url="{{ photo.image.url }}"
-                    data-photo-caption="{{ photo.caption|default:'' }}"
+                    data-photo-caption="{{ photo.display_caption|default:'' }}"
                     data-photo-taken-at="{{ photo.taken_at|date:'c'|default:'' }}"
                     data-photo-id="{{ photo.pk }}"
                     onclick="window.profilePhotoStripOpen(this)">
-                <img src="{{ photo.image.url }}" alt="{{ photo.caption|default:'' }}" loading="lazy">
+                <img src="{{ photo.image.url }}" alt="{{ photo.display_caption|default:'' }}" loading="lazy">
             </button>
             {% endfor %}
         </div>

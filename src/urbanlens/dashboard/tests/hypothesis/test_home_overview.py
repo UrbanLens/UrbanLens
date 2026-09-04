@@ -10,15 +10,20 @@ persisted via ``Profile.home_widget_layout`` (see services.home.home_widgets).
 from __future__ import annotations
 
 import json
+import re
+import tempfile
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
+from django.core.files.base import ContentFile
 from django.db import connection
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.home.home_widgets import HOME_WIDGETS, effective_widget_layout, home_dashboard_context
 
@@ -80,6 +85,75 @@ class HomeOverviewPageTests(TestCase):
         response = self.client.get(reverse("home.view"))
         self.assertContains(response, "Recently created pins")
         self.assertContains(response, "Old Asylum")
+
+
+#: The widget renders ``img.image.url``, so the fixture needs a real file - and
+#: writing it anywhere but a throwaway root would leave litter in MEDIA_ROOT.
+_PHOTO_MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-home-photos-")
+
+
+@override_settings(MEDIA_ROOT=_PHOTO_MEDIA_ROOT)
+class RecentPhotosAccessibleNameTests(TestCase):
+    """Every photo tile carries a name a screen reader can announce.
+
+    axe reports a missing or blank one as ``image-alt``/``button-name``, both
+    critical, and both have been real here: the button lost its name when the
+    thumbnail 404'd (fixed by moving the label onto the button), and the ``alt``
+    is only non-empty because of a ``|default:`` that truthiness alone does not
+    make safe. A caption of whitespace is truthy, so it wins the default and
+    lands in ``alt`` - and axe treats a whitespace-only ``alt`` as absent.
+
+    Rendered through the real view rather than the template in isolation: the
+    widget only appears when ``home_recent_photos`` is non-empty, so a scan of a
+    freshly provisioned account never reaches this markup at all. That is why
+    the accessibility suite could not confirm the fix on its own.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def _photo_tile_images(self, caption: str | None) -> list[str]:
+        """Render the homepage with one photo and return its tile ``alt`` values."""
+        photo = baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO, caption=caption)
+        photo.image.save("tile.jpg", ContentFile(b"jpeg-bytes"), save=True)
+        response = self.client.get(reverse("home.view"))
+        self.assertEqual(response.status_code, 200)
+        strip = re.search(r'<ul class="home-photo-strip.*?</ul>', response.content.decode(), re.DOTALL)
+        self.assertIsNotNone(strip, "the recent-photos widget did not render, so this asserts nothing")
+        assert strip is not None
+        return re.findall(r'<img[^>]*\salt="([^"]*)"', strip.group(0))
+
+    def test_a_captioned_photo_is_announced_by_its_caption(self) -> None:
+        self.assertEqual(self._photo_tile_images("Rooftop at dusk"), ["Rooftop at dusk"])
+
+    def test_an_uncaptioned_photo_still_has_a_name(self) -> None:
+        self.assertEqual(self._photo_tile_images(""), ["Photo"])
+
+    def test_a_whitespace_caption_does_not_become_a_blank_name(self) -> None:
+        """A caption of spaces is truthy, so ``|default:`` does not replace it."""
+        for alt in self._photo_tile_images("   "):
+            self.assertTrue(alt.strip(), "alt is whitespace only, which axe reports as image-alt")
+
+    def test_a_photo_row_with_no_file_does_not_take_the_page_down(self) -> None:
+        """The widget renders ``img.image.url``, which raises when the field is blank.
+
+        Such rows are a known condition, not a hypothetical - the wiki gallery
+        endpoint carries an explicit ``exclude(image="")`` for them. Here the
+        result is worse than a missing tile: ``ValueError: The 'image' attribute
+        has no file associated with it`` escapes the template and the whole
+        homepage 500s.
+        """
+        baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO, image="", caption="no file")
+
+        self.assertEqual(self.client.get(reverse("home.view")).status_code, 200)
+
+    def test_display_caption_treats_blank_and_missing_alike(self) -> None:
+        """The single place the rule lives, so ~30 template tags do not each need it."""
+        for stored, expected in ((None, ""), ("", ""), ("   ", ""), (" Rooftop ", "Rooftop")):
+            with self.subTest(stored=stored):
+                self.assertEqual(baker.prepare(Image, caption=stored).display_caption, expected)
 
 
 class EffectiveWidgetLayoutTests(TestCase):

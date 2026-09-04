@@ -10,10 +10,10 @@ Context:
 {% endcomment %}
 {% for doc in documents %}
 <li class="document-tile" id="document-tile-{{ doc.pk }}" data-id="{{ doc.pk }}" data-url="{{ doc.display_url }}"
-    data-caption="{{ doc.caption|default:'' }}">
-    <button type="button" class="document-tile-btn" aria-label="Open document: {{ doc.caption|default:'untitled' }}" onclick="documentsOpenLightbox({{ doc.pk }})">
+    data-caption="{{ doc.display_caption|default:'' }}">
+    <button type="button" class="document-tile-btn" aria-label="Open document: {{ doc.display_caption|default:'untitled' }}" onclick="documentsOpenLightbox({{ doc.pk }})">
         <i class="material-symbols-outlined document-tile-icon">{{ doc.document_icon }}</i>
-        <span class="document-tile-name">{{ doc.caption|default:"Untitled document" }}</span>
+        <span class="document-tile-name">{{ doc.display_caption|default:"Untitled document" }}</span>
     </button>
     <button type="button" class="document-tile-del" title="Delete document" onclick="documentsDelete({{ doc.pk }})">
         <i class="material-symbols-outlined">delete</i>

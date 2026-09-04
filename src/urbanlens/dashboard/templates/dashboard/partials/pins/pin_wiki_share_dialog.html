@@ -71,7 +71,7 @@
           <li class="wiki-seed-photo">
             <label>
               <input type="checkbox" name="image_ids" value="{{ image.id }}">
-              <img src="{{ image.image.url }}" alt="{{ image.caption|default:'Photo' }}" loading="lazy"
+              <img src="{{ image.image.url }}" alt="{{ image.display_caption|default:'Photo' }}" loading="lazy"
                    onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'wiki-seed-photo-fallback')">
               <span class="wiki-seed-photo-ribbon">Private</span>
               <span class="wiki-seed-photo-check"><i class="material-symbols-outlined">check</i></span>

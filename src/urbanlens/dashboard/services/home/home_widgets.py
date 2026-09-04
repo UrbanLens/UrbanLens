@@ -162,7 +162,7 @@ def home_dashboard_context(profile: Profile) -> dict[str, Any]:
 
     return {
         "home_stats": home_stats,
-        "home_recent_photos": Image.objects.uploaded_by(profile).photos()[:8],
+        "home_recent_photos": Image.objects.uploaded_by(profile).photos().with_file()[:8],
         "home_recent_pins": Pin.objects.filter(profile=profile).select_related("location").order_by("-created")[:6],
         "home_recent_markup_maps": MarkupMap.objects.for_profile(profile).prefetch_related("items").order_by("-created")[:6],
         "home_priority_unvisited_pins": (

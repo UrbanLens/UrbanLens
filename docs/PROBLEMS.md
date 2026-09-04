@@ -4166,53 +4166,6 @@ other pages clip it somewhere up the tree. Fixing it is a CSS change to
 `.app-nav-right`'s layout at narrow widths, which wants doing in front of a
 browser rather than blind - but the element is now named.
 
-## OPEN 2026-08-24: three accessibility defects, found once `lang` stopped masking them
-
-Adding `lang` to the two page templates cleared ten of the a11y project's
-thirteen failures and left three genuine ones, each a different rule:
-
-- **`button-name`, critical, the home page.** `.photo-tile-btn` wraps only an
-  `<img>`, and `urbanlensMediaThumbFallback` replaces that image with an icon
-  when the file 404s - taking the button's only accessible name with it. **Fixed
-  2026-08-24** by putting `aria-label` on the button in all three places that
-  render a photo tile, so the name no longer depends on the thumbnail loading.
-- **`aria-required-children`, critical, the Private Pin page.** `#media-tabs`
-  declares `role="tablist"` in markup but is filled by JavaScript, and the
-  buttons it generates carried no `role="tab"` - unlike the statically-rendered
-  article sub-tabs directly above them. It also stayed an empty tablist when
-  the media grid was absent. **Fixed 2026-08-24**: the generated buttons carry
-  `role="tab"` and `aria-selected`, and the container drops the role entirely
-  when it has nothing to put in it.
-- **`link-in-text-block`, serious, the settings page.** `a[href$="locations/"]`
-  is distinguishable from surrounding prose by colour alone. **Fixed 2026-08-27**
-  with an underline scoped to `.settings-section-desc a`. Two other inline links
-  on the same settings template (`.settings-help`, ~lines 762/809) have the
-  identical defect under a different selector and were deliberately left
-  untouched - worth a follow-up pass rather than one-off patches per selector.
-  **That follow-up done 2026-09-03**: `.settings-help a:not(.btn)`, which also
-  covers the inline links in `_immich_account.html`. Scoped off `.btn` because
-  a link styled as a control is already distinguishable without an underline.
-  Cascade checked rather than assumed - in the compiled sheet exactly one other
-  declaration sets `text-decoration` on a bare `a` (the reset at line 143,
-  specificity 0,0,1), and this rule beats it on both specificity and order.
-
-Both fixes were verified against the deployment: the Private Pin page's scan is
-now clean. The home page's is not, because clearing `button-name` uncovered a
-second defect underneath it:
-
-- **`image-alt`, critical, the home page.** axe reports `.photo-tile > img` with
-  no `alt` and no `aria-label`. **Investigated 2026-08-27, does not reproduce
-  against current source**: `_widget_recent_photos.html`'s `<img>` has carried
-  `alt="{{ img.caption|default:'Photo' }}"` since its original commit, and the
-  thumbnail-fallback hypothesis is ruled out -
-  `urbanlensMediaThumbFallback` replaces a 404'd `<img>` with a `<span>`
-  entirely (`img.replaceWith(span)`), it doesn't leave an `<img>` with a
-  stripped `alt`. The `.photo-tile > img` selector also can't match this
-  element's actual DOM position (nested one level deeper, under
-  `.photo-tile-btn`). Most likely explanation: the deployment this was scanned
-  against predates the current HEAD. Needs a fresh scan against a current
-  deploy before treating this as still open.
-
 ## OPEN (ratcheted) 2026-08-24: one Private Pin page load can exhaust the database connection pool
 
 Found by `tests/integration/` on 2026-08-24, and only visible because the

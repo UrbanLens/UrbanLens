@@ -105,7 +105,7 @@
               <li class="pin-share-photo" id="pin-share-photo-{{ photo.id }}">
                 <label>
                   <input type="checkbox" name="image_ids" value="{{ photo.id }}">
-                  <img src="{{ photo.image.url }}" alt="{{ photo.caption|default:'Photo' }}" loading="lazy"
+                  <img src="{{ photo.image.url }}" alt="{{ photo.display_caption|default:'Photo' }}" loading="lazy"
                        onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'pin-share-photo-fallback')">
                   <span class="pin-share-photo-ribbon">Private</span>
                   <span class="pin-share-photo-check"><i class="material-symbols-outlined">check</i></span>

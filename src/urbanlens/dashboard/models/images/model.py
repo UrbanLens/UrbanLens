@@ -831,6 +831,22 @@ class Image(abstract.FrontendDashboardModel):
     }
 
     @property
+    def display_caption(self) -> str:
+        """The caption as something worth showing, or ``""`` when there is none.
+
+        Whitespace counts as none. A caption of spaces is truthy, so a template
+        ``|default:`` keeps it and it lands in an ``alt`` or ``aria-label`` that
+        a screen reader announces as empty - which axe reports as ``image-alt``
+        or ``button-name``, both critical. Templates should read this rather
+        than ``caption`` wherever a fallback is applied, so the rule lives in
+        one place instead of in each of the ~30 tags that need it.
+
+        Returns:
+            The caption with surrounding whitespace removed, or an empty string.
+        """
+        return (self.caption or "").strip()
+
+    @property
     def document_icon(self) -> str:
         """Material Symbols icon name for this document's tile, from its filename's extension."""
         name = self.caption or (self.image.name or "" if self.image else "")

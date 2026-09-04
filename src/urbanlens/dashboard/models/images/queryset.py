@@ -429,6 +429,22 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         """
         return self.exclude(_own_contribution_q())
 
+    def with_file(self) -> Self:
+        """Filter out rows whose stored file is missing.
+
+        ``ImageField`` is non-null with a blank default, so a row can exist with
+        no file behind it - the wiki gallery endpoint already excludes these.
+        Any template that reaches ``image.url`` on one raises ``ValueError``
+        rather than rendering an empty tile, which takes the whole page down.
+
+        Applied in the queryset rather than skipped while rendering so that a
+        paginated caller slices the page it actually returns.
+
+        Returns:
+            The queryset without file-less rows.
+        """
+        return self.exclude(image="")
+
     def photos(self) -> Self:
         """Filter to photos only - Vault Photos' scope, excluding videos/documents."""
         from urbanlens.dashboard.models.images.model import MediaKind

@@ -121,10 +121,10 @@ just doesn't say "(optional)" instead of saying so explicitly.
             {% if pin_images %}
             <div class="visit-photo-existing" role="group" aria-label="Select existing photos">
                 {% for img in pin_images %}
-                <label class="visit-photo-pick" title="{{ img.caption|default:'Photo' }}">
+                <label class="visit-photo-pick" title="{{ img.display_caption|default:'Photo' }}">
                     <input type="checkbox" name="existing_photo_ids" value="{{ img.pk }}"
                            {% if visit and img.visit_id == visit.id %}checked{% endif %}>
-                    <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy">
+                    <img src="{{ img.image.url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy">
                     <span class="visit-photo-pick-check"><i class="material-symbols-outlined">check</i></span>
                 </label>
                 {% endfor %}

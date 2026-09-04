@@ -76,7 +76,7 @@ Context:
       </button>
       {% endif %}
       <button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox({{ img.pk }})">
-        <img src="{{ img.thumb_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy" decoding="async">
+        <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}" class="gallery-thumb" loading="lazy" decoding="async">
         {% if include_children and context_type == "pin" and img.pin_id != pin.id %}
         <span class="gallery-child-ribbon" title="Photo from the child pin {{ img.pin.effective_name }}">{{ img.pin.effective_name }}</span>
         {% elif include_children and context_type == "wiki" and img.wiki_id != wiki.id %}

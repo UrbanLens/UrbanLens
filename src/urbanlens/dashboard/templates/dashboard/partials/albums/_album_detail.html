@@ -175,7 +175,7 @@ Expects (from controllers.albums._album_detail_context):
       <li class="gallery-item album-add-item" data-id="{{ img.pk }}">
         <button type="button" class="album-item-add" title="Add to this album"
                 aria-label="Add to this album" data-image-id="{{ img.pk }}">
-          <img src="{{ img.thumb_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy" decoding="async">
+          <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}" class="gallery-thumb" loading="lazy" decoding="async">
           <span class="album-add-tick"><i class="material-symbols-outlined">add</i></span>
         </button>
       </li>

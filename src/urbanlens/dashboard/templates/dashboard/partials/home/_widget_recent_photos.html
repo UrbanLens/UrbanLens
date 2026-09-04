@@ -13,7 +13,7 @@ overview.html) via homeOpenLightbox() (overview.html's script block).
     <ul class="home-photo-strip photos-grid">
         {% for img in home_recent_photos %}
         <li class="photo-tile" data-id="{{ img.pk }}" data-url="{{ img.image.url }}"
-            data-caption="{{ img.caption|default:'' }}"
+            data-caption="{{ img.display_caption|default:'' }}"
             data-author="{{ img.author|default:'' }}"
             data-copyright="{{ img.copyright|default:'' }}"
             data-source-url="{{ img.source_url|default:'' }}"
@@ -24,8 +24,8 @@ overview.html) via homeOpenLightbox() (overview.html's script block).
             the button loses its only accessible name. axe reports that as
             button-name at critical.
             {% endcomment %}
-            <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.caption|default:'untitled' }}" onclick="homeOpenLightbox({{ img.pk }})">
-                <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy"
+            <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.display_caption|default:'untitled' }}" onclick="homeOpenLightbox({{ img.pk }})">
+                <img src="{{ img.image.url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy"
                      onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
                 {% if img.latitude and img.longitude %}<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>{% endif %}
             </button>

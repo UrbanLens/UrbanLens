@@ -12,8 +12,8 @@ Expects: candidates (queryset of Image, uploaded by the caller), query (str).
 <ul class="cip-picker-grid">
     {% for candidate in candidates %}
     <li>
-        <button type="button" class="cip-picker-item" data-image-id="{{ candidate.pk }}" title="{{ candidate.caption|default:'Untitled photo' }}">
-            <img src="{{ candidate.image.url }}" alt="{{ candidate.caption|default:'Photo' }}" class="cip-picker-thumb" loading="lazy">
+        <button type="button" class="cip-picker-item" data-image-id="{{ candidate.pk }}" title="{{ candidate.display_caption|default:'Untitled photo' }}">
+            <img src="{{ candidate.image.url }}" alt="{{ candidate.display_caption|default:'Photo' }}" class="cip-picker-thumb" loading="lazy">
         </button>
     </li>
     {% endfor %}

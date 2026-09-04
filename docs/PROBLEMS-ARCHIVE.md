@@ -9050,3 +9050,80 @@ Fixed in three parts:
 
 Rebuilding on every sync - the option this entry was deferring a decision on - turns out not to be
 the question. The sync was never the problem.
+
+## RESOLVED 2026-09-04: three accessibility defects, found once `lang` stopped masking them
+
+Adding `lang` to the two page templates cleared ten of the a11y project's
+thirteen failures and left three genuine ones, each a different rule:
+
+- **`button-name`, critical, the home page.** `.photo-tile-btn` wraps only an
+  `<img>`, and `urbanlensMediaThumbFallback` replaces that image with an icon
+  when the file 404s - taking the button's only accessible name with it. **Fixed
+  2026-08-24** by putting `aria-label` on the button in all three places that
+  render a photo tile, so the name no longer depends on the thumbnail loading.
+- **`aria-required-children`, critical, the Private Pin page.** `#media-tabs`
+  declares `role="tablist"` in markup but is filled by JavaScript, and the
+  buttons it generates carried no `role="tab"` - unlike the statically-rendered
+  article sub-tabs directly above them. It also stayed an empty tablist when
+  the media grid was absent. **Fixed 2026-08-24**: the generated buttons carry
+  `role="tab"` and `aria-selected`, and the container drops the role entirely
+  when it has nothing to put in it.
+- **`link-in-text-block`, serious, the settings page.** `a[href$="locations/"]`
+  is distinguishable from surrounding prose by colour alone. **Fixed 2026-08-27**
+  with an underline scoped to `.settings-section-desc a`. Two other inline links
+  on the same settings template (`.settings-help`, ~lines 762/809) have the
+  identical defect under a different selector and were deliberately left
+  untouched - worth a follow-up pass rather than one-off patches per selector.
+  **That follow-up done 2026-09-03**: `.settings-help a:not(.btn)`, which also
+  covers the inline links in `_immich_account.html`. Scoped off `.btn` because
+  a link styled as a control is already distinguishable without an underline.
+  Cascade checked rather than assumed - in the compiled sheet exactly one other
+  declaration sets `text-decoration` on a bare `a` (the reset at line 143,
+  specificity 0,0,1), and this rule beats it on both specificity and order.
+
+Both fixes were verified against the deployment: the Private Pin page's scan is
+now clean. The home page's is not, because clearing `button-name` uncovered a
+second defect underneath it:
+
+- **`image-alt`, critical, the home page.** axe reports `.photo-tile > img` with
+  no `alt` and no `aria-label`. **Investigated 2026-08-27, does not reproduce
+  against current source**: `_widget_recent_photos.html`'s `<img>` has carried
+  `alt="{{ img.caption|default:'Photo' }}"` since its original commit, and the
+  thumbnail-fallback hypothesis is ruled out -
+  `urbanlensMediaThumbFallback` replaces a 404'd `<img>` with a `<span>`
+  entirely (`img.replaceWith(span)`), it doesn't leave an `<img>` with a
+  stripped `alt`. The `.photo-tile > img` selector also can't match this
+  element's actual DOM position (nested one level deeper, under
+  `.photo-tile-btn`). Most likely explanation: the deployment this was scanned
+  against predates the current HEAD. Needs a fresh scan against a current
+  deploy before treating this as still open.
+
+**Closed 2026-09-04.** The outstanding item was the home page's `image-alt`, left needing "a fresh
+scan against a current deploy". A scan could not have settled it: the recent-photos widget is inside
+`{% if home_recent_photos %}`, so a freshly provisioned integration account renders no photo tiles at
+all and the rule is never exercised. That is why the a11y project came back clean while the question
+stayed open - the scan was passing by having nothing to look at.
+
+Settled with tests that render the real view with a photo present. Two confirm the entry's own
+analysis: a captioned photo is announced by its caption, an uncaptioned one by "Photo". The third
+found a genuine defect the scan would only have caught with the right data: **a whitespace-only
+caption is truthy**, so `|default:'Photo'` keeps it, and `alt="   "` is what axe reports as
+`image-alt`. Same shape for the button's `aria-label` and `button-name`.
+
+Fixed once rather than per template. There were 32 `caption|default:` tags across 17 templates, 18
+of them in an `alt` or `aria-label`, every one with the same latent defect - patching the one that
+was reported would have repeated the mistake this entry already records for the link-underline
+follow-up. `Image.display_caption` now returns `(self.caption or "").strip()` and all 32 tags read
+it, so "blank means blank" lives in one place.
+
+**A second defect found writing the fixture, and fixed here too**: `_widget_recent_photos.html`
+renders `img.image.url` unguarded, so an `Image` row whose file is missing raises `ValueError: The
+'image' attribute has no file associated with it` - and because that escapes the template, the whole
+homepage 500s rather than dropping one tile. Not hypothetical: `ImageField` is non-null with a blank
+default, and the wiki gallery endpoint already carries an explicit `exclude(image="")` for exactly
+these rows. Reproduced with a failing test before fixing.
+
+Fixed in the queryset (`ImageQuerySet.with_file()`) rather than by guarding the template, for the
+reason the wiki endpoint's own comment gives: a Python-side skip while rendering makes a paginated
+page short and its count wrong. Only the home widget was reaching `.url` unguarded among the home
+partials; other callers that need it now have a name for the rule.

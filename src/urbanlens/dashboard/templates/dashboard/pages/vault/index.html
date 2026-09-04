@@ -93,13 +93,13 @@
         <div class="vault-recent-strip">
             {% for item in recent_uploads %}
             {% if item.media_type == 'document' %}
-            <a class="vault-recent-item vault-recent-item--document" href="{% url 'vault.documents' %}" title="{{ item.caption|default:'Untitled document' }}">
+            <a class="vault-recent-item vault-recent-item--document" href="{% url 'vault.documents' %}" title="{{ item.display_caption|default:'Untitled document' }}">
                 <i class="material-symbols-outlined">{{ item.document_icon }}</i>
-                <span class="vault-recent-item-name">{{ item.caption|default:"Untitled document" }}</span>
+                <span class="vault-recent-item-name">{{ item.display_caption|default:"Untitled document" }}</span>
             </a>
             {% else %}
-            <a class="vault-recent-item" href="{% url 'vault.photos' %}" title="{{ item.caption|default:'' }}">
-                <img src="{{ item.thumb_url }}" alt="{{ item.caption|default:'' }}" loading="lazy">
+            <a class="vault-recent-item" href="{% url 'vault.photos' %}" title="{{ item.display_caption|default:'' }}">
+                <img src="{{ item.thumb_url }}" alt="{{ item.display_caption|default:'' }}" loading="lazy">
             </a>
             {% endif %}
             {% endfor %}

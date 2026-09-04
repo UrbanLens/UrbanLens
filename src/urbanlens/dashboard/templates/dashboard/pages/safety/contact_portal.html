@@ -64,7 +64,7 @@
         <div class="safety-photo-grid">
             {% for photo in photos %}
             <a href="{% url 'safety.contact.photo' contact.token photo.pk %}" target="_blank" rel="noopener">
-                <img src="{% url 'safety.contact.photo' contact.token photo.pk %}" alt="{{ photo.caption|default:'Check-in photo' }}" class="safety-photo-thumb" loading="lazy">
+                <img src="{% url 'safety.contact.photo' contact.token photo.pk %}" alt="{{ photo.display_caption|default:'Check-in photo' }}" class="safety-photo-thumb" loading="lazy">
             </a>
             {% endfor %}
         </div>

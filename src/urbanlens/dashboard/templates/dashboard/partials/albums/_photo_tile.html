@@ -14,7 +14,7 @@ Expects:
     data-uuid="{{ img.uuid }}"
     data-url="{{ img.display_url }}"
     data-thumb-url="{{ img.thumb_url }}"
-    data-caption="{{ img.caption|default:'' }}"
+    data-caption="{{ img.display_caption|default:'' }}"
     data-author="{{ img.author|default:'' }}"
     data-copyright="{{ img.copyright|default:'' }}"
     data-source-url="{{ img.source_url|default:'' }}"
@@ -32,7 +32,7 @@ Expects:
   </button>
   {% endif %}
   <button type="button" class="gallery-thumb-btn" data-photo-open>
-    <img src="{{ img.thumb_url }}" alt="{{ img.caption|default:'Photo' }}"
+    <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}"
          class="gallery-thumb" loading="lazy" decoding="async">
   </button>
   {% if in_album %}
