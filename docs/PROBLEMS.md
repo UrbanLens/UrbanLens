@@ -139,24 +139,6 @@ way: return `str(exc)` instead of the generic literal. Contrast with the `ValueE
 beside the floorplan one, which deliberately does *not* do this and explains why in its own
 comment - its text is not known to be safe, unlike a validation exception's.
 
-## OPEN 2026-09-01: the test-runner container's compiled JS bundles go stale the same way `bin/` did
-
-`test_compiled_js_references_resolve.py::CompiledJsReferenceTests.
-test_every_bundle_a_template_names_exists` failed for the first time this session, listing three
-bundles templates reference that the container doesn't have committed:
-`site_admin_external_tags.js`, `vault-documents.js`, `vault-photos.js`. All three exist on the
-host and build successfully (confirmed in the full `docker compose` bring-up's `app` container
-logs, same session) - `bin/run_tests.sh`'s sync step copies Python/template source (`docker cp
-src/.`, plus `bin/.`) into the test-runner container, but never rebuilds the frontend. The
-test-runner's `entrypoint: ["sleep", "infinity"]` deliberately bypasses `/docker-entrypoint.sh`
-(see the compose file's own comment - `init.py` runs migrate+collectstatic, not wanted here), so
-nothing else runs `bin/build-frontend.ts` for it either. Same class of failure as "RESOLVED
-2026-09-01: `bin/` stopped being synced into the test container" above - a container copy
-drifting from the tree, invisible until something exercises exactly the missing piece - just for
-compiled assets instead of scripts. Not fixed here: unlike copying `bin/`, rebuilding the
-frontend on every sync has a real time cost worth deciding on deliberately rather than
-defaulting into.
-
 ## RESOLVED 2026-09-01: `/app/src/backups` was never in the entrypoint's chown loop
 
 Found bringing up the full stack to verify this session's sandbox-tier work: `celery-worker`'s

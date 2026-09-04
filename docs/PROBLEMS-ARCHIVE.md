@@ -9005,3 +9005,48 @@ so the parity check is unaffected.
 
 Still worth doing separately: `CLAUDE.local.md` documents the bare `docker cp` form and should
 point at `bin/sync_app.sh` instead. It is untracked, so it is the operator's to change.
+
+## RESOLVED 2026-09-04: the test-runner container's compiled JS bundles go stale the same way `bin/` did
+
+`test_compiled_js_references_resolve.py::CompiledJsReferenceTests.
+test_every_bundle_a_template_names_exists` failed for the first time this session, listing three
+bundles templates reference that the container doesn't have committed:
+`site_admin_external_tags.js`, `vault-documents.js`, `vault-photos.js`. All three exist on the
+host and build successfully (confirmed in the full `docker compose` bring-up's `app` container
+logs, same session) - `bin/run_tests.sh`'s sync step copies Python/template source (`docker cp
+src/.`, plus `bin/.`) into the test-runner container, but never rebuilds the frontend. The
+test-runner's `entrypoint: ["sleep", "infinity"]` deliberately bypasses `/docker-entrypoint.sh`
+(see the compose file's own comment - `init.py` runs migrate+collectstatic, not wanted here), so
+nothing else runs `bin/build-frontend.ts` for it either. Same class of failure as "RESOLVED
+2026-09-01: `bin/` stopped being synced into the test container" above - a container copy
+drifting from the tree, invisible until something exercises exactly the missing piece - just for
+compiled assets instead of scripts. Not fixed here: unlike copying `bin/`, rebuilding the
+frontend on every sync has a real time cost worth deciding on deliberately rather than
+defaulting into.
+
+**The diagnosis above is wrong, and the real cause is worth more than the fix.** `bin/run_tests.sh`
+does not skip the compiled assets - `docker cp src/.` copies the whole tree, bundles included, and
+the container had exactly what the host had. What was behind was **the host's own build**. Checked
+2026-09-04: the newest bundle was 2026-09-01 17:57 and the newest TypeScript source 2026-09-03
+22:12.
+
+It is behind because the bundles are **not in git**. `57a4a90af` untracked 73,790 lines of build
+output on 2026-08-27 and added `**/frontend/static/*/js/` to `.gitignore`, deliberately and with a
+rationale. `test_compiled_js_references_resolve.py` was not updated to match: its docstring still
+said "all of it is committed", its failure messages still said "not committed", and its stated
+purpose - "the committed artifacts agree with each other" - had stopped describing anything. What
+it actually reads is whatever the machine running it last built, which is why it failed on three
+bundles and why that failure pointed at the wrong container.
+
+Fixed in three parts:
+
+- The test says what it now checks, skips with an actionable message when nothing has been built
+  (an empty directory otherwise makes two of its three checks pass by iterating over nothing), and
+  its failures name `bun run build` instead of claiming a file was never committed.
+- `bin/run_tests.sh` warns when the TypeScript sources are newer than the bundles it is about to
+  sync, so the cause is named before the failure rather than after. Test sources are excluded from
+  that comparison - they are not bundle inputs, and a warning that cries wolf gets read past.
+- The host's build was brought current.
+
+Rebuilding on every sync - the option this entry was deferring a decision on - turns out not to be
+the question. The sync was never the problem.

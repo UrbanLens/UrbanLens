@@ -130,6 +130,35 @@ fi
 sync_tree() { sync_tree_into "$CONTAINER"; }
 verify_parity() { verify_parity_with "$CONTAINER"; }
 
+verify_frontend_build() {
+    # The compiled bundles are not in git - 57a4a90af untracked them and
+    # .gitignore has excluded **/frontend/static/*/js/ since. The sync copies
+    # whatever this host last built, so a host that has never built, or built
+    # before the branch added an entry point, hands the container a bundle set
+    # that does not match the templates. test_compiled_js_references_resolve.py
+    # then fails naming three bundles, which on 2026-09-01 was written up as the
+    # container's assets going stale - it was the host's build that was behind.
+    local js_dir="src/urbanlens/dashboard/frontend/static/dashboard/js"
+    local ts_dir="src/urbanlens/dashboard/frontend/ts"
+    [ -d "$ts_dir" ] || return 0
+
+    local newest
+    newest=$(find "$js_dir" -name '*.js' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+    if [ -z "$newest" ]; then
+        echo "warning: no compiled JS bundles in $js_dir - the frontend has never been built here." >&2
+        echo "    test_compiled_js_references_resolve.py skips rather than passing vacuously. Build: bun run build" >&2
+        return 0
+    fi
+
+    # Test sources are excluded: they are not bundle inputs, so a newer one is
+    # not staleness. A warning that cries wolf gets read past, and this one has
+    # to survive being right only occasionally.
+    if [ -n "$(find "$ts_dir" \( -name '*.ts' -o -name '*.tsx' \) -not -name '*.test.ts' -not -name '*.spec.ts' -newer "$newest" -print -quit 2>/dev/null)" ]; then
+        echo "warning: TypeScript sources are newer than the compiled bundles being synced." >&2
+        echo "    A template naming a new entry point fails as a missing bundle. Rebuild: bun run build" >&2
+    fi
+}
+
 verify_venv() {
     # The sync only ever covers /app/src. /app/.venv is baked into the image, so
     # a dependency added to pyproject.toml after the last build is simply absent
@@ -177,6 +206,7 @@ fi
 # A warning, not an error: most runs touch none of the missing packages, and
 # refusing to run would be worse than a confusing failure in the few that do.
 verify_venv
+verify_frontend_build
 [ "$VERIFY_ONLY" -eq 1 ] && exit 0
 
 if [ "$FAST" -eq 1 ]; then
