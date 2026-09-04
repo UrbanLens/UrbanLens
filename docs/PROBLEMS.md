@@ -718,32 +718,6 @@ The only real consideration is timing, and it is mild: a full-repo format touche
 people may have open. Commit or stash in-flight work first if that matters, then run it and keep
 the result. Do not hand-revert formatting to keep a diff small.
 
-## OPEN 2026-08-21: Consensus points are awarded for reverting someone else's edit, and never retracted
-
-Found while surveying scoring infrastructure for UL-397, not while working on Consensus — so this
-is unverified against intent and may be deliberate, but the two halves disagree with each other in
-a way that looks accidental.
-
-`models/wiki_edit/signals.py` awards `MANUAL_EDIT_POINTS = 3` on **every** created `WikiEdit` that
-has an editor and no `consensus_round`. A revert is itself a `WikiEdit`
-(`services/wiki/wiki_edits.py:269`), so **reverting another user's contribution earns the reverter
-points**, and in an edit war both sides are paid on every pass. The same signal also fires for
-alias/link/markup/child-wiki rows, so those each earn the full 3 as well.
-
-Meanwhile `award_points` (`services/consensus/points.py:78`) is only ever called with positive
-amounts and there is **no retraction path anywhere** — a contribution that is later reverted keeps
-its points permanently. `services/achievements/metrics.py:398-407` takes the opposite position for
-the same underlying data, deliberately excluding `reverted=True` edits from the `wiki_edits`
-achievement metric. So the achievement system says a reverted edit doesn't count and the points
-system says it does.
-
-Not fixed here because the fix depends on a product call (should reverting be worth anything? is
-an alias worth the same as an article edit?) and because the points ledger has no per-award record
-to retract against — `award_points`' `reason` argument is logged, never persisted, so there is
-currently no way to know how many points a given edit produced. Both are addressed by the UL-397
-design (`docs/designs/reputation-and-gating.md`), but that is a separate, hidden score; whether
-the *visible* Consensus game score should also change is its own question.
-
 ## OPEN 2026-08-20: the mobile panel's `unpinned_count` still counts what the import won't create
 
 `ParcelBuildingsPanelSource.api_payload` derives `unpinned_count` as

@@ -11,6 +11,42 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-08-21: Consensus points are awarded for reverting someone else's edit, and never retracted
+
+Found while surveying scoring infrastructure for UL-397, not while working on Consensus — so this
+is unverified against intent and may be deliberate, but the two halves disagree with each other in
+a way that looks accidental.
+
+`models/wiki_edit/signals.py` awards `MANUAL_EDIT_POINTS = 3` on **every** created `WikiEdit` that
+has an editor and no `consensus_round`. A revert is itself a `WikiEdit`
+(`services/wiki/wiki_edits.py:269`), so **reverting another user's contribution earns the reverter
+points**, and in an edit war both sides are paid on every pass. The same signal also fires for
+alias/link/markup/child-wiki rows, so those each earn the full 3 as well.
+
+Meanwhile `award_points` (`services/consensus/points.py:78`) is only ever called with positive
+amounts and there is **no retraction path anywhere** — a contribution that is later reverted keeps
+its points permanently. `services/achievements/metrics.py:398-407` takes the opposite position for
+the same underlying data, deliberately excluding `reverted=True` edits from the `wiki_edits`
+achievement metric. So the achievement system says a reverted edit doesn't count and the points
+system says it does.
+
+Not fixed here because the fix depends on a product call (should reverting be worth anything? is
+an alias worth the same as an article edit?) and because the points ledger has no per-award record
+to retract against — `award_points`' `reason` argument is logged, never persisted, so there is
+currently no way to know how many points a given edit produced. Both are addressed by the UL-397
+design (`docs/designs/reputation-and-gating.md`), but that is a separate, hidden score; whether
+the *visible* Consensus game score should also change is its own question.
+
+**Fixed 2026-09-04**, with the owner's ruling: reward positive contribution, make farming unattractive, accept that it will not be perfect, and leave a note to reassess.
+
+Three changes. A revert earns nothing (`WikiEdit.is_revert`, set at creation rather than derived from the `reverted_by` back-reference, because the award happens in the reverting row's own `post_save` - before the target row points at it). Reverting retracts what the reverted edit paid, and reverting the revert puts it back; compare-and-swap on a flag stored on the row, the shape `ReputationEvent.retracted` already uses, because several paths reach it for one edit - the revert, an admin toggling `reverted` on the change form, deleting an already-reverted edit - and only the first may move the total. And substantive fields are now worth more than an alias or a link, with one edit capped.
+
+The award is recorded on the row rather than recomputed, because the weights are a first cut expected to be retuned and a retraction has to return exactly what was paid.
+
+**Known and accepted**, noted in `points_for_changes`: reverting drains the reverted author's score, so a bad actor can aim it at a good contributor. Reverts are themselves revertible and restoration is wired, so it is recoverable rather than permanent - but nothing rate-limits it.
+
+Worth recording separately, because it invalidated the guard this entry relied on: the AST scan in `test_friend_accepted_source_profile.py` was found to be matching nothing at all in the same pass (see its own archived entry). The completeness test here counts what the walk returned rather than a parallel string search, for the same reason.
+
 ## RESOLVED 2026-09-01: a source-scan regression guard is one reference short of its own threshold
 
 `test_friend_accepted_source_profile.py::EveryFriendAcceptedSiteSetsSourceProfileTests.
@@ -124,6 +160,41 @@ One caveat the numbers depend on: an index-only scan needs the visibility map, s
 
 The second half of this entry - `total` recomputed on every page fetch though only needed on the first - is **not** changed. It is now a 61-buffer index-only scan rather than the 1,881-buffer heap scan that made it worth mentioning, and `total` is part of the documented `{items, total, offset, limit}` response shape that `test_album_view_ux.py` asserts on. Dropping it from later pages is an API change with a tested consumer and no measured benefit left.
 
+## RESOLVED 2026-09-04: photo ownership was decided by the wrong column, exposing personal photos
+
+Found by an adversarial review of the fix in `169dc5b64`, not by the change itself passing or
+failing - the suite was green throughout.
+
+Several independent gates ask one question - is this photo the profile's own picture, or somebody
+else's they merely up-voted - and every one of them answered it with
+`source == ImageSource.UPLOAD`: `services/wiki/concealment.py` (which rows a concealed viewer sees),
+`controllers/image_gallery.py` and `external_api/views.py` (whether withdrawing from a wiki is this
+person's to do), `services/media/images.py` and `partials/pins/_photo_gallery.html` (the `uploaded`
+flag and its `data-uploaded` twin), `services/reputation/builtin_rules.py`, and the upload
+achievements.
+
+That is wrong in **both** directions:
+
+- A photo picked out of the user's own Immich server, Google Photos library or Flickr account is
+  their own picture, but carries the provider's name in `source`. So a concealed viewer could see a
+  stranger's personal photos on a wiki. **Flickr had been in that state all along**; `169dc5b64`
+  widened it to Immich and Google Photos by labelling those rows correctly.
+- A row materialised from somebody else's provider search can carry `UPLOAD` anyway, because
+  `media_materialize._translated_source` falls back to it for an unrecognised panel key.
+
+Ownership is now `Image.is_own_contribution` / `ImageQuerySet.own_contributions`, three conjuncts in
+one place: a `profile` is set (`services/photos/photo_enrichment` writes profile-less imagery
+belonging to nobody, and an ownership test that missed that would conceal the automatic imagery a
+fresh wiki is meant to show), `source` is in `ImageSource.personal_library()`, and no
+`media_source_key`.
+
+`test_image_ownership.py` asserts the personal set and its complement partition every `ImageSource`,
+because the failure mode of forgetting is silent and one-directional: a new personal integration left
+out shows that user's photos to a concealed viewer.
+
+Two existing fixtures were faking a provider row without the column that makes it one, and were made
+realistic rather than accommodated - a real materialised row always carries `media_source_key`.
+
 ## RESOLVED 2026-09-03: the test-runner container kept templates the repo had deleted
 
 Found by the new block-name scan, which reported a thirteenth offending template that does not
@@ -221,6 +292,22 @@ rows is warranted.
 **Fixed forward 2026-09-01 (2026-09-03).** `import_immich_photos` and `import_google_photos` now pass `source=ImageSource.IMMICH` / `ImageSource.GOOGLE_PHOTOS`, with a regression test each.
 
 **Existing rows are not backfilled, and one of the two cannot be reliably.** A Google Photos row is identifiable after the fact by its `source_url` prefix; an Immich row's `source_url` is the user's own self-hosted server, which is an arbitrary host, so no query separates those from genuine uploads. A backfill would therefore be partial by construction. Left for a decision on whether recategorising the identifiable half is worth the asymmetry - it moves achievement and reputation counts, which is why it was not done unilaterally.
+
+**Backfilled 2026-09-04 - and two things above turned out to be wrong.**
+
+The Immich half *is* identifiable: `ImmichAccount.server_url` is persisted, so one query per connected
+account matches that account's own rows exactly. Only an account since disconnected cannot be matched,
+and those rows stay under "Upload" deliberately. `manage.py backfill_personal_library_image_source`.
+
+More importantly, "it moves achievement and reputation counts" was the wrong reason to hesitate, and
+hesitating on it hid something worse. Every ownership gate in the codebase - concealment, who may
+withdraw a photo from a wiki, the `uploaded` flag, reputation, the upload achievements - decided "is
+this the profile's own picture" by asking `source == ImageSource.UPLOAD`. So labelling these rows
+correctly *broke* those gates: a stranger's own photos on a wiki became visible to a concealed viewer.
+Flickr had been in that state all along. See "photo ownership was decided by the wrong column".
+
+With ownership moved onto `Image.is_own_contribution`, `source` no longer decides anything but the
+Media gallery's per-source tabs, which is what makes the backfill cosmetic and safe.
 
 ## RESOLVED 2026-08-31: `Wiki.get_unique_search_name` is dead code
 
