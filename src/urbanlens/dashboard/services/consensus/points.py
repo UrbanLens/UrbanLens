@@ -149,6 +149,17 @@ def points_for_changes(changes: Mapping[str, object] | None) -> int:
     Unrecognised keys fall to the cheaper tier rather than the dearer one, so
     a new edit kind cannot become the best rate in the game by being added.
 
+    TODO: reassess this whole scheme once there is real usage to look at. It is
+    a first cut aimed at "reward contribution, make farming unattractive", and
+    two things about it are known to be imperfect and accepted for now:
+
+    - Reverting somebody drains their score, so a bad actor can attack a good
+      contributor's total by reverting them. Reverts are themselves revertible
+      and :func:`restore_wiki_edit_award` puts the points back, so the damage is
+      recoverable rather than permanent - but nothing rate-limits the attack.
+    - The two tiers are a guess. Nothing here measures how much work an edit
+      actually was, and a long description is worth the same as a one-word one.
+
     Args:
         changes: A ``WikiEdit.changes`` diff, or None.
 
