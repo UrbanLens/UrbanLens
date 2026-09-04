@@ -315,6 +315,11 @@ def session_items_cache_key(session_id: str) -> str:
     return f"ul_gphotos_session_items_{session_id}"
 
 
+#: Every Google Photos web URL this integration writes starts with this. Named
+#: so a backfill can recognise rows it created without restating the shape.
+GOOGLE_PHOTOS_URL_PREFIX = "https://photos.google.com/lr/photo/"
+
+
 def media_item_web_url(media_item_id: str) -> str:
     """Return the Google Photos web URL for one media item.
 
@@ -331,7 +336,7 @@ def media_item_web_url(media_item_id: str) -> str:
     Returns:
         The item's URL in the Google Photos web UI.
     """
-    return f"https://photos.google.com/lr/photo/{media_item_id}"
+    return f"{GOOGLE_PHOTOS_URL_PREFIX}{media_item_id}"
 
 
 def _parse_timestamp(value: str | None) -> datetime.datetime | None:

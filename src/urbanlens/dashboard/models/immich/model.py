@@ -103,7 +103,19 @@ class ImmichAccount(abstract.DashboardModel):
         Returns:
             The asset's URL in the Immich web UI.
         """
-        return f"{self.server_url.rstrip('/')}/photos/{asset_id}"
+        return f"{self.asset_url_prefix()}{asset_id}"
+
+    def asset_url_prefix(self) -> str:
+        """Every asset URL from this account starts with this.
+
+        Split out so a backfill can recognise rows this account created without
+        restating the URL shape - two spellings of one format drift, and the
+        one that drifts is always the copy.
+
+        Returns:
+            The account's asset URL prefix, with a trailing slash.
+        """
+        return f"{self.server_url.rstrip('/')}/photos/"
 
     def __str__(self) -> str:
         return f"Immich account for {self.profile} ({self.server_url})"
