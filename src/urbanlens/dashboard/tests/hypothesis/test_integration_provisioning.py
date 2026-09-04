@@ -31,6 +31,7 @@ from urbanlens.dashboard.models.account.model import AccountKdf, ApiKey, ApiKeyS
 from urbanlens.dashboard.models.notifications.meta.delivery_preference import DeliveryPreference
 from urbanlens.dashboard.models.notifications.model import NotificationPreference
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.admin.site_admin import promote_first_user_if_needed
 from urbanlens.dashboard.services.auth.api_keys import authenticate_api_key
 from urbanlens.dashboard.services.integration_testing import INTEGRATION_EMAIL_DOMAIN, INTEGRATION_USERNAME_PREFIX
@@ -260,9 +261,27 @@ class BootstrapAdminGuardTests(TestCase):
     function itself the decision has already been made once.
     """
 
-    def _bootstrap_admin_id(self) -> int | None:
-        from urbanlens.dashboard.models.site_settings import SiteSettings
+    def setUp(self):
+        """Establish the global state these tests read, rather than assuming it.
 
+        ``promote_first_user_if_needed`` consults two pieces of site-wide state:
+        the ``SiteSettings`` bootstrap slot, and whether any ``User`` other than
+        the one being created exists. Neither is this file's to assume. Against a
+        database another file has already written to - which is what
+        ``bin/run_tests.sh --fast`` reuses - all three tests here fail on somebody
+        else's fixture, and read as a regression in whatever was being worked on.
+
+        Clearing the slot alone would not be enough: the "an ordinary first user
+        is still promoted" case needs an empty user table as well. Both writes are
+        inside the test's transaction and roll back with it.
+        """
+        super().setUp()
+        User.objects.all().delete()
+        # Redundant while the FK is SET_NULL, but this is the value every
+        # assertion below reads, so it is established rather than inferred.
+        SiteSettings.objects.filter(pk=1).update(bootstrap_admin_user=None)
+
+    def _bootstrap_admin_id(self) -> int | None:
         return SiteSettings.get_current().bootstrap_admin_user_id
 
     def test_the_first_provisioned_account_is_not_promoted(self):
