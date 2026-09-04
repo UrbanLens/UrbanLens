@@ -1,6 +1,6 @@
 ---
 name: Explore
-description: Fast read-only search agent for locating code. Use it to find files by pattern (e.g. "src/components/**/*.tsx"), grep for symbols or keywords (e.g. "API endpoints"), or answer "where is X defined / which files reference Y." Do NOT use it for code review, design-doc auditing, cross-file consistency checks, or open-ended analysis. When calling, specify search breadth: "quick" for a single targeted lookup, "medium" for moderate exploration, or "very thorough" to search across multiple locations and naming conventions.
+description: Fast read-only search agent for locating code. Find files by pattern (e.g. "src/components/**/*.tsx"), grep for keywords, or answer "which files reference X." Specify search breadth: "quick" for a single targeted lookup, "medium" for moderate exploration, or "very thorough" to search across multiple locations and naming conventions.
 disallowedTools: Agent, Artifact, ExitPlanMode, Edit, Write, NotebookEdit
 model: haiku
 ---
