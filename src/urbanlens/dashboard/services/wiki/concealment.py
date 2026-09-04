@@ -330,9 +330,18 @@ def conceal_rows(queryset: Any, viewer: Profile | None) -> Any:
     allowed = visible_actor_ids(viewer)
 
     if queryset.model is Image:
-        # Provider rows stay: they are what a fresh wiki shows. Uploads stay
-        # only when the uploader is the viewer or a friend.
-        return queryset.filter(~Q(source=ImageSource.UPLOAD) | Q(profile_id__in=allowed))
+        # Provider rows stay: they are what a fresh wiki shows. A photo the
+        # profile actually contributed stays only when that profile is the
+        # viewer or a friend.
+        #
+        # Keyed on media_source_key rather than on source: a photo out of the
+        # uploader's own Immich server, Google Photos library or Flickr account
+        # carries that provider's name in `source` while still being their own
+        # picture, so `source == UPLOAD` showed a stranger's personal photos to
+        # a concealed viewer.
+        from urbanlens.dashboard.models.images.queryset import _own_contribution_q
+
+        return queryset.filter(~_own_contribution_q() | Q(profile_id__in=allowed))
 
     if model_name == "WikiAlias":
         # `created_by` is the intuitive discriminator here and it is wrong: it

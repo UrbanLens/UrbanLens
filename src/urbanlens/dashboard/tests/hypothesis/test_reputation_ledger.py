@@ -152,7 +152,7 @@ class ScoringTests(TestCase):
         Scoring one would pay a user for somebody else's work, and a bulk
         import would pay the importer for hundreds of them.
         """
-        external = self._photo(source=ImageSource.WIKIMEDIA)
+        external = self._photo(source=ImageSource.WIKIMEDIA, media_source_key="wikimedia", media_item_key="0" * 40)
 
         self.assertFalse(ReputationEvent.objects.filter(rule_key="photo_upload", target_id=external.pk).exists())
 

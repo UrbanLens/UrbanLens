@@ -190,6 +190,33 @@ class ImageSource(TextChoices):
     GOOGLE_STREET_VIEW = "google_street_view", "Google Street View"
     GOOGLE_SATELLITE = "google_satellite", "Google Satellite"
 
+    @classmethod
+    def personal_library(cls) -> frozenset[str]:
+        """Sources that mean "this profile's own picture".
+
+        The form upload, plus the three connected-account pickers: a photo
+        chosen out of the user's own Immich server, Google Photos library or
+        Flickr account is theirs, however it arrived. Everything else is either
+        somebody else's photograph the profile merely up-voted, or bytes fetched
+        on their behalf because a page referred to them.
+
+        Membership alone is not the ownership test - see
+        ``Image.is_own_contribution``, which also requires that no
+        ``media_source_key`` be set. Flickr is both a connected account and a
+        Media gallery panel, and ``media_materialize`` translates an unrecognised
+        panel key to ``UPLOAD``, so either value can appear on a materialised
+        row too.
+
+        ``test_image_ownership`` asserts this set plus its complement covers
+        every member, so a new source cannot be added without deciding which it
+        is - the failure otherwise is silent and one-directional: a new personal
+        integration left out is a stranger's photos shown to a concealed viewer.
+
+        Returns:
+            The ``ImageSource`` values that denote the profile's own picture.
+        """
+        return frozenset({cls.UPLOAD, cls.IMMICH, cls.GOOGLE_PHOTOS, cls.FLICKR})
+
 
 class MediaKind(TextChoices):
     """What kind of file this Image row actually holds.
@@ -667,6 +694,20 @@ class Image(abstract.FrontendDashboardModel):
 
                 self.filename_taken_at = extract_filename_taken_at(incoming_name)
         super().save(*args, **kwargs)
+
+    @property
+    def is_own_contribution(self) -> bool:
+        """Whether ``profile`` is the photographer rather than merely the up-voter.
+
+        The row-level form of ``ImageQuerySet.own_contributions`` - see
+        ``OWN_CONTRIBUTION`` in that module for why ``media_source_key`` answers
+        this and ``source`` cannot, and why a profile-less row is nobody's
+        contribution rather than everybody's.
+
+        Returns:
+            True when this profile contributed the picture itself.
+        """
+        return self.profile_id is not None and self.source in ImageSource.personal_library() and not self.media_source_key
 
     @property
     def attribution_url(self) -> str:

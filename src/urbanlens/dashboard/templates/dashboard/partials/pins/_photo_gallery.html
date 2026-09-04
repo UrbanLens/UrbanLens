@@ -66,7 +66,7 @@ Context:
         data-copied-from-label="{{ img.copied_from_label|default:'' }}"
         data-taken-at="{{ img.taken_at|date:'c'|default:'' }}"
         data-on-wiki="{% if img.wiki_id %}true{% else %}false{% endif %}"
-        data-uploaded="{% if img.source == 'upload' %}true{% else %}false{% endif %}"
+        data-uploaded="{% if img.is_own_contribution %}true{% else %}false{% endif %}"
         data-map-hidden="{% if img.map_hidden %}true{% else %}false{% endif %}"
         onmouseenter="galleryHover({{ img.pk }}, true)"
         onmouseleave="galleryHover({{ img.pk }}, false)">

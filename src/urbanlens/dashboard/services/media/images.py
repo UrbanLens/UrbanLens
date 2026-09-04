@@ -1431,7 +1431,7 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         # this photo from a pin would also take it off a community wiki, and
         # whether withdrawing it from there is even the owner's to do.
         "on_wiki": img.wiki_id is not None,
-        "uploaded": img.source == ImageSource.UPLOAD,
+        "uploaded": img.is_own_contribution,
         "map_hidden": bool(getattr(img, "map_hidden", False)),
         "media_type": img.media_type,
         # Served rather than re-derived client-side: the icon depends on the

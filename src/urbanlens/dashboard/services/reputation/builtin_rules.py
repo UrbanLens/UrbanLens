@@ -13,7 +13,10 @@ the reason each rule looks more defensive than its one-line description:
   media becomes an ``Image`` only when somebody up-votes it or sends it to a
   wiki, and the profile on that row is the voter. Bulk imports attach other
   people's photos under the importer. Every photo rule therefore gates on
-  ``source == ImageSource.UPLOAD`` rather than trusting ``profile``.
+  ``Image.is_own_contribution`` rather than trusting ``profile``. That asks
+  ``media_source_key``, which only a materialised row carries - not ``source``,
+  which names a provider on a photo out of the uploader's own Immich, Google
+  Photos or Flickr account too.
 - **Never read ``effective_latitude``** to test for GPS: it falls back to the
   Location's coordinates, so it is never null and proves nothing.
 - GPS and EXIF extraction are skipped entirely when the uploader has
@@ -60,12 +63,12 @@ def _photo_need(wiki: Wiki | None, image: Image) -> tuple[Decimal, str]:
     if wiki is None:
         return coefficients.NEED_ROUTINE, "no_wiki"
 
-    from urbanlens.dashboard.models.images.model import Image as ImageModel, ImageSource, MediaKind
+    from urbanlens.dashboard.models.images.model import Image as ImageModel, MediaKind
 
     siblings = ImageModel.objects.filter(wiki=wiki, media_type=MediaKind.PHOTO).exclude(pk=image.pk)
     if not siblings.exists():
         return coefficients.NEED_FIRST_OF_ITS_KIND, "first_photo_at_all"
-    if not siblings.filter(source=ImageSource.UPLOAD).exists():
+    if not siblings.own_contributions().exists():
         return coefficients.NEED_FIRST_BY_A_USER, "first_user_photo"
     return coefficients.NEED_ROUTINE, "routine"
 
@@ -103,11 +106,14 @@ def _score_photo(image: Image | None) -> ScoreResult | None:
     if image is None:
         return None
 
-    from urbanlens.dashboard.models.images.model import ImageSource, MediaKind
+    from urbanlens.dashboard.models.images.model import MediaKind
 
     # The profile on a materialised external row is whoever voted for it, not
-    # the photographer - so only genuine uploads are contributions.
-    if image.source != ImageSource.UPLOAD or image.media_type != MediaKind.PHOTO:
+    # the photographer - so only a photo this profile actually contributed is a
+    # contribution. Asked of media_source_key rather than of source, because a
+    # photo out of the uploader's own Immich server or Google Photos library is
+    # their own picture despite carrying a provider's name in source.
+    if not image.is_own_contribution or image.media_type != MediaKind.PHOTO:
         return None
     if image.wiki_id is None:
         return None

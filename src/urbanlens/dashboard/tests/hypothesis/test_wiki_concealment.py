@@ -295,9 +295,14 @@ class RelatedRowConcealmentTests(TestCase):
     def test_provider_photos_stay_and_strangers_uploads_go(self) -> None:
         """Image.profile is the up-voter on a materialised provider row.
 
-        So authorship only means anything when source is UPLOAD - reading the
-        actor column alone would drop provider media a fresh wiki would show,
-        and credit a voter for somebody else's photograph.
+        So authorship only means anything for a row the profile actually
+        contributed - reading the actor column alone would drop provider media a
+        fresh wiki would show, and credit a voter for somebody else's
+        photograph. What separates the two is ``media_source_key``, which
+        ``services.media.media_materialize`` sets on exactly the rows it
+        materialises; ``source`` cannot, because a photo out of the uploader's
+        own Immich or Google Photos library carries a provider's name in that
+        column while still being their own picture.
         """
         from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
@@ -307,6 +312,8 @@ class RelatedRowConcealmentTests(TestCase):
             wiki=self.wiki,
             profile=self.stranger,
             source=ImageSource.WIKIMEDIA,
+            media_source_key="wikimedia",
+            media_item_key="0" * 40,
             media_type=MediaKind.PHOTO,
             image="pin_images/p.png",
         )
@@ -332,6 +339,75 @@ class RelatedRowConcealmentTests(TestCase):
         self.assertIn(provider, visible)
         self.assertIn(friend_upload, visible)
         self.assertNotIn(stranger_upload, visible)
+
+    def test_a_strangers_photo_from_their_own_library_is_concealed(self) -> None:
+        """A photo out of the uploader's own Immich/Google Photos/Flickr library.
+
+        These are the stranger's own pictures - the picker dialog fetched them
+        from an account they connected - so a concealed viewer must not see them,
+        exactly as for a form upload. They carry a provider's name in ``source``
+        and no ``media_source_key``, which is what separates them from a row
+        materialised out of somebody else's provider search results.
+        """
+        from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        personal = [
+            baker.make(
+                Image,
+                wiki=self.wiki,
+                profile=self.stranger,
+                source=source,
+                media_type=MediaKind.PHOTO,
+                image=f"pin_images/{source}.png",
+            )
+            for source in (ImageSource.IMMICH, ImageSource.GOOGLE_PHOTOS, ImageSource.FLICKR)
+        ]
+
+        visible = conceal_rows(Image.objects.filter(wiki=self.wiki), self.viewer)
+
+        for row in personal:
+            with self.subTest(source=row.source):
+                self.assertNotIn(row, visible, f"a stranger's own {row.source} photo must be concealed, like any other photo they took")
+
+    def test_automatic_imagery_belonging_to_nobody_stays(self) -> None:
+        """``photo_enrichment`` writes profile-less rows, and they are not a contribution.
+
+        Google Maps / Street View / Satellite imagery is fetched for a place, so
+        it has no uploader and carries no ``media_source_key`` either. An
+        ownership test that looked only at ``media_source_key`` would read these
+        as somebody's own photo and conceal the automatic imagery a fresh wiki
+        is supposed to show.
+        """
+        from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        automatic = baker.make(
+            Image,
+            wiki=self.wiki,
+            profile=None,
+            source=ImageSource.GOOGLE_STREET_VIEW,
+            media_type=MediaKind.PHOTO,
+            image="pin_images/sv.png",
+        )
+
+        self.assertIn(automatic, conceal_rows(Image.objects.filter(wiki=self.wiki), self.viewer))
+
+    def test_your_own_library_photo_is_still_shown_to_you(self) -> None:
+        """The other half: concealment hides strangers, not the viewer."""
+        from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        mine = baker.make(
+            Image,
+            wiki=self.wiki,
+            profile=self.viewer,
+            source=ImageSource.IMMICH,
+            media_type=MediaKind.PHOTO,
+            image="pin_images/mine.png",
+        )
+
+        self.assertIn(mine, conceal_rows(Image.objects.filter(wiki=self.wiki), self.viewer))
 
     def test_a_provider_alias_stays_and_a_strangers_goes(self) -> None:
         """Provenance is the alias's own source, not created_by."""

@@ -70,14 +70,14 @@ def _attr_ids(*attrs: str) -> Callable[[Any], list[int]]:
 
 
 def _is_genuine_upload(instance: Any) -> bool:
-    """True when an Image row is the user's own upload, not an external photo.
+    """True when an Image row is the user's own photo, not somebody else's.
 
     Attaching a Yelp or Wikimedia photo creates an ``Image`` too, and that must
-    not extend a photo-upload streak.
+    not extend a photo-upload streak. A photo picked out of the user's own
+    Immich server or Google Photos library is their own and does extend it,
+    which is why this asks ``is_own_contribution`` rather than ``source``.
     """
-    from urbanlens.dashboard.models.images.model import ImageSource
-
-    return instance.source == ImageSource.UPLOAD
+    return instance.is_own_contribution
 
 
 def _visit_profile_ids(instance: Any) -> list[int]:

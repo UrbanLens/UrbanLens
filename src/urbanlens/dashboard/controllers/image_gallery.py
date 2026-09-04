@@ -383,7 +383,7 @@ class PinImageView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
-        withdrawing = request.GET.get("from_wiki") == "1" and img.source == ImageSource.UPLOAD
+        withdrawing = request.GET.get("from_wiki") == "1" and img.is_own_contribution
         if img.wiki_id is not None and not withdrawing:
             Image.objects.filter(pk=img.pk).update(pin=None)
             ImageAttachment.objects.filter(image=img, pin__slug=pin_slug).delete()

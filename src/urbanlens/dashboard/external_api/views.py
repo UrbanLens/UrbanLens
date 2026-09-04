@@ -1361,7 +1361,7 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
             # no-oracle policy the rest of this API and the media gate follow.
             return Response({"error": "No such photo."}, status=404)
 
-        withdrawing = request.query_params.get("from_wiki", "").lower() in {"1", "true", "yes"} and image.source == ImageSource.UPLOAD
+        withdrawing = request.query_params.get("from_wiki", "").lower() in {"1", "true", "yes"} and image.is_own_contribution
         if image.wiki_id is not None and not withdrawing:
             Image.objects.filter(pk=image.pk).update(pin=None)
             return Response(status=204)

@@ -183,9 +183,25 @@ class MetricComputationTests(AchievementTestsBase):
         self.assertEqual(get_metric("pins_created").value_for(self.profile), 3)
 
     def test_photos_uploaded_excludes_external_sources(self) -> None:
-        """Attaching someone else's Yelp photo is not an upload."""
+        """Attaching someone else's Yelp photo is not an upload.
+
+        The Yelp row carries a ``media_source_key`` because a real materialised
+        row always does - that column, not ``source``, is what says the profile
+        merely up-voted somebody else's photograph.
+        """
         baker.make(Image, profile=self.profile, source=ImageSource.UPLOAD, _quantity=2)
-        baker.make(Image, profile=self.profile, source=ImageSource.YELP)
+        baker.make(Image, profile=self.profile, source=ImageSource.YELP, media_source_key="yelp", media_item_key="0" * 40)
+        self.assertEqual(get_metric("photos_uploaded").value_for(self.profile), 2)
+
+    def test_photos_uploaded_counts_a_photo_from_your_own_library(self) -> None:
+        """An Immich or Google Photos pick is the user's own picture.
+
+        Here so the gate cannot be narrowed back to ``source == UPLOAD``: that
+        reads green against the Yelp case above while silently dropping every
+        photo a user imported from an account they connected.
+        """
+        baker.make(Image, profile=self.profile, source=ImageSource.IMMICH)
+        baker.make(Image, profile=self.profile, source=ImageSource.GOOGLE_PHOTOS)
         self.assertEqual(get_metric("photos_uploaded").value_for(self.profile), 2)
 
     def test_vulnerability_and_danger_are_counted_independently(self) -> None:
@@ -385,7 +401,7 @@ class SignalIntegrationTests(AchievementTestsBase):
 
     def test_external_photo_does_not_extend_the_upload_streak(self) -> None:
         """Attaching a Yelp photo creates an Image, but is not an upload."""
-        baker.make(Image, profile=self.profile, source=ImageSource.YELP)
+        baker.make(Image, profile=self.profile, source=ImageSource.YELP, media_source_key="yelp", media_item_key="0" * 40)
         self.assertFalse(ProfileActivityDay.objects.filter(profile=self.profile, kind=ActivityKind.PHOTO).exists())
 
         baker.make(Image, profile=self.profile, source=ImageSource.UPLOAD)

@@ -15,6 +15,36 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 
+def _own_contribution_q() -> Q:
+    """Build the ORM form of ``Image.is_own_contribution``.
+
+    Three conjuncts, each ruling out a real row shape that ``source`` alone
+    misreads:
+
+    * ``profile`` is set. ``services.photos.photo_enrichment`` writes
+      profile-less rows - Google Maps/Street View/Satellite imagery fetched for
+      a place, belonging to nobody.
+    * ``source`` names a personal library (see
+      ``ImageSource.personal_library``). This is what excludes a photograph the
+      profile merely up-voted, and ``LINKED_URL`` bytes fetched because a page
+      referred to them.
+    * No ``media_source_key``. Flickr is both a connected account and a Media
+      gallery panel, and ``media_materialize`` translates an unrecognised panel
+      key to ``UPLOAD`` - so a materialised row can carry a personal-library
+      value in ``source`` and must still be excluded.
+
+    Migration 0030 wrote ``""`` rather than NULL, so both spellings mean
+    "absent" and this has to say so. Normalising the column to NULL would let
+    that half collapse to a plain ``isnull`` test.
+
+    Returns:
+        A ``Q`` matching rows whose ``profile`` is the photographer.
+    """
+    from urbanlens.dashboard.models.images.model import ImageSource
+
+    return Q(profile__isnull=False) & Q(source__in=ImageSource.personal_library()) & (Q(media_source_key__isnull=True) | Q(media_source_key=""))
+
+
 def _named_this_viewer(viewer_profile: Profile) -> Q:
     """Containers whose membership *is* the consent, so settings do not apply.
 
@@ -321,6 +351,33 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
             Filtered queryset ordered by upload time descending.
         """
         return self.filter(profile=profile).order_by("-created")
+
+    def own_contributions(self) -> Self:
+        """Filter to rows whose ``profile`` is the photographer, not the up-voter.
+
+        The distinction ``source`` cannot draw: a photo imported from the
+        uploader's own Immich server or Google Photos library carries that
+        provider's name in ``source`` while still being their own picture,
+        whereas a row materialised from somebody else's provider search carries
+        the up-voter in ``profile``. Ownership questions - concealment, who may
+        withdraw a photo from a wiki, whether a contribution earns reputation -
+        all want this rather than ``source == UPLOAD``.
+
+        Fails closed: a future integration that sets no ``media_source_key`` is
+        treated as personal, so it is concealed rather than exposed.
+
+        Returns:
+            Rows the profile actually contributed.
+        """
+        return self.filter(_own_contribution_q())
+
+    def provider_media(self) -> Self:
+        """Filter to rows materialised from a provider's results - the complement.
+
+        Returns:
+            Rows whose ``profile`` is an up-voter rather than the photographer.
+        """
+        return self.exclude(_own_contribution_q())
 
     def photos(self) -> Self:
         """Filter to photos only - Vault Photos' scope, excluding videos/documents."""
