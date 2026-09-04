@@ -1,6 +1,15 @@
 ^api\.anthropic\.com$
 ^api\.openai\.com$
+# Cloudflare Workers AI is reachable two ways and a deployment picks one with
+# UL_CLOUDFLARE_WORKER_AI_ENDPOINT: api.cloudflare.com is the direct Workers
+# AI API, gateway.ai.cloudflare.com is the AI Gateway in front of it. Both are
+# listed because the endpoint is admin-configured free text, and getting this
+# wrong is silent: policy.validate_cloudflare_endpoint accepts any
+# *.cloudflare.com host, so a mismatch here fails at the proxy at runtime
+# rather than at startup. Cloudflare is the default vision provider AND the
+# only source of the image classifier, so a block here takes both out.
 ^api\.cloudflare\.com$
+^gateway\.ai\.cloudflare\.com$
 # ai-worker's own outbound tool calls (services/ai/tools/routing.py,
 # weather.py) - added when those tools shipped; this file otherwise only
 # ever needed ai-inference's provider hosts above. router.project-osrm.org is

@@ -104,6 +104,40 @@ proxy its route out. Renaming either - or adding a third proxy network that
 sorts earlier - would silently cut the proxy's egress, and every AI call with
 it.
 
+### Verifying the allowlist for real
+
+The allowlist is the boundary, and a host missing from it fails at runtime
+rather than at startup - `policy.validate_cloudflare_endpoint` will happily
+accept a `*.cloudflare.com` endpoint the proxy then refuses. That already
+happened once: the list carried `api.cloudflare.com` (the direct Workers AI
+API) while the deployment's `UL_CLOUDFLARE_WORKER_AI_ENDPOINT` pointed at
+`gateway.ai.cloudflare.com` (the AI Gateway in front of it), which silently
+took out the default vision provider and the only image classifier.
+
+`EgressFilterTests` pins the intended host set, but only a running tinyproxy
+proves the regexes behave. That check needs no API keys, no database and no
+existing environment - build the egress image and probe through it:
+
+```sh
+cd src/urbanlens/config/egress && docker build -t egress-check .
+docker run -d --rm --name egress-check -p 127.0.0.1:38888:8888   --user tinyproxy:tinyproxy --read-only --cap-drop ALL   --security-opt no-new-privileges:true   --tmpfs /var/run/tinyproxy:size=1m,mode=1777 egress-check
+# a numeric HTTP code means the proxy let the connection through to the real
+# host; a curl error means tinyproxy refused it
+for h in api.anthropic.com gateway.ai.cloudflare.com redata.urbanlens.org; do
+  printf '%s ' "$h"
+  curl -s -o /dev/null -w '%{http_code}
+' --max-time 12 -x http://127.0.0.1:38888 "https://$h/" || echo DENIED
+done
+docker logs egress-check 2>&1 | grep 'Proxying refused'
+docker rm -f egress-check
+```
+
+Include a look-alike such as `evil.cloudflare.com.attacker.net` - the entries
+are anchored (`^...$`) precisely so a suffix match cannot slip past, and that
+is worth re-proving whenever the filter changes. `FilterType ere` is also
+load-bearing: it decides whether those lines are extended or basic regexes,
+and the older `FilterExtended Yes` spelling is deprecated.
+
 ## "No REData, no web", enforced at three levels
 
 1. **Env** - `ai-worker`'s compose entry doesn't carry `UL_REDATA_API_URL`/
