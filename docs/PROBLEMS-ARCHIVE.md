@@ -11,6 +11,46 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-03: a permanently failed media task leaves the upload silently unfinished
+
+Found while closing the Celery requeue loop (`CELERY_TASK_REJECT_ON_WORKER_LOST`,
+see `docs/NOTES-celery-acks.md`), not caused by it.
+
+`process_image_upload` and its siblings set `Image.upload_processed_at` on
+success. Nothing sets anything on permanent failure: there is no `task_failure`
+receiver and no per-task `on_failure`, so a row whose task dies keeps
+`upload_processed_at = None` forever. The uploader sees a photo that never
+finishes processing, with no error and no retry affordance, and nothing
+server-side distinguishes "still running" from "died three days ago".
+
+`autoretry_for=(OSError,)` does not cover it — those retries run *inside* the
+child, so any failure that kills the child (OOM, decoder segfault) never reaches
+them.
+
+This predates the requeue change and is not made worse by it: under the old
+settings such a task looped forever, so the row was equally never marked *and* a
+concurrency slot was consumed indefinitely. The change makes the failure
+terminal and visible in `urbanlens_celery_tasks_total{state="failed"}`, which is
+what makes the missing row-level state worth fixing now rather than before.
+
+Likely shape: a `task_failure` receiver (or a shared task base class) that
+records the failure on the row, plus a UI state for it. Wants a decision on
+whether failed uploads are retryable by the user or discarded.
+
+**Fixed 2026-09-04**, to the owner's ruling: the user retries, and if they do not, the upload is discarded. An uploader who navigated away before the failure is covered by the same mechanism - the reviewable row and the `PHOTO_UPLOAD_FAILED` notification both outlive the page they were on.
+
+`Image.upload_failed_at` is the missing counterpart to `upload_processed_at`, and `PhotoUploadFailure` gained `image`/`kind`/`user_retries` so a failure with a surviving row can be re-run server-side rather than asking the user to find the file again. `services/media/upload_failures.py` owns the transitions.
+
+**Detection is the existing sweep's job, not a `task_failure` receiver's.** The sweep already runs hourly and already knows how to re-enqueue; giving it a budget is a smaller change than a second decision-maker in the worker's MainProcess, where a stale DB connection after a restart is its own failure mode. A receiver would only make the same outcome arrive sooner, and wants live verification against a real worker (kill a child mid-task, confirm the row is stamped) before it ships - deliberately not done on a source read.
+
+**The budget closed a loop this entry did not name.** `requeue_stalled_pending_uploads` re-fed a row whose child keeps dying on every tick, costing a sandbox slot each time on a file that had already killed a worker, and telling the uploader nothing. `upload_sweep_attempts` bounds it. Counted by the sweep rather than inside the task on purpose: the task legitimately re-runs on already-processed rows (`wiki_share`, the thumbnail backfill) and has its own retry ladder, so counting there would count several unrelated things at once.
+
+Bounded in all three directions - two sweep passes, two user retries, a week before an untouched failure is discarded. The file most likely to reach here is one that deterministically kills a decoder, and none of these may become a way to keep feeding it to a two-slot worker.
+
+`pending_scan` is deliberately left set on failure: it is what keeps unscanned, unstripped bytes out of every gallery, and a processing failure is exactly the case where the scan did not finish.
+
+**Still open, and now recorded rather than assumed**: the report that led here claimed a raising decoder loops forever. It does not - `_process_photo_upload` catches `OSError`/`ValueError` and the retry ladder ends at `_reject_image_upload`. What was genuinely stranded is a row whose *child process* died. Also untouched: the already-cleared-row case (`wiki_share` re-processing) is not swept, because the obvious predicate for it (`upload_processed_at__isnull=True`) matches most of the table - migration 0048 never backfilled that column. It would need its own explicitly bounded sweep with a `created__gt` floor.
+
 ## RESOLVED 2026-08-12: a password reset does not evict an intruder who minted an API key
 
 Resetting a password invalidates every session (Django rotates the session auth hash), which is
