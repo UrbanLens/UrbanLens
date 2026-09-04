@@ -1,3 +1,20 @@
+# dashboard/tests/ — Writing Tests Here
+
+Applies to `src/urbanlens/dashboard/tests/`. pytest and Model Bakery; run with
+`--reuse-db` and a unique `UL_TEST_DB_NAME`.
+
+Test everything substantive. Do not write trivial tests — asserting a log
+message's exact wording makes an unrelated edit fail the suite. Mock and patch
+anything that leaves the process. Prefer hypothesis property tests where a
+property exists, and `SimpleTestCase` wherever the test does not need the DB.
+
+Ruff lints this directory, but only for mechanical hygiene: import order, quote
+style, modernisation. It will not argue about a deliberately wrong type, a
+private access, a fake password or a naive datetime. Test files are formatted at
+120 columns, not the project's 250 — see `[tool.ruff.lint.per-file-ignores]`.
+
+## Gotchas
+
 - **Hypothesis `@given` with `self.client` works, but is slow** (changed 2026-07-27).
 - **`UL_CELERY_TASK_ALWAYS_EAGER=True`** runs dispatched
   tasks *inline, inside the request*. Any test asserting a request did **not** do background work
