@@ -31,31 +31,50 @@ class EmailVerificationLimitTests(TestCase):
 
     def _add(self, address: str):
         with mock.patch("urbanlens.dashboard.controllers.userprofile._send_profile_email_verification") as send:
-            response = self.client.post(self.url, {"action": "add_email", "email_input": address}, HTTP_HX_REQUEST="true")
+            response = self.client.post(
+                self.url, {"action": "add_email", "email_input": address}, HTTP_HX_REQUEST="true"
+            )
         return response, send
 
     def test_adding_an_email_logs_the_send_in_the_ledger(self) -> None:
         response, send = self._add("second@example.test")
         self.assertEqual(response.status_code, 200)
         send.assert_called_once()
-        self.assertTrue(EmailSendLog.objects.filter(sender=self.profile, email_type=EmailType.EMAIL_VERIFICATION).exists())
+        self.assertTrue(
+            EmailSendLog.objects.filter(sender=self.profile, email_type=EmailType.EMAIL_VERIFICATION).exists()
+        )
 
     def test_an_exhausted_ledger_blocks_the_add_send(self) -> None:
-        with mock.patch("urbanlens.dashboard.controllers.userprofile._send_profile_email_verification") as send:
-            with mock.patch("urbanlens.dashboard.services.security.email_safety.email_rate_limit_error", return_value="Too many emails - try later."):
-                response = self.client.post(self.url, {"action": "add_email", "email_input": "relay@example.test"}, HTTP_HX_REQUEST="true")
+        with (
+            mock.patch("urbanlens.dashboard.controllers.userprofile._send_profile_email_verification") as send,
+            mock.patch(
+                "urbanlens.dashboard.services.security.email_safety.email_rate_limit_error",
+                return_value="Too many emails - try later.",
+            ),
+        ):
+            response = self.client.post(
+                self.url, {"action": "add_email", "email_input": "relay@example.test"}, HTTP_HX_REQUEST="true"
+            )
         self.assertEqual(response.status_code, 200)
         send.assert_not_called()
-        self.assertFalse(self.profile.secondary_emails.exists(), "a blocked send must not leave a pending unverifiable row behind")
+        self.assertFalse(
+            self.profile.secondary_emails.exists(), "a blocked send must not leave a pending unverifiable row behind"
+        )
 
     def test_resend_is_cooled_down_per_address(self) -> None:
         self._add("second@example.test")
         email_id = self.profile.secondary_emails.get().pk
         with mock.patch("urbanlens.dashboard.controllers.userprofile._send_profile_email_verification") as send:
-            response = self.client.post(self.url, {"action": "resend_email_verification", "email_id": email_id}, HTTP_HX_REQUEST="true")
+            response = self.client.post(
+                self.url, {"action": "resend_email_verification", "email_id": email_id}, HTTP_HX_REQUEST="true"
+            )
         self.assertEqual(response.status_code, 200)
         send.assert_not_called()
-        self.assertEqual(EmailSendLog.objects.filter(sender=self.profile, email_type=EmailType.EMAIL_VERIFICATION).count(), 1, "the mail-bomb path: resend within the cooldown must not send")
+        self.assertEqual(
+            EmailSendLog.objects.filter(sender=self.profile, email_type=EmailType.EMAIL_VERIFICATION).count(),
+            1,
+            "the mail-bomb path: resend within the cooldown must not send",
+        )
 
     def test_resend_works_after_the_cooldown(self) -> None:
         self._add("second@example.test")
@@ -65,6 +84,8 @@ class EmailVerificationLimitTests(TestCase):
         EmailSendLog.objects.filter(sender=self.profile).update(created=stale)
         email_id = self.profile.secondary_emails.get().pk
         with mock.patch("urbanlens.dashboard.controllers.userprofile._send_profile_email_verification") as send:
-            response = self.client.post(self.url, {"action": "resend_email_verification", "email_id": email_id}, HTTP_HX_REQUEST="true")
+            response = self.client.post(
+                self.url, {"action": "resend_email_verification", "email_id": email_id}, HTTP_HX_REQUEST="true"
+            )
         self.assertEqual(response.status_code, 200)
         send.assert_called_once()

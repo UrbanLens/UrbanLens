@@ -22,7 +22,14 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
+from urbanlens.dashboard.models.pin_suggestions.model import (
+    MAX_SUGGESTION_ALIASES,
+    MAX_SUGGESTION_LINKS,
+    MAX_SUGGESTION_PHOTOS,
+    PinSuggestion,
+    PinSuggestionOrigin,
+    PinSuggestionStatus,
+)
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
@@ -80,7 +87,9 @@ class PinSuggestionsViewTests(TestCase):
         self.assertEqual(suggestion.suggested_description, "Rusted catwalks, watch the floor.")
         self.assertEqual(suggestion.suggested_pin_type, "building")
         self.assertEqual(suggestion.suggested_aliases, ["The Sawmill", "Old Mill Ruins"])
-        self.assertEqual(suggestion.suggested_links, [{"name": "Historical society", "url": "https://example.test/mill"}])
+        self.assertEqual(
+            suggestion.suggested_links, [{"name": "Historical society", "url": "https://example.test/mill"}]
+        )
 
     def test_accepting_never_fabricates_a_visit(self) -> None:
         """A discovery submission isn't evidence anyone visited - visit_dates
@@ -90,10 +99,15 @@ class PinSuggestionsViewTests(TestCase):
         self.assertEqual(suggestion.visit_dates, [])
 
     def test_photos_are_downloaded_and_staged_as_candidate_images(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()), mock.patch(
-            "socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()
+            ),
+            mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
         ):
-            response = self._post({"name": "Old Mill", "latitude": 42.5, "longitude": -73.5, "photos": ["https://example.test/photo.jpg"]})
+            response = self._post(
+                {"name": "Old Mill", "latitude": 42.5, "longitude": -73.5, "photos": ["https://example.test/photo.jpg"]}
+            )
         self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.json()["photos_attached"], 1)
         suggestion = PinSuggestion.objects.get(pk=response.json()["suggestion_id"])
@@ -118,7 +132,9 @@ class PinSuggestionsViewTests(TestCase):
         self.assertFalse(PinSuggestion.objects.exists())
 
     def test_too_many_aliases_is_rejected(self) -> None:
-        response = self._post({"latitude": 42.5, "longitude": -73.5, "aliases": [f"Alias {i}" for i in range(MAX_SUGGESTION_ALIASES + 1)]})
+        response = self._post(
+            {"latitude": 42.5, "longitude": -73.5, "aliases": [f"Alias {i}" for i in range(MAX_SUGGESTION_ALIASES + 1)]}
+        )
         self.assertEqual(response.status_code, 400)
         self.assertFalse(PinSuggestion.objects.exists())
 
@@ -135,7 +151,9 @@ class PinSuggestionsViewTests(TestCase):
         self.assertFalse(PinSuggestion.objects.exists())
 
     def test_non_http_link_scheme_is_rejected(self) -> None:
-        response = self._post({"latitude": 42.5, "longitude": -73.5, "links": [{"name": "Bad", "url": "javascript:alert(1)"}]})
+        response = self._post(
+            {"latitude": 42.5, "longitude": -73.5, "links": [{"name": "Bad", "url": "javascript:alert(1)"}]}
+        )
         self.assertEqual(response.status_code, 400)
         self.assertFalse(PinSuggestion.objects.exists())
 
@@ -171,12 +189,16 @@ class PinSuggestionsViewTests(TestCase):
 
     def test_a_logged_in_session_alone_does_not_authenticate(self) -> None:
         self.client.force_login(self.user)
-        response = self.client.post(self.url, data={"latitude": 42.5, "longitude": -73.5}, content_type="application/json")
+        response = self.client.post(
+            self.url, data={"latitude": 42.5, "longitude": -73.5}, content_type="application/json"
+        )
         self.assertEqual(response.status_code, 401)
 
     def test_cannot_submit_a_suggestion_for_another_user_via_session_alone(self) -> None:
         other = baker.make(User)
         self.client.force_login(other)
-        response = self.client.post(self.url, data={"latitude": 42.5, "longitude": -73.5}, content_type="application/json")
+        response = self.client.post(
+            self.url, data={"latitude": 42.5, "longitude": -73.5}, content_type="application/json"
+        )
         self.assertEqual(response.status_code, 401)
         self.assertFalse(PinSuggestion.objects.filter(profile=Profile.objects.get(user=other)).exists())

@@ -118,7 +118,7 @@ class LabelImageMembershipViewTests(TestCase):
         self.profile = self.user.profile
         self.client.force_login(self.user)
         self.image = baker.make(Image, profile=self.profile)
-        self.label = ensure_label( profile=self.profile, kind=KIND_MEDIA, name="Interior")
+        self.label = ensure_label(profile=self.profile, kind=KIND_MEDIA, name="Interior")
 
     def test_add_and_remove_label(self) -> None:
         add_response = self.client.post(

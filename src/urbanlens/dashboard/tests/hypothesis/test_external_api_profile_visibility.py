@@ -124,7 +124,9 @@ class ProfileDetailVisibilityTests(TestCase):
         Returns:
             The HTTP response.
         """
-        return self.client.get(reverse("external_api:profiles.detail", kwargs={"profile_slug": slug}), **_bearer(self.raw_key))
+        return self.client.get(
+            reverse("external_api:profiles.detail", kwargs={"profile_slug": slug}), **_bearer(self.raw_key)
+        )
 
     def test_non_permitted_visibility_always_404_never_403(self) -> None:
         """Across every VisibilityChoice, a stranger gets 200 or 404 - never 403."""
@@ -335,7 +337,9 @@ class ProfileNotesTests(TestCase):
 
     def test_multiple_notes_per_subject_are_allowed(self) -> None:
         for text in ("first", "second"):
-            response = self.client.post(self.url, {"content": text}, content_type="application/json", **_bearer(self.raw_key))
+            response = self.client.post(
+                self.url, {"content": text}, content_type="application/json", **_bearer(self.raw_key)
+            )
             self.assertEqual(response.status_code, 201)
 
         listing = self.client.get(self.url, **_bearer(self.raw_key))
@@ -362,7 +366,9 @@ class ProfileNotesTests(TestCase):
         self.assertEqual(response.json(), [])
 
     def test_another_users_note_uuid_reads_as_missing(self) -> None:
-        create = self.client.post(self.url, {"content": "mine"}, content_type="application/json", **_bearer(self.raw_key))
+        create = self.client.post(
+            self.url, {"content": "mine"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         note_uuid = create.json()["uuid"]
 
         stranger = baker.make(User)

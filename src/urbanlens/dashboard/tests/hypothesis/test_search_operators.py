@@ -153,7 +153,10 @@ class ScanPropertyTests(SimpleTestCase):
         self.assertEqual(result.clauses, [])
         self.assertEqual(result.text.split(), raw.split())
 
-    @given(st.sampled_from([operator.key for operator in OPERATORS]), st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789", min_size=1, max_size=12))
+    @given(
+        st.sampled_from([operator.key for operator in OPERATORS]),
+        st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789", min_size=1, max_size=12),
+    )
     def test_any_operator_with_a_simple_value_round_trips(self, key: str, value: str) -> None:
         result = scan(f"{key}:{value}")
         self.assertEqual(len(result.clauses), 1)
@@ -223,7 +226,7 @@ class ParseQueryOperatorTests(SimpleTestCase):
         self.assertEqual(viaoperator.date_end, viaenglish.date_end)
 
     def test_different_date_operators_are_distinguished(self) -> None:
-        """"Visited in March" and "added in March" are different questions."""
+        """ "Visited in March" and "added in March" are different questions."""
         from urbanlens.dashboard.services.global_search.parser import parse_query
 
         self.assertEqual(parse_query("visited:2019").date_field, "visited")

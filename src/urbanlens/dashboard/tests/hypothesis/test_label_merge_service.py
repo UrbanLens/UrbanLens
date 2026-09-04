@@ -110,7 +110,10 @@ class LabelMergeServiceTests(TestCase):
         pin.labels.add(source)
 
         # Fail after the attachments have moved but before the delete commits.
-        with patch("urbanlens.dashboard.services.labels.merge._reparent_children", side_effect=RuntimeError("boom")), self.assertRaises(RuntimeError):
+        with (
+            patch("urbanlens.dashboard.services.labels.merge._reparent_children", side_effect=RuntimeError("boom")),
+            self.assertRaises(RuntimeError),
+        ):
             merge_labels(target=target, sources=[source], profile=self.profile)
 
         # Everything rolled back: the source still exists and still owns its pin.

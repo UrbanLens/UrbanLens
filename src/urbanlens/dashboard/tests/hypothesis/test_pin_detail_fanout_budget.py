@@ -10,7 +10,7 @@ from whichever panel arrives when the pool is full.
 **This test cannot reproduce that**, and it is worth being clear about the
 limits rather than implying otherwise. Exhaustion needs concurrency against a
 real pool, which does not exist in a suite that issues one request at a time -
-see `docs/TEST_COVERAGE_GAPS.md`, where the pool itself is listed as
+see `docs/audits/TEST_COVERAGE_GAPS.md`, where the pool itself is listed as
 integration-only. What a unit test *can* hold is the number, which is the thing
 that causes it, and which creeps up one innocuous panel at a time.
 

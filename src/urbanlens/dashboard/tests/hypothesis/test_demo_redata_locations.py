@@ -22,7 +22,9 @@ from urbanlens.dashboard.services.demo.locations import merge_into_manifest, rea
 # Both imported *inside* redata_demo_locations() (module-level import would be
 # a demo-only dependency at import time for every process), so patching them
 # has to target where they are actually defined, not locations.py's namespace.
-_GATEWAY_PATH = "urbanlens.dashboard.services.apis.locations.redata_public_locations_gateway.RedataPublicLocationsGateway"
+_GATEWAY_PATH = (
+    "urbanlens.dashboard.services.apis.locations.redata_public_locations_gateway.RedataPublicLocationsGateway"
+)
 _CONFIGURED_PATH = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 
 _RECORD = {
@@ -43,7 +45,9 @@ class RedataPublicLocationsGatewayTests(SimpleTestCase):
     def test_a_non_200_response_degrades_to_an_empty_list_rather_than_raising(self) -> None:
         """REData not having this endpoint deployed yet must not crash seeding."""
         gateway = RedataPublicLocationsGateway(base_url="https://redata.test", api_key="k")
-        with mock.patch.object(RedataPublicLocationsGateway, "get_json", side_effect=LocationContextUnavailableError("not_found", "404")):
+        with mock.patch.object(
+            RedataPublicLocationsGateway, "get_json", side_effect=LocationContextUnavailableError("not_found", "404")
+        ):
             self.assertEqual(gateway.list_public_locations(), [])
 
     def test_a_non_dict_or_missing_results_key_is_treated_as_empty(self) -> None:
@@ -55,7 +59,9 @@ class RedataPublicLocationsGatewayTests(SimpleTestCase):
 
     def test_results_pass_through_unchanged(self) -> None:
         gateway = RedataPublicLocationsGateway(base_url="https://redata.test", api_key="k")
-        with mock.patch.object(RedataPublicLocationsGateway, "get_json", return_value={"count": 1, "results": [_RECORD]}):
+        with mock.patch.object(
+            RedataPublicLocationsGateway, "get_json", return_value={"count": 1, "results": [_RECORD]}
+        ):
             self.assertEqual(gateway.list_public_locations(), [_RECORD])
 
     def test_no_coordinate_is_sent_when_browsing_the_whole_catalog(self) -> None:
@@ -93,7 +99,17 @@ class RedataDemoLocationsTests(SimpleTestCase):
         with mock.patch(_CONFIGURED_PATH, return_value=True), mock.patch(_GATEWAY_PATH) as gateway_cls:
             gateway_cls.return_value.list_public_locations.return_value = [_RECORD]
             entries = redata_demo_locations()
-        self.assertEqual(entries, [{"latitude": 41.7, "longitude": -72.7, "official_name": "Example City", "wiki": {"name": "Example City", "aliases": [], "photos": []}}])
+        self.assertEqual(
+            entries,
+            [
+                {
+                    "latitude": 41.7,
+                    "longitude": -72.7,
+                    "official_name": "Example City",
+                    "wiki": {"name": "Example City", "aliases": [], "photos": []},
+                }
+            ],
+        )
 
 
 class ManifestMergeTests(SimpleTestCase):
@@ -104,7 +120,9 @@ class ManifestMergeTests(SimpleTestCase):
         self.manifest = Path(self.directory.name) / "manifest.json"
 
     def _entries(self, *pairs: tuple[float, float]) -> list[dict]:
-        return [{"latitude": lat, "longitude": lng, "official_name": f"{lat},{lng}", "wiki": None} for lat, lng in pairs]
+        return [
+            {"latitude": lat, "longitude": lng, "official_name": f"{lat},{lng}", "wiki": None} for lat, lng in pairs
+        ]
 
     def test_merging_into_an_empty_manifest_writes_everything(self) -> None:
         with mock.patch("urbanlens.UrbanLens.settings.app.settings.demo_locations_file", str(self.manifest)):

@@ -34,7 +34,9 @@ _COORDS = itertools.count()
 
 def _make_pin_with_label(profile, label) -> Pin:
     offset = next(_COORDS)
-    location = baker.make("dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}")
+    location = baker.make(
+        "dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}"
+    )
     pin = baker.make(Pin, profile=profile, location=location)
     pin.labels.add(label)
     return pin
@@ -54,10 +56,15 @@ class LabelSaveRefreshesMapPinCacheTests(TestCase):
         unrelated_pin = baker.make(
             Pin,
             profile=self.profile,
-            location=baker.make("dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}"),
+            location=baker.make(
+                "dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}"
+            ),
         )
 
-        with mock.patch("urbanlens.dashboard.services.map_pins.MapPinCache") as mock_cache_cls, self.captureOnCommitCallbacks(execute=True):
+        with (
+            mock.patch("urbanlens.dashboard.services.map_pins.MapPinCache") as mock_cache_cls,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             label.icon = "explore"
             label.save(update_fields=["icon"])
 
@@ -67,7 +74,10 @@ class LabelSaveRefreshesMapPinCacheTests(TestCase):
 
     def test_creating_a_label_does_not_touch_the_cache(self) -> None:
         """A brand-new label isn't attached to any pin yet - nothing to refresh."""
-        with mock.patch("urbanlens.dashboard.services.map_pins.MapPinCache") as mock_cache_cls, self.captureOnCommitCallbacks(execute=True):
+        with (
+            mock.patch("urbanlens.dashboard.services.map_pins.MapPinCache") as mock_cache_cls,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             baker.make(Label, profile=self.profile, kind="tag", name="New Label")
 
         mock_cache_cls.return_value.upsert_pin.assert_not_called()
@@ -82,11 +92,14 @@ class LabelCustomizationSaveRefreshesMapPinCacheTests(TestCase):
         self.other_profile = self.other_user.profile
 
     def test_customizing_a_global_label_refreshes_only_own_pins(self) -> None:
-        global_label = ensure_label( profile=None, kind="tag", name="Visited", icon="check")
+        global_label = ensure_label(profile=None, kind="tag", name="Visited", icon="check")
         own_pin = _make_pin_with_label(self.profile, global_label)
         other_profiles_pin = _make_pin_with_label(self.other_profile, global_label)
 
-        with mock.patch("urbanlens.dashboard.services.map_pins.MapPinCache") as mock_cache_cls, self.captureOnCommitCallbacks(execute=True):
+        with (
+            mock.patch("urbanlens.dashboard.services.map_pins.MapPinCache") as mock_cache_cls,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             LabelCustomization.objects.create(profile=self.profile, label=global_label, icon="star")
 
         refreshed_pin_ids = {call.args[0].pk for call in mock_cache_cls.return_value.upsert_pin.call_args_list}

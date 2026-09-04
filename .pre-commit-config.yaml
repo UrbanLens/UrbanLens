@@ -143,6 +143,13 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [manual]
+      - id: docs-refs
+        name: code never cites a docs/ path that does not exist
+        entry: python3 bin/check_docs_refs.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
       - id: ruff-format-check
         name: the whole tree matches the formatter
         entry: python3 bin/precommit_autofix.py --check

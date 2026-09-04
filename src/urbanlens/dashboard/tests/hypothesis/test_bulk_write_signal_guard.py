@@ -55,7 +55,7 @@ REVIEWED: dict[tuple[str, str, str], str] = {
         "photos, they did not take them, and crediting an upload streak for accepting a share "
         "would be wrong. The recipient's photo-count metric is consequently not invalidated at "
         'copy time; it self-heals on their next photo action. See "A guard for the '
-        'bulk-write class, which immediately found a fifth site" in docs/PROBLEMS-ARCHIVE.md.'
+        'bulk-write class, which immediately found a fifth site" in docs/archive/PROBLEMS-ARCHIVE.md.'
     ),
     (
         "dashboard/services/undo/handlers/markup_map.py",
@@ -86,7 +86,12 @@ REVIEWED: dict[tuple[str, str, str], str] = {
 }
 
 #: Signals whose receivers a bulk write bypasses.
-WATCHED_SIGNALS = (("post_save", post_save), ("pre_save", pre_save), ("post_delete", post_delete), ("pre_delete", pre_delete))
+WATCHED_SIGNALS = (
+    ("post_save", post_save),
+    ("pre_save", pre_save),
+    ("post_delete", post_delete),
+    ("pre_delete", pre_delete),
+)
 
 
 def _bulk_write_sites() -> list[tuple[str, int, str, str]]:
@@ -162,7 +167,9 @@ class BulkWriteSignalGuardTests(SimpleTestCase):
                 continue
             if (relative, model, operation) in REVIEWED:
                 continue
-            unreviewed.append(f"  {relative}:{line}\n      {model}.{operation}() skips these signals: {', '.join(sorted(set(connected)))}")
+            unreviewed.append(
+                f"  {relative}:{line}\n      {model}.{operation}() skips these signals: {', '.join(sorted(set(connected)))}"
+            )
 
         self.assertEqual(
             unreviewed,

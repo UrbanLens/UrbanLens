@@ -63,11 +63,20 @@ class FriendshipEverFriendsQuerySetTests(TestCase):
         self.other: User = baker.make(User)
 
     def test_ever_friends_includes_accepted_and_removed(self) -> None:
-        baker.make(Friendship, from_profile=self.user.profile, to_profile=self.other.profile, status=FriendshipStatus.ACCEPTED)
+        baker.make(
+            Friendship, from_profile=self.user.profile, to_profile=self.other.profile, status=FriendshipStatus.ACCEPTED
+        )
         self.assertTrue(Friendship.objects.profile(self.user.profile).ever_friends().exists())
 
     def test_ever_friends_excludes_pending_declined_blocked(self) -> None:
-        for status in (FriendshipStatus.PENDING, FriendshipStatus.REQUESTED, FriendshipStatus.DECLINED, FriendshipStatus.BLOCKED, FriendshipStatus.MUTED, FriendshipStatus.IGNORED):
+        for status in (
+            FriendshipStatus.PENDING,
+            FriendshipStatus.REQUESTED,
+            FriendshipStatus.DECLINED,
+            FriendshipStatus.BLOCKED,
+            FriendshipStatus.MUTED,
+            FriendshipStatus.IGNORED,
+        ):
             other = baker.make(User)
             baker.make(Friendship, from_profile=self.user.profile, to_profile=other.profile, status=status)
         self.assertFalse(Friendship.objects.profile(self.user.profile).ever_friends().exists())

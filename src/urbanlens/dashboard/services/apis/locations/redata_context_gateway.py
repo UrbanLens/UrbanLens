@@ -109,7 +109,7 @@ class RedataLocationContextGateway(Gateway):
     Concrete per-domain subclasses set their own ``service_key`` (for
     UrbanLens's own rate-limit/cost tracking - REData pools its own outbound
     budget across these endpoints server-side regardless, see REData's
-    ``docs/api-reference.md`` "Rate limiting") and add typed accessor methods
+    ``../REData/docs/api-reference.md`` "Rate limiting") and add typed accessor methods
     that call :meth:`near_point` with their own path.
     """
 

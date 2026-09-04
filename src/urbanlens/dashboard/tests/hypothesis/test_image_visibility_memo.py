@@ -36,7 +36,9 @@ _VIEWER_TABLES = ("dashboard_friendships", "dashboard_pins", "dashboard_trip_mem
 
 
 def _viewer_lookup_queries(captured: CaptureQueriesContext) -> list[str]:
-    return [query["sql"] for query in captured.captured_queries if any(table in query["sql"] for table in _VIEWER_TABLES)]
+    return [
+        query["sql"] for query in captured.captured_queries if any(table in query["sql"] for table in _VIEWER_TABLES)
+    ]
 
 
 class ViewerScopePrimingTests(TestCase):
@@ -120,7 +122,9 @@ class ViewerScopePrimingTests(TestCase):
         self.assertIn(stranger.pk, queryset._get_friend_ids(Profile.objects.get(pk=self.viewer.pk)))
 
     def test_priming_does_not_change_the_answer(self) -> None:
-        unprimed = set(Image.objects.all().visible_to(Profile.objects.get(pk=self.viewer.pk)).values_list("pk", flat=True))
+        unprimed = set(
+            Image.objects.all().visible_to(Profile.objects.get(pk=self.viewer.pk)).values_list("pk", flat=True)
+        )
 
         primed_viewer = Profile.objects.get(pk=self.viewer.pk)
         prime_viewer_scope(primed_viewer)

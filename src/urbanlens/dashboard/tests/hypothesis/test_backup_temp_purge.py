@@ -21,7 +21,12 @@ from unittest import mock
 
 from django.conf import settings as django_settings
 
-from urbanlens.core.controllers.backups.db import BACKUP_TIMEOUT_SECONDS, STALE_TEMP_AGE_SECONDS, DatabaseBackup, is_backup_temp_filename
+from urbanlens.core.controllers.backups.db import (
+    BACKUP_TIMEOUT_SECONDS,
+    STALE_TEMP_AGE_SECONDS,
+    DatabaseBackup,
+    is_backup_temp_filename,
+)
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 
@@ -171,7 +176,10 @@ class BackupTimeoutTests(SimpleTestCase):
                 raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 1))
 
             # `db.py` does `from shutil import which`, so the name to patch is its own.
-            with mock.patch("subprocess.run", side_effect=_hang) as mock_run, mock.patch("urbanlens.core.controllers.backups.db.which", return_value="/usr/bin/pg_dump"):
+            with (
+                mock.patch("subprocess.run", side_effect=_hang) as mock_run,
+                mock.patch("urbanlens.core.controllers.backups.db.which", return_value="/usr/bin/pg_dump"),
+            ):
                 self.assertFalse(backup.run())
 
             # A dropped `timeout=` kwarg would restore the original bug (the wedge running

@@ -5,6 +5,7 @@ Pin, using in-memory model instances - no database round-trips required.  Each
 property tested here carries a real invariant that the rest of the application
 depends on.
 """
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -68,8 +69,8 @@ def _make_location(name: str, lat: Decimal | None = None, lon: Decimal | None = 
 
 # -- effective_name -------------------------------------------------------------
 
-class PinEffectiveNameTests(SimpleTestCase):
 
+class PinEffectiveNameTests(SimpleTestCase):
     @given(nonempty_name)
     @settings(max_examples=300)
     def test_name_takes_priority_over_location_name(self, name: str) -> None:
@@ -104,6 +105,7 @@ class PinEffectiveNameTests(SimpleTestCase):
 
 
 # -- effective_latitude / effective_longitude -----------------------------------
+
 
 class PinEffectiveCoordinateTests(SimpleTestCase):
     """effective_latitude/effective_longitude always proxy the linked Location.
@@ -150,8 +152,8 @@ class PinEffectiveCoordinateTests(SimpleTestCase):
 
 # -- effective_date_last_active -------------------------------------------------
 
-class PinEffectiveDateLastActiveTests(SimpleTestCase):
 
+class PinEffectiveDateLastActiveTests(SimpleTestCase):
     @given(reasonable_date)
     @settings(max_examples=300)
     def test_explicit_date_last_active_is_returned_unchanged(self, active_date: date) -> None:
@@ -202,6 +204,7 @@ class PinEffectiveDateLastActiveTests(SimpleTestCase):
 
 # -- effective_icon -------------------------------------------------------------
 
+
 class PinEffectiveIconTests(SimpleTestCase):
     """effective_icon follows a defined priority chain.
 
@@ -249,11 +252,21 @@ class PinEffectiveIconTests(SimpleTestCase):
 
 # -- deduplicated_identity_fields ------------------------------------------------
 
+
 class PinDeduplicatedIdentityFieldsTests(SimpleTestCase):
     """Place Name/Official Name/Address collapse near-duplicate text instead of
     only catching an exact string match."""
 
-    def _make_pin_with_location(self, *, place_name: str | None, has_place_name: bool, official_name: str | None, address_basic: str | None, city: str | None = None, state: str | None = None) -> Pin:
+    def _make_pin_with_location(
+        self,
+        *,
+        place_name: str | None,
+        has_place_name: bool,
+        official_name: str | None,
+        address_basic: str | None,
+        city: str | None = None,
+        state: str | None = None,
+    ) -> Pin:
         loc = MagicMock()
         loc.place_name = place_name
         loc.has_place_name.return_value = has_place_name
@@ -332,5 +345,7 @@ class PinDeduplicatedIdentityFieldsTests(SimpleTestCase):
         self.assertEqual(labels, ["Place Name"])
 
     def test_completely_empty_pin_returns_no_fields(self) -> None:
-        pin = self._make_pin_with_location(place_name=None, has_place_name=False, official_name=None, address_basic=None)
+        pin = self._make_pin_with_location(
+            place_name=None, has_place_name=False, official_name=None, address_basic=None
+        )
         self.assertEqual(pin.deduplicated_identity_fields, [])

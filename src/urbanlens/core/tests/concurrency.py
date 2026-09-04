@@ -74,7 +74,9 @@ def run_concurrently(callables: Sequence[Callable[[], Any]], *, timeout: int = D
 
     still_running = [thread for thread in threads if thread.is_alive()]
     if still_running:
-        raise AssertionError(f"{len(still_running)} of {len(threads)} threads did not finish within {timeout}s - likely a deadlock or a lock held across the barrier")
+        raise AssertionError(
+            f"{len(still_running)} of {len(threads)} threads did not finish within {timeout}s - likely a deadlock or a lock held across the barrier"
+        )
     if failures:
         raise AssertionError(f"concurrent work raised: {failures!r}")
     return results

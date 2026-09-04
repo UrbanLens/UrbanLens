@@ -34,7 +34,9 @@ _GATEWAY_PATH = "urbanlens.dashboard.services.apis.locations.nominatim.Nominatim
 class GeocodeResolutionFallbackTests(SimpleTestCase):
     def _fallback(self, results: list[dict]) -> tuple:
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.geocode_resolution.redata_configured", return_value=False),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.geocode_resolution.redata_configured", return_value=False
+            ),
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.search.return_value = results
@@ -65,8 +67,12 @@ class GeocodeResolutionFallbackTests(SimpleTestCase):
 
         for module in (geocode_resolution, settings_controller):
             source = Path(module.__file__).read_text(encoding="utf-8")
-            self.assertNotIn("geoapiExercises", source, f"{module.__name__} reintroduced the blocked tutorial user agent")
-            self.assertNotIn("from geopy.geocoders", source, f"{module.__name__} bypasses NominatimGateway with a raw geopy client")
+            self.assertNotIn(
+                "geoapiExercises", source, f"{module.__name__} reintroduced the blocked tutorial user agent"
+            )
+            self.assertNotIn(
+                "from geopy.geocoders", source, f"{module.__name__} bypasses NominatimGateway with a raw geopy client"
+            )
 
 
 class SettingsGeocodeFallbackTests(TestCase):
@@ -77,7 +83,9 @@ class SettingsGeocodeFallbackTests(TestCase):
     def test_the_nominatim_fallback_goes_through_the_gateway(self) -> None:
         """With Google yielding nothing, the view's fallback answers via NominatimGateway."""
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway") as google_cls,
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway"
+            ) as google_cls,
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             google_cls.return_value.geocode_place_name.return_value = None

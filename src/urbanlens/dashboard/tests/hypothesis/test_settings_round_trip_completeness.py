@@ -85,7 +85,12 @@ class SettingsRoundTripCompletenessTests(TestCase):
                 setattr(profile, field.name, not default)
         # Privacy settings deliberately set to the most restrictive value: those
         # are the ones where a silently-dropped import is a privacy regression.
-        for name in ("profile_visibility", "comment_visibility", "common_pins_visibility", "trip_pin_location_visibility"):
+        for name in (
+            "profile_visibility",
+            "comment_visibility",
+            "common_pins_visibility",
+            "trip_pin_location_visibility",
+        ):
             setattr(profile, name, VisibilityChoice.NO_ONE)
         profile.save()
         return profile

@@ -88,8 +88,15 @@ class StorageAccountingTests(TestCase):
     def test_combined_totals_agree_with_the_separate_helpers(self) -> None:
         """get_storage_totals is an optimisation, not a second definition."""
         baker.make_recipe("dashboard.image", profile=self.profile, file_size=300)
-        baker.make_recipe("dashboard.image", profile=self.profile, file_size=900, quota_exempt_reason=QuotaExemption.EXTERNAL_MEDIA)
-        baker.make_recipe("dashboard.image", profile=self.profile, file_size=500, quota_exempt_reason=QuotaExemption.COMMUNITY_CONTRIBUTION)
+        baker.make_recipe(
+            "dashboard.image", profile=self.profile, file_size=900, quota_exempt_reason=QuotaExemption.EXTERNAL_MEDIA
+        )
+        baker.make_recipe(
+            "dashboard.image",
+            profile=self.profile,
+            file_size=500,
+            quota_exempt_reason=QuotaExemption.COMMUNITY_CONTRIBUTION,
+        )
 
         with self.assertNumQueries(1):
             counted, exempt = get_storage_totals(self.profile)
@@ -106,7 +113,9 @@ class CachedExternalMediaTests(TestCase):
 
     def test_is_cached_external_media_reads_the_gallery_identity(self) -> None:
         pin = baker.make_recipe("dashboard.pin")
-        external = baker.make_recipe("dashboard.image", profile=pin.profile, media_source_key="wikimedia", media_item_key="abc")
+        external = baker.make_recipe(
+            "dashboard.image", profile=pin.profile, media_source_key="wikimedia", media_item_key="abc"
+        )
         own = baker.make_recipe("dashboard.image", profile=pin.profile)
         self.assertTrue(is_cached_external_media(external))
         self.assertFalse(is_cached_external_media(own))

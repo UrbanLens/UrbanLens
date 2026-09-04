@@ -13,7 +13,11 @@ import requests
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations import cid_resolution
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidBatchResult, RedataPermissionError
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import (
+    CidLookupEntry,
+    RedataCidBatchResult,
+    RedataPermissionError,
+)
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
@@ -165,7 +169,10 @@ class ResolveViaRedataTests(SimpleTestCase):
             cid_resolution.resolve_cids([1, 2], urls_by_cid={1: "https://maps.google.com/maps/place/X"})
 
         sent_entries = gateway_cls.return_value.resolve_cids.call_args.args[0]
-        self.assertEqual(sent_entries, [CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X"), CidLookupEntry(cid=2, url=None)])
+        self.assertEqual(
+            sent_entries,
+            [CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X"), CidLookupEntry(cid=2, url=None)],
+        )
 
     def test_still_pending_on_redatas_end_is_reported_as_pending(self) -> None:
         with mock.patch(

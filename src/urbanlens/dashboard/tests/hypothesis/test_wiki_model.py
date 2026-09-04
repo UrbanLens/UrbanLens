@@ -49,7 +49,9 @@ class WikiLocationRelationTests(TestCase):
         """Matches Location.display_name's own area-suffixed placeholder, so an
         unnamed wiki reads as "Unnamed Location in Albany, NY" instead of a
         bare "Unnamed Location" that's indistinguishable from every other one."""
-        loc = baker.make(Location, official_name="", city="Albany", state="NY", country="USA", latitude="40.0", longitude="-74.0")
+        loc = baker.make(
+            Location, official_name="", city="Albany", state="NY", country="USA", latitude="40.0", longitude="-74.0"
+        )
         wiki, _created = Wiki.objects.get_or_create_for_location(loc)
         self.assertEqual(wiki.name, "Unnamed Location in Albany, NY")
 
@@ -111,6 +113,7 @@ class WikiLookupTests(TestCase):
         self.assertEqual(wiki.pk, existing.pk)
         self.assertEqual(wiki.name, "Already here")
 
+
 class EnrichWikiLocationNameTests(TestCase):
     """tasks.enrich_wiki_location's placeholder-name replacement.
 
@@ -128,7 +131,10 @@ class EnrichWikiLocationNameTests(TestCase):
         with (
             patch("urbanlens.dashboard.tasks.update_task_progress"),
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService.ensure_linked"),
-            patch("urbanlens.dashboard.services.locations.google.PlaceNameResolverChain.resolve", return_value=resolved_name),
+            patch(
+                "urbanlens.dashboard.services.locations.google.PlaceNameResolverChain.resolve",
+                return_value=resolved_name,
+            ),
             patch("urbanlens.dashboard.services.locations.boundaries.boundary_generation_ran", return_value=True),
         ):
             tasks.enrich_wiki_location(wiki.pk)

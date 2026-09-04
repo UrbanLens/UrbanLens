@@ -13,7 +13,13 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.article.model import ArticleRevision
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus, TriviaQuestionVote, TriviaQuestionVoteKind
+from urbanlens.dashboard.models.trivia.model import (
+    TriviaQuestion,
+    TriviaQuestionSource,
+    TriviaQuestionStatus,
+    TriviaQuestionVote,
+    TriviaQuestionVoteKind,
+)
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.ai.article_safety import ArticleSafetyVerdict
 from urbanlens.dashboard.services.trivia.wiki_incorporation import (
@@ -44,7 +50,9 @@ class _FakeGateway:
 
 def _make_location() -> Location:
     offset = next(_coordinate_counter)
-    return baker.make(Location, official_name="Old Armory", latitude=f"42.{650_000 + offset}", longitude=f"-73.{760_000 + offset}")
+    return baker.make(
+        Location, official_name="Old Armory", latitude=f"42.{650_000 + offset}", longitude=f"-73.{760_000 + offset}"
+    )
 
 
 def _make_profile() -> Profile:
@@ -146,7 +154,9 @@ class IncorporateQuestionIntoWikiTests(TestCase):
             def send_prompt(self, prompt: str, **kwargs) -> str | None:
                 raise RuntimeError("boom")
 
-        with patch("urbanlens.dashboard.services.trivia.wiki_incorporation.get_gateway", return_value=_RaisingGateway("x")):
+        with patch(
+            "urbanlens.dashboard.services.trivia.wiki_incorporation.get_gateway", return_value=_RaisingGateway("x")
+        ):
             result = incorporate_question_into_wiki(self.question)
         self.assertFalse(result)
         self.question.refresh_from_db()
@@ -160,7 +170,9 @@ class IncorporateQuestionIntoWikiTests(TestCase):
         self.assertIsNone(get_article(wiki=self.wiki))
 
     def test_safety_rejected_marks_processed_without_appending(self) -> None:
-        result, gateway = self._run(write="The armory was built for the state militia.", safety_approved=False, safety_reason="off_topic")
+        result, gateway = self._run(
+            write="The armory was built for the state militia.", safety_approved=False, safety_reason="off_topic"
+        )
         self.assertFalse(result)
         self.assertEqual(len(gateway.prompts), 1)
         self.question.refresh_from_db()
@@ -211,7 +223,10 @@ class SweepQuestionsForWikiIncorporationTests(TestCase):
         _upvote(ineligible, 1)
 
         with (
-            patch("urbanlens.dashboard.services.trivia.wiki_incorporation.get_gateway", return_value=_FakeGateway("A new fact about the armory.")),
+            patch(
+                "urbanlens.dashboard.services.trivia.wiki_incorporation.get_gateway",
+                return_value=_FakeGateway("A new fact about the armory."),
+            ),
             patch(
                 "urbanlens.dashboard.services.trivia.wiki_incorporation.classify_article_text",
                 return_value=ArticleSafetyVerdict(approved=True),

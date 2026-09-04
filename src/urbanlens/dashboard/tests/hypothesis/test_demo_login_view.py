@@ -15,9 +15,9 @@ from unittest import mock
 
 from django.urls import NoReverseMatch, clear_url_caches, reverse
 
-import urbanlens.UrbanLens.urls as root_urls
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX
+import urbanlens.UrbanLens.urls as root_urls
 
 
 def _reload_urlconf_with_demo_mode(*, enabled: bool) -> None:

@@ -40,8 +40,10 @@ class RedataSourcedAutoTagTests(TestCase):
         self.tag = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Power plant", allow_auto_tag=True)
 
     def _suggest(self, suggestions, *, has_feature: bool = True, apply: bool = False):
-        with mock.patch(_SERVICE, return_value=suggestions), \
-             mock.patch("urbanlens.dashboard.models.subscriptions.model.user_has_feature", return_value=has_feature):
+        with (
+            mock.patch(_SERVICE, return_value=suggestions),
+            mock.patch("urbanlens.dashboard.models.subscriptions.model.user_has_feature", return_value=has_feature),
+        ):
             return AutoTagService(kinds=[KIND_TAG]).suggest_for_pin(self.pin, apply=apply)
 
     def test_a_confident_suggestion_is_applied(self) -> None:
@@ -124,7 +126,9 @@ class RedataSourcedAutoTagTests(TestCase):
 
     def test_the_keyword_path_is_gone_from_the_pin_flow(self) -> None:
         """A label whose keywords match the pin name is not applied on that basis."""
-        keyworded = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Station", keywords="power station", allow_auto_tag=True)
+        keyworded = baker.make(
+            Label, profile=self.profile, kind=KIND_TAG, name="Station", keywords="power station", allow_auto_tag=True
+        )
 
         matched = self._suggest([], apply=True)
 

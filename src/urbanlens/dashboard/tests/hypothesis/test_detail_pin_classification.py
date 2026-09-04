@@ -100,7 +100,9 @@ class DetailPinEditTypeTests(TestCase):
             pin_type=PinType.BUILDING,
             pin_type_is_user_provided=False,
         )
-        self.url = reverse("pin.detail_pin.edit", kwargs={"pin_slug": self.parent.slug, "detail_pin_uuid": self.child.uuid})
+        self.url = reverse(
+            "pin.detail_pin.edit", kwargs={"pin_slug": self.parent.slug, "detail_pin_uuid": self.child.uuid}
+        )
 
     def _post(self, **body):
         with patch(_ENQUEUE) as self.mock_enqueue:
@@ -184,7 +186,13 @@ class ClassifyDetailMarkerTaskTests(TestCase):
     def test_a_user_typed_marker_short_circuits_before_generating_boundaries(self) -> None:
         from urbanlens.dashboard.tasks import classify_detail_marker
 
-        pin = baker.make(Pin, profile=self.profile, location=_make_location(), pin_type=PinType.ENTRANCE, pin_type_is_user_provided=True)
+        pin = baker.make(
+            Pin,
+            profile=self.profile,
+            location=_make_location(),
+            pin_type=PinType.ENTRANCE,
+            pin_type_is_user_provided=True,
+        )
         with patch("urbanlens.dashboard.services.locations.boundaries.generate_location_boundaries") as mock_generate:
             self.assertFalse(classify_detail_marker("pin", pin.pk))
         mock_generate.assert_not_called()

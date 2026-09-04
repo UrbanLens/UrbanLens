@@ -291,15 +291,15 @@ def _resize_custom_icon(uploaded_file: UploadedFile) -> UploadedFile:
 def _queryset_for_kind(kind: str, profile: Profile) -> QuerySet[Label]:
     """Return the display queryset for a label kind."""
     if kind == KIND_TAG:
-        return Label.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_pin_counts()
+        return Label.objects.tags().visible_to(profile).in_display_order().with_customizations_for(profile).with_pin_counts()
     if kind == KIND_CATEGORY:
-        return Label.objects.categories().for_profile(profile).ordered().with_pin_counts()
+        return Label.objects.categories().for_profile(profile).in_display_order().with_pin_counts()
     if kind == KIND_STATUS:
-        return Label.objects.statuses().for_profile(profile).ordered().with_pin_counts()
+        return Label.objects.statuses().for_profile(profile).in_display_order().with_pin_counts()
     if kind == KIND_USER:
-        return Label.objects.user_labels().visible_to(profile).ordered().with_pin_counts()
+        return Label.objects.user_labels().visible_to(profile).in_display_order().with_pin_counts()
     if kind == KIND_MEDIA:
-        return Label.objects.media().visible_to(profile).ordered().with_pin_counts()
+        return Label.objects.media().visible_to(profile).in_display_order().with_pin_counts()
     msg = f"Unsupported label kind: {kind}"
     raise ValueError(msg)
 
@@ -1244,7 +1244,7 @@ class LabelCustomizeView(_LabelKindMixin, LoginRequiredMixin, View):
 
 def _all_labels(profile: Profile) -> QuerySet[Label]:
     """Return all tag/category/status labels visible to the profile."""
-    return Label.objects.visible_to(profile).location_labels().ordered()
+    return Label.objects.visible_to(profile).location_labels().in_display_order()
 
 
 def _pin_member_ids(pin: Pin) -> set[int]:
@@ -1557,7 +1557,7 @@ class LabelImageMembershipView(LoginRequiredMixin, View):
             obj_uuid=str(image.uuid),
             collapse_scope="image",
             empty_text="No media labels. Click + to add one.",
-            labels_override=Label.objects.visible_to(profile).media().ordered(),
+            labels_override=Label.objects.visible_to(profile).media().in_display_order(),
             dialog_only=True,
         )
 

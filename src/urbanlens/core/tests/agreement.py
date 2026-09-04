@@ -59,4 +59,6 @@ def assert_agrees(
 
     if disagreements:
         listing = "\n".join(disagreements)
-        raise AssertionError(f"{label} disagrees with the reference implementation on {len(disagreements)} subject(s):\n{listing}")
+        raise AssertionError(
+            f"{label} disagrees with the reference implementation on {len(disagreements)} subject(s):\n{listing}"
+        )

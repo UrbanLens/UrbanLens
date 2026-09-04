@@ -44,9 +44,13 @@ class TripActivityOrderRaceTests(TransactionTestCase):
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
-        self.trip = baker.make(Trip, creator=self.profile, allow_edit_activities="everyone", allow_add_activities="everyone")
+        self.trip = baker.make(
+            Trip, creator=self.profile, allow_edit_activities="everyone", allow_add_activities="everyone"
+        )
         self.trip.profiles.add(self.profile)
-        self.activities = [baker.make(TripActivity, trip=self.trip, title=f"Stop {n}", order=n, scheduled_at=None) for n in range(4)]
+        self.activities = [
+            baker.make(TripActivity, trip=self.trip, title=f"Stop {n}", order=n, scheduled_at=None) for n in range(4)
+        ]
 
     def _run_concurrently(self, first, second) -> list[Exception]:
         barrier = threading.Barrier(2)

@@ -62,7 +62,17 @@ class RedataSatelliteProviderTests(SimpleTestCase):
         self.assertEqual(requested, ["nasa_gibs", "some_source_redata_added_yesterday"])
 
     def test_providers_another_surface_shows_better_are_left_out(self) -> None:
-        requested = self._requested(["esri_world_imagery", "esri_wayback", "usgs_imagery", "usgs_topo", "map_warper", "loc_sanborn", "nasa_gibs"])
+        requested = self._requested(
+            [
+                "esri_world_imagery",
+                "esri_wayback",
+                "usgs_imagery",
+                "usgs_topo",
+                "map_warper",
+                "loc_sanborn",
+                "nasa_gibs",
+            ]
+        )
 
         self.assertEqual(requested, ["nasa_gibs"])
 
@@ -119,7 +129,17 @@ class RedataSatelliteProviderTests(SimpleTestCase):
         self.assertFalse(from_cache)
 
     def test_a_direct_image_delivery_uses_the_url_as_is(self) -> None:
-        slides = self._slides([{"provider": "nasa_gibs", "url": "https://gibs.example/tile.jpg", "delivery": "image", "captured_on": "2019", "attribution": "NASA GIBS"}])
+        slides = self._slides(
+            [
+                {
+                    "provider": "nasa_gibs",
+                    "url": "https://gibs.example/tile.jpg",
+                    "delivery": "image",
+                    "captured_on": "2019",
+                    "attribution": "NASA GIBS",
+                }
+            ]
+        )
 
         self.assertEqual(len(slides), 1)
         self.assertEqual(slides[0].img_src, "https://gibs.example/tile.jpg")
@@ -133,7 +153,14 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_CAPABILITIES_PATH, return_value=[]),
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
-            gateway_cls.return_value.get_imagery.return_value = [{"provider": "mapbox", "url": "/api/v1/imagery/abc/download/", "delivery": "image", "captured_label": "Current"}]
+            gateway_cls.return_value.get_imagery.return_value = [
+                {
+                    "provider": "mapbox",
+                    "url": "/api/v1/imagery/abc/download/",
+                    "delivery": "image",
+                    "captured_label": "Current",
+                }
+            ]
             gateway_cls.return_value.get_timeline.return_value = {}
             gateway_cls.return_value.download_bytes.return_value = b"\xff\xd8\xff"
             slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
@@ -151,16 +178,32 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             gateway_cls.return_value.get_timeline.return_value = {}
             gateway_cls.return_value.get_imagery.return_value = [
                 {"provider": "bing_maps", "url": "/download/", "delivery": "image"},
-                {"provider": "nasa_gibs", "url": "https://gibs.example/tile.jpg", "delivery": "image", "captured_on": "2019"},
+                {
+                    "provider": "nasa_gibs",
+                    "url": "https://gibs.example/tile.jpg",
+                    "delivery": "image",
+                    "captured_on": "2019",
+                },
             ]
-            gateway_cls.return_value.download_bytes.side_effect = LocationContextUnavailableError("source_error", "boom")
+            gateway_cls.return_value.download_bytes.side_effect = LocationContextUnavailableError(
+                "source_error", "boom"
+            )
             slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(len(slides), 1)
         self.assertEqual(slides[0].source, "NASA GIBS")
 
     def test_a_tile_template_delivery_resolves_a_concrete_tile(self) -> None:
-        slides = self._slides([{"provider": "opentopomap", "url": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", "delivery": "tile_template", "attributes": {"subdomains": ["a", "b", "c"]}}])
+        slides = self._slides(
+            [
+                {
+                    "provider": "opentopomap",
+                    "url": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+                    "delivery": "tile_template",
+                    "attributes": {"subdomains": ["a", "b", "c"]},
+                }
+            ]
+        )
 
         self.assertEqual(len(slides), 1)
         img_src = slides[0].img_src

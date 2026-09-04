@@ -61,19 +61,27 @@ class ConvertToPdfTests(TestCase):
         image = baker.make(
             Image,
             profile=self.user.profile,
-            image=SimpleUploadedFile("notes.docx", b"doc-bytes", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            image=SimpleUploadedFile(
+                "notes.docx",
+                b"doc-bytes",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
         )
-        with patch("urbanlens.dashboard.services.media.documents.soffice_available", return_value=False):
+        with patch("urbanlens.dashboard.services.media.documents.soffice_path", return_value=None):
             self.assertIsNone(convert_to_pdf(image))
 
     def test_conversion_failure_returns_none(self) -> None:
         image = baker.make(
             Image,
             profile=self.user.profile,
-            image=SimpleUploadedFile("notes.docx", b"doc-bytes", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            image=SimpleUploadedFile(
+                "notes.docx",
+                b"doc-bytes",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
         )
         with (
-            patch("urbanlens.dashboard.services.media.documents.soffice_available", return_value=True),
+            patch("urbanlens.dashboard.services.media.documents.soffice_path", return_value="/usr/bin/soffice"),
             patch("subprocess.run", side_effect=subprocess.SubprocessError("boom")),
         ):
             self.assertIsNone(convert_to_pdf(image))
@@ -182,7 +190,9 @@ class OcrResourceBoundsTests(TestCase):
     def test_the_rasteriser_is_given_a_size_bound(self) -> None:
         _, convert = self._run_ocr()
 
-        self.assertIn("size", convert.call_args.kwargs, "poppler was called with no size limit - page geometry decides the raster")
+        self.assertIn(
+            "size", convert.call_args.kwargs, "poppler was called with no size limit - page geometry decides the raster"
+        )
         self.assertEqual(convert.call_args.kwargs["size"], _OCR_MAX_PIXELS)
 
     def test_the_page_count_bound_is_still_applied(self) -> None:

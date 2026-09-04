@@ -83,7 +83,9 @@ class CrossUserRouteAccessTests(TestCase):
 
         intruder_profile = self.intruder.profile
         self.intruder_location = baker.make(Location, official_name="Intruder Location")
-        self.intruder_pin = baker.make(Pin, profile=intruder_profile, location=self.intruder_location, name="Intruder Pin")
+        self.intruder_pin = baker.make(
+            Pin, profile=intruder_profile, location=self.intruder_location, name="Intruder Pin"
+        )
         self.intruder_trip = baker.make(Trip, creator=intruder_profile, name="Intruder Trip")
         self.intruder_trip.profiles.add(intruder_profile)
 

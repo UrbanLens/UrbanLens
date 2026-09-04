@@ -194,7 +194,9 @@ class SavedFilterDetailTests(SavedFilterApiTestCase):
         self.assertEqual(self.client.get(f"{_BASE}{uuid4()}/", **_bearer(self.raw_key)).status_code, 404)
 
     def test_rename_reports_no_resync(self) -> None:
-        response = self.client.patch(self._url(), {"name": "Renamed"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self._url(), {"name": "Renamed"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["lists_resynced"], 0)
 

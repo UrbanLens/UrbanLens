@@ -69,9 +69,7 @@ class SanitizeArticlePlainTextTests(SimpleTestCase):
         self.assertEqual(sanitize_article_plain_text("<p>Hello <b>world</b></p>"), "Hello world")
 
     def test_strips_entity_encoded_and_double_encoded_html(self) -> None:
-        cleaned = sanitize_article_plain_text(
-            "&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;Built in 1920."
-        )
+        cleaned = sanitize_article_plain_text("&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;Built in 1920.")
         self.assertNotIn("<", cleaned)
         self.assertNotIn(">", cleaned)
         self.assertNotIn("alert", cleaned)
@@ -213,7 +211,9 @@ class ExpandArticlesFromPageTests(TestCase):
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
         self.location = baker.make(Location, official_name="Old Mill")
-        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Old Mill", name_is_user_provided=True)
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=self.location, name="Old Mill", name_is_user_provided=True
+        )
         self.extraction = LinkExtraction.objects.create(
             profile=self.profile,
             pin=self.pin,

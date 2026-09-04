@@ -50,7 +50,11 @@ class ConsensusApplyAnswerScopeTests(TestCase):
 
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.name, "Mill Complex", "the answer the round decided did not land")
-        self.assertEqual(self.wiki.description, "Edited while the round ran", "applying a consensus answer reverted a concurrent edit")
+        self.assertEqual(
+            self.wiki.description,
+            "Edited while the round ran",
+            "applying a consensus answer reverted a concurrent edit",
+        )
 
     def test_applying_an_answer_does_not_reset_another_writers_field(self) -> None:
         stale = self._round_snapshot()
@@ -63,7 +67,9 @@ class ConsensusApplyAnswerScopeTests(TestCase):
 
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.description, "Agreed description")
-        self.assertEqual(self.wiki.cover_photo_id, photo.pk, "a consensus answer reset a field owned by a different writer")
+        self.assertEqual(
+            self.wiki.cover_photo_id, photo.pk, "a consensus answer reset a field owned by a different writer"
+        )
 
     def test_pin_type_still_records_that_it_was_user_provided(self) -> None:
         """The setter assigns two columns; scoping to the named field alone would drop one."""

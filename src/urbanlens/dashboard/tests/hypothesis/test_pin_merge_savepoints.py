@@ -23,6 +23,8 @@ See PROBLEMS.md, "merge_pins' IntegrityError recoveries could not run".
 
 from __future__ import annotations
 
+import contextlib
+
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.db.transaction import TransactionManagementError
@@ -92,10 +94,8 @@ class SavepointKeepsTheTransactionUsableTests(_PinFixtures):
 
         with transaction.atomic(), self.assertRaises(TransactionManagementError):
             mover.location = shared
-            try:
+            with contextlib.suppress(IntegrityError):
                 mover.save(update_fields=["location", "updated"])
-            except IntegrityError:
-                pass
             Pin.objects.filter(pk=mover.pk).exists()
 
 

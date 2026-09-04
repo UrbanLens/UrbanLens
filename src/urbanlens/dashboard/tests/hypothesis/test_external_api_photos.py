@@ -52,7 +52,9 @@ if TYPE_CHECKING:
 #: A real 1x1 PNG - ImageField stores whatever bytes it's given, but the
 #: upload pipeline sniffs content, so a valid file avoids testing the wrong
 #: rejection path.
-_PNG_BYTES = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
 
 #: Everything this change added, as (method, url-name) - used to assert that a
 #: key without the new scopes reaches none of it.
@@ -165,7 +167,9 @@ class ForeignPhotoTests(_PhotoApiTestCase):
         for method, name, payload in cases:
             with self.subTest(endpoint=f"{method.upper()} {name}"):
                 url = reverse(name, kwargs={"image_uuid": self.other_image.uuid})
-                response = getattr(self.client, method)(url, payload or None, content_type="application/json", **_bearer(self.raw_key))
+                response = getattr(self.client, method)(
+                    url, payload or None, content_type="application/json", **_bearer(self.raw_key)
+                )
                 self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)
 
     def test_deleting_another_users_photo_leaves_it_intact(self) -> None:
@@ -222,7 +226,9 @@ class PhotoDeleteDualOwnershipTests(_PhotoApiTestCase):
         """?from_wiki=true must win even when a pin is still attached - the
         pin-preserving unlink the default case does above must not silently
         swallow an explicit request to withdraw from the wiki too."""
-        image = _make_image(self.profile, pin=self.pin, wiki=self.wiki, location=self.location, source=ImageSource.UPLOAD)
+        image = _make_image(
+            self.profile, pin=self.pin, wiki=self.wiki, location=self.location, source=ImageSource.UPLOAD
+        )
         url = reverse("external_api:photos.detail", kwargs={"image_uuid": image.uuid})
 
         response = self.client.delete(f"{url}?from_wiki=true", **_bearer(self.raw_key))
@@ -244,7 +250,9 @@ class PhotoDeleteAndTheWikiTests(_PhotoApiTestCase):
         super().setUp()
         from urbanlens.dashboard.models.wiki.model import Wiki
 
-        self.wiki = baker.make(Wiki, location=self.image.location or baker.make("dashboard.Location", latitude=41.7, longitude=-73.9))
+        self.wiki = baker.make(
+            Wiki, location=self.image.location or baker.make("dashboard.Location", latitude=41.7, longitude=-73.9)
+        )
         Image.objects.filter(pk=self.image.pk).update(wiki=self.wiki, source=ImageSource.UPLOAD)
         self.image.refresh_from_db()
 
@@ -255,7 +263,10 @@ class PhotoDeleteAndTheWikiTests(_PhotoApiTestCase):
         response = self.client.delete(self._url(), **_bearer(self.raw_key))
 
         self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
-        self.assertTrue(Image.objects.filter(pk=self.image.pk, wiki=self.wiki).exists(), "the API withdrew a wiki contribution nobody asked to withdraw")
+        self.assertTrue(
+            Image.objects.filter(pk=self.image.pk, wiki=self.wiki).exists(),
+            "the API withdrew a wiki contribution nobody asked to withdraw",
+        )
 
     def test_asking_withdraws_it(self) -> None:
         response = self.client.delete(f"{self._url()}?from_wiki=true", **_bearer(self.raw_key))
@@ -270,7 +281,10 @@ class PhotoDeleteAndTheWikiTests(_PhotoApiTestCase):
         response = self.client.delete(f"{self._url()}?from_wiki=true", **_bearer(self.raw_key))
 
         self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
-        self.assertTrue(Image.objects.filter(pk=self.image.pk, wiki=self.wiki).exists(), "an external photo was pulled off the wiki by an API delete")
+        self.assertTrue(
+            Image.objects.filter(pk=self.image.pk, wiki=self.wiki).exists(),
+            "an external photo was pulled off the wiki by an API delete",
+        )
 
     def test_a_photo_on_no_wiki_still_deletes_outright(self) -> None:
         """The ordinary case, unchanged."""
@@ -289,7 +303,9 @@ class PhotoLabelTests(_PhotoApiTestCase):
         """PUT sets exactly the submitted names, and a second PUT replaces them."""
         url = reverse("external_api:photos.labels", kwargs={"image_uuid": self.image.uuid})
 
-        response = self.client.put(url, {"labels": ["Rooftop", "Night"]}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.put(
+            url, {"labels": ["Rooftop", "Night"]}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, HTTPStatus.OK)
         self.assertEqual(sorted(response.json()["labels"]), ["Night", "Rooftop"])
 
@@ -363,7 +379,13 @@ class JournalResponseShapeTests(TestCase):
     def test_fully_scoped_credential_omits_nothing(self) -> None:
         raw_key = _key_with_scopes(
             self.user,
-            [ApiKeyScope.PHOTOS_READ, ApiKeyScope.PINS_READ, ApiKeyScope.VISITS_READ, ApiKeyScope.WIKI_READ, ApiKeyScope.TRIPS_READ],
+            [
+                ApiKeyScope.PHOTOS_READ,
+                ApiKeyScope.PINS_READ,
+                ApiKeyScope.VISITS_READ,
+                ApiKeyScope.WIKI_READ,
+                ApiKeyScope.TRIPS_READ,
+            ],
         )
 
         response = self.client.get(reverse("external_api:memories.journal"), **_bearer(raw_key))
@@ -383,7 +405,9 @@ class JournalResponseShapeTests(TestCase):
         self.assertIsNotNone(first["next"])
         self.assertIsNone(first["previous"])
 
-        second = self.client.get(reverse("external_api:memories.journal"), {"page_size": 1, "page": 2}, **_bearer(raw_key)).json()
+        second = self.client.get(
+            reverse("external_api:memories.journal"), {"page_size": 1, "page": 2}, **_bearer(raw_key)
+        ).json()
         self.assertEqual(len(second["results"]), 1)
         self.assertIsNone(second["next"])
         self.assertIsNotNone(second["previous"])

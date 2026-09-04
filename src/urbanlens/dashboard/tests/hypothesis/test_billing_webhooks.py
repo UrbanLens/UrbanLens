@@ -52,7 +52,13 @@ class SyncFromStripeSubscriptionTests(TestCase):
         subscription = baker.make(RoleSubscription, status=BillingSubscriptionStatus.INCOMPLETE, pledged_amount_cents=0)
         webhooks.sync_from_stripe_subscription(
             subscription,
-            _subscription_payload(status="active", unit_amount=750, price_id="price_9", cancel_at_period_end=True, canceled_at=1_650_000_000),
+            _subscription_payload(
+                status="active",
+                unit_amount=750,
+                price_id="price_9",
+                cancel_at_period_end=True,
+                canceled_at=1_650_000_000,
+            ),
         )
 
         subscription.refresh_from_db()
@@ -64,9 +70,13 @@ class SyncFromStripeSubscriptionTests(TestCase):
         self.assertEqual(subscription.canceled_at, datetime.fromtimestamp(1_650_000_000, tz=UTC))
 
     def test_recomputes_threshold_met_for_dynamic_roles(self) -> None:
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
+        )
         subscription = baker.make(RoleSubscription, role=role, threshold_met=True)
-        with mock.patch("urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("10.00")):
+        with mock.patch(
+            "urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("10.00")
+        ):
             webhooks.sync_from_stripe_subscription(subscription, _subscription_payload(unit_amount=500))
 
         subscription.refresh_from_db()
@@ -77,9 +87,13 @@ class SyncFromStripeSubscriptionTests(TestCase):
         as unmet (or skips it) would still pass a suite that only ever exercises the
         below-threshold direction.
         """
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
+        )
         subscription = baker.make(RoleSubscription, role=role, threshold_met=False)
-        with mock.patch("urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("10.00")):
+        with mock.patch(
+            "urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("10.00")
+        ):
             webhooks.sync_from_stripe_subscription(subscription, _subscription_payload(unit_amount=1500))
 
         subscription.refresh_from_db()
@@ -240,7 +254,9 @@ class HandleCheckoutSessionCompletedTests(TestCase):
 
 class HandleSubscriptionUpdatedTests(TestCase):
     def test_syncs_an_existing_subscription(self) -> None:
-        subscription = baker.make(RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.INCOMPLETE)
+        subscription = baker.make(
+            RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.INCOMPLETE
+        )
         event = {"type": "customer.subscription.updated", "data": {"object": _subscription_payload(status="active")}}
         webhooks.handle_event(event)
 
@@ -248,7 +264,10 @@ class HandleSubscriptionUpdatedTests(TestCase):
         self.assertEqual(subscription.status, "active")
 
     def test_unknown_subscription_is_a_no_op(self) -> None:
-        event = {"type": "customer.subscription.updated", "data": {"object": _subscription_payload(sub_id="sub_unknown")}}
+        event = {
+            "type": "customer.subscription.updated",
+            "data": {"object": _subscription_payload(sub_id="sub_unknown")},
+        }
         webhooks.handle_event(event)  # must not raise
 
     def test_a_late_update_cannot_resurrect_a_canceled_subscription(self) -> None:
@@ -265,18 +284,32 @@ class HandleSubscriptionUpdatedTests(TestCase):
         reactivated, a new one is created instead - so a later payload claiming
         otherwise is always the stale one.
         """
-        subscription = baker.make(RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.CANCELED)
+        subscription = baker.make(
+            RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.CANCELED
+        )
 
-        webhooks.handle_event({"type": "customer.subscription.updated", "data": {"object": _subscription_payload(status="active")}})
+        webhooks.handle_event(
+            {"type": "customer.subscription.updated", "data": {"object": _subscription_payload(status="active")}}
+        )
 
         subscription.refresh_from_db()
         self.assertEqual(subscription.status, BillingSubscriptionStatus.CANCELED)
 
     def test_a_canceled_payload_still_applies_to_a_canceled_subscription(self) -> None:
         """The guard must not block ordinary re-delivery of the cancellation itself."""
-        subscription = baker.make(RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.CANCELED, pledged_amount_cents=100)
+        subscription = baker.make(
+            RoleSubscription,
+            stripe_subscription_id="sub_123",
+            status=BillingSubscriptionStatus.CANCELED,
+            pledged_amount_cents=100,
+        )
 
-        webhooks.handle_event({"type": "customer.subscription.updated", "data": {"object": _subscription_payload(status="canceled", unit_amount=500)}})
+        webhooks.handle_event(
+            {
+                "type": "customer.subscription.updated",
+                "data": {"object": _subscription_payload(status="canceled", unit_amount=500)},
+            }
+        )
 
         subscription.refresh_from_db()
         self.assertEqual(subscription.status, BillingSubscriptionStatus.CANCELED)
@@ -285,8 +318,13 @@ class HandleSubscriptionUpdatedTests(TestCase):
 
 class HandleSubscriptionDeletedTests(TestCase):
     def test_marks_the_subscription_canceled(self) -> None:
-        subscription = baker.make(RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.ACTIVE)
-        event = {"type": "customer.subscription.deleted", "data": {"object": _subscription_payload(canceled_at=1_700_000_000)}}
+        subscription = baker.make(
+            RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.ACTIVE
+        )
+        event = {
+            "type": "customer.subscription.deleted",
+            "data": {"object": _subscription_payload(canceled_at=1_700_000_000)},
+        }
         webhooks.handle_event(event)
 
         subscription.refresh_from_db()
@@ -294,13 +332,18 @@ class HandleSubscriptionDeletedTests(TestCase):
         self.assertEqual(subscription.canceled_at, datetime.fromtimestamp(1_700_000_000, tz=UTC))
 
     def test_unknown_subscription_is_a_no_op(self) -> None:
-        event = {"type": "customer.subscription.deleted", "data": {"object": _subscription_payload(sub_id="sub_unknown")}}
+        event = {
+            "type": "customer.subscription.deleted",
+            "data": {"object": _subscription_payload(sub_id="sub_unknown")},
+        }
         webhooks.handle_event(event)  # must not raise
 
     def test_missing_canceled_at_falls_back_to_now(self) -> None:
         from django.utils import timezone
 
-        subscription = baker.make(RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.ACTIVE)
+        subscription = baker.make(
+            RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.ACTIVE
+        )
         before = timezone.now()
         event = {"type": "customer.subscription.deleted", "data": {"object": _subscription_payload(canceled_at=None)}}
         webhooks.handle_event(event)
@@ -318,17 +361,26 @@ class HandleInvoicePaymentSucceededTests(TestCase):
         subscription = baker.make(RoleSubscription, stripe_subscription_id="sub_123", pledged_amount_cents=0)
         with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
             mock_retrieve.return_value.to_dict.return_value = _subscription_payload(unit_amount=900)
-            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_123"}}})
+            webhooks.handle_event(
+                {"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_123"}}}
+            )
 
         subscription.refresh_from_db()
         self.assertEqual(subscription.pledged_amount_cents, 900)
 
     def test_banks_usage_ledger_for_a_pwyw_role(self) -> None:
         role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
-        subscription = baker.make(RoleSubscription, role=role, stripe_subscription_id="sub_123", pledged_amount_cents=1000)
+        subscription = baker.make(
+            RoleSubscription, role=role, stripe_subscription_id="sub_123", pledged_amount_cents=1000
+        )
         with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
             mock_retrieve.return_value.to_dict.return_value = _subscription_payload(unit_amount=1000)
-            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_123", "amount_paid": 1000}}})
+            webhooks.handle_event(
+                {
+                    "type": "invoice.payment_succeeded",
+                    "data": {"object": {"subscription": "sub_123", "amount_paid": 1000}},
+                }
+            )
 
         subscription.refresh_from_db()
         self.assertEqual(subscription.total_paid_cents, 1000)
@@ -336,20 +388,31 @@ class HandleInvoicePaymentSucceededTests(TestCase):
 
     def test_does_not_bank_usage_ledger_for_a_fixed_price_role(self) -> None:
         role = baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=500)
-        subscription = baker.make(RoleSubscription, role=role, stripe_subscription_id="sub_123", pledged_amount_cents=500)
+        subscription = baker.make(
+            RoleSubscription, role=role, stripe_subscription_id="sub_123", pledged_amount_cents=500
+        )
         with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
             mock_retrieve.return_value.to_dict.return_value = _subscription_payload(unit_amount=500)
-            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_123", "amount_paid": 500}}})
+            webhooks.handle_event(
+                {
+                    "type": "invoice.payment_succeeded",
+                    "data": {"object": {"subscription": "sub_123", "amount_paid": 500}},
+                }
+            )
 
         subscription.refresh_from_db()
         self.assertEqual(subscription.total_paid_cents, 0)
 
     def test_missing_amount_paid_does_not_raise(self) -> None:
         role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
-        subscription = baker.make(RoleSubscription, role=role, stripe_subscription_id="sub_123", pledged_amount_cents=1000)
+        subscription = baker.make(
+            RoleSubscription, role=role, stripe_subscription_id="sub_123", pledged_amount_cents=1000
+        )
         with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
             mock_retrieve.return_value.to_dict.return_value = _subscription_payload(unit_amount=1000)
-            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_123"}}})
+            webhooks.handle_event(
+                {"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_123"}}}
+            )
 
         subscription.refresh_from_db()
         self.assertEqual(subscription.total_paid_cents, 0)
@@ -372,8 +435,15 @@ class HandleInvoicePaymentSucceededTests(TestCase):
         self.assertFalse(RoleSubscription.objects.filter(stripe_subscription_id="sub_new").exists())
 
         with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
-            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(sub_id="sub_new", unit_amount=1000, metadata={"user_id": str(user.pk), "role_id": str(role.pk)})
-            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_new", "amount_paid": 1000}}})
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(
+                sub_id="sub_new", unit_amount=1000, metadata={"user_id": str(user.pk), "role_id": str(role.pk)}
+            )
+            webhooks.handle_event(
+                {
+                    "type": "invoice.payment_succeeded",
+                    "data": {"object": {"subscription": "sub_new", "amount_paid": 1000}},
+                }
+            )
 
         subscription = RoleSubscription.objects.get(stripe_subscription_id="sub_new")
         self.assertEqual(subscription.user, user)
@@ -389,11 +459,26 @@ class HandleInvoicePaymentSucceededTests(TestCase):
         role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
         user = baker.make(User)
         covered_until = timezone.now() + timezone.timedelta(days=45)
-        baker.make(RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.CANCELED, total_paid_cents=3000, amount_used_cents=1500, usage_covered_until=covered_until)
+        baker.make(
+            RoleSubscription,
+            user=user,
+            role=role,
+            status=BillingSubscriptionStatus.CANCELED,
+            total_paid_cents=3000,
+            amount_used_cents=1500,
+            usage_covered_until=covered_until,
+        )
 
         with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
-            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(sub_id="sub_new", unit_amount=1000, metadata={"user_id": str(user.pk), "role_id": str(role.pk)})
-            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_new", "amount_paid": 1000}}})
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(
+                sub_id="sub_new", unit_amount=1000, metadata={"user_id": str(user.pk), "role_id": str(role.pk)}
+            )
+            webhooks.handle_event(
+                {
+                    "type": "invoice.payment_succeeded",
+                    "data": {"object": {"subscription": "sub_new", "amount_paid": 1000}},
+                }
+            )
 
         subscription = RoleSubscription.objects.get(stripe_subscription_id="sub_new")
         self.assertEqual(subscription.total_paid_cents, 3000 + 1000)
@@ -403,20 +488,30 @@ class HandleInvoicePaymentSucceededTests(TestCase):
     def test_out_of_order_delivery_with_unresolvable_metadata_is_a_no_op(self) -> None:
         with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
             mock_retrieve.return_value.to_dict.return_value = _subscription_payload(sub_id="sub_new", metadata={})
-            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_new", "amount_paid": 1000}}})  # must not raise
+            webhooks.handle_event(
+                {
+                    "type": "invoice.payment_succeeded",
+                    "data": {"object": {"subscription": "sub_new", "amount_paid": 1000}},
+                }
+            )  # must not raise
 
         self.assertFalse(RoleSubscription.objects.filter(stripe_subscription_id="sub_new").exists())
 
+
 class HandleInvoicePaymentFailedTests(TestCase):
     def test_marks_the_subscription_past_due(self) -> None:
-        subscription = baker.make(RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.ACTIVE)
+        subscription = baker.make(
+            RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.ACTIVE
+        )
         webhooks.handle_event({"type": "invoice.payment_failed", "data": {"object": {"subscription": "sub_123"}}})
 
         subscription.refresh_from_db()
         self.assertEqual(subscription.status, BillingSubscriptionStatus.PAST_DUE)
 
     def test_unknown_subscription_is_a_no_op(self) -> None:
-        webhooks.handle_event({"type": "invoice.payment_failed", "data": {"object": {"subscription": "sub_unknown"}}})  # must not raise
+        webhooks.handle_event(
+            {"type": "invoice.payment_failed", "data": {"object": {"subscription": "sub_unknown"}}}
+        )  # must not raise
 
 
 def _refund_object(refund_id: str, amount: int) -> mock.MagicMock:
@@ -498,7 +593,9 @@ class HandleChargeRefundedTests(TestCase):
         self._mock_invoice()
         webhooks.handle_event(_charge_refunded_event(event_id="evt_ref_1", refunds=[{"id": "re_1", "amount": 500}]))
         webhooks.handle_event(
-            _charge_refunded_event(event_id="evt_ref_2", refunds=[{"id": "re_1", "amount": 500}, {"id": "re_2", "amount": 300}])
+            _charge_refunded_event(
+                event_id="evt_ref_2", refunds=[{"id": "re_1", "amount": 500}, {"id": "re_2", "amount": 300}]
+            )
         )
 
         self.sub.refresh_from_db()
@@ -536,7 +633,10 @@ class HandleChargeRefundedTests(TestCase):
         """
         self._mock_invoice()
         with mock.patch("stripe.Refund.list") as mock_list:
-            mock_list.return_value.auto_paging_iter.return_value = [_refund_object("re_1", 500), _refund_object("re_2", 300)]
+            mock_list.return_value.auto_paging_iter.return_value = [
+                _refund_object("re_1", 500),
+                _refund_object("re_2", 300),
+            ]
             webhooks.handle_event(_charge_refunded_event(refunds=[{"id": "re_1", "amount": 500}], has_more=True))
             mock_list.assert_called_once_with(charge="ch_1", limit=100)
 
@@ -577,7 +677,9 @@ class HandleChargeDisputeClosedTests(TestCase):
             "data": {"object": {"id": "dp_1", "status": status, "charge": charge, "amount": amount}},
         }
 
-    def _mock_stripe(self, *, invoice: str | None = "in_1", subscription: str | None = "sub_123") -> tuple[mock.MagicMock, mock.MagicMock]:
+    def _mock_stripe(
+        self, *, invoice: str | None = "in_1", subscription: str | None = "sub_123"
+    ) -> tuple[mock.MagicMock, mock.MagicMock]:
         charge_patcher = mock.patch("stripe.Charge.retrieve")
         invoice_patcher = mock.patch("stripe.Invoice.retrieve")
         mock_charge = charge_patcher.start()

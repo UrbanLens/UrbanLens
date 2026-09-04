@@ -6,6 +6,7 @@ An LLM Believes this file covers the following (this assessment may be correct, 
 - add_category / change_category  (DB)
 - to_json / to_detail_json  (DB)
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -172,6 +173,7 @@ class PinHasMeaningfulNameTests(SimpleTestCase):
 
 # -- rating --------------------------------------------------------------------
 
+
 class PinRatingTests(TestCase):
     """rating returns the most recent review rating, or 0 when there are none."""
 
@@ -195,6 +197,7 @@ class PinRatingTests(TestCase):
 
 
 # -- add_category / change_category --------------------------------------------
+
 
 class PinAddCategoryTests(TestCase):
     """add_category creates the Label if needed and links it to the pin."""
@@ -274,18 +277,24 @@ class PinChangeCategoryTests(TestCase):
 
 # -- to_json / to_detail_json --------------------------------------------------
 
+
 class PinToJsonTests(TestCase):
     """to_json() serialises core pin fields to a dict."""
 
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make(
-            "dashboard.Location", official_name="Steel Mill",
-            latitude="40.000000", longitude="-74.000000",
+            "dashboard.Location",
+            official_name="Steel Mill",
+            latitude="40.000000",
+            longitude="-74.000000",
         )
         self.pin = baker.make(
-            Pin, profile=self.user.profile, location=self.location,
-            name="My Steel Mill", priority=5,
+            Pin,
+            profile=self.user.profile,
+            location=self.location,
+            name="My Steel Mill",
+            priority=5,
         )
         # to_json() reads place_name, which resolves an uncached Location's
         # name from Google - mock it so tests don't make an outbound API call.
@@ -331,7 +340,9 @@ class PinToDetailJsonTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make(
-            "dashboard.Location", latitude="41.000000", longitude="-73.000000",
+            "dashboard.Location",
+            latitude="41.000000",
+            longitude="-73.000000",
         )
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location)
 

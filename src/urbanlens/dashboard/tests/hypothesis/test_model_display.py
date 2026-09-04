@@ -8,6 +8,7 @@ Covers:
 All tests that rely on DB access use django.test.TestCase (with baker); pure
 property/display tests use unittest.TestCase with unsaved instances.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timezone
@@ -26,6 +27,7 @@ _VISIT_SOURCES = list(VisitSource.values)
 
 
 # -- PinVisit ------------------------------------------------------------------
+
 
 class PinVisitStrTests(SimpleTestCase):
     """PinVisit.__str__ contains the pin_id and a YYYY-MM-DD date."""
@@ -48,8 +50,9 @@ class PinVisitStrTests(SimpleTestCase):
 
     @given(
         st.integers(min_value=1, max_value=9999),
-        st.dates(min_value=datetime(2000, 1, 1, tzinfo=UTC).date(),
-                 max_value=datetime(2099, 12, 31, tzinfo=UTC).date()),
+        st.dates(
+            min_value=datetime(2000, 1, 1, tzinfo=UTC).date(), max_value=datetime(2099, 12, 31, tzinfo=UTC).date()
+        ),
     )
     @settings(max_examples=50, deadline=None)
     def test_str_always_contains_pin_id_and_date(self, pin_id: int, d) -> None:
@@ -90,6 +93,7 @@ class VisitSourceEnumTests(SimpleTestCase):
 
 
 # -- PinMarkup -----------------------------------------------------------------
+
 
 class PinMarkupStrTests(TestCase):
     """PinMarkup.__str__ encodes the markup_type and parent pin id."""
@@ -234,6 +238,7 @@ class MarkupTypeEnumTests(SimpleTestCase):
 
 
 # -- Alias models --------------------------------------------------------------
+
 
 class PinAliasStrTests(TestCase):
     """PinAlias.__str__ includes the alias name and the phrase 'pin alias'."""

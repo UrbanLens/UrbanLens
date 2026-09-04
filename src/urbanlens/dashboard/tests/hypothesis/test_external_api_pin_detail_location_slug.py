@@ -51,7 +51,9 @@ class PinDetailLocationSlugTests(TestCase):
 
     def test_location_slug_is_exposed_over_the_api(self) -> None:
         """The serializer passes ``location_slug`` through to the response."""
-        response = self.client.get(f"/dashboard/api/external/v1/pins/{self.pin.slug or self.pin.uuid}/", **_bearer(self.raw_key))
+        response = self.client.get(
+            f"/dashboard/api/external/v1/pins/{self.pin.slug or self.pin.uuid}/", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["location_slug"], self.pin.location.ensure_slug())
 

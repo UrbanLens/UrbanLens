@@ -49,11 +49,18 @@ class WikiCommentMentionGateTests(TestCase):
         self.author.refresh_from_db()
 
     def _get_comments(self):
-        return self.client.get(f"{BASE}/{self.location.ensure_slug()}/comments/", HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
+        return self.client.get(
+            f"{BASE}/{self.location.ensure_slug()}/comments/", HTTP_AUTHORIZATION=f"Bearer {self.raw_key}"
+        )
 
     def test_comment_mentioning_an_undiscovered_location_is_absent(self) -> None:
         """The whole comment disappears - it is not returned with the mention stripped."""
-        baker.make("dashboard.Comment", wiki=self.wiki, profile=self.author, text=f"Pairs well with @[Secret Spot](loc:{self.secret_location.uuid})")
+        baker.make(
+            "dashboard.Comment",
+            wiki=self.wiki,
+            profile=self.author,
+            text=f"Pairs well with @[Secret Spot](loc:{self.secret_location.uuid})",
+        )
         baker.make("dashboard.Comment", wiki=self.wiki, profile=self.author, text="A perfectly ordinary comment")
 
         body = self._get_comments().json()
@@ -62,7 +69,12 @@ class WikiCommentMentionGateTests(TestCase):
 
     def test_the_undiscovered_uuid_appears_nowhere_in_the_response(self) -> None:
         """Not in text, not in mentions, not anywhere in the raw bytes."""
-        baker.make("dashboard.Comment", wiki=self.wiki, profile=self.author, text=f"Check out @[Secret Spot](loc:{self.secret_location.uuid})")
+        baker.make(
+            "dashboard.Comment",
+            wiki=self.wiki,
+            profile=self.author,
+            text=f"Check out @[Secret Spot](loc:{self.secret_location.uuid})",
+        )
 
         raw = self._get_comments().content.decode()
         self.assertNotIn(str(self.secret_location.uuid), raw)
@@ -71,16 +83,29 @@ class WikiCommentMentionGateTests(TestCase):
     def test_a_mention_of_a_pinned_location_is_returned_and_resolved(self) -> None:
         """Once the viewer has pinned it, the mention is safe to name."""
         baker.make("dashboard.Pin", profile=self.profile, location=self.secret_location)
-        baker.make("dashboard.Comment", wiki=self.wiki, profile=self.author, text=f"Check out @[Secret Spot](loc:{self.secret_location.uuid})")
+        baker.make(
+            "dashboard.Comment",
+            wiki=self.wiki,
+            profile=self.author,
+            text=f"Check out @[Secret Spot](loc:{self.secret_location.uuid})",
+        )
 
         rows = self._get_comments().json()["results"]
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["mentions"], [{"display": "Secret Spot", "location_slug": self.secret_location.ensure_slug()}])
+        self.assertEqual(
+            rows[0]["mentions"], [{"display": "Secret Spot", "location_slug": self.secret_location.ensure_slug()}]
+        )
 
     def test_a_reply_mentioning_an_undiscovered_location_is_dropped(self) -> None:
         """The gate applies to replies too, not just top-level comments."""
         parent = baker.make("dashboard.Comment", wiki=self.wiki, profile=self.author, text="Parent comment")
-        baker.make("dashboard.Comment", wiki=self.wiki, profile=self.author, parent=parent, text=f"see @[Secret Spot](loc:{self.secret_location.uuid})")
+        baker.make(
+            "dashboard.Comment",
+            wiki=self.wiki,
+            profile=self.author,
+            parent=parent,
+            text=f"see @[Secret Spot](loc:{self.secret_location.uuid})",
+        )
         baker.make("dashboard.Comment", wiki=self.wiki, profile=self.author, parent=parent, text="Visible reply")
 
         rows = self._get_comments().json()["results"]
@@ -95,7 +120,9 @@ class WikiCommentMentionGateTests(TestCase):
 
     def test_own_pending_scan_comment_is_still_visible_to_its_author(self) -> None:
         """The uploader can see their own comment while it is being scanned."""
-        baker.make("dashboard.Comment", wiki=self.wiki, profile=self.profile, text="My unscanned upload", pending_scan=True)
+        baker.make(
+            "dashboard.Comment", wiki=self.wiki, profile=self.profile, text="My unscanned upload", pending_scan=True
+        )
         texts = [row["text"] for row in self._get_comments().json()["results"]]
         self.assertEqual(texts, ["My unscanned upload"])
 
@@ -121,7 +148,9 @@ class WikiCommentWriteTests(TestCase):
         return {"HTTP_AUTHORIZATION": f"Bearer {self.raw_key}"}
 
     def test_posting_a_comment_creates_it(self) -> None:
-        response = self.client.post(self._url(), {"text": "Great spot"}, content_type="application/json", **self._headers())
+        response = self.client.post(
+            self._url(), {"text": "Great spot"}, content_type="application/json", **self._headers()
+        )
         self.assertEqual(response.status_code, 201)
         self.assertTrue(self.wiki.comments.filter(text="Great spot").exists())
 

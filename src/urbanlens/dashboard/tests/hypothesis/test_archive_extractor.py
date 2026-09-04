@@ -8,6 +8,7 @@ Covers:
   file count limit, compression-ratio (zip bomb) detection
 - _safe_basename() and _extension() helpers
 """
+
 from __future__ import annotations
 
 import gzip
@@ -37,6 +38,7 @@ _hyp = hyp_settings(max_examples=40, deadline=None)
 # Helpers for building in-memory archives
 # ---------------------------------------------------------------------------
 
+
 def _make_zip(files: dict[str, bytes]) -> bytes:
     """Return a ZIP archive containing *files* (name → content)."""
     buf = io.BytesIO()
@@ -61,6 +63,7 @@ def _make_tgz(files: dict[str, bytes]) -> bytes:
 # is_archive
 # ---------------------------------------------------------------------------
 
+
 class IsArchiveTests(SimpleTestCase):
     """is_archive() identifies ZIP and GZIP magic bytes."""
 
@@ -84,9 +87,7 @@ class IsArchiveTests(SimpleTestCase):
     def test_xml_not_archive(self):
         self.assertFalse(is_archive(b"<?xml version"))
 
-    @given(st.binary(min_size=4, max_size=16).filter(
-        lambda b: b[:4] != b"PK\x03\x04" and b[:2] != b"\x1f\x8b"
-    ))
+    @given(st.binary(min_size=4, max_size=16).filter(lambda b: b[:4] != b"PK\x03\x04" and b[:2] != b"\x1f\x8b"))
     @_hyp
     def test_random_non_archive_bytes_return_false(self, data: bytes):
         self.assertFalse(is_archive(data))
@@ -95,6 +96,7 @@ class IsArchiveTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # _safe_basename
 # ---------------------------------------------------------------------------
+
 
 class SafeBasenameTests(SimpleTestCase):
     """_safe_basename rejects path-traversal and absolute paths."""
@@ -123,6 +125,7 @@ class SafeBasenameTests(SimpleTestCase):
 # _extension
 # ---------------------------------------------------------------------------
 
+
 class ExtensionTests(SimpleTestCase):
     """_extension returns lowercase extension without leading dot."""
 
@@ -145,6 +148,7 @@ class ExtensionTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # validate_content_type
 # ---------------------------------------------------------------------------
+
 
 class ValidateContentTypeTests(SimpleTestCase):
     """validate_content_type identifies format from file content."""
@@ -272,7 +276,7 @@ class ValidateContentTypeTests(SimpleTestCase):
 
     def test_my_activity_html_identified(self):
         data = (
-            b'<!DOCTYPE html><html><head><title>My Activity</title></head><body>'
+            b"<!DOCTYPE html><html><head><title>My Activity</title></head><body>"
             b'<div class="outer-cell"><div class="mdl-grid">'
             b'<div class="header-cell"><p class="mdl-typography--title">Maps<br></p></div>'
             b'<div class="content-cell mdl-typography--body-1">Directions to '
@@ -297,9 +301,9 @@ class ValidateContentTypeTests(SimpleTestCase):
         # would trip the CSV header heuristic (url/title/note) if the HTML check didn't
         # run first - this guards that ordering.
         data = (
-            b'<!DOCTYPE html><html><head><title>My Activity</title></head><body>'
+            b"<!DOCTYPE html><html><head><title>My Activity</title></head><body>"
             b'<div class="outer-cell"><p class="mdl-typography--title">Maps<br></p>'
-            b'<div>not a directions entry</div></div></body></html>'
+            b"<div>not a directions entry</div></div></body></html>"
         )
         result = validate_content_type("MyActivity.html", data)
         self.assertNotEqual(result, "csv")
@@ -308,6 +312,7 @@ class ValidateContentTypeTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # extract_archive - ZIP
 # ---------------------------------------------------------------------------
+
 
 class ExtractZipTests(SimpleTestCase):
     """extract_archive handles ZIP archives correctly."""
@@ -340,11 +345,13 @@ class ExtractZipTests(SimpleTestCase):
         self.assertEqual(result, [])
 
     def test_multiple_files_all_extracted(self):
-        data = _make_zip({
-            "a.json": json.dumps({"features": []}).encode(),
-            "b.kml": b"<kml><Placemark/></kml>",
-            "c.csv": b"URL,Title\nhttps://example.com,test",
-        })
+        data = _make_zip(
+            {
+                "a.json": json.dumps({"features": []}).encode(),
+                "b.kml": b"<kml><Placemark/></kml>",
+                "c.csv": b"URL,Title\nhttps://example.com,test",
+            }
+        )
         result = extract_archive(data)
         self.assertEqual(len(result), 3)
 
@@ -366,10 +373,12 @@ class ExtractZipTests(SimpleTestCase):
         self.assertNotIn("big.csv", names)
 
     def test_mixed_supported_and_unsupported_skips_unsupported(self):
-        data = _make_zip({
-            "places.json": json.dumps({"features": []}).encode(),
-            "image.png": b"\x89PNG\r\n",
-        })
+        data = _make_zip(
+            {
+                "places.json": json.dumps({"features": []}).encode(),
+                "image.png": b"\x89PNG\r\n",
+            }
+        )
         result = extract_archive(data)
         names = [r.name for r in result]
         self.assertIn("places.json", names)
@@ -434,6 +443,7 @@ class ExtractZipTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # extract_archive - TGZ
 # ---------------------------------------------------------------------------
+
 
 class ExtractTgzTests(SimpleTestCase):
     """extract_archive handles TGZ archives correctly."""
@@ -501,6 +511,7 @@ class ExtractTgzTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # extract_archive - format dispatch
 # ---------------------------------------------------------------------------
+
 
 class ExtractArchiveDispatchTests(SimpleTestCase):
     """extract_archive raises ValueError for unrecognised format."""

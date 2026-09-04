@@ -52,10 +52,30 @@ if TYPE_CHECKING:
 #: would make a broken gate look like a working one.
 _EPA_DATA = {
     "facilities": [
-        {"registry_id": "110000000001", "name": "Nearby Plating Works", "address": "1 Industrial Way", "compliance_status": "Violation", "significant_violator": True, "latitude": 40.02},
-        {"registry_id": "110000000002", "name": "Nearby Rendering Plant", "address": "2 Industrial Way", "compliance_status": "No Violation", "latitude": 40.03},
+        {
+            "registry_id": "110000000001",
+            "name": "Nearby Plating Works",
+            "address": "1 Industrial Way",
+            "compliance_status": "Violation",
+            "significant_violator": True,
+            "latitude": 40.02,
+        },
+        {
+            "registry_id": "110000000002",
+            "name": "Nearby Rendering Plant",
+            "address": "2 Industrial Way",
+            "compliance_status": "No Violation",
+            "latitude": 40.03,
+        },
     ],
-    "exact_site": {"registry_id": "110000000009", "name": "The Pinned Facility", "address": "9 Industrial Way", "latitude": 40.0, "longitude": -74.0, "programs": []},
+    "exact_site": {
+        "registry_id": "110000000009",
+        "name": "The Pinned Facility",
+        "address": "9 Industrial Way",
+        "latitude": 40.0,
+        "longitude": -74.0,
+        "programs": [],
+    },
 }
 
 

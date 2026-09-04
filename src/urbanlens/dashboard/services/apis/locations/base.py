@@ -16,7 +16,7 @@ from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.services.core.gateway import Gateway, Service
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterable
+    from collections.abc import Generator, Iterable, Mapping
 
 
 BBox = tuple[float, float, float, float]
@@ -192,7 +192,12 @@ class BoundaryProvider(Service, ABC):
         """Return a polygon boundary for the coordinate, or None to allow fallback."""
         ...
 
-    def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | None]:
+    def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> Mapping[str, Polygon | MultiPolygon | None]:
+        # Mapping, not dict, because dict is invariant in its value type: a
+        # provider that only ever yields Polygons could not otherwise declare
+        # that narrower return. MultiPolygon is in the union because REData
+        # returns one for a parcel made of disjoint pieces; every caller reads
+        # the result with .get() and narrows from there.
         """Return this provider's boundaries keyed by boundary type.
 
         The default implementation wraps :meth:`get_boundary` under

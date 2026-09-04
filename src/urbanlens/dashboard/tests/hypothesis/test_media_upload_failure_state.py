@@ -51,7 +51,9 @@ class RecordUploadProcessingFailureTests(TestCase):
         super().setUp()
         baker.make(User)  # the first user is auto-promoted to bootstrap site admin
         self.profile = Profile.objects.get(user=baker.make(User))
-        self.image = baker.make(Image, profile=self.profile, pending_scan=True, original_filename="cellar.jpg", image="pin_images/c.jpg")
+        self.image = baker.make(
+            Image, profile=self.profile, pending_scan=True, original_filename="cellar.jpg", image="pin_images/c.jpg"
+        )
 
     def test_a_failure_is_recorded_against_the_row(self) -> None:
         record_upload_processing_failure(self.image.pk, "The worker handling this photo stopped unexpectedly.")
@@ -62,7 +64,11 @@ class RecordUploadProcessingFailureTests(TestCase):
     def test_the_uploader_is_told(self) -> None:
         record_upload_processing_failure(self.image.pk, "boom")
 
-        self.assertTrue(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.PHOTO_UPLOAD_FAILED).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.PHOTO_UPLOAD_FAILED
+            ).exists()
+        )
 
     def test_a_reviewable_row_is_created_naming_the_file(self) -> None:
         """The uploader has to be able to tell which photo this was."""
@@ -89,7 +95,9 @@ class RecordUploadProcessingFailureTests(TestCase):
         record_upload_processing_failure(self.image.pk, "boom")
         record_upload_processing_failure(self.image.pk, "boom again")
 
-        self.assertEqual(PhotoUploadFailure.objects.filter(image=self.image, status=PhotoIssueStatus.PENDING).count(), 1)
+        self.assertEqual(
+            PhotoUploadFailure.objects.filter(image=self.image, status=PhotoIssueStatus.PENDING).count(), 1
+        )
 
     def test_a_profile_less_row_records_nothing(self) -> None:
         """Enrichment imagery belongs to nobody; there is no one to offer it to."""
@@ -106,7 +114,9 @@ class RetryAndDiscardTests(TestCase):
         super().setUp()
         baker.make(User)
         self.profile = Profile.objects.get(user=baker.make(User))
-        self.image = baker.make(Image, profile=self.profile, pending_scan=True, original_filename="cellar.jpg", image="pin_images/c.jpg")
+        self.image = baker.make(
+            Image, profile=self.profile, pending_scan=True, original_filename="cellar.jpg", image="pin_images/c.jpg"
+        )
         self.failure = record_upload_processing_failure(self.image.pk, "boom")
 
     def test_a_retry_re_enqueues_and_clears_the_failure(self) -> None:
@@ -143,7 +153,7 @@ class RetryAndDiscardTests(TestCase):
             self.assertFalse(retry_upload_processing(self.failure, self.profile))
 
     def test_discarding_removes_the_photo(self) -> None:
-        """"Discard the upload if they don't [retry]" - the owner's ruling."""
+        """ "Discard the upload if they don't [retry]" - the owner's ruling."""
         discard_failed_upload(self.failure)
 
         self.assertFalse(Image.objects.filter(pk=self.image.pk).exists())
@@ -167,7 +177,9 @@ class UnretriedDiscardSweepTests(TestCase):
         self.profile = Profile.objects.get(user=baker.make(User))
 
     def _aged_failure(self, age: datetime.timedelta) -> PhotoUploadFailure:
-        image = baker.make(Image, profile=self.profile, pending_scan=True, original_filename="old.jpg", image="pin_images/o.jpg")
+        image = baker.make(
+            Image, profile=self.profile, pending_scan=True, original_filename="old.jpg", image="pin_images/o.jpg"
+        )
         failure = record_upload_processing_failure(image.pk, "boom")
         Image.objects.filter(pk=image.pk).update(upload_failed_at=timezone.now() - age)
         return failure
@@ -211,8 +223,12 @@ class SweepBoundTests(TestCase):
         """
         from urbanlens.dashboard.tasks import STALLED_UPLOAD_AGE, requeue_stalled_pending_uploads
 
-        image = baker.make(Image, profile=self.profile, pending_scan=True, original_filename="doomed.jpg", image="pin_images/d.jpg")
-        Image.objects.filter(pk=image.pk).update(created=timezone.now() - STALLED_UPLOAD_AGE - datetime.timedelta(hours=1))
+        image = baker.make(
+            Image, profile=self.profile, pending_scan=True, original_filename="doomed.jpg", image="pin_images/d.jpg"
+        )
+        Image.objects.filter(pk=image.pk).update(
+            created=timezone.now() - STALLED_UPLOAD_AGE - datetime.timedelta(hours=1)
+        )
 
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             for _ in range(MAX_SWEEP_ATTEMPTS):
@@ -220,7 +236,9 @@ class SweepBoundTests(TestCase):
             self.assertEqual(enqueue.call_count, MAX_SWEEP_ATTEMPTS)
 
             requeue_stalled_pending_uploads()
-            self.assertEqual(enqueue.call_count, MAX_SWEEP_ATTEMPTS, "the sweep kept re-enqueuing a row it had already given up on")
+            self.assertEqual(
+                enqueue.call_count, MAX_SWEEP_ATTEMPTS, "the sweep kept re-enqueuing a row it had already given up on"
+            )
 
         self.assertTrue(PhotoUploadFailure.objects.filter(image=image, status=PhotoIssueStatus.PENDING).exists())
 
@@ -228,7 +246,9 @@ class SweepBoundTests(TestCase):
         from urbanlens.dashboard.tasks import STALLED_UPLOAD_AGE, requeue_stalled_pending_uploads
 
         image = baker.make(Image, profile=self.profile, pending_scan=True, image="pin_images/d.jpg")
-        Image.objects.filter(pk=image.pk).update(created=timezone.now() - STALLED_UPLOAD_AGE - datetime.timedelta(hours=1))
+        Image.objects.filter(pk=image.pk).update(
+            created=timezone.now() - STALLED_UPLOAD_AGE - datetime.timedelta(hours=1)
+        )
         record_upload_processing_failure(image.pk, "boom")
 
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
@@ -246,7 +266,9 @@ class FailureCardViewTests(TestCase):
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         self.client.force_login(self.user)
-        self.image = baker.make(Image, profile=self.profile, pending_scan=True, original_filename="cellar.jpg", image="pin_images/c.jpg")
+        self.image = baker.make(
+            Image, profile=self.profile, pending_scan=True, original_filename="cellar.jpg", image="pin_images/c.jpg"
+        )
         self.failure = record_upload_processing_failure(self.image.pk, "boom")
 
     def test_the_page_offers_retry_and_discard_for_a_processing_failure(self) -> None:
@@ -289,8 +311,12 @@ class FailureCardViewTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        self.assertEqual(self.client.post(reverse("vault.photos.failures.retry", args=[self.failure.pk])).status_code, 404)
-        self.assertEqual(self.client.post(reverse("vault.photos.failures.discard", args=[self.failure.pk])).status_code, 404)
+        self.assertEqual(
+            self.client.post(reverse("vault.photos.failures.retry", args=[self.failure.pk])).status_code, 404
+        )
+        self.assertEqual(
+            self.client.post(reverse("vault.photos.failures.discard", args=[self.failure.pk])).status_code, 404
+        )
 
     def test_a_refused_retry_puts_the_card_back(self) -> None:
         """A refusal from a card-swapping button must not swallow the card.

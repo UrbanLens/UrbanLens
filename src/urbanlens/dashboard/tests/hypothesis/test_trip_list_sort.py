@@ -10,6 +10,7 @@ Invariants verified:
     start_date always sort to the end regardless of direction.
   - Unrecognized `sort`/`dir` values fall back to the defaults instead of erroring.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -69,7 +70,7 @@ class TripListSortTests(TestCase):
         self.assertEqual(self._names(resp), ["Older", "Newer"])
 
     def test_start_date_ascending_groups_future_then_planning_then_past(self) -> None:
-        """"Soonest first" groups trips instead of sorting purely chronologically:
+        """ "Soonest first" groups trips instead of sorting purely chronologically:
         upcoming/active trips soonest first, then undated (planning) trips, then
         past trips most-recent first - so a months-old trip doesn't outrank
         tomorrow's just because its date is numerically smaller.

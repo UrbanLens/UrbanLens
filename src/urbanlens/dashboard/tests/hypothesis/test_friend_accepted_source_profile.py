@@ -53,7 +53,9 @@ class FriendAcceptedSourceProfileTests(TestCase):
 
     def test_accept_friend_request_names_the_accepter(self) -> None:
         """The path that was missing it."""
-        Friendship.objects.create(from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED
+        )
 
         friendship_service.accept_friend_request(self.accepter, self.requester)
 
@@ -61,7 +63,9 @@ class FriendAcceptedSourceProfileTests(TestCase):
 
     def test_request_or_accept_names_the_accepter(self) -> None:
         """The path that already set it - pinned so the two cannot drift apart."""
-        Friendship.objects.create(from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED
+        )
 
         friendship_service.request_or_accept_friendship(self.accepter, self.requester)
 
@@ -71,7 +75,9 @@ class FriendAcceptedSourceProfileTests(TestCase):
 
     def test_the_actor_named_matches_the_message_and_url(self) -> None:
         """source_profile must agree with the row's own text, not just be non-null."""
-        Friendship.objects.create(from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.requester, to_profile=self.accepter, status=FriendshipStatus.REQUESTED
+        )
 
         friendship_service.request_or_accept_friendship(self.accepter, self.requester)
 
@@ -111,7 +117,8 @@ class EveryFriendAcceptedSiteSetsSourceProfileTests(SimpleTestCase):
                 if "notification_type" not in kwargs:
                     continue
                 raises_accepted = any(
-                    kw.arg == "notification_type" and getattr(kw.value, "attr", "") == "FRIEND_ACCEPTED" for kw in node.keywords
+                    kw.arg == "notification_type" and getattr(kw.value, "attr", "") == "FRIEND_ACCEPTED"
+                    for kw in node.keywords
                 )
                 if raises_accepted:
                     sites.append((f"{path.name}:{node.lineno}", "source_profile" in kwargs))
@@ -138,4 +145,8 @@ class EveryFriendAcceptedSiteSetsSourceProfileTests(SimpleTestCase):
         Deriving the guard from the walk itself is what makes them agree: a scan
         that stops matching now fails here instead of passing silently there.
         """
-        self.assertGreaterEqual(len(self._accepted_sites()), 2, "expected at least two FRIEND_ACCEPTED sites - have they moved out of these modules, or changed how they raise?")
+        self.assertGreaterEqual(
+            len(self._accepted_sites()),
+            2,
+            "expected at least two FRIEND_ACCEPTED sites - have they moved out of these modules, or changed how they raise?",
+        )

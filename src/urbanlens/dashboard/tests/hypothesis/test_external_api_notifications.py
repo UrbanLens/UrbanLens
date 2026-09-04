@@ -42,7 +42,9 @@ class NotificationEnumValueTests(TestCase):
         self.assertEqual({value for value, _label in Status.choices}, {"unread", "read", "dismissed"})
 
     def test_importance_values(self) -> None:
-        self.assertEqual({value for value, _label in Importance.choices}, {"lowest", "low", "medium", "high", "highest"})
+        self.assertEqual(
+            {value for value, _label in Importance.choices}, {"lowest", "low", "medium", "high", "highest"}
+        )
 
     def test_delivery_preference_values(self) -> None:
         self.assertEqual({value for value, _label in DeliveryPreference.choices}, {"none", "site", "email", "both"})
@@ -157,7 +159,9 @@ class NotificationInboxTests(TestCase):
         unread = self._notify(self.profile)
         self._notify(self.profile, status=Status.READ)
 
-        response = self.client.get(reverse("external_api:notifications"), {"unread_only": "true"}, **_bearer(self.raw_key))
+        response = self.client.get(
+            reverse("external_api:notifications"), {"unread_only": "true"}, **_bearer(self.raw_key)
+        )
 
         results = response.json()["results"]
         self.assertEqual([row["uuid"] for row in results], [str(unread.uuid)])
@@ -277,7 +281,9 @@ class NotificationInboxTests(TestCase):
         self.assertEqual(sorted(seen), sorted(str(row.uuid) for row in created))
 
     def test_malformed_cursor_is_a_400(self) -> None:
-        response = self.client.get(reverse("external_api:notifications"), {"cursor": "not-a-cursor"}, **_bearer(self.raw_key))
+        response = self.client.get(
+            reverse("external_api:notifications"), {"cursor": "not-a-cursor"}, **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 400)
 
 

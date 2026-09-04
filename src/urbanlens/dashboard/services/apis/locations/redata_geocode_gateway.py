@@ -39,7 +39,7 @@ class RedataGeocodeGateway(RedataLocationContextGateway):
             per provider's own hit (not merged/re-ranked - see the module docstring).
 
         Note:
-            REData's own ``docs/api-reference.md`` documents this endpoint's
+            REData's own ``../REData/docs/api-reference.md`` documents this endpoint's
             request parameters and its shared envelope, but doesn't show a
             full worked example of one result entry's own fields. Callers
             here read ``latitude``/``longitude`` off each result, following

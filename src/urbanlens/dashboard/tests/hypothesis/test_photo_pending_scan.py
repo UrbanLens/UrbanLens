@@ -162,11 +162,21 @@ class PendingScanUploadFlowTests(TestCase):
         Image.objects.filter(pk=image.pk).update(wiki=wiki)
         image.refresh_from_db()
 
-        Friendship.objects.create(from_profile=self.owner, to_profile=self.stranger, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.owner,
+            to_profile=self.stranger,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
         baker.make(Pin, profile=self.stranger, location=self.location)
 
         self.client.force_login(self.stranger_user)
-        self.assertEqual(self.client.get(f"/media/{image.image.name}").status_code, 404, "still pending - must be denied even with both other gates open")
+        self.assertEqual(
+            self.client.get(f"/media/{image.image.name}").status_code,
+            404,
+            "still pending - must be denied even with both other gates open",
+        )
 
         process_image_upload(image.pk)
         image.refresh_from_db()
@@ -213,7 +223,9 @@ class PendingScanUploadFlowTests(TestCase):
 
         self.assertEqual(len(attempts), 2)
         self.assertTrue(result.get())
-        self.assertTrue(Image.objects.filter(pk=image.pk).exists(), "the row must not be rejected once a retry succeeds")
+        self.assertTrue(
+            Image.objects.filter(pk=image.pk).exists(), "the row must not be rejected once a retry succeeds"
+        )
         image.refresh_from_db()
         self.assertFalse(image.pending_scan)
         self.assertEqual(image.author, "A Photographer")
@@ -230,7 +242,10 @@ class PendingScanUploadFlowTests(TestCase):
             result = process_image_upload.apply(args=(image.pk,))
 
         self.assertFalse(result.get())
-        self.assertFalse(Image.objects.filter(pk=image.pk).exists(), "an unprocessable pending upload must be removed, not left visible raw")
+        self.assertFalse(
+            Image.objects.filter(pk=image.pk).exists(),
+            "an unprocessable pending upload must be removed, not left visible raw",
+        )
 
     def test_permanent_failure_notifies_the_uploader(self) -> None:
         from urbanlens.dashboard.models.notifications.meta import NotificationType
@@ -241,7 +256,9 @@ class PendingScanUploadFlowTests(TestCase):
         with patch("urbanlens.dashboard.tasks._process_photo_upload", return_value=None):
             process_image_upload.apply(args=(image.pk,))
 
-        notification = NotificationLog.objects.filter(profile=self.owner, notification_type=NotificationType.PHOTO_UPLOAD_FAILED).first()
+        notification = NotificationLog.objects.filter(
+            profile=self.owner, notification_type=NotificationType.PHOTO_UPLOAD_FAILED
+        ).first()
         self.assertIsNotNone(notification)
 
     def test_permanent_failure_on_a_legacy_already_cleared_row_does_not_delete_it(self) -> None:
@@ -373,15 +390,25 @@ class SafetyContactPortalRespectsPendingScanTests(TestCase):
         self.owner: Profile = self.user.profile
         self.checkin = baker.make(SafetyCheckin, profile=self.owner)
         # exactly one of contact_profile/email must be set (db_safety_checkin_contact_exactly_one_target)
-        self.contact = baker.make(SafetyCheckinContact, checkin=self.checkin, email="contact@example.com", contact_profile=None)
-        self.pending = baker.make(Image, safety_checkin=self.checkin, profile=self.owner, image="pin_images/raw.jpg", pending_scan=True)
-        self.ready = baker.make(Image, safety_checkin=self.checkin, profile=self.owner, image="pin_images/done.jpg", pending_scan=False)
+        self.contact = baker.make(
+            SafetyCheckinContact, checkin=self.checkin, email="contact@example.com", contact_profile=None
+        )
+        self.pending = baker.make(
+            Image, safety_checkin=self.checkin, profile=self.owner, image="pin_images/raw.jpg", pending_scan=True
+        )
+        self.ready = baker.make(
+            Image, safety_checkin=self.checkin, profile=self.owner, image="pin_images/done.jpg", pending_scan=False
+        )
 
     def test_a_pending_photo_is_not_served_to_a_contact(self) -> None:
-        response = self.client.get(reverse("safety.contact.photo", kwargs={"token": self.contact.token, "image_id": self.pending.pk}))
+        response = self.client.get(
+            reverse("safety.contact.photo", kwargs={"token": self.contact.token, "image_id": self.pending.pk})
+        )
         self.assertEqual(response.status_code, 404, "a contact was served the raw, unstripped upload")
 
     def test_a_processed_photo_is_still_served(self) -> None:
         # The gate must not break the feature it is guarding.
-        response = self.client.get(reverse("safety.contact.photo", kwargs={"token": self.contact.token, "image_id": self.ready.pk}))
+        response = self.client.get(
+            reverse("safety.contact.photo", kwargs={"token": self.contact.token, "image_id": self.ready.pk})
+        )
         self.assertNotEqual(response.status_code, 404, "the portal must still serve processed check-in photos")

@@ -77,7 +77,10 @@ class FindParksNearTests(SimpleTestCase):
 class FindNearestParkTests(SimpleTestCase):
     def test_returns_the_first_result(self) -> None:
         session = mock.Mock()
-        units = [{"park_code": "yell", "full_name": "Yellowstone National Park"}, {"park_code": "grte", "full_name": "Grand Teton National Park"}]
+        units = [
+            {"park_code": "yell", "full_name": "Yellowstone National Park"},
+            {"park_code": "grte", "full_name": "Grand Teton National Park"},
+        ]
         session.get.return_value = _response(200, {"count": 2, "complete": True, "results": units})
 
         result = _gateway(session).find_nearest_park(44.6, -110.5)

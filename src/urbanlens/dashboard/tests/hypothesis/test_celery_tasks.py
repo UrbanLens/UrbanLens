@@ -23,7 +23,9 @@ class GenerateBoundariesForLocationTaskTests(TestCase):
 
         location = baker.make_recipe("dashboard.location")
         with (
-            mock.patch("urbanlens.dashboard.services.locations.boundaries.generation_status", return_value=(True, False)),
+            mock.patch(
+                "urbanlens.dashboard.services.locations.boundaries.generation_status", return_value=(True, False)
+            ),
             mock.patch("urbanlens.dashboard.services.locations.boundaries.generate_location_boundaries") as generate,
         ):
             result = tasks.generate_boundaries_for_location(location.pk)
@@ -37,7 +39,9 @@ class GenerateBoundariesForLocationTaskTests(TestCase):
 
         location = baker.make_recipe("dashboard.location")
         with (
-            mock.patch("urbanlens.dashboard.services.locations.boundaries.generation_status", return_value=(True, True)),
+            mock.patch(
+                "urbanlens.dashboard.services.locations.boundaries.generation_status", return_value=(True, True)
+            ),
             mock.patch("urbanlens.dashboard.services.locations.boundaries.generate_location_boundaries") as generate,
         ):
             result = tasks.generate_boundaries_for_location(location.pk)
@@ -52,7 +56,9 @@ class GenerateBoundariesForLocationTaskTests(TestCase):
 
         location = baker.make_recipe("dashboard.location")
         with (
-            mock.patch("urbanlens.dashboard.services.locations.boundaries.generation_status", return_value=(False, False)),
+            mock.patch(
+                "urbanlens.dashboard.services.locations.boundaries.generation_status", return_value=(False, False)
+            ),
             mock.patch("urbanlens.dashboard.services.locations.boundaries.generate_location_boundaries") as generate,
         ):
             result = tasks.generate_boundaries_for_location(location.pk)
@@ -75,7 +81,9 @@ class PushTripToCalendarTaskTests(TestCase):
         from model_bakery import baker
 
         trip = baker.make("dashboard.Trip")
-        with mock.patch("urbanlens.dashboard.services.trips.calendar_sync.push_auto_synced_trip_changes", return_value=2) as push:
+        with mock.patch(
+            "urbanlens.dashboard.services.trips.calendar_sync.push_auto_synced_trip_changes", return_value=2
+        ) as push:
             result = tasks.push_trip_to_calendar(trip.pk)
 
         self.assertEqual(result, 2)
@@ -93,7 +101,9 @@ class DatabaseBackupTaskTests(SimpleTestCase):
 
         with (
             mock.patch("urbanlens.core.controllers.backups.db.DatabaseBackup", return_value=fake_backup) as backup_cls,
-            mock.patch("urbanlens.dashboard.models.site_settings.SiteSettings.get_current", return_value=fake_site_settings),
+            mock.patch(
+                "urbanlens.dashboard.models.site_settings.SiteSettings.get_current", return_value=fake_site_settings
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress") as progress,
         ):
             result = tasks._run_database_backup(task)
@@ -116,7 +126,9 @@ class DatabaseBackupTaskTests(SimpleTestCase):
 
         with (
             mock.patch("urbanlens.core.controllers.backups.db.DatabaseBackup", return_value=fake_backup),
-            mock.patch("urbanlens.dashboard.models.site_settings.SiteSettings.get_current", return_value=fake_site_settings),
+            mock.patch(
+                "urbanlens.dashboard.models.site_settings.SiteSettings.get_current", return_value=fake_site_settings
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress") as progress,
         ):
             result = tasks._run_database_backup(task)
@@ -133,7 +145,9 @@ class DatabaseBackupTaskTests(SimpleTestCase):
 
         with (
             mock.patch("urbanlens.core.controllers.backups.db.DatabaseBackup", return_value=fake_backup),
-            mock.patch("urbanlens.dashboard.models.site_settings.SiteSettings.get_current", return_value=fake_site_settings),
+            mock.patch(
+                "urbanlens.dashboard.models.site_settings.SiteSettings.get_current", return_value=fake_site_settings
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress") as progress,
         ):
             result = tasks._run_database_backup()
@@ -205,7 +219,9 @@ class AdvancePwywUsageLedgersTaskTests(TestCase):
             if role_subscription.pk == failing_sub.pk:
                 raise RuntimeError("boom")
 
-        with mock.patch("urbanlens.dashboard.services.billing.banking.advance_usage_ledger", side_effect=side_effect) as advance:
+        with mock.patch(
+            "urbanlens.dashboard.services.billing.banking.advance_usage_ledger", side_effect=side_effect
+        ) as advance:
             count = tasks.advance_pwyw_usage_ledgers()
 
         self.assertEqual(count, 1)

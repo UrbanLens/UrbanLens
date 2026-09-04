@@ -111,7 +111,9 @@ def _signature_mismatches() -> list[str]:
             # A function view or DRF action: the callback itself takes the parameters.
             missing = _unacceptable(callback, params)
             if missing:
-                problems.append(f"{getattr(callback, '__module__', '?')}.{getattr(callback, '__qualname__', callback)} cannot accept {sorted(missing)} (route {name or '<unnamed>'})")
+                problems.append(
+                    f"{getattr(callback, '__module__', '?')}.{getattr(callback, '__qualname__', callback)} cannot accept {sorted(missing)} (route {name or '<unnamed>'})"
+                )
             continue
         by_view[view_class].append((name, params))
 
@@ -126,7 +128,9 @@ def _signature_mismatches() -> list[str]:
             missing = _unacceptable(handler, supplied)
             if missing:
                 routes = sorted(name or "<unnamed>" for name, _ in entries)
-                problems.append(f"{view_class.__module__}.{view_class.__qualname__}.{handler_name}() cannot accept {sorted(missing)} (routes: {routes})")
+                problems.append(
+                    f"{view_class.__module__}.{view_class.__qualname__}.{handler_name}() cannot accept {sorted(missing)} (routes: {routes})"
+                )
     return sorted(problems)
 
 
@@ -173,4 +177,6 @@ class ViewSignatureRouteGuardTests(SimpleTestCase):
         """
         with_inherited = [params for _name, params, _cb in _routes() if len(params) > 1]
 
-        self.assertGreater(len(with_inherited), 20, "no routes appear to inherit a parameter - the resolver walk is not descending")
+        self.assertGreater(
+            len(with_inherited), 20, "no routes appear to inherit a parameter - the resolver walk is not descending"
+        )

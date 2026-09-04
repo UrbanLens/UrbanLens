@@ -95,7 +95,9 @@ class _OwnerApiTestCase(TestCase):
 
 class WikiOwnershipApiGateTests(_OwnerApiTestCase):
     def _get(self, raw_key: str):
-        return self.client.get(reverse("external_api:wikis.ownership", kwargs={"location_slug": self.location.slug}), **_bearer(raw_key))
+        return self.client.get(
+            reverse("external_api:wikis.ownership", kwargs={"location_slug": self.location.slug}), **_bearer(raw_key)
+        )
 
     def test_a_plain_users_key_never_receives_the_official_owners_contact_details(self) -> None:
         response = self._get(self._key_for(_plain_user()))
@@ -132,7 +134,9 @@ class WikiPropertySalesApiGateTests(_OwnerApiTestCase):
         self.sale.new_owners.add(self.contributed)
 
     def _get(self, raw_key: str):
-        return self.client.get(reverse("external_api:wikis.sales", kwargs={"location_slug": self.location.slug}), **_bearer(raw_key))
+        return self.client.get(
+            reverse("external_api:wikis.sales", kwargs={"location_slug": self.location.slug}), **_bearer(raw_key)
+        )
 
     def test_a_plain_users_key_never_receives_the_official_partys_name(self) -> None:
         response = self._get(self._key_for(_plain_user()))

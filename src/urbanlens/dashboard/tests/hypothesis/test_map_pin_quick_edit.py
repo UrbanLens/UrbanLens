@@ -18,6 +18,7 @@ Invariants verified:
     its own silently baked in whichever label's icon it was currently
     inheriting for display, without the user ever touching the icon picker.
 """
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User
@@ -59,8 +60,8 @@ class MapPinJsonTagsDataTests(TestCase):
     def test_tags_data_disambiguates_same_named_labels_by_id(self) -> None:
         """Two distinct labels may legally share a name (no unique constraint) -
         matching by name alone would conflate them, so id must always be present."""
-        tag = ensure_label( profile=self.profile, kind=KIND_TAG, name="Church")
-        category = ensure_label( profile=self.profile, kind=KIND_CATEGORY, name="Church")
+        tag = ensure_label(profile=self.profile, kind=KIND_TAG, name="Church")
+        category = ensure_label(profile=self.profile, kind=KIND_CATEGORY, name="Church")
         self.pin.labels.add(tag, category)
         tags_data = self._tags_data()
         ids = {t["id"] for t in tags_data}
@@ -152,7 +153,7 @@ class MapPinOwnIconColorFieldsTests(TestCase):
         return resp.json()["pin"]
 
     def test_effective_icon_falls_back_to_label_but_own_icon_does_not(self) -> None:
-        label = ensure_label( profile=self.profile, kind=KIND_TAG, name="Factory", icon="factory")
+        label = ensure_label(profile=self.profile, kind=KIND_TAG, name="Factory", icon="factory")
         self.pin.labels.add(label)
         data = self._pin_json()
         self.assertEqual(data["icon"], "factory")  # effective: used for the map marker
@@ -172,7 +173,7 @@ class MapPinOwnIconColorFieldsTests(TestCase):
         self.assertTrue(data["own_custom_icon_url"])
 
     def test_own_color_falls_back_to_label_but_effective_color_does_not_leak_into_it(self) -> None:
-        label = ensure_label( profile=self.profile, kind=KIND_TAG, name="Factory", icon="factory", color="#ff0000")
+        label = ensure_label(profile=self.profile, kind=KIND_TAG, name="Factory", icon="factory", color="#ff0000")
         self.pin.labels.add(label)
         data = self._pin_json()
         self.assertEqual(data["color"], "#ff0000")  # effective: used for the map marker
@@ -182,7 +183,7 @@ class MapPinOwnIconColorFieldsTests(TestCase):
         """Regression test: mirrors the fixed openEditPinDialog, which pre-fills
         the icon input from own_icon (empty here), not the label-inherited
         effective icon, then resubmits that unchanged value on an unrelated save."""
-        label = ensure_label( profile=self.profile, kind=KIND_TAG, name="Factory", icon="factory")
+        label = ensure_label(profile=self.profile, kind=KIND_TAG, name="Factory", icon="factory")
         self.pin.labels.add(label)
 
         own_icon = self._pin_json()["own_icon"]

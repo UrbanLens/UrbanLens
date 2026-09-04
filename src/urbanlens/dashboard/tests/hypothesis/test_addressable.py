@@ -3,6 +3,7 @@
 Tests use unsaved Location instances (no DB required) to exercise the
 pure Python properties on AddressableMixin.
 """
+
 from __future__ import annotations
 
 from hypothesis import given, settings, strategies as st
@@ -19,7 +20,7 @@ _ascii_text = st.text(
 )
 _opt_text = st.one_of(st.none(), _ascii_text)
 
-_HYP = dict(max_examples=100, deadline=None)
+_HYP = {"max_examples": 100, "deadline": None}
 
 
 def _loc(**kwargs) -> Location:
@@ -36,12 +37,18 @@ def _loc(**kwargs) -> Location:
 
 # -- address property -----------------------------------------------------------
 
+
 class AddressPropertyTests(SimpleTestCase):
     """AddressableMixin.address builds from street_number, route, locality, state, zipcode."""
 
     def test_all_fields_present(self) -> None:
-        loc = _loc(street_number="123", route="Main St", locality="Springfield",
-            administrative_area_level_1="MA", zipcode="01234")
+        loc = _loc(
+            street_number="123",
+            route="Main St",
+            locality="Springfield",
+            administrative_area_level_1="MA",
+            zipcode="01234",
+        )
         self.assertEqual(loc.address, "123 Main St, Springfield, MA 01234")
 
     def test_returns_none_when_all_empty(self) -> None:
@@ -80,9 +87,7 @@ class AddressPropertyTests(SimpleTestCase):
         zipcode=_opt_text,
     )
     @settings(**_HYP)
-    def test_address_is_none_iff_all_components_are_none(
-        self, street_number, route, locality, state, zipcode
-    ) -> None:
+    def test_address_is_none_iff_all_components_are_none(self, street_number, route, locality, state, zipcode) -> None:
         loc = _loc(
             street_number=street_number,
             route=route,
@@ -110,6 +115,7 @@ class AddressPropertyTests(SimpleTestCase):
 
 
 # -- address_basic property ----------------------------------------------------
+
 
 class AddressBasicPropertyTests(SimpleTestCase):
     """AddressableMixin.address_basic - only street_number and route."""
@@ -154,6 +160,7 @@ class AddressBasicPropertyTests(SimpleTestCase):
 
 # -- address_extended property -------------------------------------------------
 
+
 class AddressExtendedPropertyTests(SimpleTestCase):
     """AddressableMixin.address_extended - street with city, no state/zip."""
 
@@ -188,6 +195,7 @@ class AddressExtendedPropertyTests(SimpleTestCase):
 
 
 # -- Proxy properties and setters ---------------------------------------------
+
 
 class ProxyPropertyTests(SimpleTestCase):
     """state, county, and city are thin proxies for administrative_area fields."""

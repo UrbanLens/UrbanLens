@@ -88,5 +88,9 @@ class SearchMatchesWikiAccessTests(TestCase):
         that also confirms the place exists."""
         Wiki.objects.filter(pk=self.wiki.pk).update(created_by=self.profile)
 
-        self.assertEqual(self._page_status(), 404, "the authority grants access on created_by after all - then it belongs in wiki_access, not in search")
+        self.assertEqual(
+            self._page_status(),
+            404,
+            "the authority grants access on created_by after all - then it belongs in wiki_access, not in search",
+        )
         self.assertNotIn(_WIKI_NAME, _wiki_titles(GlobalSearchEngine().search(self.profile, "zephyr grain")))

@@ -77,7 +77,9 @@ class RejectionsAreNotBilledTests(TestCase):
             .exclude(was_service_disabled=True)
             .count()
         )
-        self.assertEqual(billed, 2, f"rejections were charged against the daily budget: {billed} billed for 2 real calls")
+        self.assertEqual(
+            billed, 2, f"rejections were charged against the daily budget: {billed} billed for 2 real calls"
+        )
 
     def test_the_limiter_agrees_once_the_minute_window_is_irrelevant(self) -> None:
         """A day's budget must not be exhausted by a burst of refusals.

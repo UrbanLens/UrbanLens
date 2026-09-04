@@ -46,7 +46,9 @@ def test_unknown_hash_raises() -> None:
 
 def test_explicit_clean_verdict_returns_none() -> None:
     gateway = Mock()
-    gateway.get_file_report.return_value = {"last_analysis_stats": {"malicious": 0, "suspicious": 0, "undetected": 3, "harmless": 67}}
+    gateway.get_file_report.return_value = {
+        "last_analysis_stats": {"malicious": 0, "suspicious": 0, "undetected": 3, "harmless": 67}
+    }
     with (
         patch.object(virustotal_scan.app_settings, "virustotal_api_key", new="test-key"),
         patch.object(virustotal_scan, "VirusTotalGateway", return_value=gateway),
@@ -83,7 +85,9 @@ def test_all_zero_stats_raises_rather_than_reading_as_clean() -> None:
     """The core correctness guard: absence of a positive finding must never be
     conflated with an explicit clean verdict when no engine actually reported."""
     gateway = Mock()
-    gateway.get_file_report.return_value = {"last_analysis_stats": {"malicious": 0, "suspicious": 0, "undetected": 0, "harmless": 0}}
+    gateway.get_file_report.return_value = {
+        "last_analysis_stats": {"malicious": 0, "suspicious": 0, "undetected": 0, "harmless": 0}
+    }
     with (
         patch.object(virustotal_scan.app_settings, "virustotal_api_key", new="test-key"),
         patch.object(virustotal_scan, "VirusTotalGateway", return_value=gateway),

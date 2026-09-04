@@ -15,11 +15,17 @@ from unittest.mock import Mock
 from hypothesis import given, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.apis.weather.forecast import owm_item_to_slot, redata_forecast_to_slots, redata_sun_to_sun_times
+from urbanlens.dashboard.services.apis.weather.forecast import (
+    owm_item_to_slot,
+    redata_forecast_to_slots,
+    redata_sun_to_sun_times,
+)
 from urbanlens.dashboard.services.apis.weather.open_meteo import OpenMeteoGateway
 
 #: Fixed-offset zones covering the real UTC-14..UTC+14 range, whole minutes.
-_fixed_offsets = st.integers(min_value=-14 * 60, max_value=14 * 60).map(lambda minutes: timezone(timedelta(minutes=minutes)))
+_fixed_offsets = st.integers(min_value=-14 * 60, max_value=14 * 60).map(
+    lambda minutes: timezone(timedelta(minutes=minutes))
+)
 
 
 class OwmItemToSlotTests(SimpleTestCase):
@@ -97,7 +103,14 @@ class RedataForecastToSlotsTests(SimpleTestCase):
         self.assertEqual(slot["precipitation_probability"], 30)
 
     def test_daily_entry_uses_temperature_max(self) -> None:
-        forecast = [{"granularity": "daily", "starts_at": "2026-06-16T00:00:00", "temperature_max_c": 25.0, "condition": "overcast"}]
+        forecast = [
+            {
+                "granularity": "daily",
+                "starts_at": "2026-06-16T00:00:00",
+                "temperature_max_c": 25.0,
+                "condition": "overcast",
+            }
+        ]
 
         slots = redata_forecast_to_slots(forecast)
 
@@ -116,14 +129,18 @@ class RedataForecastToSlotsTests(SimpleTestCase):
         self.assertEqual(slots[0]["condition"], "Hail")
 
     def test_naive_starts_at_is_assumed_utc(self) -> None:
-        slots = redata_forecast_to_slots([{"starts_at": "2026-06-15T09:00:00", "temperature_c": 10.0, "condition": "clear"}])
+        slots = redata_forecast_to_slots(
+            [{"starts_at": "2026-06-15T09:00:00", "temperature_c": 10.0, "condition": "clear"}]
+        )
 
         self.assertEqual(slots[0]["date_utc"], datetime(2026, 6, 15, 9, 0, tzinfo=UTC))
         self.assertIsNone(slots[0]["date"].tzinfo, "the display date stays as REData sent it")
 
     @given(st.datetimes(min_value=datetime(1980, 1, 1), max_value=datetime(2100, 1, 1), timezones=_fixed_offsets))
     def test_aware_starts_at_round_trips_to_the_same_utc_instant(self, moment: datetime) -> None:
-        slots = redata_forecast_to_slots([{"starts_at": moment.isoformat(), "temperature_c": 10.0, "condition": "clear"}])
+        slots = redata_forecast_to_slots(
+            [{"starts_at": moment.isoformat(), "temperature_c": 10.0, "condition": "clear"}]
+        )
 
         self.assertEqual(len(slots), 1)
         self.assertEqual(slots[0]["date_utc"], moment.astimezone(UTC))

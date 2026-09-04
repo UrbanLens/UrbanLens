@@ -123,7 +123,15 @@ class QueryScalingMixin:
         self.assertEqual(response.status_code, 200, f"{url} returned {response.status_code}")  # type: ignore[attr-defined]
         return list(captured.captured_queries), len(response.content)
 
-    def assert_flat(self, url: str, *, tolerance: int = DEFAULT_TOLERANCE, expect_growth: bool = True, growth_waiver: str = "", **extra: Any) -> None:
+    def assert_flat(
+        self,
+        url: str,
+        *,
+        tolerance: int = DEFAULT_TOLERANCE,
+        expect_growth: bool = True,
+        growth_waiver: str = "",
+        **extra: Any,
+    ) -> None:
         """Assert *url* costs the same number of queries at two data sizes.
 
         Args:
@@ -161,7 +169,10 @@ class QueryScalingMixin:
             )
 
         if large_queries and len(large_queries) > len(small_queries) + tolerance:
-            report = "\n".join(f"      {before:3d} -> {after:3d}  {sql}" for before, after, sql in queries_that_grew(small_queries, large_queries)[:5])
+            report = "\n".join(
+                f"      {before:3d} -> {after:3d}  {sql}"
+                for before, after, sql in queries_that_grew(small_queries, large_queries)[:5]
+            )
             raise AssertionError(
                 f"{url} ran {len(small_queries)} queries for {self.first_batch} rows and "
                 f"{len(large_queries)} for {total} - it is querying per row.\n"

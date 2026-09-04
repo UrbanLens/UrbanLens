@@ -1,4 +1,4 @@
-""""Today" is the user's today, not the server's.
+""" "Today" is the user's today, not the server's.
 
 ``USE_TZ`` is on, so ``datetime.date.today()`` reads the *server's* timezone while
 ``django.utils.timezone.localdate()`` reads the *active* one. They disagree for part of

@@ -4,6 +4,7 @@ Covers all nine platforms, the _clean_handle validator, handle security contract
 (no HTML/path-traversal payloads survive), website length cap, fragment stripping,
 and the get_profile_links() rendering helper.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -25,6 +26,7 @@ _hyp = hyp_settings(max_examples=60, deadline=None)
 # ---------------------------------------------------------------------------
 # _clean_handle
 # ---------------------------------------------------------------------------
+
 
 class CleanHandleTests(SimpleTestCase):
     """_clean_handle strips leading @ and rejects invalid characters."""
@@ -75,9 +77,7 @@ class CleanHandleTests(SimpleTestCase):
         self.assertIsNotNone(result)
 
     @given(
-        bad_char=st.characters(whitelist_categories=("Ps", "Pe", "Po")).filter(
-            lambda c: c not in "._-@#"
-        ),
+        bad_char=st.characters(whitelist_categories=("Ps", "Pe", "Po")).filter(lambda c: c not in "._-@#"),
         base=st.from_regex(r"[a-z]{3,10}", fullmatch=True),
     )
     @_hyp
@@ -89,6 +89,7 @@ class CleanHandleTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # Instagram
 # ---------------------------------------------------------------------------
+
 
 class InstagramParserTests(SimpleTestCase):
     """parse_social_link correctly extracts Instagram handles."""
@@ -120,6 +121,7 @@ class InstagramParserTests(SimpleTestCase):
 # Bluesky
 # ---------------------------------------------------------------------------
 
+
 class BlueskyParserTests(SimpleTestCase):
     """parse_social_link correctly extracts Bluesky profile handles."""
 
@@ -140,6 +142,7 @@ class BlueskyParserTests(SimpleTestCase):
 # UER
 # ---------------------------------------------------------------------------
 
+
 class UERParserTests(SimpleTestCase):
     """parse_social_link correctly extracts UER posterid."""
 
@@ -150,9 +153,7 @@ class UERParserTests(SimpleTestCase):
         )
 
     def test_non_numeric_posterid_returns_none(self):
-        self.assertIsNone(
-            parse_social_link("https://www.uer.ca/forum_showprofile.asp?fid=1&posterid=abc")
-        )
+        self.assertIsNone(parse_social_link("https://www.uer.ca/forum_showprofile.asp?fid=1&posterid=abc"))
 
     def test_missing_posterid_returns_none(self):
         self.assertIsNone(parse_social_link("https://www.uer.ca/forum_showprofile.asp?fid=1"))
@@ -161,6 +162,7 @@ class UERParserTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # Facebook
 # ---------------------------------------------------------------------------
+
 
 class FacebookParserTests(SimpleTestCase):
     """parse_social_link correctly extracts Facebook handles."""
@@ -182,6 +184,7 @@ class FacebookParserTests(SimpleTestCase):
 # Flickr
 # ---------------------------------------------------------------------------
 
+
 class FlickrParserTests(SimpleTestCase):
     """parse_social_link correctly extracts Flickr usernames."""
 
@@ -201,6 +204,7 @@ class FlickrParserTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # YouTube
 # ---------------------------------------------------------------------------
+
 
 class YouTubeParserTests(SimpleTestCase):
     """parse_social_link correctly extracts YouTube handles and channel IDs."""
@@ -240,6 +244,7 @@ class YouTubeParserTests(SimpleTestCase):
 # TikTok
 # ---------------------------------------------------------------------------
 
+
 class TikTokParserTests(SimpleTestCase):
     """parse_social_link correctly extracts TikTok handles."""
 
@@ -259,6 +264,7 @@ class TikTokParserTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # Reddit
 # ---------------------------------------------------------------------------
+
 
 class RedditParserTests(SimpleTestCase):
     """parse_social_link correctly extracts Reddit usernames."""
@@ -291,6 +297,7 @@ class RedditParserTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # Generic website
 # ---------------------------------------------------------------------------
+
 
 class WebsiteParserTests(SimpleTestCase):
     """parse_social_link falls through to generic website for unknown domains."""
@@ -332,6 +339,7 @@ class WebsiteParserTests(SimpleTestCase):
 # Rejected schemes / edge cases
 # ---------------------------------------------------------------------------
 
+
 class SecurityRejectionTests(SimpleTestCase):
     """parse_social_link rejects dangerous schemes and empty inputs."""
 
@@ -366,6 +374,7 @@ class SecurityRejectionTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # get_profile_links
 # ---------------------------------------------------------------------------
+
 
 class GetProfileLinksTests(SimpleTestCase):
     """get_profile_links renders SocialLink rows into dicts with URL and icon."""

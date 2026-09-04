@@ -16,7 +16,9 @@ from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind
 from urbanlens.dashboard.services.consensus.fields import AGREEMENT_DISTANCE_METERS, all_kinds, get_strategy
 
 _HYP = {"max_examples": 100, "deadline": None}
-_ascii_text = st.text(alphabet=st.characters(min_codepoint=32, max_codepoint=126, blacklist_characters='\n\r"'), min_size=1, max_size=40)
+_ascii_text = st.text(
+    alphabet=st.characters(min_codepoint=32, max_codepoint=126, blacklist_characters='\n\r"'), min_size=1, max_size=40
+)
 
 
 class RegistryCompletenessTests(SimpleTestCase):

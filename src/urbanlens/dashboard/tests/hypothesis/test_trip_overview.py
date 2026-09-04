@@ -9,6 +9,7 @@ Invariants verified:
   - Visiting a trip's detail page (TripDetailView) stamps the viewer's own
     membership row's last_viewed_at, without touching other members' rows.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -51,7 +52,12 @@ class TripOverviewViewTests(TestCase):
     def test_stats_count_by_timeline_status(self) -> None:
         today = timezone.now().date()
         _make_trip(self.profile, name="Upcoming", start_date=today + datetime.timedelta(days=5))
-        _make_trip(self.profile, name="Past", start_date=today - datetime.timedelta(days=10), end_date=today - datetime.timedelta(days=8))
+        _make_trip(
+            self.profile,
+            name="Past",
+            start_date=today - datetime.timedelta(days=10),
+            end_date=today - datetime.timedelta(days=8),
+        )
         _make_trip(self.profile, name="Planning")
 
         resp = self.client_.get(self._url())

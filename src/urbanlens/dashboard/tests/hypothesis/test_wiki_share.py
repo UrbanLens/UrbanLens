@@ -30,7 +30,9 @@ class WikiShareServiceTests(TestCase):
     """share_from_pin seeds only chosen fields/aliases/photos and links the pin."""
 
     def setUp(self):
-        self.location = baker.make("dashboard.Location", latitude="40.000000", longitude="-74.000000", official_name="Old Mill")
+        self.location = baker.make(
+            "dashboard.Location", latitude="40.000000", longitude="-74.000000", official_name="Old Mill"
+        )
         self.pin = baker.make(
             "dashboard.Pin",
             location=self.location,
@@ -39,9 +41,13 @@ class WikiShareServiceTests(TestCase):
             vulnerability=2,
         )
 
-    def _create(self, *, include: set[str] | None = None, alias_ids: set[int] | None = None, image_ids: set[int] | None = None) -> tuple[Wiki, bool]:
+    def _create(
+        self, *, include: set[str] | None = None, alias_ids: set[int] | None = None, image_ids: set[int] | None = None
+    ) -> tuple[Wiki, bool]:
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
-            return WikiShareService().share_from_pin(self.pin, include_fields=include, alias_ids=alias_ids, image_ids=image_ids)
+            return WikiShareService().share_from_pin(
+                self.pin, include_fields=include, alias_ids=alias_ids, image_ids=image_ids
+            )
 
     def test_sharing_nothing_contributes_nothing(self) -> None:
         wiki, shared = self._create()

@@ -42,9 +42,9 @@ def _square(lng: float, lat: float, delta: float) -> MultiPolygon:
     return MultiPolygon(Polygon(ring, srid=4326), srid=4326)
 
 
-_BIG = _square(-74.0, 40.0, 0.003)      # property-sized
+_BIG = _square(-74.0, 40.0, 0.003)  # property-sized
 _MEDIUM = _square(-74.0, 40.0, 0.002)
-_SMALL = _square(-74.0, 40.0, 0.001)    # building-sized
+_SMALL = _square(-74.0, 40.0, 0.001)  # building-sized
 
 
 class BoundaryModelTests(TestCase):
@@ -55,7 +55,9 @@ class BoundaryModelTests(TestCase):
 
     def test_is_source_candidate(self) -> None:
         place = make_place(PlaceKind.PARCEL, _BIG)
-        row = baker.make("dashboard.Boundary", place=place, location=None, wiki=None, pin=None, profile=None, source="redata")
+        row = baker.make(
+            "dashboard.Boundary", place=place, location=None, wiki=None, pin=None, profile=None, source="redata"
+        )
         self.assertTrue(row.is_source_candidate)
 
     def test_pin_row_is_not_a_source_candidate(self) -> None:
@@ -91,9 +93,19 @@ class BoundaryQuerySetTests(TestCase):
         self.pin = baker.make("dashboard.Pin", location=self.location)
         self.wiki = baker.make("dashboard.Wiki", location=self.location)
         self.place = make_place(PlaceKind.PARCEL, _BIG)
-        self.candidate_row = baker.make("dashboard.Boundary", place=self.place, location=None, boundary_type=BoundaryType.PROPERTY, source="redata")
-        self.wiki_row = baker.make("dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY)
-        self.pin_row = baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.BUILDING)
+        self.candidate_row = baker.make(
+            "dashboard.Boundary", place=self.place, location=None, boundary_type=BoundaryType.PROPERTY, source="redata"
+        )
+        self.wiki_row = baker.make(
+            "dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY
+        )
+        self.pin_row = baker.make(
+            "dashboard.Boundary",
+            pin=self.pin,
+            profile=self.pin.profile,
+            location=self.location,
+            boundary_type=BoundaryType.BUILDING,
+        )
 
     def test_source_candidates_exclude_wiki_and_pin_rows(self) -> None:
         candidates = list(Boundary.objects.source_candidates_for_place(self.place))
@@ -138,7 +150,13 @@ class PinPropertyResolutionTests(TestCase):
         wiki = baker.make("dashboard.Wiki", location=self.location)
         self.pin.wiki = wiki
         self.pin.save(update_fields=["wiki"])
-        baker.make("dashboard.Boundary", wiki=wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_MEDIUM)
+        baker.make(
+            "dashboard.Boundary",
+            wiki=wiki,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_MEDIUM,
+        )
 
         polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.PROPERTY)
         self.assertEqual(source, "wiki")
@@ -147,7 +165,13 @@ class PinPropertyResolutionTests(TestCase):
     def test_locations_wiki_used_when_pin_never_linked(self) -> None:
         """Imported pins have no pin.wiki; the location's wiki still applies."""
         wiki = baker.make("dashboard.Wiki", location=self.location)
-        baker.make("dashboard.Boundary", wiki=wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_MEDIUM)
+        baker.make(
+            "dashboard.Boundary",
+            wiki=wiki,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_MEDIUM,
+        )
 
         _polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.PROPERTY)
         self.assertEqual(source, "wiki")
@@ -156,14 +180,28 @@ class PinPropertyResolutionTests(TestCase):
         make_place(PlaceKind.PARCEL, _BIG)
         resolution.resolve_location_place(self.location)
         self.pin.refresh_from_db()
-        baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_SMALL)
+        baker.make(
+            "dashboard.Boundary",
+            pin=self.pin,
+            profile=self.pin.profile,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_SMALL,
+        )
 
         polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.PROPERTY)
         self.assertEqual(source, "pin")
         self.assertEqual(polygon.wkt, _SMALL.wkt)
 
     def test_detail_pin_inherits_parent_property(self) -> None:
-        baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_BIG)
+        baker.make(
+            "dashboard.Boundary",
+            pin=self.pin,
+            profile=self.pin.profile,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_BIG,
+        )
         child_location = baker.make("dashboard.Location", latitude="40.000500", longitude="-74.000500")
         child = baker.make("dashboard.Pin", profile=self.pin.profile, location=child_location, parent_pin=self.pin)
 
@@ -172,10 +210,24 @@ class PinPropertyResolutionTests(TestCase):
         self.assertEqual(polygon.wkt, _BIG.wkt)
 
     def test_detail_pin_own_drawing_beats_inheritance(self) -> None:
-        baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_BIG)
+        baker.make(
+            "dashboard.Boundary",
+            pin=self.pin,
+            profile=self.pin.profile,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_BIG,
+        )
         child_location = baker.make("dashboard.Location", latitude="40.000500", longitude="-74.000500")
         child = baker.make("dashboard.Pin", profile=self.pin.profile, location=child_location, parent_pin=self.pin)
-        baker.make("dashboard.Boundary", pin=child, profile=child.profile, location=child_location, boundary_type=BoundaryType.PROPERTY, polygon=_SMALL)
+        baker.make(
+            "dashboard.Boundary",
+            pin=child,
+            profile=child.profile,
+            location=child_location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_SMALL,
+        )
 
         polygon, source = Boundary.objects.resolve_for_pin(child, BoundaryType.PROPERTY)
         self.assertEqual(source, "pin")
@@ -183,7 +235,14 @@ class PinPropertyResolutionTests(TestCase):
 
     def test_detail_pin_outside_parent_property_falls_through_to_own_circle(self) -> None:
         """A detail pin outside its parent's property must not inherit that property's boundary."""
-        baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_BIG)
+        baker.make(
+            "dashboard.Boundary",
+            pin=self.pin,
+            profile=self.pin.profile,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_BIG,
+        )
         # Outside the ±0.003 property square, but still a "detail pin" of it.
         child_location = baker.make("dashboard.Location", latitude="40.010000", longitude="-74.010000")
         child = baker.make("dashboard.Pin", profile=self.pin.profile, location=child_location, parent_pin=self.pin)
@@ -197,7 +256,14 @@ class PinPropertyResolutionTests(TestCase):
         """The containment gate is ``contains() or touches()`` - a point exactly on the
         edge (not strictly inside) must still count, or a detail pin sitting right on its
         parent's line would wrongly fall through to its own circle."""
-        baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_BIG)
+        baker.make(
+            "dashboard.Boundary",
+            pin=self.pin,
+            profile=self.pin.profile,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_BIG,
+        )
         # Exactly on the right edge of the ±0.003 property square.
         child_location = baker.make("dashboard.Location", latitude="40.000000", longitude="-73.997000")
         child = baker.make("dashboard.Pin", profile=self.pin.profile, location=child_location, parent_pin=self.pin)
@@ -307,7 +373,14 @@ class PinBuildingResolutionTests(TestCase):
         self.assertEqual(polygon.wkt, _SMALL.wkt)
 
     def test_detail_pin_inside_parent_building_inherits_it(self) -> None:
-        baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.BUILDING, polygon=_SMALL)
+        baker.make(
+            "dashboard.Boundary",
+            pin=self.pin,
+            profile=self.pin.profile,
+            location=self.location,
+            boundary_type=BoundaryType.BUILDING,
+            polygon=_SMALL,
+        )
         # Inside the ±0.001 building square.
         child_location = baker.make("dashboard.Location", latitude="40.000400", longitude="-74.000400")
         child = baker.make("dashboard.Pin", profile=self.pin.profile, location=child_location, parent_pin=self.pin)
@@ -318,7 +391,14 @@ class PinBuildingResolutionTests(TestCase):
 
     def test_detail_pin_outside_parent_building_does_not_inherit(self) -> None:
         """A detail pin for another building on the property gets no building boundary."""
-        baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.BUILDING, polygon=_SMALL)
+        baker.make(
+            "dashboard.Boundary",
+            pin=self.pin,
+            profile=self.pin.profile,
+            location=self.location,
+            boundary_type=BoundaryType.BUILDING,
+            polygon=_SMALL,
+        )
         # Outside the ±0.001 building square (but on the same property).
         child_location = baker.make("dashboard.Location", latitude="40.002000", longitude="-74.002000")
         child = baker.make("dashboard.Pin", profile=self.pin.profile, location=child_location, parent_pin=self.pin)
@@ -358,7 +438,13 @@ class ScopeGateResolutionTests(TestCase):
     def test_building_scoped_wikis_own_property_drawing_is_still_gated(self) -> None:
         """Even a community-drawn PROPERTY boundary on a building-scoped wiki is suppressed."""
         wiki = baker.make("dashboard.Wiki", location=self.location, place=self.building_a)
-        baker.make("dashboard.Boundary", wiki=wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_MEDIUM)
+        baker.make(
+            "dashboard.Boundary",
+            wiki=wiki,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_MEDIUM,
+        )
 
         polygon, source = Boundary.objects.resolve_for_wiki(wiki, BoundaryType.PROPERTY)
         self.assertIsNone(polygon)
@@ -386,7 +472,13 @@ class WikiResolutionTests(TestCase):
         place = make_place(PlaceKind.PARCEL, _BIG)
         self.wiki.place = place
         self.wiki.save(update_fields=["place"])
-        baker.make("dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_MEDIUM)
+        baker.make(
+            "dashboard.Boundary",
+            wiki=self.wiki,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_MEDIUM,
+        )
 
         polygon, source = Boundary.objects.resolve_for_wiki(self.wiki, BoundaryType.PROPERTY)
         self.assertEqual(source, "wiki")
@@ -395,7 +487,13 @@ class WikiResolutionTests(TestCase):
     def test_concealed_viewer_never_sees_the_wiki_drawing(self) -> None:
         """A wiki-scoped Boundary row records no author, so concealment hides it outright
         rather than risk showing a stranger's edit back as if it were automatic."""
-        baker.make("dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_MEDIUM)
+        baker.make(
+            "dashboard.Boundary",
+            wiki=self.wiki,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_MEDIUM,
+        )
 
         with mock.patch("urbanlens.dashboard.services.wiki.concealment.is_concealed", return_value=True):
             polygon, source = Boundary.objects.resolve_for_wiki(self.wiki, BoundaryType.PROPERTY)
@@ -424,7 +522,9 @@ class LocationMatchingTests(TestCase):
 
         wiki = baker.make("dashboard.Wiki", location=self.location)
         huge = _square(-74.0, 40.0, 0.2)
-        baker.make("dashboard.Boundary", wiki=wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=huge)
+        baker.make(
+            "dashboard.Boundary", wiki=wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=huge
+        )
         # A point far outside the 50 m proximity fallback but inside the drawing.
         matches = Location.objects.get_all_for_point(40.1, -74.1)
         self.assertNotIn(self.location, matches)
@@ -445,7 +545,9 @@ class BoundaryControllerTests(TestCase):
         self.factory = RequestFactory()
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude="40.000000", longitude="-74.000000")
-        self.pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location, slug="test-pin-boundary")
+        self.pin = baker.make(
+            "dashboard.Pin", profile=self.user.profile, location=self.location, slug="test-pin-boundary"
+        )
         self.parcel = make_place(PlaceKind.PARCEL, _BIG)
         self.building = make_place(PlaceKind.BUILDING, _SMALL, parent=self.parcel)
         resolution.resolve_location_place(self.location)
@@ -515,7 +617,14 @@ class BoundaryControllerTests(TestCase):
     def test_clear_deletes_pin_row_and_falls_back(self) -> None:
         from urbanlens.dashboard.controllers.boundary import BoundaryController
 
-        baker.make("dashboard.Boundary", pin=self.pin, profile=self.user.profile, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_MEDIUM)
+        baker.make(
+            "dashboard.Boundary",
+            pin=self.pin,
+            profile=self.user.profile,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_MEDIUM,
+        )
 
         response = BoundaryController().save_boundary(
             self._request("post", {"boundary_type": "property", "polygon": None}),
@@ -531,7 +640,14 @@ class BoundaryControllerTests(TestCase):
 
         child_location = baker.make("dashboard.Location", latitude="40.000400", longitude="-74.000400")
         child = baker.make("dashboard.Pin", profile=self.user.profile, location=child_location, parent_pin=self.pin)
-        baker.make("dashboard.Boundary", pin=child, profile=self.user.profile, location=child_location, boundary_type=BoundaryType.BUILDING, polygon=_SMALL)
+        baker.make(
+            "dashboard.Boundary",
+            pin=child,
+            profile=self.user.profile,
+            location=child_location,
+            boundary_type=BoundaryType.BUILDING,
+            polygon=_SMALL,
+        )
 
         response = BoundaryController().get_boundaries(self._request(), self.pin.slug)
         payload = json.loads(response.content)

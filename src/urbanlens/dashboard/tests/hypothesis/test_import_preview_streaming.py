@@ -2,6 +2,7 @@
 
 must actually be added to that label, not just create it unattached.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -189,13 +190,31 @@ class ImportPreviewLegacyRepairFlagTests(TestCase):
     def test_flags_a_record_whose_cid_came_from_the_imprecise_s2_guess(self) -> None:
         """TEMPORARY: force-selected on its own merits - no matching legacy pin
         needed, since not every affected row still has one to find."""
-        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Brand New Spot", "description": "", "cid": 999999, "s2_guess": True}]
+        raw_pins = [
+            {
+                "latitude": 41.0,
+                "longitude": -75.0,
+                "name": "Brand New Spot",
+                "description": "",
+                "cid": 999999,
+                "s2_guess": True,
+            }
+        ]
         preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
 
         self.assertTrue(preview[0].get("needs_repair"))
 
     def test_does_not_flag_a_record_whose_cid_did_not_come_from_the_s2_guess(self) -> None:
-        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Brand New Spot", "description": "", "cid": 999999, "s2_guess": False}]
+        raw_pins = [
+            {
+                "latitude": 41.0,
+                "longitude": -75.0,
+                "name": "Brand New Spot",
+                "description": "",
+                "cid": 999999,
+                "s2_guess": False,
+            }
+        ]
         preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
 
         self.assertNotIn("needs_repair", preview[0])
@@ -213,8 +232,19 @@ class ImportPreviewMapsUrlPassthroughTests(TestCase):
         self.profile = baker.make("auth.User").profile
 
     def test_maps_url_is_carried_through_to_the_preview_dict(self) -> None:
-        url = "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79"
-        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Black Point Ruins", "description": "", "cid": 0x59AC8820518A7E79, "maps_url": url}]
+        url = (
+            "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79"
+        )
+        raw_pins = [
+            {
+                "latitude": 41.0,
+                "longitude": -75.0,
+                "name": "Black Point Ruins",
+                "description": "",
+                "cid": 0x59AC8820518A7E79,
+                "maps_url": url,
+            }
+        ]
 
         preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
 
@@ -241,7 +271,14 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
     def _run(self, description: str, *, name: str = "Old Mill", lat: float = 40.0, lng: float = -74.0):
         return list(
             self.gateway.import_preview_streaming(
-                [{"stem": "", "create_category": False, "label_ids": [], "pins": [{"name": name, "lat": lat, "lng": lng, "description": description}]}],
+                [
+                    {
+                        "stem": "",
+                        "create_category": False,
+                        "label_ids": [],
+                        "pins": [{"name": name, "lat": lat, "lng": lng, "description": description}],
+                    }
+                ],
                 self.profile,
                 auto_tag=False,
             ),
@@ -289,7 +326,9 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
         self.assertEqual(fake_image.pin, pin)
 
     def test_extras_are_not_applied_when_merging_into_an_existing_pin(self) -> None:
-        existing, _created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile, defaults={"name": "Existing Pin"})
+        existing, _created = Pin.objects.get_nearby_or_create(
+            40.0, -74.0, self.profile, defaults={"name": "Existing Pin"}
+        )
         self._run('<a href="https://example.com/story">link</a>', name="Old Mill", lat=40.0, lng=-74.0)
         existing.refresh_from_db()
         self.assertEqual(existing.links.count(), 0)
@@ -310,7 +349,14 @@ class ImportPreviewNamesBlankPinOnReimportTests(TestCase):
     def _import(self, name: str) -> list[dict]:
         return list(
             self.gateway.import_preview_streaming(
-                [{"stem": "", "create_category": False, "label_ids": [], "pins": [{"name": name, "lat": 40.0, "lng": -74.0, "description": ""}]}],
+                [
+                    {
+                        "stem": "",
+                        "create_category": False,
+                        "label_ids": [],
+                        "pins": [{"name": name, "lat": 40.0, "lng": -74.0, "description": ""}],
+                    }
+                ],
                 self.profile,
                 auto_tag=False,
             ),

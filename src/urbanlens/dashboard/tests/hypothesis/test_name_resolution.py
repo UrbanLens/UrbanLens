@@ -69,7 +69,12 @@ class IsAddressDerivedNameTests(SimpleTestCase):
     """Street/city/state fragments must not be promoted to official names."""
 
     def test_street_name_reported_as_place_name_is_rejected(self) -> None:
-        loc = _location(street_number="2663", route="Westwood Northern Blvd", locality="Cincinnati", administrative_area_level_1="OH")
+        loc = _location(
+            street_number="2663",
+            route="Westwood Northern Blvd",
+            locality="Cincinnati",
+            administrative_area_level_1="OH",
+        )
         self.assertTrue(is_address_derived_name("Westwood Northern Blvd", loc))
 
     def test_city_reported_as_place_name_is_rejected(self) -> None:
@@ -108,9 +113,16 @@ class IsAddressDerivedNameTests(SimpleTestCase):
     )
     @_hyp
     def test_case_and_punctuation_noise_does_not_change_verdicts(self, transform, pad: str) -> None:
-        reject_loc = _location(street_number="2663", route="Westwood Northern Blvd", locality="Cincinnati", administrative_area_level_1="OH")
+        reject_loc = _location(
+            street_number="2663",
+            route="Westwood Northern Blvd",
+            locality="Cincinnati",
+            administrative_area_level_1="OH",
+        )
         self.assertTrue(is_address_derived_name(transform("Westwood Northern Blvd") + pad, reject_loc))
-        keep_loc = _location(street_number="1", route="Kenwood Road", locality="Albany", administrative_area_level_1="NY")
+        keep_loc = _location(
+            street_number="1", route="Kenwood Road", locality="Albany", administrative_area_level_1="NY"
+        )
         self.assertFalse(is_address_derived_name(transform("Kenwood") + pad, keep_loc))
 
 
@@ -132,7 +144,9 @@ class IsAddressDerivedNameFuzzyVariantsTests(SimpleTestCase):
         self.assertTrue(is_address_derived_name("1030-1060 Main St, Amsterdam, NY", self._amsterdam_location()))
 
     def test_full_street_suffix_and_full_state_name_and_zip(self) -> None:
-        self.assertTrue(is_address_derived_name("1049 Main Street, Amsterdam, New York, 12010", self._amsterdam_location()))
+        self.assertTrue(
+            is_address_derived_name("1049 Main Street, Amsterdam, New York, 12010", self._amsterdam_location())
+        )
 
     def test_house_number_far_outside_tolerance_is_not_matched(self) -> None:
         """A house number too far off to plausibly be the same building/block must still be kept."""
@@ -261,7 +275,11 @@ class DefaultNameResolverChildPinOverrideTests(TestCase):
     def test_no_override_for_a_root_pins_location(self) -> None:
         location = self._make_location_with_pin(parent_pin=None)
         resolver = default_name_resolver(location=location)
-        candidates = [NameCandidate(name="Agreed", source="wikipedia"), NameCandidate(name="AGREED!", source="nps"), NameCandidate(name="REData", source="redata_building")]
+        candidates = [
+            NameCandidate(name="Agreed", source="wikipedia"),
+            NameCandidate(name="AGREED!", source="nps"),
+            NameCandidate(name="REData", source="redata_building"),
+        ]
         self.assertEqual(resolver.resolve(candidates, location).name, "Agreed")
 
     def test_override_for_a_child_pins_location(self) -> None:
@@ -270,12 +288,20 @@ class DefaultNameResolverChildPinOverrideTests(TestCase):
         parent = baker.make(Pin, profile=profile, location=parent_location, parent_pin=None)
         location = self._make_location_with_pin(parent_pin=parent)
         resolver = default_name_resolver(location=location)
-        candidates = [NameCandidate(name="Agreed", source="wikipedia"), NameCandidate(name="AGREED!", source="nps"), NameCandidate(name="REData", source="redata_building")]
+        candidates = [
+            NameCandidate(name="Agreed", source="wikipedia"),
+            NameCandidate(name="AGREED!", source="nps"),
+            NameCandidate(name="REData", source="redata_building"),
+        ]
         self.assertEqual(resolver.resolve(candidates, location).name, "REData")
 
     def test_no_location_given_is_a_no_op(self) -> None:
         resolver = default_name_resolver()
-        candidates = [NameCandidate(name="Agreed", source="wikipedia"), NameCandidate(name="AGREED!", source="nps"), NameCandidate(name="REData", source="redata_building")]
+        candidates = [
+            NameCandidate(name="Agreed", source="wikipedia"),
+            NameCandidate(name="AGREED!", source="nps"),
+            NameCandidate(name="REData", source="redata_building"),
+        ]
         self.assertEqual(resolver.resolve(candidates, _location()).name, "Agreed")
 
     def test_unsaved_location_is_a_no_op(self) -> None:
@@ -320,7 +346,9 @@ class ExternalNameCandidatesTests(TestCase):
             locality="Cincinnati",
             administrative_area_level_1="OH",
         )
-        with _patch_providers(_StaticProvider("google_places", ["Westwood Northern Blvd", "Cincinnati", "Real Museum"])):
+        with _patch_providers(
+            _StaticProvider("google_places", ["Westwood Northern Blvd", "Cincinnati", "Real Museum"])
+        ):
             candidates = external_name_candidates_for_location(loc)
         self.assertEqual([candidate.name for candidate in candidates], ["Real Museum"])
 

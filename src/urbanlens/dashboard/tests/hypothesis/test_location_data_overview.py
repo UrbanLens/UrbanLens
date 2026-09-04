@@ -41,7 +41,13 @@ class LocationDataOverviewFieldsAdapterTests(SimpleTestCase):
     def test_photon_adapts_address_into_fields(self) -> None:
         piece = self.controller._location_data_overview_fields(
             "photon",
-            {"locality": "Poughkeepsie", "region": "New York", "country": "United States", "house_number": "10", "street": "Main St"},
+            {
+                "locality": "Poughkeepsie",
+                "region": "New York",
+                "country": "United States",
+                "house_number": "10",
+                "street": "Main St",
+            },
         )
         assert piece is not None
         self.assertEqual(piece["heading_name"], "Poughkeepsie")
@@ -68,7 +74,9 @@ class LocationDataOverviewFieldsAdapterTests(SimpleTestCase):
         assert piece is not None
         self.assertEqual(piece["heading_name"], "Test Cafe")
         self.assertEqual(piece["chips"], ["Cafe"])
-        self.assertIn({"label": "Website", "value": "https://example.test", "href": "https://example.test"}, piece["fields"])
+        self.assertIn(
+            {"label": "Website", "value": "https://example.test", "href": "https://example.test"}, piece["fields"]
+        )
         self.assertIn({"label": "Phone", "value": "555-0100", "href": "tel:555-0100"}, piece["fields"])
         self.assertEqual(piece["footer_link"]["url"], "https://openstreetmap.org/node/1")
 
@@ -81,7 +89,13 @@ class LocationDataOverviewFieldsAdapterTests(SimpleTestCase):
     def test_overture_building_attributes_adapts_into_fields(self) -> None:
         piece = self.controller._location_data_overview_fields(
             "overture_building_attributes",
-            {"primary_name": "Test Hall", "subtype": "commercial", "height_m": 12.4, "num_floors": 3, "nearby_places": [{"name": "Corner Store", "category": "shop", "distance_m": 42.0}]},
+            {
+                "primary_name": "Test Hall",
+                "subtype": "commercial",
+                "height_m": 12.4,
+                "num_floors": 3,
+                "nearby_places": [{"name": "Corner Store", "category": "shop", "distance_m": 42.0}],
+            },
         )
         assert piece is not None
         self.assertEqual(piece["heading_name"], "Test Hall")
@@ -185,7 +199,10 @@ class LocationDataOverviewEndpointTests(TestCase):
             LocationCache.set(self.pin.location, key, {}, query_key="")
         response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
         trigger = json.loads(response["HX-Trigger"])
-        self.assertEqual(set(trigger["pinLocationDataEmpty"]["keys"]), {"nominatim", "photon", "overture_building_attributes", "open_elevation"})
+        self.assertEqual(
+            set(trigger["pinLocationDataEmpty"]["keys"]),
+            {"nominatim", "photon", "overture_building_attributes", "open_elevation"},
+        )
 
     def test_a_settled_but_empty_source_is_flagged_even_when_others_are_ready(self) -> None:
         """Photon has real data; nominatim settled with nothing - only nominatim should be flagged."""

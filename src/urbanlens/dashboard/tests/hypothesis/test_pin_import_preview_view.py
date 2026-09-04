@@ -66,7 +66,9 @@ class ParseForPreviewStemTests(TestCase):
 
     def test_plain_kml_upload_uses_its_own_filename(self) -> None:
         """Sanity baseline: a non-archive upload is completely unaffected."""
-        upload = SimpleUploadedFile("Urbex Sites.kml", _KML_TEMPLATE.encode(), content_type="application/vnd.google-earth.kml+xml")
+        upload = SimpleUploadedFile(
+            "Urbex Sites.kml", _KML_TEMPLATE.encode(), content_type="application/vnd.google-earth.kml+xml"
+        )
         response = self.client.post(reverse("pin.import.preview"), {"upload_files": [upload]})
         lists = response.json()["lists"]
         self.assertEqual(len(lists), 1)
@@ -100,7 +102,9 @@ class ParseForPreviewStemTests(TestCase):
         of those formats ever call out to Google. Explicitly force a blank key
         here rather than relying on this environment's own `.env` happening to
         leave it unset."""
-        with mock.patch("urbanlens.dashboard.services.apis.locations.google.maps.settings.google_unrestricted_api_key", ""):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.maps.settings.google_unrestricted_api_key", ""
+        ):
             lists = self._post("Urbex Sites.kml", _KML_TEMPLATE.encode())
         self.assertEqual(len(lists), 1)
         self.assertEqual(lists[0]["stem"], "Urbex Sites")

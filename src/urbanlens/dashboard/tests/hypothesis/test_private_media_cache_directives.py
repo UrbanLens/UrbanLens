@@ -59,7 +59,9 @@ class MarkPrivateMediaTests(SimpleTestCase):
         """``max-age`` alone would *invite* a shared cache to store it."""
         from django.http import HttpResponse
 
-        directives = {part.strip() for part in mark_private_media(HttpResponse(b"")).get("Cache-Control", "").split(",")}
+        directives = {
+            part.strip() for part in mark_private_media(HttpResponse(b"")).get("Cache-Control", "").split(",")
+        }
 
         self.assertIn("private", directives)
 
@@ -144,6 +146,13 @@ class EveryByteServingViewIsMarkedTests(SimpleTestCase):
 
     def test_the_check_would_notice_a_regression(self) -> None:
         """Guard against the scan silently matching nothing at all."""
-        marked = sum((_CONTROLLERS / module).read_text(encoding="utf-8").count("mark_private_media(") for module in _BYTE_SERVING_MODULES)
+        marked = sum(
+            (_CONTROLLERS / module).read_text(encoding="utf-8").count("mark_private_media(")
+            for module in _BYTE_SERVING_MODULES
+        )
 
-        self.assertGreaterEqual(marked, len(_BYTE_SERVING_MODULES), "scan found almost no marked responses - it has stopped measuring anything")
+        self.assertGreaterEqual(
+            marked,
+            len(_BYTE_SERVING_MODULES),
+            "scan found almost no marked responses - it has stopped measuring anything",
+        )

@@ -33,9 +33,24 @@ _FFMPEG_TIMEOUT_SECONDS = 600
 _FFPROBE_TIMEOUT_SECONDS = 30
 
 
+def ffmpeg_path() -> str | None:
+    """The absolute path to the ffmpeg binary, or None.
+
+    Resolved rather than left to the subprocess so the sandbox tier never hands
+    a bare name to `exec`, where a writable PATH entry earlier than the real one
+    would decide which binary runs on untrusted bytes.
+    """
+    return shutil.which("ffmpeg")
+
+
+def ffprobe_path() -> str | None:
+    """The absolute path to the ffprobe binary, or None. See `ffmpeg_path`."""
+    return shutil.which("ffprobe")
+
+
 def ffmpeg_available() -> bool:
     """Whether the ffmpeg/ffprobe binaries are present on PATH."""
-    return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+    return ffmpeg_path() is not None and ffprobe_path() is not None
 
 
 @untrusted_parse("video.probe")
@@ -49,11 +64,12 @@ def probe_video(path: str) -> dict[str, Any] | None:
         The parsed ffprobe JSON (``format``/``streams`` keys), or None if
         ffprobe is unavailable or the file can't be probed.
     """
-    if not ffmpeg_available():
+    ffprobe = ffprobe_path()
+    if ffprobe is None:
         return None
     try:
         result = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path],
+            [ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path],
             capture_output=True,
             timeout=_FFPROBE_TIMEOUT_SECONDS,
             check=True,
@@ -145,9 +161,12 @@ def _clear_location_args() -> list[str]:
 
 def _run_ffmpeg(args: list[str], src_path: str, what: str) -> bool:
     """Run one ffmpeg invocation; returns True on success."""
+    ffmpeg = ffmpeg_path()
+    if ffmpeg is None:
+        return False
     try:
         subprocess.run(
-            ["ffmpeg", "-y", "-i", src_path, *args],
+            [ffmpeg, "-y", "-i", src_path, *args],
             capture_output=True,
             timeout=_FFMPEG_TIMEOUT_SECONDS,
             check=True,

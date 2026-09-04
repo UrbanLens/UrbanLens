@@ -128,7 +128,7 @@ def _overview_context(pin: Pin) -> dict:
         "pin": pin,
         "client_version": _pin_version(pin),
         "pin_type_choices": PinType.choices,
-        "all_categories": Label.objects.categories().ordered(),
+        "all_categories": Label.objects.categories().in_display_order(),
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
@@ -297,7 +297,11 @@ class PinEditView(LoginRequiredMixin, View):
             last_visited = None
             for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d"):
                 try:
-                    last_visited = datetime.strptime(last_visited_raw, fmt)
+                    # The input carries no zone, and the bounds below are checked
+                    # against localdate(), so the submitted wall-clock time is the
+                    # user's local one. Anchoring it here keeps a naive value out
+                    # of Pin.last_visited, which is a DateTimeField under USE_TZ.
+                    last_visited = timezone.make_aware(datetime.strptime(last_visited_raw, fmt))  # noqa: DTZ007  # make_aware applies the zone
                     break
                 except ValueError:
                     continue
@@ -326,7 +330,7 @@ class PinEditView(LoginRequiredMixin, View):
             if not raw:
                 return None
             try:
-                return datetime.strptime(raw, "%Y-%m-%d").date()
+                return datetime.strptime(raw, "%Y-%m-%d").date()  # noqa: DTZ007  # .date() discards the time; only the calendar day is stored
             except ValueError:
                 return None
 

@@ -65,6 +65,10 @@ PATCH_WINDOW_SECONDS = 900
 
 TIMEOUT_SECONDS = 120
 
+#: `git add` contends with any other git process in this checkout.
+LOCK_RETRIES = 4
+LOCK_RETRY_SECONDS = 0.25
+
 #: Width for test code. See "Two formatting widths" above. Application code uses
 #: whatever `line-length` pyproject.toml sets, so it is not repeated here.
 TEST_LINE_LENGTH = 120
@@ -328,6 +332,29 @@ def sweep_mode(ruff: list[str] | None, *, write: bool) -> int:
     return 0
 
 
+def _stage(paths: list[str]) -> str | None:
+    """`git add` the paths, retrying briefly past a held index lock.
+
+    This repo is worked in by more than one session at a time, so `index.lock`
+    can be held by an unrelated `git` for a moment. Failing on the first attempt
+    would leave correct fixes unstaged and hand the developer back the two-run
+    behaviour this script exists to remove.
+
+    Returns:
+        None on success, else the last error message.
+    """
+    error = ""
+    for attempt in range(LOCK_RETRIES):
+        result = _run("git", "add", "--", *paths)
+        if result.returncode == 0:
+            return None
+        error = result.stderr.strip()
+        if "index.lock" not in error:
+            break  # not contention; retrying will not help
+        time.sleep(LOCK_RETRY_SECONDS * (attempt + 1))
+    return error
+
+
 def main(argv: list[str]) -> int:
     if "--check" in argv or "--format" in argv:
         return sweep_mode(_ruff_command(), write="--format" in argv)
@@ -368,9 +395,9 @@ def main(argv: list[str]) -> int:
 
     changed = [str(p) for p in targets if _read(p) != before[p]]
     if changed:
-        staged = _run("git", "add", "--", *changed)
-        if staged.returncode != 0:
-            print(f"autofix: could not stage fixes ({staged.stderr.strip()}); commit will report them")
+        staged = _stage(changed)
+        if staged is not None:
+            print(f"autofix: could not stage fixes ({staged}); commit will report them")
         else:
             print(f"autofix: fixed and staged {len(changed)} file(s): {', '.join(sorted(changed))}")
 

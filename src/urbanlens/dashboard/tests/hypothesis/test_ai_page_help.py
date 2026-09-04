@@ -15,7 +15,9 @@ import re
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.ai.page_help import PAGE_HELP, get_page_help
 
-_HEADER_TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "dashboard" / "partials" / "layout" / "header.html"
+_HEADER_TEMPLATE = (
+    Path(__file__).resolve().parents[2] / "templates" / "dashboard" / "partials" / "layout" / "header.html"
+)
 #: Rendered only for an anonymous visitor - not part of the signed-in
 #: primary nav the assistant's own audience (logged-in users) actually uses.
 _ANONYMOUS_ONLY = {"about", "values", "faq"}
@@ -47,7 +49,7 @@ class PageHelpContractTests(SimpleTestCase):
         url_names: set[str] = set()
         for class_name in ("app-nav-links", "app-nav-drawer-links"):
             block = re.search(rf'<ul class="{class_name}">(.*?)</ul>', template, re.DOTALL)
-            assert block is not None, f"couldn't find <ul class=\"{class_name}\"> in {_HEADER_TEMPLATE}"
+            assert block is not None, f'couldn\'t find <ul class="{class_name}"> in {_HEADER_TEMPLATE}'
             url_names.update(re.findall(r"\{% url '([\w.]+)' %\}", block.group(1)))
         return url_names - _ANONYMOUS_ONLY
 

@@ -40,7 +40,9 @@ class PinShareDetailDisclosureTests(TestCase):
         self.recipient_user = baker.make(User)
         self.sender = self.sender_user.profile
         self.recipient = self.recipient_user.profile
-        self.location = baker.make(Location, latitude=f"{_LAT:.6f}", longitude=f"{_LNG:.6f}", official_name="Unnamed Location")
+        self.location = baker.make(
+            Location, latitude=f"{_LAT:.6f}", longitude=f"{_LNG:.6f}", official_name="Unnamed Location"
+        )
         self.pin = Pin.objects.create(profile=self.sender, location=self.location, name=_UNDISCLOSED_NAME)
 
     def _detail(self, share: PinShare):
@@ -119,11 +121,23 @@ class SafePinAccessorTests(TestCase):
         self.sender = baker.make(User).profile
         self.recipient = baker.make(User).profile
         # Location.address is composed from its components, not a stored field.
-        self.location = baker.make(Location, latitude=f"{_LAT:.6f}", longitude=f"{_LNG:.6f}", official_name="Unnamed Location", street_number="12", route="Mill Road", locality="", administrative_area_level_1="", zipcode="")
+        self.location = baker.make(
+            Location,
+            latitude=f"{_LAT:.6f}",
+            longitude=f"{_LNG:.6f}",
+            official_name="Unnamed Location",
+            street_number="12",
+            route="Mill Road",
+            locality="",
+            administrative_area_level_1="",
+            zipcode="",
+        )
         self.pin = Pin.objects.create(profile=self.sender, location=self.location, name=_UNDISCLOSED_NAME)
 
     def _share(self, status: str) -> PinShare:
-        return PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, status=status)
+        return PinShare.objects.create(
+            pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, status=status
+        )
 
     def test_detected_shares_withhold_the_pin(self):
         share = self._share(PinShareStatus.DETECTED)
@@ -133,7 +147,12 @@ class SafePinAccessorTests(TestCase):
         self.assertNotIn(_UNDISCLOSED_NAME, share.safe_place_label)
 
     def test_every_other_status_reveals_it(self):
-        for status in (PinShareStatus.PENDING, PinShareStatus.ACCEPTED, PinShareStatus.REJECTED, PinShareStatus.ALREADY_PINNED):
+        for status in (
+            PinShareStatus.PENDING,
+            PinShareStatus.ACCEPTED,
+            PinShareStatus.REJECTED,
+            PinShareStatus.ALREADY_PINNED,
+        ):
             with self.subTest(status=status):
                 share = self._share(status)
 

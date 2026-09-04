@@ -195,7 +195,9 @@ class MaxUpcomingTripsPerUserTests(TestCase):
         self.client.force_login(self.user)
 
     def _make_upcoming_trip(self) -> Trip:
-        trip = Trip.objects.create(name="Existing Trip", creator=self.profile, start_date=datetime.date.today() + datetime.timedelta(days=3))
+        trip = Trip.objects.create(
+            name="Existing Trip", creator=self.profile, start_date=datetime.date.today() + datetime.timedelta(days=3)
+        )
         TripMembership.objects.get_or_create(trip=trip, profile=self.profile, defaults={"rsvp": "yes"})
         return trip
 
@@ -205,7 +207,9 @@ class MaxUpcomingTripsPerUserTests(TestCase):
         settings.save()
         self._make_upcoming_trip()
 
-        resp = self.client.post(reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json")
+        resp = self.client.post(
+            reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json"
+        )
         self.assertEqual(resp.status_code, 400)
         self.assertFalse(Trip.objects.filter(name="New Trip").exists())
 
@@ -215,7 +219,9 @@ class MaxUpcomingTripsPerUserTests(TestCase):
         settings.save()
         self._make_upcoming_trip()
 
-        resp = self.client.post(reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json")
+        resp = self.client.post(
+            reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json"
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(Trip.objects.filter(name="New Trip").exists())
 
@@ -226,7 +232,9 @@ class MaxUpcomingTripsPerUserTests(TestCase):
         for _ in range(3):
             self._make_upcoming_trip()
 
-        resp = self.client.post(reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json")
+        resp = self.client.post(
+            reverse("trips.create"), data=json.dumps({"name": "New Trip"}), content_type="application/json"
+        )
         self.assertEqual(resp.status_code, 200)
 
 
@@ -249,7 +257,9 @@ class MaxTripActivitiesTests(TestCase):
         settings.save()
         TripActivity.objects.create(trip=self.trip, added_by=self.profile, title="Existing", order=0)
 
-        resp = self.client.post(self._url(), data=json.dumps({"title": "New Activity"}), content_type="application/json")
+        resp = self.client.post(
+            self._url(), data=json.dumps({"title": "New Activity"}), content_type="application/json"
+        )
         self.assertEqual(resp.status_code, 400)
         self.assertFalse(TripActivity.objects.filter(trip=self.trip, title="New Activity").exists())
 
@@ -258,7 +268,9 @@ class MaxTripActivitiesTests(TestCase):
         settings.max_trip_activities = 5
         settings.save()
 
-        resp = self.client.post(self._url(), data=json.dumps({"title": "New Activity"}), content_type="application/json")
+        resp = self.client.post(
+            self._url(), data=json.dumps({"title": "New Activity"}), content_type="application/json"
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(TripActivity.objects.filter(trip=self.trip, title="New Activity").exists())
 

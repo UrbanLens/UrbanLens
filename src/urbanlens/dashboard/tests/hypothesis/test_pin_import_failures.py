@@ -35,7 +35,11 @@ from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure, PinImportFailureReason, PinImportFailureStatus
+from urbanlens.dashboard.models.pin_import_failures.model import (
+    PinImportFailure,
+    PinImportFailureReason,
+    PinImportFailureStatus,
+)
 from urbanlens.dashboard.services.apis.locations.cid_resolution import PROVIDER_REDATA, CidResolutionResult
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import LEGACY_COORDINATE_CUTOFF
 from urbanlens.dashboard.services.pins.pin_creation import PinCreationError
@@ -76,7 +80,13 @@ class RecordPinImportFailureTests(TestCase):
         self.profile = self.user.profile
 
     def test_creates_a_pending_row_with_correct_fields(self) -> None:
-        record_pin_import_failure(self.profile, 12345, name="Cresson Sanatorium", description="Old asylum", reason=PinImportFailureReason.NO_LOCATION_FOUND)
+        record_pin_import_failure(
+            self.profile,
+            12345,
+            name="Cresson Sanatorium",
+            description="Old asylum",
+            reason=PinImportFailureReason.NO_LOCATION_FOUND,
+        )
 
         failure = PinImportFailure.objects.get(profile=self.profile, cid=12345)
         self.assertEqual(failure.name, "Cresson Sanatorium")
@@ -86,8 +96,20 @@ class RecordPinImportFailureTests(TestCase):
         self.assertIsNone(failure.pin_id)
 
     def test_second_call_same_profile_and_cid_does_not_duplicate(self) -> None:
-        record_pin_import_failure(self.profile, 12345, name="First Name", description="First desc", reason=PinImportFailureReason.NO_LOCATION_FOUND)
-        record_pin_import_failure(self.profile, 12345, name="Different Name", description="Different desc", reason=PinImportFailureReason.LOOKUP_STALLED)
+        record_pin_import_failure(
+            self.profile,
+            12345,
+            name="First Name",
+            description="First desc",
+            reason=PinImportFailureReason.NO_LOCATION_FOUND,
+        )
+        record_pin_import_failure(
+            self.profile,
+            12345,
+            name="Different Name",
+            description="Different desc",
+            reason=PinImportFailureReason.LOOKUP_STALLED,
+        )
 
         self.assertEqual(PinImportFailure.objects.filter(profile=self.profile, cid=12345).count(), 1)
         failure = PinImportFailure.objects.get(profile=self.profile, cid=12345)
@@ -97,20 +119,28 @@ class RecordPinImportFailureTests(TestCase):
         self.assertEqual(failure.reason, PinImportFailureReason.NO_LOCATION_FOUND)
 
     def test_repeated_call_does_not_resurrect_a_resolved_entry(self) -> None:
-        record_pin_import_failure(self.profile, 12345, name="X", description="", reason=PinImportFailureReason.NO_LOCATION_FOUND)
+        record_pin_import_failure(
+            self.profile, 12345, name="X", description="", reason=PinImportFailureReason.NO_LOCATION_FOUND
+        )
         failure = PinImportFailure.objects.get(profile=self.profile, cid=12345)
         failure.status = PinImportFailureStatus.RESOLVED
         failure.save(update_fields=["status"])
 
-        record_pin_import_failure(self.profile, 12345, name="X", description="", reason=PinImportFailureReason.NO_LOCATION_FOUND)
+        record_pin_import_failure(
+            self.profile, 12345, name="X", description="", reason=PinImportFailureReason.NO_LOCATION_FOUND
+        )
 
         self.assertEqual(PinImportFailure.objects.filter(profile=self.profile, cid=12345).count(), 1)
         failure.refresh_from_db()
         self.assertEqual(failure.status, PinImportFailureStatus.RESOLVED)
 
     def test_different_cids_each_get_their_own_row(self) -> None:
-        record_pin_import_failure(self.profile, 111, name="A", description="", reason=PinImportFailureReason.NO_LOCATION_FOUND)
-        record_pin_import_failure(self.profile, 222, name="B", description="", reason=PinImportFailureReason.NO_LOCATION_FOUND)
+        record_pin_import_failure(
+            self.profile, 111, name="A", description="", reason=PinImportFailureReason.NO_LOCATION_FOUND
+        )
+        record_pin_import_failure(
+            self.profile, 222, name="B", description="", reason=PinImportFailureReason.NO_LOCATION_FOUND
+        )
         self.assertEqual(PinImportFailure.objects.filter(profile=self.profile).count(), 2)
 
     @_db_settings
@@ -121,14 +151,20 @@ class RecordPinImportFailureTests(TestCase):
         second_name=_db_safe_text,
         second_description=_db_safe_text,
     )
-    def test_idempotent_for_any_cid_and_text_pair(self, cid: int, name: str, description: str, second_name: str, second_description: str) -> None:
+    def test_idempotent_for_any_cid_and_text_pair(
+        self, cid: int, name: str, description: str, second_name: str, second_description: str
+    ) -> None:
         """No matter what varies between two calls for the same (profile, cid),
         exactly one row must ever exist, and it must keep the first values."""
         user = baker.make(User)
         profile = user.profile
 
-        record_pin_import_failure(profile, cid, name=name, description=description, reason=PinImportFailureReason.NO_LOCATION_FOUND)
-        record_pin_import_failure(profile, cid, name=second_name, description=second_description, reason=PinImportFailureReason.LOOKUP_ERROR)
+        record_pin_import_failure(
+            profile, cid, name=name, description=description, reason=PinImportFailureReason.NO_LOCATION_FOUND
+        )
+        record_pin_import_failure(
+            profile, cid, name=second_name, description=second_description, reason=PinImportFailureReason.LOOKUP_ERROR
+        )
 
         rows = list(PinImportFailure.objects.filter(profile=profile, cid=cid))
         self.assertEqual(len(rows), 1)
@@ -158,7 +194,9 @@ class ResolvePinImportFailureTests(TestCase):
     def test_resolve_via_address_success(self) -> None:
         failure = self._failure()
         with (
-            mock.patch("urbanlens.dashboard.services.pins.pin_import_failures.get_pin_by_address", return_value=(40.0, -74.0)),
+            mock.patch(
+                "urbanlens.dashboard.services.pins.pin_import_failures.get_pin_by_address", return_value=(40.0, -74.0)
+            ),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             pin = resolve_pin_import_failure(failure, self.profile, address="123 Main St, Springfield")
@@ -311,7 +349,9 @@ class DismissPinImportFailureTests(TestCase):
         self.profile = self.user.profile
 
     def test_dismiss_sets_dismissed_status(self) -> None:
-        failure = PinImportFailure.objects.create(profile=self.profile, cid=12345, name="X", reason=PinImportFailureReason.NO_LOCATION_FOUND)
+        failure = PinImportFailure.objects.create(
+            profile=self.profile, cid=12345, name="X", reason=PinImportFailureReason.NO_LOCATION_FOUND
+        )
         dismiss_pin_import_failure(failure)
         failure.refresh_from_db()
         self.assertEqual(failure.status, PinImportFailureStatus.DISMISSED)
@@ -328,7 +368,9 @@ class AutoResolvePinImportFailureForCidTests(TestCase):
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile)
 
     def test_resolves_a_matching_pending_row(self) -> None:
-        failure = PinImportFailure.objects.create(profile=self.profile, cid=12345, name="X", reason=PinImportFailureReason.LOOKUP_STALLED)
+        failure = PinImportFailure.objects.create(
+            profile=self.profile, cid=12345, name="X", reason=PinImportFailureReason.LOOKUP_STALLED
+        )
         auto_resolve_pin_import_failure_for_cid(self.profile, 12345, self.pin)
         failure.refresh_from_db()
         self.assertEqual(failure.status, PinImportFailureStatus.RESOLVED)
@@ -342,14 +384,25 @@ class AutoResolvePinImportFailureForCidTests(TestCase):
     def test_does_not_touch_an_already_resolved_row(self) -> None:
         other_pin = baker.make_recipe("dashboard.pin", profile=self.profile)
         failure = PinImportFailure.objects.create(
-            profile=self.profile, cid=12345, name="X", reason=PinImportFailureReason.LOOKUP_STALLED, status=PinImportFailureStatus.RESOLVED, pin=other_pin,
+            profile=self.profile,
+            cid=12345,
+            name="X",
+            reason=PinImportFailureReason.LOOKUP_STALLED,
+            status=PinImportFailureStatus.RESOLVED,
+            pin=other_pin,
         )
         auto_resolve_pin_import_failure_for_cid(self.profile, 12345, self.pin)
         failure.refresh_from_db()
         self.assertEqual(failure.pin_id, other_pin.pk)
 
     def test_does_not_touch_a_dismissed_row(self) -> None:
-        failure = PinImportFailure.objects.create(profile=self.profile, cid=12345, name="X", reason=PinImportFailureReason.LOOKUP_STALLED, status=PinImportFailureStatus.DISMISSED)
+        failure = PinImportFailure.objects.create(
+            profile=self.profile,
+            cid=12345,
+            name="X",
+            reason=PinImportFailureReason.LOOKUP_STALLED,
+            status=PinImportFailureStatus.DISMISSED,
+        )
         auto_resolve_pin_import_failure_for_cid(self.profile, 12345, self.pin)
         failure.refresh_from_db()
         self.assertEqual(failure.status, PinImportFailureStatus.DISMISSED)
@@ -372,7 +425,10 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
         deferred_lists = self._lists([{"name": "Cresson Sanatorium", "description": "Old asylum", "cid": 12345}])
         result = CidResolutionResult(provider=PROVIDER_REDATA, unresolvable={12345})
 
-        with mock.patch(_resolve_cids_path(), return_value=result), mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+        with (
+            mock.patch(_resolve_cids_path(), return_value=result),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
             summary = tasks.resolve_deferred_pin_locations(self.profile.pk, deferred_lists, auto_tag=False)
 
         self.assertEqual(summary, {"created": 0, "exists": 0, "skipped": 1})
@@ -386,7 +442,10 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
         deferred_lists = self._lists([{"name": "Cresson Sanatorium", "description": "Old asylum", "cid": 12345}])
         result = CidResolutionResult(provider=PROVIDER_REDATA, unresolvable={12345})
 
-        with mock.patch(_resolve_cids_path(), return_value=result), mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+        with (
+            mock.patch(_resolve_cids_path(), return_value=result),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
             tasks.resolve_deferred_pin_locations(self.profile.pk, deferred_lists, auto_tag=False)
             tasks.resolve_deferred_pin_locations(self.profile.pk, deferred_lists, auto_tag=False)
 
@@ -399,7 +458,10 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
         ]
         result = CidResolutionResult(provider=PROVIDER_REDATA, pending=[111, 222], auth_failed=True)
 
-        with mock.patch(_resolve_cids_path(), return_value=result), mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+        with (
+            mock.patch(_resolve_cids_path(), return_value=result),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
             summary = tasks.resolve_deferred_pin_locations(self.profile.pk, self._lists(pins), auto_tag=False)
 
         self.assertEqual(summary, {"created": 0, "exists": 0, "skipped": 2})
@@ -418,7 +480,10 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
         ]
         result = CidResolutionResult(provider=PROVIDER_REDATA, pending=[111, 222], request_failed=True)
 
-        with mock.patch(_resolve_cids_path(), return_value=result), mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+        with (
+            mock.patch(_resolve_cids_path(), return_value=result),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
             summary = tasks.resolve_deferred_pin_locations(
                 self.profile.pk,
                 self._lists(pins),
@@ -444,7 +509,10 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
         ]
         result = CidResolutionResult(provider=PROVIDER_REDATA, pending=[111, 222], request_failed=False)
 
-        with mock.patch(_resolve_cids_path(), return_value=result), mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+        with (
+            mock.patch(_resolve_cids_path(), return_value=result),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
             summary = tasks.resolve_deferred_pin_locations(
                 self.profile.pk,
                 self._lists(pins),
@@ -470,14 +538,20 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
         pins = [{"name": "Cresson Sanatorium", "description": "Old asylum", "cid": 12345, "label_ids": []}]
         unresolved = CidResolutionResult(provider=PROVIDER_REDATA, unresolvable={12345})
 
-        with mock.patch(_resolve_cids_path(), return_value=unresolved), mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+        with (
+            mock.patch(_resolve_cids_path(), return_value=unresolved),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
             tasks.resolve_deferred_pin_locations(self.profile.pk, self._lists(pins), auto_tag=False)
 
         failure = PinImportFailure.objects.get(profile=self.profile, cid=12345)
         self.assertEqual(failure.status, PinImportFailureStatus.PENDING)
 
         resolved = CidResolutionResult(provider=PROVIDER_REDATA, resolved={12345: (41.348754, -71.453896)})
-        with mock.patch(_resolve_cids_path(), return_value=resolved), mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+        with (
+            mock.patch(_resolve_cids_path(), return_value=resolved),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
             summary = tasks.resolve_deferred_pin_locations(self.profile.pk, self._lists(pins), auto_tag=False)
 
         self.assertEqual(summary["created"], 1)
@@ -492,7 +566,10 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
         pins = [{"name": "Known Place", "description": "", "cid": 55555, "label_ids": []}]
         resolved = CidResolutionResult(provider=PROVIDER_REDATA, resolved={55555: (41.0, -75.0)})
 
-        with mock.patch(_resolve_cids_path(), return_value=resolved), mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+        with (
+            mock.patch(_resolve_cids_path(), return_value=resolved),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
             summary = tasks.resolve_deferred_pin_locations(self.profile.pk, self._lists(pins), auto_tag=False)
 
         self.assertEqual(summary["created"], 1)
@@ -588,7 +665,10 @@ class PinImportFailureResolveViewTests(TestCase):
     def test_requires_login(self) -> None:
         self.client.logout()
         failure = self._failure()
-        response = self.client.post(reverse("memories.locations.import_failures.resolve", args=[failure.pk]), {"latitude": "1", "longitude": "1"})
+        response = self.client.post(
+            reverse("memories.locations.import_failures.resolve", args=[failure.pk]),
+            {"latitude": "1", "longitude": "1"},
+        )
         self.assertEqual(response.status_code, 302)
 
 
@@ -602,7 +682,9 @@ class PinImportFailureDismissViewTests(TestCase):
         self.client.force_login(self.user)
 
     def test_dismiss_marks_it_dismissed_and_toasts(self) -> None:
-        failure = PinImportFailure.objects.create(profile=self.profile, cid=12345, name="X", reason=PinImportFailureReason.NO_LOCATION_FOUND)
+        failure = PinImportFailure.objects.create(
+            profile=self.profile, cid=12345, name="X", reason=PinImportFailureReason.NO_LOCATION_FOUND
+        )
         response = self.client.post(reverse("memories.locations.import_failures.dismiss", args=[failure.pk]))
 
         self.assertEqual(response.status_code, 200)
@@ -615,14 +697,22 @@ class PinImportFailureDismissViewTests(TestCase):
 
     def test_cannot_dismiss_another_profiles_failure(self) -> None:
         other = baker.make(User)
-        failure = PinImportFailure.objects.create(profile=other.profile, cid=12345, name="X", reason=PinImportFailureReason.NO_LOCATION_FOUND)
+        failure = PinImportFailure.objects.create(
+            profile=other.profile, cid=12345, name="X", reason=PinImportFailureReason.NO_LOCATION_FOUND
+        )
         response = self.client.post(reverse("memories.locations.import_failures.dismiss", args=[failure.pk]))
         self.assertEqual(response.status_code, 404)
         failure.refresh_from_db()
         self.assertEqual(failure.status, PinImportFailureStatus.PENDING)
 
     def test_already_handled_failure_is_a_noop(self) -> None:
-        failure = PinImportFailure.objects.create(profile=self.profile, cid=12345, name="X", reason=PinImportFailureReason.NO_LOCATION_FOUND, status=PinImportFailureStatus.DISMISSED)
+        failure = PinImportFailure.objects.create(
+            profile=self.profile,
+            cid=12345,
+            name="X",
+            reason=PinImportFailureReason.NO_LOCATION_FOUND,
+            status=PinImportFailureStatus.DISMISSED,
+        )
         response = self.client.post(reverse("memories.locations.import_failures.dismiss", args=[failure.pk]))
         self.assertEqual(response.status_code, 200)
         trigger = json.loads(response.headers["HX-Trigger"])
@@ -644,9 +734,23 @@ class PinImportFailureQueuePartialViewTests(TestCase):
         self.client.force_login(self.user)
 
     def test_only_pending_rows_are_returned(self) -> None:
-        pending = PinImportFailure.objects.create(profile=self.profile, cid=1, name="Pending", reason=PinImportFailureReason.NO_LOCATION_FOUND)
-        PinImportFailure.objects.create(profile=self.profile, cid=2, name="Resolved", reason=PinImportFailureReason.NO_LOCATION_FOUND, status=PinImportFailureStatus.RESOLVED)
-        PinImportFailure.objects.create(profile=self.profile, cid=3, name="Dismissed", reason=PinImportFailureReason.NO_LOCATION_FOUND, status=PinImportFailureStatus.DISMISSED)
+        pending = PinImportFailure.objects.create(
+            profile=self.profile, cid=1, name="Pending", reason=PinImportFailureReason.NO_LOCATION_FOUND
+        )
+        PinImportFailure.objects.create(
+            profile=self.profile,
+            cid=2,
+            name="Resolved",
+            reason=PinImportFailureReason.NO_LOCATION_FOUND,
+            status=PinImportFailureStatus.RESOLVED,
+        )
+        PinImportFailure.objects.create(
+            profile=self.profile,
+            cid=3,
+            name="Dismissed",
+            reason=PinImportFailureReason.NO_LOCATION_FOUND,
+            status=PinImportFailureStatus.DISMISSED,
+        )
 
         response = self.client.get(reverse("memories.locations.import_failures.queue"))
 
@@ -657,9 +761,13 @@ class PinImportFailureQueuePartialViewTests(TestCase):
 
     def test_all_pending_rows_return_unpaginated_and_exclude_other_profiles(self) -> None:
         other = baker.make(User)
-        PinImportFailure.objects.create(profile=other.profile, cid=999, name="Someone else's", reason=PinImportFailureReason.NO_LOCATION_FOUND)
+        PinImportFailure.objects.create(
+            profile=other.profile, cid=999, name="Someone else's", reason=PinImportFailureReason.NO_LOCATION_FOUND
+        )
         for i in range(13):
-            PinImportFailure.objects.create(profile=self.profile, cid=1000 + i, name=f"Place {i}", reason=PinImportFailureReason.NO_LOCATION_FOUND)
+            PinImportFailure.objects.create(
+                profile=self.profile, cid=1000 + i, name=f"Place {i}", reason=PinImportFailureReason.NO_LOCATION_FOUND
+            )
 
         response = self.client.get(reverse("memories.locations.import_failures.queue"))
 
@@ -694,7 +802,9 @@ class LocationsPageRendersImportFailuresTests(TestCase):
         self.client.force_login(self.user)
 
     def test_pending_failure_card_appears_on_first_load(self) -> None:
-        failure = PinImportFailure.objects.create(profile=self.profile, cid=42, name="Mystery Spot", reason=PinImportFailureReason.NO_LOCATION_FOUND)
+        failure = PinImportFailure.objects.create(
+            profile=self.profile, cid=42, name="Mystery Spot", reason=PinImportFailureReason.NO_LOCATION_FOUND
+        )
 
         response = self.client.get(reverse("memories.locations"))
 

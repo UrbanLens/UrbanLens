@@ -146,7 +146,15 @@ class UndoStackViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"ok": True, "can_undo": False, "can_redo": False, "undo_label": None, "redo_label": None, "undo_uuid": None, "redo_uuid": None},
+            {
+                "ok": True,
+                "can_undo": False,
+                "can_redo": False,
+                "undo_label": None,
+                "redo_label": None,
+                "undo_uuid": None,
+                "redo_uuid": None,
+            },
         )
 
     def test_undo_and_redo_endpoints_walk_the_stack(self) -> None:

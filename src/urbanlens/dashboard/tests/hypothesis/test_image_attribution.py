@@ -22,7 +22,12 @@ from PIL import Image as PILImage
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.media.images import extract_author, extract_caption_from_metadata, extract_copyright_notice, is_camera_generated_filename
+from urbanlens.dashboard.services.media.images import (
+    extract_author,
+    extract_caption_from_metadata,
+    extract_copyright_notice,
+    is_camera_generated_filename,
+)
 from urbanlens.dashboard.tasks import process_image_upload
 
 _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
@@ -30,7 +35,9 @@ _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 _CAMERA_PREFIXES = ("pxl", "img", "mvimg", "dsc", "dscn", "dcim")
 
 
-def _jpeg_bytes(*, artist: str | None = None, copyright_notice: str | None = None, description: str | None = None) -> bytes:
+def _jpeg_bytes(
+    *, artist: str | None = None, copyright_notice: str | None = None, description: str | None = None
+) -> bytes:
     """Build an in-memory JPEG, optionally carrying EXIF Artist/Copyright/ImageDescription tags."""
     img = PILImage.new("RGB", (60, 40), color=(10, 20, 30))
     buf = io.BytesIO()
@@ -55,13 +62,18 @@ class ExtractAttributionTests(TestCase):
         self.assertIsNone(extract_author(io.BytesIO(_jpeg_bytes())))
 
     def test_extract_copyright_reads_tag(self):
-        self.assertEqual(extract_copyright_notice(io.BytesIO(_jpeg_bytes(copyright_notice="(c) 2026 Jane Doe"))), "(c) 2026 Jane Doe")
+        self.assertEqual(
+            extract_copyright_notice(io.BytesIO(_jpeg_bytes(copyright_notice="(c) 2026 Jane Doe"))), "(c) 2026 Jane Doe"
+        )
 
     def test_extract_copyright_none_when_absent(self):
         self.assertIsNone(extract_copyright_notice(io.BytesIO(_jpeg_bytes())))
 
     def test_extract_caption_reads_description_tag(self):
-        self.assertEqual(extract_caption_from_metadata(io.BytesIO(_jpeg_bytes(description="Sunset over the bay"))), "Sunset over the bay")
+        self.assertEqual(
+            extract_caption_from_metadata(io.BytesIO(_jpeg_bytes(description="Sunset over the bay"))),
+            "Sunset over the bay",
+        )
 
     def test_extract_caption_none_when_absent(self):
         self.assertIsNone(extract_caption_from_metadata(io.BytesIO(_jpeg_bytes())))
@@ -70,7 +82,10 @@ class ExtractAttributionTests(TestCase):
 class CameraFilenameTests(SimpleTestCase):
     """is_camera_generated_filename() recognizes common phone/camera naming conventions."""
 
-    @given(st.sampled_from(_CAMERA_PREFIXES + tuple(p.upper() for p in _CAMERA_PREFIXES)), st.integers(min_value=1000, max_value=99999999))
+    @given(
+        st.sampled_from(_CAMERA_PREFIXES + tuple(p.upper() for p in _CAMERA_PREFIXES)),
+        st.integers(min_value=1000, max_value=99999999),
+    )
     def test_matches_known_camera_prefixes(self, prefix, number):
         self.assertTrue(is_camera_generated_filename(f"{prefix}_{number}.jpg"))
         self.assertTrue(is_camera_generated_filename(f"{prefix}-{number}.jpg"))

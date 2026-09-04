@@ -73,7 +73,16 @@ class ImportPreviewCidDeferralTests(TestCase):
         url = "https://www.google.com/maps/place/Cresson+Sanatorium/data=!4m2!3m1!1s0x0:0x3039"
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             self._run(
-                [{"name": "Cresson Sanatorium", "lat": 40.431072, "lng": -78.502283, "description": "", "cid": 12345, "maps_url": url}],
+                [
+                    {
+                        "name": "Cresson Sanatorium",
+                        "lat": 40.431072,
+                        "lng": -78.502283,
+                        "description": "",
+                        "cid": 12345,
+                        "maps_url": url,
+                    }
+                ],
             )
 
         deferred_lists = enqueue.call_args.args[2]

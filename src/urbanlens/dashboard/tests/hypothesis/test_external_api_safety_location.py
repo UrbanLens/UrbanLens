@@ -20,7 +20,12 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus
+from urbanlens.dashboard.models.safety.model import (
+    SafetyCheckin,
+    SafetyCheckinPartner,
+    SafetyCheckinPartnerStatus,
+    SafetyCheckinStatus,
+)
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.visits.safety import create_checkin
 
@@ -60,7 +65,11 @@ class _SafetyLocationTestCase(TestCase):
             contacts=[(None, "friend@example.com", "Friend")],
         )
         self.partner = SafetyCheckinPartner.objects.create(
-            checkin=self.checkin, profile=self.watcher, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED, accepted_at=timezone.now()
+            checkin=self.checkin,
+            profile=self.watcher,
+            invited_by=self.owner,
+            status=SafetyCheckinPartnerStatus.ACCEPTED,
+            accepted_at=timezone.now(),
         )
 
         self.url = reverse("external_api:safety.checkins.location", kwargs={"checkin_slug": self.checkin.slug})
@@ -76,7 +85,9 @@ class _SafetyLocationTestCase(TestCase):
             The plaintext key.
         """
         key, raw = generate_api_key(user, "Test")
-        ApiKey.objects.filter(pk=key.pk).update(scopes=scopes or [ApiKeyScope.SAFETY_READ.value, ApiKeyScope.SAFETY_WRITE.value])
+        ApiKey.objects.filter(pk=key.pk).update(
+            scopes=scopes or [ApiKeyScope.SAFETY_READ.value, ApiKeyScope.SAFETY_WRITE.value]
+        )
         return raw
 
 
@@ -99,7 +110,9 @@ class SafetyLocationGetTests(_SafetyLocationTestCase):
 
     def test_invited_but_not_accepted_partner_cannot_read(self) -> None:
         """Mirrors the owner-vs-partner detail endpoint: an unanswered invite grants nothing."""
-        SafetyCheckinPartner.objects.filter(pk=self.partner.pk).update(status=SafetyCheckinPartnerStatus.INVITED, accepted_at=None)
+        SafetyCheckinPartner.objects.filter(pk=self.partner.pk).update(
+            status=SafetyCheckinPartnerStatus.INVITED, accepted_at=None
+        )
         response = self.client.get(self.url, **_bearer(self.watcher_key))
         self.assertEqual(response.status_code, 404)
 
@@ -146,9 +159,14 @@ class SafetyLocationPatchTests(_SafetyLocationTestCase):
 
     def test_disabling_sharing_clears_the_last_known_fix(self) -> None:
         self.client.patch(
-            self.url, {"sharing_enabled": True, "latitude": 40.0, "longitude": -105.0}, content_type="application/json", **_bearer(self.owner_key)
+            self.url,
+            {"sharing_enabled": True, "latitude": 40.0, "longitude": -105.0},
+            content_type="application/json",
+            **_bearer(self.owner_key),
         )
-        response = self.client.patch(self.url, {"sharing_enabled": False}, content_type="application/json", **_bearer(self.owner_key))
+        response = self.client.patch(
+            self.url, {"sharing_enabled": False}, content_type="application/json", **_bearer(self.owner_key)
+        )
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertFalse(payload["sharing_enabled"])
@@ -156,39 +174,58 @@ class SafetyLocationPatchTests(_SafetyLocationTestCase):
         self.assertIsNone(payload["longitude"])
 
     def test_reporting_a_fix_without_enabling_sharing_first_is_400(self) -> None:
-        response = self.client.patch(self.url, {"latitude": 40.0, "longitude": -105.0}, content_type="application/json", **_bearer(self.owner_key))
+        response = self.client.patch(
+            self.url,
+            {"latitude": 40.0, "longitude": -105.0},
+            content_type="application/json",
+            **_bearer(self.owner_key),
+        )
         self.assertEqual(response.status_code, 400)
         self.checkin.refresh_from_db()
         self.assertIsNone(self.checkin.live_latitude)
 
     def test_latitude_without_longitude_is_400(self) -> None:
         response = self.client.patch(
-            self.url, {"sharing_enabled": True, "latitude": 40.0}, content_type="application/json", **_bearer(self.owner_key)
+            self.url,
+            {"sharing_enabled": True, "latitude": 40.0},
+            content_type="application/json",
+            **_bearer(self.owner_key),
         )
         self.assertEqual(response.status_code, 400)
 
     def test_a_fix_on_an_already_resolved_checkin_is_400(self) -> None:
-        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(status=SafetyCheckinStatus.FOUND_SAFE, resolved_at=timezone.now())
+        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(
+            status=SafetyCheckinStatus.FOUND_SAFE, resolved_at=timezone.now()
+        )
         response = self.client.patch(
-            self.url, {"sharing_enabled": True, "latitude": 40.0, "longitude": -105.0}, content_type="application/json", **_bearer(self.owner_key)
+            self.url,
+            {"sharing_enabled": True, "latitude": 40.0, "longitude": -105.0},
+            content_type="application/json",
+            **_bearer(self.owner_key),
         )
         self.assertEqual(response.status_code, 400)
 
     def test_accepted_partner_cannot_patch(self) -> None:
         """Read access does not imply write access - only the owner may report a position."""
-        response = self.client.patch(self.url, {"sharing_enabled": True}, content_type="application/json", **_bearer(self.watcher_key))
+        response = self.client.patch(
+            self.url, {"sharing_enabled": True}, content_type="application/json", **_bearer(self.watcher_key)
+        )
         self.assertEqual(response.status_code, 404)
         self.checkin.refresh_from_db()
         self.assertFalse(self.checkin.live_location_sharing_enabled)
 
     def test_stranger_patch_is_404(self) -> None:
         raw = self._issue_key(baker.make(User, username="stranger"))
-        response = self.client.patch(self.url, {"sharing_enabled": True}, content_type="application/json", **_bearer(raw))
+        response = self.client.patch(
+            self.url, {"sharing_enabled": True}, content_type="application/json", **_bearer(raw)
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_patch_requires_safety_write(self) -> None:
         raw = self._issue_key(self.owner_user, scopes=[ApiKeyScope.SAFETY_READ.value])
-        response = self.client.patch(self.url, {"sharing_enabled": True}, content_type="application/json", **_bearer(raw))
+        response = self.client.patch(
+            self.url, {"sharing_enabled": True}, content_type="application/json", **_bearer(raw)
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_empty_patch_is_a_no_op(self) -> None:

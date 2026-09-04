@@ -104,7 +104,9 @@ class OwnContributionVisibleRowsTests(TestCase):
         own_sale = WikiPropertySale.objects.create(location=self.wiki.location, created_by=self.viewer)
         stranger_sale = WikiPropertySale.objects.create(location=self.wiki.location, created_by=self.stranger)
         with _CONCEALED:
-            visible_sales = visible_rows(WikiPropertySale.objects.for_location(self.wiki.location), self.wiki, self.viewer)
+            visible_sales = visible_rows(
+                WikiPropertySale.objects.for_location(self.wiki.location), self.wiki, self.viewer
+            )
         self.assertEqual({s.pk for s in visible_sales}, {own_sale.pk})
         self.assertNotIn(stranger_sale.pk, {s.pk for s in visible_sales})
 
@@ -154,7 +156,9 @@ class LayerUuidNullingAndWriteSafetyTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.wiki, self.viewer, self.friend, self.stranger = _wiki_with_viewer_friend_stranger()
-        self.stranger_layer = baker.make(CustomLayer, parent_wiki=self.wiki, profile=self.stranger, name="STRANGER-LAYER")
+        self.stranger_layer = baker.make(
+            CustomLayer, parent_wiki=self.wiki, profile=self.stranger, name="STRANGER-LAYER"
+        )
         self.item = baker.make(
             PinMarkup,
             parent_wiki=self.wiki,
@@ -234,7 +238,9 @@ class WikiOwnerDedupTests(TestCase):
             )
         self.assertEqual(response.status_code, 200)
 
-        new_owners = WikiOwner.objects.for_location(self.wiki.location).filter(name="Alice").exclude(pk=stranger_owner.pk)
+        new_owners = (
+            WikiOwner.objects.for_location(self.wiki.location).filter(name="Alice").exclude(pk=stranger_owner.pk)
+        )
         self.assertEqual(new_owners.count(), 1)
         self.assertEqual(new_owners.first().created_by_id, self.viewer.pk)
         # The panel actually shows the submission worked, rather than a
@@ -283,7 +289,10 @@ class WikiScopedBoundaryConcealmentTests(TestCase):
 
     def test_post_shows_the_viewers_own_just_drawn_boundary_in_the_same_response(self) -> None:
         """The self-inconsistency the review caught: drawing your own boundary must not make it vanish."""
-        polygon = {"type": "MultiPolygon", "coordinates": [[[[0, 0], [0, 0.0005], [0.0005, 0.0005], [0.0005, 0], [0, 0]]]]}
+        polygon = {
+            "type": "MultiPolygon",
+            "coordinates": [[[[0, 0], [0, 0.0005], [0.0005, 0.0005], [0.0005, 0], [0, 0]]]],
+        }
         with _CONCEALED:
             response = self.client.post(
                 reverse("location.wiki.boundary", args=[self.wiki.location.slug]),
@@ -297,7 +306,10 @@ class WikiScopedBoundaryConcealmentTests(TestCase):
 
     def test_a_later_get_still_hides_it_from_the_same_concealed_viewer(self) -> None:
         """The POST override is scoped to that one response - a subsequent GET has no such certainty and must hide it again."""
-        polygon = {"type": "MultiPolygon", "coordinates": [[[[0, 0], [0, 0.0005], [0.0005, 0.0005], [0.0005, 0], [0, 0]]]]}
+        polygon = {
+            "type": "MultiPolygon",
+            "coordinates": [[[[0, 0], [0, 0.0005], [0.0005, 0.0005], [0.0005, 0], [0, 0]]]],
+        }
         with _CONCEALED:
             self.client.post(
                 reverse("location.wiki.boundary", args=[self.wiki.location.slug]),
@@ -332,7 +344,9 @@ class SearchResultUsesConcealedValuesTests(TestCase):
         from urbanlens.dashboard.services.global_search.providers import WikiSearchProvider
 
         with writing_as(WriteSource.USER, actor=self.stranger.pk):
-            Wiki.objects.filter(pk=self.wiki.pk).update(name="Haunted Steel Mill", description="stranger's security notes")
+            Wiki.objects.filter(pk=self.wiki.pk).update(
+                name="Haunted Steel Mill", description="stranger's security notes"
+            )
         baker.make(WikiAlias, wiki=self.wiki, name="Old Warehouse", created_by=self.friend)
 
         parsed = parse_query("warehouse")

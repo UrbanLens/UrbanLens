@@ -89,11 +89,21 @@ class NearPointTests(SimpleTestCase):
                 "count": 1,
                 "complete": True,
                 "results": [{"provider": "usgs_earthquakes", "magnitude": 3.2}],
-                "providers": [{"provider": "usgs_earthquakes", "status": "ok", "count": 1, "message": None, "radius_meters": 100.0}],
+                "providers": [
+                    {
+                        "provider": "usgs_earthquakes",
+                        "status": "ok",
+                        "count": 1,
+                        "message": None,
+                        "radius_meters": 100.0,
+                    }
+                ],
             },
         )
 
-        envelope = _gateway(session).near_point("/api/v1/hazards/", 38.456, -77.123, radius_meters=100_000, provider="usgs_earthquakes")
+        envelope = _gateway(session).near_point(
+            "/api/v1/hazards/", 38.456, -77.123, radius_meters=100_000, provider="usgs_earthquakes"
+        )
 
         self.assertEqual(envelope.count, 1)
         self.assertTrue(envelope.complete)
@@ -124,7 +134,9 @@ class NearPointTests(SimpleTestCase):
         session = mock.Mock()
         session.get.return_value = _response(200, {"count": 0, "complete": True, "results": [], "providers": []})
 
-        _gateway(session).near_point("/api/v1/hazards/", 1.0, 2.0, force_refresh=True, limit=10, extra_params={"min_magnitude": 3.0, "years": 10})
+        _gateway(session).near_point(
+            "/api/v1/hazards/", 1.0, 2.0, force_refresh=True, limit=10, extra_params={"min_magnitude": 3.0, "years": 10}
+        )
 
         params = session.get.call_args.kwargs["params"]
         self.assertEqual(params["force_refresh"], "true")
@@ -161,7 +173,9 @@ class NearPointTests(SimpleTestCase):
 
     def test_503_all_providers_unavailable_carries_reason(self) -> None:
         session = mock.Mock()
-        session.get.return_value = _response(503, {"error": REASON_ALL_PROVIDERS_UNAVAILABLE, "message": "every source failed"})
+        session.get.return_value = _response(
+            503, {"error": REASON_ALL_PROVIDERS_UNAVAILABLE, "message": "every source failed"}
+        )
 
         with pytest.raises(LocationContextUnavailableError) as ctx:
             _gateway(session).near_point("/api/v1/hazards/", 1.0, 2.0)

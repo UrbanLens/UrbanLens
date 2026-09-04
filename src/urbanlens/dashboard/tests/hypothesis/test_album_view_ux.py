@@ -27,7 +27,9 @@ from urbanlens.dashboard.models.album.model import Album, AlbumItem
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.services.photos.albums import album_date_range
 
-_PNG_BYTES = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
 
 
 def _pin_with_album(name: str = "Interior"):
@@ -266,7 +268,9 @@ class AlbumUploadViewTests(TestCase):
         _other_pin, other_album = _pin_with_album(name="Not yours")
         url = reverse("pin.albums.upload", args=[self.pin.slug, other_album.slug])
 
-        response = self.client.post(url, {"image": SimpleUploadedFile("shot.png", _PNG_BYTES, content_type="image/png")})
+        response = self.client.post(
+            url, {"image": SimpleUploadedFile("shot.png", _PNG_BYTES, content_type="image/png")}
+        )
 
         self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)
 
@@ -349,7 +353,9 @@ class AlbumMapRenderTests(TestCase):
         self.url = reverse("pin.albums", args=[self.pin.slug])
 
     def test_the_payload_is_rendered_as_json_for_the_map(self) -> None:
-        image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile, latitude="39.5", longitude="-75.5")
+        image = baker.make_recipe(
+            "dashboard.image", pin=self.pin, profile=self.pin.profile, latitude="39.5", longitude="-75.5"
+        )
         AlbumItem.objects.create(album=self.album, image=image, order=0)
 
         response = self.client.get(self.url, {"album": self.album.slug})

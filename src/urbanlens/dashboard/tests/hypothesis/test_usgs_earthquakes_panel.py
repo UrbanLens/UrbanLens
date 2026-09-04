@@ -33,7 +33,18 @@ class UsgsEarthquakePanelSourceRenderTests(TestCase):
         self.assertIsNone(self.source.render_context(self.pin, {"events": []}))
 
     def test_event_renders_magnitude_place_and_link(self) -> None:
-        data = {"events": [{"event_type": "earthquake", "magnitude": 4.2, "magnitude_scale": "Mw", "title": "10km N of Nowhere", "occurred_at": "2026-01-01T00:00:00Z", "url": "https://example.com"}]}
+        data = {
+            "events": [
+                {
+                    "event_type": "earthquake",
+                    "magnitude": 4.2,
+                    "magnitude_scale": "Mw",
+                    "title": "10km N of Nowhere",
+                    "occurred_at": "2026-01-01T00:00:00Z",
+                    "url": "https://example.com",
+                }
+            ]
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["meta"][0]["label"], "M4.2")
@@ -58,11 +69,25 @@ class UsgsEarthquakePanelSourceFetchTests(TestCase):
             count=2,
             complete=True,
             results=[
-                {"event_type": "earthquake", "magnitude": 4.2, "title": "10km N of Nowhere", "occurred_at": "2026-01-01T00:00:00Z", "url": "https://example.com"},
-                {"event_type": "wildfire", "magnitude": None, "title": "Elsewhere", "occurred_at": "2026-01-02T00:00:00Z", "url": "https://example.com/2"},
+                {
+                    "event_type": "earthquake",
+                    "magnitude": 4.2,
+                    "title": "10km N of Nowhere",
+                    "occurred_at": "2026-01-01T00:00:00Z",
+                    "url": "https://example.com",
+                },
+                {
+                    "event_type": "wildfire",
+                    "magnitude": None,
+                    "title": "Elsewhere",
+                    "occurred_at": "2026-01-02T00:00:00Z",
+                    "url": "https://example.com/2",
+                },
             ],
         )
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_hazards_gateway.RedataHazardsGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_hazards_gateway.RedataHazardsGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_hazard_events.return_value = envelope
             self.source.fetch(self.pin)
 
@@ -70,13 +95,17 @@ class UsgsEarthquakePanelSourceFetchTests(TestCase):
         assert cached is not None
         self.assertEqual(len(cached.data["events"]), 1)
         self.assertEqual(cached.data["events"][0]["event_type"], "earthquake")
-        mock_gateway_cls.return_value.get_hazard_events.assert_called_once_with(40.5, -74.5, radius_meters=100_000, min_magnitude=3.0, years=10, limit=10)
+        mock_gateway_cls.return_value.get_hazard_events.assert_called_once_with(
+            40.5, -74.5, radius_meters=100_000, min_magnitude=3.0, years=10, limit=10
+        )
 
     def test_fetch_caches_an_explicit_empty_result(self) -> None:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         envelope = LocationContextEnvelope(count=0, complete=True, results=[])
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_hazards_gateway.RedataHazardsGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_hazards_gateway.RedataHazardsGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_hazard_events.return_value = envelope
             self.source.fetch(self.pin)
 

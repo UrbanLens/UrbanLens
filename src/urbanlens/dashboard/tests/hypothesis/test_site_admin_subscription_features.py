@@ -1,4 +1,5 @@
 """Tests for the site-admin "role features" and "default features" toggle actions."""
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User
@@ -94,7 +95,9 @@ class DefaultFeaturesActionTests(TestCase):
         self.client.force_login(self.admin)
 
     def test_selected_features_are_saved(self) -> None:
-        response = self.client.post(_SUBSCRIPTIONS_URL, {"action": "default_features", "features": [SiteFeature.AI, SiteFeature.SEARCH]})
+        response = self.client.post(
+            _SUBSCRIPTIONS_URL, {"action": "default_features", "features": [SiteFeature.AI, SiteFeature.SEARCH]}
+        )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(SiteSettings.get_current().feature_set, {SiteFeature.AI, SiteFeature.SEARCH})
 
@@ -106,7 +109,9 @@ class DefaultFeaturesActionTests(TestCase):
         self.assertEqual(SiteSettings.get_current().feature_set, set())
 
     def test_unknown_feature_values_are_ignored(self) -> None:
-        response = self.client.post(_SUBSCRIPTIONS_URL, {"action": "default_features", "features": [SiteFeature.AI, "not_a_real_feature"]})
+        response = self.client.post(
+            _SUBSCRIPTIONS_URL, {"action": "default_features", "features": [SiteFeature.AI, "not_a_real_feature"]}
+        )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(SiteSettings.get_current().feature_set, {SiteFeature.AI})
 

@@ -15,7 +15,11 @@ import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google import redata_cid_gateway as gw_module
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidGateway, RedataPermissionError
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import (
+    CidLookupEntry,
+    RedataCidGateway,
+    RedataPermissionError,
+)
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 
@@ -125,6 +129,8 @@ class RedataCidGatewayResolveCidsTests(SimpleTestCase):
         session = mock.Mock()
         session.post.return_value = _response(200, {"results": {"1": {"lat": 38.456, "lng": -77.123}}, "pending": []})
 
-        result = self._gateway(session).resolve_cids([CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X")])
+        result = self._gateway(session).resolve_cids(
+            [CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X")]
+        )
 
         self.assertEqual(result.resolved, {1: (38.456, -77.123)})

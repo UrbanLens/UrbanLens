@@ -2,6 +2,7 @@
 
 Import these instead of re-declaring primitives in each test module.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timezone
@@ -60,15 +61,21 @@ coord_pair_float = st.tuples(lat_float, lon_float)
 _far_lat = st.floats(min_value=-85.0, max_value=85.0, allow_nan=False, allow_infinity=False)
 _far_lon = st.floats(min_value=-175.0, max_value=175.0, allow_nan=False, allow_infinity=False)
 
+
 @st.composite
 def two_distant_coord_pairs(draw):
     """Draw two (lat, lon) pairs guaranteed to be > 1 degree apart."""
     lat1 = draw(_far_lat)
     lon1 = draw(_far_lon)
     # Offset by at least 2 degrees so PostGIS proximity check (50 m) never fires.
-    lat2 = draw(st.floats(min_value=lat1 + 2.0, max_value=min(89.9, lat1 + 10.0), allow_nan=False, allow_infinity=False))
-    lon2 = draw(st.floats(min_value=lon1 + 2.0, max_value=min(179.9, lon1 + 10.0), allow_nan=False, allow_infinity=False))
+    lat2 = draw(
+        st.floats(min_value=lat1 + 2.0, max_value=min(89.9, lat1 + 10.0), allow_nan=False, allow_infinity=False)
+    )
+    lon2 = draw(
+        st.floats(min_value=lon1 + 2.0, max_value=min(179.9, lon1 + 10.0), allow_nan=False, allow_infinity=False)
+    )
     return (lat1, lon1), (lat2, lon2)
+
 
 # -- Numeric fields -------------------------------------------------------------
 priority = st.integers(min_value=-9999, max_value=9999)
@@ -93,9 +100,7 @@ reasonable_datetime = st.datetimes(
 )
 
 # Ordered pair (start ≤ end).
-date_range = st.tuples(reasonable_date, reasonable_date).map(
-    lambda pair: (min(pair), max(pair))
-)
+date_range = st.tuples(reasonable_date, reasonable_date).map(lambda pair: (min(pair), max(pair)))
 
 # -- Colour hex strings ---------------------------------------------------------
 _hex_digit = st.sampled_from("0123456789ABCDEF")

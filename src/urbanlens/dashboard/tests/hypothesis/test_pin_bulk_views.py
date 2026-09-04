@@ -260,10 +260,12 @@ class PinBulkEditViewTests(TestCase):
 
     def test_remove_ignores_label_not_present_on_any_selected_pin(self) -> None:
         """The server must re-validate remove_label_ids, not trust the client's list."""
-        self._edit({
-            "uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)],
-            "remove_label_ids": [self.tag_absent.id],
-        })
+        self._edit(
+            {
+                "uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)],
+                "remove_label_ids": [self.tag_absent.id],
+            }
+        )
         # tag_absent was never on either pin - nothing should change, and no error either.
         self.assertNotIn(self.tag_absent, self.pin_a.labels.all())
 

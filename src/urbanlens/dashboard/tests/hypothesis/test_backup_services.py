@@ -102,7 +102,9 @@ class ScheduledBackupDueTests(SimpleTestCase):
         frequency_hours=st.integers(min_value=1, max_value=240),
     )
     @hyp_settings(max_examples=50)
-    def test_due_when_elapsed_hours_meets_or_exceeds_frequency(self, elapsed_hours: float, frequency_hours: int) -> None:
+    def test_due_when_elapsed_hours_meets_or_exceeds_frequency(
+        self, elapsed_hours: float, frequency_hours: int
+    ) -> None:
         now = datetime(2026, 1, 10, tzinfo=UTC)
         latest = now - timedelta(hours=elapsed_hours)
         fake_file = mock.Mock()
@@ -153,7 +155,10 @@ class CollectBackupStatsTests(SimpleTestCase):
 
             with (
                 mock.patch("urbanlens.dashboard.services.admin.backups.app_settings.backups_dir", root),
-                mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", wraps=lambda _backup_dir=None: backup_files(root)),
+                mock.patch(
+                    "urbanlens.dashboard.services.admin.backups.backup_files",
+                    wraps=lambda _backup_dir=None: backup_files(root),
+                ),
             ):
                 stats = collect_backup_stats(_SiteSettings(backup_frequency_hours=12, backup_retention=7))
 
@@ -173,7 +178,10 @@ class CollectBackupStatsTests(SimpleTestCase):
 
             with (
                 mock.patch("urbanlens.dashboard.services.admin.backups.app_settings.backups_dir", root),
-                mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", wraps=lambda _backup_dir=None: backup_files(root)),
+                mock.patch(
+                    "urbanlens.dashboard.services.admin.backups.backup_files",
+                    wraps=lambda _backup_dir=None: backup_files(root),
+                ),
             ):
                 stats = collect_backup_stats(_SiteSettings())
 
@@ -189,7 +197,10 @@ class CollectBackupStatsTests(SimpleTestCase):
 
             with (
                 mock.patch("urbanlens.dashboard.services.admin.backups.app_settings.backups_dir", root),
-                mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", wraps=lambda _backup_dir=None: backup_files(root)),
+                mock.patch(
+                    "urbanlens.dashboard.services.admin.backups.backup_files",
+                    wraps=lambda _backup_dir=None: backup_files(root),
+                ),
             ):
                 self.assertTrue(collect_backup_stats(site_settings).enabled)
                 site_settings.backup_enabled = False
@@ -227,7 +238,9 @@ class DefaultSiteSettingsTests(TestCase):
         self.site_settings.backup_enabled = False
         self.site_settings.backup_frequency_hours = 6
         self.site_settings.backup_retention = 3
-        self.site_settings.save(update_fields=["backup_enabled", "backup_frequency_hours", "backup_retention", "updated"])
+        self.site_settings.save(
+            update_fields=["backup_enabled", "backup_frequency_hours", "backup_retention", "updated"]
+        )
 
         with mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", return_value=[]):
             stats = collect_backup_stats()

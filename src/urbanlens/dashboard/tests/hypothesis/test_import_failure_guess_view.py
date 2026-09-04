@@ -19,7 +19,11 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure, PinImportFailureReason, PinImportFailureStatus
+from urbanlens.dashboard.models.pin_import_failures.model import (
+    PinImportFailure,
+    PinImportFailureReason,
+    PinImportFailureStatus,
+)
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.pins.import_failure_guess import LocationGuess
 
@@ -43,7 +47,9 @@ class ImportFailureGuessViewTests(TestCase):
         return reverse("memories.locations.import_failures.guess", kwargs={"failure_id": (failure or self.failure).pk})
 
     def _a_guess(self) -> LocationGuess:
-        return LocationGuess(latitude=41.47, longitude=-71.35, display_name="Fort Wetherill, Jamestown", source="name", confidence=0.6)
+        return LocationGuess(
+            latitude=41.47, longitude=-71.35, display_name="Fort Wetherill, Jamestown", source="name", confidence=0.6
+        )
 
     def test_a_guess_is_rendered_with_its_coordinates(self) -> None:
         with mock.patch(_GUESS, return_value=self._a_guess()):
@@ -66,7 +72,10 @@ class ImportFailureGuessViewTests(TestCase):
         """The whole point of the lazy fetch: hundreds of cards, no geocoding."""
         for index in range(5):
             PinImportFailure.objects.create(
-                profile=self.profile, cid=1000 + index, name=f"Place {index}", reason=PinImportFailureReason.LOOKUP_STALLED,
+                profile=self.profile,
+                cid=1000 + index,
+                name=f"Place {index}",
+                reason=PinImportFailureReason.LOOKUP_STALLED,
             )
 
         with mock.patch(_GUESS) as guess:

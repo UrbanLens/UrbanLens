@@ -89,11 +89,8 @@ def _fetch_contributors() -> list[GitHubContributor]:
     page = 1
 
     while True:
-        response = session.get(
-            _GITHUB_API_URL,
-            params={"anon": "false", "per_page": _PAGE_SIZE, "page": page},
-            timeout=15,
-        )
+        params: dict[str, str | int] = {"anon": "false", "per_page": _PAGE_SIZE, "page": page}
+        response = session.get(_GITHUB_API_URL, params=params, timeout=15)
         response.raise_for_status()
         payload: list[dict[str, Any]] = response.json()
         if not payload:

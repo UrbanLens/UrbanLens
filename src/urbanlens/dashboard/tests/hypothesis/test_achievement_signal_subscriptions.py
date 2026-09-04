@@ -40,12 +40,20 @@ def _subscription_uids() -> list[str]:
 
     ``post_save.receivers`` holds ``((uid_or_id, sender_id), receiver)``.
     """
-    return [key[0] for key, *_rest in post_save.receivers if isinstance(key[0], str) and key[0].startswith(_SUBSCRIPTION_UID_PREFIX)]
+    return [
+        key[0]
+        for key, *_rest in post_save.receivers
+        if isinstance(key[0], str) and key[0].startswith(_SUBSCRIPTION_UID_PREFIX)
+    ]
 
 
 def _live_keys_for(sender: type) -> list[tuple[str, int]]:
     """(dispatch_uid, sender_id) keys of connected per-subscription receivers for one sender."""
-    return [key for key, *_rest in post_save.receivers if isinstance(key[0], str) and key[0].startswith(_SUBSCRIPTION_UID_PREFIX) and key[1] == id(sender)]
+    return [
+        key
+        for key, *_rest in post_save.receivers
+        if isinstance(key[0], str) and key[0].startswith(_SUBSCRIPTION_UID_PREFIX) and key[1] == id(sender)
+    ]
 
 
 class AchievementSubscriptionUidTests(SimpleTestCase):
@@ -60,11 +68,17 @@ class AchievementSubscriptionUidTests(SimpleTestCase):
 
         # Exactly one live receiver per subscription: fewer means a later
         # connect() replaced an earlier one that shared its key.
-        self.assertEqual(len(connected), len(achievement_signals._SUBSCRIPTIONS), f"{len(achievement_signals._SUBSCRIPTIONS)} subscriptions but {len(connected)} live receivers - two are sharing a dispatch_uid")
+        self.assertEqual(
+            len(connected),
+            len(achievement_signals._SUBSCRIPTIONS),
+            f"{len(achievement_signals._SUBSCRIPTIONS)} subscriptions but {len(connected)} live receivers - two are sharing a dispatch_uid",
+        )
 
     def test_the_scan_is_finding_the_receivers_at_all(self) -> None:
         """A prefix rename would otherwise make every assertion above vacuous."""
-        self.assertGreater(len(_subscription_uids()), 5, "no per-subscription receivers found - has the uid prefix changed?")
+        self.assertGreater(
+            len(_subscription_uids()), 5, "no per-subscription receivers found - has the uid prefix changed?"
+        )
 
     def test_a_second_subscription_naming_an_already_subscribed_model_still_gets_a_receiver(self) -> None:
         """Directly reproduces the defect the module docstring describes.

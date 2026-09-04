@@ -42,7 +42,12 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertIsNone(self.source.render_context(self.pin, data))
 
     def test_manual_only_with_links_renders_a_card(self) -> None:
-        data = {"available": False, "reason": "manual_only", "message": "Call the assessor.", "links": {"assessor_url": "https://example.gov/assessor"}}
+        data = {
+            "available": False,
+            "reason": "manual_only",
+            "message": "Call the assessor.",
+            "links": {"assessor_url": "https://example.gov/assessor"},
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["chips"], ["Manual lookup required"])
@@ -53,7 +58,12 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertIsNone(self.source.render_context(self.pin, data))
 
     def test_captcha_blocked_renders_the_manual_lookup_card(self) -> None:
-        data = {"available": False, "reason": "blocked", "message": "CAPTCHA-protected search.", "links": {"assessor_url": "https://example.gov/assessor"}}
+        data = {
+            "available": False,
+            "reason": "blocked",
+            "message": "CAPTCHA-protected search.",
+            "links": {"assessor_url": "https://example.gov/assessor"},
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["chips"], ["Manual lookup required"])
@@ -230,7 +240,10 @@ class FetchPayloadTransientErrorTests(TestCase):
         from unittest import mock
 
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_SOURCE_ERROR, PropertyRecordsUnavailableError
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+            REASON_SOURCE_ERROR,
+            PropertyRecordsUnavailableError,
+        )
 
         error = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
         with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
@@ -242,9 +255,14 @@ class FetchPayloadTransientErrorTests(TestCase):
         from unittest import mock
 
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_MANUAL_ONLY, PropertyRecordsUnavailableError
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+            REASON_MANUAL_ONLY,
+            PropertyRecordsUnavailableError,
+        )
 
-        error = PropertyRecordsUnavailableError(REASON_MANUAL_ONLY, "Call the assessor.", links={"assessor_url": "https://example.gov/assessor"})
+        error = PropertyRecordsUnavailableError(
+            REASON_MANUAL_ONLY, "Call the assessor.", links={"assessor_url": "https://example.gov/assessor"}
+        )
         with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
             mock_gateway_cls.return_value.lookup_parcel.side_effect = error
             payload = _fetch_payload(self.location, 42.65, -73.75)
@@ -258,7 +276,10 @@ class FetchPayloadTransientErrorTests(TestCase):
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
 
         with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
-            mock_gateway_cls.return_value.lookup_parcel.return_value = {"situs_address": "123 Main St", "owner_name": ["Jane Smith"]}
+            mock_gateway_cls.return_value.lookup_parcel.return_value = {
+                "situs_address": "123 Main St",
+                "owner_name": ["Jane Smith"],
+            }
             payload = _fetch_payload(self.location, 42.65, -73.75)
         self.assertEqual(payload["available"], True)
         self.assertEqual(payload["owner_name"], ["Jane Smith"])
@@ -281,7 +302,9 @@ class FetchPayloadTransientErrorTests(TestCase):
         with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
             mock_gateway_cls.return_value.lookup_parcel.return_value = {}
             _fetch_payload(self.location, 42.65, -73.75)
-        mock_gateway_cls.return_value.lookup_parcel.assert_called_once_with(42.65, -73.75, situs_address=expected_address)
+        mock_gateway_cls.return_value.lookup_parcel.assert_called_once_with(
+            42.65, -73.75, situs_address=expected_address
+        )
 
 
 class WriteOfficialOwnersAndSalesTests(TestCase):
@@ -307,7 +330,9 @@ class WriteOfficialOwnersAndSalesTests(TestCase):
         self.assertEqual(owners.first().source, OwnerSource.USER)
 
     def test_mailing_address_only_applied_to_a_newly_created_owner(self) -> None:
-        _write_official_owners_and_sales(self.location, {"owner_name": ["Jane Smith"], "owner_mailing_address": "PO Box 1"})
+        _write_official_owners_and_sales(
+            self.location, {"owner_name": ["Jane Smith"], "owner_mailing_address": "PO Box 1"}
+        )
         owner = WikiOwner.objects.for_location(self.location).get(name="Jane Smith")
         self.assertEqual(owner.address, "PO Box 1")
 
@@ -316,7 +341,14 @@ class WriteOfficialOwnersAndSalesTests(TestCase):
         self.assertEqual(WikiOwner.objects.for_location(self.location).count(), 1)
 
     def test_creates_a_sale_with_price_and_date(self) -> None:
-        _write_official_owners_and_sales(self.location, {"sales_history": [{"date": "2020-06-15", "price": 250000, "grantor": "Old Owner", "grantee": "New Owner"}]})
+        _write_official_owners_and_sales(
+            self.location,
+            {
+                "sales_history": [
+                    {"date": "2020-06-15", "price": 250000, "grantor": "Old Owner", "grantee": "New Owner"}
+                ]
+            },
+        )
         sale = WikiPropertySale.objects.for_location(self.location).get()
         self.assertEqual(str(sale.sale_price), "250000.00")
         self.assertEqual(sale.sale_date.isoformat(), "2020-06-15")
@@ -325,13 +357,17 @@ class WriteOfficialOwnersAndSalesTests(TestCase):
         self.assertEqual(list(sale.new_owners.values_list("name", flat=True)), ["New Owner"])
 
     def test_repeat_fetch_does_not_duplicate_the_sale(self) -> None:
-        payload = {"sales_history": [{"date": "2020-06-15", "price": 250000, "grantor": "Old Owner", "grantee": "New Owner"}]}
+        payload = {
+            "sales_history": [{"date": "2020-06-15", "price": 250000, "grantor": "Old Owner", "grantee": "New Owner"}]
+        }
         _write_official_owners_and_sales(self.location, payload)
         _write_official_owners_and_sales(self.location, payload)
         self.assertEqual(WikiPropertySale.objects.for_location(self.location).count(), 1)
 
     def test_sale_with_no_date_and_no_price_is_skipped(self) -> None:
-        _write_official_owners_and_sales(self.location, {"sales_history": [{"grantor": "Old Owner", "grantee": "New Owner"}]})
+        _write_official_owners_and_sales(
+            self.location, {"sales_history": [{"grantor": "Old Owner", "grantee": "New Owner"}]}
+        )
         self.assertEqual(WikiPropertySale.objects.for_location(self.location).count(), 0)
 
     def test_negative_price_is_dropped_not_saved_negative(self) -> None:

@@ -36,8 +36,12 @@ class AlbumAddRaceTests(TestCase):
         self.location = Location.objects.create(latitude=39.5, longitude=-75.5)
         self.pin = Pin.objects.create(profile=self.profile, location=self.location, name="Album host")
         self.album = Album.objects.create(parent_pin=self.pin, profile=self.profile, name="Ruins", slug="ruins")
-        self.image = Image.objects.create(pin=self.pin, location=self.location, profile=self.profile, image="photos/a.jpg")
-        self.other = Image.objects.create(pin=self.pin, location=self.location, profile=self.profile, image="photos/b.jpg")
+        self.image = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.profile, image="photos/a.jpg"
+        )
+        self.other = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.profile, image="photos/b.jpg"
+        )
 
     def _add_with_stale_read(self, images: list[Image]) -> int:
         """Run the add as if another process inserted between our read and our write.

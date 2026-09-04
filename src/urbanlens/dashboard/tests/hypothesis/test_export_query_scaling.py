@@ -61,7 +61,9 @@ class ExportQueryScalingTests(TestCase):
         if len(large) > len(small) + _TOLERANCE:
             grew = queries_that_grew(small, large)[:3]
             detail = "\n".join(f"  {before} -> {after}: {sql}" for before, after, sql in grew)
-            self.fail(f"{export.__name__} ran {len(small)} queries for {_FIRST} rows and {len(large)} for {_FIRST + _SECOND}.\nWhat multiplied:\n{detail}")
+            self.fail(
+                f"{export.__name__} ran {len(small)} queries for {_FIRST} rows and {len(large)} for {_FIRST + _SECOND}.\nWhat multiplied:\n{detail}"
+            )
 
     def _seed_labels(self, count: int) -> None:
         for _ in range(count):
@@ -103,4 +105,6 @@ class ExportQueryScalingTests(TestCase):
                 rows = json.load(fh)
 
         exported = next(row for row in rows if row["name"] == shared.name)
-        self.assertEqual(exported["pin_uuids"], [str(mine.uuid)], "a global label must export the exporter's pins and nobody else's")
+        self.assertEqual(
+            exported["pin_uuids"], [str(mine.uuid)], "a global label must export the exporter's pins and nobody else's"
+        )

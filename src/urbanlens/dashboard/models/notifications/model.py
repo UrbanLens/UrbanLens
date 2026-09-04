@@ -8,7 +8,7 @@ import re
 from typing import TYPE_CHECKING
 
 from django.db import models
-from django.db.models import Index
+from django.db.models import Field, Index
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.notifications.meta import (
@@ -92,7 +92,13 @@ class NotificationLog(abstract.FrontendDashboardModel):
         ``notify()`` path never calls.
         """
         if self.title:
-            self.title = self.title[: self._meta.get_field("title").max_length]
+            # get_field() is typed Field | ForeignObjectRel; only the former
+            # carries max_length, and a reverse relation named "title" cannot
+            # exist here. Narrowing rather than assuming keeps the truncation -
+            # which is the security-relevant half of this method - explicit.
+            title_field = self._meta.get_field("title")
+            if isinstance(title_field, Field) and title_field.max_length:
+                self.title = self.title[: title_field.max_length]
         if self.url and not _URL_IS_SAFE_PATH.match(self.url):
             logger.warning("Refusing to store a non-relative notification url (%s); dropping it.", redact_text(self.url))
             self.url = ""

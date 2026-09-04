@@ -8,7 +8,7 @@ delete, and the mobile API's ``PhotoDetailView.delete``) used to call
 ``image.delete()`` unconditionally, destroying the other surface's copy with no
 guard at all - worse than the pin-to-pin sharing case, which at least has
 ``delete_stored_file``'s reference-count check (see
-``test_shared_image_file_deletion.py``). See docs/GOALS_CODE_AUDIT.md
+``test_shared_image_file_deletion.py``). See docs/audits/GOALS_CODE_AUDIT.md
 ("Pin-to-wiki sharing").
 """
 
@@ -106,7 +106,9 @@ class PinImageViewDeleteTests(_DualOwnershipTestCase):
         self.client.force_login(self.user)
 
     def _delete(self, image: Image):
-        return self.client.delete(reverse("pin.gallery.image", kwargs={"pin_slug": self.pin.slug, "image_id": image.pk}))
+        return self.client.delete(
+            reverse("pin.gallery.image", kwargs={"pin_slug": self.pin.slug, "image_id": image.pk})
+        )
 
     def test_deleting_a_dual_owned_photo_leaves_the_wiki_copy(self) -> None:
         image = baker.make(Image, pin=self.pin, wiki=self.wiki, location=self.location, profile=self.profile)
@@ -142,7 +144,9 @@ class WikiImageViewDeleteTests(_DualOwnershipTestCase):
         self.client.force_login(self.user)
 
     def _delete(self, image: Image):
-        return self.client.delete(reverse("location.wiki.gallery.image", kwargs={"location_slug": self.location.slug, "image_id": image.pk}))
+        return self.client.delete(
+            reverse("location.wiki.gallery.image", kwargs={"location_slug": self.location.slug, "image_id": image.pk})
+        )
 
     def test_deleting_a_dual_owned_photo_leaves_the_pin_copy(self) -> None:
         image = baker.make(Image, pin=self.pin, wiki=self.wiki, location=self.location, profile=self.profile)
@@ -189,25 +193,22 @@ class PinGalleryBulkDeleteTests(_DualOwnershipTestCase):
 
     def test_an_all_solo_batch_behaves_as_before(self) -> None:
         images = baker.make(Image, pin=self.pin, location=self.location, profile=self.profile, _quantity=3)
-        print("DEBUG created pks:", [i.pk for i in images])
-        print("DEBUG created pin_ids:", [i.pin_id for i in images])
-        print("DEBUG created profile_ids:", [i.profile_id for i in images])
-        print("DEBUG self.pin.pk:", self.pin.pk, "self.profile.pk:", self.profile.pk)
-        print("DEBUG direct filter count:", Image.objects.filter(pk__in=[i.pk for i in images], pin=self.pin, profile=self.profile).count())
-        print("DEBUG direct filter by id count:", Image.objects.filter(pk__in=[i.pk for i in images], pin_id=self.pin.pk, profile_id=self.profile.pk).count())
 
         response = self._bulk_delete([image.pk for image in images])
-        print("DEBUG response:", response.status_code, response.json())
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"deleted": 3, "unlinked": 0})
         self.assertEqual(Image.objects.filter(pk__in=[image.pk for image in images]).count(), 0)
 
     def test_an_all_dual_owned_batch_unlinks_every_row(self) -> None:
-        duals = baker.make(Image, pin=self.pin, wiki=self.wiki, location=self.location, profile=self.profile, _quantity=2)
+        duals = baker.make(
+            Image, pin=self.pin, wiki=self.wiki, location=self.location, profile=self.profile, _quantity=2
+        )
 
         response = self._bulk_delete([image.pk for image in duals])
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"deleted": 0, "unlinked": 2})
-        self.assertEqual(Image.objects.filter(pk__in=[image.pk for image in duals], wiki=self.wiki, pin__isnull=True).count(), 2)
+        self.assertEqual(
+            Image.objects.filter(pk__in=[image.pk for image in duals], wiki=self.wiki, pin__isnull=True).count(), 2
+        )

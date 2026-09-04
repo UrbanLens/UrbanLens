@@ -87,7 +87,7 @@ class OpenWeatherMapGateway(Gateway):
         for item in forecast:
             dt_txt = item.get("dt_txt", "")
             if dt_txt:
-                item["date"] = datetime.strptime(dt_txt, "%Y-%m-%d %H:%M:%S")
+                item["date"] = datetime.strptime(dt_txt, "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007  # OpenWeatherMap dt_txt is UTC; owm_item_to_slot anchors it
         return forecast
 
     def filter_forecast(self, forecast: list[dict]) -> list[dict]:

@@ -65,7 +65,7 @@ class AddDemolishedStatusToWikiTests(TestCase):
         # Deterministic regardless of whether migration 0087 already seeded
         # the global row in this test database.
         Label.objects.filter(profile=None, kind="status", name="Demolished").delete()
-        self.global_demolished = ensure_label( profile=None, kind="status", name="Demolished", is_protected=True)
+        self.global_demolished = ensure_label(profile=None, kind="status", name="Demolished", is_protected=True)
 
     def test_adds_the_global_demolished_label(self) -> None:
         wiki = baker.make(Wiki, location=baker.make("dashboard.Location"))

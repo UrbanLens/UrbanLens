@@ -105,7 +105,12 @@ class InviteToSessionTests(TestCase):
     def test_inviting_twice_does_not_double_notify(self) -> None:
         invite_to_session(self.session, self.host, self.guest)
         invite_to_session(self.session, self.host, self.guest)
-        self.assertEqual(NotificationLog.objects.filter(profile=self.guest, notification_type=NotificationType.SPOTGUESSR_INVITE).count(), 1)
+        self.assertEqual(
+            NotificationLog.objects.filter(
+                profile=self.guest, notification_type=NotificationType.SPOTGUESSR_INVITE
+            ).count(),
+            1,
+        )
         self.assertEqual(GameSessionParticipant.objects.filter(session=self.session, profile=self.guest).count(), 1)
 
 
@@ -152,7 +157,14 @@ class BeginSessionTests(TestCase):
         self.location = _make_location()
         baker.make(Pin, profile=self.host, location=self.location)
         baker.make(Pin, profile=self.guest, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=self.location),
+        )
         self.session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest])
         join_session(self.session, self.guest)
 
@@ -194,9 +206,18 @@ class JoinedOnlyRoundAndGuessTests(TestCase):
         baker.make(Pin, profile=self.guest, location=self.location)
         # Deliberately no pin for `never_joins` - if their pins were required,
         # this location would be ineligible and the round could never be created.
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=self.location),
+        )
 
-        self.session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest, self.never_joins])
+        self.session = start_multiplayer_session(
+            self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest, self.never_joins]
+        )
         join_session(self.session, self.guest)
         round_ = begin_session(self.session, self.host)
         assert round_ is not None
@@ -237,7 +258,14 @@ class JoinedOnlyRoundAndGuessTests(TestCase):
         second_location = _make_location()
         baker.make(Pin, profile=self.host, location=second_location)
         baker.make(Pin, profile=self.guest, location=second_location)
-        baker.make(Image, location=second_location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=second_location))
+        baker.make(
+            Image,
+            location=second_location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=second_location),
+        )
 
         guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)
         submit_guess(self.round_, self.host, guess_point)

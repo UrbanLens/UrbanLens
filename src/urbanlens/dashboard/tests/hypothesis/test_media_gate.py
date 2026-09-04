@@ -82,9 +82,13 @@ class MediaGateTests(TestCase):
 
     def test_anonymous_request_is_denied(self):
         response = self.client.get("/media/pin_images/owned.png")
-        self.assertIn(response.status_code, (301, 302, 401, 403), "anonymous media request must not receive file content")
+        self.assertIn(
+            response.status_code, (301, 302, 401, 403), "anonymous media request must not receive file content"
+        )
         if response.status_code in (301, 302):
-            self.assertIn("login", response.headers.get("Location", ""), "anonymous request should bounce to the login page")
+            self.assertIn(
+                "login", response.headers.get("Location", ""), "anonymous request should bounce to the login page"
+            )
 
     # -- Ownership / visibility -------------------------------------------------
 
@@ -342,7 +346,12 @@ class MediaGateTests(TestCase):
     def test_a_stranger_is_still_denied_a_file_two_other_people_share(self):
         """The extra row must not widen who the file reaches."""
         other_user = _new_user()
-        baker.make(Image, image="pin_images/owned.png", profile=other_user.profile, quota_exempt_reason=QuotaExemption.SHARED_COPY)
+        baker.make(
+            Image,
+            image="pin_images/owned.png",
+            profile=other_user.profile,
+            quota_exempt_reason=QuotaExemption.SHARED_COPY,
+        )
         self.client.force_login(_new_user())
 
         response = self.client.get("/media/pin_images/owned.png")
@@ -434,7 +443,11 @@ class CommentImageMediaGateTests(TestCase):
 
         self.client.force_login(self.owner_user)
         response = self.client.get("/media/comment_images/wiki.png")
-        self.assertEqual(response.status_code, 404, "a viewer who could see the wiki must still be denied once the author restricts comment_visibility")
+        self.assertEqual(
+            response.status_code,
+            404,
+            "a viewer who could see the wiki must still be denied once the author restricts comment_visibility",
+        )
 
     def test_wiki_comment_image_visible_when_author_allows_anyone(self):
         from urbanlens.dashboard.models.comments.model import Comment
@@ -457,7 +470,11 @@ class CommentImageMediaGateTests(TestCase):
 
         self.client.force_login(self.owner_user)
         response = self.client.get("/media/comment_images/pin.png")
-        self.assertEqual(response.status_code, 404, "the pin owner must still be denied once the comment author restricts comment_visibility")
+        self.assertEqual(
+            response.status_code,
+            404,
+            "the pin owner must still be denied once the comment author restricts comment_visibility",
+        )
 
     def test_pin_comment_image_visible_to_owner_when_author_allows_anyone(self):
         from urbanlens.dashboard.models.comments.model import Comment
@@ -482,7 +499,11 @@ class CommentImageMediaGateTests(TestCase):
 
         self.client.force_login(self.owner_user)
         response = self.client.get("/media/comment_images/trip.png")
-        self.assertEqual(response.status_code, 404, "a fellow trip member must still be denied once the author restricts comment_visibility")
+        self.assertEqual(
+            response.status_code,
+            404,
+            "a fellow trip member must still be denied once the author restricts comment_visibility",
+        )
 
     def test_trip_comment_image_visible_to_member_when_author_allows_anyone(self):
         from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMembership
@@ -559,7 +580,12 @@ class SafetyCheckinMediaGateTests(TestCase):
         from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner, SafetyCheckinPartnerStatus
 
         partner_user = _new_user()
-        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=partner_user.profile, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
+        SafetyCheckinPartner.objects.create(
+            checkin=self.checkin,
+            profile=partner_user.profile,
+            invited_by=self.owner,
+            status=SafetyCheckinPartnerStatus.ACCEPTED,
+        )
         self.client.force_login(partner_user)
 
         self.assertEqual(self._fetch(), 200, "an accepted safety partner could not load the check-in's photos")
@@ -569,7 +595,12 @@ class SafetyCheckinMediaGateTests(TestCase):
         from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner, SafetyCheckinPartnerStatus
 
         invitee_user = _new_user()
-        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=invitee_user.profile, invited_by=self.owner, status=SafetyCheckinPartnerStatus.INVITED)
+        SafetyCheckinPartner.objects.create(
+            checkin=self.checkin,
+            profile=invitee_user.profile,
+            invited_by=self.owner,
+            status=SafetyCheckinPartnerStatus.INVITED,
+        )
         self.client.force_login(invitee_user)
 
         self.assertEqual(self._fetch(), 404)
@@ -614,7 +645,9 @@ class SafetyContactTokenPhotoTests(TestCase):
 
         self.checkin = self._checkin()
         self.image = baker.make(Image, image="pin_images/tok.png", profile=self.owner, safety_checkin=self.checkin)
-        self.contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+        self.contact = baker.make(
+            "dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None
+        )
 
     def _checkin(self):
         return baker.make(
@@ -645,7 +678,9 @@ class SafetyContactTokenPhotoTests(TestCase):
 
     def test_a_token_does_not_reach_another_checkins_photo(self):
         """The token is scoped to its own check-in, not to check-in photos at large."""
-        other_image = baker.make(Image, image="pin_images/other.png", profile=self.owner, safety_checkin=self._checkin())
+        other_image = baker.make(
+            Image, image="pin_images/other.png", profile=self.owner, safety_checkin=self._checkin()
+        )
 
         response = self.client.get(self._url(self.contact.token, other_image.pk))
 

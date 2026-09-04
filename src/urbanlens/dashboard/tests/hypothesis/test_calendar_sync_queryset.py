@@ -72,9 +72,23 @@ class TripCalendarLinkActivityLinksByIdTests(TestCase):
         trip = Trip.objects.create(name="Backcountry", creator=profile)
         activity_a = TripActivity.objects.create(trip=trip, title="Trailhead")
         activity_b = TripActivity.objects.create(trip=trip, title="Summit")
-        link_a = TripCalendarLink.objects.create(trip=trip, profile=profile, activity=activity_a, direction=CalendarSyncDirection.EXPORTED, google_event_id="a")
-        link_b = TripCalendarLink.objects.create(trip=trip, profile=profile, activity=activity_b, direction=CalendarSyncDirection.EXPORTED, google_event_id="b")
-        TripCalendarLink.objects.create(trip=trip, profile=profile, direction=CalendarSyncDirection.EXPORTED, google_event_id="trip")
+        link_a = TripCalendarLink.objects.create(
+            trip=trip,
+            profile=profile,
+            activity=activity_a,
+            direction=CalendarSyncDirection.EXPORTED,
+            google_event_id="a",
+        )
+        link_b = TripCalendarLink.objects.create(
+            trip=trip,
+            profile=profile,
+            activity=activity_b,
+            direction=CalendarSyncDirection.EXPORTED,
+            google_event_id="b",
+        )
+        TripCalendarLink.objects.create(
+            trip=trip, profile=profile, direction=CalendarSyncDirection.EXPORTED, google_event_id="trip"
+        )
 
         result = TripCalendarLink.objects.activity_links_by_activity_id(trip, profile)
         self.assertEqual(result, {activity_a.pk: link_a, activity_b.pk: link_b})
@@ -105,7 +119,9 @@ class TripCalendarLinkAlreadyLinkedTests(TestCase):
         self.trip = Trip.objects.create(name="Coastal", creator=self.profile)
 
     def test_true_when_a_link_exists_for_this_profile_and_event(self) -> None:
-        TripCalendarLink.objects.create(trip=self.trip, profile=self.profile, direction=CalendarSyncDirection.IMPORTED, google_event_id="ev-1")
+        TripCalendarLink.objects.create(
+            trip=self.trip, profile=self.profile, direction=CalendarSyncDirection.IMPORTED, google_event_id="ev-1"
+        )
         self.assertTrue(TripCalendarLink.objects.already_linked(self.profile, "ev-1"))
 
     def test_false_for_an_unlinked_event(self) -> None:
@@ -114,7 +130,9 @@ class TripCalendarLinkAlreadyLinkedTests(TestCase):
     def test_false_for_a_different_profiles_link_to_the_same_event(self) -> None:
         other_user = User.objects.create_user(username="other-profile-tester")
         other_profile, _ = Profile.objects.get_or_create(user=other_user)
-        TripCalendarLink.objects.create(trip=self.trip, profile=other_profile, direction=CalendarSyncDirection.IMPORTED, google_event_id="ev-1")
+        TripCalendarLink.objects.create(
+            trip=self.trip, profile=other_profile, direction=CalendarSyncDirection.IMPORTED, google_event_id="ev-1"
+        )
         self.assertFalse(TripCalendarLink.objects.already_linked(self.profile, "ev-1"))
 
 
@@ -123,7 +141,13 @@ class TripCalendarLinkSetAutoSyncTests(TestCase):
         user = User.objects.create_user(username="auto-sync-tester")
         profile, _ = Profile.objects.get_or_create(user=user)
         trip = Trip.objects.create(name="Roadtrip", creator=profile)
-        link = TripCalendarLink.objects.create(trip=trip, profile=profile, direction=CalendarSyncDirection.EXPORTED, google_event_id="ev-1", auto_sync=False)
+        link = TripCalendarLink.objects.create(
+            trip=trip,
+            profile=profile,
+            direction=CalendarSyncDirection.EXPORTED,
+            google_event_id="ev-1",
+            auto_sync=False,
+        )
 
         TripCalendarLink.objects.set_auto_sync(link.pk, auto_sync=True)
 
@@ -135,8 +159,21 @@ class TripCalendarLinkSetAutoSyncTests(TestCase):
         profile, _ = Profile.objects.get_or_create(user=user)
         trip = Trip.objects.create(name="Overland", creator=profile)
         activity = TripActivity.objects.create(trip=trip, title="Stop")
-        trip_link = TripCalendarLink.objects.create(trip=trip, profile=profile, direction=CalendarSyncDirection.EXPORTED, google_event_id="ev-trip", auto_sync=False)
-        activity_link = TripCalendarLink.objects.create(trip=trip, profile=profile, activity=activity, direction=CalendarSyncDirection.EXPORTED, google_event_id="ev-activity", auto_sync=False)
+        trip_link = TripCalendarLink.objects.create(
+            trip=trip,
+            profile=profile,
+            direction=CalendarSyncDirection.EXPORTED,
+            google_event_id="ev-trip",
+            auto_sync=False,
+        )
+        activity_link = TripCalendarLink.objects.create(
+            trip=trip,
+            profile=profile,
+            activity=activity,
+            direction=CalendarSyncDirection.EXPORTED,
+            google_event_id="ev-activity",
+            auto_sync=False,
+        )
 
         TripCalendarLink.objects.set_auto_sync(trip_link.pk, auto_sync=True)
 

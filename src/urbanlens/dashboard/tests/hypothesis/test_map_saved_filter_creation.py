@@ -33,7 +33,11 @@ class SavedFilterToolbarTargetTests(TestCase):
     def test_the_toolbar_element_exists_even_with_no_filters(self) -> None:
         markup = render_to_string(_TOOLBAR, {"saved_filters": []})
 
-        self.assertIn('id="map-saved-filters-toolbar"', markup, "with no target in the DOM, creating the first filter updates nothing until a reload")
+        self.assertIn(
+            'id="map-saved-filters-toolbar"',
+            markup,
+            "with no target in the DOM, creating the first filter updates nothing until a reload",
+        )
 
     def test_the_empty_toolbar_is_invisible(self) -> None:
         """It must not draw empty toolbar chrome on a map with no filters."""

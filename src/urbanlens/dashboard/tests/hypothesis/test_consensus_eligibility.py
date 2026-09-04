@@ -15,7 +15,12 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.consensus.eligibility import eligible_wikis, eligible_wikis_for_all, has_eligible_wikis, has_eligible_wikis_for_all
+from urbanlens.dashboard.services.consensus.eligibility import (
+    eligible_wikis,
+    eligible_wikis_for_all,
+    has_eligible_wikis,
+    has_eligible_wikis_for_all,
+)
 
 
 def _make_profile() -> Profile:

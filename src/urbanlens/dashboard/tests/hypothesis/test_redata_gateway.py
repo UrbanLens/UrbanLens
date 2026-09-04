@@ -16,7 +16,15 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
 )
 
 
-def _response(status_code: int, *, json_body: dict | list | None = None, text: str = "", raise_on_json: bool = False, content: bytes = b"", headers: dict | None = None) -> MagicMock:
+def _response(
+    status_code: int,
+    *,
+    json_body: dict | list | None = None,
+    text: str = "",
+    raise_on_json: bool = False,
+    content: bytes = b"",
+    headers: dict | None = None,
+) -> MagicMock:
     """Build a mock requests.Response."""
     resp = MagicMock()
     resp.status_code = status_code
@@ -78,13 +86,17 @@ class LookupParcelRequestTests(SimpleTestCase):
         gateway = _gateway(session)
         gateway.lookup_parcel(42.65, -73.75, situs_address="123 Main St", apn="1-2-3")
         _args, kwargs = session.get.call_args
-        self.assertEqual(kwargs["params"], {"lat": 42.65, "lng": -73.75, "situs_address": "123 Main St", "apn": "1-2-3"})
+        self.assertEqual(
+            kwargs["params"], {"lat": 42.65, "lng": -73.75, "situs_address": "123 Main St", "apn": "1-2-3"}
+        )
 
 
 class LookupParcelSuccessTests(SimpleTestCase):
     def test_returns_the_record_payload(self) -> None:
         session = MagicMock()
-        session.get.return_value = _response(200, json_body={"record_payload": {"owner_name": ["Jane Smith"], "apn": "1-2-3"}})
+        session.get.return_value = _response(
+            200, json_body={"record_payload": {"owner_name": ["Jane Smith"], "apn": "1-2-3"}}
+        )
         gateway = _gateway(session)
         payload = gateway.lookup_parcel(42.65, -73.75)
         self.assertEqual(payload, {"owner_name": ["Jane Smith"], "apn": "1-2-3"})
@@ -102,16 +114,31 @@ class LookupParcelSuccessTests(SimpleTestCase):
         session.get.return_value = _response(
             200,
             json_body={
-                "record_payload": {"owner_name": ["Jane Smith"], "parcel_geometry": {"format": "esri_rings", "rings": [[[0.0, 0.0]]]}},
-                "parcel_geometry": {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]},
-                "building_geometry": {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]},
+                "record_payload": {
+                    "owner_name": ["Jane Smith"],
+                    "parcel_geometry": {"format": "esri_rings", "rings": [[[0.0, 0.0]]]},
+                },
+                "parcel_geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]],
+                },
+                "building_geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]],
+                },
             },
         )
         gateway = _gateway(session)
         payload = gateway.lookup_parcel(42.65, -73.75)
         self.assertEqual(payload["owner_name"], ["Jane Smith"])
-        self.assertEqual(payload["parcel_geometry"], {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]})
-        self.assertEqual(payload["building_geometry"], {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]})
+        self.assertEqual(
+            payload["parcel_geometry"],
+            {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]},
+        )
+        self.assertEqual(
+            payload["building_geometry"],
+            {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]},
+        )
 
     def test_no_top_level_geometry_leaves_record_payload_untouched(self) -> None:
         session = MagicMock()
@@ -133,7 +160,14 @@ class LookupParcelSuccessTests(SimpleTestCase):
 class LookupParcelErrorResponseTests(SimpleTestCase):
     def test_404_raises_with_redatas_own_reason(self) -> None:
         session = MagicMock()
-        session.get.return_value = _response(404, json_body={"error": REASON_MANUAL_ONLY, "message": "Call the assessor.", "links": {"assessor_url": "https://example.gov/assessor"}})
+        session.get.return_value = _response(
+            404,
+            json_body={
+                "error": REASON_MANUAL_ONLY,
+                "message": "Call the assessor.",
+                "links": {"assessor_url": "https://example.gov/assessor"},
+            },
+        )
         gateway = _gateway(session)
         with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
             gateway.lookup_parcel(42.65, -73.75)
@@ -143,7 +177,9 @@ class LookupParcelErrorResponseTests(SimpleTestCase):
 
     def test_503_raises_with_redatas_own_reason(self) -> None:
         session = MagicMock()
-        session.get.return_value = _response(503, json_body={"error": REASON_SOURCE_ERROR, "message": "county server unreachable"})
+        session.get.return_value = _response(
+            503, json_body={"error": REASON_SOURCE_ERROR, "message": "county server unreachable"}
+        )
         gateway = _gateway(session)
         with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
             gateway.lookup_parcel(42.65, -73.75)
@@ -167,7 +203,13 @@ class LookupParcelErrorResponseTests(SimpleTestCase):
 
     def test_top_level_uuid_is_included_in_the_payload(self) -> None:
         session = MagicMock()
-        session.get.return_value = _response(200, json_body={"uuid": "3fae2b1c-0000-0000-0000-000000000000", "record_payload": {"owner_name": ["Jane Smith"]}})
+        session.get.return_value = _response(
+            200,
+            json_body={
+                "uuid": "3fae2b1c-0000-0000-0000-000000000000",
+                "record_payload": {"owner_name": ["Jane Smith"]},
+            },
+        )
         gateway = _gateway(session)
         payload = gateway.lookup_parcel(42.65, -73.75)
         self.assertEqual(payload["uuid"], "3fae2b1c-0000-0000-0000-000000000000")
@@ -202,7 +244,9 @@ class LookupParcelErrorResponseTests(SimpleTestCase):
 class LookupParcelUuidTests(SimpleTestCase):
     def test_returns_the_uuid(self) -> None:
         session = MagicMock()
-        session.get.return_value = _response(200, json_body={"uuid": "3fae2b1c-0000-0000-0000-000000000000", "record_payload": {}})
+        session.get.return_value = _response(
+            200, json_body={"uuid": "3fae2b1c-0000-0000-0000-000000000000", "record_payload": {}}
+        )
         gateway = _gateway(session)
         self.assertEqual(gateway.lookup_parcel_uuid(42.65, -73.75), "3fae2b1c-0000-0000-0000-000000000000")
 
@@ -228,7 +272,9 @@ class LookupParcelUuidTests(SimpleTestCase):
 class LookupListingsTests(SimpleTestCase):
     def test_returns_the_full_body(self) -> None:
         session = MagicMock()
-        session.get.return_value = _response(200, json_body={"results": [{"uuid": "l1", "title": "Retail Building"}], "refresh_queued": True})
+        session.get.return_value = _response(
+            200, json_body={"results": [{"uuid": "l1", "title": "Retail Building"}], "refresh_queued": True}
+        )
         gateway = _gateway(session)
         body = gateway.lookup_listings("parcel-uuid")
         self.assertEqual(body["refresh_queued"], True)
@@ -322,7 +368,11 @@ class FetchCulturalResourceDetailTests(SimpleTestCase):
             200,
             json_body={
                 "detail_status": "fetched",
-                "resource": {"uuid": "r1", "attributes": {"USNName": "Old Mill"}, "attachments": [{"id": 1, "kind": "photo"}]},
+                "resource": {
+                    "uuid": "r1",
+                    "attributes": {"USNName": "Old Mill"},
+                    "attachments": [{"id": 1, "kind": "photo"}],
+                },
             },
         )
         gateway = _gateway(session)
@@ -334,7 +384,9 @@ class FetchCulturalResourceDetailTests(SimpleTestCase):
     def test_an_unenveloped_body_is_returned_as_is(self) -> None:
         """Defensive: a body with no ``resource`` key is already the resource."""
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"uuid": "r1", "attachments": [{"id": 1, "kind": "photo"}]})
+        session.post.return_value = _response(
+            200, json_body={"uuid": "r1", "attachments": [{"id": 1, "kind": "photo"}]}
+        )
         gateway = _gateway(session)
         detail = gateway.fetch_cultural_resource_detail("r1")
         self.assertEqual(detail["attachments"][0]["kind"], "photo")
@@ -386,7 +438,9 @@ class DownloadCulturalResourceAttachmentTests(SimpleTestCase):
 class LookupBuildingsTests(SimpleTestCase):
     def test_returns_the_building_list(self) -> None:
         session = MagicMock()
-        session.get.return_value = _response(200, json_body=[{"source": "cris", "name": "Reality House", "building_number": "72", "year_built": 1937}])
+        session.get.return_value = _response(
+            200, json_body=[{"source": "cris", "name": "Reality House", "building_number": "72", "year_built": 1937}]
+        )
         gateway = _gateway(session)
         buildings = gateway.lookup_buildings("parcel-uuid")
         self.assertEqual(buildings[0]["name"], "Reality House")
@@ -419,7 +473,9 @@ class LookupBuildingsTests(SimpleTestCase):
 class ExtractCulturalResourceAttachmentTests(SimpleTestCase):
     def test_returns_the_extraction_body(self) -> None:
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"id": 12, "extracted_data": {"building_number": "166"}, "extracted_images": [{"id": 3}]})
+        session.post.return_value = _response(
+            200, json_body={"id": 12, "extracted_data": {"building_number": "166"}, "extracted_images": [{"id": 3}]}
+        )
         gateway = _gateway(session)
         result = gateway.extract_cultural_resource_attachment("r1", 12)
         self.assertEqual(result["extracted_images"], [{"id": 3}])
@@ -471,7 +527,10 @@ class DownloadExtractedImageTests(SimpleTestCase):
         gateway = _gateway(session)
         gateway.download_extracted_image("r1", 12, 3)
         args, _kwargs = session.get.call_args
-        self.assertEqual(args[0], "https://redata.example.test/api/v1/cultural-resources/r1/attachments/12/extracted-images/3/download/")
+        self.assertEqual(
+            args[0],
+            "https://redata.example.test/api/v1/cultural-resources/r1/attachments/12/extracted-images/3/download/",
+        )
 
     def test_404_raises_unavailable(self) -> None:
         session = MagicMock()

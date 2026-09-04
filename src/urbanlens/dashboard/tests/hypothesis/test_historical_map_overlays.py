@@ -23,10 +23,16 @@ _GATEWAY_PATH = "urbanlens.dashboard.services.apis.locations.redata_historical_m
 _CONFIGURED_PATH = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 
 
-def _match(georeference_uuid: str, *, title: str = "Sanborn Fire Insurance Map", bounds: list[float] | None = None) -> dict:
+def _match(
+    georeference_uuid: str, *, title: str = "Sanborn Fire Insurance Map", bounds: list[float] | None = None
+) -> dict:
     return {
         "sheet": {"title": title, "date_text": "1893", "kind": "fire_insurance", "attribution": "Library of Congress"},
-        "georeference": {"uuid": georeference_uuid, "bounds": bounds or [-71.06, 42.35, -71.05, 42.36], "tile_url_template": "https://redata.example/t/{z}/{x}/{y}.png"},
+        "georeference": {
+            "uuid": georeference_uuid,
+            "bounds": bounds or [-71.06, 42.35, -71.05, 42.36],
+            "tile_url_template": "https://redata.example/t/{z}/{x}/{y}.png",
+        },
         "contains_point": True,
         "distance_meters": 0.0,
     }
@@ -53,13 +59,17 @@ class GeoreferenceAccuracyTests(TestCase):
         """Its residual is ~0 by construction, not because the placement is good."""
         from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
 
-        self.assertEqual(georeference_accuracy({"transformation": "thinPlateSpline", "rmse_meters": 0.0, "gcp_count": 30}), "")
+        self.assertEqual(
+            georeference_accuracy({"transformation": "thinPlateSpline", "rmse_meters": 0.0, "gcp_count": 30}), ""
+        )
 
     def test_a_tight_fit_is_not_worth_the_pixels(self) -> None:
         """A few metres on a scanned historical map is noise, not information."""
         from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
 
-        self.assertEqual(georeference_accuracy({"transformation": "polynomial", "rmse_meters": 3.0, "gcp_count": 8}), "")
+        self.assertEqual(
+            georeference_accuracy({"transformation": "polynomial", "rmse_meters": 3.0, "gcp_count": 8}), ""
+        )
 
     def test_a_missing_or_malformed_figure_reports_nothing(self) -> None:
         from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
@@ -208,7 +218,11 @@ class HistoricalMapBrowseTests(TestCase):
         self.assertTrue(overlay.locked, "a pre-georeferenced overlay must not offer corner dragging")
         self.assertIn(self.georeference_uuid, overlay.tile_url_template)
         self.assertTrue(overlay.tile_url_template.endswith("/{z}/{x}/{y}.png"))
-        self.assertNotIn("redata.example", overlay.tile_url_template, "REData's own tile URL (whose fetches need the API key) must never be stored for the browser")
+        self.assertNotIn(
+            "redata.example",
+            overlay.tile_url_template,
+            "REData's own tile URL (whose fetches need the API key) must never be stored for the browser",
+        )
         # Corners record the georeference bounds: NW, NE, SE, SW.
         self.assertEqual(overlay.corners(), [[42.36, -71.06], [42.36, -71.05], [42.35, -71.05], [42.35, -71.06]])
         self.assertEqual(overlay.name, "Sanborn Fire Insurance Map - 1893")

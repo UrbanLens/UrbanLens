@@ -97,7 +97,16 @@ class FlattenXmpTests(TestCase):
     """_flatten_xmp reduces Image.getxmp()'s nested dict to local-name -> value."""
 
     def test_flattens_nested_description(self):
-        data = {"xmpmeta": {"RDF": {"Description": {"{http://ns.google.com/photos/1.0/panorama/}PosePitchDegrees": "1.25", "PoseRollDegrees": "-0.4"}}}}
+        data = {
+            "xmpmeta": {
+                "RDF": {
+                    "Description": {
+                        "{http://ns.google.com/photos/1.0/panorama/}PosePitchDegrees": "1.25",
+                        "PoseRollDegrees": "-0.4",
+                    }
+                }
+            }
+        }
         out: dict = {}
         _flatten_xmp(data, out)
         self.assertEqual(out["posepitchdegrees"], "1.25")
@@ -124,18 +133,24 @@ class ExtractGpsOrientationTests(TestCase):
 
     def test_reads_gpano_pitch_and_roll(self):
         xmp = {"Description": {"GPano:PosePitchDegrees": "2.5", "GPano:PoseRollDegrees": "-1.0"}}
-        with mock.patch("urbanlens.dashboard.services.media.images.PILImage.open", return_value=self._image_with_xmp(xmp)):
+        with mock.patch(
+            "urbanlens.dashboard.services.media.images.PILImage.open", return_value=self._image_with_xmp(xmp)
+        ):
             result = extract_gps_orientation(io.BytesIO(b"not a real jpeg, open() is mocked"))
         self.assertEqual(result, (2.5, -1.0))
 
     def test_none_when_xmp_absent(self):
-        with mock.patch("urbanlens.dashboard.services.media.images.PILImage.open", return_value=self._image_with_xmp(None)):
+        with mock.patch(
+            "urbanlens.dashboard.services.media.images.PILImage.open", return_value=self._image_with_xmp(None)
+        ):
             result = extract_gps_orientation(io.BytesIO(b"not a real jpeg, open() is mocked"))
         self.assertIsNone(result)
 
     def test_none_when_only_one_axis_present(self):
         xmp = {"Description": {"GPano:PosePitchDegrees": "2.5"}}
-        with mock.patch("urbanlens.dashboard.services.media.images.PILImage.open", return_value=self._image_with_xmp(xmp)):
+        with mock.patch(
+            "urbanlens.dashboard.services.media.images.PILImage.open", return_value=self._image_with_xmp(xmp)
+        ):
             result = extract_gps_orientation(io.BytesIO(b"not a real jpeg, open() is mocked"))
         self.assertIsNone(result)
 
@@ -149,7 +164,9 @@ class ExtractCameraLensExposureTests(TestCase):
         self.assertEqual(extract_camera_info(io.BytesIO(_jpeg_bytes())), (None, None))
 
     def test_extract_lens_model_reads_tag(self):
-        self.assertEqual(extract_lens_model(io.BytesIO(_jpeg_bytes(lens_model="RF24-105mm F4 L IS USM"))), "RF24-105mm F4 L IS USM")
+        self.assertEqual(
+            extract_lens_model(io.BytesIO(_jpeg_bytes(lens_model="RF24-105mm F4 L IS USM"))), "RF24-105mm F4 L IS USM"
+        )
 
     def test_extract_lens_model_none_when_absent(self):
         self.assertIsNone(extract_lens_model(io.BytesIO(_jpeg_bytes())))
@@ -170,7 +187,9 @@ class ExtractCameraLensExposureTests(TestCase):
         self.assertIsNone(extract_aperture(io.BytesIO(_jpeg_bytes())))
 
     def test_extract_focal_length_reads_tag(self):
-        self.assertAlmostEqual(extract_focal_length(io.BytesIO(_jpeg_bytes(focal_length=Fraction(50, 1)))), 50.0, places=1)
+        self.assertAlmostEqual(
+            extract_focal_length(io.BytesIO(_jpeg_bytes(focal_length=Fraction(50, 1)))), 50.0, places=1
+        )
 
     def test_extract_focal_length_none_when_absent(self):
         self.assertIsNone(extract_focal_length(io.BytesIO(_jpeg_bytes())))
@@ -182,10 +201,19 @@ class ProcessImageUploadExifMetadataTests(TestCase):
 
     def _make_image_row(self, content: bytes) -> Image:
         profile = User.objects.create(username=f"u{Image.objects.count()}").profile
-        return Image.objects.create(image=SimpleUploadedFile("shot.jpg", content, content_type="image/jpeg"), profile=profile)
+        return Image.objects.create(
+            image=SimpleUploadedFile("shot.jpg", content, content_type="image/jpeg"), profile=profile
+        )
 
     def test_camera_and_lens_fields_are_populated(self):
-        content = _jpeg_bytes(make="Canon", model="EOS R5", lens_model="RF50mm F1.2", exposure_time=Fraction(1, 500), fnumber=Fraction(12, 10), focal_length=Fraction(50, 1))
+        content = _jpeg_bytes(
+            make="Canon",
+            model="EOS R5",
+            lens_model="RF50mm F1.2",
+            exposure_time=Fraction(1, 500),
+            fnumber=Fraction(12, 10),
+            focal_length=Fraction(50, 1),
+        )
         row = self._make_image_row(content)
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             process_image_upload(row.pk)
@@ -215,5 +243,16 @@ class ProcessImageUploadExifMetadataTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             process_image_upload(row.pk)
         row.refresh_from_db()
-        for field in ("exif_altitude", "exif_pitch", "exif_roll", "exif_camera_make", "exif_camera_model", "exif_lens_model", "exif_shutter_speed", "exif_aperture", "exif_focal_length", "exif_floor"):
+        for field in (
+            "exif_altitude",
+            "exif_pitch",
+            "exif_roll",
+            "exif_camera_make",
+            "exif_camera_model",
+            "exif_lens_model",
+            "exif_shutter_speed",
+            "exif_aperture",
+            "exif_focal_length",
+            "exif_floor",
+        ):
             self.assertIsNone(getattr(row, field), field)

@@ -226,7 +226,7 @@ class RedataGateway(Gateway):
     def lookup_assessments(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return annual assessor valuations near a parcel.
 
-        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/assessments/":
+        See REData's ``../REData/docs/api-reference.md``, "GET /parcels/{uuid}/assessments/":
         one row per **parcel-year** (``parcel_identifier`` is the assessor's own
         PIN, ``tax_year`` the tax year). ``total_value`` is an *assessed* value -
         a statutory fraction of market value (``assessment_basis`` states the
@@ -250,7 +250,7 @@ class RedataGateway(Gateway):
     def lookup_liens(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return recorded liens and fines against a parcel.
 
-        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/liens/".
+        See REData's ``../REData/docs/api-reference.md``, "GET /parcels/{uuid}/liens/".
         Rows carry ``lien_type``, ``amount``, ``filed_date`` and ``status``.
         ``status`` is free text - publishers spell it inconsistently and REData
         does not normalise it - so treat it as a label to show, not a value to
@@ -274,7 +274,7 @@ class RedataGateway(Gateway):
     def lookup_tax_payments(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return tax billing and payment history for a parcel.
 
-        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/tax-payments/".
+        See REData's ``../REData/docs/api-reference.md``, "GET /parcels/{uuid}/tax-payments/".
         One row per **parcel-year**, carrying ``tax_year``, ``amount``, ``paid``
         and ``delinquent``. ``delinquent`` is the publisher's own determination
         rather than something derived from ``paid`` - a row can be unpaid but
@@ -296,7 +296,7 @@ class RedataGateway(Gateway):
     def lookup_sale_records(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return supplementary recorded sales near a parcel.
 
-        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/sale-records/":
+        See REData's ``../REData/docs/api-reference.md``, "GET /parcels/{uuid}/sale-records/":
         recorded sales from providers outside the tiered property-records
         pipeline (Connecticut OPM statewide; Cook County). Rows are
         **near-parcel** - ``parcel`` is null and nothing links a row to a
@@ -324,7 +324,7 @@ class RedataGateway(Gateway):
 
         Never fetches from LoopNet inline with the request, even on a cache
         miss - see the endpoint's own documentation in REData's
-        ``docs/api-reference.md`` for why (LoopNet's bot-detection, REData's
+        ``../REData/docs/api-reference.md`` for why (LoopNet's bot-detection, REData's
         strict outbound budget for it). ``refresh_queued`` in the response
         signals whether this call also queued a background LoopNet fetch.
 
@@ -388,7 +388,7 @@ class RedataGateway(Gateway):
         Returns:
             One dict per *physical building* (possibly empty), not one per
             source observation - REData reconciles them (its
-            ``docs/buildings-dedup-spec.md``). Each carries at least a
+            ``../REData/docs/archive/buildings-dedup-spec.md``). Each carries at least a
             coordinate; ``geometry`` is standard GeoJSON (a ``Point`` when no
             boundary is available).
 
@@ -621,7 +621,7 @@ class RedataGateway(Gateway):
         Returns:
             The attachment dict with ``extracted_data``/``extracted_at``/
             ``extracted_images`` populated - see REData's own
-            ``docs/api-reference.md`` for the shape.
+            ``../REData/docs/api-reference.md`` for the shape.
 
         Raises:
             PropertyRecordsUnavailableError: The attachment isn't a

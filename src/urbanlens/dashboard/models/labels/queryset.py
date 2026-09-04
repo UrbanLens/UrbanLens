@@ -124,7 +124,14 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
             Prefetch("parents", queryset=Label.objects.only("id", "name", "kind")),
         )
 
-    def ordered(self) -> Self:
+    def in_display_order(self) -> Self:
+        """Rank order, then name.
+
+        Not called `ordered`: Django's `QuerySet.ordered` is a bool property,
+        and shadowing it with a method made `Paginator`'s
+        `getattr(object_list, "ordered", None)` return a truthy bound method,
+        so the UnorderedObjectListWarning could never fire for these querysets.
+        """
         return self.order_by("-order", "name")
 
 

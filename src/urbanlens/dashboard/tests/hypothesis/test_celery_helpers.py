@@ -8,7 +8,13 @@ from hypothesis import given, settings as hyp_settings, strategies as st
 from kombu.exceptions import KombuError
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.core.celery import PROGRESS_STATE, TaskProgress, get_task_progress, safely_enqueue_task, update_task_progress
+from urbanlens.dashboard.services.core.celery import (
+    PROGRESS_STATE,
+    TaskProgress,
+    get_task_progress,
+    safely_enqueue_task,
+    update_task_progress,
+)
 
 
 class TaskProgressTests(SimpleTestCase):
@@ -24,7 +30,9 @@ class TaskProgressTests(SimpleTestCase):
 class UpdateTaskProgressTests(SimpleTestCase):
     """update_task_progress clamps unsafe inputs and computes percentages."""
 
-    @given(current=st.integers(min_value=-10_000, max_value=10_000), total=st.integers(min_value=-100, max_value=10_000))
+    @given(
+        current=st.integers(min_value=-10_000, max_value=10_000), total=st.integers(min_value=-100, max_value=10_000)
+    )
     @hyp_settings(max_examples=50)
     def test_clamps_current_and_total(self, current: int, total: int) -> None:
         task = mock.Mock()

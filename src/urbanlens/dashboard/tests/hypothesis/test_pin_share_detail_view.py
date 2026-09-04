@@ -58,7 +58,7 @@ class PinShareDetailViewPrivateNotesLeakTests(TestCase):
     recipient never consented to and a share long since ACCEPTED/REJECTED. Nothing about
     consenting to share a *pin* implies consenting to share its owner's private notes about
     it - that's a live reference into the sender's pin, exactly what
-    docs/GOALS.md's sharing model forbids. See docs/GOALS_CODE_AUDIT.md ("Pin-to-pin sharing").
+    docs/GOALS.md's sharing model forbids. See docs/audits/GOALS_CODE_AUDIT.md ("Pin-to-pin sharing").
     """
 
     def setUp(self) -> None:
@@ -95,7 +95,13 @@ class PinShareDetailViewPrivateNotesLeakTests(TestCase):
                     self.assertNotContains(response, "My secret hideout notes")
 
     def test_description_stays_hidden_after_the_sender_edits_it_post_share(self) -> None:
-        share = PinShare.objects.create(pin=self.pin, location=self.pin.location, from_profile=self.sender, to_profile=self.recipient, status=PinShareStatus.PENDING)
+        share = PinShare.objects.create(
+            pin=self.pin,
+            location=self.pin.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
+        )
         self.pin.description = "An even more secret note added after sharing"
         self.pin.save(update_fields=["description"])
 
@@ -109,7 +115,13 @@ class PinShareDetailViewPrivateNotesLeakTests(TestCase):
         self.pin.location.street_number = "742"
         self.pin.location.route = "Evergreen Terrace"
         self.pin.location.save(update_fields=["street_number", "route"])
-        share = PinShare.objects.create(pin=self.pin, location=self.pin.location, from_profile=self.sender, to_profile=self.recipient, status=PinShareStatus.PENDING)
+        share = PinShare.objects.create(
+            pin=self.pin,
+            location=self.pin.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
+        )
 
         response = self._get(share)
 

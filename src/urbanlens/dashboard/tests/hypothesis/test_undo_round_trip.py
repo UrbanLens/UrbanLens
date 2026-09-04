@@ -55,8 +55,14 @@ class UndoRoundTripTests(TestCase):
         """
         builders = {
             "pin": lambda: baker.make(
-                Pin, profile=self.profile, location=self.location,
-                name="Undo Pin", description="personal notes", priority=3, danger=2, vulnerability=1,
+                Pin,
+                profile=self.profile,
+                location=self.location,
+                name="Undo Pin",
+                description="personal notes",
+                priority=3,
+                danger=2,
+                vulnerability=1,
             ),
             "pin_list": lambda: baker.make(PinList, profile=self.profile, name="Undo List", description="list notes"),
             "trip": lambda: baker.make(Trip, creator=self.profile, name="Undo Trip", description="trip notes"),
@@ -71,7 +77,11 @@ class UndoRoundTripTests(TestCase):
 
     def test_every_registered_handler_has_a_builder_here(self) -> None:
         """A new handler must come with coverage, rather than silently skipping it."""
-        missing = [label for label, handler in sorted(_HANDLERS.items()) if handler.supports_delete and self._build(label) is None]
+        missing = [
+            label
+            for label, handler in sorted(_HANDLERS.items())
+            if handler.supports_delete and self._build(label) is None
+        ]
 
         self.assertEqual(missing, [], f"undo handlers with no round-trip coverage: {missing}")
 

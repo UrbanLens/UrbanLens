@@ -76,7 +76,9 @@ class DeviceScanIngestQueryTests(TestCase):
 
     def test_the_marker_is_actually_attached(self) -> None:
         """Batching must not quietly stop resolving them."""
-        ingest_scan_upload(self.profile, client_session_uuid="", devices=[_device(1, marker_uuid=str(self.marker.uuid))])
+        ingest_scan_upload(
+            self.profile, client_session_uuid="", devices=[_device(1, marker_uuid=str(self.marker.uuid))]
+        )
 
         self.assertEqual(DeviceScanEntry.objects.get().expected_marker_id, self.marker.pk)
 
@@ -84,7 +86,9 @@ class DeviceScanIngestQueryTests(TestCase):
         """Same as the per-device `.first()` did - an unknown uuid must not fail the upload."""
         import uuid as uuid_module
 
-        ingest_scan_upload(self.profile, client_session_uuid="", devices=[_device(2, marker_uuid=str(uuid_module.uuid4()))])
+        ingest_scan_upload(
+            self.profile, client_session_uuid="", devices=[_device(2, marker_uuid=str(uuid_module.uuid4()))]
+        )
 
         self.assertIsNone(DeviceScanEntry.objects.get().expected_marker_id)
 

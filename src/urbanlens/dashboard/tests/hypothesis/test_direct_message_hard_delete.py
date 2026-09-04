@@ -60,11 +60,15 @@ class DueForHardDeleteQuerySetTests(TestCase):
         self.assertNotIn(message, DirectMessage.objects.due_for_hard_delete())
 
     def test_unread_is_excluded_regardless_of_retention_choice(self) -> None:
-        message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.WHEN_READ, read_at=None)
+        message = _make_message(
+            self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.WHEN_READ, read_at=None
+        )
         self.assertNotIn(message, DirectMessage.objects.due_for_hard_delete())
 
     def test_when_read_is_included_immediately_after_read(self) -> None:
-        message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.WHEN_READ, read_at=timezone.now())
+        message = _make_message(
+            self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.WHEN_READ, read_at=timezone.now()
+        )
         self.assertIn(message, DirectMessage.objects.due_for_hard_delete())
 
     def test_one_day_not_yet_elapsed_is_excluded(self) -> None:
@@ -187,7 +191,11 @@ class HardDeleteBatchingTests(TestCase):
         self._due(5)
         with CaptureQueriesContext(connection) as captured:
             hard_delete_expired_direct_messages(batch_size=2)
-        deletes = [q["sql"] for q in captured.captured_queries if q["sql"].startswith("DELETE") and "dashboard_direct_messages" in q["sql"]]
+        deletes = [
+            q["sql"]
+            for q in captured.captured_queries
+            if q["sql"].startswith("DELETE") and "dashboard_direct_messages" in q["sql"]
+        ]
         self.assertGreater(len(deletes), 1, "five due messages went out in one DELETE - the batch size was not applied")
 
     def test_max_per_run_leaves_the_remainder_for_the_next_run(self) -> None:
@@ -205,7 +213,9 @@ class HardDeleteBatchingTests(TestCase):
 
     def test_not_yet_due_messages_survive_a_batched_drain(self) -> None:
         self._due(3)
-        keeper = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, read_at=timezone.now())
+        keeper = _make_message(
+            self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, read_at=timezone.now()
+        )
         hard_delete_expired_direct_messages(batch_size=1)
         self.assertEqual(list(DirectMessage.objects.values_list("pk", flat=True)), [keeper.pk])
 
@@ -298,7 +308,9 @@ class SidebarPreviewTombstoneTests(TestCase):
     def test_deleted_for_everyone_message_is_not_in_the_sidebar_preview(self) -> None:
         from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
-        message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET)
+        message = _make_message(
+            self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET
+        )
         delete_message_for_everyone(message, self.sender)
         self.client.force_login(self.recipient.user)
         response = self.client.get(reverse("messages.list"))
@@ -308,7 +320,9 @@ class SidebarPreviewTombstoneTests(TestCase):
     def test_the_sender_still_sees_their_own_deleted_message_in_their_own_sidebar(self) -> None:
         from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
-        message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET)
+        message = _make_message(
+            self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET
+        )
         delete_message_for_everyone(message, self.sender)
         self.client.force_login(self.sender.user)
         response = self.client.get(reverse("messages.list"))

@@ -51,7 +51,9 @@ class StripeWebhookReplayTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.subscription = baker.make(
             RoleSubscription,
             user=self.user,
@@ -71,7 +73,9 @@ class StripeWebhookReplayTests(TestCase):
             mock.patch.object(app_settings, "stripe_webhook_secret", "whsec_test"),
             mock.patch("stripe.Webhook.construct_event", return_value=mock.Mock(to_dict=lambda: event)),
         ):
-            return (client or self.client).post(self.url, data=json.dumps(event), content_type="application/json", HTTP_STRIPE_SIGNATURE="t=1,v1=stub")
+            return (client or self.client).post(
+                self.url, data=json.dumps(event), content_type="application/json", HTTP_STRIPE_SIGNATURE="t=1,v1=stub"
+            )
 
     @mock.patch("stripe.Subscription.retrieve")
     def test_a_redelivered_payment_is_credited_once(self, retrieve: mock.Mock) -> None:
@@ -120,7 +124,10 @@ class StripeWebhookReplayTests(TestCase):
                 raise RuntimeError("connection lost")
             return original_save(instance, *args, **kwargs)
 
-        with mock.patch.object(StripeWebhookEvent, "save", fail_only_when_marking_processed), self.assertRaises(RuntimeError):
+        with (
+            mock.patch.object(StripeWebhookEvent, "save", fail_only_when_marking_processed),
+            self.assertRaises(RuntimeError),
+        ):
             self._post(event)
 
         # Stripe retries the same event.

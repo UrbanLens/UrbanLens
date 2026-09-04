@@ -44,7 +44,12 @@ class MembershipServiceTestCase(TestCase):
         self.pin_list = PinList.objects.create(profile=self.profile, name="Favorites")
 
     def _pins(self, count: int) -> list:
-        return [create_pin_for_profile(self.profile, name=f"Pin {i}", latitude=40.0 + i / 100, longitude=-70.0 - i / 100).pin for i in range(count)]
+        return [
+            create_pin_for_profile(
+                self.profile, name=f"Pin {i}", latitude=40.0 + i / 100, longitude=-70.0 - i / 100
+            ).pin
+            for i in range(count)
+        ]
 
 
 class AddPinsToListTests(MembershipServiceTestCase):
@@ -181,7 +186,10 @@ class ReorderPropertyTests(TestCase):
     def test_permutation_in_contiguous_out(self, permutation) -> None:
         profile = baker.make(User).profile
         pin_list = baker.make(PinList, profile=profile)
-        items = [baker.make(PinListItem, pin_list=pin_list, pin=baker.make("dashboard.Pin", profile=profile), order=i) for i in range(5)]
+        items = [
+            baker.make(PinListItem, pin_list=pin_list, pin=baker.make("dashboard.Pin", profile=profile), order=i)
+            for i in range(5)
+        ]
         submitted = [items[i].pk for i in permutation]
 
         self.assertEqual(reorder_list_items(pin_list, submitted), 5)
@@ -226,7 +234,7 @@ class FilterMatchingIdsExcludesChildPinsTests(MembershipServiceTestCase):
     preview call site (``controllers/saved_filters.py``, which chains ``.root_pins()`` before
     ``filter_by_criteria``). Regression for the still-live ``docs/PROBLEMS.md:585`` bug this
     audit confirmed: without it, a child pin could enter smart-list membership even though its
-    own filter preview would never have shown it. See docs/GOALS_CODE_AUDIT.md
+    own filter preview would never have shown it. See docs/audits/GOALS_CODE_AUDIT.md
     ("Lists: filter/manual reconciliation")."""
 
     def setUp(self) -> None:
@@ -235,7 +243,12 @@ class FilterMatchingIdsExcludesChildPinsTests(MembershipServiceTestCase):
         self.pin_list.smart_filter = {"name": "Bunker"}
         self.pin_list.save(update_fields=["is_smart", "smart_filter"])
         self.root_pin = create_pin_for_profile(self.profile, name="Bunker Alpha", latitude=40.0, longitude=-70.0).pin
-        self.child_pin = Pin.objects.create(profile=self.profile, parent_pin=self.root_pin, location=self.root_pin.location, name="Bunker Alpha Sub-room")
+        self.child_pin = Pin.objects.create(
+            profile=self.profile,
+            parent_pin=self.root_pin,
+            location=self.root_pin.location,
+            name="Bunker Alpha Sub-room",
+        )
 
     def test_a_root_pin_matching_the_filter_is_included(self) -> None:
         self.assertIn(self.root_pin.pk, filter_matching_ids(self.pin_list))

@@ -15,7 +15,12 @@ from urbanlens.dashboard.models.album.model import Album
 from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoMetadataConflict, PhotoUploadFailure
 from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.services.media.storage import get_storage_used_bytes
-from urbanlens.dashboard.services.photos.albums import add_images_to_album, albums_listing, loose_images_for, move_album_to_pin
+from urbanlens.dashboard.services.photos.albums import (
+    add_images_to_album,
+    albums_listing,
+    loose_images_for,
+    move_album_to_pin,
+)
 from urbanlens.dashboard.services.photos.uploads import UploadRejection, upload_photo_for_owner
 from urbanlens.dashboard.tests.hypothesis.test_album_view_ux import _PNG_BYTES, _pin_with_album
 
@@ -112,15 +117,21 @@ class AlbumMoveAndChildrenTests(TestCase):
         url = reverse("pin.albums.move", args=[self.parent.slug, self.album.slug])
         unrelated = baker.make_recipe("dashboard.pin", profile=self.parent.profile)
 
-        missing_response = self.client.post(url, data=json.dumps({"pin_slug": "does-not-exist"}), content_type="application/json")
+        missing_response = self.client.post(
+            url, data=json.dumps({"pin_slug": "does-not-exist"}), content_type="application/json"
+        )
         self.assertEqual(missing_response.status_code, HTTPStatus.NOT_FOUND)
 
-        invalid_response = self.client.post(url, data=json.dumps({"pin_slug": unrelated.slug}), content_type="application/json")
+        invalid_response = self.client.post(
+            url, data=json.dumps({"pin_slug": unrelated.slug}), content_type="application/json"
+        )
         self.assertEqual(invalid_response.status_code, HTTPStatus.BAD_REQUEST, invalid_response.content)
         self.album.refresh_from_db()
         self.assertEqual(self.album.parent_pin_id, self.parent.pk)
 
-        response = self.client.post(url, data=json.dumps({"pin_slug": self.child.slug}), content_type="application/json")
+        response = self.client.post(
+            url, data=json.dumps({"pin_slug": self.child.slug}), content_type="application/json"
+        )
 
         self.assertEqual(response.status_code, HTTPStatus.OK, response.content)
         self.album.refresh_from_db()
@@ -189,7 +200,10 @@ class PhotoMetadataConflictResolveViewTests(TestCase):
         pin_a = baker.make_recipe("dashboard.pin")
         pin_b = baker.make_recipe("dashboard.pin", profile=pin_a.profile)
         self.client.force_login(pin_a.profile.user)
-        file = lambda name: SimpleUploadedFile(name, _PNG_BYTES, content_type="image/png")
+
+        def file(name):
+            return SimpleUploadedFile(name, _PNG_BYTES, content_type="image/png")
+
         first = upload_photo_for_owner(pin_a, pin_a.profile, file("a.png"), "first caption")
         second = upload_photo_for_owner(pin_b, pin_a.profile, file("b.png"), "second caption")
         assert isinstance(first, Image)
@@ -200,7 +214,9 @@ class PhotoMetadataConflictResolveViewTests(TestCase):
         self.url = reverse("vault.photos.conflicts.resolve", args=[self.conflict.pk])
 
     def test_json_body_picks_the_new_value(self) -> None:
-        response = self.client.post(self.url, data=json.dumps({"choices": {"caption": 1}}), content_type="application/json")
+        response = self.client.post(
+            self.url, data=json.dumps({"choices": {"caption": 1}}), content_type="application/json"
+        )
 
         self.assertEqual(response.status_code, HTTPStatus.OK, response.content)
         self.conflict.refresh_from_db()
@@ -307,8 +323,12 @@ class UploadFailureRecordTests(TestCase):
         pin, album = _pin_with_album()
         self.client.force_login(pin.profile.user)
         url = reverse("pin.albums.upload", args=[pin.slug, album.slug])
-        with patch("urbanlens.dashboard.services.photos.uploads.image_upload_error", return_value=("Not an image.", 415)):
-            response = self.client.post(url, {"image": SimpleUploadedFile("shot.png", _PNG_BYTES, content_type="image/png")})
+        with patch(
+            "urbanlens.dashboard.services.photos.uploads.image_upload_error", return_value=("Not an image.", 415)
+        ):
+            response = self.client.post(
+                url, {"image": SimpleUploadedFile("shot.png", _PNG_BYTES, content_type="image/png")}
+            )
 
         self.assertEqual(response.status_code, HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
         failure = PhotoUploadFailure.objects.get(profile=pin.profile)

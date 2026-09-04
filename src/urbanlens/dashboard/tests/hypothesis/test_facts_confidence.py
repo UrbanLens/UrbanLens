@@ -56,7 +56,9 @@ class ResolveCategoricalTests(SimpleTestCase):
     @settings(**_HYP)
     def test_confidence_always_in_unit_interval(self, weight: float) -> None:
         totals, total_weight = _cluster_categorical([_WeightedEvidence(value="a", weight=weight)])
-        _value, confidence, _status = resolve_categorical(totals, total_weight, previous_value=None, previously_confirmed=False)
+        _value, confidence, _status = resolve_categorical(
+            totals, total_weight, previous_value=None, previously_confirmed=False
+        )
         self.assertGreaterEqual(confidence, 0.0)
         self.assertLessEqual(confidence, 1.0)
 
@@ -65,12 +67,20 @@ class ResolveCategoricalTests(SimpleTestCase):
     def test_a_single_observation_never_reads_as_near_full_confidence(self, weight: float) -> None:
         """One piece of evidence must never look like certainty - see PRIOR_ALPHA/PRIOR_BETA."""
         totals, total_weight = _cluster_categorical([_WeightedEvidence(value="a", weight=weight)])
-        _value, confidence, _status = resolve_categorical(totals, total_weight, previous_value=None, previously_confirmed=False)
+        _value, confidence, _status = resolve_categorical(
+            totals, total_weight, previous_value=None, previously_confirmed=False
+        )
         self.assertLess(confidence, 0.7)
 
-    @given(base_weight=_WEIGHTS, other_fraction=st.floats(min_value=0.0, max_value=1.0), extra=st.floats(min_value=0.01, max_value=1.0))
+    @given(
+        base_weight=_WEIGHTS,
+        other_fraction=st.floats(min_value=0.0, max_value=1.0),
+        extra=st.floats(min_value=0.01, max_value=1.0),
+    )
     @settings(**_HYP)
-    def test_more_agreeing_evidence_for_the_leader_never_decreases_confidence(self, base_weight: float, other_fraction: float, extra: float) -> None:
+    def test_more_agreeing_evidence_for_the_leader_never_decreases_confidence(
+        self, base_weight: float, other_fraction: float, extra: float
+    ) -> None:
         # other_weight <= base_weight guarantees "a" leads both before and
         # after (it only gains weight), so this isolates the property from
         # cases where the *leader itself* changes between the two calls.
@@ -80,19 +90,31 @@ class ResolveCategoricalTests(SimpleTestCase):
 
         before_totals, before_total_weight = _cluster_categorical(before)
         after_totals, after_total_weight = _cluster_categorical(after)
-        _value, before_confidence, _status = resolve_categorical(before_totals, before_total_weight, previous_value=None, previously_confirmed=False)
-        _value, after_confidence, _status = resolve_categorical(after_totals, after_total_weight, previous_value=None, previously_confirmed=False)
+        _value, before_confidence, _status = resolve_categorical(
+            before_totals, before_total_weight, previous_value=None, previously_confirmed=False
+        )
+        _value, after_confidence, _status = resolve_categorical(
+            after_totals, after_total_weight, previous_value=None, previously_confirmed=False
+        )
         self.assertGreaterEqual(after_confidence, before_confidence)
 
     def test_a_near_tie_is_contested(self) -> None:
-        totals, total_weight = _cluster_categorical([_WeightedEvidence(value="a", weight=0.51), _WeightedEvidence(value="b", weight=0.49)])
-        _value, _confidence, status = resolve_categorical(totals, total_weight, previous_value=None, previously_confirmed=False)
+        totals, total_weight = _cluster_categorical(
+            [_WeightedEvidence(value="a", weight=0.51), _WeightedEvidence(value="b", weight=0.49)]
+        )
+        _value, _confidence, status = resolve_categorical(
+            totals, total_weight, previous_value=None, previously_confirmed=False
+        )
         self.assertEqual(status, FactStatus.CONTESTED)
 
     def test_a_clear_majority_is_not_contested(self) -> None:
-        evidence = [_WeightedEvidence(value="a", weight=1.0) for _ in range(3)] + [_WeightedEvidence(value="b", weight=0.2)]
+        evidence = [_WeightedEvidence(value="a", weight=1.0) for _ in range(3)] + [
+            _WeightedEvidence(value="b", weight=0.2)
+        ]
         totals, total_weight = _cluster_categorical(evidence)
-        value, _confidence, status = resolve_categorical(totals, total_weight, previous_value=None, previously_confirmed=False)
+        value, _confidence, status = resolve_categorical(
+            totals, total_weight, previous_value=None, previously_confirmed=False
+        )
         self.assertEqual(value, "a")
         self.assertNotEqual(status, FactStatus.CONTESTED)
 
@@ -101,9 +123,12 @@ class ResolveCategoricalTests(SimpleTestCase):
         # "a" was confirmed on 5 units of weight; "b" now nominally leads
         # with 6, but 6/(6+5+4) is still well under CONFIRM_THRESHOLD.
         totals, total_weight = _cluster_categorical(
-            [_WeightedEvidence(value="a", weight=1.0) for _ in range(5)] + [_WeightedEvidence(value="b", weight=1.0) for _ in range(6)],
+            [_WeightedEvidence(value="a", weight=1.0) for _ in range(5)]
+            + [_WeightedEvidence(value="b", weight=1.0) for _ in range(6)],
         )
-        value, confidence, status = resolve_categorical(totals, total_weight, previous_value="a", previously_confirmed=True)
+        value, confidence, status = resolve_categorical(
+            totals, total_weight, previous_value="a", previously_confirmed=True
+        )
         self.assertEqual(value, "a")
         self.assertLess(confidence, CONFIRM_THRESHOLD)
         self.assertNotEqual(status, FactStatus.CONFIRMED)
@@ -113,7 +138,9 @@ class ResolveCategoricalTests(SimpleTestCase):
         totals, total_weight = _cluster_categorical(
             [_WeightedEvidence(value="a", weight=1.0)] + [_WeightedEvidence(value="b", weight=1.0) for _ in range(20)],
         )
-        value, confidence, status = resolve_categorical(totals, total_weight, previous_value="a", previously_confirmed=True)
+        value, confidence, status = resolve_categorical(
+            totals, total_weight, previous_value="a", previously_confirmed=True
+        )
         self.assertEqual(value, "b")
         self.assertGreaterEqual(confidence, CONFIRM_THRESHOLD)
         self.assertEqual(status, FactStatus.CONFIRMED)

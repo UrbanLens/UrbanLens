@@ -143,7 +143,11 @@ class UpdatePledgeTests(TestCase):
         subscription = baker.make(RoleSubscription, role=role, stripe_subscription_id="sub_123")
         retrieved = mock.MagicMock()
         retrieved.to_dict.return_value = {"items": {"data": [{"id": "si_123"}]}}
-        with _configured(), mock.patch("stripe.Subscription.retrieve", return_value=retrieved) as mock_retrieve, mock.patch("stripe.Subscription.modify") as mock_modify:
+        with (
+            _configured(),
+            mock.patch("stripe.Subscription.retrieve", return_value=retrieved) as mock_retrieve,
+            mock.patch("stripe.Subscription.modify") as mock_modify,
+        ):
             stripe_client.update_pledge(subscription, 1200)
 
         mock_retrieve.assert_called_once_with("sub_123")

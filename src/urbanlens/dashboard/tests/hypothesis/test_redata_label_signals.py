@@ -29,7 +29,10 @@ from urbanlens.UrbanLens.settings.app import settings
 
 @contextmanager
 def _redata_configured():
-    with mock.patch.object(settings, "redata_api_url", "https://redata.example.test"), mock.patch.object(settings, "redata_api_key", "test-key"):
+    with (
+        mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
+        mock.patch.object(settings, "redata_api_key", "test-key"),
+    ):
         yield
 
 
@@ -53,51 +56,85 @@ class LabelTaxonomySignalTests(TestCase):
         self.profile = _profile()
 
     def test_creating_a_tag_queues_definition_sync(self) -> None:
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
         self.assertIn(tasks.sync_redata_label_definitions, _queued_tasks(enqueue))
 
     def test_creating_a_category_queues_definition_sync(self) -> None:
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             Label.objects.create(profile=self.profile, name="ZzAudit Hospital", kind=KIND_CATEGORY)
         self.assertIn(tasks.sync_redata_label_definitions, _queued_tasks(enqueue))
 
     def test_creating_a_status_does_not_queue_anything(self) -> None:
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             Label.objects.create(profile=self.profile, name="ZzAudit Visited", kind=KIND_STATUS)
         self.assertNotIn(tasks.sync_redata_label_definitions, _queued_tasks(enqueue))
 
     def test_deleting_a_tag_queues_retirement(self) -> None:
         label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             label.delete()
-        calls = [call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_label_definitions]
+        calls = [
+            call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_label_definitions
+        ]
         self.assertTrue(calls)
         definitions = calls[-1].args[2]
         self.assertFalse(definitions[0]["is_active"])
 
     def test_deleting_a_status_does_not_queue_anything(self) -> None:
         label = Label.objects.create(profile=self.profile, name="ZzAudit Visited", kind=KIND_STATUS)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             label.delete()
         self.assertNotIn(tasks.sync_redata_label_definitions, _queued_tasks(enqueue))
 
     def test_converting_a_tag_to_status_queues_retirement(self) -> None:
         label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             label.kind = KIND_STATUS
             label.save()
-        calls = [call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_label_definitions]
+        calls = [
+            call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_label_definitions
+        ]
         self.assertTrue(calls)
         definitions = calls[-1].args[2]
         self.assertFalse(definitions[0]["is_active"])
 
     def test_converting_a_status_to_category_queues_an_active_definition(self) -> None:
         label = ensure_label(profile=self.profile, name="Was Status", kind=KIND_STATUS)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             label.kind = KIND_CATEGORY
             label.save()
-        calls = [call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_label_definitions]
+        calls = [
+            call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_label_definitions
+        ]
         self.assertTrue(calls)
         definitions = calls[-1].args[2]
         self.assertTrue(definitions[0]["is_active"])
@@ -108,9 +145,15 @@ class LabelTaxonomySignalTests(TestCase):
         # default taxonomy, so reusing it would leave the child with two parents
         # and the assertion below would see both.
         child = Label.objects.create(profile=self.profile, name="ZzAudit Asylum", kind=KIND_CATEGORY)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             child.parents.add(parent)
-        calls = [call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_label_definitions]
+        calls = [
+            call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_label_definitions
+        ]
         self.assertTrue(calls)
         definitions = calls[-1].args[2]
         self.assertEqual(definitions[0]["external_id"], str(child.uuid))
@@ -124,9 +167,15 @@ class PinLabelAssignmentSignalTests(TestCase):
     def test_adding_a_tag_to_a_pin_queues_assignment_sync(self) -> None:
         pin = _pin(self.profile, seq=1)
         tag = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             pin.labels.add(tag)
-        calls = [call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_pin_assignment]
+        calls = [
+            call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_pin_assignment
+        ]
         self.assertTrue(calls)
         self.assertEqual(calls[-1].args[1], pin.pk)
 
@@ -134,24 +183,40 @@ class PinLabelAssignmentSignalTests(TestCase):
         pin = _pin(self.profile, seq=1)
         tag = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
         pin.labels.add(tag)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             pin.labels.remove(tag)
-        calls = [call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_pin_assignment]
+        calls = [
+            call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_pin_assignment
+        ]
         self.assertTrue(calls)
 
     def test_reverse_add_from_the_label_side_queues_assignment_sync(self) -> None:
         """Mirrors services.labels.merge's ``target.pins.add(*source.pins.all())``."""
         pin = _pin(self.profile, seq=1)
         tag = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             tag.pins.add(pin)
-        calls = [call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_pin_assignment]
+        calls = [
+            call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_pin_assignment
+        ]
         self.assertTrue(calls)
         self.assertEqual(calls[-1].args[1], pin.pk)
 
     def test_reverse_add_of_a_status_label_does_not_queue_anything(self) -> None:
         pin = _pin(self.profile, seq=1)
         status = Label.objects.create(profile=self.profile, name="ZzAudit Visited", kind=KIND_STATUS)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             status.pins.add(pin)
         self.assertNotIn(tasks.sync_redata_pin_assignment, _queued_tasks(enqueue))

@@ -36,7 +36,11 @@ class WithinBoundsAntimeridianTests(TestCase):
         return baker.make(Pin, profile=self.profile, location=location, name=name)
 
     def _names(self, south: float, west: float, north: float, east: float) -> set[str]:
-        return set(Pin.objects.filter(profile=self.profile).within_bounds(south, west, north, east).values_list("name", flat=True))
+        return set(
+            Pin.objects.filter(profile=self.profile)
+            .within_bounds(south, west, north, east)
+            .values_list("name", flat=True)
+        )
 
     def test_an_ordinary_viewport_is_unaffected(self) -> None:
         """The rest of the planet must behave exactly as before."""

@@ -31,7 +31,12 @@ from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message, serialize_direct_message
-from urbanlens.dashboard.services.security.e2ee import fake_auth_salt, is_base64, login_params_for_identifier, valid_blob
+from urbanlens.dashboard.services.security.e2ee import (
+    fake_auth_salt,
+    is_base64,
+    login_params_for_identifier,
+    valid_blob,
+)
 
 _db_settings = settings(
     max_examples=25,
@@ -145,14 +150,18 @@ class EnrollEndpointTests(TestCase):
 
     def test_oauth_enroll_without_password(self) -> None:
         profile = _profile()
-        response = _client_for(profile).post(reverse("e2ee.enroll"), data=json.dumps(self._payload()), content_type="application/json")
+        response = _client_for(profile).post(
+            reverse("e2ee.enroll"), data=json.dumps(self._payload()), content_type="application/json"
+        )
         self.assertEqual(response.status_code, 201)
         self.assertTrue(MessagingKeyBundle.objects.filter(profile=profile).exists())
         self.assertFalse(AccountKdf.objects.filter(user=profile.user).exists())
 
     def test_password_account_enroll_requires_current_password_proof(self) -> None:
         profile = _profile(password="correct-horse")
-        response = _client_for(profile).post(reverse("e2ee.enroll"), data=json.dumps(self._payload()), content_type="application/json")
+        response = _client_for(profile).post(
+            reverse("e2ee.enroll"), data=json.dumps(self._payload()), content_type="application/json"
+        )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(MessagingKeyBundle.objects.filter(profile=profile).exists())
 
@@ -199,7 +208,9 @@ class EnrollEndpointTests(TestCase):
             auth_salt=_b64(os.urandom(16)),
             current_password="wrong",
         )
-        response = _client_for(profile).post(reverse("e2ee.enroll"), data=json.dumps(payload), content_type="application/json")
+        response = _client_for(profile).post(
+            reverse("e2ee.enroll"), data=json.dumps(payload), content_type="application/json"
+        )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(MessagingKeyBundle.objects.filter(profile=profile).exists())
 
@@ -213,7 +224,9 @@ class EnrollEndpointTests(TestCase):
             auth_salt=_b64(os.urandom(16)),
             current_password="correct-horse",
         )
-        response = _client_for(profile).post(reverse("e2ee.enroll"), data=json.dumps(payload), content_type="application/json")
+        response = _client_for(profile).post(
+            reverse("e2ee.enroll"), data=json.dumps(payload), content_type="application/json"
+        )
         self.assertEqual(response.status_code, 201)
         profile.user.refresh_from_db()
         self.assertTrue(profile.user.check_password(auth_key))
@@ -279,7 +292,13 @@ class ConversationKeyEndpointTests(TestCase):
     def _create(self, client: Client, partner: Profile, version: int = 1) -> object:
         return client.post(
             reverse("e2ee.conversation_key", kwargs={"profile_slug": partner.ensure_slug()}),
-            data=json.dumps({"version": version, "wrapped_for_me": _b64(os.urandom(48)), "wrapped_for_partner": _b64(os.urandom(48))}),
+            data=json.dumps(
+                {
+                    "version": version,
+                    "wrapped_for_me": _b64(os.urandom(48)),
+                    "wrapped_for_partner": _b64(os.urandom(48)),
+                }
+            ),
             content_type="application/json",
         )
 
@@ -304,7 +323,9 @@ class ConversationKeyEndpointTests(TestCase):
         _enroll(me)
         _enroll(partner)
         self._create(_client_for(me), partner)
-        partner_view = _client_for(partner).get(reverse("e2ee.conversation_key", kwargs={"profile_slug": me.ensure_slug()}))
+        partner_view = _client_for(partner).get(
+            reverse("e2ee.conversation_key", kwargs={"profile_slug": me.ensure_slug()})
+        )
         self.assertEqual(partner_view.status_code, 200)
         # Partner gets the "other side" of the same row - stored in canonical order.
         self.assertEqual(partner_view.json()["latest"], 1)
@@ -335,7 +356,13 @@ class RewrapAndResetTests(TestCase):
         MessagingKeyBundle.objects.filter(pk=bundle.pk).update(password_wrap_stale=True)
         response = _client_for(profile).post(
             reverse("e2ee.rewrap"),
-            data=json.dumps({"password_wrapped_secret": _b64(os.urandom(72)), "password_wrap_salt": _b64(os.urandom(16)), "current_password": "pw"}),
+            data=json.dumps(
+                {
+                    "password_wrapped_secret": _b64(os.urandom(72)),
+                    "password_wrap_salt": _b64(os.urandom(16)),
+                    "current_password": "pw",
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
@@ -347,7 +374,9 @@ class RewrapAndResetTests(TestCase):
         bundle = _enroll(profile)
         response = _client_for(profile).post(
             reverse("e2ee.rewrap"),
-            data=json.dumps({"password_wrapped_secret": _b64(os.urandom(72)), "password_wrap_salt": _b64(os.urandom(16))}),
+            data=json.dumps(
+                {"password_wrapped_secret": _b64(os.urandom(72)), "password_wrap_salt": _b64(os.urandom(16))}
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 403)
@@ -369,7 +398,13 @@ class RewrapAndResetTests(TestCase):
         _enroll(profile)
         response = _client_for(profile).post(
             reverse("e2ee.reset"),
-            data=json.dumps({"confirm": "RESET", "public_key": _b64(os.urandom(32)), "recovery_wrapped_secret": _b64(os.urandom(72))}),
+            data=json.dumps(
+                {
+                    "confirm": "RESET",
+                    "public_key": _b64(os.urandom(32)),
+                    "recovery_wrapped_secret": _b64(os.urandom(72)),
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
@@ -381,7 +416,13 @@ class RewrapAndResetTests(TestCase):
         bundle = _enroll(profile)
         response = _client_for(profile).post(
             reverse("e2ee.reset"),
-            data=json.dumps({"confirm": "RESET", "public_key": _b64(os.urandom(32)), "recovery_wrapped_secret": _b64(os.urandom(72))}),
+            data=json.dumps(
+                {
+                    "confirm": "RESET",
+                    "public_key": _b64(os.urandom(32)),
+                    "recovery_wrapped_secret": _b64(os.urandom(72)),
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 403)
@@ -393,7 +434,14 @@ class RewrapAndResetTests(TestCase):
         _enroll(profile)
         response = _client_for(profile).post(
             reverse("e2ee.reset"),
-            data=json.dumps({"confirm": "RESET", "public_key": _b64(os.urandom(32)), "recovery_wrapped_secret": _b64(os.urandom(72)), "current_password": "pw"}),
+            data=json.dumps(
+                {
+                    "confirm": "RESET",
+                    "public_key": _b64(os.urandom(32)),
+                    "recovery_wrapped_secret": _b64(os.urandom(72)),
+                    "current_password": "pw",
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
@@ -450,7 +498,14 @@ class RewrapAllAndResetPreservationTests(TestCase):
         self.assertEqual(payload["conversation_keys"][0]["wrapped_key"], row.wrapped_for_high)
 
     def _reset_body(self, **extra) -> str:
-        return json.dumps({"confirm": "RESET", "public_key": _b64(os.urandom(32)), "recovery_wrapped_secret": _b64(os.urandom(72)), **extra})
+        return json.dumps(
+            {
+                "confirm": "RESET",
+                "public_key": _b64(os.urandom(32)),
+                "recovery_wrapped_secret": _b64(os.urandom(72)),
+                **extra,
+            }
+        )
 
     @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
     def test_reset_refuses_when_the_bundle_moved_mid_flight(self) -> None:
@@ -482,7 +537,9 @@ class RewrapAllAndResetPreservationTests(TestCase):
         try:
             response = _client_for(me).post(
                 reverse("e2ee.reset"),
-                data=self._reset_body(rewrapped_conversation_keys=[{"id": row.pk, "wrapped_key": _b64(os.urandom(48))}]),
+                data=self._reset_body(
+                    rewrapped_conversation_keys=[{"id": row.pk, "wrapped_key": _b64(os.urandom(48))}]
+                ),
                 content_type="application/json",
             )
         finally:
@@ -528,7 +585,9 @@ class RewrapAllAndResetPreservationTests(TestCase):
 
         response = _client_for(me).post(
             reverse("e2ee.reset"),
-            data=self._reset_body(rewrapped_conversation_keys=[{"id": foreign.pk, "wrapped_key": _b64(os.urandom(48))}]),
+            data=self._reset_body(
+                rewrapped_conversation_keys=[{"id": foreign.pk, "wrapped_key": _b64(os.urandom(48))}]
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
@@ -642,14 +701,18 @@ class EncryptedCreateTests(TestCase):
 
     def test_encrypted_message_persists_ciphertext(self) -> None:
         a, b = self._pair()
-        message = create_direct_message(a, b, "", ciphertext=_b64(os.urandom(64)), nonce=_b64(os.urandom(24)), key_version=1)
+        message = create_direct_message(
+            a, b, "", ciphertext=_b64(os.urandom(64)), nonce=_b64(os.urandom(24)), key_version=1
+        )
         self.assertTrue(message.is_encrypted)
         self.assertEqual(message.body, "")
 
     def test_body_and_ciphertext_are_mutually_exclusive(self) -> None:
         a, b = self._pair()
         with self.assertRaises(ValueError):
-            create_direct_message(a, b, "hi", ciphertext=_b64(os.urandom(64)), nonce=_b64(os.urandom(24)), key_version=1)
+            create_direct_message(
+                a, b, "hi", ciphertext=_b64(os.urandom(64)), nonce=_b64(os.urandom(24)), key_version=1
+            )
 
     def test_ciphertext_requires_nonce_and_version(self) -> None:
         a, b = self._pair()
@@ -660,8 +723,12 @@ class EncryptedCreateTests(TestCase):
 
     def test_serializer_passes_ciphertext_and_generic_reply_preview(self) -> None:
         a, b = self._pair()
-        first = create_direct_message(a, b, "", ciphertext=_b64(os.urandom(64)), nonce=_b64(os.urandom(24)), key_version=1)
-        reply = create_direct_message(b, a, "", ciphertext=_b64(os.urandom(64)), nonce=_b64(os.urandom(24)), key_version=1, reply_to_id=first.pk)
+        first = create_direct_message(
+            a, b, "", ciphertext=_b64(os.urandom(64)), nonce=_b64(os.urandom(24)), key_version=1
+        )
+        reply = create_direct_message(
+            b, a, "", ciphertext=_b64(os.urandom(64)), nonce=_b64(os.urandom(24)), key_version=1, reply_to_id=first.pk
+        )
         payload = serialize_direct_message(reply)
         self.assertEqual(payload["body"], "")
         self.assertTrue(payload["ciphertext"])

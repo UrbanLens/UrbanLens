@@ -71,4 +71,8 @@ class BoundaryVoteRecencyTests(TestCase):
             stale,
             "re-affirming did not refresh `updated` - the vote keeps decaying, contradicting cast_boundary_vote's documented contract",
         )
-        self.assertEqual(BoundaryVote.objects.filter(place=place, profile=self.profile).count(), 1, "re-voting must update the row, never add a second")
+        self.assertEqual(
+            BoundaryVote.objects.filter(place=place, profile=self.profile).count(),
+            1,
+            "re-voting must update the row, never add a second",
+        )

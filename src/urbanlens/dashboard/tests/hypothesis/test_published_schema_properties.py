@@ -11,7 +11,7 @@ Mirrored from `tests/contract/test_openapi_conformance.py` on purpose. That
 suite is outside `testpaths` and needs an explicit invocation, so a check living
 only there does not run on a normal `pytest`. These are the cheap half - pure
 introspection, no database, no HTTP - and they are the half worth having on
-every commit. See `docs/TEST_COVERAGE_GAPS.md`.
+every commit. See `docs/audits/TEST_COVERAGE_GAPS.md`.
 """
 
 from __future__ import annotations
@@ -102,7 +102,8 @@ class DocumentedRefusalTests(SimpleTestCase):
 
         self.assertFalse(
             missing,
-            f"{len(missing)} authenticated operations do not document the refusals they return:\n  " + "\n  ".join(missing[:10]),
+            f"{len(missing)} authenticated operations do not document the refusals they return:\n  "
+            + "\n  ".join(missing[:10]),
         )
 
     def test_operations_with_a_path_parameter_document_404(self) -> None:
@@ -116,13 +117,18 @@ class DocumentedRefusalTests(SimpleTestCase):
 
         self.assertFalse(
             missing,
-            f"{len(missing)} operations addressed by a path parameter do not document a 404:\n  " + "\n  ".join(missing[:10]),
+            f"{len(missing)} operations addressed by a path parameter do not document a 404:\n  "
+            + "\n  ".join(missing[:10]),
         )
 
     def test_every_operation_declares_at_least_one_response(self) -> None:
         """An operation describing no response describes nothing to generate against."""
         document = _document()
-        undocumented = [f"{method.upper()} {path}" for path, method, operation in _operations(document) if not operation.get("responses")]
+        undocumented = [
+            f"{method.upper()} {path}"
+            for path, method, operation in _operations(document)
+            if not operation.get("responses")
+        ]
 
         self.assertFalse(undocumented, "operations with no declared responses:\n  " + "\n  ".join(sorted(undocumented)))
 

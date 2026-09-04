@@ -273,7 +273,9 @@ class TripSettingsEndpointTests(_TripSettingsTestCase):
     def test_organizer_may_edit(self) -> None:
         """A promoted member is an organizer and may change settings."""
         trip = self._make_trip(creator=self.other_profile, name="Theirs")
-        TripMembership.objects.create(trip=trip, profile=self.profile, status=TripMembership.STATUS_JOINED, is_organizer=True)
+        TripMembership.objects.create(
+            trip=trip, profile=self.profile, status=TripMembership.STATUS_JOINED, is_organizer=True
+        )
 
         response = self._patch(trip, {"allow_comments": Trip.PERM_NONE})
 

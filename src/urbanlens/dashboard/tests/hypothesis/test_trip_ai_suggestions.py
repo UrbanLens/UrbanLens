@@ -101,7 +101,12 @@ class CommonLocationIntersectionTests(TestCase):
         loc = baker.make(Location, latitude="41.300000", longitude="-72.300000")
         parent = baker.make(Pin, profile=alice, location=loc)
         baker.make(Pin, profile=bob, location=loc)
-        baker.make(Pin, profile=alice, location=baker.make(Location, latitude="41.310000", longitude="-72.310000"), parent_pin=parent)
+        baker.make(
+            Pin,
+            profile=alice,
+            location=baker.make(Location, latitude="41.310000", longitude="-72.310000"),
+            parent_pin=parent,
+        )
         # alice's detail pin doesn't create a second root-pin location, so the
         # only common location remains the one both actually pinned.
         self.assertEqual(_common_location_ids([alice, bob]), {loc.id})
@@ -213,7 +218,9 @@ class BuildTripContextTests(TestCase):
 
     def test_completed_activities_are_excluded(self) -> None:
         loc = baker.make(Location, latitude="39.200000", longitude="-71.200000")
-        baker.make(TripActivity, trip=self.trip, location=loc, added_by=self.alice, status=TripActivity.STATUS_COMPLETED)
+        baker.make(
+            TripActivity, trip=self.trip, location=loc, added_by=self.alice, status=TripActivity.STATUS_COMPLETED
+        )
         context = build_trip_context(self.trip, self.alice)
         self.assertEqual(context.activities, [])
 
@@ -227,7 +234,14 @@ class ResolveModelOutputTests(TestCase):
         loc = baker.make(Location, latitude="38.000000", longitude="-70.000000")
         self.pin = baker.make(Pin, profile=self.alice, location=loc)
         candidates = _build_candidates([self.alice], self.alice, set())
-        self.context = TripAiContext(trip_name="t", start_date=None, end_date=None, duration_days=None, participant_count=1, candidates=candidates)
+        self.context = TripAiContext(
+            trip_name="t",
+            start_date=None,
+            end_date=None,
+            duration_days=None,
+            participant_count=1,
+            candidates=candidates,
+        )
 
     def test_valid_index_resolves_to_candidate(self) -> None:
         result = _resolve_pin_suggestions({"pin_suggestions": [{"index": 1, "reason": "Nobody's been."}]}, self.context)
@@ -239,7 +253,9 @@ class ResolveModelOutputTests(TestCase):
         self.assertEqual(result, [])
 
     def test_duplicate_indices_collapse_to_one(self) -> None:
-        result = _resolve_pin_suggestions({"pin_suggestions": [{"index": 1, "reason": "a"}, {"index": 1, "reason": "b"}]}, self.context)
+        result = _resolve_pin_suggestions(
+            {"pin_suggestions": [{"index": 1, "reason": "a"}, {"index": 1, "reason": "b"}]}, self.context
+        )
         self.assertEqual(len(result), 1)
 
     def test_schedule_must_be_exact_permutation(self) -> None:
@@ -250,8 +266,12 @@ class ResolveModelOutputTests(TestCase):
             duration_days=None,
             participant_count=1,
             activities=[
-                ExistingActivity(activity_id=1, title="A", status="proposed", scheduled_at=None, votes_up=0, votes_down=0),
-                ExistingActivity(activity_id=2, title="B", status="proposed", scheduled_at=None, votes_up=0, votes_down=0),
+                ExistingActivity(
+                    activity_id=1, title="A", status="proposed", scheduled_at=None, votes_up=0, votes_down=0
+                ),
+                ExistingActivity(
+                    activity_id=2, title="B", status="proposed", scheduled_at=None, votes_up=0, votes_down=0
+                ),
             ],
         )
         valid = _resolve_schedule({"schedule": {"order": [2, 1], "reason": "drive time"}}, context)
@@ -266,8 +286,12 @@ class ResolveModelOutputTests(TestCase):
             duration_days=None,
             participant_count=1,
             activities=[
-                ExistingActivity(activity_id=1, title="A", status="proposed", scheduled_at=None, votes_up=0, votes_down=0),
-                ExistingActivity(activity_id=2, title="B", status="proposed", scheduled_at=None, votes_up=0, votes_down=0),
+                ExistingActivity(
+                    activity_id=1, title="A", status="proposed", scheduled_at=None, votes_up=0, votes_down=0
+                ),
+                ExistingActivity(
+                    activity_id=2, title="B", status="proposed", scheduled_at=None, votes_up=0, votes_down=0
+                ),
             ],
         )
         result = _resolve_schedule({"schedule": {"order": [1], "reason": "partial"}}, context)
@@ -280,7 +304,11 @@ class ResolveModelOutputTests(TestCase):
             end_date=None,
             duration_days=None,
             participant_count=1,
-            activities=[ExistingActivity(activity_id=1, title="A", status="proposed", scheduled_at=None, votes_up=0, votes_down=0)],
+            activities=[
+                ExistingActivity(
+                    activity_id=1, title="A", status="proposed", scheduled_at=None, votes_up=0, votes_down=0
+                )
+            ],
         )
         result = _resolve_schedule({"schedule": {"order": [1, 999], "reason": "hallucinated"}}, context)
         self.assertIsNone(result)
@@ -351,21 +379,27 @@ class GetTripSuggestionsCacheTests(TestCase):
 
     def test_second_call_is_served_from_cache(self) -> None:
         gateway = _StubGateway('{"summary": "first"}')
-        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway) as mocked:
+        with patch(
+            "urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway
+        ) as mocked:
             get_trip_suggestions(self.trip, self.alice)
             get_trip_suggestions(self.trip, self.alice)
         self.assertEqual(mocked.call_count, 1)
 
     def test_force_refresh_bypasses_cache_once(self) -> None:
         gateway = _StubGateway('{"summary": "fresh"}')
-        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway) as mocked:
+        with patch(
+            "urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway
+        ) as mocked:
             get_trip_suggestions(self.trip, self.alice)
             get_trip_suggestions(self.trip, self.alice, force_refresh=True)
         self.assertEqual(mocked.call_count, 2)
 
     def test_rapid_force_refresh_is_cooldown_limited(self) -> None:
         gateway = _StubGateway('{"summary": "x"}')
-        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway) as mocked:
+        with patch(
+            "urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway
+        ) as mocked:
             get_trip_suggestions(self.trip, self.alice, force_refresh=True)
             get_trip_suggestions(self.trip, self.alice, force_refresh=True)
         self.assertEqual(mocked.call_count, 1)
@@ -447,7 +481,9 @@ class ApplySuggestedOrderViewTests(TestCase):
         # The rejection tests below never reach the render, which is why this
         # was the only one affected. Same seam test_trip_planning.py patches.
         with patch("urbanlens.dashboard.services.trips.trip_legs.get_route_between", return_value=None):
-            response = self.client.post(self.url, data=f'{{"order": [{self.act_b.id}, {self.act_a.id}]}}', content_type="application/json")
+            response = self.client.post(
+                self.url, data=f'{{"order": [{self.act_b.id}, {self.act_a.id}]}}', content_type="application/json"
+            )
         self.assertEqual(response.status_code, 200)
         self.act_a.refresh_from_db()
         self.act_b.refresh_from_db()
@@ -462,7 +498,9 @@ class ApplySuggestedOrderViewTests(TestCase):
         other_trip = _joined_trip(self.alice)
         other_loc = baker.make(Location, latitude="37.200000", longitude="-69.200000")
         foreign = baker.make(TripActivity, trip=other_trip, location=other_loc, added_by=self.alice)
-        response = self.client.post(self.url, data=f'{{"order": [{self.act_a.id}, {foreign.id}]}}', content_type="application/json")
+        response = self.client.post(
+            self.url, data=f'{{"order": [{self.act_a.id}, {foreign.id}]}}', content_type="application/json"
+        )
         self.assertEqual(response.status_code, 400)
         self.act_a.refresh_from_db()
         self.assertEqual(self.act_a.order, 0)
@@ -472,5 +510,7 @@ class ApplySuggestedOrderViewTests(TestCase):
         bob = _profile()
         baker.make(TripMembership, trip=self.trip, profile=bob, status=TripMembership.STATUS_JOINED)
         self.client.force_login(bob.user)
-        response = self.client.post(self.url, data=f'{{"order": [{self.act_a.id}, {self.act_b.id}]}}', content_type="application/json")
+        response = self.client.post(
+            self.url, data=f'{{"order": [{self.act_a.id}, {self.act_b.id}]}}', content_type="application/json"
+        )
         self.assertEqual(response.status_code, 403)

@@ -1,4 +1,5 @@
 """Tests for UL-240: viewing a pending friend request should mark its notification read."""
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User
@@ -86,7 +87,9 @@ class FriendRequestResolutionStateTests(TestCase):
         )
 
     def test_pending_request_is_pending_and_unresolved(self) -> None:
-        Friendship.objects.create(from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED
+        )
         notification = self._notification()
 
         self.assertTrue(notification.is_friend_request_pending)
@@ -123,7 +126,9 @@ class FriendRequestResolutionStateTests(TestCase):
         """End-to-end: accepting from the panel dismisses the friend_request
         notification from the inbox while leaving its resolution readable on
         the history page."""
-        Friendship.objects.create(from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED
+        )
         notification = self._notification()
         self.client.force_login(self.recipient_user)
 

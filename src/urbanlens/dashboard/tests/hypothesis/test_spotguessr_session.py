@@ -106,7 +106,14 @@ class SubmitGuessTests(TestCase):
         self.profile = _make_profile()
         self.location = _make_location()
         baker.make(Pin, profile=self.profile, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=self.location),
+        )
         self.session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig(), total_rounds=1)
         round_ = get_or_create_round(self.session)
         assert round_ is not None
@@ -186,7 +193,14 @@ class SessionSummaryTests(TestCase):
         profile = _make_profile()
         location = _make_location()
         baker.make(Pin, profile=profile, location=location)
-        baker.make(Image, location=location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=location))
+        baker.make(
+            Image,
+            location=location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=location),
+        )
 
         session = start_solo_session(profile, SpotGuessrMode.PHOTOS, GameConfig(), total_rounds=1)
         round_ = get_or_create_round(session)

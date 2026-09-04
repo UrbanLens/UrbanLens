@@ -2243,7 +2243,7 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
         params = serializer.validated_data
         profile = request.user.profile
 
-        queryset = Label.objects.visible_to(profile).with_customizations_for(profile).ordered()
+        queryset = Label.objects.visible_to(profile).with_customizations_for(profile).in_display_order()
         if kind := params.get("kind"):
             queryset = queryset.filter(kind=kind)
         if (is_global := params.get("is_global")) is not None:

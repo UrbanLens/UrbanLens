@@ -74,7 +74,9 @@ class SafetyWikiOptionOracleTests(TestCase):
 
         gated = self._get(stranger)
         self.client.force_login(stranger)
-        empty = self.client.get(URL, {"destination_latitude": "-40.0", "destination_longitude": "-170.0"}).content.decode()
+        empty = self.client.get(
+            URL, {"destination_latitude": "-40.0", "destination_longitude": "-170.0"}
+        ).content.decode()
 
         self.assertEqual(gated.strip(), empty.strip())
 

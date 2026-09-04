@@ -297,7 +297,9 @@ class WikiArticleViewTests(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         self.location = baker.make(Location)
         self.wiki = baker.make(Wiki, location=self.location, name="Mill Wiki")
-        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="My Mill Pin", name_is_user_provided=True)
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=self.location, name="My Mill Pin", name_is_user_provided=True
+        )
         self.outsider = baker.make("auth.User")
         self.client.force_login(self.user)
 

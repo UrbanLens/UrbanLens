@@ -70,7 +70,10 @@ class ImageWireShapeTests(SimpleTestCase):
     """An image crosses the wire as inline base64 and reaches each provider's own shape."""
 
     def _message(self) -> Message:
-        return Message(role="user", content=[TextPart(text="what is this"), ImagePart(data=base64.b64encode(_ONE_PIXEL).decode("ascii"))])
+        return Message(
+            role="user",
+            content=[TextPart(text="what is this"), ImagePart(data=base64.b64encode(_ONE_PIXEL).decode("ascii"))],
+        )
 
     def test_a_text_only_message_still_round_trips_as_a_bare_string(self) -> None:
         # The migration must not disturb the ordinary path: every existing
@@ -104,7 +107,10 @@ class ImageWireShapeTests(SimpleTestCase):
         self.assertIsInstance(content, list)
         image_blocks = [block for block in content if block["type"] == "image"]
         self.assertEqual(len(image_blocks), 1)
-        self.assertEqual(image_blocks[0]["source"], {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(_ONE_PIXEL).decode("ascii")})
+        self.assertEqual(
+            image_blocks[0]["source"],
+            {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(_ONE_PIXEL).decode("ascii")},
+        )
 
     def test_cloudflare_switches_to_its_flat_image_prompt_payload(self) -> None:
         # Workers AI vision models take {image: [bytes], prompt} rather than a
@@ -112,7 +118,9 @@ class ImageWireShapeTests(SimpleTestCase):
         from urbanlens_ai.providers.cloudflare import CloudflareAdapter
 
         adapter = CloudflareAdapter("key", "https://api.cloudflare.com/client/v4/accounts/x/ai/run")
-        request = InferenceRequest(provider="cloudflare", model="@cf/llava-hf/llava-1.5-7b-hf", messages=[self._message()], max_tokens=300)
+        request = InferenceRequest(
+            provider="cloudflare", model="@cf/llava-hf/llava-1.5-7b-hf", messages=[self._message()], max_tokens=300
+        )
         captured: dict = {}
 
         def _fake_post(model, payload, **kwargs):
@@ -132,10 +140,20 @@ class ImageWireShapeTests(SimpleTestCase):
         from urbanlens_ai.providers.cloudflare import CloudflareAdapter
 
         adapter = CloudflareAdapter("key", "https://api.cloudflare.com/client/v4/accounts/x/ai/run")
-        request = InferenceRequest(provider="cloudflare", model="@cf/meta/llama-3-8b-instruct", system="be brief", messages=[Message(role="user", content="hi")], max_tokens=100)
+        request = InferenceRequest(
+            provider="cloudflare",
+            model="@cf/meta/llama-3-8b-instruct",
+            system="be brief",
+            messages=[Message(role="user", content="hi")],
+            max_tokens=100,
+        )
         captured: dict = {}
 
-        with mock.patch.object(adapter, "_post", side_effect=lambda model, payload, **kw: captured.update(payload) or {"result": {"response": "hello"}}):
+        with mock.patch.object(
+            adapter,
+            "_post",
+            side_effect=lambda model, payload, **kw: captured.update(payload) or {"result": {"response": "hello"}},
+        ):
             adapter.send(request)
 
         self.assertIn("messages", captured)
@@ -145,10 +163,14 @@ class ImageWireShapeTests(SimpleTestCase):
 class VisionPolicyTests(SimpleTestCase):
     """policy.py bounds what a caller may send through the image path."""
 
-    def _request(self, *, images: int = 1, data: str | None = None, provider: str = "openai", model: str = "gpt-5-nano") -> InferenceRequest:
+    def _request(
+        self, *, images: int = 1, data: str | None = None, provider: str = "openai", model: str = "gpt-5-nano"
+    ) -> InferenceRequest:
         payload = data if data is not None else base64.b64encode(_ONE_PIXEL).decode("ascii")
         parts = [TextPart(text="describe")] + [ImagePart(data=payload) for _ in range(images)]
-        return InferenceRequest(provider=provider, model=model, messages=[Message(role="user", content=parts)], max_tokens=300)
+        return InferenceRequest(
+            provider=provider, model=model, messages=[Message(role="user", content=parts)], max_tokens=300
+        )
 
     def test_a_valid_vision_request_passes(self) -> None:
         from urbanlens_ai.policy import validate_request
@@ -188,13 +210,22 @@ class VisionPolicyTests(SimpleTestCase):
     def test_a_text_only_request_skips_the_image_checks_entirely(self) -> None:
         from urbanlens_ai.policy import validate_request
 
-        validate_request(InferenceRequest(provider="anthropic", model="claude-sonnet-5", messages=[Message(role="user", content="hi")], max_tokens=100))
+        validate_request(
+            InferenceRequest(
+                provider="anthropic",
+                model="claude-sonnet-5",
+                messages=[Message(role="user", content="hi")],
+                max_tokens=100,
+            )
+        )
 
     def test_classification_is_refused_for_a_provider_that_has_none(self) -> None:
         from urbanlens_ai.policy import PolicyError, validate_classify_request
         from urbanlens_ai.schema import ClassifyRequest
 
-        request = ClassifyRequest(provider="openai", model="gpt-5-nano", image=ImagePart(data=base64.b64encode(_ONE_PIXEL).decode("ascii")))
+        request = ClassifyRequest(
+            provider="openai", model="gpt-5-nano", image=ImagePart(data=base64.b64encode(_ONE_PIXEL).decode("ascii"))
+        )
         with self.assertRaises(PolicyError) as ctx:
             validate_classify_request(request)
         self.assertIn("classification", str(ctx.exception))
@@ -203,7 +234,13 @@ class VisionPolicyTests(SimpleTestCase):
         from urbanlens_ai.policy import validate_classify_request
         from urbanlens_ai.schema import ClassifyRequest
 
-        validate_classify_request(ClassifyRequest(provider="cloudflare", model="@cf/microsoft/resnet-50", image=ImagePart(data=base64.b64encode(_ONE_PIXEL).decode("ascii"))))
+        validate_classify_request(
+            ClassifyRequest(
+                provider="cloudflare",
+                model="@cf/microsoft/resnet-50",
+                image=ImagePart(data=base64.b64encode(_ONE_PIXEL).decode("ascii")),
+            )
+        )
 
     def test_an_oversized_classify_image_is_refused(self) -> None:
         from urbanlens_ai.policy import MAX_IMAGE_BYTES, PolicyError, validate_classify_request
@@ -211,7 +248,9 @@ class VisionPolicyTests(SimpleTestCase):
 
         oversized = base64.b64encode(b"\x00" * (MAX_IMAGE_BYTES + 1)).decode("ascii")
         with self.assertRaises(PolicyError):
-            validate_classify_request(ClassifyRequest(provider="cloudflare", model="@cf/microsoft/resnet-50", image=ImagePart(data=oversized)))
+            validate_classify_request(
+                ClassifyRequest(provider="cloudflare", model="@cf/microsoft/resnet-50", image=ImagePart(data=oversized))
+            )
 
 
 class VisionRoutingTests(TestCase):
@@ -220,10 +259,14 @@ class VisionRoutingTests(TestCase):
     def _patched(self, response: InferenceResponse):
         client = mock.Mock()
         client.send.return_value = response
-        return client, mock.patch("urbanlens.dashboard.services.ai.inference_client.get_inference_client", return_value=client)
+        return client, mock.patch(
+            "urbanlens.dashboard.services.ai.inference_client.get_inference_client", return_value=client
+        )
 
     def test_the_image_is_sent_inline_with_the_prompt(self) -> None:
-        client, patched = self._patched(InferenceResponse(content=[TextBlock(text="brick, mill")], stop_reason="end_turn", usage=Usage()))
+        client, patched = self._patched(
+            InferenceResponse(content=[TextBlock(text="brick, mill")], stop_reason="end_turn", usage=Usage())
+        )
         with patched:
             self.assertEqual(vision.describe_photo_keywords(_ONE_PIXEL), ["brick", "mill"])
 
@@ -237,7 +280,9 @@ class VisionRoutingTests(TestCase):
     def test_the_site_provider_setting_chooses_the_target(self) -> None:
         settings = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings.pk).update(ai_provider="cloudflare")
-        client, patched = self._patched(InferenceResponse(content=[TextBlock(text="a")], stop_reason="end_turn", usage=Usage()))
+        client, patched = self._patched(
+            InferenceResponse(content=[TextBlock(text="a")], stop_reason="end_turn", usage=Usage())
+        )
         with patched:
             vision.describe_photo_keywords(_ONE_PIXEL)
         self.assertEqual(client.send.call_args.args[0].provider, "cloudflare")
@@ -250,7 +295,9 @@ class VisionRoutingTests(TestCase):
 
         settings = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings.pk).update(ai_provider="openai")
-        client, patched = self._patched(InferenceResponse(content=[TextBlock(text="a")], stop_reason="end_turn", usage=Usage()))
+        client, patched = self._patched(
+            InferenceResponse(content=[TextBlock(text="a")], stop_reason="end_turn", usage=Usage())
+        )
         with patched:
             vision.describe_photo_keywords(_ONE_PIXEL)
 
@@ -262,7 +309,9 @@ class ClassifyTests(TestCase):
 
     def test_labels_come_back_sorted_and_typed(self) -> None:
         client = mock.Mock()
-        client.classify.return_value = ClassifyResponse(labels=[ClassificationLabel(label="castle", score=0.9), ClassificationLabel(label="ruin", score=0.4)])
+        client.classify.return_value = ClassifyResponse(
+            labels=[ClassificationLabel(label="castle", score=0.9), ClassificationLabel(label="ruin", score=0.4)]
+        )
         with mock.patch("urbanlens.dashboard.services.ai.inference_client.get_inference_client", return_value=client):
             labels = vision.classify_photo(_ONE_PIXEL)
 
@@ -288,8 +337,19 @@ class ClassifyTests(TestCase):
         from urbanlens_ai.schema import ClassifyRequest
 
         adapter = CloudflareAdapter("key", "https://api.cloudflare.com/client/v4/accounts/x/ai/run")
-        raw = {"result": [{"label": "ruin", "score": 0.2}, {"label": "castle", "score": 0.8}, {"label": "", "score": 0.9}, "junk"]}
-        request = ClassifyRequest(provider="cloudflare", model="@cf/microsoft/resnet-50", image=ImagePart(data=base64.b64encode(_ONE_PIXEL).decode("ascii")))
+        raw = {
+            "result": [
+                {"label": "ruin", "score": 0.2},
+                {"label": "castle", "score": 0.8},
+                {"label": "", "score": 0.9},
+                "junk",
+            ]
+        }
+        request = ClassifyRequest(
+            provider="cloudflare",
+            model="@cf/microsoft/resnet-50",
+            image=ImagePart(data=base64.b64encode(_ONE_PIXEL).decode("ascii")),
+        )
 
         with mock.patch.object(adapter, "_post", return_value=raw):
             response = adapter.classify(request)
@@ -303,6 +363,10 @@ class ClassifyTests(TestCase):
         from urbanlens_ai.schema import ClassifyRequest
 
         adapter = OpenAIAdapter("key")
-        request = ClassifyRequest(provider="cloudflare", model="@cf/microsoft/resnet-50", image=ImagePart(data=base64.b64encode(_ONE_PIXEL).decode("ascii")))
+        request = ClassifyRequest(
+            provider="cloudflare",
+            model="@cf/microsoft/resnet-50",
+            image=ImagePart(data=base64.b64encode(_ONE_PIXEL).decode("ascii")),
+        )
         with self.assertRaises(ProviderError):
             adapter.classify(request)

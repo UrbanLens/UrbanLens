@@ -38,11 +38,25 @@ class SearchDirectMessagesTests(TestCase):
         self.assertEqual(hits[0]["partner"], self.alice)
 
     def test_encrypted_message_is_not_searchable(self) -> None:
-        baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="", ciphertext="deadbeef", nonce="abc", key_version=1)
+        baker.make(
+            "dashboard.DirectMessage",
+            sender=self.alice,
+            recipient=self.bob,
+            body="",
+            ciphertext="deadbeef",
+            nonce="abc",
+            key_version=1,
+        )
         self.assertEqual(search_direct_messages(self.bob, "deadbeef"), [])
 
     def test_message_deleted_for_self_is_excluded_for_that_viewer_only(self) -> None:
-        baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="secret plans", deleted_by_recipient_at=timezone.now())
+        baker.make(
+            "dashboard.DirectMessage",
+            sender=self.alice,
+            recipient=self.bob,
+            body="secret plans",
+            deleted_by_recipient_at=timezone.now(),
+        )
         self.assertEqual(search_direct_messages(self.bob, "secret plans"), [])
         self.assertEqual(len(search_direct_messages(self.alice, "secret plans")), 1)
 
@@ -74,7 +88,9 @@ class SearchDirectMessagesTests(TestCase):
         # a bare "2024" as a date filter, since a 4-digit token appears in
         # ordinary names ("Building 2024") - see _extract_date_phrases.
         in_range = baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="reunion photos")
-        out_of_range = baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="reunion photos too")
+        out_of_range = baker.make(
+            "dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="reunion photos too"
+        )
         type(in_range).objects.filter(pk=in_range.pk).update(created=datetime(2024, 6, 15, tzinfo=UTC))
         type(out_of_range).objects.filter(pk=out_of_range.pk).update(created=datetime(2020, 6, 15, tzinfo=UTC))
         hits = search_direct_messages(self.bob, "reunion in 2024")
@@ -91,7 +107,9 @@ class SearchDirectMessagesTests(TestCase):
         self.assertEqual([entry["message"].pk for entry in search_direct_messages(self.bob, "building 2024")], [hit.pk])
 
     def test_result_url_anchors_to_the_message(self) -> None:
-        message = baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="asylum gate photos")
+        message = baker.make(
+            "dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="asylum gate photos"
+        )
         hits = search_direct_messages(self.bob, "asylum gate")
         expected = reverse("messages.conversation", kwargs={"profile_slug": self.alice.ensure_slug()})
         self.assertEqual(hits[0]["url"], f"{expected}#dm-msg-{message.pk}")
@@ -105,20 +123,28 @@ class MessageSearchEndpointTests(TestCase):
         self.me = baker.make("auth.User", username="me").profile
         self.partner = baker.make("auth.User", username="partner").profile
         self.client.force_login(self.me.user)
-        baker.make("dashboard.DirectMessage", sender=self.partner, recipient=self.me, body="Found the old asylum gate today")
+        baker.make(
+            "dashboard.DirectMessage", sender=self.partner, recipient=self.me, body="Found the old asylum gate today"
+        )
 
     def test_conversation_search_requires_login(self) -> None:
         self.client.logout()
-        response = self.client.get(reverse("messages.conversation_search", kwargs={"profile_slug": self.partner.slug}), {"q": "asylum"})
+        response = self.client.get(
+            reverse("messages.conversation_search", kwargs={"profile_slug": self.partner.slug}), {"q": "asylum"}
+        )
         self.assertEqual(response.status_code, 302)
 
     def test_conversation_search_finds_message(self) -> None:
-        response = self.client.get(reverse("messages.conversation_search", kwargs={"profile_slug": self.partner.slug}), {"q": "asylum"})
+        response = self.client.get(
+            reverse("messages.conversation_search", kwargs={"profile_slug": self.partner.slug}), {"q": "asylum"}
+        )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "asylum")
 
     def test_conversation_search_below_min_length_returns_no_hits(self) -> None:
-        response = self.client.get(reverse("messages.conversation_search", kwargs={"profile_slug": self.partner.slug}), {"q": "a"})
+        response = self.client.get(
+            reverse("messages.conversation_search", kwargs={"profile_slug": self.partner.slug}), {"q": "a"}
+        )
         self.assertNotContains(response, "dm-search-result")
 
     def test_messages_search_requires_login(self) -> None:

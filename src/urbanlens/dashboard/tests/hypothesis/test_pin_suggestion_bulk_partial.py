@@ -91,7 +91,10 @@ class BulkSuggestionPartialReportingTests(TestCase):
         suggestion = self._suggestion()
 
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
             mock.patch("urbanlens.dashboard.controllers.pin_suggestions.safely_enqueue_task"),
         ):
@@ -129,9 +132,14 @@ class BulkAcceptDeferredNameResolutionTests(TestCase):
         # (signals import it at call time) from running inline under eager
         # mode - see tests/CLAUDE.md.
         self.mock_resolve_name = self.enterContext(
-            mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            )
         )
-        self.mock_view_enqueue = self.enterContext(mock.patch("urbanlens.dashboard.controllers.pin_suggestions.safely_enqueue_task"))
+        self.mock_view_enqueue = self.enterContext(
+            mock.patch("urbanlens.dashboard.controllers.pin_suggestions.safely_enqueue_task")
+        )
         self.enterContext(mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"))
 
     def _suggestion_at(self, lat: str, lon: str) -> PinSuggestion:
@@ -156,10 +164,18 @@ class BulkAcceptDeferredNameResolutionTests(TestCase):
         """Location pks the view dispatched resolve_location_place_name for."""
         from urbanlens.dashboard.tasks import resolve_location_place_name
 
-        return [call.args[1] for call in self.mock_view_enqueue.call_args_list if call.args and call.args[0] is resolve_location_place_name]
+        return [
+            call.args[1]
+            for call in self.mock_view_enqueue.call_args_list
+            if call.args and call.args[0] is resolve_location_place_name
+        ]
 
     def test_bulk_accept_never_calls_google_and_defers_name_resolution(self) -> None:
-        suggestions = [self._suggestion_at("10.0", "10.0"), self._suggestion_at("11.0", "11.0"), self._suggestion_at("12.0", "12.0")]
+        suggestions = [
+            self._suggestion_at("10.0", "10.0"),
+            self._suggestion_at("11.0", "11.0"),
+            self._suggestion_at("12.0", "12.0"),
+        ]
 
         payload = self._bulk_accept([suggestion.pk for suggestion in suggestions]).json()
 
@@ -195,8 +211,16 @@ class BulkAcceptDeferredNameResolutionTests(TestCase):
         from urbanlens.dashboard.models.google_place.model import GooglePlace
         from urbanlens.dashboard.models.location.model import Location
 
-        google_place = baker.make(GooglePlace, latitude=Decimal("10.0"), longitude=Decimal("10.0"), cached_place_name="Real Place")
-        baker.make(Location, latitude=Decimal("10.0"), longitude=Decimal("10.0"), google_place=google_place, official_name="Real Place")
+        google_place = baker.make(
+            GooglePlace, latitude=Decimal("10.0"), longitude=Decimal("10.0"), cached_place_name="Real Place"
+        )
+        baker.make(
+            Location,
+            latitude=Decimal("10.0"),
+            longitude=Decimal("10.0"),
+            google_place=google_place,
+            official_name="Real Place",
+        )
         suggestion = self._suggestion_at("10.0", "10.0")
 
         payload = self._bulk_accept([suggestion.pk]).json()

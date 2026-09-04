@@ -99,7 +99,9 @@ class PinShareRespondApiTests(TestCase):
             The Django test-client response.
         """
         pk = self.share.pk if share_id is None else share_id
-        return self.client.post(f"{BASE}/{pk}/respond/", {"action": action}, content_type="application/json", **self._headers(raw_key))
+        return self.client.post(
+            f"{BASE}/{pk}/respond/", {"action": action}, content_type="application/json", **self._headers(raw_key)
+        )
 
     def _key_with_scopes(self, scopes: list[str]) -> str:
         """Issue a second key carrying exactly *scopes*.

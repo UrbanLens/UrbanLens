@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from typing import ClassVar
-
 from unittest import mock
 
 from django.core.cache import cache
@@ -43,7 +42,9 @@ class _Provider(SatelliteViewProvider):
         self._fail = fail
         self.calls = 0
 
-    def _generate_satellite_slides(self, latitude, longitude, *, zoom=17, width=640, height=400, limit=-1) -> Generator[SatelliteSlide]:
+    def _generate_satellite_slides(
+        self, latitude, longitude, *, zoom=17, width=640, height=400, limit=-1
+    ) -> Generator[SatelliteSlide]:
         self.calls += 1
         yield from self._slides
         if self._fail:
@@ -56,7 +57,7 @@ class SlideOutageCachingTests(TestCase):
         cache.clear()
 
     def test_a_healthy_empty_answer_is_cached(self) -> None:
-        """"Nothing here" is a real answer and must not be re-fetched forever."""
+        """ "Nothing here" is a real answer and must not be re-fetched forever."""
         provider = _Provider([], fail=False)
 
         provider.get_satellite_slides(41.7, -73.9)

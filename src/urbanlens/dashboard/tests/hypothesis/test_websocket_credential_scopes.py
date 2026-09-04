@@ -399,7 +399,9 @@ class NotificationCredentialScopeTests(TransactionTestCase):
     def _communicator(self, *, raw_key: str | None = None, user=None) -> WebsocketCommunicator:
         """Build a ``ws/notifications/`` communicator, optionally bearing a credential."""
         query = f"?key={raw_key}" if raw_key else ""
-        comm = WebsocketCommunicator(ApiKeyAuthMiddleware(UserNotificationConsumer.as_asgi()), f"/ws/notifications/{query}")
+        comm = WebsocketCommunicator(
+            ApiKeyAuthMiddleware(UserNotificationConsumer.as_asgi()), f"/ws/notifications/{query}"
+        )
         comm.scope["url_route"] = {"kwargs": {}}
         comm.scope["user"] = user if user is not None else AnonymousUser()
         return comm

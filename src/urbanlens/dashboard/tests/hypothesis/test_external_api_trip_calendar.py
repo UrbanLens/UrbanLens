@@ -36,7 +36,11 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
+from urbanlens.dashboard.models.calendar_sync.model import (
+    CalendarSyncDirection,
+    GoogleCalendarAccount,
+    TripCalendarLink,
+)
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
@@ -183,7 +187,9 @@ class ExportRespectsAdderVisibilityTests(_CalendarTestCase):
         """
         Profile.objects.filter(pk=self.mate.pk).update(trip_pin_location_visibility=visibility)
         location = Location.objects.create(latitude=42.33, longitude=-83.04, **_ADDRESS_COMPONENTS)
-        return TripActivity.objects.create(trip=trip, location=location, added_by=self.mate, title="Packard Plant", **kwargs)
+        return TripActivity.objects.create(
+            trip=trip, location=location, added_by=self.mate, title="Packard Plant", **kwargs
+        )
 
     def test_trip_event_omits_a_location_the_exporter_may_not_see(self) -> None:
         """The all-day trip event must not carry a hidden trip-mate's address."""
@@ -447,7 +453,9 @@ class TripCalendarRemoveEndpointTests(_CalendarTestCase):
         Returns:
             The test client's response.
         """
-        return self.client.delete(reverse("external_api:trips.calendar_export", args=[trip.slug]), **_bearer(self.raw_key))
+        return self.client.delete(
+            reverse("external_api:trips.calendar_export", args=[trip.slug]), **_bearer(self.raw_key)
+        )
 
     def test_remove_deletes_the_event_and_the_link(self) -> None:
         """A linked trip is removed upstream and locally, and reports ``removed``."""

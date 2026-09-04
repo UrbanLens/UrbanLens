@@ -85,7 +85,12 @@ class DefaultSavedFilterTests(TestCase):
 
         saved = SavedFilter.objects.get(profile=self.profile, name=name)
         criteria = deserialize_criteria(saved.criteria, self.profile)
-        return set(Pin.objects.filter(profile=self.profile).filter_by_criteria(criteria).distinct().values_list("pk", flat=True))
+        return set(
+            Pin.objects.filter(profile=self.profile)
+            .filter_by_criteria(criteria)
+            .distinct()
+            .values_list("pk", flat=True)
+        )
 
 
 class ProtectedLabelTests(TestCase):
@@ -115,7 +120,9 @@ class ProtectedLabelTests(TestCase):
 
         self._merge(target, source)
 
-        self.assertTrue(Label.objects.filter(pk=source.pk).exists(), "a protected label was deleted by being merged away")
+        self.assertTrue(
+            Label.objects.filter(pk=source.pk).exists(), "a protected label was deleted by being merged away"
+        )
 
     def test_a_protected_label_cannot_be_bulk_deleted(self) -> None:
         source = baker.make(Label, profile=self.profile, kind=KIND_CATEGORY, name="protected-cat", is_protected=True)

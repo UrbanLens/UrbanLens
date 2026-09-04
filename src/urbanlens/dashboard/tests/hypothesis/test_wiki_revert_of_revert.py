@@ -40,7 +40,9 @@ class RevertOfRevertTests(TestCase):
         assert second_revert is not None and not skipped
 
         original.refresh_from_db()
-        self.assertFalse(original.reverted, "the original edit's content is back in force - its flag must not say otherwise")
+        self.assertFalse(
+            original.reverted, "the original edit's content is back in force - its flag must not say otherwise"
+        )
         self.assertIsNone(original.reverted_by)
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.name, "New Mill Name")

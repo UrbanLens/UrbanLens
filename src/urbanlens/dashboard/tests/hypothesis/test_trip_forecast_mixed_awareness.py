@@ -41,7 +41,10 @@ class MixedAwarenessForecastTests(TestCase):
     def _forecasts(self, slots: list[dict]) -> list[dict]:
         with (
             patch("urbanlens.dashboard.controllers.trip.activity_coords", return_value=_COORDS),
-            patch("urbanlens.dashboard.services.apis.locations.weather_resolution.get_raw_forecast_slots", return_value=slots),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.weather_resolution.get_raw_forecast_slots",
+                return_value=slots,
+            ),
         ):
             return _build_activity_forecasts([self.activity])
 
@@ -91,7 +94,10 @@ class UtcAnchoredSlotMatchingTests(TestCase):
         activity = baker.make("dashboard.TripActivity", trip=trip, scheduled_at=scheduled_at)
         with (
             patch("urbanlens.dashboard.controllers.trip.activity_coords", return_value=_COORDS),
-            patch("urbanlens.dashboard.services.apis.locations.weather_resolution.get_raw_forecast_slots", return_value=slots),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.weather_resolution.get_raw_forecast_slots",
+                return_value=slots,
+            ),
         ):
             return _build_activity_forecasts([activity])
 
@@ -125,7 +131,11 @@ class UtcAnchoredSlotMatchingTests(TestCase):
 
         slot = results[0]["slot"]
         self.assertIsNotNone(slot)
-        self.assertEqual(slot["date"], datetime.datetime(2026, 6, 1, 9, 0), "the 13:00 UTC slot wins, displayed as its local wall clock")
+        self.assertEqual(
+            slot["date"],
+            datetime.datetime(2026, 6, 1, 9, 0),
+            "the 13:00 UTC slot wins, displayed as its local wall clock",
+        )
         self.assertEqual(slot["date_utc"], datetime.datetime(2026, 6, 1, 13, 0, tzinfo=datetime.UTC))
 
     def test_gap_hours_uses_the_utc_instant_for_the_out_of_range_test(self) -> None:

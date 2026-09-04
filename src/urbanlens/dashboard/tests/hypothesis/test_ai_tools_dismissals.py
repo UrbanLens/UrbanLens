@@ -37,7 +37,9 @@ class RecentDismissalsToolTests(TestCase):
         self.assertIn("recent_dismissals", names)
 
     def test_lists_what_the_client_sent_this_turn(self) -> None:
-        entries = (DismissalEntry(id="x", kind="explainer", heading="Labels", body="Tag your pins.", page="/organize/"),)
+        entries = (
+            DismissalEntry(id="x", kind="explainer", heading="Labels", body="Tag your pins.", page="/organize/"),
+        )
         result = execute("recent_dismissals", {}, _context(self.profile, entries))
         self.assertNotIn("error", result.data)
         self.assertEqual(len(result.data["dismissals"]), 1)
@@ -61,8 +63,17 @@ class ReopenExplainerToolTests(TestCase):
     def setUp(self) -> None:
         self.profile = _plain_profile()
         self.entries = (
-            DismissalEntry(id="explainer-x", kind="explainer", heading="Labels", body="Tag your pins.", page="/organize/"),
-            DismissalEntry(id="tour-y", kind="tour", heading="Reorder", body="Drag to prioritize.", page="/organize/", prefix="ul_onboarding_v1_organize"),
+            DismissalEntry(
+                id="explainer-x", kind="explainer", heading="Labels", body="Tag your pins.", page="/organize/"
+            ),
+            DismissalEntry(
+                id="tour-y",
+                kind="tour",
+                heading="Reorder",
+                body="Drag to prioritize.",
+                page="/organize/",
+                prefix="ul_onboarding_v1_organize",
+            ),
         )
 
     def test_is_registered_and_available(self) -> None:
@@ -76,7 +87,10 @@ class ReopenExplainerToolTests(TestCase):
     def test_reopening_a_known_explainer_returns_its_kind_and_page(self) -> None:
         result = execute("reopen_explainer", {"id": "explainer-x"}, _context(self.profile, self.entries))
         self.assertNotIn("error", result.data)
-        self.assertEqual(result.data, {"status": "reopened", "id": "explainer-x", "kind": "explainer", "page": "/organize/", "prefix": None})
+        self.assertEqual(
+            result.data,
+            {"status": "reopened", "id": "explainer-x", "kind": "explainer", "page": "/organize/", "prefix": None},
+        )
 
     def test_reopening_a_known_tour_card_returns_its_prefix(self) -> None:
         result = execute("reopen_explainer", {"id": "tour-y"}, _context(self.profile, self.entries))

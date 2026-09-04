@@ -41,7 +41,9 @@ class DeferredLookupRetryWindowTests(TestCase):
                 "stem": "",
                 "create_category": False,
                 "label_ids": [],
-                "pins": [{"name": "Black Point Ruins", "lat": 41.348754, "lng": -71.453896, "description": "", "cid": 111}],
+                "pins": [
+                    {"name": "Black Point Ruins", "lat": 41.348754, "lng": -71.453896, "description": "", "cid": 111}
+                ],
             },
         ]
 

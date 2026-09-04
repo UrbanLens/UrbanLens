@@ -198,7 +198,9 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
     @_db_settings
     def test_mute_never_rewrites_any_status(self, status: str) -> None:
         """Property: whatever status a row holds, muting preserves it exactly."""
-        Friendship.objects.filter(pk=self.friendship.pk).update(status=status, muted_by_from_profile=False, muted_by_to_profile=False)
+        Friendship.objects.filter(pk=self.friendship.pk).update(
+            status=status, muted_by_from_profile=False, muted_by_to_profile=False
+        )
 
         mute_profile(self.actor, self.other_profile)
 
@@ -210,7 +212,9 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
     @_db_settings
     def test_unmute_never_rewrites_any_status(self, status: str) -> None:
         """Property: the inverse holds too - unmute is status-preserving."""
-        Friendship.objects.filter(pk=self.friendship.pk).update(status=status, muted_by_from_profile=True, muted_by_to_profile=True)
+        Friendship.objects.filter(pk=self.friendship.pk).update(
+            status=status, muted_by_from_profile=True, muted_by_to_profile=True
+        )
 
         unmute_profile(self.actor, self.other_profile)
 
@@ -245,8 +249,12 @@ class MuteQuerySetTests(TestCase):
         """The filter answers "rows I muted", so the far side's flag must not leak in."""
         self.loud_row.mute(self.loud_friend)
 
-        self.assertEqual(set(Friendship.objects.all().muted_by(self.actor).values_list("pk", flat=True)), {self.muted_row.pk})
-        self.assertEqual(set(Friendship.objects.all().muted_by(self.loud_friend).values_list("pk", flat=True)), {self.loud_row.pk})
+        self.assertEqual(
+            set(Friendship.objects.all().muted_by(self.actor).values_list("pk", flat=True)), {self.muted_row.pk}
+        )
+        self.assertEqual(
+            set(Friendship.objects.all().muted_by(self.loud_friend).values_list("pk", flat=True)), {self.loud_row.pk}
+        )
 
     def test_muted_rows_are_still_friends(self) -> None:
         """The whole point: muted rows stay inside ``is_friend()``."""
@@ -276,7 +284,11 @@ class LegacyMutedRowRepairWiringTests(SimpleTestCase):
     migration = importlib.import_module("urbanlens.dashboard.migrations.0010_v0_6_0")
 
     def test_both_directions_of_the_repair_are_wired(self) -> None:
-        operations = [op for op in self.migration.Migration.operations if type(op).__name__ == "RunPython" and op.code is self.migration.restore_muted_friendships]
+        operations = [
+            op
+            for op in self.migration.Migration.operations
+            if type(op).__name__ == "RunPython" and op.code is self.migration.restore_muted_friendships
+        ]
 
         self.assertEqual(len(operations), 1)
         self.assertIs(operations[0].reverse_code, self.migration.collapse_muted_flag_into_status)

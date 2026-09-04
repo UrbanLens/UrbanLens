@@ -459,17 +459,11 @@ class DjangoProjectInitializer:
             raise UnrecoverableError from e
 
     def check_dependencies(self):
-        """
-        Todo:
-
-        """
+        """Not implemented yet."""
         raise NotImplementedError
 
     def install_dependencies(self):
-        """
-        Todo:
-
-        """
+        """Not implemented yet."""
         raise NotImplementedError
 
     def check_db(self) -> bool:

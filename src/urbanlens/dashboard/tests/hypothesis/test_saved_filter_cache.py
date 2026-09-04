@@ -63,7 +63,9 @@ class SavedFilterCacheInvalidationTests(TestCase):
         """Regression guard for the exact reported symptom: a filter that legitimately
         matched 0 pins at some point (e.g. right after creation) must not keep
         returning that empty result forever once its criteria is fixed."""
-        saved_filter = SavedFilter.objects.create(profile=self.profile, name="My Filter", criteria={"name": "Nothing Matches This"})
+        saved_filter = SavedFilter.objects.create(
+            profile=self.profile, name="My Filter", criteria={"name": "Nothing Matches This"}
+        )
         empty_result = get_or_compute_matching_uuids(self.profile, saved_filter)
         self.assertEqual(empty_result, [])
 

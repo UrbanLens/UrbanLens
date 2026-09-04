@@ -150,7 +150,9 @@ class ThumbnailBackfillTests(TestCase):
 
     def test_backfill_enqueues_a_batch_and_advances_the_cursor(self) -> None:
         with (
-            patch("urbanlens.dashboard.services.media.images.photos_missing_thumbnails", side_effect=[[10, 11], [12], []]) as missing,
+            patch(
+                "urbanlens.dashboard.services.media.images.photos_missing_thumbnails", side_effect=[[10, 11], [12], []]
+            ) as missing,
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             self.assertEqual(backfill_image_thumbnails(limit=2), 2)

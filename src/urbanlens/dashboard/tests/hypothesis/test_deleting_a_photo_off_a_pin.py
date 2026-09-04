@@ -49,7 +49,9 @@ class DeleteFromPinGalleryTests(TestCase):
         self.client.force_login(self.owner_user)
 
     def _photo(self, *, on_wiki: bool, source: str = ImageSource.UPLOAD) -> Image:
-        result = upload_photo_for_owner(self.pin, self.owner, SimpleUploadedFile("p.jpg", _jpeg_bytes(), content_type="image/jpeg"), "caption")
+        result = upload_photo_for_owner(
+            self.pin, self.owner, SimpleUploadedFile("p.jpg", _jpeg_bytes(), content_type="image/jpeg"), "caption"
+        )
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         fields = {"source": source}
         if on_wiki:

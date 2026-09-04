@@ -74,7 +74,9 @@ class ElementToFeatureTests(SimpleTestCase):
     """_element_to_feature converts Overpass elements into GeoJSON Features."""
 
     def test_node_becomes_point(self) -> None:
-        feature = _element_to_feature({"type": "node", "id": 1, "lat": 40.5, "lon": -74.5, "tags": {"start_date": "1900"}})
+        feature = _element_to_feature(
+            {"type": "node", "id": 1, "lat": 40.5, "lon": -74.5, "tags": {"start_date": "1900"}}
+        )
         assert feature is not None
         self.assertEqual(feature["geometry"], {"type": "Point", "coordinates": [-74.5, 40.5]})
         self.assertEqual(feature["properties"]["id"], "node/1")

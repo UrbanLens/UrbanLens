@@ -115,7 +115,9 @@ class ParseCoordinatesTests(TestCase):
         parse_coordinates(dms_bait)
         elapsed = time.perf_counter() - start
 
-        self.assertLess(elapsed, 1.0, f"parse_coordinates took {elapsed:.3f}s on adversarial input - possible ReDoS regression")
+        self.assertLess(
+            elapsed, 1.0, f"parse_coordinates took {elapsed:.3f}s on adversarial input - possible ReDoS regression"
+        )
 
     def test_oversized_input_is_bounded_by_length_cap(self):
         """A message far exceeding MAX_DIRECT_MESSAGE_LENGTH still returns fast.
@@ -130,7 +132,9 @@ class ParseCoordinatesTests(TestCase):
         parse_coordinates(huge_bait)
         elapsed = time.perf_counter() - start
 
-        self.assertLess(elapsed, 1.0, f"parse_coordinates took {elapsed:.3f}s on oversized input - length cap not applied")
+        self.assertLess(
+            elapsed, 1.0, f"parse_coordinates took {elapsed:.3f}s on oversized input - length cap not applied"
+        )
 
     @given(
         st.floats(min_value=-89.9, max_value=89.9).filter(lambda v: abs(v) > 0.001),
@@ -264,7 +268,10 @@ class MessageMentionAddPinViewTests(_DmDetectionTestCase):
         self.client.force_login(self.users["recipient"])
 
         response = self.client.post(
-            reverse("messages.mention.add_pin", kwargs={"profile_slug": self.profiles["sender"].ensure_slug(), "mention_id": mention.pk}),
+            reverse(
+                "messages.mention.add_pin",
+                kwargs={"profile_slug": self.profiles["sender"].ensure_slug(), "mention_id": mention.pk},
+            ),
         )
 
         self.assertEqual(response.status_code, 200)
@@ -278,7 +285,10 @@ class MessageMentionAddPinViewTests(_DmDetectionTestCase):
         self.client.force_login(self.users["sender"])
 
         response = self.client.post(
-            reverse("messages.mention.add_pin", kwargs={"profile_slug": self.profiles["recipient"].ensure_slug(), "mention_id": mention.pk}),
+            reverse(
+                "messages.mention.add_pin",
+                kwargs={"profile_slug": self.profiles["recipient"].ensure_slug(), "mention_id": mention.pk},
+            ),
         )
 
         self.assertEqual(response.status_code, 404)
@@ -289,7 +299,10 @@ class MessageMentionAddPinViewTests(_DmDetectionTestCase):
         self.client.force_login(self.users["third"])
 
         response = self.client.post(
-            reverse("messages.mention.add_pin", kwargs={"profile_slug": self.profiles["sender"].ensure_slug(), "mention_id": mention.pk}),
+            reverse(
+                "messages.mention.add_pin",
+                kwargs={"profile_slug": self.profiles["sender"].ensure_slug(), "mention_id": mention.pk},
+            ),
         )
 
         self.assertEqual(response.status_code, 404)

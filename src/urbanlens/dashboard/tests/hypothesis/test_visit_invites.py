@@ -40,9 +40,15 @@ class _VisitInviteTestCase(TestCase):
         super().setUp()
         self.owner_user = baker.make(User, username="visit-owner", email="owner@example.com")
         self.owner = self.owner_user.profile
-        self.location = baker.make(Location, latitude="42.200000", longitude="-73.800000", official_name="Grain Elevator")
+        self.location = baker.make(
+            Location, latitude="42.200000", longitude="-73.800000", official_name="Grain Elevator"
+        )
         self.pin = Pin.objects.create(profile=self.owner, location=self.location)
-        self.visit = PinVisit.objects.create(pin=self.pin, visited_at=datetime.datetime(2026, 7, 1, 12, 0, tzinfo=datetime.UTC), source=VisitSource.MANUAL)
+        self.visit = PinVisit.objects.create(
+            pin=self.pin,
+            visited_at=datetime.datetime(2026, 7, 1, 12, 0, tzinfo=datetime.UTC),
+            source=VisitSource.MANUAL,
+        )
         self.factory = RequestFactory()
 
     def _post_request(self, data: dict):
@@ -69,7 +75,9 @@ class SyncExternalParticipantsTests(_VisitInviteTestCase):
     def test_email_stored_as_hash_only(self):
         with patch("django.core.mail.EmailMultiAlternatives.send"):
             sync_external_participants(
-                self._post_request({"external_name_1": "Sam", "external_email_1": "sam@example.com", "external_invite_1": "on"}),
+                self._post_request(
+                    {"external_name_1": "Sam", "external_email_1": "sam@example.com", "external_invite_1": "on"}
+                ),
                 self.visit,
             )
 
@@ -79,7 +87,9 @@ class SyncExternalParticipantsTests(_VisitInviteTestCase):
 
     def test_invalid_email_treated_as_no_email(self):
         sync_external_participants(
-            self._post_request({"external_name_1": "Sam", "external_email_1": "not-an-email", "external_invite_1": "on"}),
+            self._post_request(
+                {"external_name_1": "Sam", "external_email_1": "not-an-email", "external_invite_1": "on"}
+            ),
             self.visit,
         )
         participant = ExternalVisitParticipant.objects.get(visit=self.visit)
@@ -114,7 +124,11 @@ class ExistingMemberMatchTests(_VisitInviteTestCase):
     def test_friend_request_and_suggestion_sent(self):
         self._tag_member_by_email()
         self.assertTrue(Friendship.objects.filter(from_profile=self.owner, to_profile=self.member).exists())
-        self.assertTrue(VisitSuggestion.objects.filter(suggested_to=self.member, suggested_by=self.owner, origin_visit=self.visit).exists())
+        self.assertTrue(
+            VisitSuggestion.objects.filter(
+                suggested_to=self.member, suggested_by=self.owner, origin_visit=self.visit
+            ).exists()
+        )
 
     def test_unchecked_invite_records_without_contacting(self):
         self._tag_member_by_email(invite=False)
@@ -157,9 +171,15 @@ class UnknownEmailInviteTests(_VisitInviteTestCase):
     @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_second_invite_to_same_address_suppressed(self, mock_send):
         self._tag_unknown()
-        other_visit = PinVisit.objects.create(pin=self.pin, visited_at=datetime.datetime(2026, 7, 2, 12, 0, tzinfo=datetime.UTC), source=VisitSource.MANUAL)
+        other_visit = PinVisit.objects.create(
+            pin=self.pin,
+            visited_at=datetime.datetime(2026, 7, 2, 12, 0, tzinfo=datetime.UTC),
+            source=VisitSource.MANUAL,
+        )
         sync_external_participants(
-            self._post_request({"external_name_1": "Stranger", "external_email_1": "stranger@example.com", "external_invite_1": "on"}),
+            self._post_request(
+                {"external_name_1": "Stranger", "external_email_1": "stranger@example.com", "external_invite_1": "on"}
+            ),
             other_visit,
         )
 
@@ -203,7 +223,9 @@ class UnknownEmailInviteTests(_VisitInviteTestCase):
 class DeferredDeliveryTests(_VisitInviteTestCase):
     """Registering (or verifying a secondary email) later delivers the invite."""
 
-    def _pending_participant(self, email: str = "future@example.com", *, suggestion: bool = True) -> ExternalVisitParticipant:
+    def _pending_participant(
+        self, email: str = "future@example.com", *, suggestion: bool = True
+    ) -> ExternalVisitParticipant:
         return ExternalVisitParticipant.objects.create(
             visit=self.visit,
             display_name="Future Friend",

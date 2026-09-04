@@ -122,7 +122,9 @@ class WikiOwnershipPanelGateTests(TestCase):
         super().setUp()
         self.client = Client()
         self.location = baker.make(Location)
-        official = baker.make(WikiOwner, name=_OFFICIAL_NAME, source=OwnerSource.OFFICIAL, address="1 Main St", phone="555-0100")
+        official = baker.make(
+            WikiOwner, name=_OFFICIAL_NAME, source=OwnerSource.OFFICIAL, address="1 Main St", phone="555-0100"
+        )
         official.locations.add(self.location)
         contributed = baker.make(WikiOwner, name=_USER_NAME, source=OwnerSource.USER)
         contributed.locations.add(self.location)

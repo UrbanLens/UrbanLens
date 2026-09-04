@@ -157,7 +157,9 @@ class BuildSearchQueryTests(TestCase):
             longitude=Decimal("-73.931000"),
             administrative_area_level_1="New York",
         )
-        child = baker.make_recipe("dashboard.detail_pin", location=child_location, parent_pin=self.pin, name="Superintendent's Cottage")
+        child = baker.make_recipe(
+            "dashboard.detail_pin", location=child_location, parent_pin=self.pin, name="Superintendent's Cottage"
+        )
         query = build_search_query(child)
         assert query is not None
         self.assertIn('"Superintendent\'s Cottage"', query)
@@ -185,13 +187,21 @@ class FlickrSearchGatewayTests(TestCase):
                 "stat": "ok",
                 "photos": {
                     "photo": [
-                        {"id": "1", "owner": "12345@N00", "title": "Main Building", "url_o": "https://example.com/1_o.jpg", "url_s": "https://example.com/1_s.jpg"},
+                        {
+                            "id": "1",
+                            "owner": "12345@N00",
+                            "title": "Main Building",
+                            "url_o": "https://example.com/1_o.jpg",
+                            "url_s": "https://example.com/1_s.jpg",
+                        },
                         {"id": "2", "owner": "12345@N00", "title": "No usable size"},
                     ],
                 },
             },
         )
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.search._consumer_credentials", return_value=("key", "secret")):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.flickr.search._consumer_credentials", return_value=("key", "secret")
+        ):
             items = list(gw._generate_media('("Hudson River State Hospital") "New York" ("abandoned")'))
 
         self.assertEqual(len(items), 1)
@@ -207,21 +217,28 @@ class FlickrSearchGatewayTests(TestCase):
 
     def test_not_configured_returns_no_results_instead_of_raising(self) -> None:
         gw = self._gateway()
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.search._consumer_credentials", side_effect=flickr_search.FlickrNotConfiguredError()):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.flickr.search._consumer_credentials",
+            side_effect=flickr_search.FlickrNotConfiguredError(),
+        ):
             items = list(gw._generate_media("some query"))
         self.assertEqual(items, [])
 
     def test_flickr_error_status_returns_no_results(self) -> None:
         gw = self._gateway()
         gw.session.get.return_value = _mock_response(json_data={"stat": "fail", "message": "boom"})
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.search._consumer_credentials", return_value=("key", "secret")):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.flickr.search._consumer_credentials", return_value=("key", "secret")
+        ):
             items = list(gw._generate_media("some query"))
         self.assertEqual(items, [])
 
     def test_http_error_returns_no_results(self) -> None:
         gw = self._gateway()
         gw.session.get.return_value = _mock_response(ok=False, status_code=500)
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.search._consumer_credentials", return_value=("key", "secret")):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.flickr.search._consumer_credentials", return_value=("key", "secret")
+        ):
             items = list(gw._generate_media("some query"))
         self.assertEqual(items, [])
 
@@ -276,7 +293,9 @@ class BuildFeedTagQueriesTests(TestCase):
             longitude=Decimal("-73.931000"),
             administrative_area_level_1="New York",
         )
-        child = baker.make_recipe("dashboard.detail_pin", location=child_location, parent_pin=self.pin, name="Superintendent's Cottage")
+        child = baker.make_recipe(
+            "dashboard.detail_pin", location=child_location, parent_pin=self.pin, name="Superintendent's Cottage"
+        )
         queries = build_feed_tag_queries(child)
         # One name x 3 urbex terms - same fan-out as a parentless pin; the
         # ancestor tag is folded into each query, not crossed separately.
@@ -307,7 +326,11 @@ class FlickrFeedSearchGatewayTests(TestCase):
                         "author_id": "12345@N00",
                         "tags": "hudsonriverstatehospital newyork abandoned",
                     },
-                    {"title": "No usable media", "link": "https://www.flickr.com/photos/some-alias/2/", "author_id": "12345@N00"},
+                    {
+                        "title": "No usable media",
+                        "link": "https://www.flickr.com/photos/some-alias/2/",
+                        "author_id": "12345@N00",
+                    },
                 ],
             },
         )
@@ -374,6 +397,7 @@ class FlickrMediaPanelSourceTests(TestCase):
 
 
 # -- FlickrPlugin.get_panel_sources ------------------------------------------------------
+
 
 class FlickrPluginPanelSourceTests(SimpleTestCase):
     """The plugin picks the API gateway or the keyless feed fallback per current config."""

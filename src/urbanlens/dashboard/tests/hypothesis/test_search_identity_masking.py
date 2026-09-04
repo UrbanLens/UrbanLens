@@ -26,7 +26,9 @@ from urbanlens.dashboard.services.global_search.providers import CommentSearchPr
 
 def _profile(visibility: str = VisibilityChoice.ANYONE) -> Profile:
     profile = baker.make("auth.User").profile
-    Profile.objects.filter(pk=profile.pk).update(profile_visibility=visibility, direct_message_visibility=VisibilityChoice.ANYONE)
+    Profile.objects.filter(pk=profile.pk).update(
+        profile_visibility=visibility, direct_message_visibility=VisibilityChoice.ANYONE
+    )
     profile.refresh_from_db()
     profile.ensure_slug()
     return profile

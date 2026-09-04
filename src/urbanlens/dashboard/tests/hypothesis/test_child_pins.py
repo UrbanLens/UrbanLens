@@ -22,7 +22,13 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.map_pins.autocomplete import search_local
-from urbanlens.dashboard.tests.hypothesis.strategies import coord_pair_float, lat_float, lon_float, nonempty_name, priority as priority_strategy
+from urbanlens.dashboard.tests.hypothesis.strategies import (
+    coord_pair_float,
+    lat_float,
+    lon_float,
+    nonempty_name,
+    priority as priority_strategy,
+)
 
 # DB-backed @given tests below never touch self.client - only ORM/service
 # calls - per this repo's documented rule that hypothesis's per-example DB
@@ -46,7 +52,9 @@ def _make_pin(profile, **kwargs) -> Pin:
     location = kwargs.pop("location", None)
     if location is None:
         _coord_counter += 1
-        location = baker.make(Location, latitude=42.0 + _coord_counter * 0.001, longitude=-73.0 - _coord_counter * 0.001)
+        location = baker.make(
+            Location, latitude=42.0 + _coord_counter * 0.001, longitude=-73.0 - _coord_counter * 0.001
+        )
     return baker.make(Pin, profile=profile, location=location, **kwargs)
 
 
@@ -103,7 +111,9 @@ class MergeRetainsPropertiesPropertyTests(TestCase):
 
     @given(name=nonempty_name, priority=priority_strategy, coords=coord_pair_float)
     @_db_settings
-    def test_reparenting_retains_name_priority_and_location(self, name: str, priority: int, coords: tuple[float, float]) -> None:
+    def test_reparenting_retains_name_priority_and_location(
+        self, name: str, priority: int, coords: tuple[float, float]
+    ) -> None:
         lat, lon = coords
         profile = baker.make(User).profile
         target = _make_pin(profile, name="Target")
@@ -352,7 +362,9 @@ class PinPromoteChildrenViewTests(TestCase):
         """When the pin being promoted-from itself has a parent, a child sharing
         its Location can still move to that parent - only *root* pins are
         constrained by Location, and the child isn't becoming one here."""
-        same_loc_child = _make_pin(self.profile, name="Same Spot", parent_pin=self.parent, location=self.parent.location)
+        same_loc_child = _make_pin(
+            self.profile, name="Same Spot", parent_pin=self.parent, location=self.parent.location
+        )
         self._promote(self.parent)
         same_loc_child.refresh_from_db()
         self.assertEqual(same_loc_child.parent_pin_id, self.grandparent.pk)
@@ -360,7 +372,9 @@ class PinPromoteChildrenViewTests(TestCase):
     def test_promoted_child_nests_under_existing_root_at_same_location(self) -> None:
         root = _make_pin(self.profile, name="Standalone Root")
         root.slug = root.ensure_slug()
-        colliding_child = _make_pin(self.profile, name="Colliding Child", parent_pin=root, location=self.grandparent.location)
+        colliding_child = _make_pin(
+            self.profile, name="Colliding Child", parent_pin=root, location=self.grandparent.location
+        )
         self._promote(root)
         colliding_child.refresh_from_db()
         self.assertEqual(colliding_child.parent_pin_id, self.grandparent.pk)
@@ -546,7 +560,9 @@ class DetailPinJsonChildrenTests(TestCase):
         self.assertEqual(names, {"Child"})
 
     def test_children_flag_returns_full_subtree_with_owner_names(self) -> None:
-        response = self.client.get(reverse("pin.detail_pins.json", kwargs={"pin_slug": self.root.slug}), {"children": "1"})
+        response = self.client.get(
+            reverse("pin.detail_pins.json", kwargs={"pin_slug": self.root.slug}), {"children": "1"}
+        )
         by_name = {dp["name"]: dp for dp in response.json()["detail_pins"]}
         self.assertEqual(set(by_name), {"Child", "Grandchild"})
         self.assertNotIn("owner_name", by_name["Child"])
@@ -593,12 +609,18 @@ class DetailPinCoordinateDedupTests(TestCase):
         first = self._create_detail_pin("First", 42.00010, -73.00010)
         second = self._create_detail_pin("Second", 42.00020, -73.00020)
         self.assertNotEqual(first.location_id, second.location_id)
-        self.assertNotEqual((first.effective_latitude, first.effective_longitude), (second.effective_latitude, second.effective_longitude))
+        self.assertNotEqual(
+            (first.effective_latitude, first.effective_longitude),
+            (second.effective_latitude, second.effective_longitude),
+        )
 
     def test_detail_pin_near_parent_keeps_its_own_coordinates(self) -> None:
         child = self._create_detail_pin("Nearby child", 42.00010, -73.00010)
         self.assertNotEqual(child.location_id, self.root.location_id)
-        self.assertNotEqual((child.effective_latitude, child.effective_longitude), (self.root.effective_latitude, self.root.effective_longitude))
+        self.assertNotEqual(
+            (child.effective_latitude, child.effective_longitude),
+            (self.root.effective_latitude, self.root.effective_longitude),
+        )
 
     def test_moving_detail_pin_near_another_keeps_distinct_coordinates(self) -> None:
         first = self._create_detail_pin("First", 42.00010, -73.00010)
@@ -744,7 +766,9 @@ class PinShareSelectedChildrenTests(TestCase):
         self.child_b = _make_pin(self.sender, name="Rolling Mill", parent_pin=self.root)
 
     def test_dialog_get_lists_exactly_the_requested_children(self) -> None:
-        response = self.client.get(reverse("pin.share.dialog", kwargs={"pin_slug": self.root.slug}), {"children": str(self.child_a.uuid)})
+        response = self.client.get(
+            reverse("pin.share.dialog", kwargs={"pin_slug": self.root.slug}), {"children": str(self.child_a.uuid)}
+        )
         self.assertContains(response, "Blast Furnace")
         self.assertNotContains(response, "Rolling Mill")
 
@@ -774,7 +798,9 @@ class PinShareSelectedChildrenTests(TestCase):
         self.assertEqual(bundled_pins, {self.child_a.pk})
 
     def test_a_uuid_belonging_to_someone_elses_pin_is_ignored(self) -> None:
-        other_pin = baker.make(Pin, profile=baker.make(User).profile, location=baker.make(Location, latitude=60.0, longitude=-90.0))
+        other_pin = baker.make(
+            Pin, profile=baker.make(User).profile, location=baker.make(Location, latitude=60.0, longitude=-90.0)
+        )
         self.client.post(
             reverse("pin.share.send", kwargs={"pin_slug": self.root.slug}),
             {"profile_id": self.recipient.pk, "child_pin_uuids": [str(other_pin.uuid)]},
@@ -803,7 +829,7 @@ class VisitedLabelPropagationTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.visited = ensure_label( kind=KIND_STATUS, name="Visited", profile=self.profile)
+        self.visited = ensure_label(kind=KIND_STATUS, name="Visited", profile=self.profile)
         self.root = _make_pin(self.profile)
         self.child = _make_pin(self.profile, parent_pin=self.root)
         self.grandchild = _make_pin(self.profile, parent_pin=self.child)
@@ -818,7 +844,7 @@ class VisitedLabelPropagationTests(TestCase):
         self.assertNotIn(self.visited, self.child.labels.all())
 
     def test_other_status_labels_do_not_cascade(self) -> None:
-        other = ensure_label( kind=KIND_STATUS, name="Demolished", profile=self.profile)
+        other = ensure_label(kind=KIND_STATUS, name="Demolished", profile=self.profile)
         self.grandchild.labels.add(other)
         self.assertNotIn(other, self.root.labels.all())
 

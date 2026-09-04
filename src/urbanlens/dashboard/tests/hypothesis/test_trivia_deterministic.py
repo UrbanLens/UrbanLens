@@ -13,7 +13,10 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource
-from urbanlens.dashboard.services.trivia.deterministic import BUILDING_COUNT_QUESTION_THRESHOLD, generate_deterministic_questions
+from urbanlens.dashboard.services.trivia.deterministic import (
+    BUILDING_COUNT_QUESTION_THRESHOLD,
+    generate_deterministic_questions,
+)
 
 
 def _cache_buildings(location: Location, buildings: list[dict]) -> None:
@@ -72,13 +75,18 @@ class BuildingNumberQuestionTests(TestCase):
 class BuildingCountQuestionTests(TestCase):
     def test_no_question_below_the_threshold(self) -> None:
         location = baker.make(Location)
-        buildings = [{"name": "", "building_number": "", "year_built": None} for _ in range(BUILDING_COUNT_QUESTION_THRESHOLD - 1)]
+        buildings = [
+            {"name": "", "building_number": "", "year_built": None}
+            for _ in range(BUILDING_COUNT_QUESTION_THRESHOLD - 1)
+        ]
         _cache_buildings(location, buildings)
         self.assertEqual(generate_deterministic_questions(location), [])
 
     def test_question_generated_at_the_threshold(self) -> None:
         location = baker.make(Location)
-        buildings = [{"name": "", "building_number": "", "year_built": None} for _ in range(BUILDING_COUNT_QUESTION_THRESHOLD)]
+        buildings = [
+            {"name": "", "building_number": "", "year_built": None} for _ in range(BUILDING_COUNT_QUESTION_THRESHOLD)
+        ]
         _cache_buildings(location, buildings)
 
         questions = generate_deterministic_questions(location)

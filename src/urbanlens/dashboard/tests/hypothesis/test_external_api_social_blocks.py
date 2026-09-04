@@ -265,7 +265,9 @@ class UnblockRefusalsAreIndistinguishableTests(_BlockTestCase):
     def test_row_that_is_not_blocked_is_the_same_404(self) -> None:
         """An accepted friendship is not unblockable, and says nothing else."""
         friend = Profile.objects.get(user=baker.make(User))
-        friendship = Friendship.objects.create(from_profile=self.blocker, to_profile=friend, status=FriendshipStatus.ACCEPTED)
+        friendship = Friendship.objects.create(
+            from_profile=self.blocker, to_profile=friend, status=FriendshipStatus.ACCEPTED
+        )
 
         unknown = self._unblock(uuid4())
         not_blocked = self._unblock(friend.uuid)

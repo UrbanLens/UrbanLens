@@ -25,7 +25,12 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
-from urbanlens.dashboard.services.core.rate_limiter import SERVICE_REGISTRY, RateLimitExceededError, ServiceDefaults, _reserve_call
+from urbanlens.dashboard.services.core.rate_limiter import (
+    SERVICE_REGISTRY,
+    RateLimitExceededError,
+    ServiceDefaults,
+    _reserve_call,
+)
 
 
 class ServiceDefaultsMinIntervalFieldTests(SimpleTestCase):
@@ -115,12 +120,21 @@ class ApiLimitsAdminPageMinIntervalFieldTests(TestCase):
         add_user_to_site_admin_group(self.admin)
         self.client = Client()
         self.client.force_login(self.admin)
-        self.cfg = ApiRateLimit.objects.create(service="test_admin_service", display_name="Test Admin Service", calls_per_minute=10, calls_per_day=100)
+        self.cfg = ApiRateLimit.objects.create(
+            service="test_admin_service", display_name="Test Admin Service", calls_per_minute=10, calls_per_day=100
+        )
 
     def test_post_saves_min_interval_seconds(self) -> None:
         self.client.post(
             reverse("site_admin_api_limits"),
-            {"service": self.cfg.service, "enabled": "on", "calls_per_minute": "10", "calls_per_day": "100", "min_interval_seconds": "5", "notes": ""},
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "min_interval_seconds": "5",
+                "notes": "",
+            },
         )
         self.cfg.refresh_from_db()
         self.assertEqual(self.cfg.min_interval_seconds, 5.0)
@@ -130,7 +144,14 @@ class ApiLimitsAdminPageMinIntervalFieldTests(TestCase):
         self.cfg.save(update_fields=["min_interval_seconds"])
         self.client.post(
             reverse("site_admin_api_limits"),
-            {"service": self.cfg.service, "enabled": "on", "calls_per_minute": "10", "calls_per_day": "100", "min_interval_seconds": "", "notes": ""},
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "min_interval_seconds": "",
+                "notes": "",
+            },
         )
         self.cfg.refresh_from_db()
         self.assertIsNone(self.cfg.min_interval_seconds)
@@ -140,7 +161,14 @@ class ApiLimitsAdminPageMinIntervalFieldTests(TestCase):
         self.cfg.save(update_fields=["min_interval_seconds"])
         response = self.client.post(
             reverse("site_admin_api_limits"),
-            {"service": self.cfg.service, "enabled": "on", "calls_per_minute": "10", "calls_per_day": "100", "min_interval_seconds": "not-a-number", "notes": ""},
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "min_interval_seconds": "not-a-number",
+                "notes": "",
+            },
         )
         self.assertEqual(response.status_code, 302)
         self.cfg.refresh_from_db()
@@ -154,7 +182,14 @@ class ApiLimitsAdminPageMinIntervalFieldTests(TestCase):
 
         response = client.post(
             reverse("site_admin_api_limits"),
-            {"service": self.cfg.service, "enabled": "on", "calls_per_minute": "10", "calls_per_day": "100", "min_interval_seconds": "5", "notes": ""},
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "min_interval_seconds": "5",
+                "notes": "",
+            },
         )
         self.assertEqual(response.status_code, 403)
         self.cfg.refresh_from_db()
@@ -163,7 +198,14 @@ class ApiLimitsAdminPageMinIntervalFieldTests(TestCase):
         add_user_to_site_admin_group(user)
         response = client.post(
             reverse("site_admin_api_limits"),
-            {"service": self.cfg.service, "enabled": "on", "calls_per_minute": "10", "calls_per_day": "100", "min_interval_seconds": "5", "notes": ""},
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "min_interval_seconds": "5",
+                "notes": "",
+            },
         )
         self.assertEqual(response.status_code, 302)
         self.cfg.refresh_from_db()

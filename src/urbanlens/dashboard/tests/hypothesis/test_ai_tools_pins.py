@@ -41,9 +41,15 @@ class SearchPinsTests(TestCase):
     def setUp(self) -> None:
         self.profile = _plain_profile()
         self.other = _plain_profile()
-        self.location = baker.make(Location, latitude="42.5", longitude="-73.5", locality="Troy", administrative_area_level_1="NY")
-        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Steel Mill", name_is_user_provided=True)
-        self.foreign_pin = baker.make(Pin, profile=self.other, location=self.location, name="Steel Mill Twin", name_is_user_provided=True)
+        self.location = baker.make(
+            Location, latitude="42.5", longitude="-73.5", locality="Troy", administrative_area_level_1="NY"
+        )
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=self.location, name="Steel Mill", name_is_user_provided=True
+        )
+        self.foreign_pin = baker.make(
+            Pin, profile=self.other, location=self.location, name="Steel Mill Twin", name_is_user_provided=True
+        )
 
     def test_only_sees_own_pins(self) -> None:
         result = execute("search_pins", {"query": "steel"}, _context(self.profile))
@@ -71,7 +77,9 @@ class SearchPinsTests(TestCase):
         # distinct from self.location (42.5, -73.5) too.
         for i in range(3):
             location = baker.make(Location, latitude=f"{50.0 + i}", longitude="-73.5")
-            baker.make(Pin, profile=self.profile, location=location, name=f"Steel Annex {i}", name_is_user_provided=True)
+            baker.make(
+                Pin, profile=self.profile, location=location, name=f"Steel Annex {i}", name_is_user_provided=True
+            )
         result = execute("search_pins", {"query": "steel", "limit": 2}, _context(self.profile))
         self.assertEqual(len(result.data["pins"]), 2)
 
@@ -85,11 +93,15 @@ class FindUnvisitedPinsTests(TestCase):
         self.profile = _plain_profile()
         self.other = _plain_profile()
         self.location = baker.make(Location, latitude="42.5", longitude="-73.5", administrative_area_level_1="NY")
-        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Unvisited Works", name_is_user_provided=True)
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=self.location, name="Unvisited Works", name_is_user_provided=True
+        )
 
     def test_excludes_visited(self) -> None:
         visited_location = baker.make(Location, latitude="43.0", longitude="-74.0", administrative_area_level_1="NY")
-        visited_pin = baker.make(Pin, profile=self.profile, location=visited_location, name="Visited Works", name_is_user_provided=True)
+        visited_pin = baker.make(
+            Pin, profile=self.profile, location=visited_location, name="Visited Works", name_is_user_provided=True
+        )
         baker.make(PinVisit, pin=visited_pin)
 
         result = execute("find_unvisited_pins", {}, _context(self.profile))
@@ -98,7 +110,13 @@ class FindUnvisitedPinsTests(TestCase):
         self.assertFalse(any("Visited Works" in n for n in names))
 
     def test_only_sees_own_pins(self) -> None:
-        baker.make(Pin, profile=self.other, location=self.location, name="Someone Else's Unvisited Pin", name_is_user_provided=True)
+        baker.make(
+            Pin,
+            profile=self.other,
+            location=self.location,
+            name="Someone Else's Unvisited Pin",
+            name_is_user_provided=True,
+        )
 
         result = execute("find_unvisited_pins", {}, _context(self.profile))
         names = "".join(row["name"] for row in result.data["pins"])

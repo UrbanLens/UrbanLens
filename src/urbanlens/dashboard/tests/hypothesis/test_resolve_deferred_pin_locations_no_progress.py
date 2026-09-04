@@ -57,7 +57,10 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
 
     def test_no_progress_below_the_cap_still_retries(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=self._all_pending_result()),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids",
+                return_value=self._all_pending_result(),
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as mock_retry,
         ):
@@ -76,7 +79,10 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
     def test_a_batch_past_the_deadline_gives_up_and_notifies_instead_of_retrying(self) -> None:
         """The cap now only widens the retry gap; two days of no progress ends it."""
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=self._all_pending_result()),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids",
+                return_value=self._all_pending_result(),
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as mock_retry,
         ):
@@ -100,7 +106,9 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
         still pending - it must not inherit whatever no-progress streak preceded it,
         or a REData queue that's slowly working through a large batch would still get
         cut off early by a stale counter."""
-        partial = CidResolutionResult(provider=PROVIDER_REDATA, resolved={111: (41.348754, -71.453896)}, pending=[222], request_failed=False)
+        partial = CidResolutionResult(
+            provider=PROVIDER_REDATA, resolved={111: (41.348754, -71.453896)}, pending=[222], request_failed=False
+        )
         with (
             mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=partial),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),

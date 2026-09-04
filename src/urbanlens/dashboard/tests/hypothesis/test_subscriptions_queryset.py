@@ -62,7 +62,9 @@ class UserSubscriptionActiveTests(TestCase):
         self.role = baker.make(SubscriptionRole)
 
     def test_indefinite_subscription_is_active(self) -> None:
-        sub = baker.make(UserSubscription, user=self.user, role=self.role, granted_by=self.admin, revoked_at=None, expires_at=None)
+        sub = baker.make(
+            UserSubscription, user=self.user, role=self.role, granted_by=self.admin, revoked_at=None, expires_at=None
+        )
         self.assertEqual(list(UserSubscription.objects.active()), [sub])
 
     def test_expired_subscription_is_excluded(self) -> None:

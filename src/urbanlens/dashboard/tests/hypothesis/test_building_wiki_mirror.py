@@ -99,7 +99,9 @@ class BuildingWikiMirrorTests(TestCase):
         names = set(wiki.child_wikis.values_list("name", flat=True))
         self.assertEqual(len(names), 2)
         self.assertIn("Building 3", names)
-        self.assertEqual(len(names & {"Building 1", "Building 2"}), 1, "exactly one of the two colliding buildings should survive")
+        self.assertEqual(
+            len(names & {"Building 1", "Building 2"}), 1, "exactly one of the two colliding buildings should survive"
+        )
 
     def test_a_building_already_mirrored_is_not_duplicated(self) -> None:
         """A building the wiki already has a child marker for - e.g. from an
@@ -143,7 +145,9 @@ class BuildingImportRequestTests(TestCase):
         self.client.force_login(self.user)
         self.place = baker.make(Place, kind=PlaceKind.PARCEL)
         self.location = baker.make(Location, latitude=_LAT, longitude=_LNG, place=self.place)
-        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, parent_pin=None, slug="hrsh-campus")
+        self.pin = baker.make(
+            Pin, profile=self.user.profile, location=self.location, parent_pin=None, slug="hrsh-campus"
+        )
 
     def test_a_wiki_side_failure_does_not_fail_the_import(self) -> None:
         """Pins are already created by then; a 500 reports failure for work that was done.
@@ -163,10 +167,17 @@ class BuildingImportRequestTests(TestCase):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [_building(1), _building(2)], "provider": "redata"}, query_key="k")
+        LocationCache.set(
+            self.location,
+            PARCEL_BUILDINGS_CACHE_SOURCE,
+            {"buildings": [_building(1), _building(2)], "provider": "redata"},
+            query_key="k",
+        )
 
         with (
-            mock.patch.object(pin_restructure, "mirror_buildings_to_wiki", side_effect=RuntimeError("wiki side is broken")) as mock_mirror,
+            mock.patch.object(
+                pin_restructure, "mirror_buildings_to_wiki", side_effect=RuntimeError("wiki side is broken")
+            ) as mock_mirror,
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue,
         ):
             response = self.client.post(f"/dashboard/map/pin/{self.pin.slug}/buildings/import/")

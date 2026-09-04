@@ -714,14 +714,17 @@ exclude = [
     "__pycache__",
 ]
 # Advanced configuration options
+# These are bare path components, so they match at any depth.
+# `tests` and `__init__.py` used to be here. They are linted now, under the
+# narrowed rule sets in [tool.ruff.lint.per-file-ignores] below - excluding them
+# outright meant 915 of 2092 tracked .py files, 44% of the codebase, went
+# unchecked for anything at all, including import order and dead noqa.
 extend-exclude = [
     "migrations",
     "settings",
     "logs",
     "node_modules",
     "__pycache__",
-    "tests",
-    "__init__.py",
     # One-off benchmark and analysis scripts kept beside the reports they
     # produced. They are records, not importable code, so the package rules
     # (INP001 in particular) do not apply to them.
@@ -763,7 +766,6 @@ ignore = [
     "PT009",   # Use a regular assert instead of unittest-style assertEqual
     "EM101",   # Exception must not use a string literal, assign to variable first
     "EM102",   # Exception must not use an f-string literal, assign to variable first
-    "PLE1205", # Too many arguments for logging format string
     "PLR0904", # too-many-public-methods
     "PLR0911", # too-many-return-statements
     "PLR0912", # too-many-branches
@@ -787,20 +789,14 @@ ignore = [
     "RUF001",  # Ambiguous heavy plus sign (emoji)
     # Ambivalent about turning these on/off
     "C901",   # function is too complex
-    "B019",   # possible memleak
     "ARG001", # unused argument
     # Fix issues and turn these on
     "PERF401", # Use list comprehension
     "PLR0916", # too-many-boolean-expressions
     "D417",    # Missing argument descriptions in docstring for args, kwargs
-    "DTZ011",  # datetime.date.today() used
     "D1",      # Missing docstring...
-    "S321",    # FTP functions are insecure
-    "S402",    # ftplib is insecure
     "S404",    # subprocess module is potentially insecure
     "S603",    # subprocess Call: check for execution of untrusted input
-    "S607",    # potential executable path
-    "T201",    # Print found
     "UP022",   # Prefer capture_output over stdout and stderr -> PIPE
     "PLR2004", # magic values in tests
     "ANN",     # type annotation enforcement
@@ -808,7 +804,6 @@ ignore = [
     "PLC0415", # import should be at top
     "BLE001",  # catch blind Exception
     "PLW1641", # implement __hash__
-    "ISC003",  # implicit string concat
     "SIM102",  # nested
     "TRY401",  # redundant exception object
     "RUF012",  # mutable class attributes -> ClassVar
@@ -817,24 +812,76 @@ ignore = [
     "PYI021",  # docstrings should not be included in pyi (I'm not sure this is true??)
     "PTH",     # use Pathlib
     "N806",    # variable should be lowercase
-    "DTZ007",  # timezone-aware datetime without tzinfo
-    "D414",    # empty docstring
-    "S605",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"test_*.py" = [
+# Test code is linted, but only for mechanical hygiene - import order, quote
+# style, dead noqa, modernisation. A test is allowed to pass a wrong type on
+# purpose, reach into a private, hardcode a fake password and assert on a naive
+# datetime; a linter that argues about any of that is a linter people turn off.
+#
+# The previous `"test_*.py"` key never fired the way CI invokes ruff, because
+# `extend-exclude` dropped the directories first, and it missed every helper not
+# named test_*.py (strategies.py, place_helpers.py, testcase.py, result.py).
+# The brace alternation below covers all three test locations:
+#   src/urbanlens/dashboard/tests/**  (894 files)  src/urbanlens/core/tests/**  (17)
+#   tests/contract/**  (3)                         src/urbanlens/conftest.py
+"**/{tests/**,test_*.py,conftest.py}" = [
+    # --- pytest/unittest idiom. The suite is unittest-style by choice; PT009
+    # (assertEqual) is already globally ignored for exactly this reason.
+    "PT027",   # unittest-style assertRaises - 386 sites, i.e. a whole-suite rewrite
+    "PT019",   # false positive: these are @mock.patch args, not fixtures
+    "PT018",   # splitting a two-clause assert adds lines, not information
+    "PT011",   # forces match= on pytest.raises, i.e. asserting on message strings
+    # --- fixtures and fakes
+    "S",       # bandit: assert (651), fake passwords (61), /tmp paths, SQL literals
+    "SLF001",  # reaching into privates is how you test internals
+    "DTZ",     # hypothesis st.datetimes() REQUIRES naive min/max, and a fixture date
+               # needs no zone; DTZ001/007/011 all fire on ordinary test setup
+    "FBT003",  # wrong on assertIs(x, True), where the bool is the expected value
+    "ARG005",  # lambda signature is dictated by the callee being mocked
+    "PLW0603", # a module-level counter handing fixtures unique coordinates is normal
+    "B017",    # crypto interop tests where "it fails somehow" IS the assertion
+    # --- structure
+    "TC",      # TYPE_CHECKING blocks: churn with runtime-breakage risk
+    "D",       # docstrings deliberately open with the identifier under test
+    "INP001",  # tests/contract/ has no __init__.py by design (pytest rootdir layout)
+    "N802",    # getDescription overrides unittest.TextTestResult - stdlib API casing
+    "E402",    # sys.path adjustment before imports
+    "PLC0414", # `import X as X` re-export
+    "PGH003",  # blanket type: ignore
+    # --- nothing here deletes code. A binding kept for a future assertion and a
+    # noqa comment explaining why something is suppressed are both information.
+    "RUF100",  # would delete a stale noqa AND the trailing comment explaining it
+    "RUF059",  # unused tuple slots document what a setup helper returns
+    "RET504",  # a named intermediate before return documents the value
+    "B007",    # unused loop variables name what is being iterated
+    # --- already global; repeated so the scope stays correct if that changes
     "ANN",     # type annotation enforcement
-    "D",       # docstring rules
     "PLR09",   # too-many-...
-    "SLF001",  # private member access
-    "S101",    # assert usage
-    "PLR2004", # magic values in tests
+    "PLR2004", # magic values
+]
+# An __init__.py is a re-export surface. Unused imports (F401) are already
+# globally ignored, which covers the plain `import X` half of that; these cover
+# the rest. Import ORDER is deliberately still checked - it was verified safe by
+# applying the fixes and running `manage.py check` in the app container.
+"**/__init__.py" = [
+    "F403",    # `from .x import *` - prospective re-export
+    "F405",    # a name possibly from a star import
+    "RUF100",  # a noqa here often documents a deliberate side-effect import
+    "TC001",   # moving a name into TYPE_CHECKING removes it from the re-export surface
 ]
 "**/bin/**/*.py" = [
     # Fix issues and turn back on
     "E402", # module level import not at top of file - allow adjusting path for scripts
     "ANN",  # type annotation enforcement
+    "T201", # these are CLI scripts; printing is the point
+    "S607", # they invoke `git`/`docker` through PATH, which is the point of a dev script
+]
+# Claude Code hook scripts: stdlib-only CLI entry points invoked by the harness.
+".claude/**/*.py" = [
+    "T201",    # they report to the agent on stdout
+    "INP001",  # not a package
 ]
 
 [tool.ruff.lint.isort]
@@ -882,7 +929,7 @@ dev = [
     "prospector>=1.18,<1.20",
     # Server-side interop tests for the direct-message E2EE blob formats -
     # verifies the documented Argon2id/secretbox/sealed-box layouts round-trip
-    # against the browser's libsodium implementation (see docs/e2ee.md).
+    # against the browser's libsodium implementation (see docs/designs/e2ee.md).
     "pynacl~=1.6.2",
     "pytest>=9.1.1",
     "pytest-django~=4.12.0",
@@ -923,21 +970,67 @@ show_error_code_links = true
 pretty = true
 plugins = ["mypy_django_plugin.main"]
 ignore_missing_imports = true
+# These are unanchored REGEXES, not globs, so a literal dot has to be escaped.
+# `.github/` matched any path containing <anychar>github/, which silently
+# excluded services/apis/infra/github/ - production code that had therefore
+# never been type-checked at all.
+# `/__init__.py` used to be here too; those files hold ~123 real statements and
+# checking them costs zero errors.
 exclude = [
     "migrations/",
     "tests/",
-    "test_.*.py",
-    ".venv/",
-    ".venv_windows/",
+    "test_.*\\.py",
+    "\\.venv/",
+    "\\.venv_windows/",
     "site-packages/",
     "pgsql/",
     "docs/",
     "downloads/",
-    ".github/",
-    "/__init__.py",
+    "\\.github/",
 ]
-implicit_optional = true
-disable_error_code = ['misc', 'annotation-unchecked', 'override']
+# Off, i.e. mypy's own default: `def f(x: int = None)` should not type-check.
+# Measured at zero new errors, so this only guards future code.
+implicit_optional = false
+# Each measured at zero new errors on the current tree:
+#   strict_equality       - catches always-False comparisons (enum vs raw string)
+#   warn_redundant_casts  - enforces the "never use cast" rule mechanically
+# check_untyped_defs costs 2, and is the answer to the `annotation-unchecked`
+# notes: it actually checks those bodies instead of just naming them.
+strict_equality = true
+warn_redundant_casts = true
+check_untyped_defs = true
+# 'misc' stays off: 80% of what it reports is one django-stubs artifact,
+# `Unsupported dynamic base class` for the Manager.from_queryset() pattern,
+# across 68 files under dashboard/models/.
+# 'override' is now ON - it found a Liskov violation and a too-narrow base
+# return type, at a cost of 12 errors in 6 files.
+disable_error_code = ['misc', 'annotation-unchecked']
+
+# `override` is on globally because it found real defects. These four modules
+# are the exceptions, and each is a documented django-stubs limitation rather
+# than a Liskov violation worth fixing:
+#
+#   models/fields.py            TYPE_CHECKING-only __get__/__set__ that exist
+#                               precisely to override the stub-derived attribute
+#                               type - the storage type is text, the Python type
+#                               is a JSON value.
+#   models/abstract/versioned.py  bulk_create/bulk_update widen `objs` to
+#                               Sequence[Any] because the queryset is generic
+#                               over models the stubs bind to a single _Model.
+#   models/wiki/queryset.py     as_manager() is synthesised per QuerySet class by
+#                               the stubs, so ANY multiple-inheritance QuerySet
+#                               reports an incompatible return type.
+#   services/photos/photo_enrichment.py
+#                               one source resolves service_keys at runtime, so
+#                               it is a property where its siblings are ClassVar.
+[[tool.mypy.overrides]]
+module = [
+    "urbanlens.dashboard.models.fields",
+    "urbanlens.dashboard.models.abstract.versioned",
+    "urbanlens.dashboard.models.wiki.queryset",
+    "urbanlens.dashboard.services.photos.photo_enrichment",
+]
+disable_error_code = ["override"]
 
 [tool.django-stubs]
 django_settings_module = "urbanlens.UrbanLens.settings.test"

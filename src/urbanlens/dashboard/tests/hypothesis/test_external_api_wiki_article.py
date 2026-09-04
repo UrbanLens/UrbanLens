@@ -98,7 +98,7 @@ class ArticleConflictTests(WikiArticleTestCase):
         self.assertEqual(get_article(wiki=self.wiki).content, "Someone else's edit")
 
     def test_null_base_revision_conflicts_when_revisions_exist(self) -> None:
-        """"I think this article is new" is wrong here, so the save is refused."""
+        """ "I think this article is new" is wrong here, so the save is refused."""
         response = self.put({"content": "Blind write", "base_revision_id": None})
         self.assertEqual(response.status_code, 409)
         self.assertEqual(get_article(wiki=self.wiki).content, "Original body")

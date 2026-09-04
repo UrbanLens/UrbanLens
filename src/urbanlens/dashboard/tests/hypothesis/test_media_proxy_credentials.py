@@ -67,7 +67,10 @@ def _signed_url(photo_name: str = _PHOTO_NAME) -> str:
     """
     from urbanlens.dashboard.controllers.media_proxy import sign_photo_name
 
-    return reverse("media.google_maps_photo", args=[quote(photo_name, safe="")]) + f"?sig={quote(sign_photo_name(photo_name), safe='')}"
+    return (
+        reverse("media.google_maps_photo", args=[quote(photo_name, safe="")])
+        + f"?sig={quote(sign_photo_name(photo_name), safe='')}"
+    )
 
 
 class MediaProxyCredentialAccessTests(TestCase):
@@ -263,7 +266,9 @@ class MediaProxyExternalApiOptOutTests(TestCase):
 
     def test_opted_in_credential_owner_still_fetches(self) -> None:
         """The mirror image, so the test above can't pass by refusing everyone."""
-        with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")) as mocked:
+        with mock.patch.object(
+            GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")
+        ) as mocked:
             response = self.client.get(_signed_url(), HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
         self.assertEqual(response.status_code, HTTPStatus.OK)
         mocked.assert_called_once()

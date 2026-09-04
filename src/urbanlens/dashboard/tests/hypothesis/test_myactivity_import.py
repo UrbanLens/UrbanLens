@@ -209,11 +209,15 @@ class ParseTimestampTests(SimpleTestCase):
 
     def test_edt_fast_path(self):
         parsed = _parse_timestamp("Jul 3, 2026, 1:18:25 PM EDT")
-        self.assertEqual(parsed, datetime.datetime(2026, 7, 3, 13, 18, 25, tzinfo=datetime.timezone(datetime.timedelta(hours=-4))))
+        self.assertEqual(
+            parsed, datetime.datetime(2026, 7, 3, 13, 18, 25, tzinfo=datetime.timezone(datetime.timedelta(hours=-4)))
+        )
 
     def test_pst_fast_path(self):
         parsed = _parse_timestamp("Jan 15, 2026, 9:05:00 AM PST")
-        self.assertEqual(parsed, datetime.datetime(2026, 1, 15, 9, 5, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-8))))
+        self.assertEqual(
+            parsed, datetime.datetime(2026, 1, 15, 9, 5, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-8)))
+        )
 
     def test_dateparser_fallback_for_unrecognised_format(self):
         # A format the fast strptime path doesn't match (ISO-style date), exercising
@@ -301,14 +305,20 @@ class ImportMyActivityStreamingTests(TestCase):
         suggestion = VisitSuggestion.objects.get(suggested_to=self.profile)
         self.assertIsNone(suggestion.location_id)
 
-        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
             visit = accept_visit_suggestion(suggestion, self.profile)
 
         self.assertNotEqual(visit.pin.location_id, existing_location.pk)
         self.assertEqual(visit.pin.location.latitude, Decimal("39.204312"))
         self.assertEqual(visit.pin.location.longitude, Decimal("-84.569366"))
 
-    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+    @mock.patch(
+        "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+        return_value=None,
+    )
     def test_accepting_suggestion_uses_history_visit_source(self, _mock_resolve_name):
         from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion
 
@@ -337,7 +347,10 @@ class ImportMyActivityStreamingTests(TestCase):
             ("MyActivity.html", _wrap_html(_DIRECTIONS_ENTRY)),
             ("MyActivity (1).html", _wrap_html(_SEARCHED_FOR_ENTRY)),
         ]
-        events = [json.loads(line.removeprefix("data: ").strip()) for line in import_my_activity_streaming(files, self.profile)]
+        events = [
+            json.loads(line.removeprefix("data: ").strip())
+            for line in import_my_activity_streaming(files, self.profile)
+        ]
 
         self.assertEqual(events[-1]["type"], "complete")
         self.assertEqual(events[-1]["total"], 1)

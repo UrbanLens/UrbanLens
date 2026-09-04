@@ -349,7 +349,7 @@ async function getJson(url: string): Promise<any> {
 
 type Difficulty = "easy" | "medium" | "hard";
 
-// The backend accepts any float 0.0-1.0 (see docs/designs/spotguessr.md's
+// The backend accepts any float 0.0-1.0 (see docs/designs/drafts/spotguessr.md's
 // Gaussian-kernel difficulty mapping) - these 3 buttons just quantize the
 // player's choice down to one of 3 representative values.
 const DIFFICULTY_VALUES: Record<Difficulty, number> = { easy: 0.2, medium: 0.5, hard: 0.8 };
@@ -773,7 +773,7 @@ function placeGuessMarker(latlng: L.LatLng): void {
 
 // When the session was configured with a geo_bounds restriction, the guess
 // map opens zoomed to that area instead of the default world view - see
-// docs/designs/spotguessr.md's eligibility rule 3.
+// docs/designs/drafts/spotguessr.md's eligibility rule 3.
 function resetGuessMap(bounds?: GeoBoundsBox | null): void {
     const map = ensureGuessMap();
     if (state.guessMarker) {

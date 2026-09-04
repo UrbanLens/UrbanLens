@@ -92,7 +92,9 @@ class LocationVisibleToSamePlaceTests(TestCase):
         far_location = Location.objects.create(latitude=40.5, longitude=-74.5)
         resolution.resolve_location_place(far_location)
         far_pin = baker.make(Pin, profile=self.profile, location=far_location)
-        Boundary.objects.create(location=self.wiki_location, pin=far_pin, profile=self.profile, generated_polygon=_square(-74.0, 40.0, 1.0))
+        Boundary.objects.create(
+            location=self.wiki_location, pin=far_pin, profile=self.profile, generated_polygon=_square(-74.0, 40.0, 1.0)
+        )
 
         self.assertFalse(location_visible_to(self.wiki_location, self.profile))
 
@@ -110,7 +112,12 @@ class LocationVisibleToSamePlaceTests(TestCase):
     def test_building_boundary_type_still_resolves_for_display(self) -> None:
         """Unrelated to access, but the two used to share one mechanism."""
         building = make_place(PlaceKind.BUILDING, _square(-74.001, 40.001, 0.0002), parent=self.parcel)
-        self.assertEqual(Boundary.objects.official_polygons_by_location_id([self.wiki_location.pk], BoundaryType.PROPERTY)[self.wiki_location.pk], self.parcel.geometry)
+        self.assertEqual(
+            Boundary.objects.official_polygons_by_location_id([self.wiki_location.pk], BoundaryType.PROPERTY)[
+                self.wiki_location.pk
+            ],
+            self.parcel.geometry,
+        )
         self.assertIsNotNone(building.geometry)
 
     def test_wiki_page_reachable_via_same_place_pin(self) -> None:

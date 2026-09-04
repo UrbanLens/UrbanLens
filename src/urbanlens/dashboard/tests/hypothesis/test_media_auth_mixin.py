@@ -106,7 +106,12 @@ class MediaAuthDelegationTests(SimpleTestCase):
         attributes are exactly what should be present, and only a re-definition
         in the subclass body would mean the two implementations had come back.
         """
-        for name in ("resolve_media_profile", "profile_from_credential", "enforce_media_throttle", "media_auth_failure_response"):
+        for name in (
+            "resolve_media_profile",
+            "profile_from_credential",
+            "enforce_media_throttle",
+            "media_auth_failure_response",
+        ):
             self.assertNotIn(name, MediaGateView.__dict__)
 
     def test_mixin_does_not_gate_dispatch(self) -> None:

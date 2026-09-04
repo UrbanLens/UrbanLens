@@ -19,7 +19,13 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.boundary.model import Boundary
-from urbanlens.dashboard.models.device_scan.model import DeviceScanEntry, DeviceScanUpload, MarkerStatus, ScannedDevice, WikiDeviceMarker
+from urbanlens.dashboard.models.device_scan.model import (
+    DeviceScanEntry,
+    DeviceScanUpload,
+    MarkerStatus,
+    ScannedDevice,
+    WikiDeviceMarker,
+)
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.device_scan.clustering import (
@@ -77,10 +83,15 @@ class WeightForAgeTests(SimpleTestCase):
         self.assertGreater(weight, 0.0)
         self.assertLessEqual(weight, 1.0)
 
-    @given(younger_days=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_infinity=False), extra_days=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_infinity=False))
+    @given(
+        younger_days=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_infinity=False),
+        extra_days=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_infinity=False),
+    )
     def test_weight_is_monotonically_non_increasing_with_age(self, younger_days: float, extra_days: float) -> None:
         older_days = younger_days + extra_days
-        self.assertGreaterEqual(weight_for_age(timedelta(days=younger_days)), weight_for_age(timedelta(days=older_days)))
+        self.assertGreaterEqual(
+            weight_for_age(timedelta(days=younger_days)), weight_for_age(timedelta(days=older_days))
+        )
 
 
 class ConfidenceForWeightTests(SimpleTestCase):
@@ -102,7 +113,10 @@ class ConfidenceForWeightTests(SimpleTestCase):
         self.assertGreaterEqual(confidence, 0.0)
         self.assertLess(confidence, 1.0)
 
-    @given(weight=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_infinity=False), extra=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_infinity=False))
+    @given(
+        weight=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_infinity=False),
+        extra=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_infinity=False),
+    )
     def test_confidence_is_monotonically_non_decreasing_with_weight(self, weight: float, extra: float) -> None:
         self.assertLessEqual(confidence_for_weight(weight), confidence_for_weight(weight + extra))
 
@@ -172,7 +186,9 @@ class _ClusteringDbTestCase(TestCase):
         self.upload = DeviceScanUpload.objects.create()
 
     def _make_entry(self, *, lat: float, lng: float, age_days: float = 0.0) -> DeviceScanEntry:
-        entry = DeviceScanEntry.objects.create(upload=self.upload, device=self.device, location=Point(lng, lat, srid=4326), detected=True)
+        entry = DeviceScanEntry.objects.create(
+            upload=self.upload, device=self.device, location=Point(lng, lat, srid=4326), detected=True
+        )
         if age_days:
             DeviceScanEntry.objects.filter(pk=entry.pk).update(created=timezone.now() - timedelta(days=age_days))
         return entry
@@ -365,7 +381,9 @@ class AbsenceReportConcurrencyTests(_ClusteringDbTestCase):
         record_absence_report(two)
 
         marker.refresh_from_db()
-        self.assertEqual(marker.absence_streak, 2, "an absence report was lost - the streak was written from a stale read")
+        self.assertEqual(
+            marker.absence_streak, 2, "an absence report was lost - the streak was written from a stale read"
+        )
 
     def test_the_threshold_is_reached_even_when_every_report_is_stale(self) -> None:
         marker = self._make_marker()

@@ -2,6 +2,7 @@
 
 No database access - all tests exercise pure Python logic.
 """
+
 from __future__ import annotations
 
 from hypothesis import given, settings, strategies as st
@@ -24,6 +25,7 @@ _sentence = st.lists(_word, min_size=1, max_size=20).map(" ".join)
 
 
 # -- estimate_tokens ------------------------------------------------------------
+
 
 class EstimateTokensTests(SimpleTestCase):
     """estimate_tokens produces a non-negative integer approximation."""
@@ -77,6 +79,7 @@ class EstimateTokensTests(SimpleTestCase):
 
 # -- estimate_combined_tokens ---------------------------------------------------
 
+
 class EstimateCombinedTokensTests(SimpleTestCase):
     """estimate_combined_tokens sums token counts across all messages."""
 
@@ -110,6 +113,7 @@ class EstimateCombinedTokensTests(SimpleTestCase):
 
 
 # -- MessageQueue.__init__ and add_message --------------------------------------
+
 
 class MessageQueueInitTests(SimpleTestCase):
     """MessageQueue initialises with an empty list and the given max_tokens."""
@@ -197,6 +201,7 @@ class MessageQueueAddMessageTests(SimpleTestCase):
 
 # -- MessageQueue sequence protocol --------------------------------------------
 
+
 class MessageQueueSequenceTests(SimpleTestCase):
     """MessageQueue supports __iter__, __len__, __getitem__, __setitem__, __delitem__."""
 
@@ -245,6 +250,7 @@ class MessageQueueSequenceTests(SimpleTestCase):
 
 
 # -- MessageQueue.estimate_tokens -----------------------------------------------
+
 
 class MessageQueueEstimateTokensTests(SimpleTestCase):
     """estimate_tokens on the queue returns the combined token count."""

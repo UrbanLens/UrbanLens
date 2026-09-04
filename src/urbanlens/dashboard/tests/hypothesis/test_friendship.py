@@ -1,4 +1,4 @@
-﻿"""Property-based tests for the Friendship state machine.
+"""Property-based tests for the Friendship state machine.
 
 Friendship transitions follow strict rules:
   accept  → ACCEPTED
@@ -17,6 +17,7 @@ no friendship exists between two profiles.  The tests here use
 Friendship.objects.create() directly for initial setup so they are not affected
 by that known limitation.
 """
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User
@@ -36,10 +37,10 @@ _db_settings = settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
 )
 
-_DEFAULT_CREATE_KWARGS = dict(
-    relationship_type=FriendshipType.FRIEND,
-    permissions=Permission.VIEW_PROFILE,
-)
+_DEFAULT_CREATE_KWARGS = {
+    "relationship_type": FriendshipType.FRIEND,
+    "permissions": Permission.VIEW_PROFILE,
+}
 
 
 def _make_requested(profile_a: Profile, profile_b: Profile) -> Friendship:
@@ -245,12 +246,14 @@ class FriendshipQuerySetTests(TestCase):
         self.assertIn(self.friendship.pk, result_b)
 
     @given(
-        status=st.sampled_from([
-            FriendshipStatus.DECLINED,
-            FriendshipStatus.REMOVED,
-            FriendshipStatus.IGNORED,
-            FriendshipStatus.BLOCKED,
-        ])
+        status=st.sampled_from(
+            [
+                FriendshipStatus.DECLINED,
+                FriendshipStatus.REMOVED,
+                FriendshipStatus.IGNORED,
+                FriendshipStatus.BLOCKED,
+            ]
+        )
     )
     @_db_settings
     def test_rejected_statuses_absent_from_is_friend_queryset(self, status: str) -> None:

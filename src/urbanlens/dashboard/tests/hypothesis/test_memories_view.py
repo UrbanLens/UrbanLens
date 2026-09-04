@@ -1,4 +1,5 @@
 """Tests for the Memories page view."""
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User

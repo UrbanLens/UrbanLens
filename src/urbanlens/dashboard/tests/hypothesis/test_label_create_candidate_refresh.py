@@ -66,4 +66,4 @@ class LabelCreateCandidateRefreshTests(TestCase):
         label = Label.objects.get(profile=self.profile, kind=KIND_USER, name="Frequent Explorer")
         content = response.content.decode()
         self.assertIn('hx-swap-oob="beforeend:#new-people-suggestions-parent"', content)
-        self.assertNotIn(f'label-kind-chip label-kind-chip--{label.kind}', content)
+        self.assertNotIn(f"label-kind-chip label-kind-chip--{label.kind}", content)

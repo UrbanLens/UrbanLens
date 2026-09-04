@@ -43,8 +43,12 @@ class ComputeLegsTests(TestCase):
         ]
 
     def test_cached_legs_never_touch_the_gateway(self) -> None:
-        cache.set(_cache_key(self.stops[0][1], self.stops[1][1]), {"distance_meters": 18000.0, "duration_seconds": 1200.0})
-        cache.set(_cache_key(self.stops[1][1], self.stops[2][1]), {"distance_meters": 9000.0, "duration_seconds": 600.0})
+        cache.set(
+            _cache_key(self.stops[0][1], self.stops[1][1]), {"distance_meters": 18000.0, "duration_seconds": 1200.0}
+        )
+        cache.set(
+            _cache_key(self.stops[1][1], self.stops[2][1]), {"distance_meters": 9000.0, "duration_seconds": 600.0}
+        )
         with patch("urbanlens.dashboard.services.trips.trip_legs.get_route_between") as get_route_between:
             legs = compute_legs(self.stops)
         get_route_between.assert_not_called()
@@ -114,11 +118,17 @@ class ActivitiesPanelLegTests(TestCase):
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
         self.trip = baker.make(Trip, name="Leg Test Trip", creator=self.profile)
-        baker.make(TripMembership, trip=self.trip, profile=self.profile, status=TripMembership.STATUS_JOINED, rsvp="yes")
+        baker.make(
+            TripMembership, trip=self.trip, profile=self.profile, status=TripMembership.STATUS_JOINED, rsvp="yes"
+        )
         self.loc_a = baker.make(Location, latitude="42.100000", longitude="-73.100000")
         self.loc_b = baker.make(Location, latitude="42.200000", longitude="-73.200000")
-        self.act_a = baker.make(TripActivity, trip=self.trip, location=self.loc_a, added_by=self.profile, title="First stop", order=0)
-        self.act_b = baker.make(TripActivity, trip=self.trip, location=self.loc_b, added_by=self.profile, title="Second stop", order=1)
+        self.act_a = baker.make(
+            TripActivity, trip=self.trip, location=self.loc_a, added_by=self.profile, title="First stop", order=0
+        )
+        self.act_b = baker.make(
+            TripActivity, trip=self.trip, location=self.loc_b, added_by=self.profile, title="Second stop", order=1
+        )
         self.client.force_login(self.user)
         self.url = reverse("trips.activities", args=[self.trip.slug])
 

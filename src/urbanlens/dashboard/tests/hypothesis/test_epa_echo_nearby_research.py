@@ -35,7 +35,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-_GATEWAY_PATH = "urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway.RedataPointsOfInterestGateway"
+_GATEWAY_PATH = (
+    "urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway.RedataPointsOfInterestGateway"
+)
 
 
 class MilesBetweenTests(SimpleTestCase):
@@ -62,13 +64,27 @@ class EpaEchoDetailPanelSourceTests(TestCase):
         self.assertIsNone(self.source.render_context(self.pin, {}))
 
     def test_exact_site_renders_heading_name(self) -> None:
-        data = {"exact_site": {"name": "Old Mill Factory", "address": "123 Main St", "registry_id": "R1", "compliance_status": "In compliance"}}
+        data = {
+            "exact_site": {
+                "name": "Old Mill Factory",
+                "address": "123 Main St",
+                "registry_id": "R1",
+                "compliance_status": "In compliance",
+            }
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["heading_name"], "Old Mill Factory")
 
     def test_footer_link_uses_the_detailed_facility_report_url(self) -> None:
-        data = {"exact_site": {"name": "Old Mill Factory", "address": "123 Main St", "registry_id": "R123", "compliance_status": "In compliance"}}
+        data = {
+            "exact_site": {
+                "name": "Old Mill Factory",
+                "address": "123 Main St",
+                "registry_id": "R123",
+                "compliance_status": "In compliance",
+            }
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["footer_link"]["url"], "https://echo.epa.gov/detailed-facility-report?fid=R123")
@@ -152,7 +168,9 @@ class EpaEchoDetailPanelSourceFetchLinkTests(TestCase):
 
         wiki: Wiki = baker.make("dashboard.Wiki", location=self.location)
         self._fetch_with({"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R123"})
-        self.assertTrue(WikiLink.objects.filter(wiki=wiki, url="https://echo.epa.gov/detailed-facility-report?fid=R123").exists())
+        self.assertTrue(
+            WikiLink.objects.filter(wiki=wiki, url="https://echo.epa.gov/detailed-facility-report?fid=R123").exists()
+        )
 
     def test_fetching_twice_does_not_duplicate_the_link(self) -> None:
         from urbanlens.dashboard.models.links.model import PinLink
@@ -160,7 +178,10 @@ class EpaEchoDetailPanelSourceFetchLinkTests(TestCase):
         exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R123"}
         self._fetch_with(exact_site)
         self._fetch_with(exact_site)
-        self.assertEqual(PinLink.objects.filter(pin=self.pin, url="https://echo.epa.gov/detailed-facility-report?fid=R123").count(), 1)
+        self.assertEqual(
+            PinLink.objects.filter(pin=self.pin, url="https://echo.epa.gov/detailed-facility-report?fid=R123").count(),
+            1,
+        )
 
 
 class EpaEchoNearbyPanelSourceTests(TestCase):
@@ -176,7 +197,9 @@ class EpaEchoNearbyPanelSourceTests(TestCase):
 
     def test_lists_facility_names(self) -> None:
         data = {
-            "facilities": [{"name": "Facility A", "address": "1 A St", "registry_id": "RA", "compliance_status": "In compliance"}],
+            "facilities": [
+                {"name": "Facility A", "address": "1 A St", "registry_id": "RA", "compliance_status": "In compliance"}
+            ],
             "exact_site": None,
         }
         ctx = self.source.render_context(self.pin, data)
@@ -186,8 +209,18 @@ class EpaEchoNearbyPanelSourceTests(TestCase):
     def test_exact_site_match_is_excluded_from_the_nearby_list(self) -> None:
         data = {
             "facilities": [
-                {"name": "Exact Match Facility", "address": "1 A St", "registry_id": "RA", "compliance_status": "In compliance"},
-                {"name": "Other Facility", "address": "2 B St", "registry_id": "RB", "compliance_status": "In compliance"},
+                {
+                    "name": "Exact Match Facility",
+                    "address": "1 A St",
+                    "registry_id": "RA",
+                    "compliance_status": "In compliance",
+                },
+                {
+                    "name": "Other Facility",
+                    "address": "2 B St",
+                    "registry_id": "RB",
+                    "compliance_status": "In compliance",
+                },
             ],
             "exact_site": {"registry_id": "RA", "name": "Exact Match Facility", "address": "1 A St"},
         }
@@ -200,7 +233,14 @@ class EpaEchoNearbyPanelSourceTests(TestCase):
     def test_only_facility_being_the_exact_site_yields_none(self) -> None:
         """If the only nearby facility IS the exact site, there's nothing left for this list to show."""
         data = {
-            "facilities": [{"name": "Exact Match Facility", "address": "1 A St", "registry_id": "RA", "compliance_status": "In compliance"}],
+            "facilities": [
+                {
+                    "name": "Exact Match Facility",
+                    "address": "1 A St",
+                    "registry_id": "RA",
+                    "compliance_status": "In compliance",
+                }
+            ],
             "exact_site": {"registry_id": "RA", "name": "Exact Match Facility", "address": "1 A St"},
         }
         self.assertIsNone(self.source.render_context(self.pin, data))
@@ -209,7 +249,9 @@ class EpaEchoNearbyPanelSourceTests(TestCase):
         """Regression guard: this list used to have one generic footer_link to EPA
         ECHO's homepage instead of linking each entry to its own report."""
         data = {
-            "facilities": [{"name": "Facility A", "address": "1 A St", "registry_id": "RA", "compliance_status": "In compliance"}],
+            "facilities": [
+                {"name": "Facility A", "address": "1 A St", "registry_id": "RA", "compliance_status": "In compliance"}
+            ],
             "exact_site": None,
         }
         ctx = self.source.render_context(self.pin, data)
@@ -219,7 +261,9 @@ class EpaEchoNearbyPanelSourceTests(TestCase):
 
     def test_facility_with_no_registry_id_has_no_href(self) -> None:
         data = {
-            "facilities": [{"name": "Facility A", "address": "1 A St", "registry_id": "", "compliance_status": "In compliance"}],
+            "facilities": [
+                {"name": "Facility A", "address": "1 A St", "registry_id": "", "compliance_status": "In compliance"}
+            ],
             "exact_site": None,
         }
         ctx = self.source.render_context(self.pin, data)
@@ -281,8 +325,16 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
             location=baker.make("dashboard.Location", latitude=40.0, longitude=-74.0),
         )
 
-    def _poi(self, *, registry_id: str, name: str, latitude: float | None, longitude: float | None, **attributes) -> dict:
-        return {"external_id": registry_id, "name": name, "latitude": latitude, "longitude": longitude, "attributes": attributes}
+    def _poi(
+        self, *, registry_id: str, name: str, latitude: float | None, longitude: float | None, **attributes
+    ) -> dict:
+        return {
+            "external_id": registry_id,
+            "name": name,
+            "latitude": latitude,
+            "longitude": longitude,
+            "attributes": attributes,
+        }
 
     def test_no_facilities_returns_no_exact_site(self) -> None:
         with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
@@ -345,7 +397,15 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
     def test_facilities_are_persisted_to_epa_facility(self) -> None:
         from urbanlens.dashboard.models.epa_facility.model import EpaFacility
 
-        pois = [self._poi(registry_id="R1", name="Persisted Facility", latitude=40.0, longitude=-74.0, compliance_status="In compliance")]
+        pois = [
+            self._poi(
+                registry_id="R1",
+                name="Persisted Facility",
+                latitude=40.0,
+                longitude=-74.0,
+                compliance_status="In compliance",
+            )
+        ]
         with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
             mock_gateway_cls.return_value.find_near.return_value = pois
             _fetch_epa_echo_data(self.pin)
@@ -367,7 +427,13 @@ class PropagateExactSiteToNearbyLocationsTests(TestCase):
         super().setUp()
         self.owner = baker.make(User).profile
         self.location: Location = baker.make("dashboard.Location", latitude=40.0, longitude=-74.0)
-        self.exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R1", "latitude": 40.0, "longitude": -74.0}
+        self.exact_site = {
+            "name": "Old Mill Factory",
+            "address": "1 Main St",
+            "registry_id": "R1",
+            "latitude": 40.0,
+            "longitude": -74.0,
+        }
 
     def _pinned_location(self, latitude: float, longitude: float) -> Location:
         from urbanlens.dashboard.models.pin.model import Pin
@@ -481,7 +547,13 @@ class DetailPanelFetchPropagatesExactSiteTests(TestCase):
 
         neighbor: Location = baker.make("dashboard.Location", latitude=40.0005, longitude=-74.0)
         baker.make(PinModel, profile=self.owner, location=neighbor)
-        exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R1", "latitude": 40.0, "longitude": -74.0}
+        exact_site = {
+            "name": "Old Mill Factory",
+            "address": "1 Main St",
+            "registry_id": "R1",
+            "latitude": 40.0,
+            "longitude": -74.0,
+        }
 
         with mock.patch(
             "urbanlens.dashboard.plugins.builtin.epa_echo._fetch_epa_echo_data",

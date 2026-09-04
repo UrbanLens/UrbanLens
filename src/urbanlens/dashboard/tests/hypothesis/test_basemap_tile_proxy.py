@@ -40,7 +40,10 @@ class BasemapTileProxyTests(TestCase):
         self.url = reverse("map.basemap_tiles", kwargs={"layer": "usgs-topo", "z": 12, "x": 1204, "y": 1539})
 
     def test_a_tile_is_served_and_cached(self) -> None:
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNGDATA", "image/png")) as download:
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNGDATA", "image/png")) as download,
+        ):
             first = self.client.get(self.url)
             second = self.client.get(self.url)
 
@@ -55,16 +58,24 @@ class BasemapTileProxyTests(TestCase):
         a pair. A cache-hit path that dropped the type (or hardcoded
         image/png) would only surface once a non-PNG layer was already
         cached - exactly the failure the controller's own comment warns about."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"WEBPDATA", "image/webp")):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"WEBPDATA", "image/webp")),
+        ):
             first = self.client.get(self.url)
             second = self.client.get(self.url)
 
         self.assertEqual(first["Content-Type"], "image/webp")
-        self.assertEqual(second["Content-Type"], "image/webp", "the cache-hit path must serve the same type as the fresh fetch")
+        self.assertEqual(
+            second["Content-Type"], "image/webp", "the cache-hit path must serve the same type as the fresh fetch"
+        )
 
     def test_a_definitive_miss_is_cached(self) -> None:
         """Most of a layer's pyramid is empty; re-asking on every pan is the cost."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.download_tile", return_value=(404, b"", "")) as download:
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(404, b"", "")) as download,
+        ):
             first = self.client.get(self.url)
             second = self.client.get(self.url)
 
@@ -76,7 +87,10 @@ class BasemapTileProxyTests(TestCase):
         """400 (invalid_parameter/unknown_layer) is as definitive as 404 - a
         cache branch narrowed to ``status == 404`` would still pass every
         other test in this file."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.download_tile", return_value=(400, b"", "")) as download:
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(400, b"", "")) as download,
+        ):
             first = self.client.get(self.url)
             second = self.client.get(self.url)
 
@@ -86,7 +100,10 @@ class BasemapTileProxyTests(TestCase):
 
     def test_a_vendor_outage_is_never_cached(self) -> None:
         """The whole point: an outage must not become a permanently blank map."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.download_tile", return_value=(503, b"", "")) as download:
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(503, b"", "")) as download,
+        ):
             self.client.get(self.url)
             self.client.get(self.url)
 
@@ -95,7 +112,12 @@ class BasemapTileProxyTests(TestCase):
     def test_a_failed_request_answers_503_rather_than_500(self) -> None:
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.download_tile", side_effect=LocationContextUnavailableError("source_error", "down")):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(
+                f"{_GATEWAY}.download_tile", side_effect=LocationContextUnavailableError("source_error", "down")
+            ),
+        ):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 503)
@@ -104,7 +126,10 @@ class BasemapTileProxyTests(TestCase):
         """OSError - a real ``requests`` connection failure, distinct from the
         gateway's own structured error type - is the other member of the
         except tuple; dropping it from the tuple would 500 on an outage."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.download_tile", side_effect=OSError("connection reset")):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", side_effect=OSError("connection reset")),
+        ):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 503)
@@ -133,7 +158,14 @@ class BasemapCatalogueTests(TestCase):
 
     def test_layers_point_at_the_proxy_not_the_vendor(self) -> None:
         """Handing the browser REData's own template gives it a layer it cannot load."""
-        rows = [{"id": "usgs-topo", "name": "USGS Topo", "attribution": "USGS", "url_template": "https://redata.example/api/v1/tiles/usgs-topo/{z}/{x}/{y}/"}]
+        rows = [
+            {
+                "id": "usgs-topo",
+                "name": "USGS Topo",
+                "attribution": "USGS",
+                "url_template": "https://redata.example/api/v1/tiles/usgs-topo/{z}/{x}/{y}/",
+            }
+        ]
 
         with mock.patch(_CONFIGURED, return_value=True), self._sources(rows):
             layers = self.client.get(self.url).json()["layers"]
@@ -147,7 +179,9 @@ class BasemapCatalogueTests(TestCase):
         # bare substring check on the prefix while handing the browser
         # "900001" instead of "{z}".
         filled = layers[0]["url_template"].replace("{z}", "12").replace("{x}", "1204").replace("{y}", "1539")
-        self.assertEqual(filled, reverse("map.basemap_tiles", kwargs={"layer": "usgs-topo", "z": 12, "x": 1204, "y": 1539}))
+        self.assertEqual(
+            filled, reverse("map.basemap_tiles", kwargs={"layer": "usgs-topo", "z": 12, "x": 1204, "y": 1539})
+        )
 
     def test_a_layer_without_attribution_is_not_offered(self) -> None:
         """Every vendor here requires attribution on the rendered map."""
@@ -158,7 +192,10 @@ class BasemapCatalogueTests(TestCase):
         """Otherwise one bad moment costs this deployment its extra layers for a day."""
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.list_sources", side_effect=LocationContextUnavailableError("source_error", "down")):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.list_sources", side_effect=LocationContextUnavailableError("source_error", "down")),
+        ):
             self.assertEqual(self.client.get(self.url).json()["layers"], [])
 
         rows = [{"id": "usgs-topo", "name": "USGS Topo", "attribution": "USGS"}]

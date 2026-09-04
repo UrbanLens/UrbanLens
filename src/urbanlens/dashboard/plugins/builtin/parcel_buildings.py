@@ -89,7 +89,7 @@ def record_sources(building: dict[str, Any]) -> list[str]:
 
     REData's ``/parcels/{uuid}/buildings/`` now returns one record per physical
     building with a ``sources[]`` array (see its
-    ``docs/buildings-dedup-spec.md``), having removed the top-level ``source``
+    ``../REData/docs/archive/buildings-dedup-spec.md``), having removed the top-level ``source``
     string a single-observation record used to carry. Reading only the old key
     leaves the provenance chip blank for every REData building; reading only
     the new one drops Overpass, which still answers in the flat shape.

@@ -2,6 +2,7 @@
 
 No database access - pure Pydantic model logic.
 """
+
 from __future__ import annotations
 
 import os
@@ -55,13 +56,21 @@ class DebugResolutionTests(SimpleTestCase):
     @given(st.booleans())
     @_hyp
     def test_override_on_dominates_any_default(self, use_true_default: bool) -> None:
-        env = Local(debug_override=DebugTypes.OVERRIDE_ON) if use_true_default else Staging(debug_override=DebugTypes.OVERRIDE_ON)
+        env = (
+            Local(debug_override=DebugTypes.OVERRIDE_ON)
+            if use_true_default
+            else Staging(debug_override=DebugTypes.OVERRIDE_ON)
+        )
         self.assertTrue(env.debug)
 
     @given(st.booleans())
     @_hyp
     def test_override_off_dominates_any_default(self, use_true_default: bool) -> None:
-        env = Local(debug_override=DebugTypes.OVERRIDE_OFF) if use_true_default else Staging(debug_override=DebugTypes.OVERRIDE_OFF)
+        env = (
+            Local(debug_override=DebugTypes.OVERRIDE_OFF)
+            if use_true_default
+            else Staging(debug_override=DebugTypes.OVERRIDE_OFF)
+        )
         self.assertFalse(env.debug)
 
 

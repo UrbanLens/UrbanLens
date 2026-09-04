@@ -6,6 +6,7 @@ Covers:
 - PrivacySettingsForm contact_visibility persistence
 - Profile.can_view_contact_info() for each VisibilityChoice
 """
+
 from __future__ import annotations
 
 from django.urls import reverse

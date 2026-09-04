@@ -21,16 +21,26 @@ class SyncForSourceTests(TestCase):
     def test_sync_creates_rows_for_a_place(self):
         place = baker.make(Place)
 
-        PlaceExternalTag.sync_for_source(place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)]
+        )
 
         self.assertEqual(list(place.external_tags.values_list("key", "value")), [("amenity", "restaurant")])
 
     def test_sync_replaces_only_that_sources_prior_rows(self):
         place = baker.make(Place)
-        PlaceExternalTag.sync_for_source(place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)])
-        PlaceExternalTag.sync_for_source(place, ExternalTagSource.OVERTURE, [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)]
+        )
+        PlaceExternalTag.sync_for_source(
+            place,
+            ExternalTagSource.OVERTURE,
+            [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)],
+        )
 
-        PlaceExternalTag.sync_for_source(place, ExternalTagSource.OSM, [ExtractedTag(key="shop", value="bakery", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="shop", value="bakery", is_primary=True)]
+        )
 
         osm_tags = set(place.external_tags.filter(source=ExternalTagSource.OSM).values_list("key", "value"))
         overture_tags = set(place.external_tags.filter(source=ExternalTagSource.OVERTURE).values_list("key", "value"))
@@ -39,16 +49,22 @@ class SyncForSourceTests(TestCase):
 
     def test_second_sync_with_different_tags_leaves_no_stale_rows(self):
         place = baker.make(Place)
-        PlaceExternalTag.sync_for_source(place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)]
+        )
 
-        PlaceExternalTag.sync_for_source(place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="cafe", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="cafe", is_primary=True)]
+        )
 
         self.assertEqual(list(place.external_tags.values_list("key", "value")), [("amenity", "cafe")])
 
     def test_empty_value_tags_are_skipped(self):
         place = baker.make(Place)
 
-        PlaceExternalTag.sync_for_source(place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="", is_primary=True)]
+        )
 
         self.assertFalse(place.external_tags.exists())
 
@@ -71,14 +87,20 @@ class IsFreshForTests(TestCase):
 
     def test_true_immediately_after_a_sync(self):
         place = baker.make(Place)
-        PlaceExternalTag.sync_for_source(place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)]
+        )
 
         self.assertTrue(PlaceExternalTag.is_fresh_for(place, ExternalTagSource.OSM))
 
     def test_false_once_older_than_the_configured_window(self):
         place = baker.make(Place)
-        PlaceExternalTag.sync_for_source(place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)])
-        PlaceExternalTag.objects.filter(place=place, source=ExternalTagSource.OSM).update(updated=timezone.now() - timedelta(days=8))
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)]
+        )
+        PlaceExternalTag.objects.filter(place=place, source=ExternalTagSource.OSM).update(
+            updated=timezone.now() - timedelta(days=8)
+        )
 
         self.assertFalse(PlaceExternalTag.is_fresh_for(place, ExternalTagSource.OSM))
 
@@ -87,14 +109,20 @@ class IsFreshForTests(TestCase):
         site_settings.external_data_cache_days = 30
         site_settings.save()
         place = baker.make(Place)
-        PlaceExternalTag.sync_for_source(place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)])
-        PlaceExternalTag.objects.filter(place=place, source=ExternalTagSource.OSM).update(updated=timezone.now() - timedelta(days=10))
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)]
+        )
+        PlaceExternalTag.objects.filter(place=place, source=ExternalTagSource.OSM).update(
+            updated=timezone.now() - timedelta(days=10)
+        )
 
         self.assertTrue(PlaceExternalTag.is_fresh_for(place, ExternalTagSource.OSM))
 
     def test_is_independent_per_source(self):
         place = baker.make(Place)
-        PlaceExternalTag.sync_for_source(place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)]
+        )
 
         self.assertFalse(PlaceExternalTag.is_fresh_for(place, ExternalTagSource.OVERTURE))
 

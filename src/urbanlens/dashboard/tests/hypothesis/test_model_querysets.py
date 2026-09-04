@@ -7,6 +7,7 @@ ProfileNote/ProfileNickname/ProfileTrust's for_pair().
 Each test creates minimal fixture data via baker and exercises the queryset
 filter methods, verifying inclusion/exclusion semantics.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timezone
@@ -41,6 +42,7 @@ _db_settings = settings(
 
 # -- CommentQuerySet ------------------------------------------------------------
 
+
 class CommentQuerySetTopLevelTests(TestCase):
     """top_level() returns only comments with no parent."""
 
@@ -63,11 +65,13 @@ class CommentQuerySetTopLevelTests(TestCase):
 
     def test_top_level_includes_root_comment(self) -> None:
         from urbanlens.dashboard.models.comments.model import Comment
+
         qs = Comment.objects.top_level()
         self.assertIn(self.top, qs)
 
     def test_top_level_excludes_replies(self) -> None:
         from urbanlens.dashboard.models.comments.model import Comment
+
         qs = Comment.objects.top_level()
         self.assertNotIn(self.reply, qs)
 
@@ -107,11 +111,13 @@ class CommentQuerySetForPinTests(TestCase):
 
     def test_for_pin_includes_matching_comment(self) -> None:
         from urbanlens.dashboard.models.comments.model import Comment
+
         qs = Comment.objects.for_pin(self.pin)
         self.assertIn(self.comment, qs)
 
     def test_for_pin_excludes_other_pin_comment(self) -> None:
         from urbanlens.dashboard.models.comments.model import Comment
+
         qs = Comment.objects.for_pin(self.pin)
         self.assertNotIn(self.other_comment, qs)
 
@@ -138,6 +144,7 @@ class CommentQuerySetForWikiTests(TestCase):
 
     def test_for_wiki_returns_matching_comment(self) -> None:
         from urbanlens.dashboard.models.comments.model import Comment
+
         qs = Comment.objects.for_wiki(self.wiki1)
         self.assertIn(self.c1, qs)
         self.assertNotIn(self.c2, qs)
@@ -215,6 +222,7 @@ class TripCommentQuerySetByAuthorTests(TestCase):
 
 # -- PinMarkupQuerySet ---------------------------------------------------------
 
+
 class PinMarkupQuerySetTests(TestCase):
     """for_pin() and for_profile() filter markup by parent and owner."""
 
@@ -236,12 +244,14 @@ class PinMarkupQuerySetTests(TestCase):
 
     def test_for_pin_returns_markup_for_that_pin(self) -> None:
         from urbanlens.dashboard.models.markup.model import PinMarkup
+
         qs = PinMarkup.objects.for_pin(self.pin)
         self.assertIn(self.markup, qs)
         self.assertNotIn(self.other_markup, qs)
 
     def test_for_profile_returns_markup_for_that_profile(self) -> None:
         from urbanlens.dashboard.models.markup.model import PinMarkup
+
         other_user: User = baker.make(User)
         other_markup: PinMarkup = baker.make(
             "dashboard.PinMarkup",
@@ -254,6 +264,7 @@ class PinMarkupQuerySetTests(TestCase):
 
 
 # -- VisitQuerySet -------------------------------------------------------------
+
 
 class VisitQuerySetTests(TestCase):
     """for_pin(), manual(), and from_takeout() filter visits correctly."""
@@ -302,6 +313,7 @@ class VisitQuerySetTests(TestCase):
 
 # -- SocialLinkQuerySet --------------------------------------------------------
 
+
 class SocialLinkQuerySetTests(TestCase):
     """for_profile() with Profile or int, and platform() filter correctly."""
 
@@ -329,6 +341,7 @@ class SocialLinkQuerySetTests(TestCase):
 
     def test_for_profile_with_profile_instance(self) -> None:
         from urbanlens.dashboard.models.social_link.model import SocialLink
+
         qs = SocialLink.objects.for_profile(self.user.profile)
         self.assertIn(self.ig_link, qs)
         self.assertIn(self.tw_link, qs)
@@ -336,23 +349,27 @@ class SocialLinkQuerySetTests(TestCase):
 
     def test_for_profile_with_int_pk(self) -> None:
         from urbanlens.dashboard.models.social_link.model import SocialLink
+
         qs = SocialLink.objects.for_profile(self.user.profile.pk)
         self.assertIn(self.ig_link, qs)
         self.assertNotIn(self.other_link, qs)
 
     def test_platform_filters_by_platform_string(self) -> None:
         from urbanlens.dashboard.models.social_link.model import SocialLink
+
         qs = SocialLink.objects.for_profile(self.user.profile).platform("instagram")
         self.assertIn(self.ig_link, qs)
         self.assertNotIn(self.tw_link, qs)
 
     def test_platform_empty_when_no_match(self) -> None:
         from urbanlens.dashboard.models.social_link.model import SocialLink
+
         qs = SocialLink.objects.for_profile(self.user.profile).platform("nonexistent")
         self.assertFalse(qs.exists())
 
 
 # -- NotificationQuerySet -------------------------------------------------------
+
 
 class NotificationQuerySetTests(TestCase):
     """unread(), for_profile(), and mark_read() behave correctly."""
@@ -378,6 +395,7 @@ class NotificationQuerySetTests(TestCase):
 
     def test_for_profile_returns_own_notifications(self) -> None:
         from urbanlens.dashboard.models.notifications.model import NotificationLog
+
         qs = NotificationLog.objects.for_profile(self.user.profile)
         self.assertIn(self.unread_notif, qs)
         self.assertIn(self.read_notif, qs)
@@ -385,12 +403,14 @@ class NotificationQuerySetTests(TestCase):
 
     def test_unread_returns_unread_notifications(self) -> None:
         from urbanlens.dashboard.models.notifications.model import NotificationLog
+
         qs = NotificationLog.objects.for_profile(self.user.profile).unread()
         self.assertIn(self.unread_notif, qs)
         self.assertNotIn(self.read_notif, qs)
 
     def test_mark_read_updates_status_to_read(self) -> None:
         from urbanlens.dashboard.models.notifications.model import NotificationLog
+
         count = NotificationLog.objects.for_profile(self.user.profile).unread().mark_read()
         self.assertGreaterEqual(count, 1)
         self.unread_notif.refresh_from_db()
@@ -398,11 +418,13 @@ class NotificationQuerySetTests(TestCase):
 
     def test_mark_read_returns_updated_count(self) -> None:
         from urbanlens.dashboard.models.notifications.model import NotificationLog
+
         count = NotificationLog.objects.for_profile(self.user.profile).unread().mark_read()
         self.assertEqual(count, 1)
 
 
 # -- SiteSettings singleton -----------------------------------------------------
+
 
 class SiteSettingsSingletonTests(TestCase):
     """SiteSettings.get_current() creates and returns a singleton record."""
@@ -434,6 +456,7 @@ class SiteSettingsSingletonTests(TestCase):
 
 # -- TDD: Status enum values are swapped (bug demonstration) -------------------
 
+
 class NotificationStatusBugTests(SimpleTestCase):
     """Status enum member names must match their stored database values."""
 
@@ -447,6 +470,7 @@ class NotificationStatusBugTests(SimpleTestCase):
 
 
 # -- SavedFilterQuerySet ---------------------------------------------------------
+
 
 class SavedFilterQuerySetNameTakenForTests(TestCase):
     """name_taken_for() detects a name collision, scoped to one profile and excludable by pk."""
@@ -474,7 +498,9 @@ class SavedFilterQuerySetNameTakenForTests(TestCase):
     def test_excluding_its_own_pk_lets_a_rename_keep_its_current_name(self) -> None:
         from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
-        self.assertFalse(SavedFilter.objects.name_taken_for(self.user.profile, "My Filter", exclude_pk=self.existing.pk))
+        self.assertFalse(
+            SavedFilter.objects.name_taken_for(self.user.profile, "My Filter", exclude_pk=self.existing.pk)
+        )
 
     def test_exclude_pk_does_not_hide_a_collision_with_a_different_filter(self) -> None:
         from urbanlens.dashboard.models.saved_filter.model import SavedFilter
@@ -484,6 +510,7 @@ class SavedFilterQuerySetNameTakenForTests(TestCase):
 
 
 # -- ProfileNote/ProfileNickname/ProfileTrust for_pair() ------------------------
+
 
 class ProfileAnnotationForPairTests(TestCase):
     """for_pair() scopes each of the three private-annotation models to one author+subject pair."""
@@ -544,6 +571,7 @@ class ProfileAnnotationForPairTests(TestCase):
 
 
 # -- e2ee querysets ---------------------------------------------------------------
+
 
 class MessagingKeyBundleQuerySetTests(TestCase):
     """for_profile()/for_profiles() scope MessagingKeyBundle lookups."""
@@ -641,7 +669,9 @@ class ConversationKeyQuerySetOrderIndependencePropertyTests(TestCase):
         profile_a = baker.make("auth.User").profile
         profile_b = baker.make("auth.User").profile
         low, high = ConversationKey.canonical_pair(profile_a, profile_b)
-        key: ConversationKey = baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=version)
+        key: ConversationKey = baker.make(
+            "dashboard.ConversationKey", profile_low=low, profile_high=high, version=version
+        )
 
         self.assertEqual(list(ConversationKey.objects.between(profile_a, profile_b)), [key])
         self.assertEqual(list(ConversationKey.objects.between(profile_b, profile_a)), [key])
@@ -705,6 +735,7 @@ class GroupKeyQuerySetTests(TestCase):
 
 # -- Direct-message pair models ---------------------------------------------------
 
+
 class DirectMessagePairQuerySetTests(TestCase):
     """for_pair() scopes mutes and image permissions to one viewer+sender pair."""
 
@@ -732,13 +763,16 @@ class DirectMessagePairQuerySetTests(TestCase):
     def test_image_permission_for_pair_finds_the_row(self) -> None:
         from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission
 
-        row: DirectMessageImagePermission = baker.make("dashboard.DirectMessageImagePermission", viewer=self.viewer, sender=self.sender)
+        row: DirectMessageImagePermission = baker.make(
+            "dashboard.DirectMessageImagePermission", viewer=self.viewer, sender=self.sender
+        )
         baker.make("dashboard.DirectMessageImagePermission", viewer=self.viewer, sender=self.other)
 
         self.assertEqual(DirectMessageImagePermission.objects.for_pair(self.viewer, self.sender).first(), row)
 
 
 # -- MediaRelevance ---------------------------------------------------------------
+
 
 class MediaRelevanceQuerySetTests(TestCase):
     """for_gallery() scopes relevance marks to one profile+location+provider."""
@@ -751,9 +785,30 @@ class MediaRelevanceQuerySetTests(TestCase):
     def test_for_gallery_scopes_to_profile_location_and_source(self) -> None:
         from urbanlens.dashboard.models.images.relevance import MediaRelevance
 
-        mine: MediaRelevance = baker.make("dashboard.MediaRelevance", profile=self.profile, location=self.location, source="wikimedia", item_key="a" * 40, is_relevant=True)
-        baker.make("dashboard.MediaRelevance", profile=self.profile, location=self.location, source="smithsonian", item_key="b" * 40, is_relevant=True)
-        baker.make("dashboard.MediaRelevance", profile=self.profile, location=self.other_location, source="wikimedia", item_key="c" * 40, is_relevant=False)
+        mine: MediaRelevance = baker.make(
+            "dashboard.MediaRelevance",
+            profile=self.profile,
+            location=self.location,
+            source="wikimedia",
+            item_key="a" * 40,
+            is_relevant=True,
+        )
+        baker.make(
+            "dashboard.MediaRelevance",
+            profile=self.profile,
+            location=self.location,
+            source="smithsonian",
+            item_key="b" * 40,
+            is_relevant=True,
+        )
+        baker.make(
+            "dashboard.MediaRelevance",
+            profile=self.profile,
+            location=self.other_location,
+            source="wikimedia",
+            item_key="c" * 40,
+            is_relevant=False,
+        )
 
         qs = MediaRelevance.objects.for_gallery(self.profile, self.location, "wikimedia")
         self.assertIn(mine, qs)
@@ -761,6 +816,7 @@ class MediaRelevanceQuerySetTests(TestCase):
 
 
 # -- ProfileEmail -----------------------------------------------------------------
+
 
 class ProfileEmailQuerySetTests(TestCase):
     """verified_for() matches only verified claims on one normalized address."""
@@ -782,6 +838,7 @@ class ProfileEmailQuerySetTests(TestCase):
 
 
 # -- Review -----------------------------------------------------------------------
+
 
 class ReviewForPairQuerySetTests(TestCase):
     """for_pair() scopes reviews to one profile+pin pair."""

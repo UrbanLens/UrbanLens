@@ -13,8 +13,18 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind, GameRound, GameSession, SpotGuessrMode
-from urbanlens.dashboard.services.media.media_relevance import GAME_REPORT_HALF_LIFE_DAYS, effective_relevance, local_images_for_gallery_items
+from urbanlens.dashboard.models.spotguessr.model import (
+    GamePhotoFeedback,
+    GamePhotoFeedbackKind,
+    GameRound,
+    GameSession,
+    SpotGuessrMode,
+)
+from urbanlens.dashboard.services.media.media_relevance import (
+    GAME_REPORT_HALF_LIFE_DAYS,
+    effective_relevance,
+    local_images_for_gallery_items,
+)
 
 _coordinate_counter = count()
 
@@ -29,7 +39,9 @@ def _make_profile() -> Profile:
 
 
 def _make_external_image(location: Location, item_key: str) -> Image:
-    return baker.make(Image, location=location, media_type=MediaKind.PHOTO, media_source_key="wikimedia", media_item_key=item_key)
+    return baker.make(
+        Image, location=location, media_type=MediaKind.PHOTO, media_source_key="wikimedia", media_item_key=item_key
+    )
 
 
 def _backdate(feedback: GamePhotoFeedback, *, days: float) -> None:
@@ -45,15 +57,23 @@ def _feedback(image: Image, profile: Profile, kind: str) -> GamePhotoFeedback:
 
 class EffectiveRelevanceTests(TestCase):
     def test_an_image_with_no_media_identity_scores_zero(self) -> None:
-        image = baker.make(Image, location=_make_location(), media_type=MediaKind.PHOTO, media_source_key=None, media_item_key=None)
+        image = baker.make(
+            Image, location=_make_location(), media_type=MediaKind.PHOTO, media_source_key=None, media_item_key=None
+        )
         self.assertEqual(effective_relevance(image), 0.0)
 
     def test_wiki_votes_alone_sum_to_the_net_score(self) -> None:
         location = _make_location()
         image = _make_external_image(location, "a" * 40)
-        MediaRelevance.objects.create(profile=_make_profile(), location=location, source="wikimedia", item_key="a" * 40, is_relevant=True)
-        MediaRelevance.objects.create(profile=_make_profile(), location=location, source="wikimedia", item_key="a" * 40, is_relevant=True)
-        MediaRelevance.objects.create(profile=_make_profile(), location=location, source="wikimedia", item_key="a" * 40, is_relevant=False)
+        MediaRelevance.objects.create(
+            profile=_make_profile(), location=location, source="wikimedia", item_key="a" * 40, is_relevant=True
+        )
+        MediaRelevance.objects.create(
+            profile=_make_profile(), location=location, source="wikimedia", item_key="a" * 40, is_relevant=True
+        )
+        MediaRelevance.objects.create(
+            profile=_make_profile(), location=location, source="wikimedia", item_key="a" * 40, is_relevant=False
+        )
         self.assertEqual(effective_relevance(image), 1.0)
 
     def test_game_thumbs_up_counts_at_half_weight(self) -> None:
@@ -72,7 +92,9 @@ class EffectiveRelevanceTests(TestCase):
     def test_a_realistic_number_of_thumbs_down_cannot_zero_out_a_relevant_photo(self) -> None:
         location = _make_location()
         image = _make_external_image(location, "9" * 40)
-        MediaRelevance.objects.create(profile=_make_profile(), location=location, source="wikimedia", item_key="9" * 40, is_relevant=True)
+        MediaRelevance.objects.create(
+            profile=_make_profile(), location=location, source="wikimedia", item_key="9" * 40, is_relevant=True
+        )
         for _ in range(10):
             _feedback(image, _make_profile(), GamePhotoFeedbackKind.THUMBS_DOWN)
         self.assertGreater(effective_relevance(image), 0.0)
@@ -128,7 +150,9 @@ class EffectiveRelevanceTests(TestCase):
     def test_wiki_and_game_signals_blend_together(self) -> None:
         location = _make_location()
         image = _make_external_image(location, "f" * 40)
-        MediaRelevance.objects.create(profile=_make_profile(), location=location, source="wikimedia", item_key="f" * 40, is_relevant=True)
+        MediaRelevance.objects.create(
+            profile=_make_profile(), location=location, source="wikimedia", item_key="f" * 40, is_relevant=True
+        )
         _feedback(image, _make_profile(), GamePhotoFeedbackKind.THUMBS_UP)
         _feedback(image, _make_profile(), GamePhotoFeedbackKind.REPORTED)
         self.assertAlmostEqual(effective_relevance(image), 1.0 + 0.5 - 1.0)
@@ -141,7 +165,9 @@ class EffectiveRelevanceTests(TestCase):
         profile = _make_profile()
         session = baker.make(GameSession, mode=SpotGuessrMode.PHOTOS)
         for sequence_index in range(3):
-            round_ = baker.make(GameRound, session=session, location=image.location, image=image, sequence_index=sequence_index)
+            round_ = baker.make(
+                GameRound, session=session, location=image.location, image=image, sequence_index=sequence_index
+            )
             GamePhotoFeedback.objects.create(round=round_, profile=profile, kind=GamePhotoFeedbackKind.NO_REACTION)
         self.assertAlmostEqual(effective_relevance(image), 0.03)
 

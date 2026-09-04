@@ -149,7 +149,7 @@ def _parse_timestamp(text: str) -> datetime | None:
     offset_hours = _TZ_OFFSET_HOURS.get(tz_abbr.upper()) if body else None
     if offset_hours is not None:
         try:
-            naive = datetime.strptime(body, _TIMESTAMP_FORMAT)
+            naive = datetime.strptime(body, _TIMESTAMP_FORMAT)  # noqa: DTZ007  # the zone comes from the trailing abbreviation, applied below
         except ValueError:
             pass
         else:

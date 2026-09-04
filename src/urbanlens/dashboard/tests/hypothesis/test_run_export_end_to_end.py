@@ -26,6 +26,7 @@ from urbanlens.dashboard.services.import_export.export import VALID_EXPORT_TYPES
 #: everything else runs on any account.
 _TYPES = sorted(VALID_EXPORT_TYPES - {"google_takeout", "direct_messages"})
 
+
 #: The archive must carry the legacy areas plus every registered one. Registered
 #: filenames are read from their declarations rather than repeated here - the
 #: 2026-08-17 merge renamed two of them (safety.json -> safety_checkins.json,

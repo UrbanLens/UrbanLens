@@ -28,7 +28,13 @@ class LabelUndoTests(TestCase):
         self.profile: Profile = baker.make("auth.User").profile
         self.parent = ensure_label(profile=self.profile, name="Industrial", kind="tag", order=5)
         self.label = ensure_label(
-            profile=self.profile, name="Mills", kind="tag", order=3, icon="factory", color="#aa2200", keywords="mill, textile",
+            profile=self.profile,
+            name="Mills",
+            kind="tag",
+            order=3,
+            icon="factory",
+            color="#aa2200",
+            keywords="mill, textile",
         )
         self.child = ensure_label(profile=self.profile, name="Textile mills", kind="tag", order=1)
         self.label.parents.add(self.parent)

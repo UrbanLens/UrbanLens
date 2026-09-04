@@ -31,7 +31,6 @@ from urbanlens.dashboard.services.ai.tools.registry import (
     register,
 )
 
-
 #: Every tool whose :class:`DataScope` is not ``NONE``, mapped to the tests
 #: proving another profile's data never reaches it - as
 #: ``"<test module>::<class>::<test>"``.
@@ -60,7 +59,9 @@ NEGATIVE_CASES: dict[str, tuple[str, ...]] = {
         "test_ai_tools_trips::AddTripActivityTests::test_foreign_pin_is_rejected",
     ),
     "undo_peek": ("test_ai_tools_undo::UndoPeekToolTests::test_another_profiles_undo_history_is_invisible",),
-    "undo_last_action": ("test_ai_tools_undo::UndoLastActionToolTests::test_another_profiles_real_uuid_cannot_be_used_against_this_profiles_stack",),
+    "undo_last_action": (
+        "test_ai_tools_undo::UndoLastActionToolTests::test_another_profiles_real_uuid_cannot_be_used_against_this_profiles_stack",
+    ),
     "has_tunnels": (
         "test_ai_tools_places::HasTunnelsTests::test_another_profiles_pin_slug_never_resolves",
         "test_ai_tools_places::HasTunnelsTests::test_another_profiles_personal_floorplan_is_never_evidence",
@@ -70,7 +71,9 @@ NEGATIVE_CASES: dict[str, tuple[str, ...]] = {
         "test_ai_tools_visits::HaveIBeenHereTests::test_another_profiles_pin_slug_never_resolves",
         "test_ai_tools_visits::HaveIBeenHereTests::test_another_profiles_route_is_never_evidence",
     ),
-    "distance_and_drive_time": ("test_ai_tools_routing::DistanceAndDriveTimeTests::test_another_profiles_pin_slug_never_resolves",),
+    "distance_and_drive_time": (
+        "test_ai_tools_routing::DistanceAndDriveTimeTests::test_another_profiles_pin_slug_never_resolves",
+    ),
     "get_weather": ("test_ai_tools_weather::GetWeatherTests::test_another_profiles_pin_slug_never_resolves",),
 }
 
@@ -224,7 +227,11 @@ class ResultCapTests(TestCase):
 
     def test_oversized_result_becomes_an_error(self) -> None:
         name = "test_only_huge_result_tool"
-        register(ToolSpec(name=name, description="test only", args_model=_NoArgs, handler=_huge_handler, scope=DataScope.NONE))
+        register(
+            ToolSpec(
+                name=name, description="test only", args_model=_NoArgs, handler=_huge_handler, scope=DataScope.NONE
+            )
+        )
         try:
             result = execute(name, {}, _context(self.profile))
         finally:
@@ -245,7 +252,11 @@ class HandlerExceptionTests(TestCase):
 
     def test_handler_exception_is_caught(self) -> None:
         name = "test_only_broken_tool"
-        register(ToolSpec(name=name, description="test only", args_model=_NoArgs, handler=_broken_handler, scope=DataScope.NONE))
+        register(
+            ToolSpec(
+                name=name, description="test only", args_model=_NoArgs, handler=_broken_handler, scope=DataScope.NONE
+            )
+        )
         try:
             result = execute(name, {}, _context(self.profile))
         finally:
@@ -270,7 +281,15 @@ class RegistrationTests(TestCase):
             return {}
 
         with pytest.raises(ValueError, match="requires_confirmation"):
-            register(ToolSpec(name="unconfirmed_write", description="test only", args_model=_NoArgs, handler=_noop, read_only=False))
+            register(
+                ToolSpec(
+                    name="unconfirmed_write",
+                    description="test only",
+                    args_model=_NoArgs,
+                    handler=_noop,
+                    read_only=False,
+                )
+            )
 
     def test_every_registered_write_tool_requires_confirmation(self) -> None:
         for spec in REGISTRY.values():
@@ -339,7 +358,13 @@ class FuzzTests(TestCase):
         name=st.text(min_size=0, max_size=30),
         raw_args=st.dictionaries(
             st.text(min_size=0, max_size=20),
-            st.one_of(st.text(max_size=50), st.integers(), st.booleans(), st.none(), st.lists(st.text(max_size=10), max_size=3)),
+            st.one_of(
+                st.text(max_size=50),
+                st.integers(),
+                st.booleans(),
+                st.none(),
+                st.lists(st.text(max_size=10), max_size=3),
+            ),
             max_size=5,
         ),
     )

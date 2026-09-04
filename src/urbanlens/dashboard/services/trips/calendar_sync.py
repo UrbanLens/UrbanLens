@@ -28,7 +28,7 @@ from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
 if TYPE_CHECKING:
-    from collections.abc import Collection
+    from collections.abc import Collection, Sequence
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -558,7 +558,7 @@ def list_importable_events(account: GoogleCalendarAccount) -> list[dict[str, Any
     return results
 
 
-def import_events_as_trips(account: GoogleCalendarAccount, selections: list[str | dict[str, Any]]) -> tuple[list[Trip], list[str], int]:
+def import_events_as_trips(account: GoogleCalendarAccount, selections: Sequence[str | dict[str, Any]]) -> tuple[list[Trip], list[str], int]:
     """Create trips from the given calendar events on the user's calendar.
 
     Events are re-fetched individually so only data Google actually returns

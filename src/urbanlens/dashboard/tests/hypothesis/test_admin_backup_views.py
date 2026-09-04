@@ -60,7 +60,9 @@ class BackupStartViewTests(TestCase):
         user.user_permissions.add(Permission.objects.get(codename="view_site_admin"))
 
         async_result = mock.Mock(id="task-123")
-        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=async_result) as enqueue:
+        with mock.patch(
+            "urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=async_result
+        ) as enqueue:
             response = self.client.post(url)
 
         self.assertEqual(response.status_code, 202)

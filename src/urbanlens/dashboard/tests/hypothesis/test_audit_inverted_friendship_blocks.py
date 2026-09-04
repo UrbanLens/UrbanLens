@@ -58,7 +58,9 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         """The always-correct path: Friendship.objects.create(..., status=BLOCKED) for a
         stranger with no prior row. created == updated, no request_message.
         """
-        friendship = Friendship.objects.create(from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED)
+        friendship = Friendship.objects.create(
+            from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED
+        )
         old = timezone.now() - datetime.timedelta(days=60)
         self._stamp(friendship, created=old, updated=old)
 
@@ -72,7 +74,12 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         """The reuse path the bug lived in: a PENDING/ACCEPTED row later flipped to
         BLOCKED without repointing - updated lands well after created.
         """
-        friendship = Friendship.objects.create(from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED, relationship_type=FriendshipType.FRIEND)
+        friendship = Friendship.objects.create(
+            from_profile=self.alice,
+            to_profile=self.bob,
+            status=FriendshipStatus.BLOCKED,
+            relationship_type=FriendshipType.FRIEND,
+        )
         created = timezone.now() - datetime.timedelta(days=90)
         updated = timezone.now() - datetime.timedelta(days=60)
         self._stamp(friendship, created=created, updated=updated)
@@ -106,7 +113,9 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         self.assertIn("request_message", output)
 
     def test_a_row_created_on_or_after_the_cutoff_is_excluded(self) -> None:
-        friendship = Friendship.objects.create(from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED)
+        friendship = Friendship.objects.create(
+            from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED
+        )
         recent = timezone.now()
         self._stamp(friendship, created=recent, updated=recent)
 
@@ -119,12 +128,16 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         """`--before` is documented exclusive on the DATE: `created__date__lt=cutoff_date`.
         An off-by-one to `__date__lte` would silently start including the cutoff day itself -
         this pins both sides of that exact boundary against the same cutoff."""
-        on_cutoff = Friendship.objects.create(from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED)
+        on_cutoff = Friendship.objects.create(
+            from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED
+        )
         cutoff_dt = datetime.datetime(2026, 7, 30, 23, 59, tzinfo=datetime.UTC)
         self._stamp(on_cutoff, created=cutoff_dt, updated=cutoff_dt)
 
         carol = baker.make(User, username="carol").profile
-        day_before = Friendship.objects.create(from_profile=self.alice, to_profile=carol, status=FriendshipStatus.BLOCKED)
+        day_before = Friendship.objects.create(
+            from_profile=self.alice, to_profile=carol, status=FriendshipStatus.BLOCKED
+        )
         before_dt = datetime.datetime(2026, 7, 29, 0, 1, tzinfo=datetime.UTC)
         self._stamp(day_before, created=before_dt, updated=before_dt)
 
@@ -134,7 +147,9 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         self.assertIn(f"Friendship #{day_before.pk}", output)
 
     def test_a_non_blocked_row_is_never_reported(self) -> None:
-        friendship = Friendship.objects.create(from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.ACCEPTED)
+        friendship = Friendship.objects.create(
+            from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.ACCEPTED
+        )
         old = timezone.now() - datetime.timedelta(days=90)
         self._stamp(friendship, created=old, updated=old)
 
@@ -143,7 +158,12 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         self.assertNotIn(f"Friendship #{friendship.pk}", output)
 
     def test_the_command_never_writes(self) -> None:
-        friendship = Friendship.objects.create(from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED, relationship_type=FriendshipType.FRIEND)
+        friendship = Friendship.objects.create(
+            from_profile=self.alice,
+            to_profile=self.bob,
+            status=FriendshipStatus.BLOCKED,
+            relationship_type=FriendshipType.FRIEND,
+        )
         created = timezone.now() - datetime.timedelta(days=90)
         updated = timezone.now() - datetime.timedelta(days=60)
         self._stamp(friendship, created=created, updated=updated)

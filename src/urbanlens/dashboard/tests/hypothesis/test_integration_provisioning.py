@@ -114,7 +114,9 @@ class ProvisionAccountTests(TestCase):
         offenders = [
             field.name
             for field in NotificationPreference._meta.get_fields()
-            if getattr(field, "choices", None) and {value for value, _ in field.choices} == set(DeliveryPreference.values) and getattr(preferences, field.name) in email_carrying
+            if getattr(field, "choices", None)
+            and {value for value, _ in field.choices} == set(DeliveryPreference.values)
+            and getattr(preferences, field.name) in email_carrying
         ]
         self.assertEqual(offenders, [], f"these notification types would still send email: {offenders}")
 
@@ -318,7 +320,10 @@ class BootstrapAdminGuardTests(TestCase):
         self.assertIsNone(self._bootstrap_admin_id())
 
         operator = User.objects.create_user(username="the_operator", email="operator@example.com")
-        self.assertFalse(promote_first_user_if_needed(operator), "the operator was not the first user, so nothing should have been promoted")
+        self.assertFalse(
+            promote_first_user_if_needed(operator),
+            "the operator was not the first user, so nothing should have been promoted",
+        )
         self.assertIsNone(self._bootstrap_admin_id())
 
 
@@ -385,6 +390,8 @@ class CommandTests(TestCase):
             mock.patch.dict("os.environ", {"UL_ALLOW_INTEGRATION_PROVISIONING": "true"}),
         ):
             settings.environment_name = "production"
-            call_command("provision_integration_env", "--force", "--roles", "primary", stdout=StringIO(), stderr=StringIO())
+            call_command(
+                "provision_integration_env", "--force", "--roles", "primary", stdout=StringIO(), stderr=StringIO()
+            )
 
         self.assertTrue(User.objects.filter(username=username_for("primary")).exists())

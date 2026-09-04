@@ -93,7 +93,9 @@ class PinCommentPanelParentDeletedRenderingTests(TestCase):
         parent = baker.make(Comment, pin=self.pin, wiki=None, profile=self.profile, text="original text")
         baker.make(Comment, pin=self.pin, wiki=None, profile=self.profile, parent=parent, text="my reply survives")
 
-        response = self.client.delete(reverse("pin.comment.delete", kwargs={"pin_slug": self.pin.slug, "comment_id": parent.pk}))
+        response = self.client.delete(
+            reverse("pin.comment.delete", kwargs={"pin_slug": self.pin.slug, "comment_id": parent.pk})
+        )
 
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
@@ -136,7 +138,12 @@ class WikiCommentPanelParentDeletedRenderingTests(TestCase):
         parent = baker.make(Comment, wiki=self.wiki, pin=None, profile=self.profile, text="wiki original")
         baker.make(Comment, wiki=self.wiki, pin=None, profile=self.profile, parent=parent, text="wiki reply survives")
 
-        response = self.client.delete(reverse("location.wiki.comment.delete", kwargs={"location_slug": self.wiki.location.slug, "comment_id": parent.pk}))
+        response = self.client.delete(
+            reverse(
+                "location.wiki.comment.delete",
+                kwargs={"location_slug": self.wiki.location.slug, "comment_id": parent.pk},
+            )
+        )
 
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()

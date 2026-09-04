@@ -94,7 +94,9 @@ class GpsStripByFormatTests(TestCase):
         """Without this, a bad fixture would make every strip assertion vacuous."""
         missing = [fmt for fmt, _ext in _FORMATS if not _has_gps(_image_bytes_with_gps(fmt))]
 
-        self.assertEqual(missing, [], "fixture authoring produced no GPS IFD - the strip tests below would prove nothing")
+        self.assertEqual(
+            missing, [], "fixture authoring produced no GPS IFD - the strip tests below would prove nothing"
+        )
 
     def test_gps_is_stripped_from_the_stored_file(self) -> None:
         leaked = [fmt for fmt, ext in _FORMATS if _has_gps(self._stored_bytes_after_strip(fmt, ext))]

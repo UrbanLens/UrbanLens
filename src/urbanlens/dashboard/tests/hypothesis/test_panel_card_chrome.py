@@ -77,7 +77,15 @@ class PanelChromeRenderingTests(TestCase):
 
         return render_to_string(
             "dashboard/partials/pins/_simple_info_panel.html",
-            {"section_id": "x-section", "icon": "public", "title": "X", "nested": nested, "facts": [], "chips": [], "meta": []},
+            {
+                "section_id": "x-section",
+                "icon": "public",
+                "title": "X",
+                "nested": nested,
+                "facts": [],
+                "chips": [],
+                "meta": [],
+            },
         )
 
     def test_a_standalone_panel_brings_its_own_card(self) -> None:
@@ -89,4 +97,6 @@ class PanelChromeRenderingTests(TestCase):
         markup = self._render(nested=True)
 
         self.assertIn("nested", markup)
-        self.assertNotIn('class="simple-info-panel card', markup, "a tabbed panel would nest a card inside the strip's own card")
+        self.assertNotIn(
+            'class="simple-info-panel card', markup, "a tabbed panel would nest a card inside the strip's own card"
+        )

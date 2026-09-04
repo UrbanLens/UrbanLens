@@ -20,9 +20,20 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GameRound, GameSession, GameSessionStatus, SpotGuessrMode, SpotGuessrPreference
+from urbanlens.dashboard.models.spotguessr.model import (
+    GameRound,
+    GameSession,
+    GameSessionStatus,
+    SpotGuessrMode,
+    SpotGuessrPreference,
+)
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.spotguessr.session import GameConfig, begin_session, join_session, start_multiplayer_session
+from urbanlens.dashboard.services.spotguessr.session import (
+    GameConfig,
+    begin_session,
+    join_session,
+    start_multiplayer_session,
+)
 
 _coordinate_counter = count()
 
@@ -233,7 +244,14 @@ class SpotGuessrGuessFlowTests(TestCase):
         self.profile = _make_profile()
         self.location = _make_location()
         baker.make(Pin, profile=self.profile, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=self.location),
+        )
         self.client.force_login(self.profile.user)
         start = self.client.post(reverse("spotguessr.start"), {"total_rounds": "1"}).json()
         self.session_id = start["session_id"]
@@ -295,7 +313,14 @@ class SpotGuessrPhotoFeedbackViewTests(TestCase):
         self.profile = _make_profile()
         self.location = _make_location()
         baker.make(Pin, profile=self.profile, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=self.location),
+        )
         self.client.force_login(self.profile.user)
         start = self.client.post(reverse("spotguessr.start"), {"total_rounds": "1"}).json()
         self.session_id = start["session_id"]
@@ -309,7 +334,10 @@ class SpotGuessrPhotoFeedbackViewTests(TestCase):
     def test_thumbs_up_after_guessing_is_recorded(self) -> None:
         from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind
 
-        self.client.post(reverse("spotguessr.guess", args=[self.session_id, self.round_id]), {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)})
+        self.client.post(
+            reverse("spotguessr.guess", args=[self.session_id, self.round_id]),
+            {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)},
+        )
         response = self.client.post(self.feedback_url, {"kind": "thumbs_up"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["kind"], "thumbs_up")
@@ -322,14 +350,26 @@ class SpotGuessrPhotoFeedbackViewTests(TestCase):
         must still win."""
         from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind
 
-        self.client.post(reverse("spotguessr.guess", args=[self.session_id, self.round_id]), {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)})
-        self.assertEqual(GamePhotoFeedback.objects.get(round_id=self.round_id, profile=self.profile).kind, GamePhotoFeedbackKind.NO_REACTION)
+        self.client.post(
+            reverse("spotguessr.guess", args=[self.session_id, self.round_id]),
+            {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)},
+        )
+        self.assertEqual(
+            GamePhotoFeedback.objects.get(round_id=self.round_id, profile=self.profile).kind,
+            GamePhotoFeedbackKind.NO_REACTION,
+        )
 
         self.client.post(self.feedback_url, {"kind": "reported"})
-        self.assertEqual(GamePhotoFeedback.objects.get(round_id=self.round_id, profile=self.profile).kind, GamePhotoFeedbackKind.REPORTED)
+        self.assertEqual(
+            GamePhotoFeedback.objects.get(round_id=self.round_id, profile=self.profile).kind,
+            GamePhotoFeedbackKind.REPORTED,
+        )
 
     def test_an_invalid_kind_is_rejected(self) -> None:
-        self.client.post(reverse("spotguessr.guess", args=[self.session_id, self.round_id]), {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)})
+        self.client.post(
+            reverse("spotguessr.guess", args=[self.session_id, self.round_id]),
+            {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)},
+        )
         response = self.client.post(self.feedback_url, {"kind": "not_a_real_kind"})
         self.assertEqual(response.status_code, 400)
 
@@ -346,7 +386,9 @@ class SpotGuessrPhotoFeedbackViewTests(TestCase):
         response = self.client.post(reverse("spotguessr.start"), {"mode": "named_place", "total_rounds": "1"})
         data = response.json()
         guess_url = reverse("spotguessr.guess", args=[data["session_id"], data["round"]["round_id"]])
-        self.client.post(guess_url, {"latitude": str(named_location.latitude), "longitude": str(named_location.longitude)})
+        self.client.post(
+            guess_url, {"latitude": str(named_location.latitude), "longitude": str(named_location.longitude)}
+        )
 
         feedback_url = reverse("spotguessr.photo_feedback", args=[data["session_id"], data["round"]["round_id"]])
         response = self.client.post(feedback_url, {"kind": "thumbs_up"})
@@ -382,7 +424,14 @@ class SpotGuessrMultiplayerGuessRevealTests(TestCase):
         self.location = _make_location()
         baker.make(Pin, profile=self.host, location=self.location)
         baker.make(Pin, profile=self.guest, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=self.location),
+        )
 
         session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest])
         join_session(session, self.guest)
@@ -470,7 +519,14 @@ class SpotGuessrEndSessionViewTests(TestCase):
         self.location = _make_location()
         baker.make(Pin, profile=self.host, location=self.location)
         baker.make(Pin, profile=self.guest, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=self.location),
+        )
 
         self.session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest])
         join_session(self.session, self.guest)
@@ -504,11 +560,20 @@ class SpotGuessrRoundTimeoutViewTests(TestCase):
         self.profile = _make_profile()
         self.location = _make_location()
         baker.make(Pin, profile=self.profile, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=self.location),
+        )
         self.client.force_login(self.profile.user)
 
     def test_a_call_before_the_timer_expires_is_a_no_op(self) -> None:
-        start = self.client.post(reverse("spotguessr.start"), {"total_rounds": "1", "round_time_limit_seconds": "120"}).json()
+        start = self.client.post(
+            reverse("spotguessr.start"), {"total_rounds": "1", "round_time_limit_seconds": "120"}
+        ).json()
         timeout_url = reverse("spotguessr.round_timeout", args=[start["session_id"], start["round"]["round_id"]])
 
         response = self.client.post(timeout_url)
@@ -530,7 +595,9 @@ class SpotGuessrRoundTimeoutViewTests(TestCase):
 
         from django.utils import timezone
 
-        start = self.client.post(reverse("spotguessr.start"), {"total_rounds": "1", "round_time_limit_seconds": "30"}).json()
+        start = self.client.post(
+            reverse("spotguessr.start"), {"total_rounds": "1", "round_time_limit_seconds": "30"}
+        ).json()
         round_id = start["round"]["round_id"]
         GameRound.objects.filter(pk=round_id).update(created=timezone.now() - timedelta(seconds=45))
         timeout_url = reverse("spotguessr.round_timeout", args=[start["session_id"], round_id])
@@ -542,7 +609,9 @@ class SpotGuessrRoundTimeoutViewTests(TestCase):
         self.assertIsNotNone(round_.revealed_at)
 
     def test_a_non_participant_gets_a_404(self) -> None:
-        start = self.client.post(reverse("spotguessr.start"), {"total_rounds": "1", "round_time_limit_seconds": "30"}).json()
+        start = self.client.post(
+            reverse("spotguessr.start"), {"total_rounds": "1", "round_time_limit_seconds": "30"}
+        ).json()
         timeout_url = reverse("spotguessr.round_timeout", args=[start["session_id"], start["round"]["round_id"]])
 
         outsider = _make_profile()
@@ -558,7 +627,14 @@ class SpotGuessrHomeViewPrewarmTests(TestCase):
         self.profile = _make_profile()
         self.location = _make_location()
         baker.make(Pin, profile=self.profile, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            wiki=baker.make(Wiki, location=self.location),
+        )
         self.client.force_login(self.profile.user)
 
     def test_visiting_the_page_prewarms_round_one_for_the_default_mode(self) -> None:

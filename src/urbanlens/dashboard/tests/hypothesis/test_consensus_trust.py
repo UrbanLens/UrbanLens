@@ -62,7 +62,9 @@ class TrustScoreBoundsTests(SimpleTestCase):
 class RecordCheckResultTests(SimpleTestCase):
     @given(alpha=st.floats(min_value=0.5, max_value=100), beta=st.floats(min_value=0.5, max_value=100))
     @settings(**_HYP)
-    def test_a_correct_check_always_scores_higher_than_an_incorrect_one_would_have(self, alpha: float, beta: float) -> None:
+    def test_a_correct_check_always_scores_higher_than_an_incorrect_one_would_have(
+        self, alpha: float, beta: float
+    ) -> None:
         """From the same starting profile, passing a check must always beat failing it.
 
         Not "a correct check never lowers trust" in absolute terms - the

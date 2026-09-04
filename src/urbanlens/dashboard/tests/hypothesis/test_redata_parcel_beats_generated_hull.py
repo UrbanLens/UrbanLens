@@ -46,7 +46,11 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.place.model import PlaceKind
-from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries, boundary_generation_ran, generate_location_boundaries
+from urbanlens.dashboard.services.locations.boundaries import (
+    ResolvedBoundaries,
+    boundary_generation_ran,
+    generate_location_boundaries,
+)
 from urbanlens.dashboard.services.places import resolution
 from urbanlens.dashboard.tests.hypothesis.place_helpers import official_geometry
 
@@ -101,7 +105,9 @@ class CheapResolutionMustNotClaimTheChainRanTests(TestCase):
 
         location.refresh_from_db()
         self.assertEqual(location.place_id, place.pk)
-        self.assertIsNotNone(location.place_resolved_at, "resolving onto a real place must be cached, or every page view re-runs it")
+        self.assertIsNotNone(
+            location.place_resolved_at, "resolving onto a real place must be cached, or every page view re-runs it"
+        )
 
     def test_a_genuine_provider_miss_is_still_recorded_once(self) -> None:
         """The behaviour the stamp exists for, which must survive the fix.
@@ -122,7 +128,9 @@ class CheapResolutionMustNotClaimTheChainRanTests(TestCase):
             self.assertIsNone(generate_location_boundaries(location))
 
         location.refresh_from_db()
-        self.assertIsNotNone(location.place_resolved_at, "a chain run that found nothing must still record that we asked")
+        self.assertIsNotNone(
+            location.place_resolved_at, "a chain run that found nothing must still record that we asked"
+        )
         self.assertTrue(boundary_generation_ran(location))
 
 
@@ -171,7 +179,9 @@ class ProviderGeometryOutranksOurOwnHullTests(TestCase):
 
         polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.PROPERTY)
 
-        self.assertEqual(source, "generated", "with no provider outline available the child-fitted hull is the best answer there is")
+        self.assertEqual(
+            source, "generated", "with no provider outline available the child-fitted hull is the best answer there is"
+        )
         self.assertIsNotNone(polygon)
 
     def test_a_drawing_of_the_users_own_still_wins(self) -> None:
@@ -225,7 +235,7 @@ class ArrivingGeometrySupersedesTheStandInTests(TestCase):
         self.child = baker.make(Pin, profile=self.profile, location=self.child_location, parent_pin=self.pin)
 
     def test_the_refit_drops_a_hull_that_a_parcel_has_superseded(self) -> None:
-        """"Replace it right away" - not at the next cache expiry.
+        """ "Replace it right away" - not at the next cache expiry.
 
         The hull here is the one the child-pin signal fitted during setUp, not
         a constructed stand-in: this is the exact row the deployment had.

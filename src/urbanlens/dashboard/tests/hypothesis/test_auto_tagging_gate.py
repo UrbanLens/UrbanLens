@@ -56,7 +56,7 @@ class AutoTagAvailabilityTests(TestCase):
         self.assertTrue(self._available(KIND_CATEGORY, disabled=False))
 
     def test_statuses_people_and_media_are_out_of_scope(self) -> None:
-        """"Visited" and a person's name are not "what is this place"."""
+        """ "Visited" and a person's name are not "what is this place"."""
         for kind in (KIND_STATUS, KIND_USER, KIND_MEDIA):
             self.assertFalse(self._available(kind), f"{kind} labels should never auto-tag")
 
@@ -163,7 +163,9 @@ class ControlMatchesServerTests(TestCase):
             self._post_edit(label, disable=True)
 
         label.refresh_from_db()
-        self.assertTrue(label.allow_auto_tag, "a user without the capability must not be able to set a flag they cannot see")
+        self.assertTrue(
+            label.allow_auto_tag, "a user without the capability must not be able to set a flag they cannot see"
+        )
 
     def test_the_server_honours_the_field_with_the_capability(self) -> None:
         from unittest import mock

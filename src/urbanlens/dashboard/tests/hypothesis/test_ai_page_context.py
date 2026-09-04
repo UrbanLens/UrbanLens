@@ -139,7 +139,11 @@ class RegistryConsistencyTests(SimpleTestCase):
     def test_every_resolver_with_an_object_kind_has_a_verification_check(self) -> None:
         for url_name, resolver in _RESOLVERS.items():
             if resolver.object_kind is not None:
-                self.assertIn(resolver.object_kind, _EXISTENCE_CHECKS, f"{url_name!r} produces kind={resolver.object_kind!r} but verify_page_object has no check for it")
+                self.assertIn(
+                    resolver.object_kind,
+                    _EXISTENCE_CHECKS,
+                    f"{url_name!r} produces kind={resolver.object_kind!r} but verify_page_object has no check for it",
+                )
 
     def test_no_orphaned_verification_checks(self) -> None:
         """The reverse gap: a check nothing produces is dead code, not a security issue - still worth flagging."""

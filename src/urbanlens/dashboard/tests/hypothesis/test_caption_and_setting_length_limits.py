@@ -32,7 +32,9 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 
 #: Smallest valid PNG - the upload path needs a real image, not arbitrary bytes.
-_PNG_BYTES = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
 
 
 class SiteSettingNameSourceLengthTests(TestCase):
@@ -91,7 +93,10 @@ class SafetyPhotoCaptionLengthTests(TestCase):
         oversized = "c" * (column_max_length(Image, "caption") + 1)
         upload = SimpleUploadedFile("photo.png", _PNG_BYTES, content_type="image/png")
 
-        response = self.client.post(reverse("safety.checkin.gallery", kwargs={"checkin_slug": checkin.slug}), {"image": upload, "caption": oversized})
+        response = self.client.post(
+            reverse("safety.checkin.gallery", kwargs={"checkin_slug": checkin.slug}),
+            {"image": upload, "caption": oversized},
+        )
 
         # A rejected caption is reported (400), not silently truncated (201).
         self.assertEqual(response.status_code, 400)
@@ -103,7 +108,10 @@ class SafetyPhotoCaptionLengthTests(TestCase):
         exact = "c" * column_max_length(Image, "caption")
         upload = SimpleUploadedFile("photo.png", _PNG_BYTES, content_type="image/png")
 
-        response = self.client.post(reverse("safety.checkin.gallery", kwargs={"checkin_slug": checkin.slug}), {"image": upload, "caption": exact})
+        response = self.client.post(
+            reverse("safety.checkin.gallery", kwargs={"checkin_slug": checkin.slug}),
+            {"image": upload, "caption": exact},
+        )
 
         self.assertEqual(response.status_code, 201)
         self.assertTrue(Image.objects.filter(safety_checkin=checkin, caption=exact).exists())

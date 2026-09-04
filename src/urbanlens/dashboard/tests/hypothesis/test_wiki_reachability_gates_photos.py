@@ -69,7 +69,9 @@ class WikiReachabilityTestCase(TestCase):
 
     def _contribute(self, pin: Pin, wiki: Wiki, name: str) -> Image:
         """Upload a photo to *pin* and deliberately contribute it to *wiki*."""
-        result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", _jpeg_bytes(), content_type="image/jpeg"), name)
+        result = upload_photo_for_owner(
+            pin, self.owner, SimpleUploadedFile(f"{name}.jpg", _jpeg_bytes(), content_type="image/jpeg"), name
+        )
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         attach_to_wiki(result, wiki, added_by=self.owner)
         # pending_scan=False alongside the wiki link: a fresh upload is now
@@ -97,13 +99,17 @@ class PhotosOnUnreachableWikisTests(WikiReachabilityTestCase):
         """The viewer has no pin at the far place, so its wiki is not theirs to read."""
         photo = self._contribute(self.owner_far_pin, self.far_wiki, "far")
 
-        self.assertFalse(self._visible(photo, self.viewer), "a photo on a wiki the viewer cannot reach was visible to them")
+        self.assertFalse(
+            self._visible(photo, self.viewer), "a photo on a wiki the viewer cannot reach was visible to them"
+        )
 
     def test_a_photo_on_a_reachable_wiki_is_still_visible(self) -> None:
         """Positive control: the near wiki is shared, and contribution still works."""
         photo = self._contribute(self.owner_near_pin, self.near_wiki, "near")
 
-        self.assertTrue(self._visible(photo, self.viewer), "a deliberately contributed photo stopped being visible on a shared wiki")
+        self.assertTrue(
+            self._visible(photo, self.viewer), "a deliberately contributed photo stopped being visible on a shared wiki"
+        )
 
     def test_the_owner_always_sees_their_own_photo(self) -> None:
         """Positive control: reachability never applies to your own uploads."""
@@ -164,7 +170,9 @@ class TripActivityPhotosTests(WikiReachabilityTestCase):
 
     def _pin_photo(self, pin: Pin, name: str, colour: tuple[int, int, int] = (10, 20, 30)) -> Image:
         """A photo on the owner's pin, contributed to no wiki."""
-        result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", _jpeg_bytes(colour), content_type="image/jpeg"), name)
+        result = upload_photo_for_owner(
+            pin, self.owner, SimpleUploadedFile(f"{name}.jpg", _jpeg_bytes(colour), content_type="image/jpeg"), name
+        )
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         return result
 
@@ -175,11 +183,15 @@ class TripActivityPhotosTests(WikiReachabilityTestCase):
         ``photo_upload_visibility`` is left at its permissive default, so
         membership is the only thing that could admit them - and it must not.
         """
-        self.assertFalse(self._visible(self.photo, self.member), "a trip member reached the whole gallery of a pin on the itinerary")
+        self.assertFalse(
+            self._visible(self.photo, self.member), "a trip member reached the whole gallery of a pin on the itinerary"
+        )
 
     def test_somebody_not_on_the_trip_cannot_either(self) -> None:
         """The viewer pins the same near place, so only trip membership differs."""
-        self.assertFalse(self._visible(self.photo, self.viewer), "a photo on a trip activity leaked to somebody not on the trip")
+        self.assertFalse(
+            self._visible(self.photo, self.viewer), "a photo on a trip activity leaked to somebody not on the trip"
+        )
 
     def test_the_owner_still_sees_their_own_photo(self) -> None:
         """Tightening the gate must not hide a pin's photos from its uploader."""

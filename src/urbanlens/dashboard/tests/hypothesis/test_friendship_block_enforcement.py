@@ -125,11 +125,15 @@ class BlockedSendViewTests(TestCase):
         _set_dm_visibility(self.partner, VisibilityChoice.ANYONE)
 
     def test_send_succeeds_before_being_blocked(self) -> None:
-        response = self.client.post(reverse("messages.send", kwargs={"profile_slug": self.partner.slug}), {"body": "hello"})
+        response = self.client.post(
+            reverse("messages.send", kwargs={"profile_slug": self.partner.slug}), {"body": "hello"}
+        )
         self.assertEqual(response.status_code, 200)
 
     def test_send_403s_once_blocked(self) -> None:
         _block(self.partner, self.me)
-        response = self.client.post(reverse("messages.send", kwargs={"profile_slug": self.partner.slug}), {"body": "hello"})
+        response = self.client.post(
+            reverse("messages.send", kwargs={"profile_slug": self.partner.slug}), {"body": "hello"}
+        )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(DirectMessage.objects.exists())

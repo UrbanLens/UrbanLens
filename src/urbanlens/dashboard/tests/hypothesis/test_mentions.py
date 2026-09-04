@@ -3,6 +3,7 @@
 Pure-function tests (extract_location_uuids, is_visible_to) use unittest.TestCase.
 DB-backed tests (viewer_pinned_uuids, filter_visible_comments) use django.test.TestCase.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -32,6 +33,7 @@ def _loc_mention(display: str, uid: uuid.UUID) -> str:
 
 
 # -- extract_location_uuids ----------------------------------------------------
+
 
 class ExtractLocationUuidsTests(SimpleTestCase):
     """extract_location_uuids parses @[...](loc:UUID) tokens."""
@@ -86,6 +88,7 @@ class ExtractLocationUuidsTests(SimpleTestCase):
 
 # -- is_visible_to -------------------------------------------------------------
 
+
 class IsVisibleToTests(SimpleTestCase):
     """is_visible_to hides comments when any mentioned location is not pinned."""
 
@@ -116,9 +119,7 @@ class IsVisibleToTests(SimpleTestCase):
 
     @given(uid=_uuid_st, extra_uuids=st.frozensets(_uuid_st, max_size=5))
     @_hyp
-    def test_visible_iff_mentioned_uuid_in_pinned(
-        self, uid: uuid.UUID, extra_uuids: frozenset[uuid.UUID]
-    ) -> None:
+    def test_visible_iff_mentioned_uuid_in_pinned(self, uid: uuid.UUID, extra_uuids: frozenset[uuid.UUID]) -> None:
         text = _loc_mention("Place", uid)
         pinned_with = extra_uuids | {uid}
         pinned_without = extra_uuids - {uid}
@@ -127,6 +128,7 @@ class IsVisibleToTests(SimpleTestCase):
 
 
 # -- render_comment_text -------------------------------------------------------
+
 
 class RenderCommentTextTests(SimpleTestCase):
     """render_comment_text returns None for hidden comments and HTML for visible ones."""

@@ -48,7 +48,9 @@ class LabelTotalPinPrimingTests(TestCase):
         pin = baker.make(
             Pin,
             profile=self.profile,
-            location=baker.make(Location, latitude=40.0 + self._locations / 100, longitude=-70.0 - self._locations / 100),
+            location=baker.make(
+                Location, latitude=40.0 + self._locations / 100, longitude=-70.0 - self._locations / 100
+            ),
         )
         pin.labels.add(label)
         return pin
@@ -138,7 +140,11 @@ class LabelTotalPinPrimingTests(TestCase):
 
         edge_queries = [q["sql"] for q in ctx.captured_queries if "dashboard_labels_parents" in q["sql"]]
         self.assertEqual(len(edge_queries), 1)
-        self.assertIn("profile_id", edge_queries[0], "edge-list query has no profile scoping - it fetches the whole site's hierarchy")
+        self.assertIn(
+            "profile_id",
+            edge_queries[0],
+            "edge-list query has no profile scoping - it fetches the whole site's hierarchy",
+        )
 
     def test_priming_an_empty_list_touches_nothing(self) -> None:
         with CaptureQueriesContext(connection) as ctx:

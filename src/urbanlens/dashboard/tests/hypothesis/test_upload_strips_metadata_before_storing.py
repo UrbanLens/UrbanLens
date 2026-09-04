@@ -106,7 +106,9 @@ class UploadStripTestCase(TestCase):
 
         self.user = baker.make(User)
         self.profile: Profile = self.user.profile
-        self.pin = Pin.objects.create(profile=self.profile, location=baker.make(Location, latitude="40.000000", longitude="-74.000000"))
+        self.pin = Pin.objects.create(
+            profile=self.profile, location=baker.make(Location, latitude="40.000000", longitude="-74.000000")
+        )
 
 
 class StoredFileIsStrippedTests(UploadStripTestCase):

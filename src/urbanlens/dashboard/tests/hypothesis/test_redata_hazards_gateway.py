@@ -33,8 +33,25 @@ class GetHazardEventsTests(SimpleTestCase):
             {
                 "count": 1,
                 "complete": True,
-                "results": [{"event_type": "earthquake", "magnitude": 3.2, "magnitude_scale": "Mw", "occurred_at": "2026-01-01T00:00:00Z", "title": "10km N of Nowhere", "url": "https://x"}],
-                "providers": [{"provider": "usgs_earthquakes", "status": "ok", "count": 1, "message": None, "radius_meters": 100_000.0}],
+                "results": [
+                    {
+                        "event_type": "earthquake",
+                        "magnitude": 3.2,
+                        "magnitude_scale": "Mw",
+                        "occurred_at": "2026-01-01T00:00:00Z",
+                        "title": "10km N of Nowhere",
+                        "url": "https://x",
+                    }
+                ],
+                "providers": [
+                    {
+                        "provider": "usgs_earthquakes",
+                        "status": "ok",
+                        "count": 1,
+                        "message": None,
+                        "radius_meters": 100_000.0,
+                    }
+                ],
             },
         )
 

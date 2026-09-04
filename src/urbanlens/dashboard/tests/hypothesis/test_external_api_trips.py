@@ -93,15 +93,27 @@ class TripCrudTests(_TripApiTestCase):
 
     def test_blank_name_gets_a_generated_placeholder(self) -> None:
         """Omitting the name is allowed - the trip still gets a real one."""
-        response = self.client.post(reverse("external_api:trips"), {}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.post(
+            reverse("external_api:trips"), {}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 201)
         self.assertTrue(response.json()["name"])
 
     def test_uuid_replay_returns_200_and_no_duplicate(self) -> None:
         """Re-sending the same client uuid answers with the original trip."""
         client_uuid = str(uuid4())
-        first = self.client.post(reverse("external_api:trips"), {"name": "Gary", "uuid": client_uuid}, content_type="application/json", **_bearer(self.raw_key))
-        second = self.client.post(reverse("external_api:trips"), {"name": "Gary", "uuid": client_uuid}, content_type="application/json", **_bearer(self.raw_key))
+        first = self.client.post(
+            reverse("external_api:trips"),
+            {"name": "Gary", "uuid": client_uuid},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        second = self.client.post(
+            reverse("external_api:trips"),
+            {"name": "Gary", "uuid": client_uuid},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
         self.assertEqual(first.status_code, 201)
         self.assertEqual(second.status_code, 200)
         self.assertEqual(first.json()["uuid"], second.json()["uuid"])
@@ -110,7 +122,12 @@ class TripCrudTests(_TripApiTestCase):
     def test_another_users_uuid_is_refused(self) -> None:
         """A caller cannot replay - or hijack - a uuid belonging to someone else's trip."""
         theirs = self._make_trip(creator=self.other_profile)
-        response = self.client.post(reverse("external_api:trips"), {"name": "Mine", "uuid": str(theirs.uuid)}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.post(
+            reverse("external_api:trips"),
+            {"name": "Mine", "uuid": str(theirs.uuid)},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_upcoming_trip_quota_is_enforced(self) -> None:
@@ -123,7 +140,12 @@ class TripCrudTests(_TripApiTestCase):
         settings_row = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings_row.pk).update(max_upcoming_trips_per_user=1)
         self._make_trip(name="Already planning", start_date=datetime.date.today() + datetime.timedelta(days=7))
-        response = self.client.post(reverse("external_api:trips"), {"name": "One too many"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.post(
+            reverse("external_api:trips"),
+            {"name": "One too many"},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
         self.assertEqual(response.status_code, 400)
         self.assertIn("maximum", response.json()["error"])
 
@@ -166,7 +188,12 @@ class TripCrudTests(_TripApiTestCase):
     def test_patch_blank_name_is_ignored(self) -> None:
         """A trip always keeps a name - blank is a no-op, not a wipe."""
         trip = self._make_trip()
-        self.client.patch(reverse("external_api:trips.detail", args=[trip.slug]), {"name": "  "}, content_type="application/json", **_bearer(self.raw_key))
+        self.client.patch(
+            reverse("external_api:trips.detail", args=[trip.slug]),
+            {"name": "  "},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
         trip.refresh_from_db()
         self.assertEqual(trip.name, "Detroit")
 
@@ -174,7 +201,9 @@ class TripCrudTests(_TripApiTestCase):
         """Deleting goes through the Undo framework, and only the creator may."""
         trip = self._make_trip()
         with mock.patch("urbanlens.dashboard.services.undo.service.stash_for_undo") as stash:
-            response = self.client.delete(reverse("external_api:trips.detail", args=[trip.slug]), **_bearer(self.raw_key))
+            response = self.client.delete(
+                reverse("external_api:trips.detail", args=[trip.slug]), **_bearer(self.raw_key)
+            )
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Trip.objects.filter(pk=trip.pk).exists())
         stash.assert_called_once()
@@ -203,7 +232,9 @@ class TripScopeEnforcementTests(_TripApiTestCase):
     def test_post_without_trips_write_is_forbidden(self) -> None:
         """Read access alone must not permit creating a trip."""
         raw = self._key_with_scopes([ApiKeyScope.TRIPS_READ.value])
-        response = self.client.post(reverse("external_api:trips"), {"name": "Nope"}, content_type="application/json", **_bearer(raw))
+        response = self.client.post(
+            reverse("external_api:trips"), {"name": "Nope"}, content_type="application/json", **_bearer(raw)
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_get_without_any_trip_scope_is_forbidden(self) -> None:
@@ -365,8 +396,13 @@ class TripMemberTests(_TripApiTestCase):
     def test_removing_a_member_revokes_their_calendar_sync(self) -> None:
         """A removed member's live calendar export must be cut at the same moment."""
         TripMembership.objects.create(trip=self.trip, profile=self.invitee, status=TripMembership.STATUS_JOINED)
-        with mock.patch("urbanlens.dashboard.services.trips.trip_membership.disconnect_member_calendar_sync") as disconnect:
-            self.client.delete(reverse("external_api:trips.members.detail", args=[self.trip.slug, self.invitee.slug]), **_bearer(self.raw_key))
+        with mock.patch(
+            "urbanlens.dashboard.services.trips.trip_membership.disconnect_member_calendar_sync"
+        ) as disconnect:
+            self.client.delete(
+                reverse("external_api:trips.members.detail", args=[self.trip.slug, self.invitee.slug]),
+                **_bearer(self.raw_key),
+            )
         disconnect.assert_called_once()
 
     def test_creator_cannot_be_removed(self) -> None:
@@ -379,12 +415,16 @@ class TripMemberTests(_TripApiTestCase):
 
     def test_creator_cannot_leave(self) -> None:
         """The creator must delete the trip rather than abandon it."""
-        response = self.client.delete(reverse("external_api:trips.leave", args=[self.trip.slug]), **_bearer(self.raw_key))
+        response = self.client.delete(
+            reverse("external_api:trips.leave", args=[self.trip.slug]), **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_organizer_flag_is_explicit_not_a_toggle(self) -> None:
         """Sending the same value twice leaves the flag where it was."""
-        membership = TripMembership.objects.create(trip=self.trip, profile=self.invitee, status=TripMembership.STATUS_JOINED)
+        membership = TripMembership.objects.create(
+            trip=self.trip, profile=self.invitee, status=TripMembership.STATUS_JOINED
+        )
         url = reverse("external_api:trips.members.detail", args=[self.trip.slug, self.invitee.slug])
         self.client.patch(url, {"is_organizer": True}, content_type="application/json", **_bearer(self.raw_key))
         self.client.patch(url, {"is_organizer": True}, content_type="application/json", **_bearer(self.raw_key))
@@ -405,11 +445,15 @@ class TripMemberTests(_TripApiTestCase):
         """Joining reveals the itinerary, which must enter the reshare chain."""
         trip = self._make_trip(creator=self.other_profile, name="Theirs")
         TripMembership.objects.create(trip=trip, profile=self.profile, status=TripMembership.STATUS_INVITED)
-        with mock.patch("urbanlens.dashboard.services.trips.trip_share_tracking.record_trip_shares_for_member") as record:
+        with mock.patch(
+            "urbanlens.dashboard.services.trips.trip_share_tracking.record_trip_shares_for_member"
+        ) as record:
             response = self.client.post(reverse("external_api:trips.join", args=[trip.slug]), **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 200)
         record.assert_called_once()
-        self.assertTrue(TripMembership.objects.get(trip=trip, profile=self.profile).status == TripMembership.STATUS_JOINED)
+        self.assertTrue(
+            TripMembership.objects.get(trip=trip, profile=self.profile).status == TripMembership.STATUS_JOINED
+        )
 
     def test_masked_member_exposes_no_slug(self) -> None:
         """A member this viewer may not identify is addressable only by uuid.
@@ -435,7 +479,9 @@ class TripActivityTests(_TripApiTestCase):
         super().setUp()
         self.trip = self._make_trip()
         self.location = Location.objects.create(latitude=42.33, longitude=-83.04, official_name="Packard")
-        self.activity = TripActivity.objects.create(trip=self.trip, location=self.location, added_by=self.profile, title="Packard Plant")
+        self.activity = TripActivity.objects.create(
+            trip=self.trip, location=self.location, added_by=self.profile, title="Packard Plant"
+        )
 
     def test_create_activity_records_share_provenance(self) -> None:
         """Putting a place on the itinerary counts as a share of that place."""
@@ -517,12 +563,14 @@ class TripActivityTests(_TripApiTestCase):
 
         Regression for TripActivitySerializer sourcing the raw, unmasked
         ``activity.effective_title`` model property instead of the row's already-masked
-        ``display_title`` - see docs/GOALS_CODE_AUDIT.md ("Trip activities sourcing"). A
+        ``display_title`` - see docs/audits/GOALS_CODE_AUDIT.md ("Trip activities sourcing"). A
         title-less, location-hidden activity used to leak the adder's private pin name
         through this field even though latitude/longitude were correctly nulled.
         """
         pin = Pin.objects.create(profile=self.profile, location=self.location, name="My Secret Cabin")
-        activity = TripActivity.objects.create(trip=self.trip, location=self.location, pin=pin, added_by=self.profile, title="", location_hidden=True)
+        activity = TripActivity.objects.create(
+            trip=self.trip, location=self.location, pin=pin, added_by=self.profile, title="", location_hidden=True
+        )
 
         response = self._get("external_api:trips.activities", self.trip.slug)
 
@@ -541,7 +589,14 @@ class TripActivityTests(_TripApiTestCase):
         even though latitude/longitude were correctly nulled.
         """
         child = Trip.objects.create(creator=self.profile, name="Secret Getaway")
-        activity = TripActivity.objects.create(trip=self.trip, location=self.location, added_by=self.profile, title="Secret stop", location_hidden=True, child_trip=child)
+        activity = TripActivity.objects.create(
+            trip=self.trip,
+            location=self.location,
+            added_by=self.profile,
+            title="Secret stop",
+            location_hidden=True,
+            child_trip=child,
+        )
 
         response = self._get("external_api:trips.activities", self.trip.slug)
 
@@ -551,7 +606,9 @@ class TripActivityTests(_TripApiTestCase):
     def test_visible_activity_still_shows_its_child_trip_uuid(self) -> None:
         """The masking fix must not hide child_trip_uuid for visible activities."""
         child = Trip.objects.create(creator=self.profile, name="Side Trip")
-        activity = TripActivity.objects.create(trip=self.trip, location=self.location, added_by=self.profile, title="Open stop", child_trip=child)
+        activity = TripActivity.objects.create(
+            trip=self.trip, location=self.location, added_by=self.profile, title="Open stop", child_trip=child
+        )
 
         response = self._get("external_api:trips.activities", self.trip.slug)
 
@@ -561,7 +618,9 @@ class TripActivityTests(_TripApiTestCase):
     def test_visible_activity_still_shows_its_pin_derived_title(self) -> None:
         """The masking fix must not hide the title for activities that ARE visible."""
         pin = Pin.objects.create(profile=self.profile, location=self.location, name="Visible Spot")
-        activity = TripActivity.objects.create(trip=self.trip, location=self.location, pin=pin, added_by=self.profile, title="")
+        activity = TripActivity.objects.create(
+            trip=self.trip, location=self.location, pin=pin, added_by=self.profile, title=""
+        )
 
         response = self._get("external_api:trips.activities", self.trip.slug)
 
@@ -575,7 +634,9 @@ class TripActivityTests(_TripApiTestCase):
         who had merely been invited could drag any activity on the map.
         """
         trip = self._make_trip(creator=self.other_profile, name="Theirs")
-        activity = TripActivity.objects.create(trip=trip, location=self.location, added_by=self.other_profile, title="Theirs")
+        activity = TripActivity.objects.create(
+            trip=trip, location=self.location, added_by=self.other_profile, title="Theirs"
+        )
         TripMembership.objects.create(trip=trip, profile=self.profile, status=TripMembership.STATUS_INVITED)
         response = self.client.post(
             reverse("external_api:trips.activities.position", args=[trip.slug, activity.id]),
@@ -660,7 +721,9 @@ class TripActivityTests(_TripApiTestCase):
 
     def test_status_completed_routes_through_complete_activity(self) -> None:
         """Completing through the API logs visits like the web app's own action."""
-        with mock.patch("urbanlens.dashboard.services.trips.trip_activities.create_visit_entries_for_completed_activity") as entries:
+        with mock.patch(
+            "urbanlens.dashboard.services.trips.trip_activities.create_visit_entries_for_completed_activity"
+        ) as entries:
             response = self.client.put(
                 reverse("external_api:trips.activities.status", args=[self.trip.slug, self.activity.id]),
                 {"status": "completed"},
@@ -746,7 +809,9 @@ class TripCommentTests(_TripApiTestCase):
         comment = TripComment.objects.create(trip=self.trip, author=self.profile, text="React to me")
         url = reverse("external_api:trips.comments.reactions", args=[self.trip.slug, comment.id])
         self.client.put(url, {"emoji": "🔥", "reacted": True}, content_type="application/json", **_bearer(self.raw_key))
-        response = self.client.put(url, {"emoji": "🔥", "reacted": True}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.put(
+            url, {"emoji": "🔥", "reacted": True}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         reactions = {row["emoji"]: row for row in response.json()["reactions"]}
         self.assertEqual(reactions["🔥"]["count"], 1)
@@ -757,7 +822,9 @@ class TripCommentTests(_TripApiTestCase):
         comment = TripComment.objects.create(trip=self.trip, author=self.profile, text="React to me")
         url = reverse("external_api:trips.comments.reactions", args=[self.trip.slug, comment.id])
         self.client.put(url, {"emoji": "🔥", "reacted": True}, content_type="application/json", **_bearer(self.raw_key))
-        response = self.client.put(url, {"emoji": "🔥", "reacted": False}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.put(
+            url, {"emoji": "🔥", "reacted": False}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.json()["reactions"], [])
 
     def test_unknown_emoji_is_rejected(self) -> None:

@@ -9,7 +9,12 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import GameSession, SpotGuessrMode
-from urbanlens.dashboard.services.spotguessr.chat import CHAT_HISTORY_LIMIT, MAX_MESSAGE_LENGTH, recent_messages, send_chat_message
+from urbanlens.dashboard.services.spotguessr.chat import (
+    CHAT_HISTORY_LIMIT,
+    MAX_MESSAGE_LENGTH,
+    recent_messages,
+    send_chat_message,
+)
 
 
 def _make_profile() -> Profile:

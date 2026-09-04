@@ -62,7 +62,9 @@ class EmailOrUsernameModelBackendTests(TestCase):
 
     def test_backend_direct_call_matches_module_level_authenticate(self) -> None:
         backend = EmailOrUsernameModelBackend()
-        result = backend.authenticate(request=None, username="explorer@example.com", password="correct horse battery staple")
+        result = backend.authenticate(
+            request=None, username="explorer@example.com", password="correct horse battery staple"
+        )
         self.assertEqual(result, self.user)
 
 

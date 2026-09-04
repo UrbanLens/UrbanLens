@@ -16,7 +16,11 @@ from django.utils import timezone
 
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
+from urbanlens.dashboard.models.calendar_sync.model import (
+    CalendarSyncDirection,
+    GoogleCalendarAccount,
+    TripCalendarLink,
+)
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -81,7 +85,9 @@ class LabelBulkUpdateRefreshesMapPinCacheTests(TestCase):
         # "carries any of them" match - this pin only carries one, so it
         # distinguishes the two.
         only_beta = Pin.objects.create(
-            profile=self.profile, location=Location.objects.create(latitude=43.0, longitude=-70.0), name="Beta only",
+            profile=self.profile,
+            location=Location.objects.create(latitude=43.0, longitude=-70.0),
+            name="Beta only",
         )
         only_beta.labels.add(self.label_b)
 
@@ -93,7 +99,9 @@ class LabelBulkUpdateRefreshesMapPinCacheTests(TestCase):
     def test_a_pin_without_the_reordered_labels_is_not_refreshed(self):
         # A profile may hold only one pin per location, so this needs its own.
         other = Pin.objects.create(
-            profile=self.profile, location=Location.objects.create(latitude=42.0, longitude=-71.0), name="Untouched",
+            profile=self.profile,
+            location=Location.objects.create(latitude=42.0, longitude=-71.0),
+            name="Untouched",
         )
 
         refresh = self._reorder_via_organize()
@@ -127,7 +135,10 @@ class TripActivityBulkCreateQueuesCalendarPushTests(TestCase):
             token_expiry=timezone.now() + datetime.timedelta(hours=1),
         )
         self.trip = Trip.objects.create(
-            name="Bulk trip", creator=self.profile, start_date=datetime.date(2026, 11, 1), end_date=datetime.date(2026, 11, 2),
+            name="Bulk trip",
+            creator=self.profile,
+            start_date=datetime.date(2026, 11, 1),
+            end_date=datetime.date(2026, 11, 2),
         )
         self.pin_list = PinList.objects.create(profile=self.profile, name="Places")
         for index in range(3):
@@ -157,20 +168,30 @@ class TripActivityBulkCreateQueuesCalendarPushTests(TestCase):
 
     def test_activities_are_appended_after_the_trips_existing_ones(self):
         existing = TripActivity.objects.create(
-            trip=self.trip, location=Location.objects.create(latitude=50.0, longitude=-80.0), added_by=self.profile, order=0,
+            trip=self.trip,
+            location=Location.objects.create(latitude=50.0, longitude=-80.0),
+            added_by=self.profile,
+            order=0,
         )
 
         created, _ = self._copy()
 
         self.assertEqual(created, 3)
         new_orders = list(
-            TripActivity.objects.filter(trip=self.trip).exclude(pk=existing.pk).order_by("order").values_list("order", flat=True),
+            TripActivity.objects.filter(trip=self.trip)
+            .exclude(pk=existing.pk)
+            .order_by("order")
+            .values_list("order", flat=True),
         )
         self.assertEqual(new_orders, [1, 2, 3])
 
     def test_an_auto_synced_trip_gets_a_calendar_push(self):
         TripCalendarLink.objects.create(
-            trip=self.trip, profile=self.profile, google_event_id="evt-bulk", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
+            trip=self.trip,
+            profile=self.profile,
+            google_event_id="evt-bulk",
+            direction=CalendarSyncDirection.IMPORTED,
+            auto_sync=True,
         )
 
         _, enqueue = self._copy()
@@ -184,7 +205,11 @@ class TripActivityBulkCreateQueuesCalendarPushTests(TestCase):
 
     def test_copying_an_empty_list_does_not_enqueue(self):
         TripCalendarLink.objects.create(
-            trip=self.trip, profile=self.profile, google_event_id="evt-empty", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
+            trip=self.trip,
+            profile=self.profile,
+            google_event_id="evt-empty",
+            direction=CalendarSyncDirection.IMPORTED,
+            auto_sync=True,
         )
         self.pin_list.items.all().delete()
 

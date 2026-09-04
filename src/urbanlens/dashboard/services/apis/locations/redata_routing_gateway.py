@@ -51,7 +51,7 @@ class RedataRoutingGateway(RedataLocationContextGateway):
                 failed outright.
 
         Note:
-            REData's own ``docs/api-reference.md`` documents the request body
+            REData's own ``../REData/docs/api-reference.md`` documents the request body
             for this endpoint and the ``route: null``/``waypoint_order``/
             ``available_capabilities`` fields, but doesn't show a full
             worked example of a non-null ``route`` object's own fields.

@@ -29,7 +29,9 @@ class GetStateBoundaryTests(SimpleTestCase):
     def test_returns_geometry_of_matching_feature(self) -> None:
         gw = _gateway()
         geometry = {"rings": [[[-80.0, 40.0], [-80.0, 45.0], [-70.0, 45.0], [-70.0, 40.0], [-80.0, 40.0]]]}
-        gw.session.get.return_value = _json_response({"features": [{"geometry": geometry, "attributes": {"STUSPS": "NY"}}]})
+        gw.session.get.return_value = _json_response(
+            {"features": [{"geometry": geometry, "attributes": {"STUSPS": "NY"}}]}
+        )
 
         self.assertEqual(gw.get_state_boundary("ny"), geometry)
 

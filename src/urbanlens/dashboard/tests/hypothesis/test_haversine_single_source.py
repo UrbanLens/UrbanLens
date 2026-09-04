@@ -67,14 +67,18 @@ class HaversineSingleSourceTests(SimpleTestCase):
         self.assertLess(haversine_meters(-16.5, 179.99, -16.5, -179.99), 5_000.0)
 
     def test_kilometres_and_metres_agree(self) -> None:
-        self.assertAlmostEqual(haversine_km(41.35, -71.45, 51.50, -0.12) * 1000.0, haversine_meters(41.35, -71.45, 51.50, -0.12), places=6)
+        self.assertAlmostEqual(
+            haversine_km(41.35, -71.45, 51.50, -0.12) * 1000.0, haversine_meters(41.35, -71.45, 51.50, -0.12), places=6
+        )
 
     def test_a_zero_distance_is_zero(self) -> None:
         self.assertAlmostEqual(haversine_meters(41.35, -71.45, 41.35, -71.45), 0.0, places=9)
 
     @given(lat1=_lat, lng1=_lng, lat2=_lat, lng2=_lng)
     @settings(max_examples=40, deadline=None)
-    def test_all_implementations_agree_for_arbitrary_points(self, lat1: float, lng1: float, lat2: float, lng2: float) -> None:
+    def test_all_implementations_agree_for_arbitrary_points(
+        self, lat1: float, lng1: float, lat2: float, lng2: float
+    ) -> None:
         values = _all_in_meters(lat1, lng1, lat2, lng2)
         spread = max(values.values()) - min(values.values())
 
@@ -86,4 +90,6 @@ class HaversineSingleSourceTests(SimpleTestCase):
         there = haversine_meters(lat1, lng1, lat2, lng2)
 
         self.assertAlmostEqual(there, haversine_meters(lat2, lng2, lat1, lng1), places=6)
-        self.assertLessEqual(there, 20_100_000.0, "no two points on Earth are further apart than half its circumference")
+        self.assertLessEqual(
+            there, 20_100_000.0, "no two points on Earth are further apart than half its circumference"
+        )

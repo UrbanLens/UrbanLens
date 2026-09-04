@@ -298,7 +298,9 @@ class MultiPictureJpegTests(TestCase):
             result = PILImage.open(stored)
             result.load()
             self.assertEqual(result.format, "JPEG")
-            self.assertEqual(getattr(result, "n_frames", 1), 1, "the extra frames carry their own metadata and must not survive")
+            self.assertEqual(
+                getattr(result, "n_frames", 1), 1, "the extra frames carry their own metadata and must not survive"
+            )
             self.assertEqual(dict(result.getexif().get_ifd(0x8825)), {})
 
     def test_the_uploaders_downscale_settings_do_not_matter(self):

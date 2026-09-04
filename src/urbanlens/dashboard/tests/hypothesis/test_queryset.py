@@ -1,4 +1,4 @@
-﻿"""Property-based tests for PinQuerySet.filter_by_criteria.
+"""Property-based tests for PinQuerySet.filter_by_criteria.
 
 filter_by_criteria is the primary server-side search engine.  For each filter
 key the invariants are:
@@ -12,6 +12,7 @@ The pin fixtures are created once in setUp so they survive across all
 @given examples (which are each wrapped in an individually rolled-back
 savepoint by hypothesis.extra.django.TestCase).
 """
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -85,8 +86,7 @@ class FilterByCriteriaPriorityTests(TestCase):
         # Pins at fixed priority levels.
         self.priorities = [0, 25, 50, 75, 100]
         self.pins_by_priority: dict[int, Pin] = {
-            p: baker.make(Pin, profile=self.profile, priority=p)
-            for p in self.priorities
+            p: baker.make(Pin, profile=self.profile, priority=p) for p in self.priorities
         }
 
     def _base_qs(self):
@@ -139,7 +139,9 @@ class FilterByCriteriaDangerTests(TestCase):
         criterion at all" - since every pin here has danger>=0, that
         happens to look identical either way, so assert against a stricter
         min_danger=1 in the same call to prove 0 was actually evaluated."""
-        result_ids = set(self._base_qs().filter_by_criteria({"min_danger": 0, "max_danger": 0}).values_list("pk", flat=True))
+        result_ids = set(
+            self._base_qs().filter_by_criteria({"min_danger": 0, "max_danger": 0}).values_list("pk", flat=True)
+        )
         self.assertEqual(result_ids, {self.pins_by_danger[0].pk})
 
     @given(min_d=st.sampled_from([0, 1, 2, 3, 4, 5]))
@@ -196,10 +198,12 @@ class FilterByCriteriaDateTests(TestCase):
         # in Django's configured TIME_ZONE (UTC), which can already be a
         # different calendar day than the test runner's local machine time.
         today = timezone.localdate()
-        qs = self._base_qs().filter_by_criteria({
-            "created_after": today,
-            "created_before": today,
-        })
+        qs = self._base_qs().filter_by_criteria(
+            {
+                "created_after": today,
+                "created_before": today,
+            }
+        )
         self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
 

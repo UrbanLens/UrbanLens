@@ -1,4 +1,5 @@
 """Tests for SiteSettings environment override resolution."""
+
 from __future__ import annotations
 
 import os
@@ -72,11 +73,13 @@ class SiteSettingsEnvironmentTests(TestCase):
         self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.STAGING)
 
     @given(
-        st.sampled_from([
-            EnvironmentOverrideChoice.PRODUCTION,
-            EnvironmentOverrideChoice.DEVELOPMENT,
-            EnvironmentOverrideChoice.TESTING,
-        ]),
+        st.sampled_from(
+            [
+                EnvironmentOverrideChoice.PRODUCTION,
+                EnvironmentOverrideChoice.DEVELOPMENT,
+                EnvironmentOverrideChoice.TESTING,
+            ]
+        ),
     )
     @_hyp
     def test_explicit_override_ignores_env_var(self, override: str) -> None:
@@ -200,7 +203,11 @@ class ShowDevAdminFeaturesTests(TestCase):
         with patch.object(app_settings, "allow_dev_toolbar_for_non_admins", new=True):
             self.assertFalse(self.site.show_dev_admin_features(self.non_admin))
 
-    @given(st.sampled_from([EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL, EnvironmentTypes.TESTING, EnvironmentTypes.STAGING]))
+    @given(
+        st.sampled_from(
+            [EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL, EnvironmentTypes.TESTING, EnvironmentTypes.STAGING]
+        )
+    )
     @_hyp
     def test_non_admin_allowed_environments(self, env_type: str) -> None:
         """Hypothesis: with the flag on, dev/local/testing/staging all grant non-admins the toolbar."""

@@ -40,7 +40,15 @@ class GetImageryTests(SimpleTestCase):
 
     def test_returns_the_envelopes_results(self) -> None:
         session = mock.Mock()
-        results = [{"provider": "nasa_gibs", "url": "https://gibs.example/tile.jpg", "delivery": "image", "captured_on": "2019", "attribution": "NASA"}]
+        results = [
+            {
+                "provider": "nasa_gibs",
+                "url": "https://gibs.example/tile.jpg",
+                "delivery": "image",
+                "captured_on": "2019",
+                "attribution": "NASA",
+            }
+        ]
         session.get.return_value = _response(200, {"count": 1, "complete": True, "results": results})
 
         result = _gateway(session).get_imagery(41.7, -73.9)

@@ -14,7 +14,12 @@ import pytest
 from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.achievements.meta import ActivityKind, streak_metric_key
-from urbanlens.dashboard.models.achievements.model import Achievement, ProfileActivityDay, ProfileStreak, UserAchievement
+from urbanlens.dashboard.models.achievements.model import (
+    Achievement,
+    ProfileActivityDay,
+    ProfileStreak,
+    UserAchievement,
+)
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.markup.model import MarkupMap
@@ -27,7 +32,12 @@ from urbanlens.dashboard.services.achievements.evaluate import (
     evaluate_profile,
     progress_for_profile,
 )
-from urbanlens.dashboard.services.achievements.metrics import all_metrics, compute_values, get_metric, metrics_for_triggers
+from urbanlens.dashboard.services.achievements.metrics import (
+    all_metrics,
+    compute_values,
+    get_metric,
+    metrics_for_triggers,
+)
 
 
 class AchievementTestsBase(TestCase):
@@ -190,7 +200,9 @@ class MetricComputationTests(AchievementTestsBase):
         merely up-voted somebody else's photograph.
         """
         baker.make(Image, profile=self.profile, source=ImageSource.UPLOAD, _quantity=2)
-        baker.make(Image, profile=self.profile, source=ImageSource.YELP, media_source_key="yelp", media_item_key="0" * 40)
+        baker.make(
+            Image, profile=self.profile, source=ImageSource.YELP, media_source_key="yelp", media_item_key="0" * 40
+        )
         self.assertEqual(get_metric("photos_uploaded").value_for(self.profile), 2)
 
     def test_photos_uploaded_counts_a_photo_from_your_own_library(self) -> None:
@@ -362,7 +374,9 @@ class AwardingTests(AchievementTestsBase):
 
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile).exists())
         self.assertFalse(
-            NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACHIEVEMENT_EARNED).exists(),
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACHIEVEMENT_EARNED
+            ).exists(),
         )
 
 
@@ -401,7 +415,9 @@ class SignalIntegrationTests(AchievementTestsBase):
 
     def test_external_photo_does_not_extend_the_upload_streak(self) -> None:
         """Attaching a Yelp photo creates an Image, but is not an upload."""
-        baker.make(Image, profile=self.profile, source=ImageSource.YELP, media_source_key="yelp", media_item_key="0" * 40)
+        baker.make(
+            Image, profile=self.profile, source=ImageSource.YELP, media_source_key="yelp", media_item_key="0" * 40
+        )
         self.assertFalse(ProfileActivityDay.objects.filter(profile=self.profile, kind=ActivityKind.PHOTO).exists())
 
         baker.make(Image, profile=self.profile, source=ImageSource.UPLOAD)
@@ -420,7 +436,10 @@ class SignalIntegrationTests(AchievementTestsBase):
 
     def test_no_award_for_a_metric_means_no_task_is_queued(self) -> None:
         """A site with no award on a metric pays nothing when it changes."""
-        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             baker.make(Pin, profile=self.profile)
 
         queued = [call for call in enqueue.call_args_list if "achievement" in str(call)]
@@ -432,7 +451,10 @@ class SignalIntegrationTests(AchievementTestsBase):
 
         self._achievement(metric="pins_created", threshold=50, name="Far Off")
 
-        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             baker.make(Pin, profile=self.profile)
 
         enqueued_tasks = [call.args[0] for call in enqueue.call_args_list if call.args]
@@ -456,7 +478,10 @@ class SignalIntegrationTests(AchievementTestsBase):
 
         baker.make(Pin, profile=self.profile, _quantity=3)
 
-        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             achievement = self._achievement(metric="pins_created", threshold=3, name="Draft Award", is_active=False)
         self.assertEqual(enqueue.call_args_list, [])
         self.assertFalse(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
@@ -637,7 +662,14 @@ class SiteAdminAchievementViewTests(AchievementTestsBase):
         self.client.force_login(self.admin_user)
         response = self.client.post(
             reverse("site_admin_achievements"),
-            {"name": "Shutterbug", "metric": "photos_uploaded", "threshold": "10", "icon": "photo_camera", "is_active": "on", "order": "0"},
+            {
+                "name": "Shutterbug",
+                "metric": "photos_uploaded",
+                "threshold": "10",
+                "icon": "photo_camera",
+                "is_active": "on",
+                "order": "0",
+            },
         )
         self.assertEqual(response.status_code, 200)
         achievement = Achievement.objects.get(name="Shutterbug")
@@ -682,7 +714,9 @@ class SiteAdminAchievementViewTests(AchievementTestsBase):
         UserAchievement.objects.all().delete()
 
         self.client.force_login(self.admin_user)
-        response = self.client.post(reverse("site_admin_achievement_backfill", kwargs={"achievement_id": achievement.pk}))
+        response = self.client.post(
+            reverse("site_admin_achievement_backfill", kwargs={"achievement_id": achievement.pk})
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())

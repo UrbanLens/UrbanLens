@@ -119,7 +119,10 @@ def _registered_routes() -> list[tuple[str, str, dict[str, str | int]]]:
     routes: list[tuple[str, str, dict[str, str | int]]] = []
     for entry in external_api_urls.urlpatterns:
         route = str(entry.pattern)
-        kwargs = {name: _SAMPLE_ARGUMENTS.get(converter, _SAMPLE_ARGUMENTS["str"]) for converter, name in _route_parameters(route)}
+        kwargs = {
+            name: _SAMPLE_ARGUMENTS.get(converter, _SAMPLE_ARGUMENTS["str"])
+            for converter, name in _route_parameters(route)
+        }
         routes.append((entry.name, route, kwargs))
     return routes
 
@@ -129,12 +132,20 @@ class ExternalApiRouteTableTests(SimpleTestCase):
 
     def test_the_route_table_is_not_empty(self) -> None:
         """Guards the rest of this file: a broken import would make every other test vacuous."""
-        self.assertGreater(len(_registered_routes()), 100, "The external API urlconf came back nearly empty - the domain modules are probably not being concatenated at all, which would make every other assertion here pass trivially.")
+        self.assertGreater(
+            len(_registered_routes()),
+            100,
+            "The external API urlconf came back nearly empty - the domain modules are probably not being concatenated at all, which would make every other assertion here pass trivially.",
+        )
 
     def test_every_route_is_named(self) -> None:
         """An unnamed route cannot be reversed, so no client and no test can reach it."""
         unnamed = [route for name, route, _kwargs in _registered_routes() if not name]
-        self.assertEqual(unnamed, [], "Every external-API route needs name=; reverse('external_api:...') is the only supported way to build these URLs, and an unnamed route is also invisible to the shadowing check below.")
+        self.assertEqual(
+            unnamed,
+            [],
+            "Every external-API route needs name=; reverse('external_api:...') is the only supported way to build these URLs, and an unnamed route is also invisible to the shadowing check below.",
+        )
 
     def test_route_names_are_unique(self) -> None:
         """Two routes sharing a name make reverse() silently pick one of them.
@@ -147,7 +158,11 @@ class ExternalApiRouteTableTests(SimpleTestCase):
         """
         names = [name for name, _route, _kwargs in _registered_routes()]
         duplicates = sorted({name for name in names if names.count(name) > 1})
-        self.assertEqual(duplicates, [], "Duplicate external-API route names. Names are shared across every urls_*.py module because they all land in the flat 'external_api:' namespace - prefix yours with your domain.")
+        self.assertEqual(
+            duplicates,
+            [],
+            "Duplicate external-API route names. Names are shared across every urls_*.py module because they all land in the flat 'external_api:' namespace - prefix yours with your domain.",
+        )
 
     def test_every_converter_in_use_has_a_sample_value(self) -> None:
         """A converter with no witness value would silently weaken the shadowing check.
@@ -157,9 +172,17 @@ class ExternalApiRouteTableTests(SimpleTestCase):
         value the converter rejects - which turns a real ordering failure into
         an unexplained Resolver404, or worse, hides one.
         """
-        used = {converter for _name, route, _kwargs in _registered_routes() for converter, _parameter in _route_parameters(route)}
+        used = {
+            converter
+            for _name, route, _kwargs in _registered_routes()
+            for converter, _parameter in _route_parameters(route)
+        }
         missing = sorted(used - set(_SAMPLE_ARGUMENTS))
-        self.assertEqual(missing, [], f"These path converters are used by external-API routes but have no entry in _SAMPLE_ARGUMENTS: {missing}. Add one whose value is accepted by that converter and rejected by every broader one.")
+        self.assertEqual(
+            missing,
+            [],
+            f"These path converters are used by external-API routes but have no entry in _SAMPLE_ARGUMENTS: {missing}. Add one whose value is accepted by that converter and rejected by every broader one.",
+        )
 
     def test_urlpatterns_are_ordered_by_specificity(self) -> None:
         """The published list must be the sorted one, not a hand-ordered list that happens to work.
@@ -170,7 +193,11 @@ class ExternalApiRouteTableTests(SimpleTestCase):
         domain module adds a literal. This asserts the guarantee is mechanical.
         """
         patterns = list(external_api_urls.urlpatterns)
-        self.assertEqual([str(entry.pattern) for entry in order_by_specificity(patterns)], [str(entry.pattern) for entry in patterns], "external_api.urls.urlpatterns is not in specificity order - it must be assigned as order_by_specificity(...) over the concatenated modules.")
+        self.assertEqual(
+            [str(entry.pattern) for entry in order_by_specificity(patterns)],
+            [str(entry.pattern) for entry in patterns],
+            "external_api.urls.urlpatterns is not in specificity order - it must be assigned as order_by_specificity(...) over the concatenated modules.",
+        )
 
     def test_every_entry_is_a_flat_path_route(self) -> None:
         """``include()`` here would break the flat namespace the whole API depends on.
@@ -181,7 +208,11 @@ class ExternalApiRouteTableTests(SimpleTestCase):
         reshapes the second.
         """
         resolvers = [str(entry.pattern) for entry in external_api_urls.urlpatterns if isinstance(entry, URLResolver)]
-        self.assertEqual(resolvers, [], "External-API domain modules must be concatenated into urls.py's list, never include()d - see the ordering rule in external_api/urls.py.")
+        self.assertEqual(
+            resolvers,
+            [],
+            "External-API domain modules must be concatenated into urls.py's list, never include()d - see the ordering rule in external_api/urls.py.",
+        )
 
 
 class ExternalApiUrlResolutionTests(SimpleTestCase):
@@ -199,9 +230,16 @@ class ExternalApiUrlResolutionTests(SimpleTestCase):
             with self.subTest(name=name, route=route):
                 try:
                     url = reverse(f"external_api:{name}", kwargs=kwargs)
-                except NoReverseMatch as error:  # pragma: no cover - only reachable when a route is genuinely unreversible
-                    self.fail(f"external_api:{name} ({route}) is registered but will not reverse with {kwargs!r}: {error}. Every external route must live in the flat 'external_api:' namespace - see external_api/urls.py.")
-                self.assertTrue(url.startswith("/dashboard/api/external/v1/"), f"external_api:{name} reversed to {url!r}, which is outside the external API mount. The namespace must stay flat - see the ordering rule in external_api/urls.py.")
+                except (
+                    NoReverseMatch
+                ) as error:  # pragma: no cover - only reachable when a route is genuinely unreversible
+                    self.fail(
+                        f"external_api:{name} ({route}) is registered but will not reverse with {kwargs!r}: {error}. Every external route must live in the flat 'external_api:' namespace - see external_api/urls.py."
+                    )
+                self.assertTrue(
+                    url.startswith("/dashboard/api/external/v1/"),
+                    f"external_api:{name} reversed to {url!r}, which is outside the external API mount. The namespace must stay flat - see the ordering rule in external_api/urls.py.",
+                )
 
     def test_every_route_resolves_back_to_itself(self) -> None:
         """The shadowing check. Build each route's own URL, then ask who answers it.
@@ -215,8 +253,14 @@ class ExternalApiUrlResolutionTests(SimpleTestCase):
                 try:
                     match = resolve(url)
                 except Resolver404:  # pragma: no cover - only reachable when a route is genuinely unroutable
-                    self.fail(f"external_api:{name} ({route}) reverses to {url!r}, which resolves to nothing at all. {_ORDERING_RULE}")
-                self.assertEqual(match.view_name, f"external_api:{name}", f"external_api:{name} ({route}) reverses to {url!r}, but that URL is answered by {match.view_name!r} instead. {_ORDERING_RULE}")
+                    self.fail(
+                        f"external_api:{name} ({route}) reverses to {url!r}, which resolves to nothing at all. {_ORDERING_RULE}"
+                    )
+                self.assertEqual(
+                    match.view_name,
+                    f"external_api:{name}",
+                    f"external_api:{name} ({route}) reverses to {url!r}, but that URL is answered by {match.view_name!r} instead. {_ORDERING_RULE}",
+                )
 
     def test_the_canonical_shadowing_case_still_resolves(self) -> None:
         """``pins/deleted/`` is the route this whole mechanism was built around.
@@ -225,7 +269,11 @@ class ExternalApiUrlResolutionTests(SimpleTestCase):
         so the next person to break it gets a failure that says what broke.
         """
         match = resolve(reverse("external_api:pins.deleted"))
-        self.assertEqual(match.view_name, "external_api:pins.deleted", f"'pins/deleted/' is being swallowed by the generic pin-detail route again. {_ORDERING_RULE}")
+        self.assertEqual(
+            match.view_name,
+            "external_api:pins.deleted",
+            f"'pins/deleted/' is being swallowed by the generic pin-detail route again. {_ORDERING_RULE}",
+        )
 
 
 class SpecificityOrderingTests(SimpleTestCase):
@@ -323,7 +371,12 @@ def _render_route(shape: list[tuple[str, str]]) -> str:
         A route with a trailing slash, capture names derived from position so
         they are unique within the route.
     """
-    return "/".join(value if kind == "literal" else f"<{value}:p{position}>" for position, (kind, value) in enumerate(shape)) + "/"
+    return (
+        "/".join(
+            value if kind == "literal" else f"<{value}:p{position}>" for position, (kind, value) in enumerate(shape)
+        )
+        + "/"
+    )
 
 
 def _render_sample_path(shape: list[tuple[str, str]]) -> str:
@@ -369,4 +422,8 @@ class SpecificityOrderingPropertyTests(SimpleTestCase):
         for index, shape in enumerate(unique):
             sample = _render_sample_path(list(shape))
             match = resolver.resolve(sample)
-            self.assertEqual(match.url_name, f"route{index}", f"{_render_route(list(shape))!r} was shadowed: its own URL {sample!r} resolved to {match.url_name!r}. {_ORDERING_RULE}")
+            self.assertEqual(
+                match.url_name,
+                f"route{index}",
+                f"{_render_route(list(shape))!r} was shadowed: its own URL {sample!r} resolved to {match.url_name!r}. {_ORDERING_RULE}",
+            )

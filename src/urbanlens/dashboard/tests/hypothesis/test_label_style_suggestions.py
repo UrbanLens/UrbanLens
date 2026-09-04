@@ -18,6 +18,7 @@ from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
+
 @pytest.mark.django_db
 def test_suggest_label_style_requires_ai_subscription(monkeypatch: pytest.MonkeyPatch) -> None:
     profile = _make_profile(ai_enabled=True)

@@ -56,9 +56,19 @@ CONVERTIBLE_DOCUMENT_EXTENSIONS = frozenset({".doc", ".docx", ".odt", ".rtf", ".
 DOCUMENT_EXTENSIONS = CONVERTIBLE_DOCUMENT_EXTENSIONS | {".pdf"}
 
 
+def soffice_path() -> str | None:
+    """The absolute path to the LibreOffice headless binary, or None.
+
+    Resolved rather than left to the subprocess so the sandbox tier never hands
+    a bare name to `exec`, where a writable PATH entry earlier than the real one
+    would decide which binary runs on untrusted bytes.
+    """
+    return shutil.which("soffice")
+
+
 def soffice_available() -> bool:
     """Whether the LibreOffice headless binary is present on PATH."""
-    return shutil.which("soffice") is not None
+    return soffice_path() is not None
 
 
 @untrusted_parse("document.convert")
@@ -81,7 +91,8 @@ def convert_to_pdf(image: Image) -> int | None:
     ext = posixpath.splitext(old_name)[1].lower()
     if ext == ".pdf":
         return None
-    if ext not in CONVERTIBLE_DOCUMENT_EXTENSIONS or not soffice_available():
+    soffice = soffice_path()
+    if ext not in CONVERTIBLE_DOCUMENT_EXTENSIONS or soffice is None:
         return None
 
     old_size = image.image.size
@@ -92,7 +103,7 @@ def convert_to_pdf(image: Image) -> int | None:
 
         try:
             subprocess.run(
-                ["soffice", "--headless", "--norestore", "--convert-to", "pdf", "--outdir", tmpdir, src_path],
+                [soffice, "--headless", "--norestore", "--convert-to", "pdf", "--outdir", tmpdir, src_path],
                 capture_output=True,
                 timeout=_SOFFICE_TIMEOUT_SECONDS,
                 check=True,

@@ -183,7 +183,7 @@ def _pin_matches_filter(pin: Pin, pin_list: PinList) -> bool:
     # root_pins(): every saved-filter preview call site (controllers/saved_filters.py)
     # excludes detail/child pins before matching criteria - omitting it here let a
     # child pin enter smart-list membership when its own filter preview would not
-    # have shown it. See docs/GOALS_CODE_AUDIT.md ("Lists: filter/manual reconciliation").
+    # have shown it. See docs/audits/GOALS_CODE_AUDIT.md ("Lists: filter/manual reconciliation").
     return Pin.objects.filter(pk=pin.pk).root_pins().filter_by_criteria(criteria).exists()
 
 

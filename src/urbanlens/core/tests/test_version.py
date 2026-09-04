@@ -1,4 +1,5 @@
 """Tests for application version and git deployment metadata."""
+
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError

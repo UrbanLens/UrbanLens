@@ -75,7 +75,14 @@ class MediaCarouselSharedFlowTests(TestCase):
     def test_street_view_renders_slides_once_ready(self) -> None:
         source = panel_sources()["street_view"]
         cache.set(source.ready_key(self.pin), 1, 3600)
-        slide = {"source": "Google Street View", "date": "2026", "img_src": "https://example.com/sv.jpg", "latitude": 1.0, "longitude": 2.0, "heading": None}
+        slide = {
+            "source": "Google Street View",
+            "date": "2026",
+            "img_src": "https://example.com/sv.jpg",
+            "latitude": 1.0,
+            "longitude": 2.0,
+            "heading": None,
+        }
         with mock.patch(
             "urbanlens.dashboard.services.pins.external_data.collect_street_view_slides",
             return_value=([slide], [ProviderFetchResult("google_street_view", from_cache=True, count=1)]),

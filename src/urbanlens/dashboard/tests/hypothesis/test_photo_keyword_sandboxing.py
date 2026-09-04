@@ -98,7 +98,8 @@ class AnalysisThumbnailIsSandboxedTests(SimpleTestCase):
         # untrusted_parse wraps the function; the marker it sets is what the
         # sandbox guard reads at call time.
         self.assertTrue(
-            getattr(write_image_analysis_thumbnail, "__wrapped__", None) is not None or hasattr(write_image_analysis_thumbnail, "untrusted_parse_label"),
+            getattr(write_image_analysis_thumbnail, "__wrapped__", None) is not None
+            or hasattr(write_image_analysis_thumbnail, "untrusted_parse_label"),
             "write_image_analysis_thumbnail is not wrapped by @untrusted_parse",
         )
 
@@ -115,7 +116,11 @@ class AnalysisThumbnailIsSandboxedTests(SimpleTestCase):
         tree = ast.parse(pathlib.Path(tasks_module.__file__).read_text(encoding="utf-8"))
         functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
         calls = {
-            node.name: {child.func.id for child in ast.walk(node) if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)}
+            node.name: {
+                child.func.id
+                for child in ast.walk(node)
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+            }
             for node in functions
         }
 
@@ -132,11 +137,21 @@ class AnalysisThumbnailIsSandboxedTests(SimpleTestCase):
         for node in functions:
             if node.name not in reaches:
                 continue
-            decorators = [d for d in node.decorator_list if isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "shared_task"]
+            decorators = [
+                d
+                for d in node.decorator_list
+                if isinstance(d, ast.Call) and isinstance(d.func, ast.Name) and d.func.id == "shared_task"
+            ]
             decorators += [d for d in node.decorator_list if isinstance(d, ast.Name) and d.id == "shared_task"]
             if not decorators:
                 continue  # a plain helper - its own callers are what matter
-            declared = [kw.value.id for d in decorators if isinstance(d, ast.Call) for kw in d.keywords if kw.arg == "queue" and isinstance(kw.value, ast.Name)]
+            declared = [
+                kw.value.id
+                for d in decorators
+                if isinstance(d, ast.Call)
+                for kw in d.keywords
+                if kw.arg == "queue" and isinstance(kw.value, ast.Name)
+            ]
             if "SANDBOX_QUEUE" not in declared:
                 offenders.append(node.name)
         self.assertEqual(offenders, [], f"these tasks reach the image decode without queue=SANDBOX_QUEUE: {offenders}")
@@ -147,7 +162,11 @@ class AnalysisThumbnailIsSandboxedTests(SimpleTestCase):
 
         tree = ast.parse(pathlib.Path(tasks_module.__file__).read_text(encoding="utf-8"))
         calls = {
-            node.name: {child.func.id for child in ast.walk(node) if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)}
+            node.name: {
+                child.func.id
+                for child in ast.walk(node)
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+            }
             for node in ast.walk(tree)
             if isinstance(node, ast.FunctionDef)
         }
@@ -162,7 +181,11 @@ class AnalysisThumbnailIsSandboxedTests(SimpleTestCase):
         tree = ast.parse(pathlib.Path(tasks_module.__file__).read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == "generate_image_keywords":
-                names = {child.func.id for child in ast.walk(node) if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)}
+                names = {
+                    child.func.id
+                    for child in ast.walk(node)
+                    if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+                }
                 self.assertNotIn("write_image_analysis_thumbnail", names)
                 return
         self.fail("generate_image_keywords not found")
@@ -222,7 +245,10 @@ class AnalysisCopyStorageTests(TestCase):
     """The copy lives with every other photo, so the media origin's rules apply to it."""
 
     def test_it_is_written_as_a_jpeg_at_the_declared_size(self) -> None:
-        from urbanlens.dashboard.services.media.images import ANALYSIS_THUMBNAIL_MAX_DIMENSION, write_image_analysis_thumbnail
+        from urbanlens.dashboard.services.media.images import (
+            ANALYSIS_THUMBNAIL_MAX_DIMENSION,
+            write_image_analysis_thumbnail,
+        )
 
         image = _photo()
         self.assertTrue(write_image_analysis_thumbnail(image))

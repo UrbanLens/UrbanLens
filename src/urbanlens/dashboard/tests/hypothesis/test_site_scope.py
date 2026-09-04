@@ -207,7 +207,7 @@ class ParcelBuildingsCacheTests(TestCase):
         self.assertIsNone(parcel_buildings(None))
 
     def test_fetched_but_empty_yields_empty_list(self) -> None:
-        """"We looked and found nothing" is a different answer from "we never looked"."""
+        """ "We looked and found nothing" is a different answer from "we never looked"."""
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
         self.assertEqual(parcel_buildings(self.location), [])
 
@@ -236,7 +236,9 @@ class ClassificationTests(TestCase):
     def _location_on_a_footprint(self) -> Location:
         """A location standing on a known building footprint."""
         location = _make_location()
-        official_geometry(location, _footprint_around(float(location.latitude), float(location.longitude)), kind=PlaceKind.BUILDING)
+        official_geometry(
+            location, _footprint_around(float(location.latitude), float(location.longitude)), kind=PlaceKind.BUILDING
+        )
         return location
 
     def test_a_marker_on_a_building_footprint_is_a_building(self) -> None:
@@ -273,14 +275,26 @@ class ClassificationTests(TestCase):
         LocationCache.set(
             location,
             PARCEL_BUILDINGS_CACHE_SOURCE,
-            {"buildings": [{"name": "Shed", "latitude": float(location.latitude) + 0.00001, "longitude": float(location.longitude)}]},
+            {
+                "buildings": [
+                    {
+                        "name": "Shed",
+                        "latitude": float(location.latitude) + 0.00001,
+                        "longitude": float(location.longitude),
+                    }
+                ]
+            },
         )
         pin = _make_pin(self.profile, location=location, pin_type=PinType.POINT_OF_INTEREST)
         self.assertTrue(classify_building_pin_type(pin))
 
     def test_a_distant_known_building_does_not_classify(self) -> None:
         location = baker.make(Location, latitude="42.000000", longitude="-73.000000", google_place=None)
-        LocationCache.set(location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [{"name": "Shed", "latitude": 42.01, "longitude": -73.0}]})
+        LocationCache.set(
+            location,
+            PARCEL_BUILDINGS_CACHE_SOURCE,
+            {"buildings": [{"name": "Shed", "latitude": 42.01, "longitude": -73.0}]},
+        )
         pin = _make_pin(self.profile, location=location, pin_type=PinType.POINT_OF_INTEREST)
         self.assertFalse(classify_building_pin_type(pin))
 
@@ -291,6 +305,11 @@ class ClassificationTests(TestCase):
         """The end-to-end point of classification: the parent stops being a building."""
         parent = _make_pin(self.profile)
         for _ in range(MULTI_BUILDING_THRESHOLD):
-            child = _make_pin(self.profile, parent_pin=parent, location=self._location_on_a_footprint(), pin_type=PinType.POINT_OF_INTEREST)
+            child = _make_pin(
+                self.profile,
+                parent_pin=parent,
+                location=self._location_on_a_footprint(),
+                pin_type=PinType.POINT_OF_INTEREST,
+            )
             classify_building_pin_type(child)
         self.assertTrue(is_site_scope(Pin.objects.get(pk=parent.pk)))

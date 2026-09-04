@@ -18,7 +18,9 @@ literals rather than generated with Pillow so that these stay usable in a
 from __future__ import annotations
 
 #: A 1x1 PNG. Produced by Pillow and confirmed to fingerprint as ``png``.
-PNG_BYTES = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c49444154789c63f8ffff3f0005fe02fe0def46b80000000049454e44ae426082")
+PNG_BYTES = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c49444154789c63f8ffff3f0005fe02fe0def46b80000000049454e44ae426082"
+)
 
 #: A 1x1 JPEG. Larger than the others because a JPEG carries its quantisation
 #: and Huffman tables; a hand-trimmed one is not a JPEG any decoder will open.

@@ -73,7 +73,11 @@ class IsOwnContributionTests(TestCase):
     """The row-level predicate, and the queryset form agreeing with it."""
 
     def _image(self, **kwargs) -> Image:
-        defaults = {"profile": baker.make("dashboard.Profile"), "source": ImageSource.UPLOAD, "image": "pin_images/x.png"}
+        defaults = {
+            "profile": baker.make("dashboard.Profile"),
+            "source": ImageSource.UPLOAD,
+            "image": "pin_images/x.png",
+        }
         return baker.make(Image, **{**defaults, **kwargs})
 
     def test_a_form_upload_is_owned(self) -> None:
@@ -120,14 +124,20 @@ class IsOwnContributionTests(TestCase):
             self._image(source=ImageSource.LINKED_URL),
             self._image(profile=None, source=ImageSource.GOOGLE_SATELLITE),
         ]
-        owned_ids = set(Image.objects.filter(pk__in=[row.pk for row in rows]).own_contributions().values_list("pk", flat=True))
+        owned_ids = set(
+            Image.objects.filter(pk__in=[row.pk for row in rows]).own_contributions().values_list("pk", flat=True)
+        )
 
         for row in rows:
             with self.subTest(source=row.source, key=row.media_source_key, has_profile=row.profile_id is not None):
                 self.assertEqual(row.pk in owned_ids, row.is_own_contribution)
 
     def test_provider_media_is_the_exact_complement(self) -> None:
-        rows = [self._image(), self._image(source=ImageSource.WIKIMEDIA, media_source_key="wikimedia"), self._image(source=ImageSource.LINKED_URL)]
+        rows = [
+            self._image(),
+            self._image(source=ImageSource.WIKIMEDIA, media_source_key="wikimedia"),
+            self._image(source=ImageSource.LINKED_URL),
+        ]
         scope = Image.objects.filter(pk__in=[row.pk for row in rows])
 
         owned = set(scope.own_contributions().values_list("pk", flat=True))

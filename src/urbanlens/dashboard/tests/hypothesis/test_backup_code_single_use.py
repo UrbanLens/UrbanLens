@@ -80,6 +80,7 @@ class BackupCodeSingleUseTests(TestCase):
 
     def test_a_code_consumed_concurrently_is_not_accepted_twice(self) -> None:
         """The losing side of the race must not also report success."""
+
         def consume_then_match(_raw: str, _encoded: str) -> bool:
             # Stand in for a concurrent request that matched and committed its
             # write between this call's read and its own write.

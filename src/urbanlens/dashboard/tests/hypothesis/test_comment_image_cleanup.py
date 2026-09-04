@@ -48,12 +48,17 @@ class CommentImageCleanupTests(TestCase):
 
         self.assertIn(response.status_code, (200, 204))
         self.assertFalse(Comment.objects.filter(pk=comment.pk).exists())
-        self.assertFalse(default_storage.exists(path), "the comment's photo outlived its row - an orphan the media gate serves to any logged-in user")
+        self.assertFalse(
+            default_storage.exists(path),
+            "the comment's photo outlived its row - an orphan the media gate serves to any logged-in user",
+        )
         # _discard_comment_image runs after comment.delete() has already nulled the
         # in-memory instance's pk; it must call image.delete(save=False) - a stray
         # save=True would call instance.save() on that pk-less object and silently
         # resurrect the row (as a new INSERT) instead of leaving it deleted.
-        self.assertEqual(Comment.objects.count(), 0, "comment.image.delete() must not resurrect the row via instance.save()")
+        self.assertEqual(
+            Comment.objects.count(), 0, "comment.image.delete() must not resurrect the row via instance.save()"
+        )
 
     def test_deleting_a_comment_without_an_image_is_unaffected(self) -> None:
         comment = baker.make(Comment, pin=self.pin, profile=self.profile, text="no photo here")
@@ -109,7 +114,12 @@ class WikiCommentImageCleanupTests(TestCase):
         path = comment.image.name
         self.assertTrue(default_storage.exists(path), "precondition: the file must exist before deletion")
 
-        response = self.client.delete(reverse("location.wiki.comment.delete", kwargs={"location_slug": self.wiki.location.slug, "comment_id": comment.pk}))
+        response = self.client.delete(
+            reverse(
+                "location.wiki.comment.delete",
+                kwargs={"location_slug": self.wiki.location.slug, "comment_id": comment.pk},
+            )
+        )
 
         self.assertIn(response.status_code, (200, 204))
         self.assertFalse(Comment.objects.filter(pk=comment.pk).exists())

@@ -30,7 +30,12 @@ from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.external_api.permissions import OAUTH2_ONLY_SCOPES, SourceGrants, credential_grants, filter_sources_by_grants
+from urbanlens.dashboard.external_api.permissions import (
+    OAUTH2_ONLY_SCOPES,
+    SourceGrants,
+    credential_grants,
+    filter_sources_by_grants,
+)
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
@@ -116,7 +121,9 @@ class SourceGrantsDmLeakTests(SimpleTestCase):
         has to hold even when the row itself claims otherwise - a scope-picker
         bug or a direct UPDATE must not become a DM reader.
         """
-        credential = _FakeApiKey([ApiKeyScope.SEARCH_READ.value, ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.WIKI_READ.value])
+        credential = _FakeApiKey(
+            [ApiKeyScope.SEARCH_READ.value, ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.WIKI_READ.value]
+        )
         result = filter_sources_by_grants(credential, _SEARCH_SECTIONS)
         self.assertNotIn("messages", result.granted)
         self.assertIn("messages", result.omitted)
@@ -158,7 +165,9 @@ class SourceGrantsShapeTests(SimpleTestCase):
     def test_membership_and_iteration_cover_the_granted_keys(self) -> None:
         """``in`` and iteration are the ergonomic path callers will actually use."""
         credential = _FakeApiKey([ApiKeyScope.PINS_READ.value])
-        result = filter_sources_by_grants(credential, {"pins": {ApiKeyScope.PINS_READ}, "photos": {ApiKeyScope.PHOTOS_READ}})
+        result = filter_sources_by_grants(
+            credential, {"pins": {ApiKeyScope.PINS_READ}, "photos": {ApiKeyScope.PHOTOS_READ}}
+        )
         self.assertIn("pins", result)
         self.assertNotIn("photos", result)
         self.assertEqual(list(result), ["pins"])
@@ -208,7 +217,9 @@ class SourceGrantsPropertyTests(SimpleTestCase):
             max_size=6,
         ),
     )
-    def test_granted_and_omitted_partition_the_mapping(self, held: list[str], sections: dict[str, frozenset[str]]) -> None:
+    def test_granted_and_omitted_partition_the_mapping(
+        self, held: list[str], sections: dict[str, frozenset[str]]
+    ) -> None:
         """Every declared key lands in exactly one of the two tuples.
 
         A key that fell out of both would be a section silently missing from
@@ -228,7 +239,9 @@ class SourceGrantsPropertyTests(SimpleTestCase):
             max_size=6,
         ),
     )
-    def test_a_granted_section_always_agrees_with_credential_grants(self, held: list[str], sections: dict[str, frozenset[str]]) -> None:
+    def test_a_granted_section_always_agrees_with_credential_grants(
+        self, held: list[str], sections: dict[str, frozenset[str]]
+    ) -> None:
         """The filter must never be more permissive than the shared scope check.
 
         This is the whole point of building on ``credential_grants``: if the

@@ -23,7 +23,11 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.profile.profile_photos import attachment_points_for_image, strip_photos_for_owner, strip_photos_visible_to
+from urbanlens.dashboard.services.profile.profile_photos import (
+    attachment_points_for_image,
+    strip_photos_for_owner,
+    strip_photos_visible_to,
+)
 
 _coord_counter = 0
 
@@ -38,7 +42,9 @@ def _location(**kwargs) -> Location:
     """
     global _coord_counter
     _coord_counter += 1
-    return baker.make(Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001, **kwargs)
+    return baker.make(
+        Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001, **kwargs
+    )
 
 
 def _wiki_with_pin(profile, **wiki_kwargs) -> tuple[Location, Wiki]:
@@ -235,7 +241,12 @@ class ProfilePageShowsPhotoStripTests(TestCase):
         baker.make(Pin, profile=self.owner.profile, location=location)
         image = baker.make(Image, profile=self.owner.profile, wiki=wiki, pin=None, media_type=MediaKind.PHOTO)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.owner.profile.slug or self.owner.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse(
+                "profile.view_user",
+                kwargs={"profile_slug": self.owner.profile.slug or self.owner.profile.ensure_slug()},
+            )
+        )
 
         self.assertNotContains(response, f'data-photo-id="{image.pk}"')
         self.assertNotContains(response, ">Photos<")

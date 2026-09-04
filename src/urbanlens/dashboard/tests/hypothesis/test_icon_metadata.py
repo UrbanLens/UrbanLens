@@ -25,7 +25,9 @@ class IconKeywordConsistencyTests(TestCase):
     def test_every_keyword_key_is_a_picker_icon(self) -> None:
         icons = _all_picker_icons()
         orphans = sorted(k for k in ICON_KEYWORDS if k not in icons)
-        self.assertEqual(orphans, [], f"ICON_KEYWORDS entries for emojis missing from ICON_CATEGORIES: {[ascii(o) for o in orphans]}")
+        self.assertEqual(
+            orphans, [], f"ICON_KEYWORDS entries for emojis missing from ICON_CATEGORIES: {[ascii(o) for o in orphans]}"
+        )
 
     def test_keywords_are_lowercase_space_separated(self) -> None:
         for icon, keywords in ICON_KEYWORDS.items():

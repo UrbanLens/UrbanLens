@@ -31,7 +31,9 @@ class VisibleFriendRatingsTests(TestCase):
         me = _make_profile()
         friend = _make_profile()
         _befriend(me, friend)
-        baker.make(PlayerModeRating, profile=friend, mode=SpotGuessrMode.NAMED_PLACE, mu=0.5, last_played_at=timezone.now())
+        baker.make(
+            PlayerModeRating, profile=friend, mode=SpotGuessrMode.NAMED_PLACE, mu=0.5, last_played_at=timezone.now()
+        )
 
         visible = visible_friend_ratings(me)
 
@@ -44,7 +46,12 @@ class VisibleFriendRatingsTests(TestCase):
         friend = _make_profile()
         _befriend(me, friend)
         now = timezone.now()
-        baker.make(PlayerModeRating, profile=friend, mode=SpotGuessrMode.PHOTOS, last_played_at=now - timezone.timedelta(days=1))
+        baker.make(
+            PlayerModeRating,
+            profile=friend,
+            mode=SpotGuessrMode.PHOTOS,
+            last_played_at=now - timezone.timedelta(days=1),
+        )
         baker.make(PlayerModeRating, profile=friend, mode=SpotGuessrMode.STREET_VIEW, last_played_at=now)
 
         visible = visible_friend_ratings(me)

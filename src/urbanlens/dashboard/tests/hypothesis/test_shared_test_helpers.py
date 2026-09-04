@@ -32,7 +32,7 @@ class AssertAgreesTests(SimpleTestCase):
         self.assertIn("1 subject", message)
 
     def test_the_other_direction_reads_differently(self) -> None:
-        """"Wrongly hidden" and "wrongly shown" are different bugs; the message must say which."""
+        """ "Wrongly hidden" and "wrongly shown" are different bugs; the message must say which."""
         with pytest.raises(AssertionError, match="said no where the reference said yes"):
             assert_agrees(lambda n: n >= 2, lambda n: n > 2, range(6))
 

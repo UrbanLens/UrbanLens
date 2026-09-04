@@ -17,7 +17,10 @@ from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.apis.locations.open_historical_map import OhmCoverage, OpenHistoricalMapUnavailableError
+from urbanlens.dashboard.services.apis.locations.open_historical_map import (
+    OhmCoverage,
+    OpenHistoricalMapUnavailableError,
+)
 from urbanlens.dashboard.services.locations.temporal_imagery import (
     OHM_COVERAGE_CACHE_SOURCE,
     OhmTemporalCoveragePanelSource,
@@ -60,7 +63,9 @@ class OhmTemporalCoveragePanelSourceFetchTests(TestCase):
     def test_fetch_caches_available_coverage(self) -> None:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        with mock.patch("urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_coverage.return_value = OhmCoverage(available=True, years=[1900, 1950])
             self.source.fetch(self.pin)
 
@@ -72,7 +77,9 @@ class OhmTemporalCoveragePanelSourceFetchTests(TestCase):
     def test_fetch_caches_an_explicit_empty_result(self) -> None:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        with mock.patch("urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_coverage.return_value = OhmCoverage(available=False, years=[])
             self.source.fetch(self.pin)
 
@@ -83,7 +90,9 @@ class OhmTemporalCoveragePanelSourceFetchTests(TestCase):
     def test_fetch_does_not_cache_on_transient_failure(self) -> None:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        with mock.patch("urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_coverage.side_effect = OpenHistoricalMapUnavailableError("boom")
             self.source.fetch(self.pin)
 
@@ -145,7 +154,9 @@ class GetTemporalFeaturesTests(TestCase):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         geojson = {"type": "FeatureCollection", "features": [{"type": "Feature"}]}
-        with mock.patch("urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_features_at.return_value = geojson
             result = get_temporal_features(self.location, 1950)
 
@@ -161,7 +172,9 @@ class GetTemporalFeaturesTests(TestCase):
         cached_geojson = {"type": "FeatureCollection", "features": []}
         LocationCache.set(self.location, "ohm_features_1950", cached_geojson)
 
-        with mock.patch("urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway"
+        ) as mock_gateway_cls:
             result = get_temporal_features(self.location, 1950)
 
         self.assertEqual(result, cached_geojson)
@@ -170,7 +183,9 @@ class GetTemporalFeaturesTests(TestCase):
     def test_transient_failure_returns_empty_collection_without_caching(self) -> None:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        with mock.patch("urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_features_at.side_effect = OpenHistoricalMapUnavailableError("boom")
             result = get_temporal_features(self.location, 1950)
 
@@ -181,10 +196,18 @@ class GetTemporalFeaturesTests(TestCase):
         """The bug this module's docstring warns about: one shared source string would let years clobber each other."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        geojson_1900 = {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"id": "node/1900"}}]}
-        geojson_2000 = {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"id": "node/2000"}}]}
+        geojson_1900 = {
+            "type": "FeatureCollection",
+            "features": [{"type": "Feature", "properties": {"id": "node/1900"}}],
+        }
+        geojson_2000 = {
+            "type": "FeatureCollection",
+            "features": [{"type": "Feature", "properties": {"id": "node/2000"}}],
+        }
 
-        with mock.patch("urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.locations.temporal_imagery.OpenHistoricalMapGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_features_at.return_value = geojson_1900
             get_temporal_features(self.location, 1900)
             mock_gateway_cls.return_value.get_features_at.return_value = geojson_2000

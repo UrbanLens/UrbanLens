@@ -43,7 +43,7 @@ class IsOwnSiteUrlTests(SimpleTestCase):
         self.assertFalse(is_own_site_url("https://example.com/some-article"))
 
     def test_domain_that_merely_contains_urbanlens_org_as_a_substring_is_not_excluded(self) -> None:
-        """"noturbanlens.org" is a different registrable domain, not a subdomain."""
+        """ "noturbanlens.org" is a different registrable domain, not a subdomain."""
         self.assertFalse(is_own_site_url("https://noturbanlens.org/"))
 
     def test_empty_or_unparseable_url_is_not_excluded(self) -> None:
@@ -62,7 +62,9 @@ class ArchiveLinkToWaybackTests(TestCase):
         self.assertFalse(archive_link_to_wayback("PinLink", 999999))
 
     def test_link_that_already_has_a_wayback_url_is_skipped(self) -> None:
-        link = baker.make(PinLink, pin=self.pin, url="https://example.com", wayback_url="https://web.archive.org/existing")
+        link = baker.make(
+            PinLink, pin=self.pin, url="https://example.com", wayback_url="https://web.archive.org/existing"
+        )
         with mock.patch(f"{_GATEWAY}.get_availability") as get_availability:
             result = archive_link_to_wayback("PinLink", link.pk)
         self.assertFalse(result)
@@ -71,7 +73,10 @@ class ArchiveLinkToWaybackTests(TestCase):
     def test_uses_existing_snapshot_when_available(self) -> None:
         link = baker.make(PinLink, pin=self.pin, url="https://example.com", wayback_url="")
         with (
-            mock.patch(f"{_GATEWAY}.get_availability", return_value={"archived_snapshots": {"closest": {"url": "https://web.archive.org/snap"}}}),
+            mock.patch(
+                f"{_GATEWAY}.get_availability",
+                return_value={"archived_snapshots": {"closest": {"url": "https://web.archive.org/snap"}}},
+            ),
             mock.patch(f"{_GATEWAY}.save_url") as save_url,
         ):
             result = archive_link_to_wayback("PinLink", link.pk)
@@ -84,7 +89,10 @@ class ArchiveLinkToWaybackTests(TestCase):
         link = baker.make(PinLink, pin=self.pin, url="https://example.com", wayback_url="")
         with (
             mock.patch(f"{_GATEWAY}.get_availability", return_value={"archived_snapshots": {}}),
-            mock.patch(f"{_GATEWAY}.save_url", return_value={"archived_url": "https://web.archive.org/fresh", "status_code": 200}),
+            mock.patch(
+                f"{_GATEWAY}.save_url",
+                return_value={"archived_url": "https://web.archive.org/fresh", "status_code": 200},
+            ),
         ):
             result = archive_link_to_wayback("PinLink", link.pk)
         self.assertTrue(result)

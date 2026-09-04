@@ -50,7 +50,17 @@ class FindNearTests(SimpleTestCase):
     def test_returns_the_envelopes_results(self) -> None:
         session = mock.Mock()
         rows = [{"provider": "yelp", "name": "Joe's Diner", "attributes": {"rating": 4.5}}]
-        session.get.return_value = _response(200, {"count": 1, "complete": True, "results": rows, "providers": [{"provider": "yelp", "status": "ok", "count": 1, "message": None, "radius_meters": 500.0}]})
+        session.get.return_value = _response(
+            200,
+            {
+                "count": 1,
+                "complete": True,
+                "results": rows,
+                "providers": [
+                    {"provider": "yelp", "status": "ok", "count": 1, "message": None, "radius_meters": 500.0}
+                ],
+            },
+        )
 
         result = _gateway(session).find_near(40.0, -74.0, provider="yelp")
 
@@ -75,7 +85,17 @@ class FindNearTests(SimpleTestCase):
 
     def test_empty_results_is_a_real_answer_not_an_error(self) -> None:
         session = mock.Mock()
-        session.get.return_value = _response(200, {"count": 0, "complete": True, "results": [], "providers": [{"provider": "yelp", "status": "ok", "count": 0, "message": None, "radius_meters": 500.0}]})
+        session.get.return_value = _response(
+            200,
+            {
+                "count": 0,
+                "complete": True,
+                "results": [],
+                "providers": [
+                    {"provider": "yelp", "status": "ok", "count": 0, "message": None, "radius_meters": 500.0}
+                ],
+            },
+        )
 
         result = _gateway(session).find_near(40.0, -74.0, provider="yelp")
 

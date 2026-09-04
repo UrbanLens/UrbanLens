@@ -31,8 +31,12 @@ class SavedFilterMatchCountsViewTests(TestCase):
         self.profile: Profile = self.user.profile
         self.client = Client()
         self.client.force_login(self.user)
-        self.tagged_pin = baker.make(Pin, profile=self.profile, name="Tagged Pin", location=baker.make(Location, latitude=40.0, longitude=-74.0))
-        self.other_pin = baker.make(Pin, profile=self.profile, name="Other Pin", location=baker.make(Location, latitude=41.0, longitude=-75.0))
+        self.tagged_pin = baker.make(
+            Pin, profile=self.profile, name="Tagged Pin", location=baker.make(Location, latitude=40.0, longitude=-74.0)
+        )
+        self.other_pin = baker.make(
+            Pin, profile=self.profile, name="Other Pin", location=baker.make(Location, latitude=41.0, longitude=-75.0)
+        )
 
     def _url(self, **params) -> str:
         base = reverse("saved_filters.counts")
@@ -59,7 +63,12 @@ class SavedFilterMatchCountsViewTests(TestCase):
         self.assertEqual(data["counts"][str(saved_filter.uuid)], 1)
 
     def test_count_reflects_sidebar_criteria_combined_with_the_filter(self) -> None:
-        baker.make(Pin, profile=self.profile, name="Tagged Second", location=baker.make(Location, latitude=42.0, longitude=-76.0))
+        baker.make(
+            Pin,
+            profile=self.profile,
+            name="Tagged Second",
+            location=baker.make(Location, latitude=42.0, longitude=-76.0),
+        )
         saved_filter = SavedFilter.objects.create(profile=self.profile, name="Tagged Only", criteria={})
         # Sidebar's own "name" search narrows the count further.
         response = self.client.get(self._url(name="Tagged Pin"))
@@ -96,7 +105,7 @@ class SavedFilterMatchCountsViewTests(TestCase):
         """Regression: get_or_compute_matching_uuids used to recompute the profile's pin
         fingerprint (a DB aggregate) once per saved filter the profile owns, on every single
         request to this view. With N saved filters that was N redundant, identical queries per
-        toggle instead of 1. See docs/GOALS_CODE_AUDIT.md ("Saved filter performance")."""
+        toggle instead of 1. See docs/audits/GOALS_CODE_AUDIT.md ("Saved filter performance")."""
         for i in range(5):
             SavedFilter.objects.create(profile=self.profile, name=f"Extra {i}", criteria={})
         self.assertGreater(self.profile.saved_filters.count(), 5)

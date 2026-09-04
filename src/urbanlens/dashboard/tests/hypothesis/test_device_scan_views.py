@@ -26,7 +26,14 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.models.device_scan.model import DeviceScanEntry, DeviceScanUpload, DeviceSignalReading, MarkerStatus, ScannedDevice, WikiDeviceMarker
+from urbanlens.dashboard.models.device_scan.model import (
+    DeviceScanEntry,
+    DeviceScanUpload,
+    DeviceSignalReading,
+    MarkerStatus,
+    ScannedDevice,
+    WikiDeviceMarker,
+)
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -63,7 +70,9 @@ def _valid_payload(**overrides) -> dict:
         "detected": True,
         "estimated_latitude": 0.0,
         "estimated_longitude": 0.0,
-        "readings": [{"latitude": 0.0, "longitude": 0.0, "signal_strength": -65, "observed_at": "2026-01-01T00:00:00Z"}],
+        "readings": [
+            {"latitude": 0.0, "longitude": 0.0, "signal_strength": -65, "observed_at": "2026-01-01T00:00:00Z"}
+        ],
     }
     device.update(overrides)
     return {"devices": [device]}
@@ -84,7 +93,9 @@ class ScopeEnforcementTests(_DeviceScanApiTestCase):
 
     def test_default_scoped_key_is_refused_on_upload(self) -> None:
         _api_key, legacy_raw = generate_api_key(self.user, "Legacy")
-        response = self.client.post(reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(legacy_raw))
+        response = self.client.post(
+            reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(legacy_raw)
+        )
         self.assertEqual(response.status_code, HTTPStatus.FORBIDDEN)
 
     def test_default_scoped_key_is_refused_on_nearby(self) -> None:
@@ -94,7 +105,9 @@ class ScopeEnforcementTests(_DeviceScanApiTestCase):
 
     def test_read_scope_cannot_upload(self) -> None:
         with patch(_ENQUEUE):
-            response = self.client.post(reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(self.read_key))
+            response = self.client.post(
+                reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(self.read_key)
+            )
         self.assertEqual(response.status_code, HTTPStatus.FORBIDDEN)
 
     def test_write_scope_cannot_read_nearby(self) -> None:
@@ -110,15 +123,27 @@ class UploadValidationTests(_DeviceScanApiTestCase):
     """Payload validation - missing/invalid data is rejected with 400, not a 500."""
 
     def test_empty_devices_list_is_rejected(self) -> None:
-        response = self.client.post(reverse(_UPLOAD_URL), {"devices": []}, content_type="application/json", **_bearer(self.write_key))
+        response = self.client.post(
+            reverse(_UPLOAD_URL), {"devices": []}, content_type="application/json", **_bearer(self.write_key)
+        )
         self.assertEqual(response.status_code, HTTPStatus.BAD_REQUEST)
 
     def test_invalid_mac_address_is_rejected(self) -> None:
-        response = self.client.post(reverse(_UPLOAD_URL), _valid_payload(mac_address="not-a-mac"), content_type="application/json", **_bearer(self.write_key))
+        response = self.client.post(
+            reverse(_UPLOAD_URL),
+            _valid_payload(mac_address="not-a-mac"),
+            content_type="application/json",
+            **_bearer(self.write_key),
+        )
         self.assertEqual(response.status_code, HTTPStatus.BAD_REQUEST)
 
     def test_out_of_range_latitude_is_rejected(self) -> None:
-        response = self.client.post(reverse(_UPLOAD_URL), _valid_payload(estimated_latitude=200.0), content_type="application/json", **_bearer(self.write_key))
+        response = self.client.post(
+            reverse(_UPLOAD_URL),
+            _valid_payload(estimated_latitude=200.0),
+            content_type="application/json",
+            **_bearer(self.write_key),
+        )
         self.assertEqual(response.status_code, HTTPStatus.BAD_REQUEST)
 
 
@@ -127,7 +152,9 @@ class UploadPersistenceTests(_DeviceScanApiTestCase):
 
     def test_upload_returns_202_with_an_upload_uuid(self) -> None:
         with patch(_ENQUEUE) as enqueue, self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post(reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(self.write_key))
+            response = self.client.post(
+                reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(self.write_key)
+            )
 
         self.assertEqual(response.status_code, HTTPStatus.ACCEPTED)
         self.assertIn("upload_uuid", response.json())
@@ -137,7 +164,9 @@ class UploadPersistenceTests(_DeviceScanApiTestCase):
 
     def test_upload_creates_entry_and_readings(self) -> None:
         with patch(_ENQUEUE), self.captureOnCommitCallbacks(execute=True):
-            self.client.post(reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(self.write_key))
+            self.client.post(
+                reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(self.write_key)
+            )
 
         self.assertEqual(DeviceScanEntry.objects.count(), 1)
         self.assertEqual(DeviceSignalReading.objects.count(), 1)
@@ -146,7 +175,9 @@ class UploadPersistenceTests(_DeviceScanApiTestCase):
     def test_upload_attributed_to_caller_by_default(self) -> None:
         self.assertTrue(self.profile.track_device_scans)
         with patch(_ENQUEUE), self.captureOnCommitCallbacks(execute=True):
-            self.client.post(reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(self.write_key))
+            self.client.post(
+                reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(self.write_key)
+            )
 
         upload = DeviceScanUpload.objects.get()
         self.assertEqual(upload.profile_id, self.profile.pk)
@@ -156,7 +187,9 @@ class UploadPersistenceTests(_DeviceScanApiTestCase):
         self.profile.save(update_fields=["track_device_scans"])
 
         with patch(_ENQUEUE), self.captureOnCommitCallbacks(execute=True):
-            self.client.post(reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(self.write_key))
+            self.client.post(
+                reverse(_UPLOAD_URL), _valid_payload(), content_type="application/json", **_bearer(self.write_key)
+            )
 
         upload = DeviceScanUpload.objects.get()
         self.assertIsNone(upload.profile_id)
@@ -184,14 +217,18 @@ class NearbyDeviceMarkersVisibilityTests(_DeviceScanApiTestCase):
         )
 
     def test_marker_hidden_when_caller_has_not_discovered_the_wiki(self) -> None:
-        response = self.client.get(reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000}, **_bearer(self.read_key))
+        response = self.client.get(
+            reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000}, **_bearer(self.read_key)
+        )
         self.assertEqual(response.status_code, HTTPStatus.OK)
         self.assertEqual(response.json()["markers"], [])
 
     def test_marker_visible_once_caller_has_a_pin_at_the_location(self) -> None:
         baker.make(Pin, profile=self.profile, location=self.location)
 
-        response = self.client.get(reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000}, **_bearer(self.read_key))
+        response = self.client.get(
+            reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000}, **_bearer(self.read_key)
+        )
 
         self.assertEqual(response.status_code, HTTPStatus.OK)
         markers = response.json()["markers"]
@@ -205,7 +242,9 @@ class NearbyDeviceMarkersVisibilityTests(_DeviceScanApiTestCase):
         other_user = baker.make(User)
         baker.make(Pin, profile=other_user.profile, location=self.location)
 
-        response = self.client.get(reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000}, **_bearer(self.read_key))
+        response = self.client.get(
+            reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000}, **_bearer(self.read_key)
+        )
 
         self.assertEqual(response.json()["markers"], [])
 
@@ -232,18 +271,24 @@ class NearbyDeviceMarkersFilteringTests(_DeviceScanApiTestCase):
 
     def test_marker_outside_radius_is_excluded(self) -> None:
         self._make_marker(status=MarkerStatus.ACTIVE, lng=10.0)
-        response = self.client.get(reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 500}, **_bearer(self.read_key))
+        response = self.client.get(
+            reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 500}, **_bearer(self.read_key)
+        )
         self.assertEqual(response.json()["markers"], [])
 
     def test_presumed_removed_and_dismissed_are_excluded(self) -> None:
         self._make_marker(status=MarkerStatus.PRESUMED_REMOVED)
         self._make_marker(status=MarkerStatus.DISMISSED)
-        response = self.client.get(reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000}, **_bearer(self.read_key))
+        response = self.client.get(
+            reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000}, **_bearer(self.read_key)
+        )
         self.assertEqual(response.json()["markers"], [])
 
     def test_stale_marker_is_still_included(self) -> None:
         marker = self._make_marker(status=MarkerStatus.STALE)
-        response = self.client.get(reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000}, **_bearer(self.read_key))
+        response = self.client.get(
+            reverse(_NEARBY_URL), {"latitude": 0.0, "longitude": 0.0, "radius_meters": 1000}, **_bearer(self.read_key)
+        )
         markers = response.json()["markers"]
         self.assertEqual([m["marker_uuid"] for m in markers], [str(marker.uuid)])
 

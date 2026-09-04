@@ -36,10 +36,10 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
     conversations_for,
     create_direct_message,
     has_any_conversation,
-    unread_conversations_for,
     has_used_direct_messages,
     is_safe_reaction_emoji,
     thread_page,
+    unread_conversations_for,
 )
 
 _db_settings = settings(
@@ -400,7 +400,9 @@ class DirectMessageEndpointTests(TestCase):
         to start with a 🔒 emoji, duplicating the separate dedicated lock icon
         (.dm-lock-icon, "End-to-end encrypted") already rendered right next to
         it - two lock glyphs for one encrypted message."""
-        DirectMessage.objects.create(sender=self.partner, recipient=self.me, ciphertext="abc123", nonce="def456", key_version=1)
+        DirectMessage.objects.create(
+            sender=self.partner, recipient=self.me, ciphertext="abc123", nonce="def456", key_version=1
+        )
         response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.partner.slug}))
         content = response.content.decode()
         self.assertIn("Decrypting…", content)
@@ -494,7 +496,9 @@ class ConversationPaginationTests(TestCase):
         self.client.force_login(self.me.user)
 
     def _create_messages(self, count: int) -> list[DirectMessage]:
-        return [DirectMessage.objects.create(sender=self.me, recipient=self.partner, body=f"msg {i}") for i in range(count)]
+        return [
+            DirectMessage.objects.create(sender=self.me, recipient=self.partner, body=f"msg {i}") for i in range(count)
+        ]
 
     def test_thread_page_caps_at_limit_and_flags_more(self) -> None:
         messages = self._create_messages(5)
@@ -546,12 +550,16 @@ class ConversationPaginationTests(TestCase):
         self.assertNotContains(response, "msg 59<")
 
     def test_older_messages_endpoint_requires_valid_before(self) -> None:
-        response = self.client.get(reverse("messages.older", kwargs={"profile_slug": self.partner.slug}), {"before": "nope"})
+        response = self.client.get(
+            reverse("messages.older", kwargs={"profile_slug": self.partner.slug}), {"before": "nope"}
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_older_messages_endpoint_requires_login(self) -> None:
         self.client.logout()
-        response = self.client.get(reverse("messages.older", kwargs={"profile_slug": self.partner.slug}), {"before": "1"})
+        response = self.client.get(
+            reverse("messages.older", kwargs={"profile_slug": self.partner.slug}), {"before": "1"}
+        )
         self.assertEqual(response.status_code, 302)
 
 
@@ -764,7 +772,9 @@ class MessageTextAlertTests(TestCase):
         _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
 
     def _set_toggles(self, *, whatsapp: bool = False, sms: bool = False) -> None:
-        NotificationPreference.objects.update_or_create(profile=self.recipient, defaults={"message_whatsapp": whatsapp, "message_sms": sms})
+        NotificationPreference.objects.update_or_create(
+            profile=self.recipient, defaults={"message_whatsapp": whatsapp, "message_sms": sms}
+        )
 
     def test_send_schedules_the_text_alert_task_when_enabled(self) -> None:
         self._set_toggles(whatsapp=True)
@@ -831,7 +841,10 @@ class MessageTextAlertTests(TestCase):
         """Same recipient-scoped masking as the thread/bell/email paths - the
         text alert goes out-of-band through a carrier, so a hidden sender's
         real username must not appear there either."""
-        from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for, send_message_text_alerts_now
+        from urbanlens.dashboard.services.messaging.direct_messages import (
+            display_identity_for,
+            send_message_text_alerts_now,
+        )
 
         Profile.objects.filter(pk=self.sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
         self.sender.refresh_from_db()
@@ -1029,7 +1042,7 @@ class UnreadDropdownScalingTests(TestCase):
         self.assertLess(len(materialised), 8, f"built {len(materialised)} profiles for two unread conversations")
 
     def test_an_all_read_inbox_still_reports_having_conversations(self) -> None:
-        """"All caught up" and "no messages yet" are different empty states."""
+        """ "All caught up" and "no messages yet" are different empty states."""
         self._partner_with(unread=False)
 
         self.assertEqual(unread_conversations_for(self.me), [])

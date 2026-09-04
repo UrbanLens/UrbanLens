@@ -98,7 +98,9 @@ class LabelUniqueConstraintTests(TestCase):
     def test_get_or_create_is_now_safe_to_repeat(self) -> None:
         """The nine call sites that assumed this now genuinely have it."""
         first, created_first = Label.objects.get_or_create(profile=self.profile, name="ZzAudit Rooftop", kind=KIND_TAG)
-        second, created_second = Label.objects.get_or_create(profile=self.profile, name="ZzAudit Rooftop", kind=KIND_TAG)
+        second, created_second = Label.objects.get_or_create(
+            profile=self.profile, name="ZzAudit Rooftop", kind=KIND_TAG
+        )
 
         self.assertTrue(created_first)
         self.assertFalse(created_second)
@@ -228,14 +230,18 @@ class LabelConflictHandlingTests(TestCase):
 
         label = Label.objects.create(profile=self.profile, name="ZzAudit Rooftop", kind=KIND_TAG)
 
-        self.assertIsNone(find_conflicting_label(profile=self.profile, name="ZzAudit Rooftop", kind=KIND_TAG, exclude_pk=label.pk))
+        self.assertIsNone(
+            find_conflicting_label(profile=self.profile, name="ZzAudit Rooftop", kind=KIND_TAG, exclude_pk=label.pk)
+        )
 
     def test_changing_only_the_case_of_a_name_is_allowed(self) -> None:
         from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label
 
         label = Label.objects.create(profile=self.profile, name="ZzAudit Rooftop", kind=KIND_TAG)
 
-        self.assertIsNone(find_conflicting_label(profile=self.profile, name="ZZAUDIT ROOFTOP", kind=KIND_TAG, exclude_pk=label.pk))
+        self.assertIsNone(
+            find_conflicting_label(profile=self.profile, name="ZZAUDIT ROOFTOP", kind=KIND_TAG, exclude_pk=label.pk)
+        )
 
     def test_a_different_kind_does_not_collide(self) -> None:
         from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label

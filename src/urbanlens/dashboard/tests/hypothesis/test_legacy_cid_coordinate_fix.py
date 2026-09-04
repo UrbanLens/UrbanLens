@@ -127,14 +127,18 @@ class RepairLegacyPinCoordinatesTests(TestCase):
     def _location(self, latitude: float, longitude: float, *, legacy: bool = True) -> Location:
         """Create a Location, backdated before the cutoff unless told otherwise."""
         location = Location.objects.create(latitude=latitude, longitude=longitude)
-        stamp = LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
         Location.objects.filter(pk=location.pk).update(created=stamp)
         return Location.objects.get(pk=location.pk)
 
     def _pin(self, location: Location, *, name: str = "", profile=None, legacy: bool = True) -> Pin:
         """Create a pin on *location*, backdated before the cutoff unless told otherwise."""
         pin = Pin.objects.create(profile=profile or self.profile, location=location, name=name)
-        stamp = LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
         Pin.objects.filter(pk=pin.pk).update(created=stamp)
         return Pin.objects.get(pk=pin.pk)
 
@@ -153,7 +157,9 @@ class RepairLegacyPinCoordinatesTests(TestCase):
         GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
 
     def _repair(self, *, cid=None, name="", latitude=RIGHT_LATITUDE, longitude=RIGHT_LONGITUDE):
-        return repair_legacy_pin_coordinates(profile=self.profile, cid=cid, name=name, latitude=latitude, longitude=longitude)
+        return repair_legacy_pin_coordinates(
+            profile=self.profile, cid=cid, name=name, latitude=latitude, longitude=longitude
+        )
 
     # -- is_legacy_location -------------------------------------------------
 
@@ -329,13 +335,17 @@ class PreviewNeedsLegacyRepairTests(TestCase):
 
     def _location(self, latitude: float, longitude: float, *, legacy: bool = True) -> Location:
         location = Location.objects.create(latitude=latitude, longitude=longitude)
-        stamp = LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
         Location.objects.filter(pk=location.pk).update(created=stamp)
         return Location.objects.get(pk=location.pk)
 
     def _pin(self, location: Location, *, name: str = "", profile=None, legacy: bool = True) -> Pin:
         pin = Pin.objects.create(profile=profile or self.profile, location=location, name=name)
-        stamp = LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        stamp = (
+            LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        )
         Pin.objects.filter(pk=pin.pk).update(created=stamp)
         return Pin.objects.get(pk=pin.pk)
 

@@ -37,7 +37,9 @@ _ANSWER_NAMING_CAPTION = "Old Mill House, Troy NY"
 def _make_location() -> Location:
     """A location with coordinates distinct from every other one this module makes."""
     offset = next(_coordinate_counter)
-    return baker.make(Location, latitude=f"42.{650_000 + offset}", longitude=f"-73.{760_000 + offset}", official_name="Old Mill House")
+    return baker.make(
+        Location, latitude=f"42.{650_000 + offset}", longitude=f"-73.{760_000 + offset}", official_name="Old Mill House"
+    )
 
 
 def _make_profile() -> Profile:
@@ -62,7 +64,9 @@ class PreRevealRoundPayloadTests(TestCase):
             image=ContentFile(b"fake image bytes", name="test.jpg"),
         )
         self.session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig())
-        self.round = GameRound.objects.create(session=self.session, sequence_index=0, location=self.location, image=self.image)
+        self.round = GameRound.objects.create(
+            session=self.session, sequence_index=0, location=self.location, image=self.image
+        )
 
     def test_the_photo_caption_is_absent_before_the_reveal(self) -> None:
         """The caption names the place, so it is not part of the question."""

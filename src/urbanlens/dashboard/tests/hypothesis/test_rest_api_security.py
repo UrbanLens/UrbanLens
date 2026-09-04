@@ -11,6 +11,7 @@ Everything else (pin create/list/retrieve, profile CRUD, review router
 routes) has been deliberately removed; these tests pin that down so the
 surface cannot silently grow back.
 """
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User

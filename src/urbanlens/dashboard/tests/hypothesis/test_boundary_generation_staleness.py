@@ -105,11 +105,16 @@ class BoundaryGenerationStaleTests(TestCase):
             self.assertFalse(boundary_generation_stale(at_boundary))
 
             just_past = baker.make(Location, latitude=42.6501, longitude=-73.7501)
-            Location.objects.filter(pk=just_past.pk).update(place_resolved_at=frozen_now - timedelta(days=60, microseconds=1))
+            Location.objects.filter(pk=just_past.pk).update(
+                place_resolved_at=frozen_now - timedelta(days=60, microseconds=1)
+            )
             just_past.refresh_from_db()
             self.assertTrue(boundary_generation_stale(just_past))
 
-    @given(configured_days=st.integers(min_value=1, max_value=365), age_days=st.floats(min_value=0, max_value=400, allow_nan=False))
+    @given(
+        configured_days=st.integers(min_value=1, max_value=365),
+        age_days=st.floats(min_value=0, max_value=400, allow_nan=False),
+    )
     @_hyp
     def test_staleness_matches_configured_threshold(self, configured_days: int, age_days: float):
         site_settings = SiteSettings.get_current()
@@ -194,7 +199,10 @@ class GenerateLocationBoundariesRefreshTests(TestCase):
 
         new_polygon = _square(-73.75, 42.65)
         resolved = ResolvedBoundaries(property_polygon=new_polygon, building_polygon=None)
-        with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
+        with patch(
+            "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
+            return_value=resolved,
+        ):
             place = generate_location_boundaries(location)
 
         assert place is not None
@@ -210,7 +218,10 @@ class GenerateLocationBoundariesRefreshTests(TestCase):
 
         new_polygon = _square(-73.7502, 42.6502)
         resolved = ResolvedBoundaries(property_polygon=new_polygon, building_polygon=None)
-        with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
+        with patch(
+            "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
+            return_value=resolved,
+        ):
             generate_location_boundaries(location)
 
         place.refresh_from_db()
@@ -224,7 +235,10 @@ class GenerateLocationBoundariesRefreshTests(TestCase):
         place = _resolved(location, age_days=90, polygon=old_polygon).place
 
         resolved = ResolvedBoundaries(property_polygon=None, building_polygon=None)
-        with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
+        with patch(
+            "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
+            return_value=resolved,
+        ):
             generate_location_boundaries(location)
 
         place.refresh_from_db()

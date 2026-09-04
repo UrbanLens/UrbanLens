@@ -29,7 +29,9 @@ class FriendAcceptedPreferenceTests(TestCase):
         request_or_accept_friendship(self.requester, self.acceptor)
 
     def _accepted_notifications(self) -> int:
-        return NotificationLog.objects.filter(profile=self.requester, notification_type=NotificationType.FRIEND_ACCEPTED).count()
+        return NotificationLog.objects.filter(
+            profile=self.requester, notification_type=NotificationType.FRIEND_ACCEPTED
+        ).count()
 
     def test_default_preference_still_notifies(self) -> None:
         friendship = accept_friend_request(self.acceptor, self.requester)

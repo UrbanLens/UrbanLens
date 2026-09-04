@@ -61,7 +61,10 @@ class EncryptExistingTokensTests(TestCase):
     def test_site_settings_gotify_token_is_encrypted_and_readable(self) -> None:
         settings_row = SiteSettings.get_current()
         with connection.cursor() as cursor:
-            cursor.execute("UPDATE dashboard_site_settings SET notify_gotify_token = %s WHERE id = %s", ["plain-gotify", settings_row.pk])
+            cursor.execute(
+                "UPDATE dashboard_site_settings SET notify_gotify_token = %s WHERE id = %s",
+                ["plain-gotify", settings_row.pk],
+            )
 
         encrypt_existing_tokens(apps=None, schema_editor=_FakeSchemaEditor())
 
@@ -71,7 +74,9 @@ class EncryptExistingTokensTests(TestCase):
     def test_blank_tokens_are_left_alone(self) -> None:
         account = baker.make(GoogleCalendarAccount)
         with connection.cursor() as cursor:
-            cursor.execute("UPDATE dashboard_google_calendar_accounts SET refresh_token = '' WHERE id = %s", [account.pk])
+            cursor.execute(
+                "UPDATE dashboard_google_calendar_accounts SET refresh_token = '' WHERE id = %s", [account.pk]
+            )
 
         encrypt_existing_tokens(apps=None, schema_editor=_FakeSchemaEditor())
 

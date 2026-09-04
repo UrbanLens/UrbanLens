@@ -61,8 +61,18 @@ class GetWeatherTests(TestCase):
         self.assertNotIn("get_weather", names)
 
     def test_falls_back_to_open_meteo_when_owm_is_not_configured(self) -> None:
-        slot = {"date": _SLOT_DATE, "temp": 70.0, "condition": "Clear", "icon": "wb_sunny", "humidity": None, "wind_speed": None}
-        with mock.patch.object(settings, "openweathermap_api_key", None), mock.patch(_OPEN_METEO, return_value=[slot]) as open_meteo:
+        slot = {
+            "date": _SLOT_DATE,
+            "temp": 70.0,
+            "condition": "Clear",
+            "icon": "wb_sunny",
+            "humidity": None,
+            "wind_speed": None,
+        }
+        with (
+            mock.patch.object(settings, "openweathermap_api_key", None),
+            mock.patch(_OPEN_METEO, return_value=[slot]) as open_meteo,
+        ):
             result = execute("get_weather", {"pin_slug": self.pin.slug}, _context(self.profile))
         open_meteo.assert_called_once()
         self.assertEqual(result.data["source"], "open_meteo")
@@ -83,7 +93,14 @@ class GetWeatherTests(TestCase):
         self.assertEqual(result.data["temp_f"], 55)
 
     def test_owm_failure_falls_back_to_open_meteo(self) -> None:
-        slot = {"date": _SLOT_DATE, "temp": 70.0, "condition": "Clear", "icon": "wb_sunny", "humidity": None, "wind_speed": None}
+        slot = {
+            "date": _SLOT_DATE,
+            "temp": 70.0,
+            "condition": "Clear",
+            "icon": "wb_sunny",
+            "humidity": None,
+            "wind_speed": None,
+        }
         with (
             mock.patch.object(settings, "openweathermap_api_key", "test-key"),
             mock.patch(_OWM, side_effect=ConnectionError("boom")),
@@ -118,7 +135,10 @@ class GetWeatherTests(TestCase):
         with (
             mock.patch.object(settings, "openweathermap_api_key", None),
             mock.patch(_OPEN_METEO, return_value=None),
-            mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", side_effect=AssertionError("must not be called")),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured",
+                side_effect=AssertionError("must not be called"),
+            ),
         ):
             result = execute("get_weather", {"pin_slug": self.pin.slug}, _context(self.profile))
         self.assertNotIn("error", result.data)

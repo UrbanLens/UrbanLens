@@ -40,13 +40,23 @@ class PinPanelLiveRefreshTests(RedataConfiguredMixin, TestCase):
         self.client.force_login(user)
 
     def test_wikipedia_first_synchronous_load_does_not_fire(self) -> None:
-        LocationCache.set(self.pin.location, "wikipedia", {"title": "Old Mill", "extract": "A mill.", "url": "https://en.wikipedia.org/wiki/Old_Mill"}, query_key="")
+        LocationCache.set(
+            self.pin.location,
+            "wikipedia",
+            {"title": "Old Mill", "extract": "A mill.", "url": "https://en.wikipedia.org/wiki/Old_Mill"},
+            query_key="",
+        )
         response = self.client.get(reverse("pin.wikipedia", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("HX-Trigger", response)
 
     def test_wikipedia_poll_completion_fires_aliases_changed(self) -> None:
-        LocationCache.set(self.pin.location, "wikipedia", {"title": "Old Mill", "extract": "A mill.", "url": "https://en.wikipedia.org/wiki/Old_Mill"}, query_key="")
+        LocationCache.set(
+            self.pin.location,
+            "wikipedia",
+            {"title": "Old Mill", "extract": "A mill.", "url": "https://en.wikipedia.org/wiki/Old_Mill"},
+            query_key="",
+        )
         response = self.client.get(reverse("pin.wikipedia", args=[self.pin.slug]), {"attempt": "1"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(_hx_trigger_events(response), {"pinAliasesChanged": True})
@@ -55,7 +65,10 @@ class PinPanelLiveRefreshTests(RedataConfiguredMixin, TestCase):
         LocationCache.set(self.pin.location, "nominatim", {"website": "https://example.com"}, query_key="")
         response = self.client.get(reverse("pin.nominatim", args=[self.pin.slug]), {"attempt": "1"})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(_hx_trigger_events(response), {"pinAliasesChanged": True, "pinLinksChanged": True, "pinOverviewChanged": True})
+        self.assertEqual(
+            _hx_trigger_events(response),
+            {"pinAliasesChanged": True, "pinLinksChanged": True, "pinOverviewChanged": True},
+        )
 
     def test_nominatim_first_synchronous_load_does_not_fire(self) -> None:
         LocationCache.set(self.pin.location, "nominatim", {"website": "https://example.com"}, query_key="")
@@ -64,7 +77,12 @@ class PinPanelLiveRefreshTests(RedataConfiguredMixin, TestCase):
         self.assertNotIn("HX-Trigger", response)
 
     def test_epa_echo_detail_poll_completion_fires_links_changed(self) -> None:
-        LocationCache.set(self.pin.location, "epa_echo", {"exact_site": {"name": "Acme Plant", "registry_id": "12345", "programs": []}}, query_key="")
+        LocationCache.set(
+            self.pin.location,
+            "epa_echo",
+            {"exact_site": {"name": "Acme Plant", "registry_id": "12345", "programs": []}},
+            query_key="",
+        )
         response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "epa_echo_detail"]), {"attempt": "1"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(_hx_trigger_events(response), {"pinLinksChanged": True})

@@ -75,7 +75,13 @@ class ClusterTests(SimpleTestCase):
         """The case the range form gets wrong: 7,000 days fetched to show two."""
         days = [datetime.date(2005, 5, 1), datetime.date(2024, 5, 1)]
 
-        self.assertEqual(_clusters(days), [(datetime.date(2005, 5, 1), datetime.date(2005, 5, 1)), (datetime.date(2024, 5, 1), datetime.date(2024, 5, 1))])
+        self.assertEqual(
+            _clusters(days),
+            [
+                (datetime.date(2005, 5, 1), datetime.date(2005, 5, 1)),
+                (datetime.date(2024, 5, 1), datetime.date(2024, 5, 1)),
+            ],
+        )
 
     def test_order_and_duplicates_do_not_matter(self) -> None:
         days = [datetime.date(2024, 5, 3), datetime.date(2024, 5, 1), datetime.date(2024, 5, 3)]
@@ -95,7 +101,9 @@ class RecordedDaysTests(TestCase):
     def test_two_visits_decades_apart_are_two_bounded_requests(self) -> None:
         days = [datetime.date(2005, 5, 1), datetime.date(2024, 5, 1)]
 
-        with patch(_FETCH, side_effect=lambda _lat, _lng, start, _end: {start.isoformat(): _row(start.isoformat())}) as fetch:
+        with patch(
+            _FETCH, side_effect=lambda _lat, _lng, start, _end: {start.isoformat(): _row(start.isoformat())}
+        ) as fetch:
             recorded = recorded_days(self.location, days)
 
         self.assertEqual(fetch.call_count, 2)
@@ -180,7 +188,9 @@ class SummaryTests(SimpleTestCase):
     """The one-line description a visit row shows."""
 
     def test_a_full_day_reads_as_a_sentence(self) -> None:
-        day = RecordedDay(day=datetime.date(2024, 5, 1), high_f=72.0, low_f=54.0, precipitation_in=0.3, gust_max_mph=31.0)
+        day = RecordedDay(
+            day=datetime.date(2024, 5, 1), high_f=72.0, low_f=54.0, precipitation_in=0.3, gust_max_mph=31.0
+        )
 
         self.assertEqual(day.summary, "72° / 54°F · 0.30 in rain · gusts 31 mph")
 
@@ -227,7 +237,11 @@ class VisitHistoryPanelTests(TestCase):
         self.pin = baker.make(Pin, profile=self.profile, location=self.location, parent_pin=None)
 
     def _visit(self, when: datetime.date) -> PinVisit:
-        return baker.make(PinVisit, pin=self.pin, visited_at=timezone.make_aware(datetime.datetime(when.year, when.month, when.day, 12, 0)))
+        return baker.make(
+            PinVisit,
+            pin=self.pin,
+            visited_at=timezone.make_aware(datetime.datetime(when.year, when.month, when.day, 12, 0)),
+        )
 
     def _url(self) -> str:
         return reverse("pin.visits", args=[self.pin.slug])

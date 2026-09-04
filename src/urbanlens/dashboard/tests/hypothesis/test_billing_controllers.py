@@ -148,7 +148,9 @@ class BillingCheckoutViewTests(TestCase):
     def test_amount_below_stripe_minimum_redirects_without_calling_stripe(self) -> None:
         role = baker.make(SubscriptionRole, monthly_price_cents=None, pay_what_you_want=True)
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.create_checkout_session") as mock_create:
-            response = self.client.post(reverse("settings.billing.checkout"), {"role_slug": role.slug, "amount_dollars": "0.10"})
+            response = self.client.post(
+                reverse("settings.billing.checkout"), {"role_slug": role.slug, "amount_dollars": "0.10"}
+            )
 
         self.assertEqual(response.status_code, 302)
         mock_create.assert_not_called()
@@ -160,7 +162,9 @@ class BillingCheckoutViewTests(TestCase):
         role = baker.make(SubscriptionRole, monthly_price_cents=None, pay_what_you_want=True)
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.create_checkout_session") as mock_create:
             mock_create.return_value = mock.MagicMock(url="https://checkout.stripe.com/x")
-            response = self.client.post(reverse("settings.billing.checkout"), {"role_slug": role.slug, "amount_dollars": "0.50"})
+            response = self.client.post(
+                reverse("settings.billing.checkout"), {"role_slug": role.slug, "amount_dollars": "0.50"}
+            )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], "https://checkout.stripe.com/x")
@@ -170,7 +174,9 @@ class BillingCheckoutViewTests(TestCase):
     def test_amount_one_cent_below_minimum_redirects_without_calling_stripe(self) -> None:
         role = baker.make(SubscriptionRole, monthly_price_cents=None, pay_what_you_want=True)
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.create_checkout_session") as mock_create:
-            response = self.client.post(reverse("settings.billing.checkout"), {"role_slug": role.slug, "amount_dollars": "0.49"})
+            response = self.client.post(
+                reverse("settings.billing.checkout"), {"role_slug": role.slug, "amount_dollars": "0.49"}
+            )
 
         self.assertEqual(response.status_code, 302)
         mock_create.assert_not_called()
@@ -192,7 +198,9 @@ class BillingPortalViewTests(TestCase):
         self.client.force_login(self.user)
 
     def test_without_a_billing_customer_redirects_without_calling_stripe(self) -> None:
-        with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.create_billing_portal_session") as mock_create:
+        with mock.patch(
+            "urbanlens.dashboard.controllers.billing.stripe_client.create_billing_portal_session"
+        ) as mock_create:
             response = self.client.post(reverse("settings.billing.portal"))
 
         self.assertEqual(response.status_code, 302)
@@ -200,7 +208,9 @@ class BillingPortalViewTests(TestCase):
 
     def test_with_a_billing_customer_redirects_to_the_portal_url(self) -> None:
         baker.make(BillingCustomer, user=self.user)
-        with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.create_billing_portal_session") as mock_create:
+        with mock.patch(
+            "urbanlens.dashboard.controllers.billing.stripe_client.create_billing_portal_session"
+        ) as mock_create:
             mock_create.return_value = "https://billing.stripe.com/x"
             response = self.client.post(reverse("settings.billing.portal"))
 
@@ -221,14 +231,18 @@ class BillingPledgeUpdateViewTests(TestCase):
 
     def test_invalid_amount_returns_400_and_does_not_call_stripe(self) -> None:
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.update_pledge") as mock_update:
-            response = self.client.post(reverse("settings.billing.pledge", args=[self.subscription.pk]), {"amount_dollars": "not-a-number"})
+            response = self.client.post(
+                reverse("settings.billing.pledge", args=[self.subscription.pk]), {"amount_dollars": "not-a-number"}
+            )
 
         self.assertEqual(response.status_code, 400)
         mock_update.assert_not_called()
 
     def test_valid_amount_calls_update_pledge(self) -> None:
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.update_pledge") as mock_update:
-            response = self.client.post(reverse("settings.billing.pledge", args=[self.subscription.pk]), {"amount_dollars": "8.00"})
+            response = self.client.post(
+                reverse("settings.billing.pledge", args=[self.subscription.pk]), {"amount_dollars": "8.00"}
+            )
 
         self.assertEqual(response.status_code, 200)
         mock_update.assert_called_once_with(self.subscription, 800)
@@ -238,7 +252,9 @@ class BillingPledgeUpdateViewTests(TestCase):
         merely too small, not an unparseable string - both take the `amount_cents is None or
         amount_cents < MINIMUM` guard, but only this exercises the `< MINIMUM` half."""
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.update_pledge") as mock_update:
-            response = self.client.post(reverse("settings.billing.pledge", args=[self.subscription.pk]), {"amount_dollars": "0.49"})
+            response = self.client.post(
+                reverse("settings.billing.pledge", args=[self.subscription.pk]), {"amount_dollars": "0.49"}
+            )
 
         self.assertEqual(response.status_code, 400)
         mock_update.assert_not_called()
@@ -247,7 +263,9 @@ class BillingPledgeUpdateViewTests(TestCase):
         """Exact boundary: 50 cents itself must succeed - a `<` -> `<=` mutation would
         wrongly reject it."""
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.update_pledge") as mock_update:
-            response = self.client.post(reverse("settings.billing.pledge", args=[self.subscription.pk]), {"amount_dollars": "0.50"})
+            response = self.client.post(
+                reverse("settings.billing.pledge", args=[self.subscription.pk]), {"amount_dollars": "0.50"}
+            )
 
         self.assertEqual(response.status_code, 200)
         mock_update.assert_called_once_with(self.subscription, 50)
@@ -255,7 +273,9 @@ class BillingPledgeUpdateViewTests(TestCase):
     def test_cannot_update_another_users_subscription(self) -> None:
         other_subscription = baker.make(RoleSubscription, role=self.role)
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.update_pledge") as mock_update:
-            response = self.client.post(reverse("settings.billing.pledge", args=[other_subscription.pk]), {"amount_dollars": "8.00"})
+            response = self.client.post(
+                reverse("settings.billing.pledge", args=[other_subscription.pk]), {"amount_dollars": "8.00"}
+            )
 
         self.assertEqual(response.status_code, 404)
         mock_update.assert_not_called()

@@ -76,7 +76,9 @@ class AdditionalDetailsSectionTests(TestCase):
         self.profile.save(update_fields=["birth_date", "profile_visibility"])
         other = baker.make(User)
         self.client.force_login(other)
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         content = _strip_scripts(response.content.decode())
         self.assertNotIn(">Birthday: ", content)
         self.assertNotIn(">Additional Details<", content)
@@ -100,5 +102,7 @@ class ProfilePrivacyHintTests(TestCase):
         self.profile.save(update_fields=["profile_visibility"])
         other = baker.make(User)
         self.client.force_login(other)
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         self.assertNotContains(response, "ul-privacy-hint")

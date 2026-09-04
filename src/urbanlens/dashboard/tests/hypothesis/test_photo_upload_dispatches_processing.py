@@ -39,10 +39,14 @@ def _callers() -> list[pathlib.Path]:
 class PhotoUploadDispatchTests(SimpleTestCase):
     def test_the_helper_still_has_callers(self) -> None:
         """Anti-vacuity: if the helper is renamed or inlined, this suite must fail loudly rather than pass empty."""
-        self.assertTrue(_callers(), f"no caller of {_HELPER}() found - was it renamed? This guard would silently pass forever.")
+        self.assertTrue(
+            _callers(), f"no caller of {_HELPER}() found - was it renamed? This guard would silently pass forever."
+        )
 
     def test_every_caller_enqueues_exif_processing(self) -> None:
-        missing = [str(path.relative_to(_SRC)) for path in _callers() if _DISPATCH not in path.read_text(encoding="utf-8")]
+        missing = [
+            str(path.relative_to(_SRC)) for path in _callers() if _DISPATCH not in path.read_text(encoding="utf-8")
+        ]
         self.assertEqual(
             missing,
             [],

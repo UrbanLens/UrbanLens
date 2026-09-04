@@ -54,7 +54,9 @@ class ResolveDeferredPinLocationsConsecutiveFailuresTests(TestCase):
                 "stem": "",
                 "create_category": False,
                 "label_ids": [],
-                "pins": [{"name": "Black Point Ruins", "lat": 41.348754, "lng": -71.453896, "description": "", "cid": 12345}],
+                "pins": [
+                    {"name": "Black Point Ruins", "lat": 41.348754, "lng": -71.453896, "description": "", "cid": 12345}
+                ],
             },
         ]
 
@@ -63,7 +65,10 @@ class ResolveDeferredPinLocationsConsecutiveFailuresTests(TestCase):
 
     def test_a_single_request_failure_still_retries(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=self._request_failed_result()),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids",
+                return_value=self._request_failed_result(),
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as mock_retry,
         ):
@@ -81,7 +86,10 @@ class ResolveDeferredPinLocationsConsecutiveFailuresTests(TestCase):
     def test_a_batch_past_the_deadline_gives_up_and_notifies_instead_of_retrying(self) -> None:
         """Two days of failures ends it; the counter alone no longer does."""
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=self._request_failed_result()),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids",
+                return_value=self._request_failed_result(),
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as mock_retry,
         ):
@@ -107,7 +115,9 @@ class ResolveDeferredPinLocationsConsecutiveFailuresTests(TestCase):
         by a stale counter."""
         recovered = CidResolutionResult(provider=PROVIDER_REDATA, pending=[12345], request_failed=False)
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=recovered),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=recovered
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as mock_retry,
         ):

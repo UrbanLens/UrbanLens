@@ -23,7 +23,11 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 
 
 def _fake_location(**overrides: object) -> types.SimpleNamespace:
-    defaults: dict[str, object] = {"slug": "some-place", "uuid": "11111111-1111-1111-1111-111111111111", "display_name": "41°43'53.3\"N 73°55'36.2\"W"}
+    defaults: dict[str, object] = {
+        "slug": "some-place",
+        "uuid": "11111111-1111-1111-1111-111111111111",
+        "display_name": "41°43'53.3\"N 73°55'36.2\"W",
+    }
     defaults.update(overrides)
     return types.SimpleNamespace(**defaults)
 

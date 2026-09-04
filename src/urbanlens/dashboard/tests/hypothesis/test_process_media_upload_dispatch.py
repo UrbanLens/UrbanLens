@@ -111,14 +111,20 @@ class DocumentUploadDispatchTests(TestCase):
             Image,
             profile=self.profile,
             media_type=MediaKind.DOCUMENT,
-            image=SimpleUploadedFile("notes.docx", b"doc-bytes", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            image=SimpleUploadedFile(
+                "notes.docx",
+                b"doc-bytes",
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
         )
 
     def test_conversion_and_ocr_are_invoked_and_persisted(self) -> None:
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             patch("urbanlens.dashboard.services.media.documents.convert_to_pdf", return_value=999) as mock_convert,
-            patch("urbanlens.dashboard.services.media.documents.extract_pdf_text", return_value="Extracted document text") as mock_ocr,
+            patch(
+                "urbanlens.dashboard.services.media.documents.extract_pdf_text", return_value="Extracted document text"
+            ) as mock_ocr,
         ):
             result = process_image_upload(self.image.pk)
 

@@ -49,6 +49,7 @@ _PREFERENCE_CHOICE_CLASSES = {
 
 # -- Profile.preference_display / interaction_preferences ----------------------
 
+
 class PreferenceDisplayTests(TestCase):
     """Profile.preference_display and the interaction_preferences property."""
 
@@ -101,6 +102,7 @@ class PreferenceDisplayTests(TestCase):
 
 
 # -- ProfileForm -----------------------------------------------------------
+
 
 class ProfileFormPreferenceTests(TestCase):
     """ProfileForm validates the preference choice fields and their length caps."""
@@ -162,6 +164,7 @@ class ProfileFormPreferenceTests(TestCase):
 
 # -- ProfileFieldUpdateView autosave -----------------------------------------
 
+
 class ProfileFieldUpdatePreferenceTests(TestCase):
     """ProfileFieldUpdateView's autosave path for preference fields."""
 
@@ -216,6 +219,7 @@ class ProfileFieldUpdatePreferenceTests(TestCase):
 
 
 # -- Profile page rendering ---------------------------------------------------
+
 
 class ProfilePreferencesRenderingTests(TestCase):
     """The profile page's Interaction Preferences section: shown only when answered."""

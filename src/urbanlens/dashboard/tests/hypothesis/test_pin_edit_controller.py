@@ -6,10 +6,12 @@ from datetime import date
 import json
 from typing import TYPE_CHECKING
 from unittest.mock import patch
+import warnings
 
 from django.contrib.auth.models import User
 from django.test import RequestFactory
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -31,7 +33,10 @@ class PinEditCategoryUpdateTests(TestCase):
         self.user = self.profile.user
         self.pin = baker.make(Pin, profile=self.profile)
         self.existing_cat = baker.make(
-            Label, name="existing", kind="category", profile=self.profile,
+            Label,
+            name="existing",
+            kind="category",
+            profile=self.profile,
         )
         self.pin.labels.add(self.existing_cat)
 
@@ -46,7 +51,10 @@ class PinEditCategoryUpdateTests(TestCase):
         # resolves an uncached Location's place name from Google - mock it
         # so the response render doesn't make an outbound API call.
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
@@ -112,7 +120,10 @@ class PinEditNameAliasTests(TestCase):
         # resolves an uncached Location's place name from Google - mock it
         # so the response render doesn't make an outbound API call.
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
@@ -155,9 +166,43 @@ class PinEditDateFieldsTests(TestCase):
         )
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
+
+    def _assert_no_naive_datetime_warning(self, body: dict) -> None:
+        """Post `body` and fail if Django had to guess a zone for last_visited.
+
+        A round-trip through the database always comes back aware, so asserting
+        on the stored value proves nothing. The defect is visible only at the
+        moment of assignment: Django warns, then interprets the value in the
+        current zone rather than the one the user meant.
+        """
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            response = self._post(body)
+        self.assertEqual(response.status_code, 200)
+        naive = [
+            str(w.message)
+            for w in caught
+            if issubclass(w.category, RuntimeWarning) and "naive datetime" in str(w.message)
+        ]
+        self.assertEqual(naive, [], f"last_visited was assigned a naive datetime: {naive}")
+
+    def test_last_visited_datetime_input_is_made_aware(self) -> None:
+        """`last_visited` is a DateTimeField and USE_TZ is on."""
+        self._assert_no_naive_datetime_warning({"last_visited": "2026-06-01T13:30"})
+        self.pin.refresh_from_db()
+        self.assertEqual(timezone.localtime(self.pin.last_visited).hour, 13)
+
+    def test_last_visited_date_only_input_is_made_aware(self) -> None:
+        """The date-only format takes the same assignment path."""
+        self._assert_no_naive_datetime_warning({"last_visited": "2026-06-01"})
+        self.pin.refresh_from_db()
+        self.assertEqual(timezone.localdate(self.pin.last_visited), date(2026, 6, 1))
 
     def test_date_built_saves_and_clears(self) -> None:
         response = self._post({"date_built": "1912-05-01"})
@@ -207,7 +252,10 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
         req.user = self.user
         with (
             patch(mock_enqueue_target) as mock_enqueue,
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
         ):
             response = PinOverviewView.as_view()(req, pin_slug=self.pin.slug)
         return response, mock_enqueue
@@ -215,7 +263,11 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
     def _address_dispatches(self, mock_enqueue) -> list[int]:
         from urbanlens.dashboard.tasks import backfill_location_address
 
-        return [call.args[1] for call in mock_enqueue.call_args_list if call.args and call.args[0] is backfill_location_address]
+        return [
+            call.args[1]
+            for call in mock_enqueue.call_args_list
+            if call.args and call.args[0] is backfill_location_address
+        ]
 
     def test_route_less_location_dispatches_the_backfill_task(self) -> None:
         response, mock_enqueue = self._get()
@@ -234,8 +286,13 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
         req = self.factory.get(f"/map/pin/{self.pin.slug}/overview/")
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway.geocode_coordinates") as mock_geocode,
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway.geocode_coordinates"
+            ) as mock_geocode,
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             response = PinOverviewView.as_view()(req, pin_slug=self.pin.slug)
@@ -267,7 +324,10 @@ class PinOverviewEditableDescriptionTests(TestCase):
         req = self.factory.get(f"/map/pin/{pin.slug}/overview/")
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             return PinOverviewView.as_view()(req, pin_slug=pin.slug)
@@ -359,7 +419,10 @@ class PinEditRatingClearTests(TestCase):
             content_type="application/json",
         )
         req.user = self.user
-        with patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+        with patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
     def test_setting_a_rating_creates_a_review(self) -> None:

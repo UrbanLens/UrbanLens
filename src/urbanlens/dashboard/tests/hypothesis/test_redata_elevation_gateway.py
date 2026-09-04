@@ -33,7 +33,15 @@ class GetElevationTests(SimpleTestCase):
             {
                 "count": 1,
                 "complete": True,
-                "results": [{"provider": "usgs_epqs", "dataset": "3DEP", "resolution_meters": 10, "elevation_meters": 245.0, "status": "ok"}],
+                "results": [
+                    {
+                        "provider": "usgs_epqs",
+                        "dataset": "3DEP",
+                        "resolution_meters": 10,
+                        "elevation_meters": 245.0,
+                        "status": "ok",
+                    }
+                ],
                 "providers": [],
             },
         )
@@ -56,9 +64,27 @@ class GetElevationTests(SimpleTestCase):
                 "count": 3,
                 "complete": True,
                 "results": [
-                    {"provider": "usgs_epqs", "dataset": "3DEP", "resolution_meters": 10, "elevation_meters": 245.0, "status": "ok"},
-                    {"provider": "open_elevation", "dataset": "SRTM", "resolution_meters": 90, "elevation_meters": 240.0, "status": "ok"},
-                    {"provider": "open_meteo", "dataset": "Copernicus DEM GLO-90", "resolution_meters": 90, "elevation_meters": None, "status": "ok"},
+                    {
+                        "provider": "usgs_epqs",
+                        "dataset": "3DEP",
+                        "resolution_meters": 10,
+                        "elevation_meters": 245.0,
+                        "status": "ok",
+                    },
+                    {
+                        "provider": "open_elevation",
+                        "dataset": "SRTM",
+                        "resolution_meters": 90,
+                        "elevation_meters": 240.0,
+                        "status": "ok",
+                    },
+                    {
+                        "provider": "open_meteo",
+                        "dataset": "Copernicus DEM GLO-90",
+                        "resolution_meters": 90,
+                        "elevation_meters": None,
+                        "status": "ok",
+                    },
                 ],
                 "providers": [],
             },

@@ -123,7 +123,15 @@ class _ProviderMediaMappingMixin(_MixinBase):
         mock_search.assert_not_called()
 
     def test_maps_title_url_and_thumbnail(self) -> None:
-        results = [{"title": "The ruins", "url": "https://example.test/a", "thumbnail_url": "https://example.test/a-thumb", "date_text": "c. 1890", "license": "Public Domain"}]
+        results = [
+            {
+                "title": "The ruins",
+                "url": "https://example.test/a",
+                "thumbnail_url": "https://example.test/a-thumb",
+                "date_text": "c. 1890",
+                "license": "Public Domain",
+            }
+        ]
         items, _ = self._items(results)
         self.assertEqual(len(items), 1)
         item = items[0]
@@ -153,7 +161,11 @@ class _ProviderMediaMappingMixin(_MixinBase):
     def test_a_gateway_failure_propagates_rather_than_being_swallowed(self) -> None:
         with (
             mock.patch.object(RedataReferenceDocumentsGateway, "__post_init__", return_value=None),
-            mock.patch.object(RedataReferenceDocumentsGateway, "search", side_effect=LocationContextUnavailableError("source_error", "down")),
+            mock.patch.object(
+                RedataReferenceDocumentsGateway,
+                "search",
+                side_effect=LocationContextUnavailableError("source_error", "down"),
+            ),
             pytest.raises(LocationContextUnavailableError),
         ):
             list(self.provider_cls()._generate_media("Bannerman Castle"))

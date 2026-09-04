@@ -45,7 +45,9 @@ class GetNearbyObservationsTests(SimpleTestCase):
                         "attributes": {"obscured": False},
                     },
                 ],
-                "providers": [{"provider": "inaturalist", "status": "ok", "count": 1, "message": None, "radius_meters": 1000.0}],
+                "providers": [
+                    {"provider": "inaturalist", "status": "ok", "count": 1, "message": None, "radius_meters": 1000.0}
+                ],
             },
         )
 
@@ -84,7 +86,14 @@ class GetNearbyObservationsTests(SimpleTestCase):
             {
                 "count": 1,
                 "complete": True,
-                "results": [{"provider": "inaturalist", "common_name": "Spotted Turtle", "coordinate_uncertainty_meters": 27000, "attributes": {"obscured": True}}],
+                "results": [
+                    {
+                        "provider": "inaturalist",
+                        "common_name": "Spotted Turtle",
+                        "coordinate_uncertainty_meters": 27000,
+                        "attributes": {"obscured": True},
+                    }
+                ],
                 "providers": [],
             },
         )

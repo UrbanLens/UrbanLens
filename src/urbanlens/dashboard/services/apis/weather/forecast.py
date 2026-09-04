@@ -197,7 +197,7 @@ def redata_sun_to_sun_times(sun: dict[str, Any]) -> SunTimes | None:
     Args:
         sun: The ``sun`` object from one REData weather result entry - ``{}``
             for a provider that doesn't publish sun times (see REData's
-            ``docs/api-reference.md``, "GET /weather/").
+            ``../REData/docs/api-reference.md``, "GET /weather/").
 
     Returns:
         The normalized sun times, or None when any field is missing/unparseable.

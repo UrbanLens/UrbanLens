@@ -22,7 +22,9 @@ class MapPinCacheCeleryTests(SimpleTestCase):
         client.set.return_value = True
         cache = MapPinCache(_Profile(), client=client)
 
-        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=mock.Mock(id="task")) as enqueue:
+        with mock.patch(
+            "urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=mock.Mock(id="task")
+        ) as enqueue:
             cache.enqueue_rebuild()
 
         client.set.assert_called_once_with(cache.rebuild_queued_key, "1", nx=True, ex=cache.LOCK_SECONDS)

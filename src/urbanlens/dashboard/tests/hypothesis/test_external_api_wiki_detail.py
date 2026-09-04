@@ -213,7 +213,9 @@ class WikiScopeEnforcementTests(WikiDetailBaseTestCase):
         for method, suffix, payload in self.WRITES:
             with self.subTest(method=method, suffix=suffix):
                 kwargs = {"content_type": "application/json", **self.headers()}
-                response = getattr(self.client, method)(self.url(suffix), payload if payload is not None else {}, **kwargs)
+                response = getattr(self.client, method)(
+                    self.url(suffix), payload if payload is not None else {}, **kwargs
+                )
                 self.assertEqual(response.status_code, 403, f"{method.upper()} {suffix} was not refused")
 
     def test_read_scope_still_permits_reads(self) -> None:
@@ -235,7 +237,9 @@ class WikiAliasesAndLinksTests(WikiDetailBaseTestCase):
         the list is never empty - assert on the alias under test rather than on
         the whole collection.
         """
-        created = self.client.post(self.url("aliases/"), {"name": "The Mill"}, content_type="application/json", **self.headers())
+        created = self.client.post(
+            self.url("aliases/"), {"name": "The Mill"}, content_type="application/json", **self.headers()
+        )
         self.assertEqual(created.status_code, 201)
         alias_id = created.json()["id"]
 
@@ -250,7 +254,12 @@ class WikiAliasesAndLinksTests(WikiDetailBaseTestCase):
         self.assertNotIn(alias_id, [row["id"] for row in remaining])
 
     def test_link_create_list_delete(self) -> None:
-        created = self.client.post(self.url("links/"), {"name": "History", "url": "https://example.com/mill"}, content_type="application/json", **self.headers())
+        created = self.client.post(
+            self.url("links/"),
+            {"name": "History", "url": "https://example.com/mill"},
+            content_type="application/json",
+            **self.headers(),
+        )
         self.assertEqual(created.status_code, 201)
         link_id = created.json()["id"]
 
@@ -261,5 +270,7 @@ class WikiAliasesAndLinksTests(WikiDetailBaseTestCase):
         self.assertEqual(removed.status_code, 204)
 
     def test_malformed_link_url_is_rejected(self) -> None:
-        response = self.client.post(self.url("links/"), {"url": "not a url"}, content_type="application/json", **self.headers())
+        response = self.client.post(
+            self.url("links/"), {"url": "not a url"}, content_type="application/json", **self.headers()
+        )
         self.assertEqual(response.status_code, 400)

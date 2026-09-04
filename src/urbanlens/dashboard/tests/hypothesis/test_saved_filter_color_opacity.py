@@ -95,7 +95,14 @@ class SavedFilterColorRendersOnButtonsTests(TestCase):
         self.user = baker.make(User)
         self.client.force_login(self.user)
         self.profile = self.user.profile
-        SavedFilter.objects.create(profile=self.profile, name="Mills", icon="filter_alt", color="#F44336", opacity=50, criteria={"name": "Mill"})
+        SavedFilter.objects.create(
+            profile=self.profile,
+            name="Mills",
+            icon="filter_alt",
+            color="#F44336",
+            opacity=50,
+            criteria={"name": "Mill"},
+        )
 
     def test_toolbar_button_carries_the_tint_and_colored_modifier(self) -> None:
         response = self.client.get(reverse("map.view"))

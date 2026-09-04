@@ -113,7 +113,9 @@ class PasswordResetApiKeyRevocationTests(TestCase):
         """The form has to be valid before anything destructive happens."""
         url = self._start_reset()
 
-        self.client.post(url, {"new_password1": NEW_PASSWORD, "new_password2": "something else", "revoke_api_keys": "1"})
+        self.client.post(
+            url, {"new_password1": NEW_PASSWORD, "new_password2": "something else", "revoke_api_keys": "1"}
+        )
 
         self.assertIsNotNone(authenticate_api_key(self.raw_key))
 
@@ -137,7 +139,9 @@ class PasswordResetApiKeyRevocationTests(TestCase):
         keyless.save(update_fields=["password"])
 
         uidb64 = urlsafe_base64_encode(force_bytes(keyless.pk))
-        response = self.client.get(reverse("password_reset_confirm", args=[uidb64, default_token_generator.make_token(keyless)]), follow=True)
+        response = self.client.get(
+            reverse("password_reset_confirm", args=[uidb64, default_token_generator.make_token(keyless)]), follow=True
+        )
 
         self.assertEqual(response.context["active_api_key_count"], 0)
         self.assertNotContains(response, "api-key-choice-dialog")
@@ -145,7 +149,9 @@ class PasswordResetApiKeyRevocationTests(TestCase):
     def test_the_prompt_is_present_when_there_is_a_key(self) -> None:
         """Negative-then-positive: the assertion above must be able to fail."""
         uidb64 = urlsafe_base64_encode(force_bytes(self.user.pk))
-        response = self.client.get(reverse("password_reset_confirm", args=[uidb64, default_token_generator.make_token(self.user)]), follow=True)
+        response = self.client.get(
+            reverse("password_reset_confirm", args=[uidb64, default_token_generator.make_token(self.user)]), follow=True
+        )
 
         self.assertEqual(response.context["active_api_key_count"], 1)
         self.assertContains(response, "api-key-choice-dialog")
@@ -166,19 +172,25 @@ class PasswordResetApiKeyRevocationTests(TestCase):
         self.assertFalse(response.context["validlink"])
         self.assertEqual(response.context["active_api_key_count"], 0)
         self.assertNotContains(response, "api-key-choice-dialog")
-        self.assertNotContains(response, "my-integration", msg_prefix="a key's name is user-authored text and must never reach this page")
+        self.assertNotContains(
+            response, "my-integration", msg_prefix="a key's name is user-authored text and must never reach this page"
+        )
 
     def test_the_key_name_is_never_rendered_even_on_a_valid_link(self) -> None:
         """The count is enough to phrase the question; the names are not needed."""
         uidb64 = urlsafe_base64_encode(force_bytes(self.user.pk))
 
-        response = self.client.get(reverse("password_reset_confirm", args=[uidb64, default_token_generator.make_token(self.user)]), follow=True)
+        response = self.client.get(
+            reverse("password_reset_confirm", args=[uidb64, default_token_generator.make_token(self.user)]), follow=True
+        )
 
         self.assertNotContains(response, "my-integration")
 
     def test_the_hidden_field_defaults_to_keeping_the_keys(self) -> None:
         """No JavaScript, or JavaScript that throws, must not revoke anything."""
         uidb64 = urlsafe_base64_encode(force_bytes(self.user.pk))
-        response = self.client.get(reverse("password_reset_confirm", args=[uidb64, default_token_generator.make_token(self.user)]), follow=True)
+        response = self.client.get(
+            reverse("password_reset_confirm", args=[uidb64, default_token_generator.make_token(self.user)]), follow=True
+        )
 
         self.assertContains(response, 'name="revoke_api_keys" id="revoke-api-keys-field" value=""')

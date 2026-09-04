@@ -93,7 +93,9 @@ class ProfileHeroMetaEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         self.assertContains(response, "Rochester, NY")
         self.assertNotIn("profile-area--editable", _rendered_markup(response))
 
@@ -103,7 +105,9 @@ class ProfileHeroMetaEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         self.assertNotIn("Add your area...", _rendered_markup(response))
 
     def test_edit_profile_page_keeps_the_plain_form_field_not_the_inline_editor(self) -> None:

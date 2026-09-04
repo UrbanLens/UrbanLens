@@ -23,7 +23,10 @@ class SubmitUserQuestionTests(TestCase):
         profile = _make_profile()
         location = baker.make(Location)
 
-        with patch("urbanlens.dashboard.services.trivia.submission._enqueue_classification") as mock_enqueue, self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("urbanlens.dashboard.services.trivia.submission._enqueue_classification") as mock_enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             question = submit_user_question(profile, location, "What year was it built?", "1937")
 
         self.assertEqual(question.source, TriviaQuestionSource.USER_SUBMITTED)
@@ -35,7 +38,10 @@ class SubmitUserQuestionTests(TestCase):
     def test_prompt_and_answer_are_truncated(self) -> None:
         profile = _make_profile()
         location = baker.make(Location)
-        with patch("urbanlens.dashboard.services.trivia.submission._enqueue_classification"), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("urbanlens.dashboard.services.trivia.submission._enqueue_classification"),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             question = submit_user_question(profile, location, "Q" * 1000, "A" * 1000)
         self.assertEqual(len(question.prompt), 500)
         self.assertEqual(len(question.answer), 255)
@@ -55,14 +61,20 @@ class ClassifyAndUpdateTests(TestCase):
         )
 
     def test_approved_verdict_flips_status_to_approved(self) -> None:
-        with patch("urbanlens.dashboard.services.trivia.classifier.classify_trivia_question", return_value=ClassifierVerdict(approved=True)):
+        with patch(
+            "urbanlens.dashboard.services.trivia.classifier.classify_trivia_question",
+            return_value=ClassifierVerdict(approved=True),
+        ):
             classify_and_update(self.question)
         self.question.refresh_from_db()
         self.assertEqual(self.question.status, TriviaQuestionStatus.APPROVED)
         self.assertIsNone(self.question.rejection_reason)
 
     def test_rejected_verdict_flips_status_to_rejected_with_reason(self) -> None:
-        with patch("urbanlens.dashboard.services.trivia.classifier.classify_trivia_question", return_value=ClassifierVerdict(approved=False, reason="person")):
+        with patch(
+            "urbanlens.dashboard.services.trivia.classifier.classify_trivia_question",
+            return_value=ClassifierVerdict(approved=False, reason="person"),
+        ):
             classify_and_update(self.question)
         self.question.refresh_from_db()
         self.assertEqual(self.question.status, TriviaQuestionStatus.REJECTED)

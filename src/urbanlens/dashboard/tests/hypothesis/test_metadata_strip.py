@@ -65,7 +65,7 @@ def _metadata_of(data: bytes) -> tuple[dict, str]:
     exif = opened.getexif()
     tags = dict(exif)
     tags.update({f"gps{k}": v for k, v in exif.get_ifd(_GPS_IFD).items()})
-    info = " ".join(str(value) for key, value in opened.info.items() if key not in ("icc_profile",))
+    info = " ".join(str(value) for key, value in opened.info.items() if key != "icc_profile")
     return tags, info
 
 
@@ -95,7 +95,11 @@ class JpegStripTests(SimpleTestCase):
         after = PILImage.open(io.BytesIO(stripped))
         self.assertEqual(after.format, "JPEG")
         self.assertEqual(after.size, before.size)
-        self.assertEqual(list(after.convert("RGB").getdata()), list(before.convert("RGB").getdata()), "the strip must not touch pixel data")
+        self.assertEqual(
+            list(after.convert("RGB").getdata()),
+            list(before.convert("RGB").getdata()),
+            "the strip must not touch pixel data",
+        )
 
     def test_a_comment_segment_is_dropped(self):
         with_comment = _encoded("JPEG", comment=b"private note about this place", quality=95)
@@ -183,7 +187,10 @@ class UnhandledInputTests(SimpleTestCase):
 
         self.assertTrue(result is None or isinstance(result, bytes))
 
-    @given(prefix=st.sampled_from([b"\xff\xd8", b"\x89PNG\r\n\x1a\n", b"RIFF\x00\x00\x00\x00WEBP"]), tail=st.binary(min_size=0, max_size=200))
+    @given(
+        prefix=st.sampled_from([b"\xff\xd8", b"\x89PNG\r\n\x1a\n", b"RIFF\x00\x00\x00\x00WEBP"]),
+        tail=st.binary(min_size=0, max_size=200),
+    )
     @hypothesis_settings(max_examples=200, deadline=None)
     def test_truncated_containers_never_raise(self, prefix: bytes, tail: bytes):
         """Fuzzed headers reach the per-format parsers rather than the type sniff."""

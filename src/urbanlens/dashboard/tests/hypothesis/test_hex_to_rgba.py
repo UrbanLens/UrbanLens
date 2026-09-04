@@ -1,4 +1,5 @@
 """Tests for the hex_to_rgba template filter (color+opacity swatch tints)."""
+
 from __future__ import annotations
 
 from urbanlens.core.tests.testcase import SimpleTestCase

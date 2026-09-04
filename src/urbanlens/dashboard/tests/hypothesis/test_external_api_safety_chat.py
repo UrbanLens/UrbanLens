@@ -81,7 +81,12 @@ class _SafetyChatTestCase(TestCase):
             contact_message="Please call me",
             contacts=[(None, "friend@example.com", "Friend")],
         )
-        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=self.partner, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
+        SafetyCheckinPartner.objects.create(
+            checkin=self.checkin,
+            profile=self.partner,
+            invited_by=self.owner,
+            status=SafetyCheckinPartnerStatus.ACCEPTED,
+        )
         self.url = reverse("external_api:safety.checkins.messages", kwargs={"checkin_slug": self.checkin.slug})
 
     def _issue_key(self, user: User, scopes: list[str] | None = None) -> str:
@@ -97,7 +102,9 @@ class _SafetyChatTestCase(TestCase):
         key, raw = generate_api_key(user, "Test")
         # scopes is editable=False, so it is set directly rather than through a
         # form. The default grant deliberately excludes safety:*.
-        ApiKey.objects.filter(pk=key.pk).update(scopes=scopes or [ApiKeyScope.SAFETY_READ.value, ApiKeyScope.SAFETY_WRITE.value])
+        ApiKey.objects.filter(pk=key.pk).update(
+            scopes=scopes or [ApiKeyScope.SAFETY_READ.value, ApiKeyScope.SAFETY_WRITE.value]
+        )
         return raw
 
     def _post(self, raw_key: str, body: str):
@@ -194,7 +201,9 @@ class SafetyChatAccessTests(_SafetyChatTestCase):
         """
         invitee_user = baker.make(User, username="invitee")
         invitee = Profile.objects.get(user=invitee_user)
-        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=invitee, invited_by=self.owner, status=SafetyCheckinPartnerStatus.INVITED)
+        SafetyCheckinPartner.objects.create(
+            checkin=self.checkin, profile=invitee, invited_by=self.owner, status=SafetyCheckinPartnerStatus.INVITED
+        )
 
         response = self.client.get(self.url, **_bearer(self._issue_key(invitee_user)))
         self.assertEqual(response.status_code, 404)
@@ -204,7 +213,9 @@ class SafetyChatAccessTests(_SafetyChatTestCase):
         """The write side refuses the same people the read side does."""
         invitee_user = baker.make(User, username="invitee")
         invitee = Profile.objects.get(user=invitee_user)
-        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=invitee, invited_by=self.owner, status=SafetyCheckinPartnerStatus.INVITED)
+        SafetyCheckinPartner.objects.create(
+            checkin=self.checkin, profile=invitee, invited_by=self.owner, status=SafetyCheckinPartnerStatus.INVITED
+        )
 
         self.assertEqual(self._post(self._issue_key(invitee_user), "let me in").status_code, 404)
         self.assertFalse(SafetyCheckinMessage.objects.filter(body="let me in").exists())
@@ -258,8 +269,14 @@ class SafetyChatReadTests(_SafetyChatTestCase):
         SafetyCheckinMessage.objects.create(checkin=self.checkin, sender_profile=self.owner, body="from owner")
         SafetyCheckinMessage.objects.create(checkin=self.checkin, sender_profile=self.partner, body="from partner")
 
-        owner_view = {row["body"]: row["is_mine"] for row in self.client.get(self.url, **_bearer(self.owner_key)).json()["results"]}
-        partner_view = {row["body"]: row["is_mine"] for row in self.client.get(self.url, **_bearer(self.partner_key)).json()["results"]}
+        owner_view = {
+            row["body"]: row["is_mine"]
+            for row in self.client.get(self.url, **_bearer(self.owner_key)).json()["results"]
+        }
+        partner_view = {
+            row["body"]: row["is_mine"]
+            for row in self.client.get(self.url, **_bearer(self.partner_key)).json()["results"]
+        }
 
         self.assertEqual(owner_view, {"from owner": True, "from partner": False})
         self.assertEqual(partner_view, {"from owner": False, "from partner": True})
@@ -341,7 +358,9 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
         self.assertEqual(payload["body"], "Reached the north rim")
         self.assertEqual(payload["sender_username"], "explorer")
         self.assertTrue(payload["is_mine"])
-        self.assertTrue(SafetyCheckinMessage.objects.filter(checkin=self.checkin, body="Reached the north rim").exists())
+        self.assertTrue(
+            SafetyCheckinMessage.objects.filter(checkin=self.checkin, body="Reached the north rim").exists()
+        )
 
     def test_partner_posts_a_message_attributed_to_their_own_profile(self) -> None:
         """A partner's message is theirs, not the owner's.
@@ -408,14 +427,16 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
         self.assertEqual(response.status_code, 201)
 
     def test_archived_checkin_is_409_not_400(self) -> None:
-        """"This conversation is over" is a different answer from "your message is bad".
+        """ "This conversation is over" is a different answer from "your message is bad".
 
         A client must be able to tell them apart: one means retire the thread,
         the other means ask the user to retype. Writing into an archived
         check-in would also restore plaintext onto a row whose PII has already
         been sealed away and scrubbed.
         """
-        SafetyCheckinArchive.objects.create(checkin=self.checkin, ciphertext="x", nonce="y", sealed_key="z", key_bundle_version=1)
+        SafetyCheckinArchive.objects.create(
+            checkin=self.checkin, ciphertext="x", nonce="y", sealed_key="z", key_bundle_version=1
+        )
 
         response = self._post(self.owner_key, "one last thing")
         self.assertEqual(response.status_code, 409)
@@ -429,5 +450,7 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
         must not additionally start 404ing, or a client would be unable to tell
         an archived check-in from one it may not see.
         """
-        SafetyCheckinArchive.objects.create(checkin=self.checkin, ciphertext="x", nonce="y", sealed_key="z", key_bundle_version=1)
+        SafetyCheckinArchive.objects.create(
+            checkin=self.checkin, ciphertext="x", nonce="y", sealed_key="z", key_bundle_version=1
+        )
         self.assertEqual(self.client.get(self.url, **_bearer(self.owner_key)).status_code, 200)

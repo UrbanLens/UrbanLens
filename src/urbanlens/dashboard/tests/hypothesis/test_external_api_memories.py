@@ -85,7 +85,10 @@ class MemoriesTimelineTests(TestCase):
 
         response = self.client.get(
             reverse("external_api:memories.timeline"),
-            {"start": (far_past - datetime.timedelta(days=1)).date().isoformat(), "end": (far_past + datetime.timedelta(days=1)).date().isoformat()},
+            {
+                "start": (far_past - datetime.timedelta(days=1)).date().isoformat(),
+                "end": (far_past + datetime.timedelta(days=1)).date().isoformat(),
+            },
             **_bearer(self.raw_key),
         )
 
@@ -145,7 +148,13 @@ class MemoriesOnThisDayTests(TestCase):
         """A route started one year ago today surfaces, with its path as GeoJSON."""
         today = timezone.now()
         last_year = today.replace(year=today.year - 1)
-        Route.objects.create(profile=self.profile, source=RouteSource.GPX_TRACK, path=LineString((-74.0, 40.7), (-74.01, 40.71)), started_at=last_year, distance_meters=123.4)
+        Route.objects.create(
+            profile=self.profile,
+            source=RouteSource.GPX_TRACK,
+            path=LineString((-74.0, 40.7), (-74.01, 40.71)),
+            started_at=last_year,
+            distance_meters=123.4,
+        )
 
         response = self.client.get(reverse("external_api:memories.on_this_day"), **_bearer(self.raw_key))
 
@@ -166,7 +175,13 @@ class PinSuggestionQueueTests(TestCase):
         self.raw_key = _key_with_scopes(self.user, [ApiKeyScope.PHOTOS_READ, ApiKeyScope.PHOTOS_WRITE])
 
     def _make_suggestion(self, profile: Profile, **kwargs) -> PinSuggestion:
-        defaults = {"profile": profile, "latitude": 40.7, "longitude": -74.0, "origin": PinSuggestionOrigin.LOCAL_SCAN, "status": PinSuggestionStatus.PENDING}
+        defaults = {
+            "profile": profile,
+            "latitude": 40.7,
+            "longitude": -74.0,
+            "origin": PinSuggestionOrigin.LOCAL_SCAN,
+            "status": PinSuggestionStatus.PENDING,
+        }
         defaults.update(kwargs)
         return PinSuggestion.objects.create(**defaults)
 
@@ -202,12 +217,20 @@ class PinSuggestionActionTests(TestCase):
         self.raw_key = _key_with_scopes(self.user, [ApiKeyScope.PHOTOS_READ, ApiKeyScope.PHOTOS_WRITE])
 
     def _make_suggestion(self, profile: Profile, **kwargs) -> PinSuggestion:
-        defaults = {"profile": profile, "latitude": 40.7, "longitude": -74.0, "origin": PinSuggestionOrigin.LOCAL_SCAN, "status": PinSuggestionStatus.PENDING}
+        defaults = {
+            "profile": profile,
+            "latitude": 40.7,
+            "longitude": -74.0,
+            "origin": PinSuggestionOrigin.LOCAL_SCAN,
+            "status": PinSuggestionStatus.PENDING,
+        }
         defaults.update(kwargs)
         return PinSuggestion.objects.create(**defaults)
 
     def _action_url(self, suggestion_id: int, action: str) -> str:
-        return reverse("external_api:suggestions.pins.action", kwargs={"suggestion_id": suggestion_id, "action": action})
+        return reverse(
+            "external_api:suggestions.pins.action", kwargs={"suggestion_id": suggestion_id, "action": action}
+        )
 
     def test_scope_is_required(self) -> None:
         suggestion = self._make_suggestion(self.profile)
@@ -215,7 +238,10 @@ class PinSuggestionActionTests(TestCase):
         response = self.client.post(self._action_url(suggestion.pk, "accept"), **_bearer(raw_key))
         self.assertEqual(response.status_code, HTTPStatus.FORBIDDEN)
 
-    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+    @mock.patch(
+        "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+        return_value=None,
+    )
     def test_accepting_a_new_pin_suggestion_creates_a_pin(self, _mock_resolve_name) -> None:
         """A suggestion with no matched pin creates one and is marked accepted."""
         suggestion = self._make_suggestion(self.profile, suggested_name="Old Mill")

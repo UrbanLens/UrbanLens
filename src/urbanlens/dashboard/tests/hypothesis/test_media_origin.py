@@ -318,15 +318,28 @@ class SettingsNamesAreRealTests(SimpleTestCase):
     def test_site_url_is_the_real_setting_name(self) -> None:
         from django.conf import settings
 
-        self.assertTrue(hasattr(settings, "SITE_URL"), "settings.SITE_URL is what cookie_domain and the frame-ancestors CSP read")
-        self.assertFalse(hasattr(settings, "UL_SITE_URL"), "UL_SITE_URL is the env var, not the setting - reading it off settings yields '' silently")
+        self.assertTrue(
+            hasattr(settings, "SITE_URL"), "settings.SITE_URL is what cookie_domain and the frame-ancestors CSP read"
+        )
+        self.assertFalse(
+            hasattr(settings, "UL_SITE_URL"),
+            "UL_SITE_URL is the env var, not the setting - reading it off settings yields '' silently",
+        )
 
     def test_every_setting_this_module_reads_exists(self) -> None:
         from django.conf import settings
 
-        for name in ("SITE_URL", "UL_MEDIA_BASE_URL", "UL_MEDIA_COOKIE_DOMAIN", "UL_MEDIA_CSP", "SESSION_COOKIE_SECURE"):
+        for name in (
+            "SITE_URL",
+            "UL_MEDIA_BASE_URL",
+            "UL_MEDIA_COOKIE_DOMAIN",
+            "UL_MEDIA_CSP",
+            "SESSION_COOKIE_SECURE",
+        ):
             with self.subTest(setting=name):
-                self.assertTrue(hasattr(settings, name), f"services.media.origin reads settings.{name}, which does not exist")
+                self.assertTrue(
+                    hasattr(settings, name), f"services.media.origin reads settings.{name}, which does not exist"
+                )
 
     @override_settings(UL_MEDIA_BASE_URL=MEDIA_ORIGIN, SITE_URL=APP_ORIGIN, UL_MEDIA_COOKIE_DOMAIN="")
     def test_cookie_domain_actually_derives_from_site_url(self) -> None:
@@ -361,7 +374,9 @@ class MediaOriginStartupCheckTests(SimpleTestCase):
     def test_a_media_origin_with_no_hostname_is_an_error(self) -> None:
         self.assertEqual(self._check(), ["dashboard.E003"])
 
-    @override_settings(UL_MEDIA_BASE_URL="https://media.somewhere-else.net", SITE_URL=APP_ORIGIN, UL_MEDIA_COOKIE_DOMAIN="")
+    @override_settings(
+        UL_MEDIA_BASE_URL="https://media.somewhere-else.net", SITE_URL=APP_ORIGIN, UL_MEDIA_COOKIE_DOMAIN=""
+    )
     def test_unrelated_hosts_are_an_error(self) -> None:
         # This is the shape the original UL_SITE_URL bug took: no derivable
         # domain, so the cookie is never set and every media URL 404s.
@@ -373,6 +388,10 @@ class MediaOriginStartupCheckTests(SimpleTestCase):
         # this pair derives "co.uk", which browsers reject outright.
         self.assertEqual(self._check(), ["dashboard.E005"])
 
-    @override_settings(UL_MEDIA_BASE_URL="https://media.a.co.uk", SITE_URL="https://b.co.uk", UL_MEDIA_COOKIE_DOMAIN="explicit.example.com")
+    @override_settings(
+        UL_MEDIA_BASE_URL="https://media.a.co.uk",
+        SITE_URL="https://b.co.uk",
+        UL_MEDIA_COOKIE_DOMAIN="explicit.example.com",
+    )
     def test_an_explicit_cookie_domain_settles_it(self) -> None:
         self.assertEqual(self._check(), [])

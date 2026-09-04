@@ -61,7 +61,12 @@ class GenerateApiKeyTests(TestCase):
         api_key, _raw_key = generate_api_key(user, "Zapier")
         self.assertCountEqual(
             api_key.scopes,
-            [ApiKeyScope.PROFILE_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.PINS_WRITE.value, ApiKeyScope.PUSH_MANAGE.value],
+            [
+                ApiKeyScope.PROFILE_READ.value,
+                ApiKeyScope.PINS_READ.value,
+                ApiKeyScope.PINS_WRITE.value,
+                ApiKeyScope.PUSH_MANAGE.value,
+            ],
         )
 
     def test_blank_name_falls_back_to_default_label(self) -> None:

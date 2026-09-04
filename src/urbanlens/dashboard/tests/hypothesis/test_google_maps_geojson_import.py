@@ -9,6 +9,7 @@ This method (renamed from ``takeout_json_to_dict``) handles two shapes:
   types (reduced to a centroid) and arbitrary property names (via the
   ``pick_name_and_description`` fallback heuristic).
 """
+
 from __future__ import annotations
 
 import json
@@ -163,7 +164,13 @@ class GeojsonToDictGenericShapeTests(SimpleTestCase):
     )
     def test_round_trips_arbitrary_point_coordinates(self, lon: float, lat: float):
         text = _feature_collection(
-            [{"type": "Feature", "properties": {"name": "Spot"}, "geometry": {"type": "Point", "coordinates": [lon, lat]}}],
+            [
+                {
+                    "type": "Feature",
+                    "properties": {"name": "Spot"},
+                    "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                }
+            ],
         )
 
         pins = self.gateway.geojson_to_dict(text, self.profile)

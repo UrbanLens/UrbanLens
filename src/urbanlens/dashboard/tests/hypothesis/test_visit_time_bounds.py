@@ -4,7 +4,7 @@ Found by the integration suite on 2026-08-24: `POST pins/{slug}/visits/`
 accepted a `visited_at` a week in the future and answered 201. Nothing here
 asserted the *absence* of that validation, because every existing visit test
 supplies a sensible timestamp - the author writing a test is thinking about the
-feature working, not about it being abused. See `docs/TEST_COVERAGE_GAPS.md`,
+feature working, not about it being abused. See `docs/audits/TEST_COVERAGE_GAPS.md`,
 which records that blind spot as the common thread through most of what the
 integration suite caught.
 
@@ -47,12 +47,16 @@ class VisitTimeSerializerTests(TestCase):
 
     def test_a_past_visit_is_accepted(self) -> None:
         """The check must not be satisfiable by rejecting everything."""
-        serializer = PinVisitCreateSerializer(data={"visited_at": (timezone.now() - datetime.timedelta(days=3)).isoformat()})
+        serializer = PinVisitCreateSerializer(
+            data={"visited_at": (timezone.now() - datetime.timedelta(days=3)).isoformat()}
+        )
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
     def test_a_visit_a_week_from_now_is_refused(self) -> None:
-        serializer = PinVisitCreateSerializer(data={"visited_at": (timezone.now() + datetime.timedelta(days=7)).isoformat()})
+        serializer = PinVisitCreateSerializer(
+            data={"visited_at": (timezone.now() + datetime.timedelta(days=7)).isoformat()}
+        )
 
         self.assertFalse(serializer.is_valid())
         self.assertIn("visited_at", serializer.errors)
@@ -63,7 +67,9 @@ class VisitTimeSerializerTests(TestCase):
         The tolerance is what keeps this a check on the *date* rather than a
         trap for anybody whose device is not perfectly synchronised.
         """
-        serializer = PinVisitCreateSerializer(data={"visited_at": (timezone.now() + MAX_VISIT_CLOCK_SKEW / 2).isoformat()})
+        serializer = PinVisitCreateSerializer(
+            data={"visited_at": (timezone.now() + MAX_VISIT_CLOCK_SKEW / 2).isoformat()}
+        )
 
         self.assertTrue(serializer.is_valid(), serializer.errors)
 

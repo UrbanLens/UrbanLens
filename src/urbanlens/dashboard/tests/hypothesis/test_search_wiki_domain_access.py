@@ -1,7 +1,7 @@
 """Global search and map autocomplete must grant wiki-adjacent access through the same
 domain rule the wiki page itself enforces, not a narrower exact-Location pin match.
 
-See docs/GOALS_CODE_AUDIT.md ("Discovery: browse and search parity" / "Wiki access"). Before
+See docs/audits/GOALS_CODE_AUDIT.md ("Discovery: browse and search parity" / "Wiki access"). Before
 this fix, WikiSearchProvider, ArticleSearchProvider, CommentSearchProvider,
 PhotoSearchProvider, and services.map_pins.autocomplete.search_local each reimplemented wiki
 visibility with ``location__pins__profile=profile`` - an exact Location-row match - instead of
@@ -79,7 +79,9 @@ class WikiSearchDomainAccessTests(_BoundaryMateFixture):
 class ArticleSearchDomainAccessTests(_BoundaryMateFixture):
     def setUp(self) -> None:
         super().setUp()
-        self.article = baker.make("dashboard.Article", wiki=self.wiki, content="A distinctive paragraph about turbines.")
+        self.article = baker.make(
+            "dashboard.Article", wiki=self.wiki, content="A distinctive paragraph about turbines."
+        )
 
     def test_finds_wiki_article_via_a_boundary_mate_pin(self) -> None:
         response = GlobalSearchEngine().search(self.profile, "distinctive paragraph turbines")
@@ -94,7 +96,9 @@ class ArticleSearchDomainAccessTests(_BoundaryMateFixture):
 class CommentSearchDomainAccessTests(_BoundaryMateFixture):
     def setUp(self) -> None:
         super().setUp()
-        self.comment = baker.make("dashboard.Comment", wiki=self.wiki, profile=self.content_owner, text="a very distinctive comment string")
+        self.comment = baker.make(
+            "dashboard.Comment", wiki=self.wiki, profile=self.content_owner, text="a very distinctive comment string"
+        )
 
     def test_finds_wiki_comment_via_a_boundary_mate_pin(self) -> None:
         response = GlobalSearchEngine().search(self.profile, "distinctive comment string")
@@ -215,7 +219,11 @@ class ExternalTagSearchDomainAccessTests(_BoundaryMateFixture):
         super().setUp()
         from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, ExtractedTag, PlaceExternalTag
 
-        PlaceExternalTag.sync_for_source(self.parcel, ExternalTagSource.OVERTURE, [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            self.parcel,
+            ExternalTagSource.OVERTURE,
+            [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)],
+        )
 
     def test_site_search_finds_the_wiki_via_a_boundary_mate_pin_and_its_tag(self) -> None:
         response = GlobalSearchEngine().search(self.profile, "restaurant")

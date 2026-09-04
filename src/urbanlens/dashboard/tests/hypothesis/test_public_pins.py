@@ -359,8 +359,12 @@ class SuggestionSyncTests(TestCase):
         """
         late_joiner = Profile.objects.get(user=baker.make("auth.User"))
         counters = evaluate_public_pin_candidates()
-        self.assertEqual(counters["passed"], 0, "the candidate was force-set to PASSED directly, not settled by this run")
-        suggestion = PinSuggestion.objects.filter(profile=late_joiner, location=self.location, origin=PinSuggestionOrigin.COMMUNITY)
+        self.assertEqual(
+            counters["passed"], 0, "the candidate was force-set to PASSED directly, not settled by this run"
+        )
+        suggestion = PinSuggestion.objects.filter(
+            profile=late_joiner, location=self.location, origin=PinSuggestionOrigin.COMMUNITY
+        )
         self.assertTrue(suggestion.exists())
 
     def test_queue_hides_community_suggestions_when_toggled_off(self) -> None:

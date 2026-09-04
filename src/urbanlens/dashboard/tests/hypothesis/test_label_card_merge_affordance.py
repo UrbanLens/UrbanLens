@@ -46,7 +46,9 @@ class SingleMergeAffordanceTests(TestCase):
                 self.assertFalse(_config(kind).enable_single_merge)
 
                 label = baker.make(Label, profile=self.profile, kind=kind, name=f"Subject {kind}")
-                response = self.client.get(reverse("label.merge", kwargs={"label_kind": _config(kind).url_kind, "label_id": label.pk}))
+                response = self.client.get(
+                    reverse("label.merge", kwargs={"label_kind": _config(kind).url_kind, "label_id": label.pk})
+                )
 
                 self.assertEqual(response.status_code, 404)
 
@@ -65,4 +67,6 @@ class SingleMergeAffordanceTests(TestCase):
         html = self._rows_html(KIND_TAG)
 
         self.assertTrue(_config(KIND_TAG).enable_single_merge)
-        self.assertIn(reverse("label.merge", kwargs={"label_kind": _config(KIND_TAG).url_kind, "label_id": tag.pk}), html)
+        self.assertIn(
+            reverse("label.merge", kwargs={"label_kind": _config(KIND_TAG).url_kind, "label_id": tag.pk}), html
+        )

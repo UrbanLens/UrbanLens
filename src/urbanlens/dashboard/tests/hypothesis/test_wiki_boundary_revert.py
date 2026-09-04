@@ -48,7 +48,13 @@ class WikiBoundaryRevertTests(TestCase):
         self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Mill")
 
     def test_reverting_restores_the_prior_polygon(self) -> None:
-        row = baker.make("dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_NEW)
+        row = baker.make(
+            "dashboard.Boundary",
+            wiki=self.wiki,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_NEW,
+        )
         edit = baker.make(WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": _OLD.wkt, "to": _NEW.wkt}})
 
         revert_changes, skipped = revert_edit_fields(self.location, self.wiki, edit)
@@ -60,7 +66,13 @@ class WikiBoundaryRevertTests(TestCase):
 
     def test_reverting_a_newly_drawn_boundary_deletes_the_row(self) -> None:
         """A "from": null edit created the boundary from nothing - reverting removes it."""
-        row = baker.make("dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_NEW)
+        row = baker.make(
+            "dashboard.Boundary",
+            wiki=self.wiki,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_NEW,
+        )
 
         edit = baker.make(WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": None, "to": _NEW.wkt}})
         revert_changes, skipped = revert_edit_fields(self.location, self.wiki, edit)
@@ -83,7 +95,13 @@ class WikiBoundaryRevertTests(TestCase):
 
     def test_a_boundary_changed_again_since_is_left_alone(self) -> None:
         """The conflict check: a third polygon was drawn after this edit - reverting must not clobber it."""
-        row = baker.make("dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_OTHER)
+        row = baker.make(
+            "dashboard.Boundary",
+            wiki=self.wiki,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_OTHER,
+        )
         edit = baker.make(WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": _OLD.wkt, "to": _NEW.wkt}})
 
         revert_changes, skipped = revert_edit_fields(self.location, self.wiki, edit)
@@ -94,13 +112,23 @@ class WikiBoundaryRevertTests(TestCase):
         self.assertTrue(row.polygon.equals(_OTHER), "a later, unrelated change was clobbered by the revert")
 
     def test_the_legacy_bounding_box_key_targets_the_property_boundary(self) -> None:
-        row = baker.make("dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_NEW)
+        row = baker.make(
+            "dashboard.Boundary",
+            wiki=self.wiki,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_NEW,
+        )
         edit = baker.make(WikiEdit, wiki=self.wiki, changes={"bounding_box": {"from": _OLD.wkt, "to": _NEW.wkt}})
 
         revert_changes, skipped = revert_edit_fields(self.location, self.wiki, edit)
 
         self.assertEqual(skipped, [])
-        self.assertIn("bounding_box", revert_changes, "the legacy key name is preserved in the diff, not rewritten to boundary_property")
+        self.assertIn(
+            "bounding_box",
+            revert_changes,
+            "the legacy key name is preserved in the diff, not rewritten to boundary_property",
+        )
         row.refresh_from_db()
         self.assertTrue(row.polygon.equals(_OLD))
 
@@ -119,7 +147,11 @@ class WikiBoundaryRevertTests(TestCase):
         them must still revert (skipping just that field) instead of crashing."""
         self.wiki.name = "New Mill"
         self.wiki.save(update_fields=["name"])
-        edit = baker.make(WikiEdit, wiki=self.wiki, changes={"latitude": {"from": "40.0", "to": "40.1"}, "name": {"from": "Mill", "to": "New Mill"}})
+        edit = baker.make(
+            WikiEdit,
+            wiki=self.wiki,
+            changes={"latitude": {"from": "40.0", "to": "40.1"}, "name": {"from": "Mill", "to": "New Mill"}},
+        )
 
         # revert_edit_fields mutates `wiki` in place and leaves persisting it
         # to the caller (see save_edited_fields) - asserted on the in-memory

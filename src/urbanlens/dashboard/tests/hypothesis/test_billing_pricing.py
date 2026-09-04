@@ -36,20 +36,28 @@ class RolePwywThresholdCentsTests(TestCase):
         self.assertIsNone(pricing.role_pwyw_threshold_cents(role))
 
     def test_plain_pwyw_with_no_minimum_has_zero_threshold(self) -> None:
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=None
+        )
         self.assertEqual(pricing.role_pwyw_threshold_cents(role), 0)
 
     def test_plain_pwyw_with_a_static_minimum(self) -> None:
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=300)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=300
+        )
         self.assertEqual(pricing.role_pwyw_threshold_cents(role), 300)
 
     def test_dynamic_threshold_uses_cost_per_user(self) -> None:
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
+        )
         with mock.patch("urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("4.00")):
             self.assertEqual(pricing.role_pwyw_threshold_cents(role), 400)
 
     def test_dynamic_threshold_is_zero_when_there_are_no_active_users(self) -> None:
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
+        )
         with mock.patch("urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=None):
             self.assertEqual(pricing.role_pwyw_threshold_cents(role), 0)
 
@@ -58,9 +66,13 @@ class RolePwywThresholdCentsTests(TestCase):
         # cursor here; a dropped/defaulted argument would silently re-evaluate against "now"
         # instead, which the other dynamic-threshold tests above (all called with as_of=None)
         # can't catch.
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
+        )
         as_of = datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC)
-        with mock.patch("urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("1.00")) as mock_cost_per_user:
+        with mock.patch(
+            "urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("1.00")
+        ) as mock_cost_per_user:
             pricing.role_pwyw_threshold_cents(role, as_of=as_of)
         mock_cost_per_user.assert_called_once_with(as_of)
 
@@ -71,28 +83,40 @@ class PledgeMeetsThresholdTests(TestCase):
         self.assertTrue(pricing.pledge_meets_threshold(role, 0))
 
     def test_pledge_below_static_minimum_fails(self) -> None:
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.assertFalse(pricing.pledge_meets_threshold(role, 499))
 
     def test_pledge_at_static_minimum_passes(self) -> None:
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.assertTrue(pricing.pledge_meets_threshold(role, 500))
 
     def test_pledge_below_dynamic_threshold_fails(self) -> None:
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
+        )
         with mock.patch("urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("5.00")):
             self.assertFalse(pricing.pledge_meets_threshold(role, 400))
 
     def test_pledge_meeting_dynamic_threshold_passes(self) -> None:
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
+        )
         with mock.patch("urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("5.00")):
             self.assertTrue(pricing.pledge_meets_threshold(role, 500))
 
     def test_dynamic_threshold_forwards_as_of(self) -> None:
         # Proves the `as_of` this function accepts actually reaches cost_per_user, rather
         # than being dropped on the way through role_pwyw_threshold_cents.
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
+        )
         as_of = datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC)
-        with mock.patch("urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("5.00")) as mock_cost_per_user:
+        with mock.patch(
+            "urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("5.00")
+        ) as mock_cost_per_user:
             pricing.pledge_meets_threshold(role, 500, as_of=as_of)
         mock_cost_per_user.assert_called_once_with(as_of)

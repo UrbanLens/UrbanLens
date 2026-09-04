@@ -11,6 +11,7 @@ Invariants verified:
     another) would silently collide and let one entity's uploaded icon land on
     a different entity.
 """
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User

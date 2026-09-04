@@ -5,6 +5,7 @@ Covers:
 - for_profile()  - line 17
 - mark_read()    - lines 21-22
 """
+
 from __future__ import annotations
 
 from model_bakery import baker
@@ -88,9 +89,7 @@ class NotificationQuerySetForInboxTests(TestCase):
         self.user = baker.make("auth.User")
         self.profile = self.user.profile
         self.active = baker.make(NotificationLog, profile=self.profile, status=Status.READ, title="Active")
-        self.dismissed = baker.make(
-            NotificationLog, profile=self.profile, status=Status.DISMISSED, title="Dismissed"
-        )
+        self.dismissed = baker.make(NotificationLog, profile=self.profile, status=Status.DISMISSED, title="Dismissed")
 
     def test_for_inbox_includes_read_and_unread(self):
         qs = NotificationLog.objects.for_profile(self.profile).for_inbox()
@@ -107,16 +106,10 @@ class NotificationQuerySetMarkReadTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.profile = self.user.profile
-        self.n1 = baker.make(
-            NotificationLog, profile=self.profile, status=Status.UNREAD, title="A"
-        )
-        self.n2 = baker.make(
-            NotificationLog, profile=self.profile, status=Status.UNREAD, title="B"
-        )
+        self.n1 = baker.make(NotificationLog, profile=self.profile, status=Status.UNREAD, title="A")
+        self.n2 = baker.make(NotificationLog, profile=self.profile, status=Status.UNREAD, title="B")
         # One already-read; should not be double-counted.
-        self.n3 = baker.make(
-            NotificationLog, profile=self.profile, status=Status.READ, title="C"
-        )
+        self.n3 = baker.make(NotificationLog, profile=self.profile, status=Status.READ, title="C")
 
     def test_mark_read_returns_updated_count(self):
         count = NotificationLog.objects.filter(profile=self.profile).unread().mark_read()

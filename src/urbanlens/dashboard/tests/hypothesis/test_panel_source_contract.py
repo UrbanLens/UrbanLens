@@ -30,7 +30,11 @@ if TYPE_CHECKING:
 
 class ShippedPanelsAreWellFormedTests(SimpleTestCase):
     def test_every_registered_panel_declares_what_it_needs(self) -> None:
-        broken = {key: panel_source_problems(source) for key, source in panel_sources().items() if panel_source_problems(source)}
+        broken = {
+            key: panel_source_problems(source)
+            for key, source in panel_sources().items()
+            if panel_source_problems(source)
+        }
 
         self.assertEqual(broken, {}, f"registered panels are misconfigured: {broken}")
 

@@ -32,7 +32,9 @@ class FriendRespondRequiresIncomingRequestTests(TestCase):
         return self.client.post(reverse("friend.respond", args=[other.pk]), {"action": action})
 
     def test_requester_cannot_accept_their_own_outgoing_request(self) -> None:
-        friendship = Friendship.objects.create(from_profile=self.bob, to_profile=self.alice, status=FriendshipStatus.REQUESTED)
+        friendship = Friendship.objects.create(
+            from_profile=self.bob, to_profile=self.alice, status=FriendshipStatus.REQUESTED
+        )
 
         # Bob sent it, so Bob has nothing to answer - the row must not move.
         response = self._respond_as(self.bob, self.alice, "accept")
@@ -57,7 +59,9 @@ class FriendRespondRequiresIncomingRequestTests(TestCase):
 
     def test_declining_a_real_incoming_request_still_works(self) -> None:
         """The guard must reject the two cases above without breaking the ordinary one."""
-        friendship = Friendship.objects.create(from_profile=self.bob, to_profile=self.alice, status=FriendshipStatus.REQUESTED)
+        friendship = Friendship.objects.create(
+            from_profile=self.bob, to_profile=self.alice, status=FriendshipStatus.REQUESTED
+        )
 
         response = self._respond_as(self.alice, self.bob, "decline")
         self.assertEqual(response.status_code, 200)

@@ -33,6 +33,7 @@ from urbanlens.dashboard import tasks as tasks_module
 
 _TASKS_PATH = Path(tasks_module.__file__)
 
+
 def _takes_a_lock(node: ast.FunctionDef) -> bool:
     """Whether a task guards itself with an overlap lock.
 
@@ -51,7 +52,10 @@ def _takes_a_lock(node: ast.FunctionDef) -> bool:
     for sub in ast.walk(node):
         if not isinstance(sub, ast.Call):
             continue
-        if getattr(sub.func, "attr", None) == "add" and getattr(getattr(sub.func, "value", None), "id", None) == "cache":
+        if (
+            getattr(sub.func, "attr", None) == "add"
+            and getattr(getattr(sub.func, "value", None), "id", None) == "cache"
+        ):
             return True
         if getattr(sub.func, "id", None) in {"acquire_lock", "beat_lock"}:
             return True
@@ -144,26 +148,24 @@ class BeatLockIntervalTests(SimpleTestCase):
         sweep would silently get no interval check at all.
         """
         tree = ast.parse(_TASKS_PATH.read_text(encoding="utf-8"))
-        guarded = {
-            node.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef)
-            and _takes_a_lock(node)
+        guarded = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and _takes_a_lock(node)}
+        scheduled_names = {
+            entry["task"].rsplit(".", 1)[-1]: name for name, entry in settings.CELERY_BEAT_SCHEDULE.items()
         }
-        scheduled_names = {entry["task"].rsplit(".", 1)[-1]: name for name, entry in settings.CELERY_BEAT_SCHEDULE.items()}
-        uncovered = sorted(scheduled_names[fn] for fn in guarded & set(scheduled_names) if scheduled_names[fn] not in _LOCKED_BEAT_TASKS)
+        uncovered = sorted(
+            scheduled_names[fn]
+            for fn in guarded & set(scheduled_names)
+            if scheduled_names[fn] not in _LOCKED_BEAT_TASKS
+        )
 
-        self.assertEqual(uncovered, [], "lock-guarded beat tasks with no interval check - add them to _LOCKED_BEAT_TASKS")
+        self.assertEqual(
+            uncovered, [], "lock-guarded beat tasks with no interval check - add them to _LOCKED_BEAT_TASKS"
+        )
 
     def test_the_scan_still_finds_the_known_locks(self) -> None:
         """Guard against the AST scan quietly matching nothing after a refactor."""
         tree = ast.parse(_TASKS_PATH.read_text(encoding="utf-8"))
-        guarded = sum(
-            1
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef)
-            and _takes_a_lock(node)
-        )
+        guarded = sum(1 for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and _takes_a_lock(node))
 
         self.assertGreaterEqual(guarded, len(_LOCKED_BEAT_TASKS))
 

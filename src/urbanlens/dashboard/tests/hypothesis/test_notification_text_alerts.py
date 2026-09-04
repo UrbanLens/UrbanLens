@@ -129,7 +129,9 @@ class ScheduleNotificationTextAlertsTests(_AlertTestBase):
         self._prefs(pin_shared_whatsapp=True)
         with mock.patch(_ENQUEUE_PATCH) as enqueue, self.captureOnCommitCallbacks(execute=True):
             notification = self._notification()
-        text_alert_calls = [c for c in enqueue.call_args_list if c.args and c.args[0] is send_notification_text_alerts_if_unread]
+        text_alert_calls = [
+            c for c in enqueue.call_args_list if c.args and c.args[0] is send_notification_text_alerts_if_unread
+        ]
         self.assertEqual(len(text_alert_calls), 1)
         self.assertEqual(text_alert_calls[0].args[1], notification.pk)
 

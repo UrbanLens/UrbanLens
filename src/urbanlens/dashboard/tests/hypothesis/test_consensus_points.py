@@ -112,7 +112,7 @@ class PointsForChangesTests(SimpleTestCase):
     @given(keys=st.lists(st.text(min_size=1, max_size=30), min_size=0, max_size=40, unique=True))
     @settings(**_HYP)
     def test_always_within_bounds(self, keys: list[str]) -> None:
-        self.assertIn(points_for_changes(dict.fromkeys(keys, {})), range(MANUAL_EDIT_POINTS_CAP + 1))
+        self.assertIn(points_for_changes({key: {} for key in keys}), range(MANUAL_EDIT_POINTS_CAP + 1))
 
     def test_the_cap_stays_below_an_in_game_answer(self) -> None:
         """The stated intent of the award, asserted rather than only commented.

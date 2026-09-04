@@ -239,10 +239,14 @@ class CreateGroupMessageTests(TestCase):
 
     def test_body_and_ciphertext_mutually_exclusive(self) -> None:
         with self.assertRaises(ValueError):
-            create_group_message(self.creator, self.group, "hi", ciphertext=_blob(), nonce=_blob(b"\x03" * 24), key_version=1)
+            create_group_message(
+                self.creator, self.group, "hi", ciphertext=_blob(), nonce=_blob(b"\x03" * 24), key_version=1
+            )
 
     def test_encrypted_message_persists(self) -> None:
-        message = create_group_message(self.creator, self.group, "", ciphertext=_blob(), nonce=_blob(b"\x03" * 24), key_version=1)
+        message = create_group_message(
+            self.creator, self.group, "", ciphertext=_blob(), nonce=_blob(b"\x03" * 24), key_version=1
+        )
         self.assertTrue(message.is_encrypted)
         self.assertEqual(message.key_version, 1)
 
@@ -405,9 +409,13 @@ class GroupMessageReplayScopingTests(TestCase):
     def test_replaying_the_same_group_and_uuid_is_still_a_true_replay(self) -> None:
         """The fix must not break the legitimate same-group retry this guards."""
         shared_uuid = uuid_module.uuid4()
-        first = share_pin_in_group_message(self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid)
+        first = share_pin_in_group_message(
+            self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid
+        )
 
-        second = share_pin_in_group_message(self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid)
+        second = share_pin_in_group_message(
+            self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid
+        )
 
         self.assertEqual(first.pk, second.pk)
         self.assertEqual(GroupMessage.objects.filter(group=self.group_a).count(), 1)
@@ -793,7 +801,9 @@ class GroupKeyEndpointTests(TestCase):
         other_group = create_group_chat(self.creator, "Other", [self.member])
         from urbanlens.dashboard.services.security.e2ee import group_member_token
 
-        self.assertNotEqual(group_member_token(self.group.uuid, self.member.pk), group_member_token(other_group.uuid, self.member.pk))
+        self.assertNotEqual(
+            group_member_token(self.group.uuid, self.member.pk), group_member_token(other_group.uuid, self.member.pk)
+        )
 
     def test_post_requires_exact_member_coverage(self) -> None:
         _enroll(self.creator)
@@ -854,7 +864,10 @@ class GroupKeyEndpointTests(TestCase):
 
         remove_group_member(self.group, self.creator, self.member)
 
-        self.assertTrue(json.loads(self.client.get(self.url).content)["needs_rotation"], "a removed member's key version is still current - the group never rotates them out")
+        self.assertTrue(
+            json.loads(self.client.get(self.url).content)["needs_rotation"],
+            "a removed member's key version is still current - the group never rotates them out",
+        )
 
     def test_membership_change_flags_rotation_and_hides_prior_envelopes(self) -> None:
         _enroll(self.creator)
@@ -893,7 +906,9 @@ class ChangePasswordEndpointTests(TestCase):
         self.user.set_password("old-password")
         self.user.save()
         self.client.force_login(self.user)
-        response = self._post({"current_secret": "not-it", "new_auth_key": _blob(), "new_auth_salt": _blob(b"\x04" * 16)})
+        response = self._post(
+            {"current_secret": "not-it", "new_auth_key": _blob(), "new_auth_salt": _blob(b"\x04" * 16)}
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_change_rotates_credential_and_kdf(self) -> None:
@@ -923,9 +938,13 @@ class ChangePasswordEndpointTests(TestCase):
         self.user.set_password("old-password")
         self.user.save()
         bundle = _enroll(self.profile)
-        MessagingKeyBundle.objects.filter(pk=bundle.pk).update(password_wrapped_secret=_blob(), password_wrap_salt=_blob(b"\x09" * 16))
+        MessagingKeyBundle.objects.filter(pk=bundle.pk).update(
+            password_wrapped_secret=_blob(), password_wrap_salt=_blob(b"\x09" * 16)
+        )
         self.client.force_login(self.user)
-        response = self._post({"current_secret": "old-password", "new_auth_key": _blob(), "new_auth_salt": _blob(b"\x04" * 16)})
+        response = self._post(
+            {"current_secret": "old-password", "new_auth_key": _blob(), "new_auth_salt": _blob(b"\x04" * 16)}
+        )
         self.assertEqual(response.status_code, 200)
         bundle.refresh_from_db()
         self.assertTrue(bundle.password_wrap_stale)
@@ -965,7 +984,9 @@ class SetPasswordPromptTests(TestCase):
         # branch away so these tests exercise the password prompt itself.
         from unittest import mock
 
-        patcher = mock.patch("urbanlens.dashboard.controllers.account.should_redirect_to_site_admin", return_value=False)
+        patcher = mock.patch(
+            "urbanlens.dashboard.controllers.account.should_redirect_to_site_admin", return_value=False
+        )
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -974,7 +995,9 @@ class SetPasswordPromptTests(TestCase):
 
         self.user.set_unusable_password()
         self.user.save()
-        ProfileModel.objects.filter(pk=self.profile.pk).update(welcome_onboarding_complete=True, profile_setup_complete=True)
+        ProfileModel.objects.filter(pk=self.profile.pk).update(
+            welcome_onboarding_complete=True, profile_setup_complete=True
+        )
         self.client.force_login(self.user)
         response = self.client.get(reverse("post_login"))
         self.assertRedirects(response, reverse("account.set_password"), fetch_redirect_response=False)
@@ -984,7 +1007,9 @@ class SetPasswordPromptTests(TestCase):
 
         self.user.set_unusable_password()
         self.user.save()
-        ProfileModel.objects.filter(pk=self.profile.pk).update(welcome_onboarding_complete=True, profile_setup_complete=True)
+        ProfileModel.objects.filter(pk=self.profile.pk).update(
+            welcome_onboarding_complete=True, profile_setup_complete=True
+        )
         self.client.force_login(self.user)
         self.client.post(reverse("account.set_password.skip"))
         response = self.client.get(reverse("post_login"))

@@ -1,10 +1,11 @@
-﻿"""Property-based tests for the Review model.
+"""Property-based tests for the Review model.
 
 Covers:
 - Rating field validation (MinValueValidator(0), MaxValueValidator(5))
 - unique_together (profile, pin) constraint
 - Pin.rating property delegates to the latest review
 """
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User

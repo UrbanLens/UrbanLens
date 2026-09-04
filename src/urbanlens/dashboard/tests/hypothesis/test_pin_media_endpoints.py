@@ -88,6 +88,8 @@ class CsrfEnforcedPinMediaEndpointTests(TestCase):
                 reverse("pin.media.relevance", args=[pin.slug]),
                 {"source": "wikipedia", "url": "https://example.test/photo.jpg", "is_relevant": True},
             )
-        self.assertNotEqual(response.status_code, 405, "media/relevance/ must not be shadowed by the media/<source>/ catch-all")
+        self.assertNotEqual(
+            response.status_code, 405, "media/relevance/ must not be shadowed by the media/<source>/ catch-all"
+        )
         self.assertNotEqual(response.status_code, 500)
         self.assertEqual(response.status_code, 200)

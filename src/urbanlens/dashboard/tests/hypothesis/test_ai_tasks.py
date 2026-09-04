@@ -39,9 +39,14 @@ class RunAssistantTurnTaskTests(TestCase):
     def test_successful_turn_returns_reply_and_releases_the_lock(self) -> None:
         token = acquire_turn_lock(self.profile)
         assert token is not None
-        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="Hi!", actions=["Searched your pins"])):
+        with patch(
+            "urbanlens.dashboard.services.ai.tasks.run_assistant_turn",
+            return_value=AssistantTurn(reply="Hi!", actions=["Searched your pins"]),
+        ):
             result = run_assistant_turn_task(self.profile.pk, [], "hello", token)
-        self.assertEqual(result, {"reply": "Hi!", "actions": ["Searched your pins"], "proposals": [], "client_actions": []})
+        self.assertEqual(
+            result, {"reply": "Hi!", "actions": ["Searched your pins"], "proposals": [], "client_actions": []}
+        )
         # Released, not merely unexamined - a fresh acquire must now succeed.
         self.assertFalse(turn_lock_is_current(self.profile, token))
         self.assertIsNotNone(acquire_turn_lock(self.profile))
@@ -50,7 +55,10 @@ class RunAssistantTurnTaskTests(TestCase):
         token = acquire_turn_lock(self.profile)
         assert token is not None
         proposal = {"n": 0, "tool": "create_trip", "args": {"name": "X"}, "confirm_label": "Create trip"}
-        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok", proposals=[proposal])):
+        with patch(
+            "urbanlens.dashboard.services.ai.tasks.run_assistant_turn",
+            return_value=AssistantTurn(reply="ok", proposals=[proposal]),
+        ):
             result = run_assistant_turn_task(self.profile.pk, [], "hello", token)
         self.assertEqual(result["proposals"], [proposal])
 
@@ -97,7 +105,9 @@ class RunAssistantTurnTaskTests(TestCase):
     def test_assistant_unavailable_error_from_the_loop_releases_the_lock(self) -> None:
         token = acquire_turn_lock(self.profile)
         assert token is not None
-        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", side_effect=AssistantUnavailableError("off")):
+        with patch(
+            "urbanlens.dashboard.services.ai.tasks.run_assistant_turn", side_effect=AssistantUnavailableError("off")
+        ):
             result = run_assistant_turn_task(self.profile.pk, [], "hello", token)
         self.assertEqual(result, {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []})
         self.assertFalse(turn_lock_is_current(self.profile, token))
@@ -106,7 +116,9 @@ class RunAssistantTurnTaskTests(TestCase):
         token = acquire_turn_lock(self.profile)
         assert token is not None
         history = [{"role": "user", "content": "earlier"}]
-        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
+        with patch(
+            "urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")
+        ) as mock_run:
             run_assistant_turn_task(self.profile.pk, history, "hello", token)
         mock_run.assert_called_once_with(self.profile, history, "hello", page=None, dismissals=())
 
@@ -116,9 +128,13 @@ class RunAssistantTurnTaskTests(TestCase):
         pin = baker.make("dashboard.Pin", profile=self.profile)
         token = acquire_turn_lock(self.profile)
         assert token is not None
-        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
+        with patch(
+            "urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")
+        ) as mock_run:
             run_assistant_turn_task(self.profile.pk, [], "hello", token, page={"kind": "pin", "id": pin.pk})
-        mock_run.assert_called_once_with(self.profile, [], "hello", page=PageObject(kind="pin", id=pin.pk), dismissals=())
+        mock_run.assert_called_once_with(
+            self.profile, [], "hello", page=PageObject(kind="pin", id=pin.pk), dismissals=()
+        )
 
     def test_a_page_belonging_to_another_profile_is_dropped_not_trusted(self) -> None:
         """The task re-verifies against its own profile - it never just trusts what the web view enqueued."""
@@ -126,14 +142,18 @@ class RunAssistantTurnTaskTests(TestCase):
         other_pin = baker.make("dashboard.Pin", profile=other_profile)
         token = acquire_turn_lock(self.profile)
         assert token is not None
-        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
+        with patch(
+            "urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")
+        ) as mock_run:
             run_assistant_turn_task(self.profile.pk, [], "hello", token, page={"kind": "pin", "id": other_pin.pk})
         mock_run.assert_called_once_with(self.profile, [], "hello", page=None, dismissals=())
 
     def test_a_malformed_page_payload_is_dropped_not_a_raise(self) -> None:
         token = acquire_turn_lock(self.profile)
         assert token is not None
-        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
+        with patch(
+            "urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")
+        ) as mock_run:
             run_assistant_turn_task(self.profile.pk, [], "hello", token, page={"kind": "pin"})
         mock_run.assert_called_once_with(self.profile, [], "hello", page=None, dismissals=())
 
@@ -143,14 +163,24 @@ class RunAssistantTurnTaskTests(TestCase):
         token = acquire_turn_lock(self.profile)
         assert token is not None
         raw = [{"id": "x", "kind": "explainer", "heading": "H", "body": "B", "page": "/organize/"}]
-        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
+        with patch(
+            "urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")
+        ) as mock_run:
             run_assistant_turn_task(self.profile.pk, [], "hello", token, dismissals=raw)
-        mock_run.assert_called_once_with(self.profile, [], "hello", page=None, dismissals=(DismissalEntry(id="x", kind="explainer", heading="H", body="B", page="/organize/"),))
+        mock_run.assert_called_once_with(
+            self.profile,
+            [],
+            "hello",
+            page=None,
+            dismissals=(DismissalEntry(id="x", kind="explainer", heading="H", body="B", page="/organize/"),),
+        )
 
     def test_a_malformed_dismissals_payload_is_dropped_not_a_raise(self) -> None:
         token = acquire_turn_lock(self.profile)
         assert token is not None
-        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")) as mock_run:
+        with patch(
+            "urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok")
+        ) as mock_run:
             run_assistant_turn_task(self.profile.pk, [], "hello", token, dismissals=[{"id": "x"}])
         mock_run.assert_called_once_with(self.profile, [], "hello", page=None, dismissals=())
 
@@ -158,6 +188,9 @@ class RunAssistantTurnTaskTests(TestCase):
         token = acquire_turn_lock(self.profile)
         assert token is not None
         client_actions = [{"action": "reopen_explainer", "id": "x", "kind": "explainer"}]
-        with patch("urbanlens.dashboard.services.ai.tasks.run_assistant_turn", return_value=AssistantTurn(reply="ok", client_actions=client_actions)):
+        with patch(
+            "urbanlens.dashboard.services.ai.tasks.run_assistant_turn",
+            return_value=AssistantTurn(reply="ok", client_actions=client_actions),
+        ):
             result = run_assistant_turn_task(self.profile.pk, [], "hello", token)
         self.assertEqual(result["client_actions"], client_actions)

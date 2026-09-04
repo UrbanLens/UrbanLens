@@ -140,7 +140,7 @@ class ImportPinsStreamingCreatesPinsTests(TestCase):
 
     def test_html_description_is_stripped_and_link_extracted(self) -> None:
         csv_bytes = (
-            b'name,latitude,longitude,description\n'
+            b"name,latitude,longitude,description\n"
             b'Old Mill,40.0,-74.0,"City: Poughkeepsie<br>Tour: https://example.com/story"\n'
         )
 
@@ -171,7 +171,7 @@ class ImportPinsStreamingCreatesPinsTests(TestCase):
         get_nearby_or_create profile-collision bug this file otherwise covers).
         """
         csv_bytes = (
-            b'Title,URL\n'
+            b"Title,URL\n"
             b'Black Point Ruins,"https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79"\n'
         )
 

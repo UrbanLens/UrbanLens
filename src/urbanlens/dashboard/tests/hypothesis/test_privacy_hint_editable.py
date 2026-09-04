@@ -37,7 +37,13 @@ class PrivacyHintEditableTests(SimpleTestCase):
         owner = _FakeProfile(profile_visibility="anyone")
         html = render_to_string(
             "dashboard/partials/ui/_privacy_hint.html",
-            {"label": "Name, avatar & bio", "value": "Anyone (Logged In)", "field": "profile_visibility", "raw_value": owner.profile_visibility, "owner": owner},
+            {
+                "label": "Name, avatar & bio",
+                "value": "Anyone (Logged In)",
+                "field": "profile_visibility",
+                "raw_value": owner.profile_visibility,
+                "owner": owner,
+            },
         )
         self.assertIn("visibility</i>", html)
         self.assertNotIn("lock</i>", html)
@@ -47,7 +53,13 @@ class PrivacyHintEditableTests(SimpleTestCase):
             owner = _FakeProfile(profile_visibility=value)
             html = render_to_string(
                 "dashboard/partials/ui/_privacy_hint.html",
-                {"label": "Name, avatar & bio", "value": value, "field": "profile_visibility", "raw_value": owner.profile_visibility, "owner": owner},
+                {
+                    "label": "Name, avatar & bio",
+                    "value": value,
+                    "field": "profile_visibility",
+                    "raw_value": owner.profile_visibility,
+                    "owner": owner,
+                },
             )
             self.assertIn("lock</i>", html, f"expected lock icon for {value}")
             self.assertNotIn("visibility</i>", html, f"unexpected eye icon for {value}")
@@ -62,7 +74,13 @@ class PrivacyHintEditableTests(SimpleTestCase):
         owner = _FakeProfile(profile_visibility="anyone", contact_visibility="friends")
         html = render_to_string(
             "dashboard/partials/ui/_privacy_hint.html",
-            {"label": "Name, avatar & bio", "value": "Anyone (Logged In)", "field": "profile_visibility", "raw_value": owner.profile_visibility, "owner": owner},
+            {
+                "label": "Name, avatar & bio",
+                "value": "Anyone (Logged In)",
+                "field": "profile_visibility",
+                "raw_value": owner.profile_visibility,
+                "owner": owner,
+            },
         )
         match = re.search(r"data-other-fields='([^']*)'", html)
         self.assertIsNotNone(match)
@@ -87,6 +105,11 @@ class PrivacyHintEditableTests(SimpleTestCase):
         owner = _FakeProfile(contact_visibility="common_friend")
         html = render_to_string(
             "dashboard/partials/ui/_privacy_hint.html",
-            {"value": "Users with a friend in common", "field": "contact_visibility", "raw_value": owner.contact_visibility, "owner": owner},
+            {
+                "value": "Users with a friend in common",
+                "field": "contact_visibility",
+                "raw_value": owner.contact_visibility,
+                "owner": owner,
+            },
         )
         self.assertIn('<option value="common_friend" selected>', html)

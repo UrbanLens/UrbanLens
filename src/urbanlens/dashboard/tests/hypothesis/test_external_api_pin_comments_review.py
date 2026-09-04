@@ -41,7 +41,9 @@ class PinCommentsApiTests(TestCase):
         return f"{BASE}/{self.pin.slug or self.pin.uuid}/comments/{suffix}"
 
     def test_post_then_list(self) -> None:
-        created = self.client.post(self.url(), {"text": "Note to self"}, content_type="application/json", **self.headers())
+        created = self.client.post(
+            self.url(), {"text": "Note to self"}, content_type="application/json", **self.headers()
+        )
         self.assertEqual(created.status_code, 201)
 
         rows = self.client.get(self.url(), **self.headers()).json()["results"]
@@ -49,7 +51,9 @@ class PinCommentsApiTests(TestCase):
         self.assertTrue(rows[0]["author_is_self"])
 
     def test_delete_own_comment(self) -> None:
-        comment_id = self.client.post(self.url(), {"text": "Temporary"}, content_type="application/json", **self.headers()).json()["id"]
+        comment_id = self.client.post(
+            self.url(), {"text": "Temporary"}, content_type="application/json", **self.headers()
+        ).json()["id"]
         removed = self.client.delete(self.url(f"{comment_id}/"), **self.headers())
         self.assertEqual(removed.status_code, 204)
 
@@ -137,7 +141,9 @@ class VisibleCommentTreePropertyTests(TestCase):
 
     @settings(max_examples=8, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(mentioned_count=st.integers(min_value=1, max_value=3), plain_count=st.integers(min_value=0, max_value=3))
-    def test_comments_mentioning_unpinned_locations_are_always_dropped(self, mentioned_count: int, plain_count: int) -> None:
+    def test_comments_mentioning_unpinned_locations_are_always_dropped(
+        self, mentioned_count: int, plain_count: int
+    ) -> None:
         """However many there are, none of them survives the gate."""
         self.wiki.comments.all().delete()
 

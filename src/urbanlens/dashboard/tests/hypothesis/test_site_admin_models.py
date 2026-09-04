@@ -86,7 +86,11 @@ class SiteAdminModelsViewTests(TestCase):
 
     def test_no_promoted_model_is_reported_as_the_heuristic_answering(self) -> None:
         """`active: null` is a normal state, not a failure."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=_HEURISTIC), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value=_HEURISTIC),
+            mock.patch(_PHOTOS, return_value=_HEURISTIC),
+        ):
             response = self.client.get(self.url)
 
         summary = response.context["models"][0]["summary"]
@@ -97,11 +101,20 @@ class SiteAdminModelsViewTests(TestCase):
     def test_a_promoted_model_shows_its_version_and_metrics(self) -> None:
         """Metrics live on the serialized model version, not at the envelope's top level."""
         body = {
-            "active": {"version": 12, "algorithm": "logreg", "metrics": {"brier": 0.081}, "baseline_metrics": {"heuristic": {"brier": 0.14}}},
+            "active": {
+                "version": 12,
+                "algorithm": "logreg",
+                "metrics": {"brier": 0.081},
+                "baseline_metrics": {"heuristic": {"brier": 0.14}},
+            },
             "ranker": "model",
         }
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=body), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value=body),
+            mock.patch(_PHOTOS, return_value=_HEURISTIC),
+        ):
             response = self.client.get(self.url)
 
         summary = response.context["models"][0]["summary"]
@@ -115,21 +128,33 @@ class SiteAdminModelsViewTests(TestCase):
         """REData states which ranker answered; inferring it would disagree the moment they differ."""
         body = {"active": {"version": 3}, "ranker": "heuristic"}
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=body), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value=body),
+            mock.patch(_PHOTOS, return_value=_HEURISTIC),
+        ):
             response = self.client.get(self.url)
 
         self.assertEqual(response.context["models"][0]["summary"]["ranker"], "heuristic")
 
     def test_the_photo_models_scorer_field_is_read_too(self) -> None:
         """The same fact is named `ranker` for labels and `scorer` for photos."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=_HEURISTIC), mock.patch(_PHOTOS, return_value={"active": {"version": 9}, "scorer": "model"}):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value=_HEURISTIC),
+            mock.patch(_PHOTOS, return_value={"active": {"version": 9}, "scorer": "model"}),
+        ):
             response = self.client.get(self.url)
 
         self.assertEqual(response.context["models"][1]["summary"]["ranker"], "model")
 
     def test_a_malformed_active_renders_rather_than_500ing(self) -> None:
         """A diagnostics page that dies on an unexpected shape hides what it was reporting."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value={"active": 12}), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value={"active": 12}),
+            mock.patch(_PHOTOS, return_value=_HEURISTIC),
+        ):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
@@ -139,7 +164,11 @@ class SiteAdminModelsViewTests(TestCase):
         """A diagnostics page that dies when the thing it diagnoses is down is useless."""
         from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, side_effect=GatewayRequestError("down")), mock.patch(_PHOTOS, side_effect=GatewayRequestError("down")):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, side_effect=GatewayRequestError("down")),
+            mock.patch(_PHOTOS, side_effect=GatewayRequestError("down")),
+        ):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
@@ -147,19 +176,34 @@ class SiteAdminModelsViewTests(TestCase):
 
     def test_a_personal_field_never_reaches_the_page(self) -> None:
         """The whole constraint, asserted end to end."""
-        body = {"active": {"version": 3, "metrics": {"brier": 0.1}}, "ranker": "model", "uploader": "jess@example.test", "reputation": 0.9}
+        body = {
+            "active": {"version": 3, "metrics": {"brier": 0.1}},
+            "ranker": "model",
+            "uploader": "jess@example.test",
+            "reputation": 0.9,
+        }
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=body), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value=body),
+            mock.patch(_PHOTOS, return_value=_HEURISTIC),
+        ):
             response = self.client.get(self.url)
 
         self.assertNotContains(response, "jess@example.test")
         self.assertNotIn("uploader", response.context["models"][0]["summary"])
 
     def test_both_models_are_reported(self) -> None:
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value={"active": {"version": 1}}), mock.patch(_PHOTOS, return_value={"active": {"version": 2}}):
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value={"active": {"version": 1}}),
+            mock.patch(_PHOTOS, return_value={"active": {"version": 2}}),
+        ):
             response = self.client.get(self.url)
 
-        self.assertEqual([entry["title"] for entry in response.context["models"]], ["Label suggestion", "Photo relevance"])
+        self.assertEqual(
+            [entry["title"] for entry in response.context["models"]], ["Label suggestion", "Photo relevance"]
+        )
 
 
 class ReputationIsNotConsumedTests(SimpleTestCase):
@@ -210,10 +254,17 @@ class ReputationIsNotConsumedTests(SimpleTestCase):
             for node in ast.walk(tree):
                 # Only strings *used in code* count - a docstring saying the
                 # endpoint is deliberately unused is not a call to it.
-                if isinstance(node, ast.Constant) and isinstance(node.value, str) and "photos/reputation" in node.value and id(node) not in docstring_nodes:
+                if (
+                    isinstance(node, ast.Constant)
+                    and isinstance(node.value, str)
+                    and "photos/reputation" in node.value
+                    and id(node) not in docstring_nodes
+                ):
                     offenders.append(f"{path.name}:{node.lineno}")
 
-        self.assertEqual(offenders, [], "a per-contributor reputation score is not something this application has a use for")
+        self.assertEqual(
+            offenders, [], "a per-contributor reputation score is not something this application has a use for"
+        )
 
     def test_the_guard_catches_a_real_consumer(self) -> None:
         """Proves the matcher fires, since a guard is only worth its false-negative rate."""
@@ -230,7 +281,14 @@ class ReputationIsNotConsumedTests(SimpleTestCase):
             and isinstance(node.body[0].value, ast.Constant)
             and isinstance(node.body[0].value.value, str)
         }
-        hits = [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str) and "photos/reputation" in n.value and id(n) not in docstring_nodes]
+        hits = [
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Constant)
+            and isinstance(n.value, str)
+            and "photos/reputation" in n.value
+            and id(n) not in docstring_nodes
+        ]
 
         self.assertEqual(len(hits), 1)
 
@@ -241,6 +299,13 @@ class ReputationIsNotConsumedTests(SimpleTestCase):
         source = '"""Deliberately does not wrap GET /api/v1/photos/reputation/."""\n'
         tree = ast.parse(source)
         docstring_nodes = {id(tree.body[0].value)}
-        hits = [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str) and "photos/reputation" in n.value and id(n) not in docstring_nodes]
+        hits = [
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Constant)
+            and isinstance(n.value, str)
+            and "photos/reputation" in n.value
+            and id(n) not in docstring_nodes
+        ]
 
         self.assertEqual(hits, [])

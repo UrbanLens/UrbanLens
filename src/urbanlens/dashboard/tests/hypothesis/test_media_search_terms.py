@@ -72,18 +72,36 @@ class MediaPanelSourceSearchTermsRejectAddressDerivedTests(SimpleTestCase):
 
     def test_address_derived_only_name_yields_no_terms_when_rejected(self) -> None:
         """The exact reported scenario: no real landmark name, just the street address."""
-        loc = _location(street_number="1265", route="Section Rd", locality="Cincinnati", administrative_area_level_1="OH", official_name="1265 Section Rd")
+        loc = _location(
+            street_number="1265",
+            route="Section Rd",
+            locality="Cincinnati",
+            administrative_area_level_1="OH",
+            official_name="1265 Section Rd",
+        )
         pin = _pin(loc)
         self.assertEqual(MediaPanelSource.search_terms(pin, _RejectingGateway()), [])
 
     def test_address_derived_name_still_searched_when_flag_is_off(self) -> None:
-        loc = _location(street_number="1265", route="Section Rd", locality="Cincinnati", administrative_area_level_1="OH", official_name="1265 Section Rd")
+        loc = _location(
+            street_number="1265",
+            route="Section Rd",
+            locality="Cincinnati",
+            administrative_area_level_1="OH",
+            official_name="1265 Section Rd",
+        )
         pin = _pin(loc)
         terms = MediaPanelSource.search_terms(pin, _BareGateway())
         self.assertNotEqual(terms, [])
 
     def test_real_landmark_name_is_not_rejected(self) -> None:
-        loc = _location(street_number="42", route="Mill St", locality="Springfield", administrative_area_level_1="IL", official_name="Riverside Mill")
+        loc = _location(
+            street_number="42",
+            route="Mill St",
+            locality="Springfield",
+            administrative_area_level_1="IL",
+            official_name="Riverside Mill",
+        )
         pin = _pin(loc)
         terms = MediaPanelSource.search_terms(pin, _RejectingGateway())
         self.assertNotEqual(terms, [])
@@ -94,7 +112,13 @@ class MediaPanelSourceSearchTermsIncludeAddressTests(SimpleTestCase):
     """include_address=False drops a genuinely separate street address from the query."""
 
     def test_include_address_false_omits_the_address_when_name_is_distinct(self) -> None:
-        loc = _location(street_number="42", route="Mill St", locality="Springfield", administrative_area_level_1="IL", official_name="Riverside Mill")
+        loc = _location(
+            street_number="42",
+            route="Mill St",
+            locality="Springfield",
+            administrative_area_level_1="IL",
+            official_name="Riverside Mill",
+        )
         pin = _pin(loc)
         with_address = MediaPanelSource.search_terms(pin, _BareGateway())
         without_address = MediaPanelSource.search_terms(pin, _NoAddressGateway())
@@ -132,7 +156,20 @@ class MediaProviderCacheKeyTests(SimpleTestCase):
 
     def _run(self, cached_query_key: str, terms: list[str]) -> tuple[list[MediaItem], bool, list[str]]:
         gateway = _CountingGateway()
-        row = self._Row(cached_query_key, {"items": [{"url": "https://example.test/cached", "thumb_url": "", "caption": "cached", "source": "test", "page_url": ""}]})
+        row = self._Row(
+            cached_query_key,
+            {
+                "items": [
+                    {
+                        "url": "https://example.test/cached",
+                        "thumb_url": "",
+                        "caption": "cached",
+                        "source": "test",
+                        "page_url": "",
+                    }
+                ]
+            },
+        )
         with (
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.get_fresh", return_value=row),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
@@ -142,7 +179,9 @@ class MediaProviderCacheKeyTests(SimpleTestCase):
         return items, from_cache, gateway.fetched or []
 
     def test_matching_query_key_is_served_from_cache(self) -> None:
-        items, from_cache, fetched = self._run('"Riverside Mill" "Springfield IL"', ['"Riverside Mill" "Springfield IL"'])
+        items, from_cache, fetched = self._run(
+            '"Riverside Mill" "Springfield IL"', ['"Riverside Mill" "Springfield IL"']
+        )
         self.assertTrue(from_cache)
         self.assertEqual([item.caption for item in items], ["cached"])
         self.assertEqual(fetched, [])
@@ -201,7 +240,13 @@ class InternetArchiveMediaProviderRelevanceFlagsTests(SimpleTestCase):
     def test_address_is_actually_omitted_from_the_query(self) -> None:
         """The exact reported scenario: name "Summit Road" pulled in unrelated
         nationwide results once the street address was included."""
-        loc = _location(street_number="1000", route="I-75 Nb Expy", locality="Cincinnati", administrative_area_level_1="OH", official_name="Summit Road")
+        loc = _location(
+            street_number="1000",
+            route="I-75 Nb Expy",
+            locality="Cincinnati",
+            administrative_area_level_1="OH",
+            official_name="Summit Road",
+        )
         pin = _pin(loc)
         terms = MediaPanelSource.search_terms(pin, InternetArchiveMediaProvider())
         self.assertEqual(terms, ["Summit Road Cincinnati OH"])
@@ -230,7 +275,13 @@ class SmithsonianMediaProviderRelevanceFlagsTests(SimpleTestCase):
         self.assertFalse(SmithsonianMediaProvider.quote_locality)
 
     def test_query_is_a_clean_name_and_locality_without_address_or_country(self) -> None:
-        loc = _location(street_number="1000", route="I-75 Nb Expy", locality="Cincinnati", administrative_area_level_1="OH", official_name="Summit Road")
+        loc = _location(
+            street_number="1000",
+            route="I-75 Nb Expy",
+            locality="Cincinnati",
+            administrative_area_level_1="OH",
+            official_name="Summit Road",
+        )
         pin = _pin(loc)
         terms = MediaPanelSource.search_terms(pin, SmithsonianMediaProvider())
         self.assertEqual(terms, ["Summit Road Cincinnati OH"])

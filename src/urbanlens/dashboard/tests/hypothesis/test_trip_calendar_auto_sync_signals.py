@@ -9,7 +9,11 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
+from urbanlens.dashboard.models.calendar_sync.model import (
+    CalendarSyncDirection,
+    GoogleCalendarAccount,
+    TripCalendarLink,
+)
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 from urbanlens.dashboard.models.trips.signals import sync_trip_on_activity_save, sync_trip_on_save
@@ -29,7 +33,10 @@ class TripCalendarAutoSyncSignalTests(TestCase):
             token_expiry=timezone.now() + datetime.timedelta(hours=1),
         )
         self.trip = Trip.objects.create(
-            name="Signal trip", creator=self.profile, start_date=datetime.date(2026, 11, 1), end_date=datetime.date(2026, 11, 2),
+            name="Signal trip",
+            creator=self.profile,
+            start_date=datetime.date(2026, 11, 1),
+            end_date=datetime.date(2026, 11, 2),
         )
 
     def _enqueue_for_trip_save(self):
@@ -49,7 +56,11 @@ class TripCalendarAutoSyncSignalTests(TestCase):
 
     def test_trip_with_auto_sync_link_enqueues_push(self):
         TripCalendarLink.objects.create(
-            trip=self.trip, profile=self.profile, google_event_id="evt-1", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
+            trip=self.trip,
+            profile=self.profile,
+            google_event_id="evt-1",
+            direction=CalendarSyncDirection.IMPORTED,
+            auto_sync=True,
         )
 
         enqueue = self._enqueue_for_trip_save()
@@ -59,7 +70,11 @@ class TripCalendarAutoSyncSignalTests(TestCase):
 
     def test_trip_with_manual_export_link_does_not_enqueue(self):
         TripCalendarLink.objects.create(
-            trip=self.trip, profile=self.profile, google_event_id="evt-1", direction=CalendarSyncDirection.EXPORTED, auto_sync=False,
+            trip=self.trip,
+            profile=self.profile,
+            google_event_id="evt-1",
+            direction=CalendarSyncDirection.EXPORTED,
+            auto_sync=False,
         )
 
         enqueue = self._enqueue_for_trip_save()
@@ -67,7 +82,11 @@ class TripCalendarAutoSyncSignalTests(TestCase):
 
     def test_activity_save_enqueues_push_for_its_trip_when_auto_synced(self):
         TripCalendarLink.objects.create(
-            trip=self.trip, profile=self.profile, google_event_id="evt-1", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
+            trip=self.trip,
+            profile=self.profile,
+            google_event_id="evt-1",
+            direction=CalendarSyncDirection.IMPORTED,
+            auto_sync=True,
         )
         activity = TripActivity.objects.create(trip=self.trip, title="New stop")
 

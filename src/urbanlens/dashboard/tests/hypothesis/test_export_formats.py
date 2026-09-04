@@ -19,7 +19,12 @@ import gpxpy
 from hypothesis import given, strategies as st
 from pygeoif.geometry import Point
 
-from urbanlens.dashboard.services.import_export.export_formats import pins_to_csv, pins_to_geojson, pins_to_gpx, pins_to_kml
+from urbanlens.dashboard.services.import_export.export_formats import (
+    pins_to_csv,
+    pins_to_geojson,
+    pins_to_gpx,
+    pins_to_kml,
+)
 
 
 @dataclass
@@ -38,7 +43,13 @@ _longitudes = st.floats(min_value=-180, max_value=180, allow_nan=False, allow_in
 _names = _printable_text.filter(lambda s: s.strip())
 _descriptions = _printable_text
 
-_pins = st.builds(_FakePin, effective_name=_names, effective_latitude=_latitudes, effective_longitude=_longitudes, description=_descriptions)
+_pins = st.builds(
+    _FakePin,
+    effective_name=_names,
+    effective_latitude=_latitudes,
+    effective_longitude=_longitudes,
+    description=_descriptions,
+)
 
 
 @given(st.lists(_pins, max_size=10))
@@ -74,8 +85,12 @@ def test_kml_round_trips_placemark_count_and_coordinates(pins: list[_FakePin]) -
         # whatever caused it. The messages exist so a recurrence is diagnosable
         # from the run output alone - `float.hex` shows a one-ulp difference that
         # decimal repr can hide.
-        assert geometry.x == pin.effective_longitude, f"longitude changed: {geometry.x!r} ({float(geometry.x).hex()}) != {pin.effective_longitude!r} ({pin.effective_longitude.hex()})"
-        assert geometry.y == pin.effective_latitude, f"latitude changed: {geometry.y!r} ({float(geometry.y).hex()}) != {pin.effective_latitude!r} ({pin.effective_latitude.hex()})"
+        assert geometry.x == pin.effective_longitude, (
+            f"longitude changed: {geometry.x!r} ({float(geometry.x).hex()}) != {pin.effective_longitude!r} ({pin.effective_longitude.hex()})"
+        )
+        assert geometry.y == pin.effective_latitude, (
+            f"latitude changed: {geometry.y!r} ({float(geometry.y).hex()}) != {pin.effective_latitude!r} ({pin.effective_latitude.hex()})"
+        )
 
 
 @given(st.lists(_pins, max_size=10))

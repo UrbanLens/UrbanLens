@@ -11,7 +11,11 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.trivia.classifier import ClassifierVerdict
-from urbanlens.dashboard.services.trivia.generation import MIN_DESCRIPTION_LENGTH, generate_questions_for_wiki, sweep_wikis_for_generation
+from urbanlens.dashboard.services.trivia.generation import (
+    MIN_DESCRIPTION_LENGTH,
+    generate_questions_for_wiki,
+    sweep_wikis_for_generation,
+)
 
 _LONG_DESCRIPTION = "This building has a long and storied history. " * 20
 assert len(_LONG_DESCRIPTION) >= MIN_DESCRIPTION_LENGTH
@@ -57,7 +61,10 @@ class GenerateQuestionsForWikiTests(TestCase):
         gateway = _FakeGateway(["What year was it built?|||1937"])
         with (
             patch("urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=gateway),
-            patch("urbanlens.dashboard.services.trivia.generation.classify_trivia_question", return_value=ClassifierVerdict(approved=True)),
+            patch(
+                "urbanlens.dashboard.services.trivia.generation.classify_trivia_question",
+                return_value=ClassifierVerdict(approved=True),
+            ),
         ):
             created = generate_questions_for_wiki(wiki)
 
@@ -72,7 +79,10 @@ class GenerateQuestionsForWikiTests(TestCase):
         gateway = _FakeGateway(["What was X in the year somebody did Y?|||1937"])
         with (
             patch("urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=gateway),
-            patch("urbanlens.dashboard.services.trivia.generation.classify_trivia_question", return_value=ClassifierVerdict(approved=False, reason="person")),
+            patch(
+                "urbanlens.dashboard.services.trivia.generation.classify_trivia_question",
+                return_value=ClassifierVerdict(approved=False, reason="person"),
+            ),
         ):
             created = generate_questions_for_wiki(wiki)
 
@@ -106,7 +116,10 @@ class SweepWikisForGenerationTests(TestCase):
         gateway = _FakeGateway(["What year was it built?|||1937"])
         with (
             patch("urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=gateway),
-            patch("urbanlens.dashboard.services.trivia.generation.classify_trivia_question", return_value=ClassifierVerdict(approved=True)),
+            patch(
+                "urbanlens.dashboard.services.trivia.generation.classify_trivia_question",
+                return_value=ClassifierVerdict(approved=True),
+            ),
         ):
             summary = sweep_wikis_for_generation(batch_size=10)
 

@@ -22,7 +22,9 @@ class GetRouteBetweenTests(SimpleTestCase):
             gateway_cls.return_value.get_route.return_value = {"distance_meters": 100.0, "duration_seconds": 10.0}
             result = routing_resolution.get_route_between((1.0, 2.0), (3.0, 4.0))
 
-        gateway_cls.return_value.get_route.assert_called_once_with([(1.0, 2.0), (3.0, 4.0)], capability="as_given", profile="driving")
+        gateway_cls.return_value.get_route.assert_called_once_with(
+            [(1.0, 2.0), (3.0, 4.0)], capability="as_given", profile="driving"
+        )
         self.assertEqual(result, {"distance_meters": 100.0, "duration_seconds": 10.0})
 
     def test_redata_not_configured_uses_osrm(self) -> None:

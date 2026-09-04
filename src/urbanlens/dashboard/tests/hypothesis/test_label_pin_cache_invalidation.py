@@ -47,7 +47,11 @@ class LabelEditPinCacheInvalidationTests(TestCase):
     def test_editing_own_label_bumps_pins_carrying_it(self) -> None:
         label = baker.make(Label, profile=self.profile, kind="tag", name="Urbex", icon="place")
         pin = _make_pin_with_label(self.profile, label)
-        other_pin = baker.make("dashboard.Pin", profile=self.profile, location=baker.make("dashboard.Location", latitude="41.500000", longitude="-75.500000"))
+        other_pin = baker.make(
+            "dashboard.Pin",
+            profile=self.profile,
+            location=baker.make("dashboard.Location", latitude="41.500000", longitude="-75.500000"),
+        )
         Pin.objects.filter(pk=other_pin.pk).update(updated=_STALE)
 
         url = reverse("label.edit", kwargs={"label_kind": "tag", "label_id": label.id})
@@ -68,7 +72,7 @@ class LabelCustomizePinCacheInvalidationTests(TestCase):
         self.client.force_login(self.user)
 
     def test_customizing_a_global_label_bumps_own_pins_carrying_it(self) -> None:
-        global_label = ensure_label( profile=None, kind="tag", name="Visited", icon="check")
+        global_label = ensure_label(profile=None, kind="tag", name="Visited", icon="check")
         pin = _make_pin_with_label(self.profile, global_label)
 
         url = reverse("label.customize", kwargs={"label_kind": "tag", "label_id": global_label.id})
@@ -90,7 +94,9 @@ class LabelDetailViewPinCacheInvalidationTests(TestCase):
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         _key, self.raw_key = generate_api_key(self.user, "Labels client")
-        ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value])
+        ApiKey.objects.filter(user=self.user).update(
+            scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value]
+        )
 
     def test_patching_own_label_bumps_pins_carrying_it(self) -> None:
         label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Urbex", icon="place")

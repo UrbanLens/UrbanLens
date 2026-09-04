@@ -65,7 +65,12 @@ class DocumentIconTests(TestCase):
     def test_falls_back_to_the_stored_filename_when_there_is_no_caption(self) -> None:
         from urbanlens.core.tests.images import JPEG_BYTES
 
-        image = baker.make(Image, media_type=MediaKind.DOCUMENT, caption="", image=SimpleUploadedFile("Report.pdf", JPEG_BYTES, content_type="application/pdf"))
+        image = baker.make(
+            Image,
+            media_type=MediaKind.DOCUMENT,
+            caption="",
+            image=SimpleUploadedFile("Report.pdf", JPEG_BYTES, content_type="application/pdf"),
+        )
         self.assertEqual(image.document_icon, "picture_as_pdf")
 
 
@@ -236,7 +241,9 @@ class VaultPhotosExcludesDocumentsTests(TestCase):
     def setUp(self) -> None:
         self.user: User = baker.make(User)
         self.profile = self.user.profile
-        self.document = baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT, pin=None, wiki=None, caption="Deed.pdf")
+        self.document = baker.make(
+            Image, profile=self.profile, media_type=MediaKind.DOCUMENT, pin=None, wiki=None, caption="Deed.pdf"
+        )
 
     def test_vault_photos_gallery_excludes_it(self) -> None:
         self.client.force_login(self.user)

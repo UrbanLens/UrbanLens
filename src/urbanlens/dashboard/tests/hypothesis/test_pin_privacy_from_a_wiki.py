@@ -60,7 +60,9 @@ class WikiNeighbourTestCase(TestCase):
         self.neighbour = self.neighbour_user.profile
 
         self.location = baker.make(Location, latitude=41.7361, longitude=-73.9361)
-        self.owner_pin = baker.make(Pin, profile=self.owner, location=self.location, parent_pin=None, name=PRIVATE_PIN_NAME)
+        self.owner_pin = baker.make(
+            Pin, profile=self.owner, location=self.location, parent_pin=None, name=PRIVATE_PIN_NAME
+        )
         self.neighbour_pin = baker.make(Pin, profile=self.neighbour, location=self.location, parent_pin=None)
         self.wiki = baker.make(Wiki, location=self.location)
 
@@ -88,13 +90,23 @@ class WikiNeighbourTestCase(TestCase):
 
     def _private_photo(self) -> Image:
         """A photo uploaded to the owner's own pin, never contributed anywhere."""
-        result = upload_photo_for_owner(self.owner_pin, self.owner, SimpleUploadedFile("private.jpg", _jpeg_bytes(), content_type="image/jpeg"), PRIVATE_CAPTION)
+        result = upload_photo_for_owner(
+            self.owner_pin,
+            self.owner,
+            SimpleUploadedFile("private.jpg", _jpeg_bytes(), content_type="image/jpeg"),
+            PRIVATE_CAPTION,
+        )
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         return self._processed(result)
 
     def _shared_photo(self) -> Image:
         """A photo the owner deliberately contributed to the wiki."""
-        result = upload_photo_for_owner(self.owner_pin, self.owner, SimpleUploadedFile("shared.jpg", _jpeg_bytes((30, 20, 10)), content_type="image/jpeg"), "deliberately shared")
+        result = upload_photo_for_owner(
+            self.owner_pin,
+            self.owner,
+            SimpleUploadedFile("shared.jpg", _jpeg_bytes((30, 20, 10)), content_type="image/jpeg"),
+            "deliberately shared",
+        )
         assert isinstance(result, Image)
         attach_to_wiki(result, self.wiki, added_by=self.owner)
         return self._processed(result, wiki=self.wiki)
@@ -151,7 +163,9 @@ class PrivatePinPhotoIsNotOnTheWikiTests(WikiNeighbourTestCase):
 
         from django.urls import reverse
 
-        response = self.client.get(reverse("location.wiki.overlays.media", kwargs={"location_slug": self.location.slug}))
+        response = self.client.get(
+            reverse("location.wiki.overlays.media", kwargs={"location_slug": self.location.slug})
+        )
 
         self.assertEqual(response.status_code, 200, "the wiki overlay picker was not reachable")
         listed = {entry["id"] for entry in response.json()["images"]}
@@ -169,12 +183,16 @@ class PrivatePinDataIsNotReachableTests(WikiNeighbourTestCase):
 
         response = self.client.get(f"/dashboard/map/pin/{self.owner_pin.slug}/gallery/")
 
-        self.assertIn(response.status_code, (403, 404), f"a neighbour read another user's pin gallery ({response.status_code})")
+        self.assertIn(
+            response.status_code, (403, 404), f"a neighbour read another user's pin gallery ({response.status_code})"
+        )
 
     def test_the_child_pin_subtree_is_not_readable_by_a_neighbour(self) -> None:
         """Child pins are entrances, hazards and stairs - the most operationally
         sensitive thing a pin carries."""
-        baker.make(Pin, profile=self.owner, location=self.location, parent_pin=self.owner_pin, name="zzq-hidden-entrance")
+        baker.make(
+            Pin, profile=self.owner, location=self.location, parent_pin=self.owner_pin, name="zzq-hidden-entrance"
+        )
         self._as_neighbour()
 
         response = self.client.get(f"/dashboard/map/pin/{self.owner_pin.slug}/gallery/?children=1")
@@ -213,7 +231,9 @@ class PrivatePhotoBytesTests(WikiNeighbourTestCase):
             with self.subTest(setting=setting):
                 self.owner.photo_upload_visibility = setting
                 self.owner.save(update_fields=["photo_upload_visibility"])
-                self.assertEqual(self._fetch_bytes(private), 404, f"a co-pinner fetched an unshared pin photo under {setting}")
+                self.assertEqual(
+                    self._fetch_bytes(private), 404, f"a co-pinner fetched an unshared pin photo under {setting}"
+                )
 
     def test_once_shared_the_setting_decides_again(self) -> None:
         """The other half: sharing is what hands the setting its job back."""

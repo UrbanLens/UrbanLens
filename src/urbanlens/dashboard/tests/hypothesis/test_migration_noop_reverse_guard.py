@@ -133,9 +133,15 @@ class MigrationNoopReverseGuardTests(SimpleTestCase):
     # -- guard the guard ----------------------------------------------------
 
     def test_the_scan_still_finds_migrations(self) -> None:
-        self.assertGreaterEqual(len(list(MIGRATIONS_DIR.glob("[0-9]*.py"))), 20, "the migration scan found almost nothing - the path resolution broke")
+        self.assertGreaterEqual(
+            len(list(MIGRATIONS_DIR.glob("[0-9]*.py"))),
+            20,
+            "the migration scan found almost nothing - the path resolution broke",
+        )
 
     def test_the_scan_still_finds_noop_reverses(self) -> None:
         """Without this, an AST change that matched nothing would pass silently."""
         found = _noop_reverse_files()
-        self.assertGreaterEqual(len(found), 8, f"only {len(found)} files with noop reverses found - the matcher stopped working")
+        self.assertGreaterEqual(
+            len(found), 8, f"only {len(found)} files with noop reverses found - the matcher stopped working"
+        )

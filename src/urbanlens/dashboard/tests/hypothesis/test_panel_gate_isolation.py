@@ -48,12 +48,16 @@ class GateAllowsTests(TestCase):
         """The regression that matters: a client must still get every healthy panel."""
         from urbanlens.dashboard.external_api.views_panels import PinPanelsListView
 
-        healthy = {key: source for key, source in panel_sources().items()}
+        healthy = dict(panel_sources())
         broken = dict(healthy)
         broken["exploding_test_source"] = _ExplodingSource()
 
         with mock.patch("urbanlens.dashboard.external_api.views_panels.panel_sources", return_value=broken):
-            exposed = [source for source in broken.values() if getattr(source, "api_kinds", None) and gate_allows(source, self.pin)]
+            exposed = [
+                source
+                for source in broken.values()
+                if getattr(source, "api_kinds", None) and gate_allows(source, self.pin)
+            ]
 
         self.assertNotIn("exploding_test_source", [getattr(s, "key", "") for s in exposed])
         self.assertGreaterEqual(len(exposed), 0, "evaluation must complete rather than raising")

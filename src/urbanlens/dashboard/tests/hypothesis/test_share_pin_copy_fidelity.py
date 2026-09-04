@@ -36,7 +36,11 @@ class SharedPinCopyFidelityTests(TestCase):
 
     def _accept(self, pin: Pin, images: list[Image] | None = None) -> Pin:
         share = PinShare.objects.create(
-            pin=pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, status=PinShareStatus.PENDING,
+            pin=pin,
+            location=self.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
         )
         if images:
             share.images.set(images)
@@ -49,7 +53,11 @@ class SharedPinCopyFidelityTests(TestCase):
         # exactly what the flag exists to prevent. name_is_user_provided, the same
         # pattern for the same reason, is copied.
         pin = Pin.objects.create(
-            profile=self.sender, location=self.location, name="Chosen type", pin_type="building", pin_type_is_user_provided=True,
+            profile=self.sender,
+            location=self.location,
+            name="Chosen type",
+            pin_type="building",
+            pin_type_is_user_provided=True,
         )
 
         copied = self._accept(pin)
@@ -71,7 +79,9 @@ class SharedPinCopyFidelityTests(TestCase):
         what the pin looks like". It does, and that is the intent: the recipient
         gets the place, not the sender's presentation of it.
         """
-        pin = Pin.objects.create(profile=self.sender, location=self.location, name="Custom icon", custom_icon="icons/skull.png", icon="place")
+        pin = Pin.objects.create(
+            profile=self.sender, location=self.location, name="Custom icon", custom_icon="icons/skull.png", icon="place"
+        )
 
         copied = self._accept(pin)
 
@@ -131,7 +141,11 @@ class SharedPinCopyFidelityTests(TestCase):
 
     def test_the_senders_pin_is_left_alone(self):
         pin = Pin.objects.create(
-            profile=self.sender, location=self.location, name="Untouched", pin_type="building", pin_type_is_user_provided=True,
+            profile=self.sender,
+            location=self.location,
+            name="Untouched",
+            pin_type="building",
+            pin_type_is_user_provided=True,
         )
 
         self._accept(pin)
@@ -214,7 +228,9 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         # A floor, not a target: the guard exists to notice the copy being
         # restructured out from under this test, and the count legitimately fell
         # when the owner-side fields below stopped travelling.
-        self.assertGreater(len(passed), 12, "could not find the property copy - has create_pin_from_share been restructured?")
+        self.assertGreater(
+            len(passed), 12, "could not find the property copy - has create_pin_from_share been restructured?"
+        )
 
         concrete = {field.name for field in Pin._meta.get_fields() if getattr(field, "concrete", False)}
         unaccounted = sorted(concrete - passed - set(self.NOT_COPIED))
@@ -240,4 +256,6 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         passed = _copied_field_names()
         contradicted = sorted(set(self.NOT_COPIED) & passed)
 
-        self.assertEqual(contradicted, [], f"NOT_COPIED claims these are skipped, but the copy passes them: {contradicted}")
+        self.assertEqual(
+            contradicted, [], f"NOT_COPIED claims these are skipped, but the copy passes them: {contradicted}"
+        )

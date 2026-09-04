@@ -814,7 +814,7 @@ _CSP_DIRECTIVES: dict[str, object] = {
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
         "https://tile.openweathermap.org",
-        # No longer needed for Leaflet's marker PNGs (see docs/PROBLEMS-ARCHIVE.md,
+        # No longer needed for Leaflet's marker PNGs (see docs/archive/PROBLEMS-ARCHIVE.md,
         # "Nuclei scan audit") - nothing else here loads an image from cdnjs.
         # img-src's blanket https: below covers it if that changes again.
         # Result favicons on the web-search page and the Gravatar avatar preview.

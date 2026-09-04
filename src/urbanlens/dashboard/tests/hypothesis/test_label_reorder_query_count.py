@@ -42,7 +42,9 @@ class LabelReorderQueryCountTests(TestCase):
         """Names run off a per-test counter - restarting at 0 collides on ``uq_label_profile_name_kind_ci``."""
         start = self._next_tag
         self._next_tag += count
-        return [baker.make(Label, profile=self.profile, kind=KIND_TAG, name=f"Tag {i}") for i in range(start, start + count)]
+        return [
+            baker.make(Label, profile=self.profile, kind=KIND_TAG, name=f"Tag {i}") for i in range(start, start + count)
+        ]
 
     def _reorder(self, ids: list[int]):
         return self.client.post(self.url, data=json.dumps({"tag_ids": ids}), content_type="application/json")

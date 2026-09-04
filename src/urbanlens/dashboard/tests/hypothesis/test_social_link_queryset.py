@@ -2,6 +2,7 @@
 
 All tests require the database - records are created with model_bakery.
 """
+
 from __future__ import annotations
 
 from model_bakery import baker
@@ -13,6 +14,7 @@ from urbanlens.dashboard.models.social_link.model import SocialLink
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_link(profile, platform: str = "instagram", handle: str = "testuser") -> SocialLink:
     """Create a SocialLink for a profile."""
     return baker.make(SocialLink, profile=profile, platform=platform, handle=handle)
@@ -21,6 +23,7 @@ def _make_link(profile, platform: str = "instagram", handle: str = "testuser") -
 # ---------------------------------------------------------------------------
 # for_profile - Profile instance path (line 18)
 # ---------------------------------------------------------------------------
+
 
 class SocialLinkForProfileInstanceTests(TestCase):
     """for_profile(profile_instance) filters by the model object."""
@@ -63,6 +66,7 @@ class SocialLinkForProfileInstanceTests(TestCase):
 # for_profile - integer pk path (lines 16-17)
 # ---------------------------------------------------------------------------
 
+
 class SocialLinkForProfileIntTests(TestCase):
     """for_profile(int) filters by profile_id FK."""
 
@@ -96,6 +100,7 @@ class SocialLinkForProfileIntTests(TestCase):
 # ---------------------------------------------------------------------------
 # platform (line 22)
 # ---------------------------------------------------------------------------
+
 
 class SocialLinkPlatformTests(TestCase):
     """platform(key) filters to links with that exact platform string."""

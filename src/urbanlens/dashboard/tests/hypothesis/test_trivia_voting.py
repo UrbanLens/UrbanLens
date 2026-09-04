@@ -7,7 +7,12 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaQuestionVote, TriviaQuestionVoteKind
+from urbanlens.dashboard.models.trivia.model import (
+    TriviaQuestion,
+    TriviaQuestionSource,
+    TriviaQuestionVote,
+    TriviaQuestionVoteKind,
+)
 from urbanlens.dashboard.services.trivia.voting import (
     DOWNVOTE_WEIGHT,
     NO_REACTION_WEIGHT,
@@ -24,7 +29,9 @@ def _make_profile() -> Profile:
 
 
 def _make_question() -> TriviaQuestion:
-    return baker.make(TriviaQuestion, location=baker.make(Location), source=TriviaQuestionSource.DETERMINISTIC, answer="1937")
+    return baker.make(
+        TriviaQuestion, location=baker.make(Location), source=TriviaQuestionSource.DETERMINISTIC, answer="1937"
+    )
 
 
 class EffectiveScoreTests(TestCase):
@@ -49,7 +56,9 @@ class EffectiveScoreTests(TestCase):
 
     def test_no_reaction_passive_default_matches_spec_value(self) -> None:
         question = _make_question()
-        baker.make(TriviaQuestionVote, question=question, profile=_make_profile(), kind=TriviaQuestionVoteKind.NO_REACTION)
+        baker.make(
+            TriviaQuestionVote, question=question, profile=_make_profile(), kind=TriviaQuestionVoteKind.NO_REACTION
+        )
         self.assertAlmostEqual(effective_score(question), 0.05)
         self.assertAlmostEqual(NO_REACTION_WEIGHT, 0.05)
 
@@ -58,7 +67,9 @@ class EffectiveScoreTests(TestCase):
         on its own - the spec wants downvotes alone able to retire a question."""
         question = _make_question()
         for _ in range(3):
-            baker.make(TriviaQuestionVote, question=question, profile=_make_profile(), kind=TriviaQuestionVoteKind.DOWNVOTE)
+            baker.make(
+                TriviaQuestionVote, question=question, profile=_make_profile(), kind=TriviaQuestionVoteKind.DOWNVOTE
+            )
         self.assertLess(effective_score(question), 0.0)
 
     def test_mixed_votes_sum_correctly(self) -> None:

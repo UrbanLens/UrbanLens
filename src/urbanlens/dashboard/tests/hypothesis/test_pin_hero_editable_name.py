@@ -82,8 +82,16 @@ class PinHeroChildPinHierarchyTests(TestCase):
         baker.make(User)
         user = baker.make(User)
         self.profile = Profile.objects.get(user=user)
-        self.parent = baker.make_recipe("dashboard.pin", profile=self.profile, name="Campus", name_is_user_provided=True)
-        self.child = baker.make_recipe("dashboard.pin", profile=self.profile, name="Boiler Room", name_is_user_provided=True, parent_pin=self.parent)
+        self.parent = baker.make_recipe(
+            "dashboard.pin", profile=self.profile, name="Campus", name_is_user_provided=True
+        )
+        self.child = baker.make_recipe(
+            "dashboard.pin",
+            profile=self.profile,
+            name="Boiler Room",
+            name_is_user_provided=True,
+            parent_pin=self.parent,
+        )
         self.client.force_login(user)
 
     def test_child_name_is_the_hero_title(self) -> None:

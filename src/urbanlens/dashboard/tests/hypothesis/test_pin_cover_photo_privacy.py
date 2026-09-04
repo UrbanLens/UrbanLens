@@ -32,7 +32,9 @@ _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 
 
 def _make_image(**kwargs) -> Image:
-    return Image.objects.create(image=SimpleUploadedFile("photo.jpg", b"fake image bytes", content_type="image/jpeg"), **kwargs)
+    return Image.objects.create(
+        image=SimpleUploadedFile("photo.jpg", b"fake image bytes", content_type="image/jpeg"), **kwargs
+    )
 
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)

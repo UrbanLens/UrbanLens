@@ -117,7 +117,9 @@ class PlaceholderSlugTests(TestCase):
         upgrade_placeholder_pin_names()
 
         fresh.refresh_from_db()
-        self.assertEqual(fresh.slug, "unnamed-location", "A pin created two minutes ago had its URL changed underneath it.")
+        self.assertEqual(
+            fresh.slug, "unnamed-location", "A pin created two minutes ago had its URL changed underneath it."
+        )
 
     def test_the_age_guard_is_a_delay_not_an_exemption(self) -> None:
         """The same pin, once old enough, is still repaired."""

@@ -47,7 +47,9 @@ class VendorAssetTableTests(SimpleTestCase):
         """The marker images were served from 1.7.1 while the library was 1.9.4."""
         library = VENDOR_ASSETS["leaflet_js"].path.split("/")[1]
         for key in ("leaflet_marker_icon", "leaflet_marker_shadow"):
-            self.assertEqual(VENDOR_ASSETS[key].path.split("/")[1], library, f"{key} is from a different Leaflet release")
+            self.assertEqual(
+                VENDOR_ASSETS[key].path.split("/")[1], library, f"{key} is from a different Leaflet release"
+            )
 
     def test_every_script_and_style_pins_an_integrity_hash(self) -> None:
         """Every ``<script>``/``<link>`` this table can render must be checkable.
@@ -62,7 +64,11 @@ class VendorAssetTableTests(SimpleTestCase):
             if asset.kind == "image":
                 continue
             self.assertTrue(asset.integrity, f"{key} ({asset.kind}) has no integrity hash")
-            self.assertRegex(asset.integrity, r"^sha(256|384|512)-", f"{key}'s integrity value {asset.integrity!r} is not a valid SRI hash")
+            self.assertRegex(
+                asset.integrity,
+                r"^sha(256|384|512)-",
+                f"{key}'s integrity value {asset.integrity!r} is not a valid SRI hash",
+            )
 
 
 class VendorAssetResolutionTests(SimpleTestCase):
@@ -105,7 +111,9 @@ class VendorAssetResolutionTests(SimpleTestCase):
 
     def test_the_template_tags_render(self) -> None:
         with _mirrored("https://assets.example.test/vendor"):
-            rendered = Template('{% load vendor_assets %}{% vendor_asset "leaflet_js" %}|{% vendor_asset_source "leaflet_marker_icon" %}').render(Context({}))
+            rendered = Template(
+                '{% load vendor_assets %}{% vendor_asset "leaflet_js" %}|{% vendor_asset_source "leaflet_marker_icon" %}'
+            ).render(Context({}))
         tag, url = rendered.split("|")
         self.assertIn("https://assets.example.test/vendor/leaflet/1.9.4/leaflet.js", tag)
         self.assertEqual(url, "https://assets.example.test/vendor/leaflet/1.9.4/images/marker-icon.png")
@@ -121,7 +129,9 @@ class NoRawCdnUrlsInTemplatesTests(SimpleTestCase):
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 if pattern.search(line):
                     offenders.append(f"{path.relative_to(_TEMPLATE_ROOT)}:{number}: {line.strip()[:100]}")
-        self.assertEqual(offenders, [], "add the asset to VENDOR_ASSETS and use {% vendor_asset %}:\n" + "\n".join(offenders))
+        self.assertEqual(
+            offenders, [], "add the asset to VENDOR_ASSETS and use {% vendor_asset %}:\n" + "\n".join(offenders)
+        )
 
 
 class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
@@ -130,7 +140,12 @@ class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
     def test_the_mirror_origin_reaches_the_directives_that_serve_it(self) -> None:
         from urbanlens.UrbanLens.settings.base import allow_vendor_mirror
 
-        directives: dict[str, object] = {"script-src": ["'self'"], "style-src": ["'self'"], "font-src": ["'self'"], "img-src": ["https:"]}
+        directives: dict[str, object] = {
+            "script-src": ["'self'"],
+            "style-src": ["'self'"],
+            "font-src": ["'self'"],
+            "img-src": ["https:"],
+        }
 
         origin = allow_vendor_mirror(directives, "https://assets.example.test/vendor/leaflet")
 

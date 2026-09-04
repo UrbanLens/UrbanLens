@@ -68,14 +68,14 @@ class HookRegistryFilterTests(SimpleTestCase):
 
     def test_extra_arguments_are_forwarded(self) -> None:
         hooks = HookRegistry()
-        hooks.add_filter("value", lambda v, pin: v + [pin])
+        hooks.add_filter("value", lambda v, pin: [*v, pin])
         self.assertEqual(hooks.apply_filters("value", [], "pin-7"), ["pin-7"])
 
     @given(priorities=st.lists(st.integers(min_value=-100, max_value=100), min_size=1, max_size=8))
     def test_callbacks_always_run_in_ascending_priority(self, priorities: list[int]) -> None:
         hooks = HookRegistry()
         for priority in priorities:
-            hooks.add_filter("order", lambda seen, p=priority: seen + [p], priority=priority)
+            hooks.add_filter("order", lambda seen, p=priority: [*seen, p], priority=priority)
         seen = hooks.apply_filters("order", [])
         self.assertEqual(seen, sorted(priorities))
 
@@ -261,7 +261,15 @@ class BuiltinDiscoveryTests(SimpleTestCase):
             ],
         )
         street = [type(p).__name__ for p in plugin_registry.street_view_providers()]
-        self.assertEqual(street, ["GoogleMapsGateway", "MapillaryStreetViewProvider", "KartaViewStreetViewProvider", "PanoramaxStreetViewProvider"])
+        self.assertEqual(
+            street,
+            [
+                "GoogleMapsGateway",
+                "MapillaryStreetViewProvider",
+                "KartaViewStreetViewProvider",
+                "PanoramaxStreetViewProvider",
+            ],
+        )
 
     def test_unknown_panel_source_is_rejected_cleanly(self) -> None:
         from urbanlens.dashboard.services.pins.external_data import get_panel_source, schedule_panel_fetch

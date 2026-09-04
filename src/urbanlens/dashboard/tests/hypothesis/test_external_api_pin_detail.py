@@ -46,7 +46,9 @@ class PinDetailGetTests(TestCase):
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         _api_key, self.raw_key = generate_api_key(self.user, "Detail client")
-        self.pin = create_pin_for_profile(self.profile, name="Old Mill", latitude=42.5, longitude=-73.5, description="Rusty catwalks").pin
+        self.pin = create_pin_for_profile(
+            self.profile, name="Old Mill", latitude=42.5, longitude=-73.5, description="Rusty catwalks"
+        ).pin
 
     def _get(self, pin: Pin):
         return self.client.get(_url(pin), **_bearer(self.raw_key))
@@ -62,7 +64,9 @@ class PinDetailGetTests(TestCase):
 
     def test_other_users_pin_is_a_404_not_a_403(self) -> None:
         other = baker.make(User)
-        other_pin = create_pin_for_profile(Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0).pin
+        other_pin = create_pin_for_profile(
+            Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0
+        ).pin
         response = self._get(other_pin)
         self.assertEqual(response.status_code, 404)
 
@@ -92,7 +96,9 @@ class PinDetailGetTests(TestCase):
 
     def test_security_fields_default_to_unknown(self) -> None:
         body = self._get(self.pin).json()
-        self.assertEqual(set(body["security"]), {"fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked"})
+        self.assertEqual(
+            set(body["security"]), {"fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked"}
+        )
         self.assertTrue(all(value == "unknown" for value in body["security"].values()))
 
     def test_security_field_reflects_a_set_value(self) -> None:
@@ -171,7 +177,9 @@ class PinDetailGetTests(TestCase):
         # create_pin_for_profile, whose fuzzy Location dedup would otherwise
         # resolve this nearby point onto the parent's own Location and reject
         # the create as a duplicate top-level pin.
-        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
+        child = baker.make(
+            "dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance"
+        )
         body = self._get(child).json()
         self.assertEqual(body["parent_uuid"], str(self.pin.uuid))
 
@@ -236,7 +244,9 @@ class PinDetailPatchTests(TestCase):
 
     def test_other_users_pin_is_a_404(self) -> None:
         other = baker.make(User)
-        other_pin = create_pin_for_profile(Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0).pin
+        other_pin = create_pin_for_profile(
+            Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0
+        ).pin
         response = self._patch(other_pin, {"name": "Hijacked"})
         self.assertEqual(response.status_code, 404)
         other_pin.refresh_from_db()
@@ -266,14 +276,18 @@ class PinDetailPatchTests(TestCase):
         self.assertEqual(self.pin.parent_pin_id, new_parent.pk)
 
     def test_reparenting_under_a_descendant_is_rejected_as_a_cycle(self) -> None:
-        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
+        child = baker.make(
+            "dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance"
+        )
         response = self._patch(self.pin, {"parent_id": str(child.uuid)})
         self.assertEqual(response.status_code, 400)
         self.assertIn("circular", response.json()["error"])
 
     def test_reparenting_under_another_profiles_pin_is_rejected_without_leaking_it(self) -> None:
         other = baker.make(User)
-        other_pin = create_pin_for_profile(Profile.objects.get(user=other), name="Theirs", latitude=1.0, longitude=1.0).pin
+        other_pin = create_pin_for_profile(
+            Profile.objects.get(user=other), name="Theirs", latitude=1.0, longitude=1.0
+        ).pin
         response = self._patch(self.pin, {"parent_id": str(other_pin.uuid)})
         self.assertEqual(response.status_code, 400)
         self.pin.refresh_from_db()
@@ -281,7 +295,9 @@ class PinDetailPatchTests(TestCase):
 
     def test_a_rejected_reparent_rolls_back_other_fields_in_the_same_patch(self) -> None:
         """A single PATCH is all-or-nothing: an invalid parent_id must not leave a partial rename applied."""
-        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
+        child = baker.make(
+            "dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance"
+        )
         response = self._patch(self.pin, {"name": "Should Not Stick", "parent_id": str(child.uuid)})
         self.assertEqual(response.status_code, 400)
         self.pin.refresh_from_db()
@@ -330,13 +346,17 @@ class PinDetailDeleteTests(TestCase):
 
     def test_other_users_pin_is_a_404(self) -> None:
         other = baker.make(User)
-        other_pin = create_pin_for_profile(Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0).pin
+        other_pin = create_pin_for_profile(
+            Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0
+        ).pin
         response = self._delete(other_pin)
         self.assertEqual(response.status_code, 404)
         self.assertTrue(Pin.objects.filter(pk=other_pin.pk).exists())
 
     def test_pin_with_children_requires_a_decision(self) -> None:
-        baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
+        baker.make(
+            "dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance"
+        )
         response = self._delete(self.pin)
         self.assertEqual(response.status_code, 409)
         body = response.json()
@@ -345,13 +365,17 @@ class PinDetailDeleteTests(TestCase):
         self.assertTrue(Pin.objects.filter(pk=self.pin.pk).exists())
 
     def test_children_delete_removes_the_whole_subtree(self) -> None:
-        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
+        child = baker.make(
+            "dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance"
+        )
         response = self._delete(self.pin, children="delete")
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Pin.objects.filter(pk__in=[self.pin.pk, child.pk]).exists())
 
     def test_children_keep_promotes_them_to_top_level(self) -> None:
-        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
+        child = baker.make(
+            "dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance"
+        )
         response = self._delete(self.pin, children="keep")
         self.assertEqual(response.status_code, 204)
         child.refresh_from_db()

@@ -25,10 +25,27 @@ from urbanlens.dashboard.plugins.builtin.redata_building_attributes import (
     _nearest_building,
     _render_building_attributes,
 )
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+    PropertyRecordsUnavailableError,
+    RedataGateway,
+)
 
-_NEAR_BUILDING = {"source": "cris", "name": "Old Mill", "building_number": "72", "year_built": 1937, "latitude": 42.6501, "longitude": -73.7501}
-_FAR_BUILDING = {"source": "county_gis", "name": "Warehouse B", "building_number": "", "year_built": None, "latitude": 43.0, "longitude": -74.0}
+_NEAR_BUILDING = {
+    "source": "cris",
+    "name": "Old Mill",
+    "building_number": "72",
+    "year_built": 1937,
+    "latitude": 42.6501,
+    "longitude": -73.7501,
+}
+_FAR_BUILDING = {
+    "source": "county_gis",
+    "name": "Warehouse B",
+    "building_number": "",
+    "year_built": None,
+    "latitude": 43.0,
+    "longitude": -74.0,
+}
 
 #: 20 m east and 25 m north of (42.65, -73.75), as degree offsets. At that
 #: latitude a degree of longitude is only cos(42.65 deg) ~ 0.736 as long as a
@@ -97,7 +114,11 @@ class FetchBuildingPayloadTests(TestCase):
         """REData saying "nothing here" is a result; caching it stops a re-ask."""
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("no_data_found", "nothing")),
+            patch.object(
+                RedataGateway,
+                "lookup_parcel_uuid",
+                side_effect=PropertyRecordsUnavailableError("no_data_found", "nothing"),
+            ),
         ):
             self.assertEqual(_fetch_building_payload(42.65, -73.75), {})
 
@@ -110,7 +131,9 @@ class FetchBuildingPayloadTests(TestCase):
         """
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")),
+            patch.object(
+                RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")
+            ),
             self.assertRaises(PropertyRecordsUnavailableError),
         ):
             _fetch_building_payload(42.65, -73.75)
@@ -130,7 +153,9 @@ class FetchBuildingPayloadTests(TestCase):
         fetch by other routes.
         """
         with (
-            patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")),
+            patch.object(
+                RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")
+            ),
             self.assertRaises(ValueError),
         ):
             _fetch_building_payload(42.65, -73.75)
@@ -182,7 +207,9 @@ class PanelFetchTests(TestCase):
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             RedataBuildingAttributesPanelSource().fetch(self.pin)
-        mock_set.assert_called_once_with(self.location, "redata_building_attributes", _NEAR_BUILDING, query_key="42.65000,-73.75000")
+        mock_set.assert_called_once_with(
+            self.location, "redata_building_attributes", _NEAR_BUILDING, query_key="42.65000,-73.75000"
+        )
 
     def test_render_context_delegates_to_shared_renderer(self) -> None:
         ctx = RedataBuildingAttributesPanelSource().render_context(self.pin, _NEAR_BUILDING)
@@ -235,14 +262,18 @@ class EnrichmentSourceTests(TestCase):
         `run_enrichment_cycle` consults `gate()` once via `self_reported_skip`;
         without it the cycle shortlists candidates and every fetch raises.
         """
-        with patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=False):
+        with patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=False
+        ):
             self.assertFalse(RedataBuildingAttributesEnrichmentSource().gate())
 
     def test_fetch_propagates_when_unconfigured_rather_than_caching_empty(self) -> None:
         """Reached only by a caller that skipped the gate; must still not write a row."""
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
         with (
-            patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")),
+            patch.object(
+                RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")
+            ),
             self.assertRaises(ValueError),
         ):
             RedataBuildingAttributesEnrichmentSource().fetch(location)

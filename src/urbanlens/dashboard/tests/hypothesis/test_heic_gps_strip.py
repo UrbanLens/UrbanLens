@@ -57,7 +57,9 @@ class HeicGpsStripTests(TestCase):
 
     def _stored_heic(self) -> Image:
         image = baker.make(Image, profile=self.profile)
-        image.image.save("IMG_0001.heic", SimpleUploadedFile("IMG_0001.heic", _heic_with_gps(), content_type="image/heic"), save=True)
+        image.image.save(
+            "IMG_0001.heic", SimpleUploadedFile("IMG_0001.heic", _heic_with_gps(), content_type="image/heic"), save=True
+        )
         return image
 
     def _gps_present(self, image: Image) -> bool:
@@ -123,7 +125,9 @@ class HeicIsStoredInARenderableFormatTests(TestCase):
 
     def _stored_heic(self) -> Image:
         image = baker.make(Image, profile=self.profile)
-        image.image.save("IMG_0001.heic", SimpleUploadedFile("IMG_0001.heic", _heic_with_gps(), content_type="image/heic"), save=True)
+        image.image.save(
+            "IMG_0001.heic", SimpleUploadedFile("IMG_0001.heic", _heic_with_gps(), content_type="image/heic"), save=True
+        )
         return image
 
     def _stored_format(self, image: Image) -> str:
@@ -162,6 +166,8 @@ class HeicIsStoredInARenderableFormatTests(TestCase):
         image = baker.make(Image, profile=self.profile)
         buffer = io.BytesIO()
         PILImage.new("RGB", (48, 48), (10, 20, 30)).save(buffer, format="JPEG")
-        image.image.save("plain.jpg", SimpleUploadedFile("plain.jpg", buffer.getvalue(), content_type="image/jpeg"), save=True)
+        image.image.save(
+            "plain.jpg", SimpleUploadedFile("plain.jpg", buffer.getvalue(), content_type="image/jpeg"), save=True
+        )
 
         self.assertIsNone(downscale_stored_image(image, None, convert_webp=False))

@@ -13,7 +13,12 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus, TriviaSession
+from urbanlens.dashboard.models.trivia.model import (
+    TriviaQuestion,
+    TriviaQuestionSource,
+    TriviaQuestionStatus,
+    TriviaSession,
+)
 
 _coordinate_counter = count()
 
@@ -155,7 +160,9 @@ class TriviaQuestionVoteViewTests(TestCase):
         start_response = self.client.post(reverse("trivia.start"), {"total_rounds": "1"})
         round_id = start_response.json()["round"]["round_id"]
         session_id = start_response.json()["session_id"]
-        self.client.post(reverse("trivia.answer", kwargs={"session_id": session_id, "round_id": round_id}), {"answer": "1937"})
+        self.client.post(
+            reverse("trivia.answer", kwargs={"session_id": session_id, "round_id": round_id}), {"answer": "1937"}
+        )
 
         response = self.client.post(self.vote_url, {"kind": "upvote"})
         self.assertEqual(response.status_code, 200)
@@ -182,7 +189,10 @@ class TriviaQuestionSubmitViewTests(TestCase):
     def test_creates_a_pending_review_question(self) -> None:
         from unittest.mock import patch
 
-        with patch("urbanlens.dashboard.services.trivia.submission._enqueue_classification"), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("urbanlens.dashboard.services.trivia.submission._enqueue_classification"),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             response = self.client.post(
                 self.submit_url,
                 {"location_id": self.location.pk, "prompt": "What year was it built?", "answer": "1937"},
@@ -198,7 +208,10 @@ class TriviaQuestionSubmitViewTests(TestCase):
         """Per spec: the submitter gets no signal either way, so they can't iteratively probe the filter."""
         from unittest.mock import patch
 
-        with patch("urbanlens.dashboard.services.trivia.submission._enqueue_classification"), self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("urbanlens.dashboard.services.trivia.submission._enqueue_classification"),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             response = self.client.post(
                 self.submit_url,
                 {"location_id": self.location.pk, "prompt": "What year was it built?", "answer": "1937"},

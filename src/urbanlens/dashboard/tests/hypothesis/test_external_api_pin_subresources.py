@@ -64,7 +64,9 @@ class SubResourceTestCase(TestCase):
 
     def _other_users_pin(self) -> Pin:
         other = baker.make(User)
-        return create_pin_for_profile(Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0).pin
+        return create_pin_for_profile(
+            Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0
+        ).pin
 
     def _get(self, path: str):
         return self.client.get(path, **_bearer(self.raw_key))

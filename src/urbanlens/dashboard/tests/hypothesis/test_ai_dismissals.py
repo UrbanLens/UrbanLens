@@ -18,14 +18,43 @@ from urbanlens.dashboard.services.ai.dismissals import (
 
 class ParseDismissalsJsonTests(SimpleTestCase):
     def test_a_well_formed_explainer_entry_round_trips(self) -> None:
-        raw = json.dumps([{"id": "organize-labels-intro", "kind": "explainer", "heading": "Labels", "body": "Tag your pins.", "page": "/organize/"}])
+        raw = json.dumps(
+            [
+                {
+                    "id": "organize-labels-intro",
+                    "kind": "explainer",
+                    "heading": "Labels",
+                    "body": "Tag your pins.",
+                    "page": "/organize/",
+                }
+            ]
+        )
         self.assertEqual(
             parse_dismissals_json(raw),
-            (DismissalEntry(id="organize-labels-intro", kind="explainer", heading="Labels", body="Tag your pins.", page="/organize/"),),
+            (
+                DismissalEntry(
+                    id="organize-labels-intro",
+                    kind="explainer",
+                    heading="Labels",
+                    body="Tag your pins.",
+                    page="/organize/",
+                ),
+            ),
         )
 
     def test_a_tour_entry_keeps_its_prefix(self) -> None:
-        raw = json.dumps([{"id": "step-one", "kind": "tour", "heading": "Reorder", "body": "Drag to prioritize.", "page": "/organize/", "prefix": "ul_onboarding_v1_organize"}])
+        raw = json.dumps(
+            [
+                {
+                    "id": "step-one",
+                    "kind": "tour",
+                    "heading": "Reorder",
+                    "body": "Drag to prioritize.",
+                    "page": "/organize/",
+                    "prefix": "ul_onboarding_v1_organize",
+                }
+            ]
+        )
         entries = parse_dismissals_json(raw)
         self.assertEqual(entries[0].prefix, "ul_onboarding_v1_organize")
 
@@ -63,7 +92,12 @@ class ParseDismissalsJsonTests(SimpleTestCase):
         self.assertEqual(len(entries[0].body), BODY_MAX_CHARS)
 
     def test_more_than_the_cap_is_truncated_not_rejected(self) -> None:
-        raw = json.dumps([{"id": f"x{i}", "kind": "explainer", "heading": "H", "body": "B", "page": "/"} for i in range(MAX_DISMISSALS + 3)])
+        raw = json.dumps(
+            [
+                {"id": f"x{i}", "kind": "explainer", "heading": "H", "body": "B", "page": "/"}
+                for i in range(MAX_DISMISSALS + 3)
+            ]
+        )
         self.assertEqual(len(parse_dismissals_json(raw)), MAX_DISMISSALS)
 
 

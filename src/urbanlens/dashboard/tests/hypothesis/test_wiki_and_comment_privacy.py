@@ -12,6 +12,7 @@ Covers two regressions:
   own ``comment_visibility`` privacy setting, independent of whether the
   viewer can see the page the comment is on.
 """
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User
@@ -72,11 +73,15 @@ class WikiVisibilityTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_wiki_label_membership_unpinned_404s(self) -> None:
-        response = self.client.get(reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.wiki.location.slug}))
+        response = self.client.get(
+            reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.wiki.location.slug})
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_wiki_label_membership_pinned_succeeds(self) -> None:
-        response = self.client.get(reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.own_wiki.location.slug}))
+        response = self.client.get(
+            reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.own_wiki.location.slug})
+        )
         self.assertEqual(response.status_code, 200)
 
     def test_wiki_markup_json_unpinned_404s(self) -> None:
@@ -226,7 +231,9 @@ class CommentAuthorPrivacyTests(TestCase):
     def test_deleting_a_hidden_comment_is_not_found(self) -> None:
         """A 403 would confirm the sequential id exists, which the listing withholds."""
         comment = self._comment(visibility=VisibilityChoice.NO_ONE)
-        response = self.client.delete(reverse("location.wiki.comment.delete", args=[self.wiki.location.slug, comment.id]))
+        response = self.client.delete(
+            reverse("location.wiki.comment.delete", args=[self.wiki.location.slug, comment.id])
+        )
         self.assertEqual(response.status_code, 404)
         self.assertTrue(Comment.objects.filter(pk=comment.id).exists())
 

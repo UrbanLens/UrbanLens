@@ -28,7 +28,11 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import ACCOUNT_DELETION_GRACE_PERIOD, ACCOUNT_DELETION_REMINDER_LEAD, Profile
+from urbanlens.dashboard.models.profile.model import (
+    ACCOUNT_DELETION_GRACE_PERIOD,
+    ACCOUNT_DELETION_REMINDER_LEAD,
+    Profile,
+)
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
 from urbanlens.dashboard.services.profile.account_deletion import (
     cancel_deletion,
@@ -43,7 +47,9 @@ def _fake_image(name: str) -> SimpleUploadedFile:
 
 
 def _backdate_request(profile: Profile, ago: datetime.timedelta) -> Profile:
-    Profile.objects.filter(pk=profile.pk).update(deletion_requested_at=timezone.now() - ago, deletion_reminder_sent_at=None)
+    Profile.objects.filter(pk=profile.pk).update(
+        deletion_requested_at=timezone.now() - ago, deletion_reminder_sent_at=None
+    )
     profile.refresh_from_db()
     return profile
 
@@ -130,7 +136,11 @@ class RequestDeletionTests(TestCase):
 
     def test_creates_onsite_notification(self):
         request_deletion(self.profile)
-        self.assertTrue(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED
+            ).exists()
+        )
 
     def test_sends_email(self):
         request_deletion(self.profile)
@@ -148,23 +158,45 @@ class RequestDeletionTests(TestCase):
         self.profile.user.save(update_fields=["email"])
         # Assert test assumptions
         self.assertEqual(len(mail.outbox), 0, "Outbox is 0 before test run")
-        self.assertFalse(self.profile.is_pending_deletion, "User started with pending deletion, possible unsanitary test db")
-        self.assertFalse(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED).exists(), "Possible unsanitary test db")
+        self.assertFalse(
+            self.profile.is_pending_deletion, "User started with pending deletion, possible unsanitary test db"
+        )
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED
+            ).exists(),
+            "Possible unsanitary test db",
+        )
 
         request_deletion(self.profile)
         self.assertEqual(len(mail.outbox), 0)
         self.assertTrue(self.profile.is_pending_deletion)
-        self.assertTrue(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED
+            ).exists()
+        )
 
     def test_deletion_still_recorded_when_email_send_fails(self):
         """`_send_email` logs and swallows delivery failures - a raised SMTPException must not abort the request."""
-        self.assertFalse(self.profile.is_pending_deletion, "User started with pending deletion, possible unsanitary test db")
-        self.assertFalse(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED).exists(), "Possible unsanitary test db")
+        self.assertFalse(
+            self.profile.is_pending_deletion, "User started with pending deletion, possible unsanitary test db"
+        )
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED
+            ).exists(),
+            "Possible unsanitary test db",
+        )
 
         with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("nope")):
             request_deletion(self.profile)
         self.assertTrue(self.profile.is_pending_deletion)
-        self.assertTrue(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED
+            ).exists()
+        )
 
 
 class CancelDeletionTests(TestCase):
@@ -192,7 +224,11 @@ class SendDeletionReminderTests(TestCase):
 
     def test_creates_onsite_notification(self):
         send_deletion_reminder(self.profile)
-        self.assertTrue(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REMINDER).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REMINDER
+            ).exists()
+        )
 
     def test_sends_email(self):
         send_deletion_reminder(self.profile)
@@ -353,28 +389,40 @@ class RequestAccountDeletionViewTests(TestCase):
         self.assertFalse(self.user.profile.is_pending_deletion)
 
     def test_wrong_confirm_text_does_not_schedule_deletion(self):
-        self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete somebody-else"})
+        self.client.post(
+            reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete somebody-else"}
+        )
         self.user.profile.refresh_from_db()
         self.assertFalse(self.user.profile.is_pending_deletion)
 
     def test_correct_password_and_confirmation_schedules_deletion(self):
-        self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"})
+        self.client.post(
+            reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"}
+        )
         self.user.profile.refresh_from_db()
         self.assertTrue(self.user.profile.is_pending_deletion)
 
     def test_user_stays_logged_in_after_request(self):
-        response = self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"}, follow=True)
+        response = self.client.post(
+            reverse("account.delete.request"),
+            {"password": "correct-horse", "confirm_text": "delete alice"},
+            follow=True,
+        )
         self.assertTrue(response.wsgi_request.user.is_authenticated)
 
     def test_confirm_text_is_case_insensitive(self):
-        self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "DELETE ALICE"})
+        self.client.post(
+            reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "DELETE ALICE"}
+        )
         self.user.profile.refresh_from_db()
         self.assertTrue(self.user.profile.is_pending_deletion)
 
     def test_superuser_cannot_schedule_deletion(self):
         self.user.is_superuser = True
         self.user.save()
-        self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"})
+        self.client.post(
+            reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"}
+        )
         self.user.profile.refresh_from_db()
         self.assertFalse(self.user.profile.is_pending_deletion)
 
@@ -382,7 +430,9 @@ class RequestAccountDeletionViewTests(TestCase):
         """The gate is `is_superuser OR has_perm(view_site_admin)` - a staff moderator
         holding just the permission (not superuser) must be blocked too."""
         self.user.user_permissions.add(Permission.objects.get(codename="view_site_admin"))
-        self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"})
+        self.client.post(
+            reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"}
+        )
         self.user.profile.refresh_from_db()
         self.assertFalse(self.user.profile.is_pending_deletion)
 
@@ -448,7 +498,9 @@ class DeletionReminderOverlapLockTests(TestCase):
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.user = baker.make(User, email="leaving@example.com")
         self.profile = self.user.profile
-        self.profile.deletion_requested_at = timezone.now() - (ACCOUNT_DELETION_GRACE_PERIOD - ACCOUNT_DELETION_REMINDER_LEAD)
+        self.profile.deletion_requested_at = timezone.now() - (
+            ACCOUNT_DELETION_GRACE_PERIOD - ACCOUNT_DELETION_REMINDER_LEAD
+        )
         self.profile.save(update_fields=["deletion_requested_at"])
 
     def test_a_run_holding_the_lock_blocks_a_concurrent_one(self) -> None:

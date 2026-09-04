@@ -29,7 +29,9 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 class _FakeView:
     """A view declaring scopes per method, optionally with an explicit tier override."""
 
-    def __init__(self, required_scopes_by_method: dict | None = None, throttle_tier_by_method: dict | None = None) -> None:
+    def __init__(
+        self, required_scopes_by_method: dict | None = None, throttle_tier_by_method: dict | None = None
+    ) -> None:
         if required_scopes_by_method is not None:
             self.required_scopes_by_method = required_scopes_by_method
         if throttle_tier_by_method is not None:
@@ -93,7 +95,9 @@ class RequestTierTests(SimpleTestCase):
         self.assertEqual(request_tier(view, "GET"), TIER_WRITE)
 
     @given(
-        read_scopes=st.lists(st.sampled_from([s for s in ApiKeyScope if s.value.endswith(":read")]), min_size=1, max_size=4),
+        read_scopes=st.lists(
+            st.sampled_from([s for s in ApiKeyScope if s.value.endswith(":read")]), min_size=1, max_size=4
+        ),
         method=st.sampled_from(["GET", "POST", "PATCH", "DELETE"]),
     )
     def test_any_all_read_declaration_is_read_tier(self, read_scopes: list, method: str) -> None:

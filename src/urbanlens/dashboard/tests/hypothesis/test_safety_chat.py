@@ -57,7 +57,9 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
         )
 
     def _owner_communicator(self) -> WebsocketCommunicator:
-        comm = WebsocketCommunicator(SafetyCheckinChatConsumer.as_asgi(), f"/ws/safety/checkin/{self.checkin.uuid}/chat/")
+        comm = WebsocketCommunicator(
+            SafetyCheckinChatConsumer.as_asgi(), f"/ws/safety/checkin/{self.checkin.uuid}/chat/"
+        )
         comm.scope["url_route"] = {"kwargs": {"checkin_uuid": str(self.checkin.uuid), "token": None}}
         comm.scope["user"] = self.owner_user
         return comm

@@ -13,6 +13,7 @@ Invariants verified:
     in either field would otherwise let stored pin data break out of the JS
     string literal.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

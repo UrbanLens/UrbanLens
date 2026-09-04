@@ -108,7 +108,9 @@ class PinOwnershipPanelViewTests(OwnershipPanelViewTestsBase):
 
     def test_updates_owner_fields(self) -> None:
         owner = baker.make(PinOwner, pin=self.pin, name="Old Name")
-        response = self.client.post(reverse("pin.ownership.edit", args=[self.pin.slug, owner.id]), {"name": "New Name", "phone": "555-1234"})
+        response = self.client.post(
+            reverse("pin.ownership.edit", args=[self.pin.slug, owner.id]), {"name": "New Name", "phone": "555-1234"}
+        )
         self.assertEqual(response.status_code, 200)
         owner.refresh_from_db()
         self.assertEqual(owner.name, "New Name")
@@ -178,7 +180,9 @@ class WikiOwnershipPanelViewTests(OwnershipPanelViewTestsBase):
     def test_official_owner_cannot_be_edited(self) -> None:
         owner = baker.make(WikiOwner, name="Official Records Inc", source=OwnerSource.OFFICIAL)
         owner.locations.add(self.location)
-        response = self.client.post(reverse("location.wiki.ownership.edit", args=[self.location.slug, owner.id]), {"name": "Tampered Name"})
+        response = self.client.post(
+            reverse("location.wiki.ownership.edit", args=[self.location.slug, owner.id]), {"name": "Tampered Name"}
+        )
         self.assertEqual(response.status_code, 200)
         owner.refresh_from_db()
         self.assertEqual(owner.name, "Official Records Inc")
@@ -204,7 +208,12 @@ class PinPropertySaleTabViewTests(OwnershipPanelViewTestsBase):
     def test_post_creates_a_sale_with_multiple_previous_and_new_owners(self) -> None:
         response = self.client.post(
             reverse("pin.sales", args=[self.pin.slug]),
-            {"previous_owners": "Seller One, Seller Two", "new_owners": "Buyer One, Buyer Two, Buyer Three", "sale_price": "300000", "sale_date": "2024-06-01"},
+            {
+                "previous_owners": "Seller One, Seller Two",
+                "new_owners": "Buyer One, Buyer Two, Buyer Three",
+                "sale_price": "300000",
+                "sale_date": "2024-06-01",
+            },
         )
         self.assertEqual(response.status_code, 200)
         sale = PinPropertySale.objects.get(pin=self.pin)
@@ -213,7 +222,9 @@ class PinPropertySaleTabViewTests(OwnershipPanelViewTestsBase):
         self.assertEqual(str(sale.sale_price), "300000.00")
 
     def test_overlapping_previous_and_new_owner_names_is_rejected(self) -> None:
-        response = self.client.post(reverse("pin.sales", args=[self.pin.slug]), {"previous_owners": "Same Co", "new_owners": "same co"})
+        response = self.client.post(
+            reverse("pin.sales", args=[self.pin.slug]), {"previous_owners": "Same Co", "new_owners": "same co"}
+        )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(PinPropertySale.objects.exists())
 
@@ -267,7 +278,10 @@ class WikiPropertySaleTabViewTests(OwnershipPanelViewTestsBase):
     def test_recording_a_sale_removes_previous_owners_from_current_shared_owners(self) -> None:
         seller = baker.make(WikiOwner, name="Seller Co")
         seller.locations.add(self.location)
-        self.client.post(reverse("location.wiki.sales", args=[self.location.slug]), {"previous_owners": "Seller Co", "new_owners": "Buyer Co"})
+        self.client.post(
+            reverse("location.wiki.sales", args=[self.location.slug]),
+            {"previous_owners": "Seller Co", "new_owners": "Buyer Co"},
+        )
         seller.refresh_from_db()
         self.assertNotIn(self.location, seller.locations.all())
         buyer = WikiOwner.objects.get(name="Buyer Co")

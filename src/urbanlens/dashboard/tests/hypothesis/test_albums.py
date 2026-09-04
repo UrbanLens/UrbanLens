@@ -154,7 +154,9 @@ class AlbumOrderingTests(TestCase):
         self.album.refresh_from_db()
         self.assertEqual(self.album.sort, AlbumSort.CUSTOM)
         self.assertEqual(self._display_item_ids(), reversed_ids)
-        self.assertEqual(list(AlbumItem.objects.in_display_order(self.album).values_list("order", flat=True)), [0, 1, 2])
+        self.assertEqual(
+            list(AlbumItem.objects.in_display_order(self.album).values_list("order", flat=True)), [0, 1, 2]
+        )
 
     def test_reorder_ignores_ids_from_another_album(self) -> None:
         other = Album.objects.create(name="Exterior", profile=self.pin.profile, parent_pin=self.pin)
@@ -360,7 +362,9 @@ class AlbumBatchingTests(TestCase):
         pin, images = _pin_with_photos(3)
         album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin)
         add_images_to_album(album, images, pin.profile)
-        reorder_album_items(album, list(reversed(list(AlbumItem.objects.in_display_order(album).values_list("pk", flat=True)))))
+        reorder_album_items(
+            album, list(reversed(list(AlbumItem.objects.in_display_order(album).values_list("pk", flat=True))))
+        )
         album.refresh_from_db()
 
         batched = {a.pk: imgs for a, imgs in albums_with_images(pin, pin.profile)}
@@ -420,12 +424,16 @@ class CacheMediaItemIntoAlbumTaskTests(TestCase):
     def _run(self):
         from urbanlens.dashboard.tasks import cache_media_item_into_album
 
-        return cache_media_item_into_album(self.album.pk, self.pin.profile.pk, "wikimedia", "https://example.test/p.jpg")
+        return cache_media_item_into_album(
+            self.album.pk, self.pin.profile.pk, "wikimedia", "https://example.test/p.jpg"
+        )
 
     def test_files_the_materialized_image_into_the_album(self) -> None:
         fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
         with (
-            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image),
+            mock.patch(
+                "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
+            ),
             mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote,
         ):
             result = self._run()
@@ -450,7 +458,9 @@ class CacheMediaItemIntoAlbumTaskTests(TestCase):
         from urbanlens.dashboard.tasks import cache_media_item_into_album
 
         with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item") as materialize:
-            self.assertIsNone(cache_media_item_into_album(album_id, self.pin.profile.pk, "wikimedia", "https://example.test/p.jpg"))
+            self.assertIsNone(
+                cache_media_item_into_album(album_id, self.pin.profile.pk, "wikimedia", "https://example.test/p.jpg")
+            )
         materialize.assert_not_called()
 
 
@@ -482,7 +492,9 @@ class ExternalMediaAlbumAddTests(TestCase):
     def test_records_a_relevant_vote_and_caches(self) -> None:
         fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.profile)
         with (
-            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image) as materialize,
+            mock.patch(
+                "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
+            ) as materialize,
             mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote,
         ):
             result = self._call()
@@ -493,7 +505,9 @@ class ExternalMediaAlbumAddTests(TestCase):
         materialize.assert_called_once()
         queue_vote.assert_called_once()
 
-        vote = MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url))
+        vote = MediaRelevance.objects.get(
+            profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)
+        )
         self.assertTrue(vote.is_relevant)
 
     def test_respects_an_existing_not_relevant_vote(self) -> None:
@@ -512,7 +526,9 @@ class ExternalMediaAlbumAddTests(TestCase):
         self.assertIsNone(result.image)
         materialize.assert_not_called()
         # The user's deliberate down-vote must survive untouched.
-        vote = MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url))
+        vote = MediaRelevance.objects.get(
+            profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)
+        )
         self.assertFalse(vote.is_relevant)
 
     def test_an_existing_relevant_vote_still_caches(self) -> None:
@@ -525,7 +541,9 @@ class ExternalMediaAlbumAddTests(TestCase):
         )
         fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.profile)
         with (
-            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image),
+            mock.patch(
+                "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
+            ),
             mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote"),
         ):
             result = self._call()
@@ -548,7 +566,9 @@ class ExternalMediaAlbumAddTests(TestCase):
         # The raw exception text must not reach the user.
         self.assertNotIn("boom", result.error)
         self.assertTrue(
-            MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)).is_relevant
+            MediaRelevance.objects.get(
+                profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)
+            ).is_relevant
         )
 
     def test_explicit_policy_overrides_a_prior_downvote(self) -> None:
@@ -564,14 +584,18 @@ class ExternalMediaAlbumAddTests(TestCase):
         )
         fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.profile)
         with (
-            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image),
+            mock.patch(
+                "urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image
+            ),
             mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote"),
         ):
             result = self._call(policy=VotePolicy.EXPLICIT)
 
         self.assertFalse(result.declined)
         self.assertTrue(result.voted)
-        vote = MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url))
+        vote = MediaRelevance.objects.get(
+            profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)
+        )
         self.assertTrue(vote.is_relevant)
 
     def test_materialize_false_records_the_vote_without_downloading(self) -> None:
@@ -583,5 +607,7 @@ class ExternalMediaAlbumAddTests(TestCase):
         self.assertIsNone(result.error)
         materialize.assert_not_called()
         self.assertTrue(
-            MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)).is_relevant
+            MediaRelevance.objects.get(
+                profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)
+            ).is_relevant
         )

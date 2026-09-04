@@ -185,9 +185,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         from urbanlens.dashboard.models.labels.model import KIND_USER
 
-        tags = Label.objects.tags().visible_to(profile).ordered()
-        categories = Label.objects.categories().ordered()
-        filter_labels = Label.objects.exclude(kind=KIND_USER).visible_to(profile).ordered()
+        tags = Label.objects.tags().visible_to(profile).in_display_order()
+        categories = Label.objects.categories().in_display_order()
+        filter_labels = Label.objects.exclude(kind=KIND_USER).visible_to(profile).in_display_order()
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
 
         filter_labels_list = list(filter_labels)

@@ -26,7 +26,11 @@ _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-cover-")
 
 
 def _make_image(**kwargs) -> Image:
-    return Image.objects.create(image=SimpleUploadedFile("photo.jpg", b"fake image bytes", content_type="image/jpeg"), media_type=MediaKind.PHOTO, **kwargs)
+    return Image.objects.create(
+        image=SimpleUploadedFile("photo.jpg", b"fake image bytes", content_type="image/jpeg"),
+        media_type=MediaKind.PHOTO,
+        **kwargs,
+    )
 
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
@@ -67,8 +71,16 @@ class CoverPhotoUrlTests(TestCase):
         self.assertEqual(self._serialize()["cover_photo_url"], photo.thumb_url)
 
     def test_skips_a_materialized_photo_this_profile_voted_irrelevant(self) -> None:
-        voted_down = _make_image(pin=self.pin, profile=self.profile, location=self.location, media_source_key="wikimedia", media_item_key="abc123")
-        MediaRelevance.objects.create(profile=self.profile, location=self.location, source="wikimedia", item_key="abc123", is_relevant=False)
+        voted_down = _make_image(
+            pin=self.pin,
+            profile=self.profile,
+            location=self.location,
+            media_source_key="wikimedia",
+            media_item_key="abc123",
+        )
+        MediaRelevance.objects.create(
+            profile=self.profile, location=self.location, source="wikimedia", item_key="abc123", is_relevant=False
+        )
         fallback = _make_image(pin=self.pin, profile=self.profile)
 
         result = self._serialize()["cover_photo_url"]
@@ -76,6 +88,11 @@ class CoverPhotoUrlTests(TestCase):
         self.assertNotEqual(result, voted_down.thumb_url)
 
     def test_a_video_is_never_used_as_the_fallback_thumbnail(self) -> None:
-        Image.objects.create(image=SimpleUploadedFile("clip.mp4", b"fake video bytes", content_type="video/mp4"), media_type=MediaKind.VIDEO, pin=self.pin, profile=self.profile)
+        Image.objects.create(
+            image=SimpleUploadedFile("clip.mp4", b"fake video bytes", content_type="video/mp4"),
+            media_type=MediaKind.VIDEO,
+            pin=self.pin,
+            profile=self.profile,
+        )
 
         self.assertIsNone(self._serialize()["cover_photo_url"])

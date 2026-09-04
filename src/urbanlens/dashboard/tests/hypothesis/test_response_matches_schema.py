@@ -112,14 +112,18 @@ class NullableTranslationTests(TestCase):
     def test_a_nullable_field_accepts_null(self) -> None:
         import jsonschema
 
-        schema = openapi_to_json_schema({"type": "object", "properties": {"next": {"type": "string", "nullable": True}}})
+        schema = openapi_to_json_schema(
+            {"type": "object", "properties": {"next": {"type": "string", "nullable": True}}}
+        )
 
         jsonschema.validate(instance={"next": None}, schema=schema)
 
     def test_a_nullable_field_still_rejects_the_wrong_type(self) -> None:
         import jsonschema
 
-        schema = openapi_to_json_schema({"type": "object", "properties": {"next": {"type": "string", "nullable": True}}})
+        schema = openapi_to_json_schema(
+            {"type": "object", "properties": {"next": {"type": "string", "nullable": True}}}
+        )
 
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.validate(instance={"next": 42}, schema=schema)
@@ -137,7 +141,9 @@ class NullableTranslationTests(TestCase):
         """The `labels/` defect was a missing required field, so this must hold."""
         import jsonschema
 
-        schema = openapi_to_json_schema({"type": "object", "required": ["uuid"], "properties": {"uuid": {"type": "string"}}})
+        schema = openapi_to_json_schema(
+            {"type": "object", "required": ["uuid"], "properties": {"uuid": {"type": "string"}}}
+        )
 
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.validate(instance={}, schema=schema)
@@ -208,7 +214,9 @@ class ResponseSchemaConformanceTests(TestCase):
             path = reverse(url_name, kwargs=kwargs)
             schema = self._response_schema(document, path)
             if schema is None:
-                failures.append(f"{path}: the schema declares no JSON 200 response, so a client has nothing to generate against")
+                failures.append(
+                    f"{path}: the schema declares no JSON 200 response, so a client has nothing to generate against"
+                )
                 continue
 
             response = self.client.get(path, headers=_bearer(self.raw_key))

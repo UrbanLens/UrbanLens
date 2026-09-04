@@ -206,7 +206,9 @@ class GetOrCreateRoundConsumesSoloStartPrewarmTests(TestCase):
         shared_location = _make_location()
         baker.make(Pin, profile=host, location=shared_location)
         baker.make(Pin, profile=guest, location=shared_location)
-        baker.make(Image, location=shared_location, media_type=MediaKind.PHOTO, wiki=baker.make(Wiki, location=shared_location))
+        baker.make(
+            Image, location=shared_location, media_type=MediaKind.PHOTO, wiki=baker.make(Wiki, location=shared_location)
+        )
 
         config = GameConfig()
         picked = generate_round_content(SpotGuessrMode.PHOTOS, config, [host], [], None)
@@ -334,7 +336,9 @@ class PrewarmSpotguessrSoloStartTaskTests(TestCase):
         profile = _make_profile()
         _make_photo_location(profile)
 
-        result = prewarm_spotguessr_solo_start(profile.pk, SpotGuessrMode.PHOTOS, {"difficulty": 0.5, "not_a_real_field": "x"})
+        result = prewarm_spotguessr_solo_start(
+            profile.pk, SpotGuessrMode.PHOTOS, {"difficulty": 0.5, "not_a_real_field": "x"}
+        )
 
         self.assertTrue(result)
         prewarm.consume_for_solo_start(profile.pk, SpotGuessrMode.PHOTOS, GameConfig(difficulty=0.5))

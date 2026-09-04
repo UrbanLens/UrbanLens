@@ -58,7 +58,9 @@ class CandidateNameForLocationTests(TestCase):
         location = _make_location()
         wiki = baker.make(Wiki, location=location, name="Old Mill House")
         baker.make(WikiAlias, wiki=wiki, name="The Mill", kind=AliasType.NICKNAME)
-        with mock.patch("urbanlens.dashboard.services.spotguessr.named_place.random.choice", return_value="The Mill") as mock_choice:
+        with mock.patch(
+            "urbanlens.dashboard.services.spotguessr.named_place.random.choice", return_value="The Mill"
+        ) as mock_choice:
             result = candidate_name_for_location(location, use_aliases=True)
         mock_choice.assert_called_once()
         self.assertCountEqual(mock_choice.call_args.args[0], ["Old Mill House", "The Mill"])

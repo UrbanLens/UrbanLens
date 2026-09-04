@@ -27,7 +27,9 @@ from urbanlens.dashboard.services.import_export.export import _export_direct_mes
 
 def _profile(visibility: str = VisibilityChoice.ANYONE) -> Profile:
     profile = baker.make("auth.User").profile
-    Profile.objects.filter(pk=profile.pk).update(profile_visibility=visibility, direct_message_visibility=VisibilityChoice.ANYONE)
+    Profile.objects.filter(pk=profile.pk).update(
+        profile_visibility=visibility, direct_message_visibility=VisibilityChoice.ANYONE
+    )
     profile.refresh_from_db()
     profile.ensure_slug()
     return profile

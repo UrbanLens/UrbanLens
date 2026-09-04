@@ -6,6 +6,7 @@ file, since these are typically hand-pasted rather than produced by a single
 trusted export pipeline. That per-line fault tolerance is the main regression
 risk covered here.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

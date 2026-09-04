@@ -74,7 +74,11 @@ class ExtPanel204MarkerTests(TestCase):
             # The marker must be on the same element as the id, not just anywhere on
             # the page - check they're within a short distance of each other.
             idx = content.index(f'id="{section_id}"')
-            self.assertIn("data-ext-panel-204", content[max(0, idx - 200) : idx + 200], f"{section_id} is missing data-ext-panel-204")
+            self.assertIn(
+                "data-ext-panel-204",
+                content[max(0, idx - 200) : idx + 200],
+                f"{section_id} is missing data-ext-panel-204",
+            )
 
     def test_web_search_section_carries_the_marker_when_rendered(self) -> None:
         from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
@@ -103,8 +107,16 @@ class ExtPanel204MarkerTests(TestCase):
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         panel_keys = [panel.key for panel in response.context["simple_info_panels"]]
         self.assertTrue(panel_keys, "simple_info_panels was empty - can't verify the marker on it")
-        self.assertNotIn("photon", panel_keys, "photon should be excluded to simple_info_panels - it belongs to location_data_tabs now")
-        self.assertNotIn("overture_building_attributes", panel_keys, "overture_building_attributes should be excluded from simple_info_panels - it belongs to location_data_tabs now")
+        self.assertNotIn(
+            "photon",
+            panel_keys,
+            "photon should be excluded to simple_info_panels - it belongs to location_data_tabs now",
+        )
+        self.assertNotIn(
+            "overture_building_attributes",
+            panel_keys,
+            "overture_building_attributes should be excluded from simple_info_panels - it belongs to location_data_tabs now",
+        )
         for key in ("gdelt", "epa_echo_detail"):
             self.assertIn(key, panel_keys, f"{key} is no longer part of simple_info_panels - update this test")
 
@@ -113,11 +125,13 @@ class ExtPanel204MarkerTests(TestCase):
         # counting div-opens for the loop's pin.panel route against marker occurrences
         # scoped to those same divs.
         for key in panel_keys:
-            marker = f'hx-get="{reverse('pin.panel', args=[self.pin.slug, key])}"'
+            marker = f'hx-get="{reverse("pin.panel", args=[self.pin.slug, key])}"'
             self.assertIn(marker, content, f"panel {key} not rendered with the expected hx-get")
             idx = content.index(marker)
             # data-ext-panel-204 is on the same <div ...> as the id, which precedes hx-get.
-            self.assertIn("data-ext-panel-204", content[max(0, idx - 300) : idx], f"panel {key} is missing data-ext-panel-204")
+            self.assertIn(
+                "data-ext-panel-204", content[max(0, idx - 300) : idx], f"panel {key} is missing data-ext-panel-204"
+            )
 
     def test_js_handler_uses_the_attribute_not_a_hardcoded_list(self) -> None:
         """Regression guard against reintroducing a hand-maintained id Set that can drift out of sync."""
@@ -172,7 +186,7 @@ class ExtPanel204StartsHiddenTests(TestCase):
         panel_keys = [panel.key for panel in response.context["simple_info_panels"]]
         self.assertTrue(panel_keys, "simple_info_panels was empty - can't verify this")
         for key in panel_keys:
-            marker = f'hx-get="{reverse('pin.panel', args=[self.pin.slug, key])}"'
+            marker = f'hx-get="{reverse("pin.panel", args=[self.pin.slug, key])}"'
             idx = content.index(marker)
             self.assertIn("hidden", content[max(0, idx - 300) : idx], f"panel {key} does not start hidden")
 

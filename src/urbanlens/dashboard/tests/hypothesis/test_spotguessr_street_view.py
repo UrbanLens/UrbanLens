@@ -33,11 +33,21 @@ class CandidateStreetViewForLocationTests(TestCase):
     @patch("urbanlens.dashboard.services.apis.locations.google.maps.GoogleMapsGateway.get_street_view_slides")
     def test_returns_the_slides_image_data_uri_on_success(self, mock_slides) -> None:
         mock_slides.return_value = (
-            [StreetViewSlide(img_src="data:image/jpeg;base64,abc123", source="Google Street View", date="2024-01", latitude=42.65, longitude=-73.76)],
+            [
+                StreetViewSlide(
+                    img_src="data:image/jpeg;base64,abc123",
+                    source="Google Street View",
+                    date="2024-01",
+                    latitude=42.65,
+                    longitude=-73.76,
+                )
+            ],
             False,
         )
         result = candidate_street_view_for_location(self.location)
-        self.assertEqual(result, StreetViewPanorama(latitude=42.65, longitude=-73.76, image="data:image/jpeg;base64,abc123"))
+        self.assertEqual(
+            result, StreetViewPanorama(latitude=42.65, longitude=-73.76, image="data:image/jpeg;base64,abc123")
+        )
 
     @patch("urbanlens.dashboard.services.apis.locations.google.maps.GoogleMapsGateway.get_street_view_slides")
     def test_no_coverage_returns_none(self, mock_slides) -> None:
@@ -46,7 +56,10 @@ class CandidateStreetViewForLocationTests(TestCase):
 
     @patch("urbanlens.dashboard.services.apis.locations.google.maps.GoogleMapsGateway.get_street_view_slides")
     def test_a_slide_missing_coordinates_returns_none(self, mock_slides) -> None:
-        mock_slides.return_value = ([StreetViewSlide(img_src="data:image/jpeg;base64,abc123", source="Google Street View", date="2024-01")], False)
+        mock_slides.return_value = (
+            [StreetViewSlide(img_src="data:image/jpeg;base64,abc123", source="Google Street View", date="2024-01")],
+            False,
+        )
         self.assertIsNone(candidate_street_view_for_location(self.location))
 
     @patch("urbanlens.dashboard.services.apis.locations.google.maps.GoogleMapsGateway.get_street_view_slides")
@@ -70,13 +83,23 @@ class CandidateStreetViewForLocationTests(TestCase):
         from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE
 
         mock_deadline.return_value = (
-            [StreetViewSlide(img_src="data:image/jpeg;base64,abc123", source="Google Street View", date="2024-01", latitude=42.65, longitude=-73.76)],
+            [
+                StreetViewSlide(
+                    img_src="data:image/jpeg;base64,abc123",
+                    source="Google Street View",
+                    date="2024-01",
+                    latitude=42.65,
+                    longitude=-73.76,
+                )
+            ],
             False,
         )
 
         result = candidate_street_view_for_location(self.location)
 
-        self.assertEqual(result, StreetViewPanorama(latitude=42.65, longitude=-73.76, image="data:image/jpeg;base64,abc123"))
+        self.assertEqual(
+            result, StreetViewPanorama(latitude=42.65, longitude=-73.76, image="data:image/jpeg;base64,abc123")
+        )
         mock_deadline.assert_called_once()
         self.assertEqual(mock_deadline.call_args.kwargs["timeout"], EXTERNAL_CALL_DEADLINE)
 

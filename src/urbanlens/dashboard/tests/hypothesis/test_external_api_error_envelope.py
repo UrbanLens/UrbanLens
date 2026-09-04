@@ -162,7 +162,11 @@ class _DualAuthHttp404ProbeView(DualAuthJsonView):
 urlpatterns = [
     path("__envelope_probe__/http404/", _CredentialHttp404ProbeView.as_view(), name="envelope_probe.http404"),
     path("__envelope_probe__/notfound/", _CredentialNotFoundProbeView.as_view(), name="envelope_probe.notfound"),
-    path("__envelope_probe__/dual-auth-http404/", _DualAuthHttp404ProbeView.as_view(), name="envelope_probe.dual_auth_http404"),
+    path(
+        "__envelope_probe__/dual-auth-http404/",
+        _DualAuthHttp404ProbeView.as_view(),
+        name="envelope_probe.dual_auth_http404",
+    ),
     *import_module(django_settings.ROOT_URLCONF).urlpatterns,
 ]
 
@@ -285,7 +289,9 @@ class ValidationEnvelopeTests(_EnvelopeTestCase):
 
     def test_missing_required_field_is_wrapped_with_its_field(self) -> None:
         """A required-field failure on a POST body takes the same shape."""
-        response = self.client.post(reverse("external_api:push_devices"), {}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.post(
+            reverse("external_api:push_devices"), {}, content_type="application/json", **_bearer(self.raw_key)
+        )
         payload = self.assertEnvelope(response, 400)
         self.assertEqual(payload["error"], INVALID_REQUEST_MESSAGE)
         self.assertIn("address", payload["fields"])
@@ -297,7 +303,9 @@ class ValidationEnvelopeTests(_EnvelopeTestCase):
         is invisible on the wire - but it is what lets the payload be handed to
         ``json.dumps`` or a non-DRF renderer without surprises.
         """
-        response = self.client.post(reverse("external_api:push_devices"), {}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.post(
+            reverse("external_api:push_devices"), {}, content_type="application/json", **_bearer(self.raw_key)
+        )
         messages = response.json()["fields"]["address"]
         self.assertTrue(all(isinstance(message, str) for message in messages))
 
@@ -328,7 +336,9 @@ class DrfRaisedErrorEnvelopeTests(_EnvelopeTestCase):
         (``UnscopedExternalApiView``), which is what lets dispatch get far
         enough to reject the verb itself.
         """
-        payload = self.assertEnvelope(self.client.post(reverse("external_api:auth.session"), **_bearer(self.raw_key)), 405)
+        payload = self.assertEnvelope(
+            self.client.post(reverse("external_api:auth.session"), **_bearer(self.raw_key)), 405
+        )
         self.assertIn("POST", payload["error"])
 
     def test_dual_auth_method_not_allowed_uses_the_envelope(self) -> None:

@@ -49,7 +49,11 @@ class CloudflareModelCostsTests(SimpleTestCase):
         self.assertEqual(gw.cost, Decimal("0.30"))
 
     def test_other_mainstream_models_have_real_costs_not_the_generic_fallback(self) -> None:
-        generic_cost = round(_SAMPLE_TOKENS * CloudflareGateway.DEFAULT_COST_PER_THOUSAND[0] / 1000 + _SAMPLE_TOKENS * CloudflareGateway.DEFAULT_COST_PER_THOUSAND[1] / 1000, 2)
+        generic_cost = round(
+            _SAMPLE_TOKENS * CloudflareGateway.DEFAULT_COST_PER_THOUSAND[0] / 1000
+            + _SAMPLE_TOKENS * CloudflareGateway.DEFAULT_COST_PER_THOUSAND[1] / 1000,
+            2,
+        )
         #: exact published-pricing cost for _SAMPLE_TOKENS tokens each way, not just
         #: "isn't the generic fallback" - pins the actual MODEL_COSTS values so a
         #: typo'd digit in an entry fails the test instead of surviving because the
@@ -82,5 +86,9 @@ class CloudflareModelCostsTests(SimpleTestCase):
         gw = _gateway("@cf/some-vendor/a-brand-new-model-not-yet-catalogued")
         gw.send_tokens(_SAMPLE_TOKENS)
         gw.receive_tokens(_SAMPLE_TOKENS)
-        expected = round(_SAMPLE_TOKENS * CloudflareGateway.DEFAULT_COST_PER_THOUSAND[0] / 1000 + _SAMPLE_TOKENS * CloudflareGateway.DEFAULT_COST_PER_THOUSAND[1] / 1000, 2)
+        expected = round(
+            _SAMPLE_TOKENS * CloudflareGateway.DEFAULT_COST_PER_THOUSAND[0] / 1000
+            + _SAMPLE_TOKENS * CloudflareGateway.DEFAULT_COST_PER_THOUSAND[1] / 1000,
+            2,
+        )
         self.assertEqual(gw.cost, expected)

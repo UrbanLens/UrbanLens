@@ -20,7 +20,10 @@ from django.test import Client
 from django.urls import reverse
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+    PropertyRecordsUnavailableError,
+    RedataGateway,
+)
 
 
 class PinLoopnetPhotoViewTests(SimpleTestCase):
@@ -53,7 +56,11 @@ class PinLoopnetPhotoViewTests(SimpleTestCase):
     def test_unavailable_photo_returns_404(self) -> None:
         with (
             patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
-            patch.object(RedataGateway, "download_listing_photo", side_effect=PropertyRecordsUnavailableError("photo_unavailable", "gone")),
+            patch.object(
+                RedataGateway,
+                "download_listing_photo",
+                side_effect=PropertyRecordsUnavailableError("photo_unavailable", "gone"),
+            ),
         ):
             response = self.client.get(reverse("pin.loopnet.photo", args=["listing-1", 1]))
         self.assertEqual(response.status_code, 404)
@@ -86,7 +93,9 @@ class PinCrisAttachmentViewTests(SimpleTestCase):
             patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
             patch("urbanlens.dashboard.controllers.pin.cache.set"),
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "download_cultural_resource_attachment", return_value=(b"pdf-bytes", "application/pdf")),
+            patch.object(
+                RedataGateway, "download_cultural_resource_attachment", return_value=(b"pdf-bytes", "application/pdf")
+            ),
         ):
             response = self.client.get(reverse("pin.cris.attachment", args=["res-1", 5]))
         self.assertEqual(response.status_code, 200)
@@ -96,7 +105,11 @@ class PinCrisAttachmentViewTests(SimpleTestCase):
     def test_unavailable_attachment_returns_404(self) -> None:
         with (
             patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
-            patch.object(RedataGateway, "download_cultural_resource_attachment", side_effect=PropertyRecordsUnavailableError("attachment_unavailable", "gone")),
+            patch.object(
+                RedataGateway,
+                "download_cultural_resource_attachment",
+                side_effect=PropertyRecordsUnavailableError("attachment_unavailable", "gone"),
+            ),
         ):
             response = self.client.get(reverse("pin.cris.attachment", args=["res-1", 5]))
         self.assertEqual(response.status_code, 404)
@@ -146,7 +159,9 @@ class CrisAttachmentPreviewModeTests(SimpleTestCase):
 
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "download_cultural_resource_attachment", return_value=(self._tiff_bytes(), "image/tiff")),
+            patch.object(
+                RedataGateway, "download_cultural_resource_attachment", return_value=(self._tiff_bytes(), "image/tiff")
+            ),
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             self.assertEqual(self.client.get(self.url, {"preview": "1"}).status_code, 404)
@@ -163,7 +178,9 @@ class CrisAttachmentPreviewModeTests(SimpleTestCase):
             patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
             patch("urbanlens.dashboard.controllers.pin.cache.set"),
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "download_cultural_resource_attachment", return_value=(b"jpeg-bytes", "image/jpeg")),
+            patch.object(
+                RedataGateway, "download_cultural_resource_attachment", return_value=(b"jpeg-bytes", "image/jpeg")
+            ),
         ):
             response = self.client.get(self.url, {"preview": "1"})
         self.assertEqual(response.content, b"jpeg-bytes")
@@ -175,7 +192,11 @@ class CrisAttachmentPreviewModeTests(SimpleTestCase):
             patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
             patch("urbanlens.dashboard.controllers.pin.cache.set"),
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "download_cultural_resource_attachment", return_value=(b"not a document", "application/zip")),
+            patch.object(
+                RedataGateway,
+                "download_cultural_resource_attachment",
+                return_value=(b"not a document", "application/zip"),
+            ),
         ):
             response = self.client.get(self.url, {"preview": "1"})
         self.assertEqual(response.status_code, 404)
@@ -185,7 +206,9 @@ class CrisAttachmentPreviewModeTests(SimpleTestCase):
             patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
             patch("urbanlens.dashboard.controllers.pin.cache.set"),
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "download_cultural_resource_attachment", return_value=(self._tiff_bytes(), "image/tiff")),
+            patch.object(
+                RedataGateway, "download_cultural_resource_attachment", return_value=(self._tiff_bytes(), "image/tiff")
+            ),
         ):
             response = self.client.get(self.url)
         self.assertEqual(response["Content-Type"], "image/tiff")

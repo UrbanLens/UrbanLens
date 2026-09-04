@@ -15,8 +15,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.middleware.csrf import get_token
 from django.test import Client, RequestFactory
 from django.urls import reverse
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -44,7 +43,15 @@ class CopyWikiPhotoToPinTests(TestCase):
         self.location = baker.make(Location)
         self.wiki = baker.make(Wiki, location=self.location)
         self.pin = baker.make(Pin, profile=self.copier, location=self.location)
-        self.image = _wiki_image(wiki=self.wiki, location=self.location, profile=self.uploader, author="", caption="don't copy this", latitude="40.000000", longitude="-74.000000")
+        self.image = _wiki_image(
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.uploader,
+            author="",
+            caption="don't copy this",
+            latitude="40.000000",
+            longitude="-74.000000",
+        )
 
     def test_creates_an_independent_row(self) -> None:
         copy, created = copy_wiki_photo_to_pin(self.image, self.pin, self.copier)
@@ -175,7 +182,9 @@ class ImageQuerySetCopiedFromOthersTests(TestCase):
         wiki = baker.make(Wiki, location=location)
         pin = baker.make(Pin, profile=profile, location=location)
         original = _wiki_image(wiki=wiki, location=location, profile=uploader)
-        own_upload = Image.objects.create(image=SimpleUploadedFile("mine.jpg", b"bytes", content_type="image/jpeg"), pin=pin, profile=profile)
+        own_upload = Image.objects.create(
+            image=SimpleUploadedFile("mine.jpg", b"bytes", content_type="image/jpeg"), pin=pin, profile=profile
+        )
 
         copy, _created = copy_wiki_photo_to_pin(original, pin, profile)
 
@@ -199,7 +208,9 @@ class VaultPhotosShowFromOthersTests(TestCase):
         pin = baker.make(Pin, profile=self.profile, location=location)
         original = _wiki_image(wiki=wiki, location=location, profile=uploader)
         self.copy, _created = copy_wiki_photo_to_pin(original, pin, self.profile)
-        self.own_upload = Image.objects.create(image=SimpleUploadedFile("mine.jpg", b"bytes", content_type="image/jpeg"), pin=pin, profile=self.profile)
+        self.own_upload = Image.objects.create(
+            image=SimpleUploadedFile("mine.jpg", b"bytes", content_type="image/jpeg"), pin=pin, profile=self.profile
+        )
 
     def test_default_view_shows_every_owned_photo(self) -> None:
         response = self.client.get(reverse("vault.photos"))
@@ -301,7 +312,10 @@ class CopyWikiPhotoViewTests(TestCase):
         # only the target-pin lookup, which does use `location`, sees no pin).
         mock_location = mock.MagicMock()
         mock_location.pins.filter.return_value.first.return_value = None
-        with mock.patch("urbanlens.dashboard.controllers.wiki_media.resolve_visible_wiki", return_value=(mock_location, self.wiki, self.profile)):
+        with mock.patch(
+            "urbanlens.dashboard.controllers.wiki_media.resolve_visible_wiki",
+            return_value=(mock_location, self.wiki, self.profile),
+        ):
             response = self._post(self.image.pk)
 
         self.assertEqual(response.status_code, 400)

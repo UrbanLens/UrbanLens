@@ -26,7 +26,10 @@ from urbanlens.UrbanLens.settings.app import settings
 
 @contextmanager
 def _redata_configured():
-    with mock.patch.object(settings, "redata_api_url", "https://redata.example.test"), mock.patch.object(settings, "redata_api_key", "test-key"):
+    with (
+        mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
+        mock.patch.object(settings, "redata_api_key", "test-key"),
+    ):
         yield
 
 
@@ -41,7 +44,17 @@ class SubmissionPayloadTests(TestCase):
         self.location = baker.make(Location, latitude="42.65", longitude="-73.75")
 
     def test_omits_optional_fields_that_have_no_value(self) -> None:
-        image = baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, taken_at=None, profile=None, author="", source_url="")
+        image = baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            taken_at=None,
+            profile=None,
+            author="",
+            source_url="",
+        )
         payload = redata_relevance._submission_payload(image)
         self.assertIsNotNone(payload)
         assert payload is not None
@@ -77,7 +90,9 @@ class SubmissionPayloadTests(TestCase):
         self.assertEqual(payload["photographer"], "Jane Doe")
 
     def test_source_host_is_extracted_from_source_url(self) -> None:
-        image = baker.make(Image, location=self.location, source_url="https://commons.wikimedia.org/wiki/File:Example.jpg")
+        image = baker.make(
+            Image, location=self.location, source_url="https://commons.wikimedia.org/wiki/File:Example.jpg"
+        )
         payload = redata_relevance._submission_payload(image)
         assert payload is not None
         self.assertEqual(payload["source"], "commons.wikimedia.org")
@@ -90,7 +105,9 @@ class SubmissionPayloadTests(TestCase):
         self.assertAlmostEqual(payload["years_from_abandoned"], 2.0, places=1)
 
     def test_no_usable_coordinates_returns_none(self) -> None:
-        image = baker.make(Image, location=None, latitude=None, longitude=None, estimated_latitude=None, estimated_longitude=None)
+        image = baker.make(
+            Image, location=None, latitude=None, longitude=None, estimated_latitude=None, estimated_longitude=None
+        )
         self.assertIsNone(redata_relevance._submission_payload(image))
 
 
@@ -100,15 +117,33 @@ class SubmitPhotosTests(TestCase):
 
     def test_not_configured_does_nothing(self) -> None:
         image = baker.make(Image, location=self.location)
-        with _redata_not_configured(), mock.patch("urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway") as gw:
+        with (
+            _redata_not_configured(),
+            mock.patch("urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway") as gw,
+        ):
             redata_relevance.submit_photos([image])
         gw.assert_not_called()
 
     def test_caches_returned_confidence_onto_the_image(self) -> None:
         image = baker.make(Image, location=self.location)
         gateway_instance = mock.Mock()
-        gateway_instance.submit_photos.return_value = {"results": {str(image.uuid): {"confidence": 0.73, "scorer": "heuristic", "model_version": None, "scored_at": "2026-08-01T00:00:00Z"}}}
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway", return_value=gateway_instance):
+        gateway_instance.submit_photos.return_value = {
+            "results": {
+                str(image.uuid): {
+                    "confidence": 0.73,
+                    "scorer": "heuristic",
+                    "model_version": None,
+                    "scored_at": "2026-08-01T00:00:00Z",
+                }
+            }
+        }
+        with (
+            _redata_configured(),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway",
+                return_value=gateway_instance,
+            ),
+        ):
             redata_relevance.submit_photos([image])
         image.refresh_from_db()
         self.assertAlmostEqual(image.redata_confidence, 0.73)
@@ -117,8 +152,13 @@ class SubmitPhotosTests(TestCase):
         self.assertIsNotNone(image.redata_scored_at)
 
     def test_skips_images_with_no_usable_location(self) -> None:
-        image = baker.make(Image, location=None, latitude=None, longitude=None, estimated_latitude=None, estimated_longitude=None)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway") as gw:
+        image = baker.make(
+            Image, location=None, latitude=None, longitude=None, estimated_latitude=None, estimated_longitude=None
+        )
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway") as gw,
+        ):
             redata_relevance.submit_photos([image])
         gw.assert_not_called()
 
@@ -126,7 +166,13 @@ class SubmitPhotosTests(TestCase):
         image = baker.make(Image, location=self.location)
         gateway_instance = mock.Mock()
         gateway_instance.submit_photos.side_effect = GatewayRequestError("boom")
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway", return_value=gateway_instance):
+        with (
+            _redata_configured(),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway",
+                return_value=gateway_instance,
+            ),
+        ):
             redata_relevance.submit_photos([image])  # must not raise
         image.refresh_from_db()
         self.assertIsNone(image.redata_confidence)
@@ -138,19 +184,28 @@ class QueuePhotoSubmissionTests(TestCase):
 
     def test_not_configured_does_not_enqueue(self) -> None:
         image = baker.make(Image, location=self.location)
-        with _redata_not_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+        with (
+            _redata_not_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+        ):
             redata_relevance.queue_photo_submission(image)
         enqueue.assert_not_called()
 
     def test_no_location_does_not_enqueue(self) -> None:
         image = baker.make(Image, location=None)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+        ):
             redata_relevance.queue_photo_submission(image)
         enqueue.assert_not_called()
 
     def test_configured_with_location_enqueues(self) -> None:
         image = baker.make(Image, location=self.location)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+        ):
             redata_relevance.queue_photo_submission(image)
         enqueue.assert_called_once()
         self.assertEqual(enqueue.call_args.args[1], [image.pk])
@@ -163,13 +218,19 @@ class QueueRelevanceVoteTests(TestCase):
 
     def test_not_configured_does_not_enqueue(self) -> None:
         image = baker.make(Image, location=self.location)
-        with _redata_not_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+        with (
+            _redata_not_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+        ):
             redata_relevance.queue_relevance_vote(image, self.profile, is_relevant=True)
         enqueue.assert_not_called()
 
     def test_configured_enqueues_with_vote_value(self) -> None:
         image = baker.make(Image, location=self.location)
-        with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+        with (
+            _redata_configured(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+        ):
             redata_relevance.queue_relevance_vote(image, self.profile, is_relevant=False)
         enqueue.assert_called_once()
         self.assertEqual(enqueue.call_args.args[1:], (image.pk, self.profile.pk, False))
@@ -208,7 +269,10 @@ class SubmitRedataPhotoVoteTaskTests(TestCase):
         image = baker.make(Image, location=self.location)
         gateway_instance = mock.Mock()
         gateway_instance.submit_votes.return_value = {"recorded": 1, "unknown_photo_ids": [], "updated_photos": 1}
-        with mock.patch("urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway", return_value=gateway_instance):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway",
+            return_value=gateway_instance,
+        ):
             result = tasks.submit_redata_photo_vote(image.pk, self.profile.pk, is_relevant=True)
         self.assertTrue(result)
         vote = gateway_instance.submit_votes.call_args.args[0][0]
@@ -219,8 +283,15 @@ class SubmitRedataPhotoVoteTaskTests(TestCase):
     def test_unknown_photo_id_returns_false(self) -> None:
         image = baker.make(Image, location=self.location)
         gateway_instance = mock.Mock()
-        gateway_instance.submit_votes.return_value = {"recorded": 0, "unknown_photo_ids": [str(image.uuid)], "updated_photos": 0}
-        with mock.patch("urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway", return_value=gateway_instance):
+        gateway_instance.submit_votes.return_value = {
+            "recorded": 0,
+            "unknown_photo_ids": [str(image.uuid)],
+            "updated_photos": 0,
+        }
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway",
+            return_value=gateway_instance,
+        ):
             result = tasks.submit_redata_photo_vote(image.pk, self.profile.pk, is_relevant=True)
         self.assertFalse(result)
 
@@ -228,7 +299,10 @@ class SubmitRedataPhotoVoteTaskTests(TestCase):
         image = baker.make(Image, location=self.location)
         gateway_instance = mock.Mock()
         gateway_instance.submit_votes.side_effect = GatewayRequestError("boom")
-        with mock.patch("urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway", return_value=gateway_instance):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway",
+            return_value=gateway_instance,
+        ):
             result = tasks.submit_redata_photo_vote(image.pk, self.profile.pk, is_relevant=True)
         self.assertFalse(result)
 

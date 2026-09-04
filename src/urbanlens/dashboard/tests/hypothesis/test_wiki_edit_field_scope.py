@@ -41,7 +41,9 @@ class WikiEditFieldScopeTests(TestCase):
         self.editor = baker.make(User).profile
         self.other = baker.make(User).profile
         self.location = baker.make("dashboard.Location", latitude=41.2, longitude=-73.9)
-        self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Mill", description="Original description")
+        self.wiki = baker.make(
+            "dashboard.Wiki", location=self.location, name="Mill", description="Original description"
+        )
 
     def _snapshot(self) -> Wiki:
         """One editor's request-scoped copy of the row."""
@@ -54,7 +56,9 @@ class WikiEditFieldScopeTests(TestCase):
         apply_wiki_edit(stale, self.editor, {"name": "Mill Complex"}, strict=True)
 
         self.wiki.refresh_from_db()
-        self.assertEqual(self.wiki.description, "Someone else's research", "a concurrent edit to another field was reverted")
+        self.assertEqual(
+            self.wiki.description, "Someone else's research", "a concurrent edit to another field was reverted"
+        )
         self.assertEqual(self.wiki.name, "Mill Complex", "the edit that was actually made did not land")
 
     def test_an_edit_does_not_reset_a_field_written_by_another_subsystem(self) -> None:
@@ -89,7 +93,12 @@ class WikiEditFieldScopeTests(TestCase):
         """Narrowing the write must not narrow it to nothing."""
         wiki = self._snapshot()
 
-        apply_wiki_edit(wiki, self.editor, {"name": "Mill Complex", "description": "Rewritten", "date_abandoned": "1974-03-02"}, strict=True)
+        apply_wiki_edit(
+            wiki,
+            self.editor,
+            {"name": "Mill Complex", "description": "Rewritten", "date_abandoned": "1974-03-02"},
+            strict=True,
+        )
 
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.name, "Mill Complex")

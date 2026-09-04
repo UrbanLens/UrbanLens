@@ -4,6 +4,7 @@ Regression coverage for a bug where the color was captured, stored, and
 serialized correctly but never actually rendered anywhere the layer's
 button/thumbnail appeared - see custom_layer_button() and _layers_panel.html.
 """
+
 from __future__ import annotations
 
 from django.template.loader import render_to_string
@@ -30,13 +31,22 @@ class MapLayersPanelColorRenderTests(TestCase):
         self.pin = baker.make("dashboard.Pin", profile=self.profile)
 
     def test_colored_custom_layer_tints_its_thumbnail(self) -> None:
-        layer = baker.make("dashboard.CustomLayer", name="Tunnels", color="#F44336", icon="route", parent_pin=self.pin, profile=self.profile)
+        layer = baker.make(
+            "dashboard.CustomLayer",
+            name="Tunnels",
+            color="#F44336",
+            icon="route",
+            parent_pin=self.pin,
+            profile=self.profile,
+        )
         context = map_layers_panel(layers="", custom_layers=[layer])
         html = render_to_string("dashboard/partials/map/_layers_panel.html", context)
         self.assertIn("background:rgba(244,67,54,0.18)", html)
 
     def test_colorless_custom_layer_has_no_inline_background(self) -> None:
-        layer = baker.make("dashboard.CustomLayer", name="Tunnels", color="", icon="route", parent_pin=self.pin, profile=self.profile)
+        layer = baker.make(
+            "dashboard.CustomLayer", name="Tunnels", color="", icon="route", parent_pin=self.pin, profile=self.profile
+        )
         context = map_layers_panel(layers="", custom_layers=[layer])
         html = render_to_string("dashboard/partials/map/_layers_panel.html", context)
         self.assertNotIn("background:rgba", html)

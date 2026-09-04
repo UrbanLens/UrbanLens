@@ -20,7 +20,10 @@ from urbanlens.UrbanLens.settings.app import settings
 
 @contextmanager
 def _redata_configured():
-    with mock.patch.object(settings, "redata_api_url", "https://redata.example.test"), mock.patch.object(settings, "redata_api_key", "test-key"):
+    with (
+        mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
+        mock.patch.object(settings, "redata_api_key", "test-key"),
+    ):
         yield
 
 
@@ -36,12 +39,31 @@ class SearchNearbyLandmarksTests(SimpleTestCase):
             _redata_configured(),
             mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.RedataPlacesGateway") as gw_cls,
         ):
-            gw_cls.return_value.search_nearby.return_value = [{"place_id": "p1", "name": "Old Mill", "latitude": 1.0, "longitude": 2.0, "formatted_address": "123 Main St", "types": ["historical_landmark"]}]
+            gw_cls.return_value.search_nearby.return_value = [
+                {
+                    "place_id": "p1",
+                    "name": "Old Mill",
+                    "latitude": 1.0,
+                    "longitude": 2.0,
+                    "formatted_address": "123 Main St",
+                    "types": ["historical_landmark"],
+                }
+            ]
             result = places_resolution.search_nearby_landmarks(1.0, 2.0, 500, ["historical_landmark"], api_key="key")
 
         self.assertEqual(
             result,
-            [{"id": "p1", "displayName": {"text": "Old Mill"}, "location": {"latitude": 1.0, "longitude": 2.0}, "shortFormattedAddress": "123 Main St", "types": ["historical_landmark"], "rating": None, "userRatingCount": None}],
+            [
+                {
+                    "id": "p1",
+                    "displayName": {"text": "Old Mill"},
+                    "location": {"latitude": 1.0, "longitude": 2.0},
+                    "shortFormattedAddress": "123 Main St",
+                    "types": ["historical_landmark"],
+                    "rating": None,
+                    "userRatingCount": None,
+                }
+            ],
         )
 
     def test_not_configured_calls_google_directly(self) -> None:
@@ -54,7 +76,9 @@ class SearchNearbyLandmarksTests(SimpleTestCase):
 
         self.assertEqual(result, [{"id": "p1", "rating": 4.5}])
         gw_cls.assert_called_once_with(api_key="key")
-        gw_cls.return_value.search_nearby.assert_called_once_with(1.0, 2.0, radius=500, included_types=["historical_landmark"])
+        gw_cls.return_value.search_nearby.assert_called_once_with(
+            1.0, 2.0, radius=500, included_types=["historical_landmark"]
+        )
 
 
 class GetPlaceDetailsFullTests(SimpleTestCase):
@@ -63,12 +87,25 @@ class GetPlaceDetailsFullTests(SimpleTestCase):
             _redata_configured(),
             mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.RedataPlacesGateway") as gw_cls,
         ):
-            gw_cls.return_value.get_place.return_value = {"name": "Sydney Opera House", "formatted_address": "Bennelong Point", "google_maps_uri": "https://maps.google.com/?cid=1"}
+            gw_cls.return_value.get_place.return_value = {
+                "name": "Sydney Opera House",
+                "formatted_address": "Bennelong Point",
+                "google_maps_uri": "https://maps.google.com/?cid=1",
+            }
             result = places_resolution.get_place_details_full("p1", api_key="key")
 
         self.assertEqual(
             result,
-            {"name": "Sydney Opera House", "formatted_address": "Bennelong Point", "rating": None, "editorial_summary": None, "opening_hours": None, "website": None, "url": "https://maps.google.com/?cid=1", "photos": []},
+            {
+                "name": "Sydney Opera House",
+                "formatted_address": "Bennelong Point",
+                "rating": None,
+                "editorial_summary": None,
+                "opening_hours": None,
+                "website": None,
+                "url": "https://maps.google.com/?cid=1",
+                "photos": [],
+            },
         )
 
     def test_redata_configured_place_not_found_returns_empty_dict(self) -> None:
@@ -99,7 +136,19 @@ class GetPlaceDetailsFullTests(SimpleTestCase):
             result = places_resolution.get_place_details_full("p1", api_key="key")
 
         self.assertEqual(result, {"name": "x"})
-        gw_cls.return_value.get_place_details.assert_called_once_with("p1", fields=["name", "formatted_address", "rating", "editorial_summary", "opening_hours", "website", "url", "photos"])
+        gw_cls.return_value.get_place_details.assert_called_once_with(
+            "p1",
+            fields=[
+                "name",
+                "formatted_address",
+                "rating",
+                "editorial_summary",
+                "opening_hours",
+                "website",
+                "url",
+                "photos",
+            ],
+        )
 
 
 class FindNearestPlacePhotosTests(SimpleTestCase):
@@ -186,20 +235,32 @@ class AutocompletePredictionsTests(SimpleTestCase):
             _redata_configured(),
             mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.RedataPlacesGateway") as gw_cls,
         ):
-            gw_cls.return_value.autocomplete.return_value = [{"kind": "place", "place_id": "p1", "main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"}]
+            gw_cls.return_value.autocomplete.return_value = [
+                {"kind": "place", "place_id": "p1", "main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"}
+            ]
             result = places_resolution.autocomplete_predictions("sydney op", api_key="key")
 
-        self.assertEqual(result, [{"place_id": "p1", "main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"}])
+        self.assertEqual(
+            result, [{"place_id": "p1", "main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"}]
+        )
 
     def test_not_configured_normalizes_legacy_structured_formatting(self) -> None:
         with (
             _redata_not_configured(),
             mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.GooglePlacesGateway") as gw_cls,
         ):
-            gw_cls.return_value.autocomplete.return_value = [{"place_id": "p1", "description": "fallback", "structured_formatting": {"main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"}}]
+            gw_cls.return_value.autocomplete.return_value = [
+                {
+                    "place_id": "p1",
+                    "description": "fallback",
+                    "structured_formatting": {"main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"},
+                }
+            ]
             result = places_resolution.autocomplete_predictions("sydney op", api_key="key")
 
-        self.assertEqual(result, [{"place_id": "p1", "main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"}])
+        self.assertEqual(
+            result, [{"place_id": "p1", "main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"}]
+        )
 
 
 class ResolvePlaceCoordinatesTests(SimpleTestCase):
@@ -226,7 +287,10 @@ class ResolvePlaceCoordinatesTests(SimpleTestCase):
             _redata_not_configured(),
             mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.GooglePlacesGateway") as gw_cls,
         ):
-            gw_cls.return_value.get_place_details.return_value = {"geometry": {"location": {"lat": 1.5, "lng": 2.5}}, "name": "Old Mill"}
+            gw_cls.return_value.get_place_details.return_value = {
+                "geometry": {"location": {"lat": 1.5, "lng": 2.5}},
+                "name": "Old Mill",
+            }
             result = places_resolution.resolve_place_coordinates("p1", api_key="key")
 
         self.assertEqual(result, (1.5, 2.5, "Old Mill"))
@@ -243,7 +307,9 @@ class ResolveNameFromNearbyTests(SimpleTestCase):
                 {"name": "Poughkeepsie", "types": ["locality", "political"]},
                 {"name": "College Hill Golf Course", "types": ["golf_course", "point_of_interest"]},
             ]
-            self.assertEqual(places_resolution.resolve_name_from_nearby(1.0, 2.0, 50, api_key="key"), "College Hill Golf Course")
+            self.assertEqual(
+                places_resolution.resolve_name_from_nearby(1.0, 2.0, 50, api_key="key"), "College Hill Golf Course"
+            )
 
     def test_redata_error_is_swallowed_to_none(self) -> None:
         """Unlike most other functions here, this one must swallow - the caller's
@@ -269,4 +335,6 @@ class ResolveNameFromNearbyTests(SimpleTestCase):
             mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.GooglePlacesGateway") as gw_cls,
         ):
             gw_cls.return_value.get_data.return_value = [{"name": "College Hill Golf Course", "types": ["golf_course"]}]
-            self.assertEqual(places_resolution.resolve_name_from_nearby(1.0, 2.0, 50, api_key="key"), "College Hill Golf Course")
+            self.assertEqual(
+                places_resolution.resolve_name_from_nearby(1.0, 2.0, 50, api_key="key"), "College Hill Golf Course"
+            )

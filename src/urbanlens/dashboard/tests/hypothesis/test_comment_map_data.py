@@ -24,11 +24,16 @@ class CommentMapDataSanitizationTests(SimpleTestCase):
 
     def test_malicious_hex_injection_in_color_is_rejected(self) -> None:
         import json
-        payload = json.dumps({
-            "center_lat": 41.0,
-            "center_lng": -74.0,
-            "shapes": [{"type": "line", "latlngs": [[41.0, -74.0], [41.1, -74.1]], "color": '"><script>alert(1)</script>'}],
-        })
+
+        payload = json.dumps(
+            {
+                "center_lat": 41.0,
+                "center_lng": -74.0,
+                "shapes": [
+                    {"type": "line", "latlngs": [[41.0, -74.0], [41.1, -74.1]], "color": '"><script>alert(1)</script>'}
+                ],
+            }
+        )
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
         shape = result["markup"][0]
@@ -36,63 +41,92 @@ class CommentMapDataSanitizationTests(SimpleTestCase):
 
     def test_css_expression_in_color_is_rejected(self) -> None:
         import json
-        payload = json.dumps({
-            "center_lat": 41.0,
-            "center_lng": -74.0,
-            "shapes": [{"type": "polygon", "latlngs": [[41.0, -74.0], [41.1, -74.1], [41.0, -74.1]], "color": "red;expression(alert(1))"}],
-        })
+
+        payload = json.dumps(
+            {
+                "center_lat": 41.0,
+                "center_lng": -74.0,
+                "shapes": [
+                    {
+                        "type": "polygon",
+                        "latlngs": [[41.0, -74.0], [41.1, -74.1], [41.0, -74.1]],
+                        "color": "red;expression(alert(1))",
+                    }
+                ],
+            }
+        )
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
         assert result["markup"][0]["color"] == "#e74c3c"  # nosec B101
 
     def test_invalid_center_coordinates_are_rejected(self) -> None:
         import json
+
         for bad_lat, bad_lng in [(91.0, 0.0), (-91.0, 0.0), (0.0, 181.0), (0.0, -181.0), ("x", 0.0)]:
             payload = json.dumps({"center_lat": bad_lat, "center_lng": bad_lng, "shapes": []})
             assert _parse_map_data(_request(payload)) is None, f"Expected None for lat={bad_lat} lng={bad_lng}"  # nosec B101
 
     def test_valid_hex_color_is_preserved(self) -> None:
         import json
-        payload = json.dumps({
-            "center_lat": 51.5, "center_lng": -0.1,
-            "shapes": [{"type": "rect", "latlngs": [[51.5, -0.1], [51.6, 0.0]], "color": "#2196F3"}],
-        })
+
+        payload = json.dumps(
+            {
+                "center_lat": 51.5,
+                "center_lng": -0.1,
+                "shapes": [{"type": "rect", "latlngs": [[51.5, -0.1], [51.6, 0.0]], "color": "#2196F3"}],
+            }
+        )
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
         assert result["markup"][0]["color"] == "#2196F3"  # nosec B101
 
     def test_unknown_shape_type_is_dropped(self) -> None:
         import json
-        payload = json.dumps({
-            "center_lat": 0.0, "center_lng": 0.0,
-            "shapes": [{"type": "__proto__", "latlngs": [[0.0, 0.0], [1.0, 1.0]], "color": "#ffffff"}],
-        })
+
+        payload = json.dumps(
+            {
+                "center_lat": 0.0,
+                "center_lng": 0.0,
+                "shapes": [{"type": "__proto__", "latlngs": [[0.0, 0.0], [1.0, 1.0]], "color": "#ffffff"}],
+            }
+        )
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
         assert result["markup"] == []  # nosec B101
 
     def test_out_of_range_latlng_pairs_are_stripped(self) -> None:
         import json
-        payload = json.dumps({
-            "center_lat": 0.0, "center_lng": 0.0,
-            "shapes": [{"type": "line", "latlngs": [[200.0, 0.0], [0.0, 0.0], [1.0, 1.0]], "color": "#ff0000"}],
-        })
+
+        payload = json.dumps(
+            {
+                "center_lat": 0.0,
+                "center_lng": 0.0,
+                "shapes": [{"type": "line", "latlngs": [[200.0, 0.0], [0.0, 0.0], [1.0, 1.0]], "color": "#ff0000"}],
+            }
+        )
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
         assert len(result["markup"][0]["latlngs"]) == 2  # nosec B101
 
     def test_stroke_width_is_clamped(self) -> None:
         import json
-        payload = json.dumps({
-            "center_lat": 0.0, "center_lng": 0.0,
-            "shapes": [{"type": "line", "latlngs": [[0.0, 0.0], [1.0, 1.0]], "color": "#ff0000", "stroke_width": 9999}],
-        })
+
+        payload = json.dumps(
+            {
+                "center_lat": 0.0,
+                "center_lng": 0.0,
+                "shapes": [
+                    {"type": "line", "latlngs": [[0.0, 0.0], [1.0, 1.0]], "color": "#ff0000", "stroke_width": 9999}
+                ],
+            }
+        )
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101
         assert result["markup"][0]["stroke_width"] <= 50  # nosec B101
 
     def test_zoom_is_clamped(self) -> None:
         import json
+
         payload = json.dumps({"center_lat": 0.0, "center_lng": 0.0, "zoom": 999, "shapes": []})
         result = _parse_map_data(_request(payload))
         assert result is not None  # nosec B101

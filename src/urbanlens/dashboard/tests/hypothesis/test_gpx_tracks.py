@@ -6,6 +6,7 @@ content into Route candidates instead. All tests require the database, since
 gpx_tracks_to_routes() builds real (unsaved) Route model instances whose
 `profile` FK is validated against a real Profile row.
 """
+
 from __future__ import annotations
 
 import datetime

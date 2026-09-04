@@ -55,7 +55,9 @@ class UndoPeekToolTests(TestCase):
     def test_reports_the_top_entrys_label_and_uuid(self) -> None:
         undo_action = _stash_deleted_pin(self.profile)
         result = execute("undo_peek", {}, _context(self.profile))
-        self.assertEqual(result.data, {"can_undo": True, "label": undo_action.object_repr, "undo_uuid": str(undo_action.uuid)})
+        self.assertEqual(
+            result.data, {"can_undo": True, "label": undo_action.object_repr, "undo_uuid": str(undo_action.uuid)}
+        )
 
     def test_another_profiles_undo_history_is_invisible(self) -> None:
         other = _plain_profile()
@@ -70,7 +72,9 @@ class UndoLastActionToolTests(TestCase):
 
     def test_write_tool_produces_a_proposal_without_executing(self) -> None:
         undo_action = _stash_deleted_pin(self.profile)
-        result = execute("undo_last_action", {"undo_uuid": str(undo_action.uuid)}, _context(self.profile), confirmed=False)
+        result = execute(
+            "undo_last_action", {"undo_uuid": str(undo_action.uuid)}, _context(self.profile), confirmed=False
+        )
         self.assertIsNotNone(result.proposal)
         assert result.proposal is not None
         self.assertEqual(result.proposal["args"], {"undo_uuid": str(undo_action.uuid)})
@@ -100,7 +104,9 @@ class UndoLastActionToolTests(TestCase):
         self.assertIsNone(second.undone_at)
 
     def test_nothing_to_undo_is_an_error_not_a_raise(self) -> None:
-        result = execute("undo_last_action", {"undo_uuid": "00000000-0000-0000-0000-000000000000"}, _context(self.profile))
+        result = execute(
+            "undo_last_action", {"undo_uuid": "00000000-0000-0000-0000-000000000000"}, _context(self.profile)
+        )
         self.assertIn("error", result.data)
 
     def test_another_profiles_real_uuid_cannot_be_used_against_this_profiles_stack(self) -> None:
@@ -126,7 +132,10 @@ class UndoLastActionToolTests(TestCase):
         # _undo_last_action imports restore_undo_action locally at call time
         # (matching every other handler's deferred-import convention), so the
         # patch target is where it's defined, not the tool module's own name.
-        with patch("urbanlens.dashboard.services.undo.service.restore_undo_action", side_effect=UndoExpiredError("already restored")):
+        with patch(
+            "urbanlens.dashboard.services.undo.service.restore_undo_action",
+            side_effect=UndoExpiredError("already restored"),
+        ):
             result = execute("undo_last_action", {"undo_uuid": str(undo_action.uuid)}, _context(self.profile))
         self.assertIn("error", result.data)
 
@@ -147,7 +156,9 @@ class UndoToolsIntegrationTests(TestCase):
         peek_result = execute("undo_peek", {}, _context(self.profile))
         self.assertTrue(peek_result.data["can_undo"])
 
-        confirm_result = execute("undo_last_action", {"undo_uuid": peek_result.data["undo_uuid"]}, _context(self.profile))
+        confirm_result = execute(
+            "undo_last_action", {"undo_uuid": peek_result.data["undo_uuid"]}, _context(self.profile)
+        )
 
         self.assertNotIn("error", confirm_result.data)
         self.assertIsNone(peek_undo(self.profile))

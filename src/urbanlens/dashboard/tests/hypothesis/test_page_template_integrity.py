@@ -154,11 +154,17 @@ class BlockNameTests(SimpleTestCase):
             checked += 1
             for name in self._top_level_blocks(source):
                 with self.subTest(template=str(template.relative_to(_TEMPLATES_ROOT)), block=name):
-                    self.assertIn(name, defined, f"{template.name} declares {{% block {name} %}}, which no template it extends defines - Django drops it silently.")
+                    self.assertIn(
+                        name,
+                        defined,
+                        f"{template.name} declares {{% block {name} %}}, which no template it extends defines - Django drops it silently.",
+                    )
         # Guard against the scan passing because it matched nothing. 89 templates
         # extend another as of this writing; the floor only has to be high enough
         # that a broken path cannot slip through.
-        self.assertGreater(checked, 70, "The template scan resolved almost no extends chains; it is not testing what it claims.")
+        self.assertGreater(
+            checked, 70, "The template scan resolved almost no extends chains; it is not testing what it claims."
+        )
 
 
 class SubresourceIntegrityTests(SimpleTestCase):
@@ -184,5 +190,11 @@ class SubresourceIntegrityTests(SimpleTestCase):
             source = _template_source(name)
             for tag in _REMOTE_SCRIPT.findall(source):
                 with self.subTest(template=name, tag=tag[:80]):
-                    self.assertIn("integrity=", tag, "A cross-origin script is loaded without a subresource integrity hash.")
-                    self.assertIn("crossorigin=", tag, "integrity is only enforced when the request is made with CORS; add crossorigin=\"anonymous\".")
+                    self.assertIn(
+                        "integrity=", tag, "A cross-origin script is loaded without a subresource integrity hash."
+                    )
+                    self.assertIn(
+                        "crossorigin=",
+                        tag,
+                        'integrity is only enforced when the request is made with CORS; add crossorigin="anonymous".',
+                    )

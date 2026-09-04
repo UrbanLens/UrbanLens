@@ -2,7 +2,7 @@
 
 REData's reconciled `/parcels/{uuid}/buildings/` reports structure: a coarse
 footprint enclosing finer ones becomes their ``parent_ref`` rather than a
-duplicate of them (its ``docs/buildings-dedup-spec.md``). `parcel_buildings`
+duplicate of them (its ``../REData/docs/archive/buildings-dedup-spec.md``). `parcel_buildings`
 already reads that for display order and counting.
 
 `ensure_building_places` did not: every building was created with
@@ -54,7 +54,12 @@ class BuildingPlaceNestingTests(TestCase):
         places = self._places(
             [
                 {"ref": "osm:way/1", "name": "Kirkbride", "geometry": _square(0.1, 0.1, 0.6), "child_refs": ["cris:1"]},
-                {"ref": "cris:1", "name": "North Wing", "parent_ref": "osm:way/1", "geometry": _square(0.15, 0.15, 0.08)},
+                {
+                    "ref": "cris:1",
+                    "name": "North Wing",
+                    "parent_ref": "osm:way/1",
+                    "geometry": _square(0.15, 0.15, 0.08),
+                },
             ],
         )
 
@@ -71,7 +76,9 @@ class BuildingPlaceNestingTests(TestCase):
         just created, not just leave it for the next unrelated refresh.
         """
         location = baker.make(Location, latitude=0.19, longitude=0.19)
-        self.assertEqual(location.place_id, self.parcel.pk, "only the parcel exists yet, so that is the only possible answer")
+        self.assertEqual(
+            location.place_id, self.parcel.pk, "only the parcel exists yet, so that is the only possible answer"
+        )
 
         places = self._places([{"ref": "osm:way/1", "name": "Kirkbride", "geometry": _square(0.1, 0.1, 0.5)}])
 
@@ -106,7 +113,9 @@ class BuildingPlaceNestingTests(TestCase):
 
     def test_a_parent_outside_the_list_falls_back_to_the_parcel(self) -> None:
         """Its parent may have been dropped as off-property; the child is not lost."""
-        places = self._places([{"ref": "cris:1", "name": "Orphan", "parent_ref": "gone", "geometry": _square(0.2, 0.2, 0.1)}])
+        places = self._places(
+            [{"ref": "cris:1", "name": "Orphan", "parent_ref": "gone", "geometry": _square(0.2, 0.2, 0.1)}]
+        )
 
         self.assertEqual(places["cris:1"].parent_id, self.parcel.pk)
 
@@ -132,7 +141,10 @@ class BuildingPlaceNestingTests(TestCase):
         """Overpass-shaped records carry no ref/parent_ref at all."""
         created = ensure_building_places(
             self.parcel,
-            [{"name": "Shed", "geometry": _square(0.2, 0.2, 0.1)}, {"name": "Barn", "geometry": _square(0.5, 0.5, 0.1)}],
+            [
+                {"name": "Shed", "geometry": _square(0.2, 0.2, 0.1)},
+                {"name": "Barn", "geometry": _square(0.5, 0.5, 0.1)},
+            ],
             provider="",
         )
 
@@ -179,13 +191,21 @@ class DistinctRecordsStayDistinctTests(TestCase):
 
     def test_a_record_without_an_id_can_still_match_by_geometry(self) -> None:
         """The fallback is the whole reason two sources' parcels merge; keep it."""
-        first = ensure_building_places(self.parcel, [{"name": "Shed", "geometry": _square(0.20, 0.20, 0.10)}], provider="")
-        second = ensure_building_places(self.parcel, [{"name": "Shed", "geometry": _square(0.201, 0.201, 0.10)}], provider="")
+        first = ensure_building_places(
+            self.parcel, [{"name": "Shed", "geometry": _square(0.20, 0.20, 0.10)}], provider=""
+        )
+        second = ensure_building_places(
+            self.parcel, [{"name": "Shed", "geometry": _square(0.201, 0.201, 0.10)}], provider=""
+        )
 
         self.assertEqual(first[0].pk, second[0].pk)
 
     def test_the_same_id_still_matches_itself(self) -> None:
-        first = ensure_building_places(self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.40)}], provider="redata")
-        second = ensure_building_places(self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.41)}], provider="redata")
+        first = ensure_building_places(
+            self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.40)}], provider="redata"
+        )
+        second = ensure_building_places(
+            self.parcel, [{"ref": "block", "name": "Block", "geometry": _square(0.10, 0.10, 0.41)}], provider="redata"
+        )
 
         self.assertEqual(first[0].pk, second[0].pk)

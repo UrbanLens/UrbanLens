@@ -34,7 +34,9 @@ class PinDetachLocationTests(TestCase):
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.user = baker.make(User)
         self.client.force_login(self.user)
-        self.location = baker.make(Location, latitude=41.7, longitude=-73.9, official_name="Hudson River State Hospital")
+        self.location = baker.make(
+            Location, latitude=41.7, longitude=-73.9, official_name="Hudson River State Hospital"
+        )
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, parent_pin=None, slug="hrsh")
 
     def _detach(self):

@@ -169,7 +169,9 @@ class PinCreateViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_address_only_geocodes_through_the_shared_service(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.pins.pin_creation.get_pin_by_address", return_value=(42.6, -73.6)):
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.pin_creation.get_pin_by_address", return_value=(42.6, -73.6)
+        ):
             response = self._post({"name": "Geocoded Spot", "address": "1 Main St"})
         self.assertEqual(response.status_code, 201, response.content)
         pin = Pin.objects.get(uuid=response.json()["uuid"])
@@ -219,8 +221,12 @@ class PinCreateViewTests(TestCase):
 
     def test_parent_id_creates_a_child_pin_within_the_fuzzy_dedup_radius(self) -> None:
         """A detail pin a few meters from its parent must not be swallowed by the 50m fuzzy Location dedup."""
-        parent = Pin.objects.get(uuid=self._post({"name": "Campus", "latitude": 42.5, "longitude": -73.5}).json()["uuid"])
-        response = self._post({"name": "Entrance", "latitude": 42.5001, "longitude": -73.5001, "parent_id": str(parent.uuid)})
+        parent = Pin.objects.get(
+            uuid=self._post({"name": "Campus", "latitude": 42.5, "longitude": -73.5}).json()["uuid"]
+        )
+        response = self._post(
+            {"name": "Entrance", "latitude": 42.5001, "longitude": -73.5001, "parent_id": str(parent.uuid)}
+        )
         self.assertEqual(response.status_code, 201, response.content)
         body = response.json()
         self.assertEqual(body["parent_uuid"], str(parent.uuid))
@@ -238,7 +244,9 @@ class PinCreateViewTests(TestCase):
                 **_bearer(generate_api_key(other, "Other client")[1]),
             ).json()["uuid"]
         )
-        response = self._post({"name": "Sneaky", "latitude": 1.0001, "longitude": 1.0001, "parent_id": str(other_pin.uuid)})
+        response = self._post(
+            {"name": "Sneaky", "latitude": 1.0001, "longitude": 1.0001, "parent_id": str(other_pin.uuid)}
+        )
         self.assertEqual(response.status_code, 400)
         self.assertFalse(Pin.objects.filter(name="Sneaky").exists())
 
@@ -313,7 +321,9 @@ class PinSyncViewTests(TestCase):
     def test_write_scope_alone_cannot_be_used_to_read_via_post_scope(self) -> None:
         """The inverse asymmetry: a read-only key cannot create."""
         ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.PINS_READ.value])
-        response = self.client.post(self.url, data={"latitude": 1, "longitude": 1}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.post(
+            self.url, data={"latitude": 1, "longitude": 1}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_empty_sync_returns_no_pins_and_a_watermark(self) -> None:
@@ -384,7 +394,9 @@ class PinSyncViewTests(TestCase):
         # same Location, so a second top-level create here would correctly raise
         # PinCreationError). Build the child directly with parent_pin set - it's
         # exempt from db_pin_unique_location_per_profile once parent_pin is non-null.
-        child = baker.make("dashboard.Pin", profile=self.profile, location=parent.location, parent_pin=parent, name="Entrance")
+        child = baker.make(
+            "dashboard.Pin", profile=self.profile, location=parent.location, parent_pin=parent, name="Entrance"
+        )
         by_uuid = {p["uuid"]: p for p in self._get().json()["pins"]}
         self.assertEqual(by_uuid[str(child.uuid)]["parent_uuid"], str(parent.uuid))
         self.assertIsNone(by_uuid[str(parent.uuid)]["parent_uuid"])
@@ -458,7 +470,9 @@ class PinTombstoneTests(TestCase):
 
     def test_other_users_deletions_are_never_served(self) -> None:
         other = baker.make(User)
-        other_pin = create_pin_for_profile(Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0).pin
+        other_pin = create_pin_for_profile(
+            Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0
+        ).pin
         other_pin.delete()
         body = self._get().json()
         self.assertEqual(body["tombstones"], [])
@@ -489,7 +503,9 @@ class PinTombstoneTests(TestCase):
         old_pin = self._make_pin("Ancient", 42.5, -73.5)
         old_uuid = old_pin.uuid
         old_pin.delete()
-        PinTombstone.objects.filter(pin_uuid=old_uuid).update(created=timezone.now() - TOMBSTONE_RETENTION - timedelta(days=1))
+        PinTombstone.objects.filter(pin_uuid=old_uuid).update(
+            created=timezone.now() - TOMBSTONE_RETENTION - timedelta(days=1)
+        )
         fresh_pin = self._make_pin("Recent", 43.5, -74.5)
         fresh_uuid = fresh_pin.uuid
         fresh_pin.delete()
@@ -534,7 +550,9 @@ class PinCreateIdempotencyTests(TestCase):
 
     def test_a_uuid_owned_by_another_profile_is_rejected_without_leaking_it(self) -> None:
         other = baker.make(User)
-        other_pin = create_pin_for_profile(Profile.objects.get(user=other), name="Theirs", latitude=1.0, longitude=1.0).pin
+        other_pin = create_pin_for_profile(
+            Profile.objects.get(user=other), name="Theirs", latitude=1.0, longitude=1.0
+        ).pin
         response = self._post({"name": "Mine", "latitude": 42.5, "longitude": -73.5, "uuid": str(other_pin.uuid)})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Pin.objects.filter(profile=self.profile).count(), 0)
@@ -562,7 +580,15 @@ class PinCreateFieldTests(TestCase):
         return self.client.post(self.url, data=payload, content_type="application/json", **_bearer(self.raw_key))
 
     def test_description_and_pin_type_are_stored(self) -> None:
-        response = self._post({"name": "Boiler house", "latitude": 42.5, "longitude": -73.5, "description": "Rusted catwalks, watch the floor.", "pin_type": "building"})
+        response = self._post(
+            {
+                "name": "Boiler house",
+                "latitude": 42.5,
+                "longitude": -73.5,
+                "description": "Rusted catwalks, watch the floor.",
+                "pin_type": "building",
+            }
+        )
         self.assertEqual(response.status_code, 201, response.content)
         pin = Pin.objects.get(uuid=response.json()["uuid"])
         self.assertEqual(pin.description, "Rusted catwalks, watch the floor.")

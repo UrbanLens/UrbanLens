@@ -30,7 +30,9 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.trips.trip_visibility import apply_trip_visibility_filter as _apply_trip_visibility_filter
+from urbanlens.dashboard.services.trips.trip_visibility import (
+    apply_trip_visibility_filter as _apply_trip_visibility_filter,
+)
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -375,7 +377,9 @@ class PendingRequestVisibilityTests(TestCase):
         super().setUp()
         self.sender = _make_profile()
         self.recipient = _make_profile()
-        self.request_row = Friendship.objects.create(from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED)
+        self.request_row = Friendship.objects.create(
+            from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED
+        )
 
     def test_recipient_passes_every_relationship_gate_on_sender(self) -> None:
         for choice in self._RELATIONSHIP_CHOICES:

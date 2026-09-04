@@ -44,7 +44,9 @@ from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 #: A real 1x1 PNG. The upload pipeline sniffs magic bytes, so junk content would
 #: exercise the content-mismatch rejection instead of the path under test.
-_PNG_BYTES = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
 
 #: A file whose magic bytes identify it as a PDF - used to prove the sniffing
 #: step runs. Junk bytes would not do: a format ``filetype`` cannot fingerprint
@@ -98,8 +100,12 @@ class _SocialProfileTestCase(TestCase):
         for profile in (self.profile, self.other):
             profile.profile_visibility = VisibilityChoice.ANYONE
             profile.save(update_fields=["profile_visibility"])
-        self.raw_key = _key_with_scopes(self.user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE, ApiKeyScope.PROFILE_READ)
-        self.other_key = _key_with_scopes(self.other_user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE, ApiKeyScope.PROFILE_READ)
+        self.raw_key = _key_with_scopes(
+            self.user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE, ApiKeyScope.PROFILE_READ
+        )
+        self.other_key = _key_with_scopes(
+            self.other_user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE, ApiKeyScope.PROFILE_READ
+        )
 
     def _slug(self, profile: Profile) -> str:
         """The path segment addressing a profile.
@@ -236,7 +242,12 @@ class AvatarUploadTests(_SocialProfileTestCase):
             ("Our antivirus scanner is temporarily unavailable. Please try again shortly.", 503),
         )
         for message, status_code in cases:
-            with self.subTest(status=status_code), patch("urbanlens.dashboard.services.media.images.image_upload_error", return_value=(message, status_code)):
+            with (
+                self.subTest(status=status_code),
+                patch(
+                    "urbanlens.dashboard.services.media.images.image_upload_error", return_value=(message, status_code)
+                ),
+            ):
                 response = self._put_png(self.profile)
                 self.assertEqual(response.status_code, status_code)
                 self.assertEqual(response.json(), {"error": message})
@@ -392,7 +403,12 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
     def test_nickname_put_replaces_rather_than_duplicating(self) -> None:
         """The row is a singleton per pair, so PUT is idempotent."""
         for value in ("First", "Second"):
-            self.client.put(self._nickname_url(self.other), {"nickname": value}, content_type="application/json", **_bearer(self.raw_key))
+            self.client.put(
+                self._nickname_url(self.other),
+                {"nickname": value},
+                content_type="application/json",
+                **_bearer(self.raw_key),
+            )
 
         rows = ProfileNickname.objects.for_pair(self.profile, self.other)
         self.assertEqual(rows.count(), 1)
@@ -422,7 +438,9 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
 
     def test_trust_round_trips(self) -> None:
         """A rating in range is stored and echoed."""
-        response = self.client.put(self._trust_url(self.other), {"rating": 4}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.put(
+            self._trust_url(self.other), {"rating": 4}, content_type="application/json", **_bearer(self.raw_key)
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["trust"], 4)
@@ -432,7 +450,12 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
         """``update_or_create`` skips field validators, so the bound is enforced here."""
         for rating in (0, 6, -1):
             with self.subTest(rating=rating):
-                response = self.client.put(self._trust_url(self.other), {"rating": rating}, content_type="application/json", **_bearer(self.raw_key))
+                response = self.client.put(
+                    self._trust_url(self.other),
+                    {"rating": rating},
+                    content_type="application/json",
+                    **_bearer(self.raw_key),
+                )
                 self.assertEqual(response.status_code, 400)
         self.assertFalse(ProfileTrust.objects.for_pair(self.profile, self.other).exists())
 
@@ -459,8 +482,15 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
 
     def test_self_annotation_is_400(self) -> None:
         """You cannot nickname or rate yourself."""
-        nickname = self.client.put(self._nickname_url(self.profile), {"nickname": "Me"}, content_type="application/json", **_bearer(self.raw_key))
-        trust = self.client.put(self._trust_url(self.profile), {"rating": 5}, content_type="application/json", **_bearer(self.raw_key))
+        nickname = self.client.put(
+            self._nickname_url(self.profile),
+            {"nickname": "Me"},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        trust = self.client.put(
+            self._trust_url(self.profile), {"rating": 5}, content_type="application/json", **_bearer(self.raw_key)
+        )
 
         self.assertEqual(nickname.status_code, 400)
         self.assertEqual(trust.status_code, 400)
@@ -472,9 +502,16 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
 
         responses = (
             self.client.get(self._annotations_url(self.other), **_bearer(self.raw_key)),
-            self.client.put(self._nickname_url(self.other), {"nickname": "x"}, content_type="application/json", **_bearer(self.raw_key)),
+            self.client.put(
+                self._nickname_url(self.other),
+                {"nickname": "x"},
+                content_type="application/json",
+                **_bearer(self.raw_key),
+            ),
             self.client.delete(self._nickname_url(self.other), **_bearer(self.raw_key)),
-            self.client.put(self._trust_url(self.other), {"rating": 3}, content_type="application/json", **_bearer(self.raw_key)),
+            self.client.put(
+                self._trust_url(self.other), {"rating": 3}, content_type="application/json", **_bearer(self.raw_key)
+            ),
             self.client.delete(self._trust_url(self.other), **_bearer(self.raw_key)),
         )
 
@@ -578,7 +615,9 @@ class AnnotationScopeEnforcementTests(_SocialProfileTestCase):
             content_type="application/json",
             **_bearer(raw_key),
         )
-        trust = self.client.delete(reverse("external_api:profiles.trust", kwargs={"profile_slug": slug}), **_bearer(raw_key))
+        trust = self.client.delete(
+            reverse("external_api:profiles.trust", kwargs={"profile_slug": slug}), **_bearer(raw_key)
+        )
 
         self.assertEqual(nickname.status_code, 403)
         self.assertEqual(trust.status_code, 403)

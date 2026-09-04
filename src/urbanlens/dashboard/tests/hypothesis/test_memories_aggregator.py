@@ -5,6 +5,7 @@ PinVisit is used as the representative source for the boundary-inclusion
 property test since every _x_for_range() function applies the same
 ``__date__range`` filtering pattern against its own model's timestamp field.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -29,7 +30,7 @@ class MemoryEventsDateRangeTests(TestCase):
     """get_memory_events() only returns events whose date falls within [start, end]."""
 
     def setUp(self):
-        self.profile =  _make_profile()
+        self.profile = _make_profile()
         self.location = baker.make_recipe("dashboard.location")
         self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
 

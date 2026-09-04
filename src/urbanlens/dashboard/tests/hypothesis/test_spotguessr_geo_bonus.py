@@ -88,7 +88,11 @@ class BonusPointsForGuessTests(SimpleTestCase):
         guess_point = Point(-73.75, 42.65, srid=4326)
         scope = BonusScope(country=True, state=True, city=True)
         with patch("urbanlens.dashboard.services.spotguessr.geo_bonus.NominatimGateway") as mock_gateway:
-            mock_gateway.return_value.reverse_geocode_admin.return_value = {"country": "USA", "state": "New York", "city": "Albany"}
+            mock_gateway.return_value.reverse_geocode_admin.return_value = {
+                "country": "USA",
+                "state": "New York",
+                "city": "Albany",
+            }
             result = bonus_points_for_guess(guess_point, self.location, scope)
         self.assertEqual(result.total, COUNTRY_BONUS + STATE_BONUS + CITY_BONUS)
         self.assertEqual(set(result.matched_tiers), {"country", "state", "city"})
@@ -97,7 +101,11 @@ class BonusPointsForGuessTests(SimpleTestCase):
         guess_point = Point(-73.75, 42.65, srid=4326)
         scope = BonusScope(country=False, state=True, city=True)
         with patch("urbanlens.dashboard.services.spotguessr.geo_bonus.NominatimGateway") as mock_gateway:
-            mock_gateway.return_value.reverse_geocode_admin.return_value = {"country": "USA", "state": "New York", "city": "Albany"}
+            mock_gateway.return_value.reverse_geocode_admin.return_value = {
+                "country": "USA",
+                "state": "New York",
+                "city": "Albany",
+            }
             result = bonus_points_for_guess(guess_point, self.location, scope)
         self.assertEqual(result.total, STATE_BONUS + CITY_BONUS)
         self.assertNotIn("country", result.matched_tiers)
@@ -106,7 +114,11 @@ class BonusPointsForGuessTests(SimpleTestCase):
         guess_point = Point(2.35, 48.85, srid=4326)
         scope = BonusScope(country=True, state=True, city=True)
         with patch("urbanlens.dashboard.services.spotguessr.geo_bonus.NominatimGateway") as mock_gateway:
-            mock_gateway.return_value.reverse_geocode_admin.return_value = {"country": "France", "state": "Ile-de-France", "city": "Paris"}
+            mock_gateway.return_value.reverse_geocode_admin.return_value = {
+                "country": "France",
+                "state": "Ile-de-France",
+                "city": "Paris",
+            }
             result = bonus_points_for_guess(guess_point, self.location, scope)
         self.assertEqual(result.total, 0)
         self.assertEqual(result.matched_tiers, [])

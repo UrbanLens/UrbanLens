@@ -139,7 +139,10 @@ class WorkerLostRequeueTests(SimpleTestCase):
     def test_rejecting_on_worker_lost_requeues_even_a_redelivered_message(self) -> None:
         """The loop is real: nothing consults how many times this was delivered."""
         request, on_ack, on_reject, _ = _build_request(redelivered=True)
-        with patch.object(worker_lost_probe, "acks_late", new=True), patch.object(worker_lost_probe, "reject_on_worker_lost", new=True):
+        with (
+            patch.object(worker_lost_probe, "acks_late", new=True),
+            patch.object(worker_lost_probe, "reject_on_worker_lost", new=True),
+        ):
             request.on_failure(_exception_info(WorkerLostError("Worker exited prematurely: signal 9 (SIGKILL)")))
 
         on_reject.assert_called_once()
@@ -149,7 +152,10 @@ class WorkerLostRequeueTests(SimpleTestCase):
     def test_the_requeue_branch_reports_the_failure_nowhere(self) -> None:
         """Why the loop is silent: no stored result, no failure event."""
         request, _, on_reject, eventer = _build_request()
-        with patch.object(worker_lost_probe, "acks_late", new=True), patch.object(worker_lost_probe, "reject_on_worker_lost", new=True):
+        with (
+            patch.object(worker_lost_probe, "acks_late", new=True),
+            patch.object(worker_lost_probe, "reject_on_worker_lost", new=True),
+        ):
             request.on_failure(_exception_info(WorkerLostError("Worker exited prematurely: signal 9 (SIGKILL)")))
 
         on_reject.assert_called_once()
@@ -159,7 +165,10 @@ class WorkerLostRequeueTests(SimpleTestCase):
     def test_our_setting_acknowledges_once_and_reports_the_failure(self) -> None:
         """With the setting off the loss becomes one visible failure."""
         request, on_ack, on_reject, eventer = _build_request()
-        with patch.object(worker_lost_probe, "acks_late", new=True), patch.object(worker_lost_probe, "reject_on_worker_lost", new=False):
+        with (
+            patch.object(worker_lost_probe, "acks_late", new=True),
+            patch.object(worker_lost_probe, "reject_on_worker_lost", new=False),
+        ):
             request.on_failure(_exception_info(WorkerLostError("Worker exited prematurely: signal 9 (SIGKILL)")))
 
         on_ack.assert_called_once()
@@ -180,7 +189,10 @@ class TimeLimitRequeueTests(SimpleTestCase):
     def test_a_timeout_requeues_when_acks_on_failure_or_timeout_is_off(self) -> None:
         """Every redelivery would exceed the same time limit again."""
         request, _, on_reject, _ = _build_request()
-        with patch.object(worker_lost_probe, "acks_late", new=True), patch.object(worker_lost_probe, "acks_on_failure_or_timeout", new=False):
+        with (
+            patch.object(worker_lost_probe, "acks_late", new=True),
+            patch.object(worker_lost_probe, "acks_on_failure_or_timeout", new=False),
+        ):
             request.on_failure(_exception_info(TimeLimitExceeded(3600)))
 
         on_reject.assert_called_once()
@@ -189,7 +201,10 @@ class TimeLimitRequeueTests(SimpleTestCase):
     def test_a_timeout_is_acknowledged_under_our_settings(self) -> None:
         """Held at Celery's default, a timeout fails once."""
         request, on_ack, on_reject, _ = _build_request()
-        with patch.object(worker_lost_probe, "acks_late", new=True), patch.object(worker_lost_probe, "acks_on_failure_or_timeout", new=True):
+        with (
+            patch.object(worker_lost_probe, "acks_late", new=True),
+            patch.object(worker_lost_probe, "acks_on_failure_or_timeout", new=True),
+        ):
             request.on_failure(_exception_info(TimeLimitExceeded(3600)))
 
         on_ack.assert_called_once()
@@ -244,12 +259,16 @@ class CeleryConfigurationReachesTasksTests(SimpleTestCase):
 
     def test_no_task_requeues_on_worker_lost(self) -> None:
         """Covers the global setting and any per-task override of it."""
-        offenders = sorted(name for name, task in self._app_tasks().items() if getattr(task, "reject_on_worker_lost", False))
+        offenders = sorted(
+            name for name, task in self._app_tasks().items() if getattr(task, "reject_on_worker_lost", False)
+        )
         self.assertEqual(offenders, [], f"these tasks requeue forever when their child is killed: {offenders}")
 
     def test_every_task_acknowledges_a_failure_or_timeout(self) -> None:
         """The second route into the same unbounded branch."""
-        offenders = sorted(name for name, task in self._app_tasks().items() if not getattr(task, "acks_on_failure_or_timeout", True))
+        offenders = sorted(
+            name for name, task in self._app_tasks().items() if not getattr(task, "acks_on_failure_or_timeout", True)
+        )
         self.assertEqual(offenders, [], f"these tasks requeue forever on a time limit: {offenders}")
 
     def test_acks_late_is_off_only_where_that_is_deliberate(self) -> None:
@@ -261,7 +280,11 @@ class CeleryConfigurationReachesTasksTests(SimpleTestCase):
         would be easy to arrive at accidentally.
         """
         offenders = sorted(name for name, task in self._app_tasks().items() if not getattr(task, "acks_late", False))
-        self.assertEqual(sorted(set(offenders) - ACKS_LATE_EXEMPT), [], f"these tasks acknowledge before running, so a lost worker loses them: {offenders}")
+        self.assertEqual(
+            sorted(set(offenders) - ACKS_LATE_EXEMPT),
+            [],
+            f"these tasks acknowledge before running, so a lost worker loses them: {offenders}",
+        )
 
 
 class RequeueSystemCheckTests(SimpleTestCase):
@@ -299,6 +322,10 @@ class RequeueSystemCheckTests(SimpleTestCase):
 
     def test_the_settings_the_check_reads_exist(self) -> None:
         """A check reading a setting production does not define proves nothing."""
-        for name in ("CELERY_TASK_ACKS_LATE", "CELERY_TASK_REJECT_ON_WORKER_LOST", "CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT"):
+        for name in (
+            "CELERY_TASK_ACKS_LATE",
+            "CELERY_TASK_REJECT_ON_WORKER_LOST",
+            "CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT",
+        ):
             with self.subTest(setting=name):
                 self.assertTrue(hasattr(settings, name), f"{name} is not defined in settings")

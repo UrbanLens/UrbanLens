@@ -6,6 +6,7 @@ Covers three layers:
 - ``Pin.objects.filter_by_criteria``'s ``include_regions``/``exclude_regions`` handling.
 - ``services.search.filter_criteria``'s (de)serialization round-trip for regions.
 """
+
 from __future__ import annotations
 
 from unittest import mock
@@ -80,8 +81,12 @@ class DissolvePolygonsTests(SimpleTestCase):
         # than independently-computed center+delta arithmetic, which can drift
         # by float rounding and turn an intended shared edge into a hairline
         # gap or overlap.
-        a = Polygon(((-74.005, 39.995), (-73.995, 39.995), (-73.995, 40.005), (-74.005, 40.005), (-74.005, 39.995)), srid=4326)
-        b = Polygon(((-73.995, 39.995), (-73.985, 39.995), (-73.985, 40.005), (-73.995, 40.005), (-73.995, 39.995)), srid=4326)
+        a = Polygon(
+            ((-74.005, 39.995), (-73.995, 39.995), (-73.995, 40.005), (-74.005, 40.005), (-74.005, 39.995)), srid=4326
+        )
+        b = Polygon(
+            ((-73.995, 39.995), (-73.985, 39.995), (-73.985, 40.005), (-73.995, 40.005), (-73.995, 39.995)), srid=4326
+        )
         self.assertTrue(a.touches(b))
         result = dissolve_polygons([a, b])
         self.assertEqual(len(result), 1)
@@ -105,12 +110,16 @@ class FilterByCriteriaRegionTests(TestCase):
         return Pin.objects.filter(profile=self.profile)
 
     def test_include_regions_keeps_only_pins_inside(self) -> None:
-        result_ids = set(self._base_qs().filter_by_criteria({"include_regions": self.region}).values_list("pk", flat=True))
+        result_ids = set(
+            self._base_qs().filter_by_criteria({"include_regions": self.region}).values_list("pk", flat=True)
+        )
         self.assertIn(self.inside_pin.pk, result_ids)
         self.assertNotIn(self.outside_pin.pk, result_ids)
 
     def test_exclude_regions_drops_pins_inside(self) -> None:
-        result_ids = set(self._base_qs().filter_by_criteria({"exclude_regions": self.region}).values_list("pk", flat=True))
+        result_ids = set(
+            self._base_qs().filter_by_criteria({"exclude_regions": self.region}).values_list("pk", flat=True)
+        )
         self.assertNotIn(self.inside_pin.pk, result_ids)
         self.assertIn(self.outside_pin.pk, result_ids)
 
@@ -130,7 +139,9 @@ class FilterByCriteriaRegionTests(TestCase):
         pin_near_edge = baker.make(Pin, profile=self.profile, location=near_edge_location)
 
         result_ids = set(
-            self._base_qs().filter_by_criteria({"include_regions": self.region, "exclude_regions": hole}).values_list("pk", flat=True),
+            self._base_qs()
+            .filter_by_criteria({"include_regions": self.region, "exclude_regions": hole})
+            .values_list("pk", flat=True),
         )
         self.assertNotIn(pin_in_hole.pk, result_ids)
         self.assertIn(pin_near_edge.pk, result_ids)
@@ -200,10 +211,15 @@ class FiltersTabViewRenderingTests(TestCase):
 
     def test_region_search_returns_polygonal_results_only(self) -> None:
         fake_results = [
-            {"display_name": "Albany, NY, USA", "geojson": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]}},
+            {
+                "display_name": "Albany, NY, USA",
+                "geojson": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
+            },
             {"display_name": "123 Main St", "geojson": {"type": "Point", "coordinates": [0, 0]}},
         ]
-        with mock.patch("urbanlens.dashboard.controllers.region_search.NominatimGateway.search", return_value=fake_results):
+        with mock.patch(
+            "urbanlens.dashboard.controllers.region_search.NominatimGateway.search", return_value=fake_results
+        ):
             response = self.client.get(reverse("region_search.search"), {"q": "Albany, NY"})
         self.assertEqual(response.status_code, 200)
         data = response.json()

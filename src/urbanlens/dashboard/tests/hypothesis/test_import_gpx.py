@@ -5,6 +5,7 @@ for the rationale), so the regression coverage here specifically checks that a
 file containing both waypoints and a multi-point track only produces pins for
 the waypoints.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -117,7 +118,9 @@ class GpxToDictTests(SimpleTestCase):
             alphabet=st.characters(blacklist_categories=("Cs", "Cc"), blacklist_characters="<>&\"'"),
             min_size=1,
             max_size=40,
-        ).map(str.strip).filter(bool),
+        )
+        .map(str.strip)
+        .filter(bool),
         lat=st.floats(min_value=-89, max_value=89, allow_nan=False, allow_infinity=False),
         lon=st.floats(min_value=-179, max_value=179, allow_nan=False, allow_infinity=False),
     )

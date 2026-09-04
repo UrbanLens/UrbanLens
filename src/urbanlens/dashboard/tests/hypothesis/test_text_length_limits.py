@@ -11,6 +11,7 @@ Two layers are verified:
     length via ``text_length_error()`` and return 400 rather than silently
     persisting oversized input.
 """
+
 from __future__ import annotations
 
 import json
@@ -120,7 +121,9 @@ class ModelFullCleanLengthTests(TestCase):
         self.assertIn("text", cm.exception.message_dict)
 
     def test_pin_markup_label_too_long(self) -> None:
-        markup = baker.make(PinMarkup, markup_type="line", geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]})
+        markup = baker.make(
+            PinMarkup, markup_type="line", geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]}
+        )
         markup.label = "x" * (MAX_MARKUP_LABEL_LENGTH + 1)
         with self.assertRaises(ValidationError) as cm:
             markup.full_clean()
@@ -152,7 +155,10 @@ class PinEditDescriptionLengthTests(TestCase):
         )
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+                return_value=None,
+            ),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
@@ -306,7 +312,9 @@ class TripActivityNotesLengthTests(TestCase):
         self.profile = self.user.profile
         self.client = Client()
         self.client.force_login(self.user)
-        self.trip = _make_trip(self.profile, allow_add_activities=Trip.PERM_EVERYONE, allow_edit_activities=Trip.PERM_EVERYONE)
+        self.trip = _make_trip(
+            self.profile, allow_add_activities=Trip.PERM_EVERYONE, allow_edit_activities=Trip.PERM_EVERYONE
+        )
 
     def test_create_rejects_oversized_notes(self) -> None:
         resp = self.client.post(
@@ -363,11 +371,13 @@ class MarkupLabelLengthTests(TestCase):
     def test_create_rejects_oversized_label(self) -> None:
         resp = self.client.post(
             reverse("pin.markup", args=[self.pin.slug]),
-            data=json.dumps({
-                "markup_type": "line",
-                "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
-                "label": "x" * (MAX_MARKUP_LABEL_LENGTH + 1),
-            }),
+            data=json.dumps(
+                {
+                    "markup_type": "line",
+                    "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+                    "label": "x" * (MAX_MARKUP_LABEL_LENGTH + 1),
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 400)

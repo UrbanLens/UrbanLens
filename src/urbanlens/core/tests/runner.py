@@ -23,6 +23,7 @@ class BufferingLogHandler(logging.Handler):
     A logging handler that buffers log records and only outputs them
     under certain conditions, such as when a test fails.
     """
+
     def __init__(self):
         super().__init__()
         self.buffer = []
@@ -44,6 +45,7 @@ class QuietTestRunner(unittest.TextTestRunner):
     """
     A test runner that suppresses log output when tests pass.
     """
+
     def run(self, test):
         """
         Wrap the super().run(test) call with log suppression logic.
@@ -76,7 +78,6 @@ class QuietTestRunner(unittest.TextTestRunner):
 
 
 class TestRunner(DiscoverRunner):
-
     def setup_test_environment(self, **kwargs: Any) -> None:
         # Set env var first - checked by signals before settings are fully loaded.
         os.environ["DJANGO_TESTING"] = "1"

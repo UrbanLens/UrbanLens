@@ -3,6 +3,7 @@
 test_friendship.py already covers: between, is_friend, not_friend, profile.
 This file adds: user, status, relationship_type, has_permission.
 """
+
 from __future__ import annotations
 
 from model_bakery import baker
@@ -15,10 +16,10 @@ from urbanlens.dashboard.models.friendship.meta import (
 )
 from urbanlens.dashboard.models.friendship.model import Friendship
 
-_DEFAULTS = dict(
-    relationship_type=FriendshipType.FRIEND,
-    permissions=Permission.VIEW_PROFILE,
-)
+_DEFAULTS = {
+    "relationship_type": FriendshipType.FRIEND,
+    "permissions": Permission.VIEW_PROFILE,
+}
 
 
 def _make_friendship(from_profile, to_profile, **kwargs) -> Friendship:
@@ -31,6 +32,7 @@ def _make_friendship(from_profile, to_profile, **kwargs) -> Friendship:
 
 
 # -- user() --------------------------------------------------------------------
+
 
 class FriendshipQuerySetUserTests(TestCase):
     """user() returns friendships where the user is on either side."""
@@ -56,6 +58,7 @@ class FriendshipQuerySetUserTests(TestCase):
 
 # -- status() -----------------------------------------------------------------
 
+
 class FriendshipQuerySetStatusTests(TestCase):
     """status() filters by the named status value."""
 
@@ -63,12 +66,8 @@ class FriendshipQuerySetStatusTests(TestCase):
         self.profile_a = baker.make("auth.User").profile
         self.profile_b = baker.make("auth.User").profile
         self.profile_c = baker.make("auth.User").profile
-        self.f_requested = _make_friendship(
-            self.profile_a, self.profile_b, status=FriendshipStatus.REQUESTED
-        )
-        self.f_accepted = _make_friendship(
-            self.profile_a, self.profile_c, status=FriendshipStatus.ACCEPTED
-        )
+        self.f_requested = _make_friendship(self.profile_a, self.profile_b, status=FriendshipStatus.REQUESTED)
+        self.f_accepted = _make_friendship(self.profile_a, self.profile_c, status=FriendshipStatus.ACCEPTED)
 
     def test_status_requested_includes_requested_friendship(self) -> None:
         qs = Friendship.objects.all().status(FriendshipStatus.REQUESTED)
@@ -83,6 +82,7 @@ class FriendshipQuerySetStatusTests(TestCase):
 
 # -- relationship_type() -------------------------------------------------------
 
+
 class FriendshipQuerySetRelationshipTypeTests(TestCase):
     """relationship_type() filters by the named relationship type."""
 
@@ -91,11 +91,13 @@ class FriendshipQuerySetRelationshipTypeTests(TestCase):
         self.profile_b = baker.make("auth.User").profile
         self.profile_c = baker.make("auth.User").profile
         self.f_friend = _make_friendship(
-            self.profile_a, self.profile_b,
+            self.profile_a,
+            self.profile_b,
             relationship_type=FriendshipType.FRIEND,
         )
         self.f_connected = _make_friendship(
-            self.profile_a, self.profile_c,
+            self.profile_a,
+            self.profile_c,
             relationship_type=FriendshipType.CONNECTED,
         )
 
@@ -112,6 +114,7 @@ class FriendshipQuerySetRelationshipTypeTests(TestCase):
 
 # -- has_permission() ----------------------------------------------------------
 
+
 class FriendshipQuerySetHasPermissionTests(TestCase):
     """has_permission() filters friendships by the permissions field."""
 
@@ -120,11 +123,13 @@ class FriendshipQuerySetHasPermissionTests(TestCase):
         self.profile_b = baker.make("auth.User").profile
         self.profile_c = baker.make("auth.User").profile
         self.f_view = _make_friendship(
-            self.profile_a, self.profile_b,
+            self.profile_a,
+            self.profile_b,
             permissions=Permission.VIEW_PROFILE,
         )
         self.f_share = _make_friendship(
-            self.profile_a, self.profile_c,
+            self.profile_a,
+            self.profile_c,
             permissions=Permission.SHARE_LOCATIONS,
         )
 

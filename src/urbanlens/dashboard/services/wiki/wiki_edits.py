@@ -161,7 +161,7 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, st
                 new_val = raw.date()
             else:
                 try:
-                    new_val = datetime.strptime(str(raw), "%Y-%m-%d").date()
+                    new_val = datetime.strptime(str(raw), "%Y-%m-%d").date()  # noqa: DTZ007  # .date() discards the time; the wiki field is a date
                 except ValueError:
                     if strict:
                         raise WikiEditValidationError(f"{field} must be a date in YYYY-MM-DD format.", field) from None

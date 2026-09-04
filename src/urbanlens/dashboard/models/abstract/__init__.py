@@ -1,4 +1,3 @@
-
 from urbanlens.dashboard.models.abstract.addressable import AddressableModel
 from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, SecurityLevel, TextChoices
 from urbanlens.dashboard.models.abstract.model import DashboardModel, FrontendDashboardModel, PublicDashboardModel

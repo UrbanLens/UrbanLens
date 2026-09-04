@@ -51,7 +51,10 @@ class GroupRemovalStopsDeliveryTests(TestCase):
 
     def _recipients(self) -> set[str]:
         """Channel groups addressed when the creator posts a message."""
-        with patch("urbanlens.dashboard.services.messaging.group_chats.send_group_message") as send, self.captureOnCommitCallbacks(execute=True):
+        with (
+            patch("urbanlens.dashboard.services.messaging.group_chats.send_group_message") as send,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             create_group_message(self.creator, self.group, "anyone there?")
         return {call.args[0] for call in send.call_args_list}
 

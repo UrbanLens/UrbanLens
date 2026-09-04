@@ -56,10 +56,12 @@ class TaxStatusTests(SimpleTestCase):
 
 class LienRowTests(SimpleTestCase):
     def test_newest_filing_first(self) -> None:
-        rows = _lien_rows([
-            {"lien_type": "tax", "filed_date": "2019-01-01"},
-            {"lien_type": "code enforcement", "filed_date": "2024-06-01"},
-        ])
+        rows = _lien_rows(
+            [
+                {"lien_type": "tax", "filed_date": "2019-01-01"},
+                {"lien_type": "code enforcement", "filed_date": "2024-06-01"},
+            ]
+        )
 
         self.assertEqual([row["lien_type"] for row in rows], ["code enforcement", "tax"])
 

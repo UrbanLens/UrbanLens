@@ -295,7 +295,7 @@ class SpotGuessrHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
                 "default_rounds": spotguessr_session.DEFAULT_ROUNDS_PER_SESSION,
                 "round_time_limit_choices": spotguessr_session.ROUND_TIME_LIMIT_CHOICES,
                 "mode_cards": _mode_cards(),
-                "labels": Label.objects.location_labels().visible_to(profile).ordered(),
+                "labels": Label.objects.location_labels().visible_to(profile).in_display_order(),
                 "urls": _url_templates(),
                 "my_profile_id": profile.pk,
                 "initial_session_id": initial_session_id,

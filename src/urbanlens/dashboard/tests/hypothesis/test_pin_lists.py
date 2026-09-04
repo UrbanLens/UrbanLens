@@ -43,7 +43,9 @@ from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.search.filter_criteria import serialize_form_criteria
 
-_db_settings = settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much])
+_db_settings = settings(
+    max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much]
+)
 
 _coord_counter = itertools.count(1)
 
@@ -105,7 +107,10 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
         response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
         self.assertContains(response, "pinListCreateMarkupMap()")
         self.assertContains(response, "Create Markup Map")
-        self.assertNotContains(response, 'disabled title="Add pins to this list first">\n                    <i class="material-symbols-outlined">map</i>')
+        self.assertNotContains(
+            response,
+            'disabled title="Add pins to this list first">\n                    <i class="material-symbols-outlined">map</i>',
+        )
 
     def test_create_markup_map_button_disabled_when_list_is_empty(self) -> None:
         pin_list = baker.make(PinList, profile=self.profile, name="Empty list")
@@ -170,7 +175,9 @@ class PinListDetailPaginationTests(TestCase):
     def test_items_page_view_returns_the_remaining_rows(self) -> None:
         pins = self._add_pins(5)
         with mock.patch.object(pin_lists, "_ITEMS_PAGE_SIZE", 3):
-            response = self.client.get(reverse("lists.items.page", kwargs={"list_slug": self.pin_list.slug}), {"page": 2})
+            response = self.client.get(
+                reverse("lists.items.page", kwargs={"list_slug": self.pin_list.slug}), {"page": 2}
+            )
         content = response.content.decode()
         for pin in pins[3:]:
             self.assertIn(pin.effective_name, content)
@@ -244,8 +251,12 @@ class PinListExportViewTests(TestCase):
     def test_another_users_list_is_not_reachable(self) -> None:
         other_user = baker.make(User)
         other_list = baker.make(PinList, profile=other_user.profile, name="Not Mine")
-        PinListItem.objects.create(pin_list=other_list, pin=_make_pin(other_user.profile), added_via=PinListItem.ADDED_MANUAL)
-        response = self.client.post(reverse("lists.export", kwargs={"list_slug": other_list.slug}), data={"format": "csv"})
+        PinListItem.objects.create(
+            pin_list=other_list, pin=_make_pin(other_user.profile), added_via=PinListItem.ADDED_MANUAL
+        )
+        response = self.client.post(
+            reverse("lists.export", kwargs={"list_slug": other_list.slug}), data={"format": "csv"}
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_detail_page_has_an_export_button(self) -> None:
@@ -271,7 +282,9 @@ class PinListDetailInlineEditableTests(TestCase):
         self.profile = self.user.profile
 
     def test_title_and_description_render_as_editable(self) -> None:
-        pin_list = baker.make(PinList, profile=self.profile, name="Urban Ruins", description="Places I want to explore.")
+        pin_list = baker.make(
+            PinList, profile=self.profile, name="Urban Ruins", description="Places I want to explore."
+        )
         response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
         self.assertContains(response, "pin-list-title-editable")
         self.assertContains(response, 'data-raw-name="Urban Ruins"')
@@ -383,7 +396,11 @@ class PinListEditConcurrentWriteTests(TestCase):
         self.assertEqual(response.status_code, 200)
         pin_list.refresh_from_db()
         self.assertEqual(pin_list.name, "Renamed")
-        self.assertEqual(pin_list.description, "Changed elsewhere", "a concurrent edit to another field was reverted by this request's save")
+        self.assertEqual(
+            pin_list.description,
+            "Changed elsewhere",
+            "a concurrent edit to another field was reverted by this request's save",
+        )
 
 
 class SelectingSavedFilterImmediatelyPopulatesListTests(TestCase):
@@ -417,14 +434,22 @@ class SelectingSavedFilterImmediatelyPopulatesListTests(TestCase):
 
     def test_clearing_the_filter_removes_previously_matched_pins(self) -> None:
         edit_url = reverse("lists.edit", kwargs={"list_slug": self.pin_list.slug})
-        self.client.post(edit_url, data=json.dumps({"saved_filter_uuid": str(self.saved_filter.uuid)}), content_type="application/json")
+        self.client.post(
+            edit_url,
+            data=json.dumps({"saved_filter_uuid": str(self.saved_filter.uuid)}),
+            content_type="application/json",
+        )
         self.client.post(edit_url, data=json.dumps({"saved_filter_uuid": ""}), content_type="application/json")
         self.pin_list.refresh_from_db()
         self.assertEqual(self.pin_list.items.count(), 0)
 
     def test_turning_is_smart_off_alone_does_not_touch_existing_membership(self) -> None:
         edit_url = reverse("lists.edit", kwargs={"list_slug": self.pin_list.slug})
-        self.client.post(edit_url, data=json.dumps({"saved_filter_uuid": str(self.saved_filter.uuid)}), content_type="application/json")
+        self.client.post(
+            edit_url,
+            data=json.dumps({"saved_filter_uuid": str(self.saved_filter.uuid)}),
+            content_type="application/json",
+        )
         self.client.post(edit_url, data=json.dumps({"is_smart": True}), content_type="application/json")
         self.pin_list.refresh_from_db()
         self.assertTrue(self.pin_list.items.filter(pin=self.matching_pin).exists())
@@ -442,7 +467,7 @@ class SmartListLabelChangeResyncTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.exclude_label = ensure_label( kind=KIND_TAG, profile=self.profile, name="Demolished")
+        self.exclude_label = ensure_label(kind=KIND_TAG, profile=self.profile, name="Demolished")
         self.pin_list = baker.make(
             PinList,
             profile=self.profile,
@@ -497,7 +522,9 @@ class EditingSourceSavedFilterResyncsDerivedListsTests(TestCase):
         self.profile = self.user.profile
         self.alpha_pin = _make_pin(self.profile, name="Alpha Ruin")
         self.beta_pin = _make_pin(self.profile, name="Beta Ruin")
-        self.saved_filter = SavedFilter.objects.create(profile=self.profile, name="My Filter", criteria={"name": "Ruin"})
+        self.saved_filter = SavedFilter.objects.create(
+            profile=self.profile, name="My Filter", criteria={"name": "Ruin"}
+        )
         self.pin_list = baker.make(PinList, profile=self.profile, name="Derived List")
         self.client.post(
             reverse("lists.edit", kwargs={"list_slug": self.pin_list.slug}),
@@ -557,7 +584,9 @@ class EditingSourceSavedFilterResyncsDerivedListsTests(TestCase):
         self.assertIsNone(self.pin_list.smart_filter)
 
     def test_a_list_manually_editing_its_own_smart_filter_is_unaffected_by_other_lists(self) -> None:
-        other_list = baker.make(PinList, profile=self.profile, name="Independent List", is_smart=True, smart_filter={"name": "Gamma"})
+        other_list = baker.make(
+            PinList, profile=self.profile, name="Independent List", is_smart=True, smart_filter={"name": "Gamma"}
+        )
         self.client.post(
             reverse("saved_filters.edit", kwargs={"filter_uuid": self.saved_filter.uuid}),
             {"filter_name": "My Filter", "name": "Alpha"},
@@ -679,14 +708,23 @@ class PinListQuerySetTests(TestCase):
         self.assertEqual(result, [])
 
     def test_active_smart_lists_excludes_smart_lists_with_no_rules_configured(self) -> None:
-        baker.make(PinList, profile=self.profile, name="Empty Smart List", is_smart=True, smart_filter=None, smart_boundary=None)
+        baker.make(
+            PinList,
+            profile=self.profile,
+            name="Empty Smart List",
+            is_smart=True,
+            smart_filter=None,
+            smart_boundary=None,
+        )
 
         result = list(PinList.objects.active_smart_lists(self.profile))
 
         self.assertEqual(result, [])
 
     def test_active_smart_lists_includes_a_list_with_a_smart_filter(self) -> None:
-        smart_list = baker.make(PinList, profile=self.profile, name="Filtered", is_smart=True, smart_filter={"name": "ruins"})
+        smart_list = baker.make(
+            PinList, profile=self.profile, name="Filtered", is_smart=True, smart_filter={"name": "ruins"}
+        )
 
         result = list(PinList.objects.active_smart_lists(self.profile))
 

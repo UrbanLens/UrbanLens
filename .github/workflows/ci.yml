@@ -143,6 +143,22 @@ jobs:
       - name: Template hash-comments close on the line they open
         run: python3 bin/check_template_comments.py
 
+      # The three below had no CI backstop before 2026-09-04. Two ran only in
+      # pre-commit (defeated by --no-verify or by a checkout where nobody ran
+      # `pre-commit install`), and check_pin_not_published_to_wiki.py - a
+      # privacy guard - was wired into nothing at all.
+      - name: Tracked text files are stored with LF
+        run: python3 bin/check_line_endings.py
+
+      - name: A private pin's fields never reach a community wiki
+        run: python3 bin/check_pin_not_published_to_wiki.py
+
+      # A document that moves leaves its pointers behind: a 2026-09-04 sweep
+      # found 39 stale citations across 33 files, including one naming a file
+      # that had been deleted from git without its replacement being added.
+      - name: Code cites only docs/ paths that exist
+        run: python3 bin/check_docs_refs.py
+
       # Nothing else checks this: a model change without its migration only
       # surfaces if some test happens to touch the field, and otherwise waits
       # until the column is needed in production.

@@ -69,7 +69,10 @@ class ResolvePublicHttpUrlTests(SimpleTestCase):
 
     def test_any_internal_answer_rejects_the_whole_url(self) -> None:
         """One bad address in a multi-answer response is enough to refuse it."""
-        with mock.patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34", "127.0.0.1")), self.assertRaises(UnsafeUrlError):
+        with (
+            mock.patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34", "127.0.0.1")),
+            self.assertRaises(UnsafeUrlError),
+        ):
             resolve_public_http_url("https://rebind.test/a.jpg")
 
     def test_internal_ranges_are_blocked(self) -> None:
@@ -87,7 +90,9 @@ class PinnedResolverTests(SimpleTestCase):
 
     def test_without_a_pin_it_delegates_to_the_real_resolver(self) -> None:
         _PINS.map = None
-        with mock.patch("urbanlens.dashboard.services.security.url_safety._real_getaddrinfo", return_value=_addrinfo("1.2.3.4")) as real:
+        with mock.patch(
+            "urbanlens.dashboard.services.security.url_safety._real_getaddrinfo", return_value=_addrinfo("1.2.3.4")
+        ) as real:
             result = _pinned_getaddrinfo("example.test", 443)
 
         real.assert_called_once()
@@ -104,7 +109,9 @@ class PinnedResolverTests(SimpleTestCase):
 
     def test_a_pin_does_not_affect_other_hosts(self) -> None:
         _PINS.map = {"rebind.test": "93.184.216.34"}
-        with mock.patch("urbanlens.dashboard.services.security.url_safety._real_getaddrinfo", return_value=_addrinfo("5.6.7.8")) as real:
+        with mock.patch(
+            "urbanlens.dashboard.services.security.url_safety._real_getaddrinfo", return_value=_addrinfo("5.6.7.8")
+        ) as real:
             result = _pinned_getaddrinfo("other.test", 443)
 
         real.assert_called_once()
@@ -135,7 +142,11 @@ class PeerAddressTests(SimpleTestCase):
         response = requests.get(f"http://127.0.0.1:{self.port}/", stream=True, allow_redirects=False, timeout=10)
         self.addCleanup(response.close)
 
-        self.assertEqual(_peer_address(response), "127.0.0.1", "the peer must be readable before the body is consumed, or the check is decorative")
+        self.assertEqual(
+            _peer_address(response),
+            "127.0.0.1",
+            "the peer must be readable before the body is consumed, or the check is decorative",
+        )
 
     def test_a_real_connection_to_an_unvalidated_peer_is_refused(self) -> None:
         """End-to-end, with the pin disabled - the condition the backstop exists for.
@@ -149,7 +160,14 @@ class PeerAddressTests(SimpleTestCase):
         resolver here reproduces that, and the fetch must still refuse.
         """
         url = f"http://127.0.0.1:{self.port}/"
-        with mock.patch("socket.getaddrinfo", _real_getaddrinfo), mock.patch("urbanlens.dashboard.services.security.url_safety.resolve_public_http_url", return_value=(url, "93.184.216.34")), self.assertRaises(UnsafeUrlError):
+        with (
+            mock.patch("socket.getaddrinfo", _real_getaddrinfo),
+            mock.patch(
+                "urbanlens.dashboard.services.security.url_safety.resolve_public_http_url",
+                return_value=(url, "93.184.216.34"),
+            ),
+            self.assertRaises(UnsafeUrlError),
+        ):
             fetch_public_url(url)
 
 
@@ -186,7 +204,9 @@ class FetchPublicUrlTests(SimpleTestCase):
             fetch_public_url("https://example.test/a.jpg")
 
         get.assert_called_once()
-        self.assertEqual(get.call_args.kwargs["allow_redirects"], False, "redirects are followed by hand so every hop is revalidated")
+        self.assertEqual(
+            get.call_args.kwargs["allow_redirects"], False, "redirects are followed by hand so every hop is revalidated"
+        )
         self.assertEqual(get.call_args.kwargs["stream"], True, "the body must not be read before the peer is checked")
 
     def test_a_response_without_a_socket_is_not_rejected(self) -> None:
@@ -236,7 +256,10 @@ class FetchPublicUrlTests(SimpleTestCase):
         """The backstop: if the pin ever fails to apply, the body is never read."""
         session = mock.MagicMock()
         session.get.return_value = self._response(peer="127.0.0.1")
-        with mock.patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")), self.assertRaises(UnsafeUrlError):
+        with (
+            mock.patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")),
+            self.assertRaises(UnsafeUrlError),
+        ):
             fetch_public_url("https://rebind.test/a.jpg", session=session)
 
         session.get.return_value.close.assert_called_once()
@@ -269,7 +292,10 @@ class FetchPublicUrlTests(SimpleTestCase):
     def test_a_redirect_chain_that_never_ends_is_refused(self) -> None:
         session = mock.MagicMock()
         session.get.return_value = self._response(status=302, location="https://example.test/loop.jpg")
-        with mock.patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")), self.assertRaises(UnsafeUrlError):
+        with (
+            mock.patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")),
+            self.assertRaises(UnsafeUrlError),
+        ):
             fetch_public_url("https://example.test/a.jpg", session=session, max_redirects=2)
 
         self.assertEqual(session.get.call_count, 3, "should try the original plus max_redirects hops, then give up")

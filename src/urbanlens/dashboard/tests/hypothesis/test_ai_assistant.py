@@ -70,9 +70,13 @@ class _StubGateway:
             return None
         step = self.steps.pop(0)
         if "reply" in step:
-            return InferenceResponse(content=[TextBlock(text=step["reply"])], stop_reason="end_turn", usage=Usage(output_tokens=5))
+            return InferenceResponse(
+                content=[TextBlock(text=step["reply"])], stop_reason="end_turn", usage=Usage(output_tokens=5)
+            )
         calls = step.get("tools") or [step]
-        blocks: list[TextBlock | ToolUseBlock] = [ToolUseBlock(id=f"tu_{i}", name=call["tool"], input=call.get("args", {})) for i, call in enumerate(calls)]
+        blocks: list[TextBlock | ToolUseBlock] = [
+            ToolUseBlock(id=f"tu_{i}", name=call["tool"], input=call.get("args", {})) for i, call in enumerate(calls)
+        ]
         return InferenceResponse(content=blocks, stop_reason="tool_use", usage=Usage(output_tokens=5))
 
 
@@ -83,7 +87,10 @@ class AssistantLoopTests(TestCase):
         self.profile = _plain_profile()
 
     def test_unavailable_when_gateway_is_none(self) -> None:
-        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=None), pytest.raises(AssistantUnavailableError):
+        with (
+            patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=None),
+            pytest.raises(AssistantUnavailableError),
+        ):
             run_assistant_turn(self.profile, [], "hello")
 
     def test_read_only_tool_then_reply(self) -> None:
@@ -98,7 +105,12 @@ class AssistantLoopTests(TestCase):
 
     def test_write_tool_produces_a_proposal_without_executing(self) -> None:
         """A write tool never runs inside the loop - it becomes a proposal for the user to confirm."""
-        gateway = _StubGateway([{"tool": "create_trip", "args": {"name": "Loop Trip"}}, {"reply": "I've proposed creating that trip - just confirm it."}])
+        gateway = _StubGateway(
+            [
+                {"tool": "create_trip", "args": {"name": "Loop Trip"}},
+                {"reply": "I've proposed creating that trip - just confirm it."},
+            ]
+        )
         with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
             turn = run_assistant_turn(self.profile, [], "make me a trip")
         self.assertEqual(turn.reply, "I've proposed creating that trip - just confirm it.")
@@ -200,8 +212,12 @@ class AssistantLoopTests(TestCase):
     def test_dismissals_reach_the_recent_dismissals_tool(self) -> None:
         from urbanlens.dashboard.services.ai.dismissals import DismissalEntry
 
-        entries = (DismissalEntry(id="x", kind="explainer", heading="Labels", body="Tag your pins.", page="/organize/"),)
-        gateway = _StubGateway([{"tool": "recent_dismissals", "args": {}}, {"reply": "You dismissed the Labels explainer."}])
+        entries = (
+            DismissalEntry(id="x", kind="explainer", heading="Labels", body="Tag your pins.", page="/organize/"),
+        )
+        gateway = _StubGateway(
+            [{"tool": "recent_dismissals", "args": {}}, {"reply": "You dismissed the Labels explainer."}]
+        )
         with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
             turn = run_assistant_turn(self.profile, [], "what did I just dismiss?", dismissals=entries)
         self.assertIn('"id": "x"', gateway.prompts[1])
@@ -210,15 +226,31 @@ class AssistantLoopTests(TestCase):
     def test_a_successful_client_action_tool_is_collected_on_the_turn(self) -> None:
         from urbanlens.dashboard.services.ai.dismissals import DismissalEntry
 
-        entries = (DismissalEntry(id="x", kind="explainer", heading="Labels", body="Tag your pins.", page="/organize/"),)
+        entries = (
+            DismissalEntry(id="x", kind="explainer", heading="Labels", body="Tag your pins.", page="/organize/"),
+        )
         gateway = _StubGateway([{"tool": "reopen_explainer", "args": {"id": "x"}}, {"reply": "Reopened it."}])
         with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
             turn = run_assistant_turn(self.profile, [], "reopen that", dismissals=entries)
-        self.assertEqual(turn.client_actions, [{"action": "reopen_explainer", "status": "reopened", "id": "x", "kind": "explainer", "page": "/organize/", "prefix": None}])
+        self.assertEqual(
+            turn.client_actions,
+            [
+                {
+                    "action": "reopen_explainer",
+                    "status": "reopened",
+                    "id": "x",
+                    "kind": "explainer",
+                    "page": "/organize/",
+                    "prefix": None,
+                }
+            ],
+        )
         self.assertEqual(turn.actions, ["Reopened it"])
 
     def test_a_failed_client_action_tool_call_is_not_collected(self) -> None:
-        gateway = _StubGateway([{"tool": "reopen_explainer", "args": {"id": "never-dismissed"}}, {"reply": "I couldn't find that."}])
+        gateway = _StubGateway(
+            [{"tool": "reopen_explainer", "args": {"id": "never-dismissed"}}, {"reply": "I couldn't find that."}]
+        )
         with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
             turn = run_assistant_turn(self.profile, [], "reopen that")
         self.assertEqual(turn.client_actions, [])
@@ -241,7 +273,9 @@ class AssistantViewTests(TestCase):
 
     def _enqueued(self, task_id: str = "task-abc-123"):
         """A patched safely_enqueue_task returning a fake AsyncResult with this id."""
-        return patch("urbanlens.dashboard.controllers.assistant.safely_enqueue_task", return_value=mock.Mock(id=task_id))
+        return patch(
+            "urbanlens.dashboard.controllers.assistant.safely_enqueue_task", return_value=mock.Mock(id=task_id)
+        )
 
     def test_page_reflects_ai_availability(self) -> None:
         # Unavailable: the disabled notice, no chat form.
@@ -260,7 +294,10 @@ class AssistantViewTests(TestCase):
         self.assertContains(response, 'name="message"')
 
     def test_message_enqueues_a_pending_bubble_then_polling_resolves_it(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued(),
+        ):
             response = self.client.post(reverse("assistant.message"), {"message": "find pins"})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "find pins")
@@ -269,7 +306,11 @@ class AssistantViewTests(TestCase):
         self.assertNotContains(response, "Found 3 pins.")
 
         turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
-        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Found 3 pins.", "actions": ["Searched your pins"]})
+        progress = TaskProgress(
+            task_id="task-abc-123",
+            state="SUCCESS",
+            result={"reply": "Found 3 pins.", "actions": ["Searched your pins"]},
+        )
         with patch("urbanlens.dashboard.controllers.assistant.get_task_progress", return_value=progress):
             response = self.client.get(reverse("assistant.turn", args=[turn_id]))
         self.assertEqual(response.status_code, 200)
@@ -295,11 +336,18 @@ class AssistantViewTests(TestCase):
         # "still running". Without the turn-result cache the second tab would
         # spin until MAX_POLL_ATTEMPTS and show the gave-up message for a turn
         # that actually succeeded.
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued(),
+        ):
             self.client.post(reverse("assistant.message"), {"message": "find pins"})
         turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
 
-        success = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Found 3 pins.", "actions": ["Searched your pins"]})
+        success = TaskProgress(
+            task_id="task-abc-123",
+            state="SUCCESS",
+            result={"reply": "Found 3 pins.", "actions": ["Searched your pins"]},
+        )
         with patch("urbanlens.dashboard.controllers.assistant.get_task_progress", return_value=success):
             first = self.client.get(reverse("assistant.turn", args=[turn_id]))
         self.assertContains(first, "Found 3 pins.")
@@ -316,7 +364,10 @@ class AssistantViewTests(TestCase):
         # Same consumed-once problem on the failure branch: the sentinel the
         # first poll caches is what keeps the second from reading PENDING off
         # the forgotten task id and polling on.
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued(),
+        ):
             self.client.post(reverse("assistant.message"), {"message": "find pins"})
         turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
 
@@ -332,7 +383,10 @@ class AssistantViewTests(TestCase):
         progress.assert_not_called()
 
     def test_poll_view_renders_an_error_bubble_on_failure(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued(),
+        ):
             self.client.post(reverse("assistant.message"), {"message": "find pins"})
         turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
 
@@ -344,7 +398,10 @@ class AssistantViewTests(TestCase):
         self.assertNotContains(response, "assistant-msg--pending")
 
     def test_poll_view_still_pending_self_polls_again(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued(),
+        ):
             self.client.post(reverse("assistant.message"), {"message": "find pins"})
         turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
 
@@ -360,7 +417,10 @@ class AssistantViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_poll_view_404s_for_another_profiles_turn(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued(),
+        ):
             self.client.post(reverse("assistant.message"), {"message": "find pins"})
         turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
 
@@ -371,7 +431,10 @@ class AssistantViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_second_message_while_a_turn_is_in_flight_is_dropped_with_a_toast(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued() as mock_enqueue,
+        ):
             self.client.post(reverse("assistant.message"), {"message": "first"})
             response = self.client.post(reverse("assistant.message"), {"message": "second"})
         self.assertEqual(response.status_code, 200)
@@ -380,7 +443,10 @@ class AssistantViewTests(TestCase):
         self.assertIn("Still working on your last message", response["HX-Trigger"])
 
     def test_message_when_ai_unavailable_shows_notice_and_saves_history(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=False), self._enqueued() as mock_enqueue:
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=False),
+            self._enqueued() as mock_enqueue,
+        ):
             response = self.client.post(reverse("assistant.message"), {"message": "find pins"})
         mock_enqueue.assert_not_called()
         self.assertEqual(response.status_code, 200)
@@ -396,7 +462,10 @@ class AssistantViewTests(TestCase):
     def test_stale_pending_entry_resolves_to_an_error_on_next_read(self) -> None:
         """A turn record can expire (server restart, 15-minute TTL) while a pending marker is still in session."""
         session = self.client.session
-        session["assistant_chat"] = [{"role": "user", "content": "find pins"}, {"role": "assistant", "pending": True, "turn_id": "long-gone"}]
+        session["assistant_chat"] = [
+            {"role": "user", "content": "find pins"},
+            {"role": "assistant", "pending": True, "turn_id": "long-gone"},
+        ]
         session.save()
 
         with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True):
@@ -415,17 +484,29 @@ class AssistantViewTests(TestCase):
 
     def test_page_path_resolves_to_a_page_object_on_the_enqueued_task(self) -> None:
         pin: Pin = baker.make(Pin, profile=self.profile)
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
-            self.client.post(reverse("assistant.message"), {"message": "find pins", "page_path": reverse("pin.details", args=[pin.slug])})
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued() as mock_enqueue,
+        ):
+            self.client.post(
+                reverse("assistant.message"),
+                {"message": "find pins", "page_path": reverse("pin.details", args=[pin.slug])},
+            )
         self.assertEqual(mock_enqueue.call_args.kwargs["page"], {"kind": "pin", "id": pin.pk})
 
     def test_an_unresolvable_page_path_enqueues_no_page(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued() as mock_enqueue,
+        ):
             self.client.post(reverse("assistant.message"), {"message": "find pins", "page_path": "/not/a/real/route/"})
         self.assertIsNone(mock_enqueue.call_args.kwargs["page"])
 
     def test_no_page_path_enqueues_no_page(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued() as mock_enqueue,
+        ):
             self.client.post(reverse("assistant.message"), {"message": "find pins"})
         self.assertIsNone(mock_enqueue.call_args.kwargs["page"])
 
@@ -433,34 +514,54 @@ class AssistantViewTests(TestCase):
         import json
 
         dismissals = json.dumps([{"id": "x", "kind": "explainer", "heading": "H", "body": "B", "page": "/map/"}])
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued() as mock_enqueue,
+        ):
             self.client.post(reverse("assistant.message"), {"message": "find pins", "dismissals": dismissals})
-        self.assertEqual(mock_enqueue.call_args.kwargs["dismissals"], [{"id": "x", "kind": "explainer", "heading": "H", "body": "B", "page": "/map/", "prefix": None}])
+        self.assertEqual(
+            mock_enqueue.call_args.kwargs["dismissals"],
+            [{"id": "x", "kind": "explainer", "heading": "H", "body": "B", "page": "/map/", "prefix": None}],
+        )
 
     def test_malformed_dismissals_json_enqueues_an_empty_list(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued() as mock_enqueue,
+        ):
             self.client.post(reverse("assistant.message"), {"message": "find pins", "dismissals": "not json"})
         self.assertEqual(mock_enqueue.call_args.kwargs["dismissals"], [])
 
     def test_no_dismissals_enqueues_an_empty_list(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued() as mock_enqueue:
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued() as mock_enqueue,
+        ):
             self.client.post(reverse("assistant.message"), {"message": "find pins"})
         self.assertEqual(mock_enqueue.call_args.kwargs["dismissals"], [])
 
     def test_client_actions_fire_an_hx_trigger_on_the_resolved_poll(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued(),
+        ):
             self.client.post(reverse("assistant.message"), {"message": "reopen it"})
         turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
 
         client_actions = [{"action": "reopen_explainer", "id": "x", "kind": "explainer"}]
-        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Reopened.", "client_actions": client_actions})
+        progress = TaskProgress(
+            task_id="task-abc-123", state="SUCCESS", result={"reply": "Reopened.", "client_actions": client_actions}
+        )
         with patch("urbanlens.dashboard.controllers.assistant.get_task_progress", return_value=progress):
             response = self.client.get(reverse("assistant.turn", args=[turn_id]))
         self.assertIn("ulAssistantAction", response["HX-Trigger"])
         self.assertIn("reopen_explainer", response["HX-Trigger"])
 
     def test_no_client_actions_means_no_hx_trigger(self) -> None:
-        with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True), self._enqueued():
+        with (
+            patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
+            self._enqueued(),
+        ):
             self.client.post(reverse("assistant.message"), {"message": "find pins"})
         turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
 
@@ -550,18 +651,27 @@ class AssistantProposalConfirmViewTests(TestCase):
         """Send a message, then resolve its poll to a turn carrying exactly this one proposal."""
         with (
             patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True),
-            patch("urbanlens.dashboard.controllers.assistant.safely_enqueue_task", return_value=mock.Mock(id="task-abc-123")),
+            patch(
+                "urbanlens.dashboard.controllers.assistant.safely_enqueue_task",
+                return_value=mock.Mock(id="task-abc-123"),
+            ),
         ):
             self.client.post(reverse("assistant.message"), {"message": message})
         turn_id = self.client.session["assistant_chat"][-1]["turn_id"]
 
-        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Confirm to create it.", "actions": [], "proposals": [proposal]})
+        progress = TaskProgress(
+            task_id="task-abc-123",
+            state="SUCCESS",
+            result={"reply": "Confirm to create it.", "actions": [], "proposals": [proposal]},
+        )
         with patch("urbanlens.dashboard.controllers.assistant.get_task_progress", return_value=progress):
             self.client.get(reverse("assistant.turn", args=[turn_id]))
         return turn_id
 
     def test_confirm_runs_the_write_exactly_once(self) -> None:
-        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "Confirmed Trip"}, "confirm_label": "Create trip"})
+        turn_id = self._resolve_with_proposal(
+            {"n": 0, "tool": "create_trip", "args": {"name": "Confirmed Trip"}, "confirm_label": "Create trip"}
+        )
         self.assertFalse(Trip.objects.filter(name="Confirmed Trip").exists())
 
         response = self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
@@ -583,7 +693,9 @@ class AssistantProposalConfirmViewTests(TestCase):
         """
         from urbanlens.dashboard.services.ai.turns import claim_turn_proposal
 
-        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "Racing Trip"}, "confirm_label": "Create trip"})
+        turn_id = self._resolve_with_proposal(
+            {"n": 0, "tool": "create_trip", "args": {"name": "Racing Trip"}, "confirm_label": "Create trip"}
+        )
         self.assertTrue(claim_turn_proposal(turn_id, 0))
 
         response = self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
@@ -593,7 +705,9 @@ class AssistantProposalConfirmViewTests(TestCase):
         self.assertFalse(Trip.objects.filter(name="Racing Trip").exists())
 
     def test_confirm_marks_the_session_proposal_resolved(self) -> None:
-        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "Resolved Trip"}, "confirm_label": "Create trip"})
+        turn_id = self._resolve_with_proposal(
+            {"n": 0, "tool": "create_trip", "args": {"name": "Resolved Trip"}, "confirm_label": "Create trip"}
+        )
         self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
 
         with patch("urbanlens.dashboard.controllers.assistant.assistant_available", return_value=True):
@@ -605,12 +719,18 @@ class AssistantProposalConfirmViewTests(TestCase):
         self.assertEqual(entries[-1]["proposals"][0]["status"], "done")
 
     def test_confirm_404s_for_an_unknown_or_out_of_range_proposal(self) -> None:
-        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "X"}, "confirm_label": "Create trip"})
+        turn_id = self._resolve_with_proposal(
+            {"n": 0, "tool": "create_trip", "args": {"name": "X"}, "confirm_label": "Create trip"}
+        )
         self.assertEqual(self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 5])).status_code, 404)
-        self.assertEqual(self.client.post(reverse("assistant.proposal.confirm", args=["never-issued", 0])).status_code, 404)
+        self.assertEqual(
+            self.client.post(reverse("assistant.proposal.confirm", args=["never-issued", 0])).status_code, 404
+        )
 
     def test_confirm_404s_for_another_profiles_proposal(self) -> None:
-        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "Not Yours"}, "confirm_label": "Create trip"})
+        turn_id = self._resolve_with_proposal(
+            {"n": 0, "tool": "create_trip", "args": {"name": "Not Yours"}, "confirm_label": "Create trip"}
+        )
 
         other_user: User = baker.make(User)
         other_client = self.client_class()
@@ -629,7 +749,8 @@ class AssistantProposalConfirmViewTests(TestCase):
         pin.delete()
 
         turn_id = self._resolve_with_proposal(
-            {"n": 0, "tool": "undo_last_action", "args": {"undo_uuid": str(undo_action.uuid)}, "confirm_label": "Undo"}, message="undo that"
+            {"n": 0, "tool": "undo_last_action", "args": {"undo_uuid": str(undo_action.uuid)}, "confirm_label": "Undo"},
+            message="undo that",
         )
         response = self.client.post(reverse("assistant.proposal.confirm", args=[turn_id, 0]))
 
@@ -648,7 +769,13 @@ class AssistantProposalConfirmViewTests(TestCase):
         first_pin.delete()
 
         turn_id = self._resolve_with_proposal(
-            {"n": 0, "tool": "undo_last_action", "args": {"undo_uuid": str(first_action.uuid)}, "confirm_label": "Undo"}, message="undo that"
+            {
+                "n": 0,
+                "tool": "undo_last_action",
+                "args": {"undo_uuid": str(first_action.uuid)},
+                "confirm_label": "Undo",
+            },
+            message="undo that",
         )
 
         # Something else happens after the proposal was made, before it's confirmed.

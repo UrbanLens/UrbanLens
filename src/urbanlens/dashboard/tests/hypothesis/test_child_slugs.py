@@ -247,7 +247,9 @@ class ChildWikiSlugTests(TestCase):
         self.assertEqual(child.slug, "hrsh-powerhouse")
 
     def test_uuid_location_slug_is_replaced_with_the_child_wiki_slug(self) -> None:
-        parent = Wiki.objects.create(location=self._location(official_name="Hudson River State Hospital"), name="Hudson River State Hospital")
+        parent = Wiki.objects.create(
+            location=self._location(official_name="Hudson River State Hospital"), name="Hudson River State Hospital"
+        )
         WikiAlias.objects.create(wiki=parent, name="HRSH")
         child_location = self._location()  # no official_name → UUID slug
         self.assertTrue(is_uuid_slug(child_location.slug))

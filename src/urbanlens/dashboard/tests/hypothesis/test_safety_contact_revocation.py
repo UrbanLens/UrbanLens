@@ -30,7 +30,11 @@ from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
 from urbanlens.dashboard.models.safety.model import SafetyCheckinContact
-from urbanlens.dashboard.tests.hypothesis.test_safety_chat import _IN_MEMORY_CHANNEL_LAYERS, SafetyCheckinChatConsumerTests, _run
+from urbanlens.dashboard.tests.hypothesis.test_safety_chat import (
+    _IN_MEMORY_CHANNEL_LAYERS,
+    SafetyCheckinChatConsumerTests,
+    _run,
+)
 
 
 @override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
@@ -116,6 +120,8 @@ class ContactAccessRevocationTests(SafetyCheckinChatConsumerTests):
             contact_comm = self._contact_communicator(self.contact.token)
             self.assertTrue((await contact_comm.connect())[0])
 
-            self.assertTrue(await contact_comm.receive_nothing(timeout=0.5), "a contact still on the list must stay connected")
+            self.assertTrue(
+                await contact_comm.receive_nothing(timeout=0.5), "a contact still on the list must stay connected"
+            )
 
         await contact_comm.disconnect()

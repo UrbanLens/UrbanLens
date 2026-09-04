@@ -194,7 +194,9 @@ class ReactionNotificationTests(TestCase):
         Returns:
             The row count.
         """
-        return NotificationLog.objects.filter(profile=self.author, notification_type=NotificationType.COMMENT_LIKED).count()
+        return NotificationLog.objects.filter(
+            profile=self.author, notification_type=NotificationType.COMMENT_LIKED
+        ).count()
 
     def test_adding_a_reaction_notifies_the_comment_author(self) -> None:
         """The service - not the view - is what makes every surface notify."""
@@ -223,7 +225,9 @@ class ReactionNotificationTests(TestCase):
         missing row as "site delivery", so the off case only exists once a row
         says so.
         """
-        NotificationPreference.objects.update_or_create(profile=self.author, defaults={"comment_liked": DeliveryPreference.NONE})
+        NotificationPreference.objects.update_or_create(
+            profile=self.author, defaults={"comment_liked": DeliveryPreference.NONE}
+        )
 
         toggle_reaction(self.reactor, self.comment, "👍")
 

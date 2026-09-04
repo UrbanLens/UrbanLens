@@ -183,7 +183,15 @@ class CustomLayerPinEndpointTests(TestCase):
         trigger = json.loads(response["HX-Trigger"])
         self.assertEqual(
             trigger["ul:custom-layers-changed"]["layers"],
-            [{"uuid": str(layer.uuid), "name": "Tunnels", "icon": "route", "color": "#F44336", "default_visible": layer.default_visible}],
+            [
+                {
+                    "uuid": str(layer.uuid),
+                    "name": "Tunnels",
+                    "icon": "route",
+                    "color": "#F44336",
+                    "default_visible": layer.default_visible,
+                }
+            ],
         )
         self.assertEqual(layer.name, "Tunnels")
         self.assertEqual(layer.color, "#F44336")
@@ -200,7 +208,9 @@ class CustomLayerPinEndpointTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_create_layer_with_invalid_color_and_icon_blanks_them(self) -> None:
-        response = self.client.post(self._list_url(), {"name": "Tunnels", "color": "javascript:alert(1)", "icon": "not-a-real-icon"})
+        response = self.client.post(
+            self._list_url(), {"name": "Tunnels", "color": "javascript:alert(1)", "icon": "not-a-real-icon"}
+        )
         self.assertEqual(response.status_code, 200)
         layer = CustomLayer.objects.get(parent_pin=self.pin)
         self.assertEqual(layer.color, "")
@@ -312,7 +322,9 @@ class CustomLayerShareToWikiTests(TestCase):
         return reverse("pin.layers.share_to_wiki", args=[self.pin.slug, layer.uuid])
 
     def test_shares_a_copy_with_matching_name_color_and_icon(self) -> None:
-        layer = CustomLayer.objects.create(name="Tunnels", color="#F44336", icon="route", parent_pin=self.pin, profile=self.profile)
+        layer = CustomLayer.objects.create(
+            name="Tunnels", color="#F44336", icon="route", parent_pin=self.pin, profile=self.profile
+        )
         response = self.client.post(self._share_url(layer))
         self.assertEqual(response.status_code, 200)
 
@@ -426,11 +438,13 @@ class MarkupLayerAssignmentTests(TestCase):
         layer = CustomLayer.objects.create(name="Tunnels", parent_pin=self.pin, profile=self.profile)
         response = self.client.post(
             reverse("pin.markup", args=[self.pin.slug]),
-            data=json.dumps({
-                "markup_type": "line",
-                "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
-                "layer_uuid": str(layer.uuid),
-            }),
+            data=json.dumps(
+                {
+                    "markup_type": "line",
+                    "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+                    "layer_uuid": str(layer.uuid),
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
@@ -442,11 +456,13 @@ class MarkupLayerAssignmentTests(TestCase):
         foreign_layer = CustomLayer.objects.create(name="Elsewhere", parent_pin=other_pin, profile=self.profile)
         response = self.client.post(
             reverse("pin.markup", args=[self.pin.slug]),
-            data=json.dumps({
-                "markup_type": "line",
-                "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
-                "layer_uuid": str(foreign_layer.uuid),
-            }),
+            data=json.dumps(
+                {
+                    "markup_type": "line",
+                    "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+                    "layer_uuid": str(foreign_layer.uuid),
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)

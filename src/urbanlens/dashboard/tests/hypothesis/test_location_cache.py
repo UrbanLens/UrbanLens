@@ -1,4 +1,5 @@
 """Tests for LocationCache staleness and the shared, Location-scoped caching contract."""
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -42,7 +43,10 @@ class LocationCacheStalenessTests(TestCase):
 
         self.assertFalse(entry.is_stale)
 
-    @given(configured_days=st.integers(min_value=1, max_value=365), age_days=st.floats(min_value=0, max_value=400, allow_nan=False))
+    @given(
+        configured_days=st.integers(min_value=1, max_value=365),
+        age_days=st.floats(min_value=0, max_value=400, allow_nan=False),
+    )
     @_hyp
     def test_staleness_matches_configured_threshold(self, configured_days: int, age_days: float):
         site_settings = SiteSettings.get_current()

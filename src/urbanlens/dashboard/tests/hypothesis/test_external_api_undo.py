@@ -60,7 +60,9 @@ class UndoListTests(_UndoApiTestCase):
         """A pin entry is listed; a safety_checkin entry is omitted and named in `omitted`."""
         pin = baker.make(Pin, profile=self.profile)
         stash_for_undo("pin", [pin], self.profile)
-        baker.make(UndoAction, profile=self.profile, model_label="safety_checkin", object_repr="Overdue check-in", payload={})
+        baker.make(
+            UndoAction, profile=self.profile, model_label="safety_checkin", object_repr="Overdue check-in", payload={}
+        )
 
         raw_key = self._key_with_scopes([ApiKeyScope.UNDO_READ.value, ApiKeyScope.PINS_READ.value])
         response = self.client.get(reverse("external_api:undo"), **_bearer(raw_key))
@@ -74,10 +76,19 @@ class UndoListTests(_UndoApiTestCase):
         """A credential holding every domain's read scope reports no omissions."""
         pin = baker.make(Pin, profile=self.profile)
         stash_for_undo("pin", [pin], self.profile)
-        baker.make(UndoAction, profile=self.profile, model_label="safety_checkin", object_repr="Overdue check-in", payload={})
+        baker.make(
+            UndoAction, profile=self.profile, model_label="safety_checkin", object_repr="Overdue check-in", payload={}
+        )
 
         raw_key = self._key_with_scopes(
-            [ApiKeyScope.UNDO_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.WIKI_READ.value, ApiKeyScope.TRIPS_READ.value, ApiKeyScope.LISTS_READ.value, ApiKeyScope.SAFETY_READ.value]
+            [
+                ApiKeyScope.UNDO_READ.value,
+                ApiKeyScope.PINS_READ.value,
+                ApiKeyScope.WIKI_READ.value,
+                ApiKeyScope.TRIPS_READ.value,
+                ApiKeyScope.LISTS_READ.value,
+                ApiKeyScope.SAFETY_READ.value,
+            ]
         )
         response = self.client.get(reverse("external_api:undo"), **_bearer(raw_key))
         self.assertEqual(response.json()["omitted"], [])
@@ -85,7 +96,9 @@ class UndoListTests(_UndoApiTestCase):
 
     def test_never_lists_another_profiles_entries(self) -> None:
         """Another profile's undo history never leaks into this list."""
-        baker.make(UndoAction, profile=self.other_profile, model_label="pin", object_repr="Someone else's pin", payload={})
+        baker.make(
+            UndoAction, profile=self.other_profile, model_label="pin", object_repr="Someone else's pin", payload={}
+        )
         raw_key = self._key_with_scopes([ApiKeyScope.UNDO_READ.value, ApiKeyScope.PINS_READ.value])
         response = self.client.get(reverse("external_api:undo"), **_bearer(raw_key))
         self.assertEqual(response.json()["entries"], [])
@@ -93,7 +106,9 @@ class UndoListTests(_UndoApiTestCase):
     def test_expired_entries_are_excluded(self) -> None:
         """An entry past UNDO_RETENTION doesn't appear in the active list."""
         entry = baker.make(UndoAction, profile=self.profile, model_label="pin", object_repr="Old pin", payload={})
-        UndoAction.objects.filter(pk=entry.pk).update(created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1))
+        UndoAction.objects.filter(pk=entry.pk).update(
+            created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1)
+        )
         raw_key = self._key_with_scopes([ApiKeyScope.UNDO_READ.value, ApiKeyScope.PINS_READ.value])
         response = self.client.get(reverse("external_api:undo"), **_bearer(raw_key))
         self.assertEqual(response.json()["entries"], [])
@@ -128,7 +143,9 @@ class UndoRestoreTests(_UndoApiTestCase):
 
     def test_another_profiles_entry_is_404_not_403(self) -> None:
         """Another profile's undo entry is indistinguishable from a nonexistent one."""
-        entry = baker.make(UndoAction, profile=self.other_profile, model_label="pin", object_repr="Not yours", payload={})
+        entry = baker.make(
+            UndoAction, profile=self.other_profile, model_label="pin", object_repr="Not yours", payload={}
+        )
         raw_key = self._key_with_scopes([ApiKeyScope.UNDO_WRITE.value, ApiKeyScope.PINS_WRITE.value])
         url = reverse("external_api:undo.restore", kwargs={"undo_uuid": entry.uuid})
         response = self.client.post(url, **_bearer(raw_key))
@@ -138,7 +155,9 @@ class UndoRestoreTests(_UndoApiTestCase):
     def test_expired_entry_returns_410_and_is_deleted(self) -> None:
         """An entry past retention answers 410 (not 404) and is cleaned up on the attempt."""
         entry = baker.make(UndoAction, profile=self.profile, model_label="pin", object_repr="Old pin", payload={})
-        UndoAction.objects.filter(pk=entry.pk).update(created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1))
+        UndoAction.objects.filter(pk=entry.pk).update(
+            created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1)
+        )
         raw_key = self._key_with_scopes([ApiKeyScope.UNDO_WRITE.value, ApiKeyScope.PINS_WRITE.value])
         url = reverse("external_api:undo.restore", kwargs={"undo_uuid": entry.uuid})
         response = self.client.post(url, **_bearer(raw_key))

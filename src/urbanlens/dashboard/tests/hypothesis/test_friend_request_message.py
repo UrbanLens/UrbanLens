@@ -35,7 +35,9 @@ class DirectFriendRequestMessageTests(TestCase):
     def test_message_is_included_in_the_notification(self) -> None:
         self.client.post(self.url, {"message": "Hey, we met at the abandoned mill!"})
 
-        notification = NotificationLog.objects.get(profile=self.target.profile, notification_type=NotificationType.FRIEND_REQUEST)
+        notification = NotificationLog.objects.get(
+            profile=self.target.profile, notification_type=NotificationType.FRIEND_REQUEST
+        )
         self.assertIn("Hey, we met at the abandoned mill!", notification.message)
 
     def test_request_without_a_message_still_works(self) -> None:
@@ -92,7 +94,9 @@ class EmailInviteMessageTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_invitation_message_carries_through_to_signup_auto_friend_request(self) -> None:
-        FriendInvitation.objects.create(inviter=self.inviter.profile, email="newperson@example.com", message="Welcome aboard!")
+        FriendInvitation.objects.create(
+            inviter=self.inviter.profile, email="newperson@example.com", message="Welcome aboard!"
+        )
 
         new_user = baker.make(User, username="newperson", email="newperson@example.com", is_active=True)
         from urbanlens.dashboard.controllers.account import _process_pending_invitations

@@ -14,7 +14,11 @@ from urbanlens.dashboard.services.ai.anthropic import AnthropicGateway
 from urbanlens.dashboard.services.ai.inference_client import InferenceError, ToolSpec
 from urbanlens_ai.schema import InferenceResponse, TextBlock, ToolUseBlock, Usage
 
-_TOOLS = [ToolSpec(name="search_pins", description="search the user's pins", input_schema={"type": "object", "properties": {}})]
+_TOOLS = [
+    ToolSpec(
+        name="search_pins", description="search the user's pins", input_schema={"type": "object", "properties": {}}
+    )
+]
 
 
 class SendWithToolsTests(SimpleTestCase):
@@ -37,7 +41,9 @@ class SendWithToolsTests(SimpleTestCase):
 
     def test_tools_reach_the_inference_request(self) -> None:
         gateway = self._gateway()
-        gateway._inference_client.send.return_value = InferenceResponse(content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=5))
+        gateway._inference_client.send.return_value = InferenceResponse(
+            content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=5)
+        )
 
         gateway.send_with_tools("hello", _TOOLS)
 
@@ -50,7 +56,9 @@ class SendWithToolsTests(SimpleTestCase):
         # nothing to do with real tool use and would only confuse the model.
         gateway = AnthropicGateway(instructions="test instructions")  # default formatting, not ""
         gateway._inference_client = mock.Mock()
-        gateway._inference_client.send.return_value = InferenceResponse(content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=5))
+        gateway._inference_client.send.return_value = InferenceResponse(
+            content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=5)
+        )
 
         gateway.send_with_tools("hello", _TOOLS)
 
@@ -61,7 +69,9 @@ class SendWithToolsTests(SimpleTestCase):
     def test_formatting_is_restored_after_the_call(self) -> None:
         gateway = AnthropicGateway(formatting="custom formatting", instructions="test instructions")
         gateway._inference_client = mock.Mock()
-        gateway._inference_client.send.return_value = InferenceResponse(content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=5))
+        gateway._inference_client.send.return_value = InferenceResponse(
+            content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=5)
+        )
 
         gateway.send_with_tools("hello", _TOOLS)
 
@@ -69,7 +79,11 @@ class SendWithToolsTests(SimpleTestCase):
 
     def test_returns_the_raw_response_unparsed(self) -> None:
         gateway = self._gateway()
-        response = InferenceResponse(content=[ToolUseBlock(id="tu_1", name="search_pins", input={"query": "steel"})], stop_reason="tool_use", usage=Usage(output_tokens=10))
+        response = InferenceResponse(
+            content=[ToolUseBlock(id="tu_1", name="search_pins", input={"query": "steel"})],
+            stop_reason="tool_use",
+            usage=Usage(output_tokens=10),
+        )
         gateway._inference_client.send.return_value = response
 
         result = gateway.send_with_tools("hello", _TOOLS)
@@ -82,7 +96,9 @@ class SendWithToolsTests(SimpleTestCase):
 
     def test_text_reply_round_trips_through_response_text(self) -> None:
         gateway = self._gateway()
-        gateway._inference_client.send.return_value = InferenceResponse(content=[TextBlock(text="Here are your pins.")], stop_reason="end_turn", usage=Usage(output_tokens=5))
+        gateway._inference_client.send.return_value = InferenceResponse(
+            content=[TextBlock(text="Here are your pins.")], stop_reason="end_turn", usage=Usage(output_tokens=5)
+        )
 
         result = gateway.send_with_tools("hello", _TOOLS)
 
@@ -90,7 +106,9 @@ class SendWithToolsTests(SimpleTestCase):
 
     def test_records_received_tokens_from_usage(self) -> None:
         gateway = self._gateway()
-        gateway._inference_client.send.return_value = InferenceResponse(content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=42))
+        gateway._inference_client.send.return_value = InferenceResponse(
+            content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=42)
+        )
 
         gateway.send_with_tools("hello", _TOOLS)
 
@@ -104,13 +122,17 @@ class SendWithToolsTests(SimpleTestCase):
 
     def test_empty_content_returns_none(self) -> None:
         gateway = self._gateway()
-        gateway._inference_client.send.return_value = InferenceResponse(content=[], stop_reason="end_turn", usage=Usage())
+        gateway._inference_client.send.return_value = InferenceResponse(
+            content=[], stop_reason="end_turn", usage=Usage()
+        )
 
         self.assertIsNone(gateway.send_with_tools("hello", _TOOLS))
 
     def test_no_tools_is_an_empty_list_on_the_request(self) -> None:
         gateway = self._gateway()
-        gateway._inference_client.send.return_value = InferenceResponse(content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=1))
+        gateway._inference_client.send.return_value = InferenceResponse(
+            content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=1)
+        )
 
         gateway.send_with_tools("hello", [])
 

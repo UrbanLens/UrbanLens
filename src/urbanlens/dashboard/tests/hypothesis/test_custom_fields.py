@@ -14,7 +14,14 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.search import SearchForm
-from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldDisplay, CustomFieldEntity, CustomFieldStyle, CustomFieldType, CustomFieldValue
+from urbanlens.dashboard.models.custom_fields.model import (
+    CustomField,
+    CustomFieldDisplay,
+    CustomFieldEntity,
+    CustomFieldStyle,
+    CustomFieldType,
+    CustomFieldValue,
+)
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
@@ -32,8 +39,12 @@ class CustomFieldTestsBase(TestCase):
         self.pin = baker.make(Pin, profile=self.profile, name="Old Mill", name_is_user_provided=True)
         self.client.force_login(self.user)
 
-    def _field(self, entity_type: str = CustomFieldEntity.PIN, name: str = "Gate code", field_type: str = CustomFieldType.TEXT) -> CustomField:
-        return CustomField.objects.create(profile=self.profile, entity_type=entity_type, name=name, field_type=field_type)
+    def _field(
+        self, entity_type: str = CustomFieldEntity.PIN, name: str = "Gate code", field_type: str = CustomFieldType.TEXT
+    ) -> CustomField:
+        return CustomField.objects.create(
+            profile=self.profile, entity_type=entity_type, name=name, field_type=field_type
+        )
 
 
 class CustomFieldValueParsingTests(SimpleTestCase):
@@ -42,7 +53,11 @@ class CustomFieldValueParsingTests(SimpleTestCase):
     def _value(self, field_type: str) -> CustomFieldValue:
         return CustomFieldValue(field=CustomField(field_type=field_type))
 
-    @given(st.decimals(allow_nan=False, allow_infinity=False, min_value=Decimal(-999999999), max_value=Decimal(999999999), places=6))
+    @given(
+        st.decimals(
+            allow_nan=False, allow_infinity=False, min_value=Decimal(-999999999), max_value=Decimal(999999999), places=6
+        )
+    )
     @hypothesis_settings(max_examples=25, deadline=None)
     def test_number_round_trip(self, number: Decimal) -> None:
         value = self._value(CustomFieldType.NUMBER)
@@ -283,7 +298,9 @@ class LightboxStripTests(CustomFieldTestsBase):
 
     def test_markup_map_strip_renders_and_saves(self) -> None:
         markup_map = baker.make(MarkupMap, profile=self.profile)
-        field = self._field(name="Route length", entity_type=CustomFieldEntity.MARKUP_MAP, field_type=CustomFieldType.NUMBER)
+        field = self._field(
+            name="Route length", entity_type=CustomFieldEntity.MARKUP_MAP, field_type=CustomFieldType.NUMBER
+        )
         response = self.client.get(reverse("custom_fields.markup_map", args=[markup_map.uuid]))
         self.assertEqual(response.status_code, 200)
 
@@ -397,7 +414,11 @@ class CustomFieldExportTests(CustomFieldTestsBase):
 
     def test_export_includes_style_config_and_new_value_types(self) -> None:
         select_field = CustomField.objects.create(
-            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open", "Locked"]},
+            profile=self.profile,
+            entity_type=CustomFieldEntity.PIN,
+            name="Access",
+            field_type=CustomFieldType.SELECT,
+            config={"choices": ["Open", "Locked"]},
         )
         CustomFieldValue.objects.create(field=select_field, pin=self.pin, value_text="Open")
         checkbox_field = self._field(name="Has power", field_type=CustomFieldType.CHECKBOX)
@@ -405,7 +426,11 @@ class CustomFieldExportTests(CustomFieldTestsBase):
         time_field = self._field(name="Best hour", field_type=CustomFieldType.TIME)
         CustomFieldValue.objects.create(field=time_field, pin=self.pin, value_time=time(6, 30))
         stars_field = CustomField.objects.create(
-            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Photogenic", field_type=CustomFieldType.NUMBER, style=CustomFieldStyle.STARS,
+            profile=self.profile,
+            entity_type=CustomFieldEntity.PIN,
+            name="Photogenic",
+            field_type=CustomFieldType.NUMBER,
+            style=CustomFieldStyle.STARS,
         )
         CustomFieldValue.objects.create(field=stars_field, pin=self.pin, value_number=Decimal(4))
 
@@ -542,7 +567,14 @@ class CustomFieldDefinitionStyleViewTests(CustomFieldTestsBase):
     def test_create_slider_field_with_bounds(self) -> None:
         self.client.post(
             reverse("custom_fields.settings"),
-            {"entity_type": "pin", "name": "Decay", "field_type": "number", "style": "slider", "slider_min": "1", "slider_max": "10"},
+            {
+                "entity_type": "pin",
+                "name": "Decay",
+                "field_type": "number",
+                "style": "slider",
+                "slider_min": "1",
+                "slider_max": "10",
+            },
         )
         field = CustomField.objects.get(profile=self.profile, name="Decay")
         self.assertEqual(field.style, CustomFieldStyle.SLIDER)
@@ -552,13 +584,24 @@ class CustomFieldDefinitionStyleViewTests(CustomFieldTestsBase):
     def test_slider_bounds_must_be_ordered(self) -> None:
         self.client.post(
             reverse("custom_fields.settings"),
-            {"entity_type": "pin", "name": "Decay", "field_type": "number", "style": "slider", "slider_min": "10", "slider_max": "1"},
+            {
+                "entity_type": "pin",
+                "name": "Decay",
+                "field_type": "number",
+                "style": "slider",
+                "slider_min": "10",
+                "slider_max": "1",
+            },
         )
         self.assertFalse(CustomField.objects.filter(profile=self.profile, name="Decay").exists())
 
     def test_update_changes_style_and_options(self) -> None:
         field = CustomField.objects.create(
-            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open"]},
+            profile=self.profile,
+            entity_type=CustomFieldEntity.PIN,
+            name="Access",
+            field_type=CustomFieldType.SELECT,
+            config={"choices": ["Open"]},
         )
         self.client.post(
             reverse("custom_fields.update", args=[field.id]),
@@ -621,8 +664,12 @@ class CustomFieldDisplayTests(CustomFieldTestsBase):
 
     def test_pin_panel_places_fields_by_display(self) -> None:
         self._field(name="Plain field")
-        CustomField.objects.create(profile=self.profile, entity_type="pin", name="Section field", display=CustomFieldDisplay.SECTION)
-        fixed = CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed field", display=CustomFieldDisplay.FIXED)
+        CustomField.objects.create(
+            profile=self.profile, entity_type="pin", name="Section field", display=CustomFieldDisplay.SECTION
+        )
+        fixed = CustomField.objects.create(
+            profile=self.profile, entity_type="pin", name="Fixed field", display=CustomFieldDisplay.FIXED
+        )
 
         response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
@@ -638,8 +685,12 @@ class CustomFieldDisplayTests(CustomFieldTestsBase):
         self.assertNotIn("Section field", rows_html)
 
     def test_fixed_default_positions_stagger(self) -> None:
-        CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed A", display=CustomFieldDisplay.FIXED)
-        CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed B", display=CustomFieldDisplay.FIXED)
+        CustomField.objects.create(
+            profile=self.profile, entity_type="pin", name="Fixed A", display=CustomFieldDisplay.FIXED
+        )
+        CustomField.objects.create(
+            profile=self.profile, entity_type="pin", name="Fixed B", display=CustomFieldDisplay.FIXED
+        )
         response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
         html = response.content.decode()
         # Never-dragged fields must not overlap: each gets a distinct top offset.
@@ -647,7 +698,9 @@ class CustomFieldDisplayTests(CustomFieldTestsBase):
         self.assertIn("top: 27.00%", html)
 
     def test_position_saves_and_clamps(self) -> None:
-        field = CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED)
+        field = CustomField.objects.create(
+            profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED
+        )
         response = self._post_position(field, 150, -20)
         self.assertEqual(response.status_code, 204)
         field.refresh_from_db()
@@ -655,27 +708,37 @@ class CustomFieldDisplayTests(CustomFieldTestsBase):
         self.assertEqual(field.fixed_position, {"left": 92.0, "top": 0.0})
 
     def test_saved_position_renders_on_the_panel(self) -> None:
-        field = CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED)
+        field = CustomField.objects.create(
+            profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED
+        )
         self._post_position(field, 12.5, 33.25)
         response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
         self.assertContains(response, "left: 12.50%; top: 33.25%;")
 
     def test_position_rejects_garbage(self) -> None:
-        field = CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED)
+        field = CustomField.objects.create(
+            profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED
+        )
         self.assertEqual(self._post_position(field, "left", "top").status_code, 400)
         self.assertEqual(self._post_position(field, float("nan"), 5).status_code, 400)
-        response = self.client.post(reverse("custom_fields.position", args=[field.id]), data="not json", content_type="application/json")
+        response = self.client.post(
+            reverse("custom_fields.position", args=[field.id]), data="not json", content_type="application/json"
+        )
         self.assertEqual(response.status_code, 400)
         field.refresh_from_db()
         self.assertNotIn("fixed_pos", field.config or {})
 
     def test_position_404_for_another_users_field(self) -> None:
         other_profile = baker.make("auth.User").profile
-        field = CustomField.objects.create(profile=other_profile, entity_type="pin", name="Theirs", display=CustomFieldDisplay.FIXED)
+        field = CustomField.objects.create(
+            profile=other_profile, entity_type="pin", name="Theirs", display=CustomFieldDisplay.FIXED
+        )
         self.assertEqual(self._post_position(field, 10, 10).status_code, 404)
 
     def test_position_survives_definition_edit(self) -> None:
-        field = CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED)
+        field = CustomField.objects.create(
+            profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED
+        )
         self._post_position(field, 40, 40)
         self.client.post(
             reverse("custom_fields.update", args=[field.id]),
@@ -709,7 +772,11 @@ class NewTypeValueEndpointTests(CustomFieldTestsBase):
 
     def test_select_value_saves_and_rejects_unknown(self) -> None:
         field = CustomField.objects.create(
-            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open", "Locked"]},
+            profile=self.profile,
+            entity_type=CustomFieldEntity.PIN,
+            name="Access",
+            field_type=CustomFieldType.SELECT,
+            config={"choices": ["Open", "Locked"]},
         )
         self._post(field, "Open")
         self.assertEqual(CustomFieldValue.objects.get(field=field, pin=self.pin).value_text, "Open")
@@ -741,7 +808,11 @@ class NewTypeMapFilterTests(CustomFieldTestsBase):
     def setUp(self) -> None:
         super().setUp()
         self.select_field = CustomField.objects.create(
-            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open", "Locked"]},
+            profile=self.profile,
+            entity_type=CustomFieldEntity.PIN,
+            name="Access",
+            field_type=CustomFieldType.SELECT,
+            config={"choices": ["Open", "Locked"]},
         )
         self.checkbox_field = self._field(name="Has power", field_type=CustomFieldType.CHECKBOX)
         self.time_field = self._field(name="Best hour", field_type=CustomFieldType.TIME)
@@ -751,7 +822,9 @@ class NewTypeMapFilterTests(CustomFieldTestsBase):
         CustomFieldValue.objects.create(field=self.select_field, pin=self.open_pin, value_text="Open")
         CustomFieldValue.objects.create(field=self.checkbox_field, pin=self.open_pin, value_boolean=True)
         CustomFieldValue.objects.create(field=self.time_field, pin=self.open_pin, value_time=time(6, 0))
-        CustomFieldValue.objects.create(field=self.url_field, pin=self.open_pin, value_text="https://example.com/asylum")
+        CustomFieldValue.objects.create(
+            field=self.url_field, pin=self.open_pin, value_text="https://example.com/asylum"
+        )
 
         self.locked_pin = baker.make(Pin, profile=self.profile, name="Locked Mill", name_is_user_provided=True)
         CustomFieldValue.objects.create(field=self.select_field, pin=self.locked_pin, value_text="Locked")
@@ -801,7 +874,11 @@ class NewTypeCriteriaRoundTripTests(CustomFieldTestsBase):
         from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
 
         select_field = CustomField.objects.create(
-            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open", "Locked"]},
+            profile=self.profile,
+            entity_type=CustomFieldEntity.PIN,
+            name="Access",
+            field_type=CustomFieldType.SELECT,
+            config={"choices": ["Open", "Locked"]},
         )
         checkbox_field = self._field(name="Has power", field_type=CustomFieldType.CHECKBOX)
         time_field = self._field(name="Best hour", field_type=CustomFieldType.TIME)
@@ -827,7 +904,11 @@ class ReferenceFieldTests(CustomFieldTestsBase):
 
     def _reference_field(self, ref_type: str, name: str = "Related") -> CustomField:
         return CustomField.objects.create(
-            profile=self.profile, entity_type=CustomFieldEntity.PIN, name=name, field_type=CustomFieldType.REFERENCE, config={"ref_type": ref_type},
+            profile=self.profile,
+            entity_type=CustomFieldEntity.PIN,
+            name=name,
+            field_type=CustomFieldType.REFERENCE,
+            config={"ref_type": ref_type},
         )
 
     def _post_value(self, field: CustomField, raw) -> None:
@@ -844,7 +925,9 @@ class ReferenceFieldTests(CustomFieldTestsBase):
 
     def test_cannot_reference_another_users_pin(self) -> None:
         field = self._reference_field("pin")
-        foreign_pin = baker.make(Pin, profile=baker.make("auth.User").profile, name="Not Yours", name_is_user_provided=True)
+        foreign_pin = baker.make(
+            Pin, profile=baker.make("auth.User").profile, name="Not Yours", name_is_user_provided=True
+        )
         self._post_value(field, foreign_pin.pk)
         self.assertFalse(CustomFieldValue.objects.filter(field=field, pin=self.pin).exists())
 
@@ -864,7 +947,9 @@ class ReferenceFieldTests(CustomFieldTestsBase):
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         pinned_wiki = baker.make(Wiki, location=self.pin.location, name="Pinned Place")
-        unpinned_wiki = baker.make(Wiki, location=baker.make("dashboard.Location", latitude="40.1", longitude="-75.1"), name="Elsewhere")
+        unpinned_wiki = baker.make(
+            Wiki, location=baker.make("dashboard.Location", latitude="40.1", longitude="-75.1"), name="Elsewhere"
+        )
         field = self._reference_field("wiki")
         self._post_value(field, unpinned_wiki.pk)
         self.assertFalse(CustomFieldValue.objects.filter(field=field, pin=self.pin).exists())

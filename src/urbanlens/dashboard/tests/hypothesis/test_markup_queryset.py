@@ -2,6 +2,7 @@
 
 All tests require the database - records are created with model_bakery.
 """
+
 from __future__ import annotations
 
 from model_bakery import baker
@@ -12,6 +13,7 @@ from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_markup(pin, profile, markup_type: str = MarkupType.LINE) -> PinMarkup:
     """Create a PinMarkup attached to the given pin and profile."""
@@ -27,6 +29,7 @@ def _make_markup(pin, profile, markup_type: str = MarkupType.LINE) -> PinMarkup:
 # ---------------------------------------------------------------------------
 # for_pin (line 17)
 # ---------------------------------------------------------------------------
+
 
 class PinMarkupForPinTests(TestCase):
     """for_pin(pin) returns only markup items attached to that pin."""
@@ -76,6 +79,7 @@ class PinMarkupForPinTests(TestCase):
 # ---------------------------------------------------------------------------
 # for_profile (line 21)
 # ---------------------------------------------------------------------------
+
 
 class PinMarkupForProfileTests(TestCase):
     """for_profile(profile) returns only markup items belonging to that profile."""

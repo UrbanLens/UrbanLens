@@ -49,7 +49,14 @@ def square(lng: float, lat: float, delta: float) -> MultiPolygon:
     return MultiPolygon(Polygon(ring, srid=4326), srid=4326)
 
 
-def make_place(kind: str, geometry: MultiPolygon | None, *, parent: Place | None = None, relation: str = PlaceRelation.PART_OF, name: str = "") -> Place:
+def make_place(
+    kind: str,
+    geometry: MultiPolygon | None,
+    *,
+    parent: Place | None = None,
+    relation: str = PlaceRelation.PART_OF,
+    name: str = "",
+) -> Place:
     """Create a place with its derived columns filled, as provisioning would."""
     place = Place.objects.create(kind=kind, geometry=geometry, name=name)
     if geometry is not None:

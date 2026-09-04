@@ -206,7 +206,9 @@ class ScoringTests(TestCase):
 
     def test_a_wiki_edit_is_scored_by_fields_changed_not_rows_written(self) -> None:
         """One Suggest-Edits submit spanning six fields writes a single WikiEdit."""
-        one = baker.make(WikiEdit, wiki=self.wiki, editor=self.profile, changes={"description": ["a", "b"]}, reverted=False)
+        one = baker.make(
+            WikiEdit, wiki=self.wiki, editor=self.profile, changes={"description": ["a", "b"]}, reverted=False
+        )
         three = baker.make(
             WikiEdit,
             wiki=self.wiki,

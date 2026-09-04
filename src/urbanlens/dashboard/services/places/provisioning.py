@@ -311,7 +311,7 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
 
     # REData's reconciled shape reports nesting: a coarse footprint enclosing
     # finer ones becomes their `parent_ref` rather than a duplicate of them (its
-    # `docs/buildings-dedup-spec.md`). Parenting every building to the parcel
+    # `../REData/docs/archive/buildings-dedup-spec.md`). Parenting every building to the parcel
     # regardless made an envelope and the wings inside it *siblings* whose
     # footprints overlap - the Place tree then said two peers occupy the same
     # ground, which is the shape `resolve_locations_in` has to disambiguate and

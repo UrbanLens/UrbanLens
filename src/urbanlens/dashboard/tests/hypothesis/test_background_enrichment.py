@@ -200,28 +200,42 @@ class StaggerSecondsTests(TestCase):
             return True
 
     def test_derived_from_tightest_per_minute_limit(self) -> None:
-        ApiRateLimit.objects.create(service="svc_stagger", display_name="x", calls_per_minute=30, calls_per_day=None, calls_per_30_days=None)
+        ApiRateLimit.objects.create(
+            service="svc_stagger", display_name="x", calls_per_minute=30, calls_per_day=None, calls_per_30_days=None
+        )
         self.assertEqual(stagger_seconds(self._Source()), 2.0)
 
     def test_clamped_to_max(self) -> None:
-        ApiRateLimit.objects.create(service="svc_stagger", display_name="x", calls_per_minute=1, calls_per_day=None, calls_per_30_days=None)
+        ApiRateLimit.objects.create(
+            service="svc_stagger", display_name="x", calls_per_minute=1, calls_per_day=None, calls_per_30_days=None
+        )
         self.assertEqual(stagger_seconds(self._Source()), 60.0)
 
     def test_clamp_to_max_engages_when_raw_pace_exceeds_it(self) -> None:
         # 60/1 * 5 = 300s raw pace: unlike test_clamped_to_max above (where the raw
         # pace already equals 60 without any clamping), this forces min(pause, MAX)
         # to actually reduce the value, so removing that clamp would be caught.
-        ApiRateLimit.objects.create(service="svc_stagger_multi", display_name="x", calls_per_minute=1, calls_per_day=None, calls_per_30_days=None)
+        ApiRateLimit.objects.create(
+            service="svc_stagger_multi",
+            display_name="x",
+            calls_per_minute=1,
+            calls_per_day=None,
+            calls_per_30_days=None,
+        )
         self.assertEqual(stagger_seconds(self._MultiCallSource()), 60.0)
 
     def test_clamped_to_min(self) -> None:
         # 60/120 * 1 = 0.5s raw pace, below MIN_STAGGER_SECONDS - the floor clamp
         # is otherwise entirely unexercised by the other tests here.
-        ApiRateLimit.objects.create(service="svc_stagger", display_name="x", calls_per_minute=120, calls_per_day=None, calls_per_30_days=None)
+        ApiRateLimit.objects.create(
+            service="svc_stagger", display_name="x", calls_per_minute=120, calls_per_day=None, calls_per_30_days=None
+        )
         self.assertEqual(stagger_seconds(self._Source()), 1.0)
 
     def test_default_when_no_per_minute_limit(self) -> None:
-        ApiRateLimit.objects.create(service="svc_stagger", display_name="x", calls_per_minute=None, calls_per_day=None, calls_per_30_days=None)
+        ApiRateLimit.objects.create(
+            service="svc_stagger", display_name="x", calls_per_minute=None, calls_per_day=None, calls_per_30_days=None
+        )
         self.assertEqual(stagger_seconds(self._Source()), 2.0)
 
 
@@ -290,7 +304,10 @@ class PrioritizedCandidatesTests(TestCase):
 
         from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaEnrichmentSource
 
-        pks = [location.pk for location in prioritized_location_candidates(WikipediaEnrichmentSource().missing_filter(), limit=10)]
+        pks = [
+            location.pk
+            for location in prioritized_location_candidates(WikipediaEnrichmentSource().missing_filter(), limit=10)
+        ]
         self.assertNotIn(cached.pk, pks)
         self.assertIn(uncached.pk, pks)
 
@@ -322,7 +339,10 @@ class PrioritizedCandidatesTests(TestCase):
 
         from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaEnrichmentSource
 
-        pks = [candidate.pk for candidate in prioritized_location_candidates(WikipediaEnrichmentSource().missing_filter(), limit=10)]
+        pks = [
+            candidate.pk
+            for candidate in prioritized_location_candidates(WikipediaEnrichmentSource().missing_filter(), limit=10)
+        ]
         self.assertNotIn(location.pk, pks)
 
 
@@ -520,7 +540,9 @@ class RunEnrichmentCycleTests(TestCase):
         broken = _BrokenSource()
         healthy = _RecordingSource()
         with (
-            patch("urbanlens.dashboard.services.locations.enrichment.enrichment_sources", return_value=[broken, healthy]),
+            patch(
+                "urbanlens.dashboard.services.locations.enrichment.enrichment_sources", return_value=[broken, healthy]
+            ),
             patch.object(SiteSettings, "get_effective_environment_type", return_value=EnvironmentTypes.PRODUCTION),
         ):
             summary = run_enrichment_cycle(sleep=lambda _seconds: None)
@@ -543,7 +565,9 @@ class RunEnrichmentCycleTests(TestCase):
             refreshes_names = True
 
         source = NameSource()
-        with patch("urbanlens.dashboard.services.locations.enrichment.refresh_official_names", return_value=1) as mock_refresh:
+        with patch(
+            "urbanlens.dashboard.services.locations.enrichment.refresh_official_names", return_value=1
+        ) as mock_refresh:
             summary = self._run(source)
         mock_refresh.assert_called_once_with({location.pk})
         self.assertEqual(summary["names_refreshed"], 1)
@@ -554,7 +578,13 @@ class EnrichmentCycleProductionGateTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        ApiRateLimit.objects.create(service="svc_cycle", display_name="Cycle service", calls_per_minute=None, calls_per_day=100, calls_per_30_days=None)
+        ApiRateLimit.objects.create(
+            service="svc_cycle",
+            display_name="Cycle service",
+            calls_per_minute=None,
+            calls_per_day=100,
+            calls_per_30_days=None,
+        )
 
     def _run_with_environment(self, env_type: EnvironmentTypes, source: EnrichmentSource, **kwargs):
         with (
@@ -695,7 +725,9 @@ class ScheduledEnrichmentTaskTests(TestCase):
         cache.delete(RUN_LOCK_CACHE_KEY)
         with (
             patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle", return_value={"sources": {}}) as mock_cycle,
+            patch(
+                "urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle", return_value={"sources": {}}
+            ) as mock_cycle,
         ):
             result = run_scheduled_enrichment.apply().result
         mock_cycle.assert_called_once()
@@ -715,7 +747,10 @@ class ScheduledEnrichmentTaskTests(TestCase):
         cache.delete(RUN_LOCK_CACHE_KEY)
         with (
             patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle", side_effect=SoftTimeLimitExceeded()),
+            patch(
+                "urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle",
+                side_effect=SoftTimeLimitExceeded(),
+            ),
         ):
             result = run_scheduled_enrichment.apply().result
         self.assertEqual(result, {"skipped": "timed_out"})
@@ -749,7 +784,10 @@ class ScheduledEnrichmentTaskTests(TestCase):
         cache.delete(RUN_LOCK_CACHE_KEY)
         with (
             patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle", side_effect=SoftTimeLimitExceeded()),
+            patch(
+                "urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle",
+                side_effect=SoftTimeLimitExceeded(),
+            ),
         ):
             result = run_scheduled_enrichment.apply().result
         self.assertEqual(result, {"skipped": "timed_out"})

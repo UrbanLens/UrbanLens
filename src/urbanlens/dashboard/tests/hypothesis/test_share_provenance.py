@@ -125,7 +125,10 @@ class ExposureRecordingFailureIsolationTests(_ProvenanceTestCase):
     def test_a_database_error_recording_the_exposure_is_swallowed(self):
         share = self._pending_share()
 
-        with mock.patch("urbanlens.dashboard.models.pin_share.exposure.LocationExposure.objects.record", side_effect=DatabaseError("boom")):
+        with mock.patch(
+            "urbanlens.dashboard.models.pin_share.exposure.LocationExposure.objects.record",
+            side_effect=DatabaseError("boom"),
+        ):
             result = record_share_exposure(share)
 
         self.assertIsNone(result)
@@ -147,13 +150,23 @@ class ExposureRecordingFailureIsolationTests(_ProvenanceTestCase):
         """
         share = self._pending_share()
         location = share.shared_location
-        LocationExposure.objects.create(profile_id=share.to_profile_id, location_id=location.pk, share_id=share.pk, source=ExposureSource.SHARE_RECEIVED)
+        LocationExposure.objects.create(
+            profile_id=share.to_profile_id,
+            location_id=location.pk,
+            share_id=share.pk,
+            source=ExposureSource.SHARE_RECEIVED,
+        )
 
         def _violate_unique(*, profile_id, location_id, share_id, source):
-            return LocationExposure.objects.create(profile_id=profile_id, location_id=location_id, share_id=share_id, source=source)
+            return LocationExposure.objects.create(
+                profile_id=profile_id, location_id=location_id, share_id=share_id, source=source
+            )
 
         with transaction.atomic():
-            with mock.patch("urbanlens.dashboard.models.pin_share.exposure.LocationExposure.objects.record", side_effect=_violate_unique):
+            with mock.patch(
+                "urbanlens.dashboard.models.pin_share.exposure.LocationExposure.objects.record",
+                side_effect=_violate_unique,
+            ):
                 result = record_share_exposure(share)
             self.assertIsNone(result)
             # If the failed INSERT had escaped record_share_exposure's own atomic()
@@ -438,7 +451,9 @@ class ShareViewIntegrationTests(_ProvenanceTestCase):
 
         self.assertEqual(response.status_code, 200)
         share = PinShare.objects.get(pin=self.sarah_pin, to_profile=self.profiles["john"])
-        self.assertTrue(LocationExposure.objects.filter(profile=self.profiles["john"], location=self.location, share=share).exists())
+        self.assertTrue(
+            LocationExposure.objects.filter(profile=self.profiles["john"], location=self.location, share=share).exists()
+        )
 
 
 class LocationExposureQuerySetTests(_ProvenanceTestCase):
@@ -494,7 +509,10 @@ class LocationExposureQuerySetTests(_ProvenanceTestCase):
         )
 
         self.assertFalse(created)
-        self.assertEqual(LocationExposure.objects.filter(profile=self.profiles["kim"], location=self.location, share=share).count(), 1)
+        self.assertEqual(
+            LocationExposure.objects.filter(profile=self.profiles["kim"], location=self.location, share=share).count(),
+            1,
+        )
 
 
 class PinShareQuerySetTests(_ProvenanceTestCase):
@@ -561,7 +579,13 @@ class PinShareQuerySetTests(_ProvenanceTestCase):
 
     def test_pending_pin_ids_for_finds_a_pending_share_among_candidates(self) -> None:
         other_pin = Pin.objects.create(profile=self.profiles["sarah"], location=self.far_location)
-        PinShare.objects.create(pin=other_pin, location=other_pin.location, from_profile=self.profiles["sarah"], to_profile=self.profiles["john"], status=PinShareStatus.PENDING)
+        PinShare.objects.create(
+            pin=other_pin,
+            location=other_pin.location,
+            from_profile=self.profiles["sarah"],
+            to_profile=self.profiles["john"],
+            status=PinShareStatus.PENDING,
+        )
 
         ids = set(PinShare.objects.pending_pin_ids_for(self.profiles["john"], [self.sarah_pin, other_pin]))
 
@@ -656,7 +680,9 @@ class ArbitraryChainDepthPropertyTests(_ProvenanceTestCase):
 
     @given(num_branches=st.integers(min_value=2, max_value=5))
     @_db_settings
-    def test_arbitrary_number_of_branches_from_one_pin_all_trace_back_to_the_same_origin(self, num_branches: int) -> None:
+    def test_arbitrary_number_of_branches_from_one_pin_all_trace_back_to_the_same_origin(
+        self, num_branches: int
+    ) -> None:
         """John re-shares the same accepted pin to an arbitrary number of
         independent recipients (a branching reshare fan-out, not a linear
         chain) - every branch must chain back to the same origin share,
@@ -673,4 +699,9 @@ class ArbitraryChainDepthPropertyTests(_ProvenanceTestCase):
             # branch's own direct share (onward), not the resolved origin -
             # resolve_origin_share only decides parent_share; record_share_exposure
             # always records the share that directly caused the exposure.
-            self.assertEqual(LocationExposure.objects.filter(profile=self.profiles[branch_name], location=self.location, share=onward).count(), 1)
+            self.assertEqual(
+                LocationExposure.objects.filter(
+                    profile=self.profiles[branch_name], location=self.location, share=onward
+                ).count(),
+                1,
+            )

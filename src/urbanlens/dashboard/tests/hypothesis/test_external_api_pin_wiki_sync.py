@@ -136,7 +136,9 @@ class PinWikiSyncApiTests(TestCase):
         Returns:
             The Django test-client response.
         """
-        return self.client.post(self._url("push"), {"child_pin_uuids": uuids}, content_type="application/json", **self._headers(raw_key))
+        return self.client.post(
+            self._url("push"), {"child_pin_uuids": uuids}, content_type="application/json", **self._headers(raw_key)
+        )
 
     def test_push_without_a_wiki_reports_wiki_exists_false(self) -> None:
         """A property with no community page is a 200 the client can explain."""

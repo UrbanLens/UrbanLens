@@ -4,6 +4,7 @@ Covers the guard functions in services.visits.visits and the call sites that mus
 create zero rows when disabled - including the "no exceptions, even for
 explicit imports" requirement for GPX route import.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

@@ -68,7 +68,14 @@ class RoundRatingRaceTests(TransactionTestCase):
         session = baker.make(TriviaSession, host_profile=profile)
         baker.make(TriviaSessionParticipant, session=session, profile=profile)
         round_ = baker.make(TriviaRound, session=session, question=self.question, sequence_index=0)
-        answer = baker.make(TriviaAnswer, round=round_, profile=profile, is_correct=True, matched_via=TriviaAnswerMatchKind.EXACT, points=1000)
+        answer = baker.make(
+            TriviaAnswer,
+            round=round_,
+            profile=profile,
+            is_correct=True,
+            matched_via=TriviaAnswerMatchKind.EXACT,
+            points=1000,
+        )
         return round_, answer
 
     def test_two_rounds_on_one_question_both_count(self) -> None:

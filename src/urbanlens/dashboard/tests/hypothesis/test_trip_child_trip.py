@@ -147,7 +147,7 @@ class ChildTripGhostMarkerVisibilityTests(TestCase):
         activities - the same viewer-aware gate the parent trip's own activities already get
         (via viewer_hidden_activity_ids) was missing here, so an activity the adder never
         flagged location_hidden, but whose visibility setting excludes this viewer, still
-        rendered a real marker with real coordinates. See docs/GOALS_CODE_AUDIT.md
+        rendered a real marker with real coordinates. See docs/audits/GOALS_CODE_AUDIT.md
         ("Trip activities sourcing").
         """
         other_user = baker.make("auth.User")

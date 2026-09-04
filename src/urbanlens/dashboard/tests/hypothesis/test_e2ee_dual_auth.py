@@ -120,7 +120,9 @@ class OwnKeysDualAuthTests(TestCase):
         messaging scopes onto it.
         """
         key, raw = generate_api_key(self.profile.user, "leaky-ci-key")
-        ApiKey.objects.filter(pk=key.pk).update(scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value])
+        ApiKey.objects.filter(pk=key.pk).update(
+            scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value]
+        )
         self.assertEqual(self.client.get(self.url, **_bearer(raw)).status_code, 403)
 
 
@@ -155,7 +157,9 @@ class CurrentPasswordProofUnderCredentialAuthTests(TestCase):
         super().setUp()
         baker.make(User)
         self.profile = _profile_with_password()
-        self.token = _token_for(self.profile.user, f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}")
+        self.token = _token_for(
+            self.profile.user, f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}"
+        )
 
     def _post(self, url_name: str, payload: dict):
         return self.client.post(
@@ -194,7 +198,11 @@ class CurrentPasswordProofUnderCredentialAuthTests(TestCase):
         _enroll(self.profile)
         response = self._post(
             "e2ee.rewrap",
-            {"password_wrapped_secret": _b64(os.urandom(72)), "password_wrap_salt": _b64(os.urandom(16)), "current_password": "wrong"},
+            {
+                "password_wrapped_secret": _b64(os.urandom(72)),
+                "password_wrap_salt": _b64(os.urandom(16)),
+                "current_password": "wrong",
+            },
         )
         self.assertEqual(response.status_code, 403)
 
@@ -306,7 +314,9 @@ class GroupKeyTokenContractTests(TestCase):
         from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
         self.group = create_group_chat(self.creator, "Trip crew", [self.member])
-        self.token = _token_for(self.creator.user, f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}")
+        self.token = _token_for(
+            self.creator.user, f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}"
+        )
         self.url = reverse("e2ee.group_key", kwargs={"group_uuid": self.group.uuid})
 
     def test_get_issues_opaque_member_ids_not_slugs(self) -> None:

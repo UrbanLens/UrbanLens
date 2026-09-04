@@ -71,7 +71,9 @@ class CollectValkeyStatsTests(SimpleTestCase):
 
         with (
             mock.patch.dict("os.environ", {"UL_VALKEY_URL": "redis://example:6379/0"}),
-            mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.redis.Redis.from_url", return_value=fake_client),
+            mock.patch(
+                "urbanlens.dashboard.services.admin.infrastructure_stats.redis.Redis.from_url", return_value=fake_client
+            ),
         ):
             stat = collect_valkey_stats()
 
@@ -84,7 +86,11 @@ class CollectCeleryStatsTests(SimpleTestCase):
 
     def test_returns_disabled_when_broker_missing(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.django_settings.CELERY_BROKER_URL", "", create=True),
+            mock.patch(
+                "urbanlens.dashboard.services.admin.infrastructure_stats.django_settings.CELERY_BROKER_URL",
+                "",
+                create=True,
+            ),
             mock.patch("django.core.cache.cache.get", return_value=None),
             mock.patch("django.core.cache.cache.set"),
         ):
@@ -107,7 +113,11 @@ class CollectCeleryStatsTests(SimpleTestCase):
         fake_app.control.inspect.return_value = fake_inspect
 
         with (
-            mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.django_settings.CELERY_BROKER_URL", "redis://example:6379/0", create=True),
+            mock.patch(
+                "urbanlens.dashboard.services.admin.infrastructure_stats.django_settings.CELERY_BROKER_URL",
+                "redis://example:6379/0",
+                create=True,
+            ),
             mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.current_app", fake_app),
             mock.patch("django.core.cache.cache.get", return_value=None),
             mock.patch("django.core.cache.cache.set"),
@@ -142,7 +152,9 @@ _COLLECTOR = "urbanlens.dashboard.services.admin.infrastructure_stats.collect_{}
 
 
 def _stub(key: str) -> InfrastructureServiceStat:
-    return InfrastructureServiceStat(key=key, name=key, icon="x", status="healthy", status_label="Connected", metrics=())
+    return InfrastructureServiceStat(
+        key=key, name=key, icon="x", status="healthy", status_label="Connected", metrics=()
+    )
 
 
 class CollectInfrastructureServiceStatsTests(SimpleTestCase):
@@ -156,7 +168,9 @@ class CollectInfrastructureServiceStatsTests(SimpleTestCase):
     def _patched(self, **overrides):
         """Patch all four collectors, overriding individual ones by key."""
         return [
-            mock.patch(_COLLECTOR.format(key), side_effect=overrides[key]) if key in overrides else mock.patch(_COLLECTOR.format(key), return_value=_stub(key))
+            mock.patch(_COLLECTOR.format(key), side_effect=overrides[key])
+            if key in overrides
+            else mock.patch(_COLLECTOR.format(key), return_value=_stub(key))
             for key in ("postgres", "valkey", "celery", "nginx")
         ]
 

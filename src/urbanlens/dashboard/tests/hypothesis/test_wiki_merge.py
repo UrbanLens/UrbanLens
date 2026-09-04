@@ -72,7 +72,9 @@ def _square(latitude: float, longitude: float, size: float) -> MultiPolygon:
     )
 
 
-def _make_wiki_with_boundary(*, size: float | None, near: Wiki | None = None, near_offset: float = _NEAR_OFFSET) -> Wiki:
+def _make_wiki_with_boundary(
+    *, size: float | None, near: Wiki | None = None, near_offset: float = _NEAR_OFFSET
+) -> Wiki:
     """A wiki anchored to a place whose official outline is a square of ``size``.
 
     ``size=None`` leaves the wiki placeless, exercising ``resolve_for_wiki``'s
@@ -169,7 +171,9 @@ class ReconcileWikiNestingTests(TestCase):
         building.refresh_from_db()
         wing.refresh_from_db()
         self.assertEqual(wing.parent_wiki_id, campus.pk)
-        self.assertEqual(building.parent_wiki_id, wing.pk, "the building's immediate parent is the wing, not the campus")
+        self.assertEqual(
+            building.parent_wiki_id, wing.pk, "the building's immediate parent is the wing, not the campus"
+        )
 
     def test_unrelated_wikis_are_never_merged(self) -> None:
         a = _make_wiki_with_boundary(size=WING_SIZE)
@@ -279,7 +283,10 @@ class GenerateLocationBoundariesIntegrationTests(TestCase):
         location = _make_location()
         baker.make(Wiki, location=location, name="Some Wiki")
         with (
-            patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=ResolvedBoundaries()),
+            patch(
+                "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
+                return_value=ResolvedBoundaries(),
+            ),
             patch("urbanlens.dashboard.services.wiki.wiki_merge.reconcile_wiki_nesting_for_location") as mock_reconcile,
         ):
             generate_location_boundaries(location)

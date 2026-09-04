@@ -40,7 +40,9 @@ class LedgerStaleSnapshotTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.sub = baker.make(RoleSubscription, user=self.user, role=self.role)
         self.start = timezone.now() - timedelta(days=200)
         RoleSubscription.objects.filter(pk=self.sub.pk).update(created=self.start)
@@ -84,7 +86,9 @@ class LedgerStaleSnapshotTests(TestCase):
         banking.advance_usage_ledger(sweep_snapshot, as_of=self.start + timedelta(days=60))
 
         self.sub.refresh_from_db()
-        self.assertGreaterEqual(self.sub.usage_covered_until, paid_until, "the sweep un-advanced coverage a payment had already bought")
+        self.assertGreaterEqual(
+            self.sub.usage_covered_until, paid_until, "the sweep un-advanced coverage a payment had already bought"
+        )
 
     def test_the_caller_s_instance_reflects_what_was_stored(self) -> None:
         """Refreshing under the lock must leave the caller holding current values.
@@ -129,4 +133,8 @@ class LedgerStaleSnapshotTests(TestCase):
         banking.apply_refund(refunder, 500)
 
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.total_paid_cents, 2500, "a concurrent payment and refund erased each other instead of both applying")
+        self.assertEqual(
+            self.sub.total_paid_cents,
+            2500,
+            "a concurrent payment and refund erased each other instead of both applying",
+        )

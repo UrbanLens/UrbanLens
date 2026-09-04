@@ -28,7 +28,9 @@ class BackfillPersonalLibraryImageSourceTests(TestCase):
         super().setUp()
         baker.make("auth.User")  # the first user is auto-promoted to bootstrap site admin
         self.profile = Profile.objects.get(user=baker.make("auth.User"))
-        self.account = ImmichAccount.objects.create(profile=self.profile, server_url="https://photos.example.com", api_key="k")
+        self.account = ImmichAccount.objects.create(
+            profile=self.profile, server_url="https://photos.example.com", api_key="k"
+        )
 
     def _image(self, **kwargs) -> Image:
         defaults = {"profile": self.profile, "source": ImageSource.UPLOAD, "image": "pin_images/x.png"}

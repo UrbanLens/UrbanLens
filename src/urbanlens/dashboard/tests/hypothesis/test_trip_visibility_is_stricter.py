@@ -45,7 +45,9 @@ class TripVisibilityIsStricterTests(TestCase):
         self.viewer = Profile.objects.get(user=baker.make("auth.User"))
         self.location = baker.make(Location)
         trip = baker.make(Trip, creator=self.adder)
-        self.activity = baker.make(TripActivity, trip=trip, location=self.location, added_by=self.adder, location_hidden=False)
+        self.activity = baker.make(
+            TripActivity, trip=trip, location=self.location, added_by=self.adder, location_hidden=False
+        )
 
     def _set_visibility(self, value: str) -> None:
         Profile.objects.filter(pk=self.adder.pk).update(trip_pin_location_visibility=value)
@@ -103,13 +105,13 @@ class TripVisibilityIsStricterTests(TestCase):
         self.assertFalse(self._hidden())
 
     def test_a_pin_on_a_different_location_sharing_this_ones_place_also_reveals_it(self) -> None:
-        """"This location" means the real-world place, not the exact coordinate
+        """ "This location" means the real-world place, not the exact coordinate
         row - a pin fifty metres away on the same parcel must count, the same
         fix already applied to services.pins.common_pins and
         Profile._have_common_pin. This is *not* a re-widening of divergence 2
         above: `elsewhere` there shares no Place with self.location, so it is
         still correctly hidden - only a genuinely shared real-world place
-        narrows the gap. See docs/GOALS_CODE_AUDIT.md
+        narrows the gap. See docs/audits/GOALS_CODE_AUDIT.md
         ("Cross-pin aggregate comparison level")."""
         self._set_visibility(VisibilityChoice.COMMON_PIN)
         place = baker.make(Place, kind=PlaceKind.PARCEL)

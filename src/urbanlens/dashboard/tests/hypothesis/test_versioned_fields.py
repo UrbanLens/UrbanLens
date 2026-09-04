@@ -34,7 +34,11 @@ class InterceptionTests(TestCase):
         WikiFieldRevision.objects.filter(target=self.wiki).delete()
 
     def _names(self) -> list[str]:
-        return list(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").order_by("pk").values_list("value", flat=True))
+        return list(
+            WikiFieldRevision.objects.filter(target=self.wiki, field_name="name")
+            .order_by("pk")
+            .values_list("value", flat=True)
+        )
 
     def test_save_records_a_revision(self) -> None:
         """The ordinary path."""
@@ -268,7 +272,9 @@ class DirtyFieldTests(TestCase):
             fresh.save()
             fresh.save()
 
-        self.assertEqual(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name", actor_id=self.friend.pk).count(), 1)
+        self.assertEqual(
+            WikiFieldRevision.objects.filter(target=self.wiki, field_name="name", actor_id=self.friend.pk).count(), 1
+        )
 
 
 class ErasureTests(TestCase):
@@ -341,7 +347,9 @@ class UpdateAccuracyTests(TestCase):
         self.wiki.name = "Bulk Name"
         Wiki.objects.bulk_update([self.wiki], ["name"])
 
-        values = list(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").values_list("value", flat=True))
+        values = list(
+            WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").values_list("value", flat=True)
+        )
 
         self.assertEqual(values, ["Bulk Name"])
         self.assertFalse(any("CASE" in v for v in values))

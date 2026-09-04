@@ -73,7 +73,9 @@ class CheckinResolvedMidSweepTests(_CheckinRaceTestCase):
 
     def test_escalation_does_not_notify_contacts_of_a_checkin_resolved_mid_sweep(self) -> None:
         checkin = self._checkin(SafetyCheckinStatus.AWAITING_CHECKIN, checkin_by=self.now - timedelta(hours=2))
-        contact = baker.make(SafetyCheckinContact, checkin=checkin, email="rescue@example.com", contact_profile=None, notified_at=None)
+        contact = baker.make(
+            SafetyCheckinContact, checkin=checkin, email="rescue@example.com", contact_profile=None, notified_at=None
+        )
         stale = SafetyCheckin.objects.get(pk=checkin.pk)
 
         check_in(SafetyCheckin.objects.get(pk=checkin.pk), self.profile)
@@ -87,7 +89,9 @@ class CheckinResolvedMidSweepTests(_CheckinRaceTestCase):
         self.assertEqual(checkin.status, SafetyCheckinStatus.CHECKED_IN)
 
     def test_escalation_does_not_publish_a_resolved_checkin_to_the_community_wiki(self) -> None:
-        checkin = self._checkin(SafetyCheckinStatus.AWAITING_CHECKIN, checkin_by=self.now - timedelta(hours=2), notify_community_wiki=True)
+        checkin = self._checkin(
+            SafetyCheckinStatus.AWAITING_CHECKIN, checkin_by=self.now - timedelta(hours=2), notify_community_wiki=True
+        )
         stale = SafetyCheckin.objects.get(pk=checkin.pk)
 
         check_in(SafetyCheckin.objects.get(pk=checkin.pk), self.profile)
@@ -98,7 +102,9 @@ class CheckinResolvedMidSweepTests(_CheckinRaceTestCase):
 
     def test_escalation_still_notifies_contacts_of_a_genuinely_overdue_checkin(self) -> None:
         checkin = self._checkin(SafetyCheckinStatus.AWAITING_CHECKIN, checkin_by=self.now - timedelta(hours=2))
-        contact = baker.make(SafetyCheckinContact, checkin=checkin, email="rescue@example.com", contact_profile=None, notified_at=None)
+        contact = baker.make(
+            SafetyCheckinContact, checkin=checkin, email="rescue@example.com", contact_profile=None, notified_at=None
+        )
 
         with mock.patch("urbanlens.dashboard.services.visits.safety._send_email") as send_email:
             escalate_checkin(checkin)

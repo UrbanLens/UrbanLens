@@ -77,7 +77,10 @@ class CopySampleEnvTests(SimpleTestCase):
             root = pathlib.Path(temp_dir)
             self._run_with_missing_env("staging", root)
 
-            self.assertFalse((root / ".env").exists(), "a deployed environment must not seed .env - it is configured from the environment")
+            self.assertFalse(
+                (root / ".env").exists(),
+                "a deployed environment must not seed .env - it is configured from the environment",
+            )
 
     def test_production_does_not_write_an_env_file(self) -> None:
         import tempfile
@@ -106,7 +109,10 @@ class CopySampleEnvTests(SimpleTestCase):
             root = pathlib.Path(temp_dir)
             (root / ".env-sample").write_text("UL_EXAMPLE=1\n", encoding="utf-8")
 
-            with mock.patch.object(self.init_module, "ROOT_DIR", root), mock.patch("pathlib.Path.open", side_effect=PermissionError(13, "Permission denied")):
+            with (
+                mock.patch.object(self.init_module, "ROOT_DIR", root),
+                mock.patch("pathlib.Path.open", side_effect=PermissionError(13, "Permission denied")),
+            ):
                 # Must return rather than raise: this is the exact failure staging hit.
                 self._initializer("local").copy_sample_env()
 

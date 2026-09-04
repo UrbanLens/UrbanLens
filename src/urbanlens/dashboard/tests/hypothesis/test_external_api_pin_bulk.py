@@ -46,7 +46,9 @@ class PinBulkTestCase(TestCase):
 
     def _other_users_pin(self) -> Pin:
         other = baker.make(User)
-        return create_pin_for_profile(Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0).pin
+        return create_pin_for_profile(
+            Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0
+        ).pin
 
     def _post(self, path: str, payload: dict):
         return self.client.post(path, data=payload, content_type="application/json", **_bearer(self.raw_key))
@@ -61,10 +63,14 @@ class PinBulkDeleteTests(PinBulkTestCase):
         self.assertEqual(body["descendant_count"], 0)
         self.assertEqual(body["total_count"], 2)
         self.assertFalse(Pin.objects.filter(pk__in=[self.pin_a.pk, self.pin_b.pk]).exists())
-        self.assertTrue(UndoAction.objects.filter(uuid=body["undo_uuid"], profile=self.profile, model_label="pin").exists())
+        self.assertTrue(
+            UndoAction.objects.filter(uuid=body["undo_uuid"], profile=self.profile, model_label="pin").exists()
+        )
 
     def test_deleting_a_parent_sweeps_its_children_and_counts_them(self) -> None:
-        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin_a.location, parent_pin=self.pin_a, name="Entrance")
+        child = baker.make(
+            "dashboard.Pin", profile=self.profile, location=self.pin_a.location, parent_pin=self.pin_a, name="Entrance"
+        )
         response = self._post(f"{_BASE}delete/", {"uuids": [str(self.pin_a.uuid)]})
         self.assertEqual(response.status_code, 200, response.content)
         body = response.json()
@@ -96,7 +102,9 @@ class PinBulkDeleteTests(PinBulkTestCase):
 
 class PinBulkMergeTests(PinBulkTestCase):
     def test_merges_sources_into_the_target_as_detail_pins(self) -> None:
-        response = self._post(f"{_BASE}merge/", {"target_uuid": str(self.pin_a.uuid), "source_uuids": [str(self.pin_b.uuid)]})
+        response = self._post(
+            f"{_BASE}merge/", {"target_uuid": str(self.pin_a.uuid), "source_uuids": [str(self.pin_b.uuid)]}
+        )
         self.assertEqual(response.status_code, 200, response.content)
         body = response.json()
         self.assertEqual(body["target"]["uuid"], str(self.pin_a.uuid))
@@ -108,7 +116,9 @@ class PinBulkMergeTests(PinBulkTestCase):
     def test_promotes_a_child_target_to_top_level_first(self) -> None:
         pin_c = create_pin_for_profile(self.profile, name="Pin C", latitude=44.5, longitude=-75.5).pin
         Pin.objects.filter(pk=self.pin_b.pk).update(parent_pin=pin_c)
-        response = self._post(f"{_BASE}merge/", {"target_uuid": str(self.pin_b.uuid), "source_uuids": [str(self.pin_a.uuid)]})
+        response = self._post(
+            f"{_BASE}merge/", {"target_uuid": str(self.pin_b.uuid), "source_uuids": [str(self.pin_a.uuid)]}
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.pin_b.refresh_from_db()
         self.assertIsNone(self.pin_b.parent_pin_id)
@@ -117,7 +127,9 @@ class PinBulkMergeTests(PinBulkTestCase):
         """pin_b becomes a child of pin_a at pin_a's own Location - promoting it collides with pin_a itself."""
         Pin.objects.filter(pk=self.pin_b.pk).update(parent_pin=self.pin_a, location_id=self.pin_a.location_id)
         pin_c = create_pin_for_profile(self.profile, name="Pin C", latitude=44.5, longitude=-75.5).pin
-        response = self._post(f"{_BASE}merge/", {"target_uuid": str(self.pin_b.uuid), "source_uuids": [str(pin_c.uuid)]})
+        response = self._post(
+            f"{_BASE}merge/", {"target_uuid": str(self.pin_b.uuid), "source_uuids": [str(pin_c.uuid)]}
+        )
         self.assertEqual(response.status_code, 400)
         self.assertIn("already have a top-level pin", response.json()["error"])
 
@@ -126,8 +138,13 @@ class PinBulkMergeTests(PinBulkTestCase):
         # parent - by the time sources are processed the target has always been
         # promoted to root, so this exercises the ordinary (non-cycle) path for
         # a source that happens to already be one of the target's children.
-        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin_a.location, parent_pin=self.pin_a, name="Entrance")
-        response = self._post(f"{_BASE}merge/", {"target_uuid": str(self.pin_a.uuid), "source_uuids": [str(child.uuid), str(self.pin_b.uuid)]})
+        child = baker.make(
+            "dashboard.Pin", profile=self.profile, location=self.pin_a.location, parent_pin=self.pin_a, name="Entrance"
+        )
+        response = self._post(
+            f"{_BASE}merge/",
+            {"target_uuid": str(self.pin_a.uuid), "source_uuids": [str(child.uuid), str(self.pin_b.uuid)]},
+        )
         self.assertEqual(response.status_code, 200, response.content)
         body = response.json()
         self.assertEqual(set(body["merged_uuids"]), {str(child.uuid), str(self.pin_b.uuid)})
@@ -135,12 +152,16 @@ class PinBulkMergeTests(PinBulkTestCase):
 
     def test_unknown_target_is_a_404(self) -> None:
         theirs = self._other_users_pin()
-        response = self._post(f"{_BASE}merge/", {"target_uuid": str(theirs.uuid), "source_uuids": [str(self.pin_a.uuid)]})
+        response = self._post(
+            f"{_BASE}merge/", {"target_uuid": str(theirs.uuid), "source_uuids": [str(self.pin_a.uuid)]}
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_no_valid_sources_is_a_400(self) -> None:
         theirs = self._other_users_pin()
-        response = self._post(f"{_BASE}merge/", {"target_uuid": str(self.pin_a.uuid), "source_uuids": [str(theirs.uuid)]})
+        response = self._post(
+            f"{_BASE}merge/", {"target_uuid": str(self.pin_a.uuid), "source_uuids": [str(theirs.uuid)]}
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_promotion_does_not_persist_when_sources_are_all_invalid(self) -> None:
@@ -148,7 +169,9 @@ class PinBulkMergeTests(PinBulkTestCase):
         pin_c = create_pin_for_profile(self.profile, name="Pin C", latitude=44.5, longitude=-75.5).pin
         Pin.objects.filter(pk=self.pin_b.pk).update(parent_pin=pin_c)
         theirs = self._other_users_pin()
-        response = self._post(f"{_BASE}merge/", {"target_uuid": str(self.pin_b.uuid), "source_uuids": [str(theirs.uuid)]})
+        response = self._post(
+            f"{_BASE}merge/", {"target_uuid": str(self.pin_b.uuid), "source_uuids": [str(theirs.uuid)]}
+        )
         self.assertEqual(response.status_code, 400)
         self.pin_b.refresh_from_db()
         self.assertEqual(self.pin_b.parent_pin_id, pin_c.pk)
@@ -156,7 +179,9 @@ class PinBulkMergeTests(PinBulkTestCase):
 
 class PinBulkEditTests(PinBulkTestCase):
     def test_sets_description_on_every_pin(self) -> None:
-        response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "description": "Shared note"})
+        response = self._post(
+            f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "description": "Shared note"}
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json(), {"count": 2, "reparented": 0})
         self.pin_a.refresh_from_db()
@@ -192,32 +217,46 @@ class PinBulkEditTests(PinBulkTestCase):
 
     def test_adds_labels_to_every_pin(self) -> None:
         label = ensure_label(profile=self.profile, name="Rusty", kind="tag")
-        response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "add_label_uuids": [str(label.uuid)]})
+        response = self._post(
+            f"{_BASE}edit/",
+            {"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "add_label_uuids": [str(label.uuid)]},
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertTrue(self.pin_a.labels.filter(pk=label.pk).exists())
         self.assertTrue(self.pin_b.labels.filter(pk=label.pk).exists())
 
     def test_unresolvable_add_label_uuid_is_a_400(self) -> None:
-        response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid)], "add_label_uuids": ["00000000-0000-0000-0000-000000000000"]})
+        response = self._post(
+            f"{_BASE}edit/",
+            {"uuids": [str(self.pin_a.uuid)], "add_label_uuids": ["00000000-0000-0000-0000-000000000000"]},
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_removing_a_label_writes_an_auto_removal_tombstone(self) -> None:
         label = ensure_label(profile=self.profile, name="Rusty", kind="tag")
         self.pin_a.labels.add(label)
-        response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid)], "remove_label_uuids": [str(label.uuid)]})
+        response = self._post(
+            f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid)], "remove_label_uuids": [str(label.uuid)]}
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertFalse(self.pin_a.labels.filter(pk=label.pk).exists())
-        self.assertTrue(PinAutoRemoval.objects.filter(pin=self.pin_a, kind=AutoRemovalKind.LABEL, value=str(label.pk)).exists())
+        self.assertTrue(
+            PinAutoRemoval.objects.filter(pin=self.pin_a, kind=AutoRemovalKind.LABEL, value=str(label.pk)).exists()
+        )
 
     def test_removing_a_label_absent_from_a_pin_is_a_silent_no_op(self) -> None:
         label = ensure_label(profile=self.profile, name="Rusty", kind="tag")
         # Not attached to pin_a - removal must succeed without incident.
-        response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid)], "remove_label_uuids": [str(label.uuid)]})
+        response = self._post(
+            f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid)], "remove_label_uuids": [str(label.uuid)]}
+        )
         self.assertEqual(response.status_code, 200, response.content)
 
     def test_reparents_every_pin_under_the_named_target(self) -> None:
         parent = create_pin_for_profile(self.profile, name="Campus", latitude=50.0, longitude=50.0).pin
-        response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "parent_uuid": str(parent.uuid)})
+        response = self._post(
+            f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "parent_uuid": str(parent.uuid)}
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["reparented"], 2)
         self.pin_a.refresh_from_db()
@@ -235,8 +274,12 @@ class PinBulkEditTests(PinBulkTestCase):
         self.assertIsNone(self.pin_a.parent_pin_id)
 
     def test_reparenting_under_a_descendant_skips_that_pin_without_failing_the_batch(self) -> None:
-        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin_a.location, parent_pin=self.pin_a, name="Entrance")
-        response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "parent_uuid": str(child.uuid)})
+        child = baker.make(
+            "dashboard.Pin", profile=self.profile, location=self.pin_a.location, parent_pin=self.pin_a, name="Entrance"
+        )
+        response = self._post(
+            f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "parent_uuid": str(child.uuid)}
+        )
         self.assertEqual(response.status_code, 200, response.content)
         # pin_a would become its own descendant via child - skipped; pin_b is fine.
         self.assertEqual(response.json()["reparented"], 1)
@@ -244,12 +287,20 @@ class PinBulkEditTests(PinBulkTestCase):
         self.assertEqual(self.pin_b.parent_pin_id, child.pk)
 
     def test_unknown_parent_uuid_is_a_400(self) -> None:
-        response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid)], "parent_uuid": "00000000-0000-0000-0000-000000000000"})
+        response = self._post(
+            f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid)], "parent_uuid": "00000000-0000-0000-0000-000000000000"}
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_detaching_a_pin_whose_location_conflicts_with_an_existing_root_is_skipped(self) -> None:
         """Detaching must not raise IntegrityError when the pin's own Location already has an unrelated top-level pin."""
-        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin_a.location, parent_pin=self.pin_b, name="Shares pin_a's spot")
+        child = baker.make(
+            "dashboard.Pin",
+            profile=self.profile,
+            location=self.pin_a.location,
+            parent_pin=self.pin_b,
+            name="Shares pin_a's spot",
+        )
         response = self._post(f"{_BASE}edit/", {"uuids": [str(child.uuid)], "parent_uuid": None})
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["reparented"], 0)
@@ -271,7 +322,9 @@ class PinBulkEditTests(PinBulkTestCase):
 
     def test_another_users_pin_is_silently_dropped_from_the_batch(self) -> None:
         theirs = self._other_users_pin()
-        response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid), str(theirs.uuid)], "description": "Shared"})
+        response = self._post(
+            f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid), str(theirs.uuid)], "description": "Shared"}
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["count"], 1)
         theirs.refresh_from_db()

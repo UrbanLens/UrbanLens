@@ -33,7 +33,14 @@ class ResolveDeferredPinLocationsMapsUrlTests(TestCase):
                 "create_category": False,
                 "label_ids": [],
                 "pins": [
-                    {"name": "Black Point Ruins", "lat": 41.348754, "lng": -71.453896, "description": "", "cid": 12345, "maps_url": url},
+                    {
+                        "name": "Black Point Ruins",
+                        "lat": 41.348754,
+                        "lng": -71.453896,
+                        "description": "",
+                        "cid": 12345,
+                        "maps_url": url,
+                    },
                     {"name": "No URL Place", "lat": 40.0, "lng": -74.0, "description": "", "cid": 67890},
                 ],
             },
@@ -42,7 +49,9 @@ class ResolveDeferredPinLocationsMapsUrlTests(TestCase):
         with (
             mock.patch(
                 "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids",
-                return_value=CidResolutionResult(provider=PROVIDER_REDATA, resolved={12345: (41.348754, -71.453896), 67890: (40.0, -74.0)}),
+                return_value=CidResolutionResult(
+                    provider=PROVIDER_REDATA, resolved={12345: (41.348754, -71.453896), 67890: (40.0, -74.0)}
+                ),
             ) as resolve_cids,
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):

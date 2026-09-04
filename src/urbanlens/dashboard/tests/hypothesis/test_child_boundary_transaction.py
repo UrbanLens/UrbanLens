@@ -39,20 +39,28 @@ class ChildPinOutsideTransactionTests(TransactionTestCase):
 
     def test_creating_a_child_pin_outside_a_transaction(self) -> None:
         """No explicit atomic() here, matching a view under ATOMIC_REQUESTS=False."""
-        child = Pin.objects.create(profile=self.profile, location=self._child_location(42.6527, -73.7563), parent_pin=self.parent)
+        child = Pin.objects.create(
+            profile=self.profile, location=self._child_location(42.6527, -73.7563), parent_pin=self.parent
+        )
 
         self.assertIsNotNone(child.pk)
         # Not just "didn't raise": the refit must have actually run to completion
         # and fitted a stand-in, not merely survived by swallowing the error.
         self.assertTrue(
-            Boundary.objects.filter(pin=self.parent, boundary_type=BoundaryType.PROPERTY, generated_from_children=True).exists(),
+            Boundary.objects.filter(
+                pin=self.parent, boundary_type=BoundaryType.PROPERTY, generated_from_children=True
+            ).exists(),
             "the child-pin signal should have fitted a stand-in boundary for the parent",
         )
 
     def test_deleting_a_child_pin_outside_a_transaction(self) -> None:
-        child = Pin.objects.create(profile=self.profile, location=self._child_location(42.6528, -73.7564), parent_pin=self.parent)
+        child = Pin.objects.create(
+            profile=self.profile, location=self._child_location(42.6528, -73.7564), parent_pin=self.parent
+        )
         self.assertTrue(
-            Boundary.objects.filter(pin=self.parent, boundary_type=BoundaryType.PROPERTY, generated_from_children=True).exists(),
+            Boundary.objects.filter(
+                pin=self.parent, boundary_type=BoundaryType.PROPERTY, generated_from_children=True
+            ).exists(),
             "the setup step should have fitted a stand-in boundary for the parent",
         )
 
@@ -75,8 +83,14 @@ class ChildPinOutsideTransactionTests(TransactionTestCase):
         the loop itself.
         """
         other_parent = baker.make(Pin, profile=self.profile, location=self._child_location(42.7000, -73.8000))
-        child = Pin.objects.create(profile=self.profile, location=self._child_location(42.6528, -73.7564), parent_pin=self.parent)
-        self.assertTrue(Boundary.objects.filter(pin=self.parent, boundary_type=BoundaryType.PROPERTY, generated_from_children=True).exists())
+        child = Pin.objects.create(
+            profile=self.profile, location=self._child_location(42.6528, -73.7564), parent_pin=self.parent
+        )
+        self.assertTrue(
+            Boundary.objects.filter(
+                pin=self.parent, boundary_type=BoundaryType.PROPERTY, generated_from_children=True
+            ).exists()
+        )
 
         child.parent_pin = other_parent
         child.save()
@@ -87,6 +101,8 @@ class ChildPinOutsideTransactionTests(TransactionTestCase):
             "the old parent lost its only child and should have had its stand-in dropped",
         )
         self.assertTrue(
-            Boundary.objects.filter(pin=other_parent, boundary_type=BoundaryType.PROPERTY, generated_from_children=True).exists(),
+            Boundary.objects.filter(
+                pin=other_parent, boundary_type=BoundaryType.PROPERTY, generated_from_children=True
+            ).exists(),
             "the new parent gained a child and should have a freshly fitted stand-in",
         )

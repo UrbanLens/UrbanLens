@@ -102,4 +102,8 @@ class ProfileRoundTripTests(TestCase):
             _import_area("profile", self.profile, temp_dir, ImportResult())
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.bio, "new bio")
-        self.assertEqual(self.profile.phone_number, "+15551234567", "an archive without a contact block must not blank existing handles")
+        self.assertEqual(
+            self.profile.phone_number,
+            "+15551234567",
+            "an archive without a contact block must not blank existing handles",
+        )

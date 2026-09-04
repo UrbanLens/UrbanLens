@@ -53,7 +53,9 @@ class ImportFailureGuessTests(TestCase):
         """The common export shape: a house number and street, no city."""
         failure = self._failure("123 Main St")
 
-        with mock.patch(f"{_GATEWAY}.search", return_value=[_osm("41.35", "-71.45", name="123 Main St, Newport")]) as search:
+        with mock.patch(
+            f"{_GATEWAY}.search", return_value=[_osm("41.35", "-71.45", name="123 Main St, Newport")]
+        ) as search:
             guess = guess_for_failure(failure)
 
         self.assertIsNotNone(guess)
@@ -64,7 +66,10 @@ class ImportFailureGuessTests(TestCase):
     def test_a_place_name_falls_back_to_an_osm_search(self) -> None:
         failure = self._failure("Fort Wetherill")
 
-        with mock.patch(f"{_GATEWAY}.search", return_value=[_osm("41.47", "-71.35", name="Fort Wetherill", cls="historic", importance=0.5)]):
+        with mock.patch(
+            f"{_GATEWAY}.search",
+            return_value=[_osm("41.47", "-71.35", name="Fort Wetherill", cls="historic", importance=0.5)],
+        ):
             guess = guess_for_failure(failure)
 
         self.assertIsNotNone(guess)
@@ -126,7 +131,9 @@ class ImportFailureGuessTests(TestCase):
     def test_an_unusable_result_does_not_raise(self) -> None:
         failure = self._failure("Fort Wetherill")
 
-        with mock.patch(f"{_GATEWAY}.search", return_value=[{"display_name": "no coordinates", "class": "place", "importance": 0.9}]):
+        with mock.patch(
+            f"{_GATEWAY}.search", return_value=[{"display_name": "no coordinates", "class": "place", "importance": 0.9}]
+        ):
             self.assertIsNone(guess_for_failure(failure))
 
 
@@ -208,7 +215,10 @@ class ImportFailureGuessCorroborationTests(TestCase):
 
     def test_no_url_and_no_match_still_yields_nothing(self) -> None:
         failure = PinImportFailure.objects.create(
-            profile=self.profile, cid=999, name="Unfindable Place", reason=PinImportFailureReason.LOOKUP_STALLED,
+            profile=self.profile,
+            cid=999,
+            name="Unfindable Place",
+            reason=PinImportFailureReason.LOOKUP_STALLED,
         )
 
         with mock.patch(f"{_GATEWAY}.search", return_value=[]):

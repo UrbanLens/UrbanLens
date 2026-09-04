@@ -113,7 +113,9 @@ class CacheMediaItemIntoWikiTaskTests(TestCase):
 
         with mock.patch(_MATERIALIZE) as materialize:
             materialize.return_value = mock.Mock(pk=7)
-            result = cache_media_item_into_wiki(self.wiki.pk, self.profile.pk, "wikimedia", "https://example.test/a.jpg")
+            result = cache_media_item_into_wiki(
+                self.wiki.pk, self.profile.pk, "wikimedia", "https://example.test/a.jpg"
+            )
 
         self.assertEqual(result, 7)
         self.assertEqual(materialize.call_args.kwargs["location"], self.location)
@@ -136,6 +138,8 @@ class CacheMediaItemIntoWikiTaskTests(TestCase):
         from urbanlens.dashboard.tasks import cache_media_item_into_wiki
 
         with mock.patch(_MATERIALIZE, side_effect=MaterializeError("dead provider")):
-            result = cache_media_item_into_wiki(self.wiki.pk, self.profile.pk, "wikimedia", "https://example.test/a.jpg")
+            result = cache_media_item_into_wiki(
+                self.wiki.pk, self.profile.pk, "wikimedia", "https://example.test/a.jpg"
+            )
 
         self.assertIsNone(result)

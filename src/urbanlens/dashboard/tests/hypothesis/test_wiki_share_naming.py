@@ -39,7 +39,9 @@ class WikiCreationNamingTests(TestCase):
 
     def _pin(self, *, name: str | None) -> Pin:
         self._seq += 1
-        location = baker.make(Location, latitude=41.73332 + self._seq / 10000, longitude=-73.92794, official_name=_ADDRESS)
+        location = baker.make(
+            Location, latitude=41.73332 + self._seq / 10000, longitude=-73.92794, official_name=_ADDRESS
+        )
         return baker.make(Pin, profile=self.profile, location=location, parent_pin=None, name=name)
 
     def _alias(self, pin: Pin, name: str, kind: str = AliasType.ALTERNATE):
@@ -96,4 +98,7 @@ class WikiCreationNamingTests(TestCase):
         # Named from the alias the user selected, and that alias is still copied
         # across - naming from one must not replace seeding them.
         self.assertEqual(wiki.name, "Hudson Heritage")
-        self.assertTrue(wiki.aliases.filter(name="Hudson Heritage").exists(), "the selected alias should still be copied onto the wiki")
+        self.assertTrue(
+            wiki.aliases.filter(name="Hudson Heritage").exists(),
+            "the selected alias should still be copied onto the wiki",
+        )

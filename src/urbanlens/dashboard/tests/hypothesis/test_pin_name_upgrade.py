@@ -86,7 +86,9 @@ class UpgradePlaceholderPinNamesTaskTests(TestCase):
         from urbanlens.dashboard.tasks import upgrade_placeholder_pin_names
 
         location = baker.make(Location, official_name="Old Steel Mill", latitude="40.0", longitude="-74.0")
-        pin = baker.make(Pin, profile=self.profile, location=location, name="My Favorite Ruin", name_is_user_provided=False)
+        pin = baker.make(
+            Pin, profile=self.profile, location=location, name="My Favorite Ruin", name_is_user_provided=False
+        )
 
         upgraded = upgrade_placeholder_pin_names()
 

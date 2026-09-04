@@ -135,9 +135,15 @@ class ExternalInvitePrivacyTests(TestCase):
         baseline_name, baseline = next(iter(responses.items()))
         for name, response in responses.items():
             with self.subTest(case=name):
-                self.assertEqual(response.status_code, baseline.status_code, f"{name} vs {baseline_name}: status differs")
+                self.assertEqual(
+                    response.status_code, baseline.status_code, f"{name} vs {baseline_name}: status differs"
+                )
                 self.assertEqual(response.content, baseline.content, f"{name} vs {baseline_name}: body differs")
-                self.assertEqual(sorted(response.headers), sorted(baseline.headers), f"{name} vs {baseline_name}: header names differ")
+                self.assertEqual(
+                    sorted(response.headers),
+                    sorted(baseline.headers),
+                    f"{name} vs {baseline_name}: header names differ",
+                )
 
     def test_response_is_exactly_the_invariant_sent_document(self) -> None:
         response = self._case_unregistered()

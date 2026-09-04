@@ -41,7 +41,9 @@ class SeedThatDoesNothingTests(QueryScalingMixin, TestCase):
 
     def test_the_growth_requirement_can_be_waived_with_a_reason(self) -> None:
         """Paginated endpoints cap what they render; the waiver must be explicit."""
-        self.assert_flat(reverse("trips.overview"), expect_growth=False, growth_waiver="nothing is seeded in this harness test")
+        self.assert_flat(
+            reverse("trips.overview"), expect_growth=False, growth_waiver="nothing is seeded in this harness test"
+        )
 
     def test_waiving_growth_without_a_reason_is_refused(self) -> None:
         with pytest.raises(AssertionError, match="growth_waiver"):

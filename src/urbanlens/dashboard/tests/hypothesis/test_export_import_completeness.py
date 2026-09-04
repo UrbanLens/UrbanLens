@@ -17,7 +17,12 @@ from model_bakery import baker
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.article.model import Article
-from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
+from urbanlens.dashboard.models.custom_fields.model import (
+    CustomField,
+    CustomFieldEntity,
+    CustomFieldType,
+    CustomFieldValue,
+)
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
@@ -49,7 +54,9 @@ class ExportPinsCompletenessTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make(User).profile
-        self.pin = baker.make(Pin, profile=self.profile, name="Old Mill", vulnerability=4, danger=2, fences="everywhere", locked="some")
+        self.pin = baker.make(
+            Pin, profile=self.profile, name="Old Mill", vulnerability=4, danger=2, fences="everywhere", locked="some"
+        )
         Review.objects.create(profile=self.profile, pin=self.pin, rating=5)
         save_article(editor=self.profile, content="# History\n\nSome text.", pin=self.pin)
 
@@ -169,7 +176,9 @@ class ImportPinCompletenessTests(TestCase):
         super().setUp()
         self.exporter = baker.make(User).profile
         self.importer = baker.make(User).profile
-        self.pin = baker.make(Pin, profile=self.exporter, name="Old Mill", vulnerability=3, danger=5, cameras="everywhere")
+        self.pin = baker.make(
+            Pin, profile=self.exporter, name="Old Mill", vulnerability=3, danger=5, cameras="everywhere"
+        )
         Review.objects.create(profile=self.exporter, pin=self.pin, rating=4)
         save_article(editor=self.exporter, content="An old mill.", pin=self.pin)
 
@@ -242,7 +251,9 @@ class ImportCustomFieldsTests(TestCase):
 
         exporter = baker.make(User).profile
         pin = baker.make(Pin, profile=exporter, name="Gatehouse")
-        field = CustomField.objects.create(profile=exporter, entity_type=CustomFieldEntity.PIN, name="Gate code", field_type=CustomFieldType.TEXT)
+        field = CustomField.objects.create(
+            profile=exporter, entity_type=CustomFieldEntity.PIN, name="Gate code", field_type=CustomFieldType.TEXT
+        )
         value = CustomFieldValue(field=field, pin=pin)
         value.set_value("1234")
         value.save()
@@ -269,7 +280,12 @@ class ImportCustomFieldsTests(TestCase):
         from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         exporter = baker.make(User).profile
-        CustomField.objects.create(profile=exporter, entity_type=CustomFieldEntity.PROFILE, name="Relationship", field_type=CustomFieldType.TEXT)
+        CustomField.objects.create(
+            profile=exporter,
+            entity_type=CustomFieldEntity.PROFILE,
+            name="Relationship",
+            field_type=CustomFieldType.TEXT,
+        )
         importer = baker.make(User).profile
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -277,7 +293,11 @@ class ImportCustomFieldsTests(TestCase):
             result = ImportResult()
             import_data._import_custom_fields(importer, temp_dir, result, pin_uuid_map={}, label_uuid_map={})
 
-        self.assertTrue(CustomField.objects.filter(profile=importer, name="Relationship", entity_type=CustomFieldEntity.PROFILE).exists())
+        self.assertTrue(
+            CustomField.objects.filter(
+                profile=importer, name="Relationship", entity_type=CustomFieldEntity.PROFILE
+            ).exists()
+        )
 
 
 # -- The four previously-importerless categories (decision 2026-07-23: build all) --
@@ -299,7 +319,9 @@ class RoundTripCommentsTests(TestCase):
         result = import_data.ImportResult()
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_comments(self.exporter, temp_dir)
-            import_data._import_comments(importer_profile, temp_dir, result, pin_uuid_map=pin_uuid_map, label_uuid_map={})
+            import_data._import_comments(
+                importer_profile, temp_dir, result, pin_uuid_map=pin_uuid_map, label_uuid_map={}
+            )
         return result
 
     def test_export_carries_target_uuid(self) -> None:
@@ -447,12 +469,21 @@ class RoundTripPhotosTests(TestCase):
 
     def _import(self, temp_dir: str, pin_uuid_map=None, label_uuid_map=None) -> import_data.ImportResult:
         result = import_data.ImportResult()
-        import_data._import_photos(self.importer, temp_dir, result, pin_uuid_map=pin_uuid_map or {}, label_uuid_map=label_uuid_map or {})
+        import_data._import_photos(
+            self.importer, temp_dir, result, pin_uuid_map=pin_uuid_map or {}, label_uuid_map=label_uuid_map or {}
+        )
         return result
 
     def test_photo_reimports_and_attaches_to_mapped_pin(self) -> None:
         my_pin = baker.make(Pin, profile=self.importer)
-        row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000001", "filename": "mill.jpg", "caption": "Turbine hall", "media_type": "photo", "target_type": "pin", "target_uuid": "8a4f0a53-2222-4f77-9111-000000000002"}
+        row = {
+            "uuid": "8a4f0a53-1111-4f77-9111-000000000001",
+            "filename": "mill.jpg",
+            "caption": "Turbine hall",
+            "media_type": "photo",
+            "target_type": "pin",
+            "target_uuid": "8a4f0a53-2222-4f77-9111-000000000002",
+        }
         with tempfile.TemporaryDirectory() as temp_dir:
             self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
             result = self._import(temp_dir, pin_uuid_map={"8a4f0a53-2222-4f77-9111-000000000002": my_pin.pk})
@@ -464,7 +495,12 @@ class RoundTripPhotosTests(TestCase):
         self.assertEqual(result.created.get("photos"), 1)
 
     def test_unresolvable_target_still_imports_as_unattached(self) -> None:
-        row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000003", "filename": "mill.jpg", "target_type": "pin", "target_uuid": "8a4f0a53-2222-4f77-9111-000000000099"}
+        row = {
+            "uuid": "8a4f0a53-1111-4f77-9111-000000000003",
+            "filename": "mill.jpg",
+            "target_type": "pin",
+            "target_uuid": "8a4f0a53-2222-4f77-9111-000000000099",
+        }
         with tempfile.TemporaryDirectory() as temp_dir:
             self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
             self._import(temp_dir)
@@ -499,7 +535,9 @@ class RoundTripPhotosTests(TestCase):
         row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000006", "filename": "mill.jpg"}
         with tempfile.TemporaryDirectory() as temp_dir:
             self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
-            with mock.patch("urbanlens.dashboard.services.media.storage.quota_error_for_upload", return_value="over quota"):
+            with mock.patch(
+                "urbanlens.dashboard.services.media.storage.quota_error_for_upload", return_value="over quota"
+            ):
                 result = self._import(temp_dir)
 
         self.assertFalse(Image.objects.filter(profile=self.importer).exists())
@@ -521,7 +559,11 @@ class RoundTripPhotosTests(TestCase):
 
     def test_labels_reattach_via_label_uuid_map(self) -> None:
         label = ensure_label(profile=self.importer, name="Abandoned", kind="tag")
-        row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000007", "filename": "mill.jpg", "label_uuids": ["8a4f0a53-3333-4f77-9111-000000000001"]}
+        row = {
+            "uuid": "8a4f0a53-1111-4f77-9111-000000000007",
+            "filename": "mill.jpg",
+            "label_uuids": ["8a4f0a53-3333-4f77-9111-000000000001"],
+        }
         with tempfile.TemporaryDirectory() as temp_dir:
             self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
             self._import(temp_dir, label_uuid_map={"8a4f0a53-3333-4f77-9111-000000000001": label.pk})
@@ -542,7 +584,12 @@ class RoundTripPhotosTests(TestCase):
     @given(caption=short_text_or_none)
     @_db_settings
     def test_arbitrary_caption_round_trips(self, caption: str | None) -> None:
-        row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000009", "filename": "mill.jpg", "caption": caption, "media_type": "photo"}
+        row = {
+            "uuid": "8a4f0a53-1111-4f77-9111-000000000009",
+            "filename": "mill.jpg",
+            "caption": caption,
+            "media_type": "photo",
+        }
         with tempfile.TemporaryDirectory() as temp_dir:
             self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
             result = self._import(temp_dir)
@@ -574,7 +621,13 @@ class RestoreOverlayImageQuotaLockTests(TestCase):
             with open(os.path.join(overlays_dir, "overlay.png"), "wb") as fh:
                 fh.write(b"fake-png-bytes")
 
-            ctx = import_data.ImportContext(profile=self.importer, data_dir=temp_dir, result=import_data.ImportResult(), pin_uuid_map={}, label_uuid_map={})
+            ctx = import_data.ImportContext(
+                profile=self.importer,
+                data_dir=temp_dir,
+                result=import_data.ImportResult(),
+                pin_uuid_map={},
+                label_uuid_map={},
+            )
             with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
                 image = import_data.MapAnnotationsImport()._restore_overlay_image({"filename": "overlay.png"}, ctx)
 
@@ -601,7 +654,9 @@ class RoundTripTripsTests(TestCase):
         from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 
         trip = Trip.objects.create(name=name, creator=creator, **kwargs)
-        TripMembership.objects.get_or_create(trip=trip, profile=creator, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
+        TripMembership.objects.get_or_create(
+            trip=trip, profile=creator, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED}
+        )
         return trip
 
     def test_owned_trip_is_rebuilt_with_creator_membership(self) -> None:
@@ -621,7 +676,11 @@ class RoundTripTripsTests(TestCase):
         self.assertEqual(rebuilt.name, "Detroit Run")
         self.assertEqual(rebuilt.description, "Factories.")
         self.assertEqual(rebuilt.uuid, original_uuid)
-        self.assertTrue(TripMembership.objects.filter(trip=rebuilt, profile=self.importer, status=TripMembership.STATUS_JOINED).exists())
+        self.assertTrue(
+            TripMembership.objects.filter(
+                trip=rebuilt, profile=self.importer, status=TripMembership.STATUS_JOINED
+            ).exists()
+        )
         self.assertEqual(result.created.get("trips"), 1)
 
     def test_membership_in_someone_elses_trip_is_not_rebuilt(self) -> None:
@@ -660,7 +719,13 @@ class RoundTripTripsTests(TestCase):
         trip = self._make_trip(self.exporter)
         TripMembership.objects.create(trip=trip, profile=friend, status=TripMembership.STATUS_JOINED)
         TripMembership.objects.create(trip=trip, profile=stranger, status=TripMembership.STATUS_JOINED)
-        Friendship.objects.create(from_profile=self.importer, to_profile=friend, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(
+            from_profile=self.importer,
+            to_profile=friend,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
 
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_trips(self.exporter, temp_dir)
@@ -669,7 +734,9 @@ class RoundTripTripsTests(TestCase):
             import_data._import_trips(self.importer, temp_dir, result, pin_uuid_map={}, label_uuid_map={})
 
         rebuilt = Trip.objects.get(creator=self.importer)
-        self.assertTrue(TripMembership.objects.filter(trip=rebuilt, profile=friend, status=TripMembership.STATUS_INVITED).exists())
+        self.assertTrue(
+            TripMembership.objects.filter(trip=rebuilt, profile=friend, status=TripMembership.STATUS_INVITED).exists()
+        )
         self.assertFalse(TripMembership.objects.filter(trip=rebuilt, profile=stranger).exists())
 
     @given(name=nonempty_name, description=short_text_or_none)
@@ -709,13 +776,17 @@ class RoundTripDirectMessagesTests(TestCase):
         # partner_uuid whenever the partner's identity is masked from the
         # exporter (masked partner => nothing restorable, by design), and two
         # bare baker strangers mask each other under the default setting.
-        ProfileModel.objects.filter(pk__in=[self.me.pk, self.partner.pk]).update(community_enabled=True, direct_message_visibility="anyone", profile_visibility="anyone")
+        ProfileModel.objects.filter(pk__in=[self.me.pk, self.partner.pk]).update(
+            community_enabled=True, direct_message_visibility="anyone", profile_visibility="anyone"
+        )
 
     def _export_and_import(self, exporter=None, importer=None) -> import_data.ImportResult:
         result = import_data.ImportResult()
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_direct_messages(exporter or self.me, temp_dir)
-            import_data._import_direct_messages(importer or self.me, temp_dir, result, pin_uuid_map={}, label_uuid_map={})
+            import_data._import_direct_messages(
+                importer or self.me, temp_dir, result, pin_uuid_map={}, label_uuid_map={}
+            )
         return result
 
     def test_sent_plaintext_message_is_restored_after_deletion(self) -> None:
@@ -753,7 +824,9 @@ class RoundTripDirectMessagesTests(TestCase):
     def test_encrypted_messages_are_never_imported(self) -> None:
         from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 
-        DirectMessage.objects.create(sender=self.me, recipient=self.partner, body="", ciphertext="c2VhbGVk", nonce="bm9uY2U=", key_version=1)
+        DirectMessage.objects.create(
+            sender=self.me, recipient=self.partner, body="", ciphertext="c2VhbGVk", nonce="bm9uY2U=", key_version=1
+        )
 
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_direct_messages(self.me, temp_dir)

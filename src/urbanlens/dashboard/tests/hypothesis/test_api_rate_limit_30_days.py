@@ -20,7 +20,13 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
-from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDefaults, ServiceDisabledError, check_rate_limit
+from urbanlens.dashboard.services.core.rate_limiter import (
+    RateLimitExceededError,
+    RequestCancelledError,
+    ServiceDefaults,
+    ServiceDisabledError,
+    check_rate_limit,
+)
 
 
 def _log_call(service: str, *, days_ago: float = 0.0) -> ApiCallLog:
@@ -101,12 +107,21 @@ class ApiLimitsAdminPageThirtyDayFieldTests(TestCase):
         add_user_to_site_admin_group(self.admin)
         self.client = Client()
         self.client.force_login(self.admin)
-        self.cfg = ApiRateLimit.objects.create(service="test_admin_service", display_name="Test Admin Service", calls_per_minute=10, calls_per_day=100)
+        self.cfg = ApiRateLimit.objects.create(
+            service="test_admin_service", display_name="Test Admin Service", calls_per_minute=10, calls_per_day=100
+        )
 
     def test_post_saves_calls_per_30_days(self) -> None:
         self.client.post(
             reverse("site_admin_api_limits"),
-            {"service": self.cfg.service, "enabled": "on", "calls_per_minute": "10", "calls_per_day": "100", "calls_per_30_days": "3000", "notes": ""},
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "calls_per_30_days": "3000",
+                "notes": "",
+            },
         )
         self.cfg.refresh_from_db()
         self.assertEqual(self.cfg.calls_per_30_days, 3000)
@@ -116,7 +131,14 @@ class ApiLimitsAdminPageThirtyDayFieldTests(TestCase):
         self.cfg.save(update_fields=["calls_per_30_days"])
         self.client.post(
             reverse("site_admin_api_limits"),
-            {"service": self.cfg.service, "enabled": "on", "calls_per_minute": "10", "calls_per_day": "100", "calls_per_30_days": "", "notes": ""},
+            {
+                "service": self.cfg.service,
+                "enabled": "on",
+                "calls_per_minute": "10",
+                "calls_per_day": "100",
+                "calls_per_30_days": "",
+                "notes": "",
+            },
         )
         self.cfg.refresh_from_db()
         self.assertIsNone(self.cfg.calls_per_30_days)
@@ -131,7 +153,10 @@ class ApiLimitsAdminPageThirtyDayFieldTests(TestCase):
         self.assertEqual(tab_names[-1], "Other")
 
     def test_known_service_is_categorized_not_left_in_other(self) -> None:
-        with patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value={"wikipedia": ServiceDefaults(display_name="Wikipedia")}):
+        with patch(
+            "urbanlens.dashboard.services.core.rate_limiter.all_service_defaults",
+            return_value={"wikipedia": ServiceDefaults(display_name="Wikipedia")},
+        ):
             response = self.client.get(reverse("site_admin_api_limits"))
         tab_names = [tab["name"] for tab in response.context["tabs"]]
         self.assertIn("Reference & Archives", tab_names)

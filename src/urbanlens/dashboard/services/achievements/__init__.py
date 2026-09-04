@@ -1,4 +1,5 @@
 """Achievements: metric registry, streak tracking, and award evaluation."""
+
 from urbanlens.dashboard.services.achievements.activity import rebuild_streak, record_activity
 from urbanlens.dashboard.services.achievements.evaluate import (
     active_metric_keys,

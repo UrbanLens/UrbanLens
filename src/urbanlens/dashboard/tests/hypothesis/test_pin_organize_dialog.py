@@ -49,7 +49,9 @@ class PinOrganizeDialogTests(TestCase):
     def test_location_label_dialog_has_no_lists_tab(self) -> None:
         """Only the pin route gets the Lists tab - locations have no PinList concept."""
         wiki = baker.make("dashboard.Wiki", location=self.pin.location)
-        response = self.client.get(reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.pin.location.slug}))
+        response = self.client.get(
+            reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.pin.location.slug})
+        )
         self.assertNotContains(response, "tad-top-tabs")
         del wiki
 
@@ -95,7 +97,7 @@ class PinOrganizeDialogTests(TestCase):
         baker.make(Label, kind=KIND_USER, profile=self.profile, name="Alex Person")
         baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Regular Tag")
 
-        labels = list(Label.objects.visible_to(self.profile).location_labels().ordered())
+        labels = list(Label.objects.visible_to(self.profile).location_labels().in_display_order())
 
         self.assertIn("Regular Tag", [b.name for b in labels])
         self.assertNotIn("Alex Person", [b.name for b in labels])

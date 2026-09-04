@@ -57,7 +57,9 @@ class NotificationTitleTruncationTests(TestCase):
 
     def test_a_title_that_already_fits_is_untouched(self) -> None:
         """Truncation must not be doing anything to the ordinary case."""
-        log = NotificationLog.objects.create(profile=baker.make("auth.User").profile, title="Someone replied to your comment")
+        log = NotificationLog.objects.create(
+            profile=baker.make("auth.User").profile, title="Someone replied to your comment"
+        )
 
         log.refresh_from_db()
         self.assertEqual(log.title, "Someone replied to your comment")
@@ -87,7 +89,9 @@ class EscalationSurvivesLongWikiNameTests(TestCase):
         escalate_checkin(checkin)
 
         contact.refresh_from_db()
-        self.assertIsNotNone(contact.notified_at, "the wiki post aborted the escalation before the emergency contacts were reached")
+        self.assertIsNotNone(
+            contact.notified_at, "the wiki post aborted the escalation before the emergency contacts were reached"
+        )
 
     # -- completeness -------------------------------------------------------
 
@@ -105,7 +109,9 @@ class EscalationSurvivesLongWikiNameTests(TestCase):
 
         for label, (wrapper, source_max) in wrapped.items():
             with self.subTest(title=label):
-                log = NotificationLog.objects.create(profile=baker.make("auth.User").profile, title="w" * wrapper + "n" * source_max)
+                log = NotificationLog.objects.create(
+                    profile=baker.make("auth.User").profile, title="w" * wrapper + "n" * source_max
+                )
 
                 log.refresh_from_db()
                 self.assertLessEqual(len(log.title), _TITLE_MAX)

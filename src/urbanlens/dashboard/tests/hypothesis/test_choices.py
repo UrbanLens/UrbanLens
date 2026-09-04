@@ -2,6 +2,7 @@
 
 No database access - these are pure logic tests.
 """
+
 from __future__ import annotations
 
 from hypothesis import assume, given, settings, strategies as st
@@ -111,7 +112,6 @@ class TextChoicesGetNameTests(SimpleTestCase):
         self.assertEqual(member.value, value)
 
 
-
 class PinTypeTests(SimpleTestCase):
     """PinType covers the structural vocabulary of a pin."""
 
@@ -179,7 +179,9 @@ class IndoorOutdoorTests(SimpleTestCase):
         field = model._meta.get_field("indoor_outdoor")
         self.assertTrue(field.null, f"{model.__name__}.indoor_outdoor must be null=True (unclassified by default)")
         self.assertTrue(field.blank, f"{model.__name__}.indoor_outdoor must be blank=True")
-        self.assertIsNone(field.get_default(), f"{model.__name__}.indoor_outdoor must default to None, not a guessed value")
+        self.assertIsNone(
+            field.get_default(), f"{model.__name__}.indoor_outdoor must default to None, not a guessed value"
+        )
         choice_values = {value for value, _ in field.choices}
         self.assertEqual(choice_values, set(IndoorOutdoor.values))
 

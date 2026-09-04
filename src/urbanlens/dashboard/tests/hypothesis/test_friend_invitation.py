@@ -1,4 +1,5 @@
 """Tests for email friend invitations processed after account verification."""
+
 from __future__ import annotations
 
 from unittest.mock import patch

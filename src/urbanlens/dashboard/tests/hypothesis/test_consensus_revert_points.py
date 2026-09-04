@@ -49,7 +49,9 @@ class ConsensusRevertPointsTests(TestCase):
         return row.total_points if row else 0
 
     def _edit(self, profile: Profile, **changes) -> WikiEdit:
-        return apply_wiki_edit(self.wiki, profile, changes or {"description": "A description of the place."}, strict=False)
+        return apply_wiki_edit(
+            self.wiki, profile, changes or {"description": "A description of the place."}, strict=False
+        )
 
     def _revert(self, target: WikiEdit) -> WikiEdit | None:
         self.wiki.refresh_from_db()
@@ -154,7 +156,9 @@ class ConsensusRevertPointsTests(TestCase):
     def test_retraction_never_creates_a_consensus_profile(self) -> None:
         """A profile with no row is a no-op, not a reason to materialise one at zero."""
         stranger = Profile.objects.get(user=baker.make(User))
-        edit = baker.make(WikiEdit, wiki=self.wiki, editor=stranger, changes={"name": {"from": "a", "to": "b"}}, consensus_points=3)
+        edit = baker.make(
+            WikiEdit, wiki=self.wiki, editor=stranger, changes={"name": {"from": "a", "to": "b"}}, consensus_points=3
+        )
         ConsensusProfile.objects.filter(profile=stranger).delete()
 
         retract_wiki_edit_award(edit)

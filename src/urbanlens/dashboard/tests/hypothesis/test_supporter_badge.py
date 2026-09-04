@@ -3,6 +3,7 @@
 DB-backed - both properties resolve the user's real subscription state via
 active_subscription_roles(), which queries RoleSubscription/UserSubscription.
 """
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User
@@ -33,15 +34,33 @@ class IsSupporterTests(TestCase):
         self.assertFalse(self.profile.is_supporter)
 
     def test_active_threshold_met_subscription_is_a_supporter(self) -> None:
-        baker.make(RoleSubscription, user=self.user, role=self.role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True)
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.ACTIVE,
+            threshold_met=True,
+        )
         self.assertTrue(self.profile.is_supporter)
 
     def test_threshold_not_met_is_not_a_supporter(self) -> None:
-        baker.make(RoleSubscription, user=self.user, role=self.role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=False)
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.ACTIVE,
+            threshold_met=False,
+        )
         self.assertFalse(self.profile.is_supporter)
 
     def test_canceled_subscription_is_not_a_supporter(self) -> None:
-        baker.make(RoleSubscription, user=self.user, role=self.role, status=BillingSubscriptionStatus.CANCELED, threshold_met=True)
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.CANCELED,
+            threshold_met=True,
+        )
         self.assertFalse(self.profile.is_supporter)
 
 
@@ -56,7 +75,13 @@ class DisplaySupporterBadgeTests(TestCase):
         self.role = baker.make(SubscriptionRole)
 
     def _make_supporter(self) -> None:
-        baker.make(RoleSubscription, user=self.user, role=self.role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True)
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.ACTIVE,
+            threshold_met=True,
+        )
 
     def test_supporter_with_badge_enabled_shows_the_badge(self) -> None:
         self._make_supporter()

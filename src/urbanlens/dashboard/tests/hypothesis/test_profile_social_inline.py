@@ -60,7 +60,9 @@ class ProfileSocialInlineRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         content = _strip_scripts(response.content.decode())
         self.assertIn("urbex_jane", content)
         self.assertNotIn("edit-add-link-form", content)
@@ -72,7 +74,9 @@ class ProfileSocialInlineRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         content = _strip_scripts(response.content.decode())
         self.assertNotIn(">Social<", content)
 
@@ -91,7 +95,9 @@ class ProfileSocialInlineActionTests(TestCase):
     def test_add_link_creates_the_row_and_rerenders_the_partial(self) -> None:
         response = self._hx_post({"action": "add_link", "link_input": "https://instagram.com/urbex_jane"})
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(SocialLink.objects.filter(profile=self.profile, platform="instagram", handle="urbex_jane").exists())
+        self.assertTrue(
+            SocialLink.objects.filter(profile=self.profile, platform="instagram", handle="urbex_jane").exists()
+        )
         self.assertContains(response, "social-links-content")
         self.assertContains(response, "urbex_jane")
 

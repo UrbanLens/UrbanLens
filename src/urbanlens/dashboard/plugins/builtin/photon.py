@@ -67,7 +67,7 @@ class PhotonPanelSource(CoordinateGatedInfoPanelSource):
         """Build the address card from REData's normalized address components.
 
         Reads only the cross-provider-normalized fields REData's own
-        ``docs/api-reference.md`` documents for this endpoint
+        ``../REData/docs/api-reference.md`` documents for this endpoint
         (``house_number``/``street``/``locality``/``region``/``postal_code``/
         ``country``) - Photon's own raw OSM extras (``osm_key``/``osm_value``,
         a deep link to the raw OSM entry) aren't part of that documented

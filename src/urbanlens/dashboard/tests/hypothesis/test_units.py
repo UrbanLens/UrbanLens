@@ -1,4 +1,5 @@
 """Tests for distance unit conversion/formatting and region inference."""
+
 from __future__ import annotations
 
 from hypothesis import given, strategies as st

@@ -71,7 +71,9 @@ class NormalizeMacAddressPropertyTests(SimpleTestCase):
 
     @_SUPPRESS_SLOW_DRAW
     @given(octets=_OCTETS, separator=_SEPARATORS, uppercase=st.booleans())
-    def test_normalize_is_separator_and_case_insensitive(self, octets: list[str], separator: str, uppercase: bool) -> None:
+    def test_normalize_is_separator_and_case_insensitive(
+        self, octets: list[str], separator: str, uppercase: bool
+    ) -> None:
         """Any valid separator style, in either case, resolves to the same canonical form."""
         raw = separator.join(octets)
         raw = raw.upper() if uppercase else raw.lower()

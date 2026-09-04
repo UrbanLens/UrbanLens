@@ -4,6 +4,7 @@ Covers the panel-fetch chokepoint (schedule_panel_fetch), the AI gateway
 factory's centralized per-profile check, and the weather endpoint - the three
 representative call sites for the master switch.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

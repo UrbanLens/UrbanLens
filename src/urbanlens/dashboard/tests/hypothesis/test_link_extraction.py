@@ -98,13 +98,25 @@ class ParseHelpersTests(SimpleTestCase):
     def test_validate_url_rejects_non_http_and_private_hosts(self) -> None:
         with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]):
             self.assertEqual(_validate_extraction_url("https://example.com/page"), "https://example.com/page")
-        for bad in ("ftp://example.com", "javascript:alert(1)", "http://localhost/x", "http://127.0.0.1/x", "http://192.168.1.1/x", "http://[::1]/x", "", "https://" + "a" * 2100):
+        for bad in (
+            "ftp://example.com",
+            "javascript:alert(1)",
+            "http://localhost/x",
+            "http://127.0.0.1/x",
+            "http://192.168.1.1/x",
+            "http://[::1]/x",
+            "",
+            "https://" + "a" * 2100,
+        ):
             with self.assertRaises(LinkExtractionError):
                 _validate_extraction_url(bad)
 
     def test_validate_url_rejects_a_hostname_that_resolves_to_a_private_address(self) -> None:
         """A domain the requester controls can point DNS at an internal IP (SSRF); resolved addresses are checked too."""
-        with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("169.254.169.254", 0))]), self.assertRaises(LinkExtractionError):
+        with (
+            patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("169.254.169.254", 0))]),
+            self.assertRaises(LinkExtractionError),
+        ):
             _validate_extraction_url("https://attacker-controlled.example/x")
 
     def test_validate_url_rejects_when_dns_resolution_fails(self) -> None:
@@ -347,7 +359,9 @@ class RunExtractionPipelineTests(TestCase):
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
         self.pin = baker.make(Pin, profile=self.profile, name="Old Mill", name_is_user_provided=True)
-        self.extraction = LinkExtraction.objects.create(profile=self.profile, pin=self.pin, url="https://example.com/history")
+        self.extraction = LinkExtraction.objects.create(
+            profile=self.profile, pin=self.pin, url="https://example.com/history"
+        )
         _grant_ai_to_everyone()
 
     def _run(
@@ -360,7 +374,10 @@ class RunExtractionPipelineTests(TestCase):
         fetch_patch = (
             patch("urbanlens.dashboard.services.ai.link_extraction.fetch_page_text", return_value=page_text)
             if page_text is not None
-            else patch("urbanlens.dashboard.services.ai.link_extraction.fetch_page_text", side_effect=LinkExtractionError("The page couldn't be fetched."))
+            else patch(
+                "urbanlens.dashboard.services.ai.link_extraction.fetch_page_text",
+                side_effect=LinkExtractionError("The page couldn't be fetched."),
+            )
         )
         # Isolate structured-field pipeline tests from article expansion (covered in test_article_expansion).
         expand_patch = patch(
@@ -382,19 +399,29 @@ class RunExtractionPipelineTests(TestCase):
         self.pin.refresh_from_db()
         self.assertEqual(self.pin.date_abandoned, date(1998, 1, 1))
         self.assertTrue(PinAlias.objects.filter(pin=self.pin, name="Grand Mill").exists())
-        notification = NotificationLog.objects.get(profile=self.profile, notification_type=NotificationType.AI_EXTRACTION)
+        notification = NotificationLog.objects.get(
+            profile=self.profile, notification_type=NotificationType.AI_EXTRACTION
+        )
         self.assertEqual(notification.url, reverse("ai.extractions"))
 
     def test_empty_answer_is_recorded_as_empty(self) -> None:
         extraction = self._run(answer='{"date_abandoned": null, "owner_name": null}')
         self.assertEqual(extraction.status, LinkExtractionStatus.EMPTY)
-        self.assertTrue(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.AI_EXTRACTION).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.AI_EXTRACTION
+            ).exists()
+        )
 
     def test_fetch_failure_is_recorded_and_notifies(self) -> None:
         extraction = self._run(page_text=None)
         self.assertEqual(extraction.status, LinkExtractionStatus.FAILED)
         self.assertIn("couldn't be fetched", extraction.error)
-        self.assertTrue(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.AI_EXTRACTION).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.AI_EXTRACTION
+            ).exists()
+        )
 
     def test_prompt_injection_keys_cannot_touch_the_pin(self) -> None:
         extraction = self._run(answer='{"name": "HACKED", "profile": 1, "date_abandoned": "1998"}')
@@ -508,14 +535,18 @@ class EndpointTests(TestCase):
     def test_extract_endpoint_queues_a_run(self) -> None:
         _grant_ai_to_everyone()
         with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=object()):
-            response = self.client.post(reverse("pin.ai_extract", args=[self.pin.slug]), {"url": "https://example.com/history"})
+            response = self.client.post(
+                reverse("pin.ai_extract", args=[self.pin.slug]), {"url": "https://example.com/history"}
+            )
         self.assertEqual(response.status_code, 200)
         extraction = LinkExtraction.objects.get()
         self.assertEqual(extraction.pin, self.pin)
         self.assertEqual(extraction.url, "https://example.com/history")
 
     def test_extract_endpoint_403s_without_feature(self) -> None:
-        response = self.client.post(reverse("pin.ai_extract", args=[self.pin.slug]), {"url": "https://example.com/history"})
+        response = self.client.post(
+            reverse("pin.ai_extract", args=[self.pin.slug]), {"url": "https://example.com/history"}
+        )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(LinkExtraction.objects.exists())
 
@@ -526,7 +557,21 @@ class EndpointTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_review_page_lists_only_own_runs(self) -> None:
-        mine = LinkExtraction.objects.create(profile=self.profile, pin=self.pin, url="https://example.com/mine", status=LinkExtractionStatus.SUCCESS, results=[{"key": "date_abandoned", "label": "Date abandoned", "value": "1998-01-01", "applied": True, "note": "Set on the pin."}])
+        mine = LinkExtraction.objects.create(
+            profile=self.profile,
+            pin=self.pin,
+            url="https://example.com/mine",
+            status=LinkExtractionStatus.SUCCESS,
+            results=[
+                {
+                    "key": "date_abandoned",
+                    "label": "Date abandoned",
+                    "value": "1998-01-01",
+                    "applied": True,
+                    "note": "Set on the pin.",
+                }
+            ],
+        )
         other_profile = Profile.objects.get(user=baker.make("auth.User"))
         other_pin = baker.make(Pin, profile=other_profile)
         LinkExtraction.objects.create(profile=other_profile, pin=other_pin, url="https://example.com/theirs")

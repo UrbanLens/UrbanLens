@@ -16,7 +16,11 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
-_NAME_PART = st.text(alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ", min_size=1, max_size=20).map(str.strip).filter(bool)
+_NAME_PART = (
+    st.text(alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ", min_size=1, max_size=20)
+    .map(str.strip)
+    .filter(bool)
+)
 
 
 def _location(**kwargs) -> Location:

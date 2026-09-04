@@ -68,7 +68,7 @@ def format_search_date(raw: str | None) -> str:
 
     for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
         try:
-            dt = datetime.strptime(raw[:19].rstrip("Z"), fmt.rstrip("%z"))
+            dt = datetime.strptime(raw[:19].rstrip("Z"), fmt.rstrip("%z"))  # noqa: DTZ007  # tzinfo=UTC is applied on the next line
             dt = dt.replace(tzinfo=UTC)
             return _format_relative_search_date(dt)
         except ValueError:

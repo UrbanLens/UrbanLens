@@ -41,7 +41,9 @@ class HasTunnelsTests(TestCase):
         self.other = _plain_profile()
         self.place = baker.make(Place)
         self.location = baker.make(Location, latitude=_LAT, longitude=_LNG, place=self.place)
-        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Mine", name_is_user_provided=True)
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=self.location, name="Mine", name_is_user_provided=True
+        )
 
     def test_appears_in_available_tools(self) -> None:
         names = {spec.name for spec in available_tools(_context(self.profile))}
@@ -83,7 +85,13 @@ class HasTunnelsTests(TestCase):
         self.assertIn("floorplan", result.data["sources"])
 
     def test_own_uploaded_photo_caption_is_evidence(self) -> None:
-        baker.make(Image, image="pin_images/tunnel.png", profile=self.profile, location=self.location, caption="Found a tunnel entrance here")
+        baker.make(
+            Image,
+            image="pin_images/tunnel.png",
+            profile=self.profile,
+            location=self.location,
+            caption="Found a tunnel entrance here",
+        )
 
         result = execute("has_tunnels", {"pin_slug": self.pin.slug}, _context(self.profile))
 
@@ -93,7 +101,13 @@ class HasTunnelsTests(TestCase):
 
     def test_another_profiles_unshared_photo_is_never_evidence(self) -> None:
         """A photo nobody shared into a wiki this profile can reach must not leak."""
-        baker.make(Image, image="pin_images/secret.png", profile=self.other, location=self.location, caption="secret tunnel network")
+        baker.make(
+            Image,
+            image="pin_images/secret.png",
+            profile=self.other,
+            location=self.location,
+            caption="secret tunnel network",
+        )
 
         result = execute("has_tunnels", {"pin_slug": self.pin.slug}, _context(self.profile))
 
@@ -114,6 +128,12 @@ class HasTunnelsTests(TestCase):
         self.assertIn("error", result.data)
 
     def test_another_profiles_pin_slug_never_resolves(self) -> None:
-        theirs = baker.make(Pin, profile=self.other, location=baker.make(Location, latitude="44.0", longitude="-75.0"), name="Theirs", name_is_user_provided=True)
+        theirs = baker.make(
+            Pin,
+            profile=self.other,
+            location=baker.make(Location, latitude="44.0", longitude="-75.0"),
+            name="Theirs",
+            name_is_user_provided=True,
+        )
         result = execute("has_tunnels", {"pin_slug": theirs.slug}, _context(self.profile))
         self.assertIn("error", result.data)

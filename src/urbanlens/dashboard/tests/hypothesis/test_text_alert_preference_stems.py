@@ -42,7 +42,8 @@ def _stems_with_a_toggle_pair() -> set[str]:
     return {
         notification_type.value
         for notification_type in NotificationType
-        if f"{notification_type.name.lower()}_whatsapp" in columns and f"{notification_type.name.lower()}_sms" in columns
+        if f"{notification_type.name.lower()}_whatsapp" in columns
+        and f"{notification_type.name.lower()}_sms" in columns
     }
 
 

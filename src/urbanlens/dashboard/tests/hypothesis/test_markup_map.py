@@ -24,7 +24,11 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
-from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title, materialize_markup_map, sanitize_map_data
+from urbanlens.dashboard.services.map.map_snapshot import (
+    default_markup_map_title,
+    materialize_markup_map,
+    sanitize_map_data,
+)
 
 # Latitudes stay away from the poles so circle radius→edge conversion stays finite.
 _lat = st.floats(min_value=-84, max_value=84, allow_nan=False, allow_infinity=False)
@@ -107,7 +111,9 @@ class ShapeRoundTripTests(SimpleTestCase):
             self.assertAlmostEqual(restored.geometry["radius"] / radius, 1.0, delta=0.01)
 
     def test_text_with_box_corner_round_trips(self) -> None:
-        item = PinMarkup.from_snapshot_shape(_shape("text", [[40.0, -74.0], [40.1, -73.9]], label="Entrance", stroke_width=18))
+        item = PinMarkup.from_snapshot_shape(
+            _shape("text", [[40.0, -74.0], [40.1, -73.9]], label="Entrance", stroke_width=18)
+        )
         assert item is not None  # nosec B101
         self.assertEqual(item.geometry["type"], "Point")
         self.assertEqual(item.geometry["coordinates"], [-74.0, 40.0])
@@ -123,7 +129,9 @@ class ShapeRoundTripTests(SimpleTestCase):
         self.assertIsNone(PinMarkup.from_snapshot_shape(_shape("__proto__", [[0.0, 0.0], [1.0, 1.0]])))
 
     def test_style_fields_survive(self) -> None:
-        item = PinMarkup.from_snapshot_shape(_shape("line", [[0.0, 0.0], [1.0, 1.0]], border_color="none", label="path"))
+        item = PinMarkup.from_snapshot_shape(
+            _shape("line", [[0.0, 0.0], [1.0, 1.0]], border_color="none", label="path")
+        )
         assert item is not None  # nosec B101
         result = item.to_snapshot_shape()
         assert result is not None  # nosec B101
@@ -336,7 +344,9 @@ class MarkupMapEndpointTests(TestCase):
     def _create_map(self) -> str:
         response = self.client.post(
             reverse("markup_map.create"),
-            data=json.dumps({"center_lat": 40.0, "center_lng": -74.0, "zoom": 12, "layer_mode": "topographic", "show_borders": True}),
+            data=json.dumps(
+                {"center_lat": 40.0, "center_lng": -74.0, "zoom": 12, "layer_mode": "topographic", "show_borders": True}
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
@@ -364,11 +374,13 @@ class MarkupMapEndpointTests(TestCase):
         map_uuid = self._create_map()
         response = self.client.post(
             reverse("markup_map.markup", args=[map_uuid]),
-            data=json.dumps({
-                "markup_type": "line",
-                "geometry": {"type": "LineString", "coordinates": [[-74.0, 40.0], [-73.9, 40.1]]},
-                "color": "#123456",
-            }),
+            data=json.dumps(
+                {
+                    "markup_type": "line",
+                    "geometry": {"type": "LineString", "coordinates": [[-74.0, 40.0], [-73.9, 40.1]]},
+                    "color": "#123456",
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
@@ -449,7 +461,9 @@ class MarkupMapEndpointTests(TestCase):
         map_uuid = self._create_map()
         response = self.client.post(
             reverse("markup_map.view_state", args=[map_uuid]),
-            data=json.dumps({"center_lat": 41.0, "center_lng": -75.0, "zoom": 99, "layer_mode": "satellite", "show_borders": False}),
+            data=json.dumps(
+                {"center_lat": 41.0, "center_lng": -75.0, "zoom": 99, "layer_mode": "satellite", "show_borders": False}
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
@@ -557,7 +571,9 @@ class DeleteFlagsAttachedContentTests(TestCase):
     def test_comment_is_flagged_and_text_survives(self) -> None:
         markup_map = MarkupMap.objects.create(profile=self.profile)
         pin = baker.make("dashboard.Pin", profile=self.profile)
-        comment = baker.make("dashboard.Comment", pin=pin, profile=self.profile, markup_map=markup_map, text="Watch out here")
+        comment = baker.make(
+            "dashboard.Comment", pin=pin, profile=self.profile, markup_map=markup_map, text="Watch out here"
+        )
         markup_map.delete()
         comment.refresh_from_db()
         self.assertIsNone(comment.markup_map_id)
@@ -567,7 +583,9 @@ class DeleteFlagsAttachedContentTests(TestCase):
     def test_trip_comment_is_flagged(self) -> None:
         markup_map = MarkupMap.objects.create(profile=self.profile)
         trip = baker.make("dashboard.Trip", creator=self.profile)
-        trip_comment = baker.make("dashboard.TripComment", trip=trip, author=self.profile, markup_map=markup_map, text="Route looks good")
+        trip_comment = baker.make(
+            "dashboard.TripComment", trip=trip, author=self.profile, markup_map=markup_map, text="Route looks good"
+        )
         markup_map.delete()
         trip_comment.refresh_from_db()
         self.assertIsNone(trip_comment.markup_map_id)
@@ -611,7 +629,9 @@ class AttachmentsPropertyTests(TestCase):
         pin = baker.make("dashboard.Pin", profile=self.profile)
         recipient_user = baker.make("auth.User")
         comment = baker.make("dashboard.Comment", pin=pin, profile=self.profile, markup_map=markup_map)
-        message = baker.make("dashboard.DirectMessage", sender=self.profile, recipient=recipient_user.profile, markup_map=markup_map)
+        message = baker.make(
+            "dashboard.DirectMessage", sender=self.profile, recipient=recipient_user.profile, markup_map=markup_map
+        )
 
         kinds = {kind for kind, _host in markup_map.attachments}
         self.assertEqual(kinds, {"comment", "direct_message"})

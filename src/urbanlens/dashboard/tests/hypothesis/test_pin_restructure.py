@@ -45,13 +45,43 @@ _coord_counter = count(1)
 #: different answers and the tests can tell which one ran.
 _SHED_FOOTPRINT = {
     "type": "Polygon",
-    "coordinates": [[[-73.93090, 41.73270], [-73.92990, 41.73270], [-73.92990, 41.73370], [-73.93090, 41.73370], [-73.93090, 41.73270]]],
+    "coordinates": [
+        [
+            [-73.93090, 41.73270],
+            [-73.92990, 41.73270],
+            [-73.92990, 41.73370],
+            [-73.93090, 41.73370],
+            [-73.93090, 41.73270],
+        ]
+    ],
 }
 
 _BUILDINGS = [
-    {"source": "cris", "name": "Tool Shed", "building_number": "154", "year_built": 1937, "latitude": 41.73320, "longitude": -73.93040, "geometry": _SHED_FOOTPRINT},
-    {"source": "cris", "name": "Main Hall", "building_number": "9", "year_built": 1892, "latitude": 41.73300, "longitude": -73.93000},
-    {"source": "cris", "name": "", "building_number": "22", "year_built": None, "latitude": 41.73280, "longitude": -73.92960},
+    {
+        "source": "cris",
+        "name": "Tool Shed",
+        "building_number": "154",
+        "year_built": 1937,
+        "latitude": 41.73320,
+        "longitude": -73.93040,
+        "geometry": _SHED_FOOTPRINT,
+    },
+    {
+        "source": "cris",
+        "name": "Main Hall",
+        "building_number": "9",
+        "year_built": 1892,
+        "latitude": 41.73300,
+        "longitude": -73.93000,
+    },
+    {
+        "source": "cris",
+        "name": "",
+        "building_number": "22",
+        "year_built": None,
+        "latitude": 41.73280,
+        "longitude": -73.92960,
+    },
 ]
 
 
@@ -83,10 +113,14 @@ class BuildingFootprintTests(SimpleTestCase):
 
     def test_a_point_geometry_is_not_a_footprint(self) -> None:
         """REData sends a Point when it has no real outline - nothing to contain."""
-        self.assertIsNone(pin_restructure.building_footprint({"geometry": {"type": "Point", "coordinates": [-73.93, 41.733]}}))
+        self.assertIsNone(
+            pin_restructure.building_footprint({"geometry": {"type": "Point", "coordinates": [-73.93, 41.733]}})
+        )
 
     def test_malformed_geometry_degrades_to_no_footprint(self) -> None:
-        self.assertIsNone(pin_restructure.building_footprint({"geometry": {"type": "Polygon", "coordinates": "nonsense"}}))
+        self.assertIsNone(
+            pin_restructure.building_footprint({"geometry": {"type": "Polygon", "coordinates": "nonsense"}})
+        )
 
 
 class MarkerCoversBuildingTests(TestCase):
@@ -97,7 +131,11 @@ class MarkerCoversBuildingTests(TestCase):
         self.profile = baker.make("dashboard.Profile")
 
     def _pin_at(self, latitude: float, longitude: float) -> Pin:
-        return baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=latitude, longitude=longitude, google_place=None))
+        return baker.make(
+            Pin,
+            profile=self.profile,
+            location=baker.make(Location, latitude=latitude, longitude=longitude, google_place=None),
+        )
 
     def test_a_pin_inside_the_footprint_counts_however_far_from_the_centroid(self) -> None:
         """A pin at the far corner of a large building is still on that building."""
@@ -144,7 +182,12 @@ class NestableRootPinTests(TestCase):
         official_geometry(self.location, _parcel_polygon())
 
     def _root_pin_at(self, latitude: float, longitude: float, **kwargs) -> Pin:
-        return baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=latitude, longitude=longitude, google_place=None), **kwargs)
+        return baker.make(
+            Pin,
+            profile=self.profile,
+            location=baker.make(Location, latitude=latitude, longitude=longitude, google_place=None),
+            **kwargs,
+        )
 
     def test_a_top_level_pin_inside_the_boundary_is_nestable(self) -> None:
         inside = self._root_pin_at(41.7330, -73.9300, name="Old Powerhouse")
@@ -158,12 +201,21 @@ class NestableRootPinTests(TestCase):
         self.assertNotIn(self.pin, pin_restructure.nestable_root_pins(self.pin))
 
     def test_existing_child_pins_are_not_offered_again(self) -> None:
-        baker.make(Pin, profile=self.profile, parent_pin=self.pin, location=baker.make(Location, latitude=41.7331, longitude=-73.9302, google_place=None))
+        baker.make(
+            Pin,
+            profile=self.profile,
+            parent_pin=self.pin,
+            location=baker.make(Location, latitude=41.7331, longitude=-73.9302, google_place=None),
+        )
         self.assertEqual(pin_restructure.nestable_root_pins(self.pin), [])
 
     def test_another_users_pin_is_never_nestable(self) -> None:
         other_profile = baker.make(User).profile
-        baker.make(Pin, profile=other_profile, location=baker.make(Location, latitude=41.7333, longitude=-73.9303, google_place=None))
+        baker.make(
+            Pin,
+            profile=other_profile,
+            location=baker.make(Location, latitude=41.7333, longitude=-73.9303, google_place=None),
+        )
         self.assertEqual(pin_restructure.nestable_root_pins(self.pin), [])
 
     def test_a_circle_fallback_boundary_never_drives_nesting(self) -> None:
@@ -214,7 +266,9 @@ class RestructureOfferGatingTests(TestCase):
                 profile=self.user.profile,
                 parent_pin=self.pin,
                 pin_type=PinType.BUILDING,
-                location=baker.make(Location, latitude=building["latitude"], longitude=building["longitude"], google_place=None),
+                location=baker.make(
+                    Location, latitude=building["latitude"], longitude=building["longitude"], google_place=None
+                ),
             )
         self.assertContains(self.client.get(self.url), "1 building")
 
@@ -225,12 +279,16 @@ class RestructureOfferGatingTests(TestCase):
                 profile=self.user.profile,
                 parent_pin=self.pin,
                 pin_type=PinType.BUILDING,
-                location=baker.make(Location, latitude=building["latitude"], longitude=building["longitude"], google_place=None),
+                location=baker.make(
+                    Location, latitude=building["latitude"], longitude=building["longitude"], google_place=None
+                ),
             )
         self.assertEqual(self.client.get(self.url).status_code, 204)
 
     def test_a_single_building_place_is_never_offered(self) -> None:
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS[:1], "provider": "redata"})
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS[:1], "provider": "redata"}
+        )
         self.assertEqual(self.client.get(self.url).status_code, 204)
 
     def test_a_dismissed_pin_is_never_offered_again(self) -> None:
@@ -244,8 +302,12 @@ class RestructureOfferGatingTests(TestCase):
         self.assertEqual(self.client.get(self.url).status_code, 204)
 
     def test_a_child_pin_is_never_offered(self) -> None:
-        child = baker.make(Pin, profile=self.user.profile, parent_pin=self.pin, location=_make_location(), slug="a-building")
-        self.assertEqual(self.client.get(reverse("pin.restructure.offer", kwargs={"pin_slug": child.slug})).status_code, 204)
+        child = baker.make(
+            Pin, profile=self.user.profile, parent_pin=self.pin, location=_make_location(), slug="a-building"
+        )
+        self.assertEqual(
+            self.client.get(reverse("pin.restructure.offer", kwargs={"pin_slug": child.slug})).status_code, 204
+        )
 
     def test_an_uncached_parcel_polls_instead_of_blocking(self) -> None:
         pin = baker.make(Pin, profile=self.user.profile, location=_make_location(), slug="unknown-parcel")
@@ -260,19 +322,30 @@ class RestructureOfferGatingTests(TestCase):
 
         pin = baker.make(Pin, profile=self.user.profile, location=_make_location(), slug="slow-parcel")
         official_geometry(pin.location, _parcel_polygon())
-        baker.make(Pin, profile=self.user.profile, location=baker.make(Location, latitude=41.7330, longitude=-73.9300, google_place=None), name="Inside")
+        baker.make(
+            Pin,
+            profile=self.user.profile,
+            location=baker.make(Location, latitude=41.7330, longitude=-73.9300, google_place=None),
+            name="Inside",
+        )
 
-        response = self.client.get(reverse("pin.restructure.offer", kwargs={"pin_slug": pin.slug}), {"attempt": str(MAX_POLL_ATTEMPTS)})
+        response = self.client.get(
+            reverse("pin.restructure.offer", kwargs={"pin_slug": pin.slug}), {"attempt": str(MAX_POLL_ATTEMPTS)}
+        )
         self.assertContains(response, "Inside")
 
     def test_nothing_to_suggest_yields_204(self) -> None:
         pin = baker.make(Pin, profile=self.user.profile, location=_make_location(), slug="ordinary-house")
         LocationCache.set(pin.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
-        self.assertEqual(self.client.get(reverse("pin.restructure.offer", kwargs={"pin_slug": pin.slug})).status_code, 204)
+        self.assertEqual(
+            self.client.get(reverse("pin.restructure.offer", kwargs={"pin_slug": pin.slug})).status_code, 204
+        )
 
     def test_another_users_pin_is_not_reachable(self) -> None:
         other = baker.make(Pin, profile=baker.make(User).profile, location=_make_location(), slug="not-mine")
-        self.assertEqual(self.client.get(reverse("pin.restructure.offer", kwargs={"pin_slug": other.slug})).status_code, 404)
+        self.assertEqual(
+            self.client.get(reverse("pin.restructure.offer", kwargs={"pin_slug": other.slug})).status_code, 404
+        )
 
 
 class RestructureOfferContentTests(TestCase):
@@ -286,7 +359,12 @@ class RestructureOfferContentTests(TestCase):
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
         official_geometry(self.location, _parcel_polygon())
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
-        baker.make(Pin, profile=self.user.profile, location=baker.make(Location, latitude=41.7338, longitude=-73.9306, google_place=None), name="Gatehouse")
+        baker.make(
+            Pin,
+            profile=self.user.profile,
+            location=baker.make(Location, latitude=41.7338, longitude=-73.9306, google_place=None),
+            name="Gatehouse",
+        )
         self.url = reverse("pin.restructure.offer", kwargs={"pin_slug": self.pin.slug})
 
     def test_both_halves_appear_in_a_single_card(self) -> None:
@@ -329,7 +407,9 @@ class RestructureDismissTests(TestCase):
         self.user.profile.refresh_from_db()
         self.pin.refresh_from_db()
         self.assertFalse(self.user.profile.suggest_pin_restructure)
-        self.assertTrue(self.pin.restructure_offer_dismissed, "turning the setting back on must not revive this pin's prompt")
+        self.assertTrue(
+            self.pin.restructure_offer_dismissed, "turning the setting back on must not revive this pin's prompt"
+        )
         self.assertIn("Settings", response["HX-Trigger"])
 
 
@@ -382,7 +462,9 @@ class RestructureApplyTests(TestCase):
         self.client.post(self.url)
         self.stray.refresh_from_db()
         self.assertEqual(self.stray.name, "Gatehouse")
-        self.assertEqual(self.stray.location.latitude, baker.prepare(Location, latitude=self.stray.location.latitude).latitude)
+        self.assertEqual(
+            self.stray.location.latitude, baker.prepare(Location, latitude=self.stray.location.latitude).latitude
+        )
 
     def test_the_property_becomes_parcel_scope(self) -> None:
         self.client.post(self.url)
@@ -434,7 +516,9 @@ class RestructureApplyTests(TestCase):
 
     def test_another_users_pin_is_not_reachable(self) -> None:
         other = baker.make(Pin, profile=baker.make(User).profile, location=_make_location(), slug="not-mine")
-        self.assertEqual(self.client.post(reverse("pin.restructure.apply", kwargs={"pin_slug": other.slug})).status_code, 404)
+        self.assertEqual(
+            self.client.post(reverse("pin.restructure.apply", kwargs={"pin_slug": other.slug})).status_code, 404
+        )
 
 
 class RestructureWikiMirrorTests(TestCase):
@@ -462,7 +546,10 @@ class RestructureWikiMirrorTests(TestCase):
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             self.client.post(self.url)
 
-        self.assertTrue(any("mirror_buildings" in getattr(call.args[0], "name", "") for call in enqueue.call_args_list), "the building import must hand the wiki mirror to a task")
+        self.assertTrue(
+            any("mirror_buildings" in getattr(call.args[0], "name", "") for call in enqueue.call_args_list),
+            "the building import must hand the wiki mirror to a task",
+        )
 
     def test_a_place_with_no_wiki_gains_one_to_hang_the_buildings_off(self) -> None:
         """This used to assert the mirror created a *draft* rather than a published
@@ -540,7 +627,12 @@ class BuildingImportPanelActionTests(TestCase):
 
     def test_it_never_nests_existing_top_level_pins(self) -> None:
         """The panel button is about buildings; re-parenting is the dialog's job."""
-        stray = baker.make(Pin, profile=self.user.profile, location=baker.make(Location, latitude=41.7338, longitude=-73.9306, google_place=None), name="Gatehouse")
+        stray = baker.make(
+            Pin,
+            profile=self.user.profile,
+            location=baker.make(Location, latitude=41.7338, longitude=-73.9306, google_place=None),
+            name="Gatehouse",
+        )
         self.client.post(self.url)
         stray.refresh_from_db()
         self.assertIsNone(stray.parent_pin_id)
@@ -615,7 +707,13 @@ class MissingBuildingsParcelBoundaryTests(TestCase):
         already pinned by hand stays visible regardless of where the parcel
         data says it sits (see building_rows' own boundary_polygon docstring)."""
         nameless = next(b for b in _BUILDINGS if b["building_number"] == "22")
-        baker.make(Pin, profile=self.user.profile, parent_pin=self.pin, location=_make_location(latitude=nameless["latitude"], longitude=nameless["longitude"]), name="Building 22")
+        baker.make(
+            Pin,
+            profile=self.user.profile,
+            parent_pin=self.pin,
+            location=_make_location(latitude=nameless["latitude"], longitude=nameless["longitude"]),
+            name="Building 22",
+        )
 
         response = self.client.get(reverse("pin.parcel_buildings", kwargs={"pin_slug": self.pin.slug}))
         names = {row["name"] or row["building_number"] for row in response.context["rows"]}
@@ -651,7 +749,9 @@ class BuildingUnderExistingRootPinTests(TestCase):
         self.stray = baker.make(
             Pin,
             profile=self.user.profile,
-            location=baker.make(Location, latitude=self.occupied["latitude"], longitude=self.occupied["longitude"], google_place=None),
+            location=baker.make(
+                Location, latitude=self.occupied["latitude"], longitude=self.occupied["longitude"], google_place=None
+            ),
             name="Main Hall",
         )
         self.url = reverse("pin.buildings.import", kwargs={"pin_slug": self.pin.slug})
@@ -700,13 +800,25 @@ class RestructureNestOrMergeChoiceTests(TestCase):
         self.user = baker.make(User)
         self.client.force_login(self.user)
         self.location = _make_location()
-        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus", name="Hudson River State Hospital")
+        self.pin = baker.make(
+            Pin, profile=self.user.profile, location=self.location, slug="campus", name="Hudson River State Hospital"
+        )
         official_geometry(self.location, _parcel_polygon())
         # No REData buildings in this fixture - isolates the nest/merge choice
         # from the building-import half already covered above.
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
-        self.dup1 = baker.make(Pin, profile=self.user.profile, location=baker.make(Location, latitude=41.7330, longitude=-73.9300, google_place=None), name="Hudson River State Hospital")
-        self.dup2 = baker.make(Pin, profile=self.user.profile, location=baker.make(Location, latitude=41.7332, longitude=-73.9302, google_place=None), name="Hudson River State Hospital")
+        self.dup1 = baker.make(
+            Pin,
+            profile=self.user.profile,
+            location=baker.make(Location, latitude=41.7330, longitude=-73.9300, google_place=None),
+            name="Hudson River State Hospital",
+        )
+        self.dup2 = baker.make(
+            Pin,
+            profile=self.user.profile,
+            location=baker.make(Location, latitude=41.7332, longitude=-73.9302, google_place=None),
+            name="Hudson River State Hospital",
+        )
         self.url = reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug})
 
     def _post(self, **overrides):
@@ -770,7 +882,10 @@ class RestructureNestOrMergeChoiceTests(TestCase):
         conflicts = plan_merge_conflicts(self.pin, self.dup2)
         self.assertEqual([c.key for c in conflicts], ["article"])
 
-        response = self._post(nest_keys=[str(self.dup2.pk)], **{f"nest_mode__{self.dup2.pk}": "merge", f"resolution__{self.dup2.pk}__article": str(self.pin.pk)})
+        response = self._post(
+            nest_keys=[str(self.dup2.pk)],
+            **{f"nest_mode__{self.dup2.pk}": "merge", f"resolution__{self.dup2.pk}__article": str(self.pin.pk)},
+        )
 
         self.assertNotIn("HX-Keep-Open", response)
         self.assertFalse(Pin.objects.filter(pk=self.dup2.pk).exists())
@@ -784,7 +899,9 @@ class RestructureNestOrMergeChoiceTests(TestCase):
         baker.make(Article, pin=self.pin)
         baker.make(Article, pin=self.dup2)
 
-        response = self._post(nest_keys=[str(self.dup1.pk), str(self.dup2.pk)], **{f"nest_mode__{self.dup2.pk}": "merge"})
+        response = self._post(
+            nest_keys=[str(self.dup1.pk), str(self.dup2.pk)], **{f"nest_mode__{self.dup2.pk}": "merge"}
+        )
 
         self.assertIn("pinDetailPinsChanged", response["HX-Trigger"])
         self.dup1.refresh_from_db()

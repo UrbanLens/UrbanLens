@@ -80,7 +80,11 @@ class ApiCallLogRetentionTests(SimpleTestCase):
 
         default = inspect.signature(cost_tracking.monthly_cost_series).parameters["months"].default
 
-        self.assertEqual(default, _COST_SERIES_MONTHS, "monthly_cost_series' month count changed - re-derive the retention bound above")
+        self.assertEqual(
+            default,
+            _COST_SERIES_MONTHS,
+            "monthly_cost_series' month count changed - re-derive the retention bound above",
+        )
 
     def test_the_rate_limiter_still_uses_a_30_day_window(self) -> None:
         """Likewise: if the limiter's longest window grows, retention has to be rechecked."""
@@ -117,13 +121,22 @@ class PruneApiCallLogsUsesTheConfiguredRetentionTests(TestCase):
         from urbanlens.dashboard.tasks import prune_api_call_logs
 
         survivor = ApiCallLog.objects.create(service="retention-boundary-test")
-        ApiCallLog.objects.filter(pk=survivor.pk).update(created=timezone.now() - timedelta(days=_API_CALL_LOG_RETENTION_DAYS - 1))
+        ApiCallLog.objects.filter(pk=survivor.pk).update(
+            created=timezone.now() - timedelta(days=_API_CALL_LOG_RETENTION_DAYS - 1)
+        )
 
         victim = ApiCallLog.objects.create(service="retention-boundary-test")
-        ApiCallLog.objects.filter(pk=victim.pk).update(created=timezone.now() - timedelta(days=_API_CALL_LOG_RETENTION_DAYS + 1))
+        ApiCallLog.objects.filter(pk=victim.pk).update(
+            created=timezone.now() - timedelta(days=_API_CALL_LOG_RETENTION_DAYS + 1)
+        )
 
         deleted = prune_api_call_logs()
 
         self.assertEqual(deleted, 1, "expected exactly the older-than-retention row to be pruned")
-        self.assertTrue(ApiCallLog.objects.filter(pk=survivor.pk).exists(), "a row still inside the retention window must survive pruning")
-        self.assertFalse(ApiCallLog.objects.filter(pk=victim.pk).exists(), "a row older than the retention window must be pruned")
+        self.assertTrue(
+            ApiCallLog.objects.filter(pk=survivor.pk).exists(),
+            "a row still inside the retention window must survive pruning",
+        )
+        self.assertFalse(
+            ApiCallLog.objects.filter(pk=victim.pk).exists(), "a row older than the retention window must be pruned"
+        )

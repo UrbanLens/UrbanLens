@@ -13,9 +13,18 @@ from __future__ import annotations
 from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway, WikipediaMediaGateway, _absolute_media_url
+from urbanlens.dashboard.services.apis.assets.wikipedia import (
+    WikipediaGateway,
+    WikipediaMediaGateway,
+    _absolute_media_url,
+)
 
-_COMPONENTS = {"locality": "Poughkeepsie", "route": "Main St", "street_number": "103", "administrative_area_level_1": "NY"}
+_COMPONENTS = {
+    "locality": "Poughkeepsie",
+    "route": "Main St",
+    "street_number": "103",
+    "administrative_area_level_1": "NY",
+}
 
 
 class AddressMatchesTests(SimpleTestCase):
@@ -52,7 +61,10 @@ class AddressMatchesTests(SimpleTestCase):
         self.assertFalse(WikipediaGateway._address_matches(summary, _COMPONENTS, name="The Actual Place"))
 
     def test_long_extract_with_no_matching_signal_is_rejected(self) -> None:
-        summary = {"title": "Unrelated Article", "extract": "A very long article about an entirely different place, " * 20}
+        summary = {
+            "title": "Unrelated Article",
+            "extract": "A very long article about an entirely different place, " * 20,
+        }
         self.assertFalse(WikipediaGateway._address_matches(summary, _COMPONENTS, name="The Actual Place"))
 
     def test_no_components_and_no_name_is_rejected(self) -> None:
@@ -71,7 +83,11 @@ class GetArticleForLocationTests(SimpleTestCase):
         """A geographically close but otherwise unrelated article must not be returned."""
         with (
             mock.patch.object(WikipediaGateway, "_geo_search", return_value=[{"title": "Nearby Unrelated Place"}]),
-            mock.patch.object(WikipediaGateway, "_fetch_summary", return_value={"title": "Nearby Unrelated Place", "extract": "Some other place entirely."}),
+            mock.patch.object(
+                WikipediaGateway,
+                "_fetch_summary",
+                return_value={"title": "Nearby Unrelated Place", "extract": "Some other place entirely."},
+            ),
         ):
             result = self.gateway.get_article_for_location(40.0, -74.0, _COMPONENTS, name="The Actual Place")
         self.assertIsNone(result)
@@ -82,7 +98,11 @@ class GetArticleForLocationTests(SimpleTestCase):
             mock.patch.object(
                 WikipediaGateway,
                 "_fetch_summary",
-                return_value={"title": "The Actual Place", "extract": "Located in Poughkeepsie.", "extract_html": "<p>Located in Poughkeepsie.</p>"},
+                return_value={
+                    "title": "The Actual Place",
+                    "extract": "Located in Poughkeepsie.",
+                    "extract_html": "<p>Located in Poughkeepsie.</p>",
+                },
             ),
             mock.patch.object(WikipediaGateway, "_fill_full_extract"),
             mock.patch.object(WikipediaGateway, "_fetch_infobox", return_value=[]),
@@ -97,7 +117,11 @@ class GetArticleForLocationTests(SimpleTestCase):
         candidates = [{"title": "Wrong Nearby Article"}, {"title": "The Actual Place"}]
         summaries = {
             "Wrong Nearby Article": {"title": "Wrong Nearby Article", "extract": "Something unrelated."},
-            "The Actual Place": {"title": "The Actual Place", "extract": "Located in Poughkeepsie.", "extract_html": "<p>Located in Poughkeepsie.</p>"},
+            "The Actual Place": {
+                "title": "The Actual Place",
+                "extract": "Located in Poughkeepsie.",
+                "extract_html": "<p>Located in Poughkeepsie.</p>",
+            },
         }
         with (
             mock.patch.object(WikipediaGateway, "_geo_search", return_value=candidates),
@@ -116,10 +140,16 @@ class GetArticleForLocationTests(SimpleTestCase):
             mock.patch.object(
                 WikipediaGateway,
                 "_fetch_summary",
-                return_value={"title": "The Actual Place", "extract": "Located in Poughkeepsie.", "extract_html": "<p>Located in Poughkeepsie.</p>"},
+                return_value={
+                    "title": "The Actual Place",
+                    "extract": "Located in Poughkeepsie.",
+                    "extract_html": "<p>Located in Poughkeepsie.</p>",
+                },
             ),
             mock.patch.object(WikipediaGateway, "_fill_full_extract"),
-            mock.patch.object(WikipediaGateway, "_fetch_infobox", return_value=[["Established", "1900"]]) as fetch_infobox,
+            mock.patch.object(
+                WikipediaGateway, "_fetch_infobox", return_value=[["Established", "1900"]]
+            ) as fetch_infobox,
         ):
             result = self.gateway.get_article_for_location(40.0, -74.0, _COMPONENTS, name="The Actual Place")
         fetch_infobox.assert_called_once_with("The Actual Place")
@@ -134,7 +164,9 @@ class AbsoluteMediaUrlTests(SimpleTestCase):
         self.assertEqual(_absolute_media_url("//upload.wikimedia.org/x.jpg"), "https://upload.wikimedia.org/x.jpg")
 
     def test_already_absolute_url_is_unchanged(self) -> None:
-        self.assertEqual(_absolute_media_url("https://upload.wikimedia.org/x.jpg"), "https://upload.wikimedia.org/x.jpg")
+        self.assertEqual(
+            _absolute_media_url("https://upload.wikimedia.org/x.jpg"), "https://upload.wikimedia.org/x.jpg"
+        )
 
     def test_empty_string_is_unchanged(self) -> None:
         self.assertEqual(_absolute_media_url(""), "")
@@ -182,7 +214,11 @@ class GetArticleMediaTests(SimpleTestCase):
         self.assertEqual(media[0]["url"], "https://upload.wikimedia.org/thumb/1280px-Example.jpg")
 
     def test_non_image_items_are_skipped(self) -> None:
-        payload = {"items": [{"title": "File:Anthem.ogg", "type": "audio", "srcset": [{"src": "//upload.wikimedia.org/anthem.ogg"}]}]}
+        payload = {
+            "items": [
+                {"title": "File:Anthem.ogg", "type": "audio", "srcset": [{"src": "//upload.wikimedia.org/anthem.ogg"}]}
+            ]
+        }
         with mock.patch.object(self.gateway.session, "get", return_value=self._response(payload=payload)):
             media = self.gateway.get_article_media("Example Article")
         self.assertEqual(media, [])
@@ -214,7 +250,15 @@ class WikipediaCampusFallbackTests(TestCase):
     name are the right second query, without widening the global radius.
     """
 
-    _CAMPUS_ARTICLE = {"title": "Hudson River State Hospital", "extract": "x", "url": "", "thumbnail": "", "description": "", "page_id": 1, "infobox": []}
+    _CAMPUS_ARTICLE = {
+        "title": "Hudson River State Hospital",
+        "extract": "x",
+        "url": "",
+        "thumbnail": "",
+        "description": "",
+        "page_id": 1,
+        "infobox": [],
+    }
 
     def setUp(self) -> None:
         super().setUp()
@@ -226,9 +270,13 @@ class WikipediaCampusFallbackTests(TestCase):
 
         self.profile = baker.make(User).profile
         self.campus_location = baker.make(Location, latitude=41.6, longitude=-73.8)
-        self.campus = baker.make(Pin, profile=self.profile, location=self.campus_location, name="Hudson River State Hospital")
+        self.campus = baker.make(
+            Pin, profile=self.profile, location=self.campus_location, name="Hudson River State Hospital"
+        )
         self.child_location = baker.make(Location, latitude=41.61, longitude=-73.81)
-        self.child = baker.make(Pin, profile=self.profile, location=self.child_location, name="Boiler House", parent_pin=self.campus)
+        self.child = baker.make(
+            Pin, profile=self.profile, location=self.child_location, name="Boiler House", parent_pin=self.campus
+        )
 
     def _article_only_at_campus(self, lat, lng, components, name=""):
         return self._CAMPUS_ARTICLE if abs(lat - 41.6) < 1e-6 else None
@@ -247,7 +295,9 @@ class WikipediaCampusFallbackTests(TestCase):
     def test_own_coordinate_match_never_consults_the_parent(self) -> None:
         from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaPanelSource
 
-        with mock.patch.object(WikipediaGateway, "get_article_for_location", return_value=dict(self._CAMPUS_ARTICLE)) as get_article:
+        with mock.patch.object(
+            WikipediaGateway, "get_article_for_location", return_value=dict(self._CAMPUS_ARTICLE)
+        ) as get_article:
             WikipediaPanelSource().fetch(self.child)
 
         get_article.assert_called_once()
@@ -273,7 +323,13 @@ class WikipediaMediaGatewayTests(SimpleTestCase):
         with mock.patch.object(
             WikipediaGateway,
             "get_article_media",
-            return_value=[{"title": "Example.jpg", "url": "https://upload.wikimedia.org/full.jpg", "thumb_url": "https://upload.wikimedia.org/thumb.jpg"}],
+            return_value=[
+                {
+                    "title": "Example.jpg",
+                    "url": "https://upload.wikimedia.org/full.jpg",
+                    "thumb_url": "https://upload.wikimedia.org/thumb.jpg",
+                }
+            ],
         ):
             items = list(gateway._generate_media("Example Article"))
         self.assertEqual(len(items), 1)
@@ -292,8 +348,16 @@ class WikipediaMediaGatewayTests(SimpleTestCase):
             WikipediaGateway,
             "get_article_media",
             return_value=[
-                {"title": "Dup.jpg", "url": "https://upload.wikimedia.org/dup.jpg", "thumb_url": "https://upload.wikimedia.org/dup-thumb.jpg"},
-                {"title": "New.jpg", "url": "https://upload.wikimedia.org/new.jpg", "thumb_url": "https://upload.wikimedia.org/new-thumb.jpg"},
+                {
+                    "title": "Dup.jpg",
+                    "url": "https://upload.wikimedia.org/dup.jpg",
+                    "thumb_url": "https://upload.wikimedia.org/dup-thumb.jpg",
+                },
+                {
+                    "title": "New.jpg",
+                    "url": "https://upload.wikimedia.org/new.jpg",
+                    "thumb_url": "https://upload.wikimedia.org/new-thumb.jpg",
+                },
             ],
         ):
             items = list(gateway._generate_media("Example Article"))
@@ -370,7 +434,10 @@ class FetchInfoboxTests(SimpleTestCase):
             self.assertEqual(self.gateway._fetch_infobox("Some Article"), [])
 
     def test_row_count_is_capped(self) -> None:
-        rows = "".join(f'<tr><th class="infobox-label">Field {i}</th><td class="infobox-data">Value {i}</td></tr>' for i in range(50))
+        rows = "".join(
+            f'<tr><th class="infobox-label">Field {i}</th><td class="infobox-data">Value {i}</td></tr>'
+            for i in range(50)
+        )
         payload = {"parse": {"text": f'<div><table class="infobox">{rows}</table></div>'}}
         with mock.patch.object(self.gateway.session, "get", return_value=self._response(payload)):
             pairs = self.gateway._fetch_infobox("Some Article")

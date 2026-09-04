@@ -125,7 +125,9 @@ class _PinPatchTestCase(TestCase):
         Returns:
             The Django test-client response.
         """
-        return self.client.patch(self._url(pin), payload, content_type="application/json", **_bearer(raw_key or self.raw_key))
+        return self.client.patch(
+            self._url(pin), payload, content_type="application/json", **_bearer(raw_key or self.raw_key)
+        )
 
     def _get(self, pin: Pin | None = None):
         """GET a pin's detail payload.
@@ -221,7 +223,9 @@ class PinPatchRoundTripTests(_PinPatchTestCase):
         self.assertTrue(self.pin.pin_type_is_user_provided)
 
     def test_the_three_abandonment_dates_round_trip(self) -> None:
-        response = self._patch({"date_built": "1902-05-01", "date_abandoned": "1988-11-30", "date_last_active": "1987-01-15"})
+        response = self._patch(
+            {"date_built": "1902-05-01", "date_abandoned": "1988-11-30", "date_last_active": "1987-01-15"}
+        )
 
         self.assertEqual(response.status_code, 200, response.content)
         body = self._get().json()
@@ -362,7 +366,7 @@ class PinPatchPartialSemanticsTests(_PinPatchTestCase):
         self.assertIsNone(self.pin.icon)
 
     def test_a_blank_string_clears_a_free_text_field_exactly_like_null(self) -> None:
-        """"Cleared in the UI" and "explicit JSON null" must land on one stored value.
+        """ "Cleared in the UI" and "explicit JSON null" must land on one stored value.
 
         Otherwise a pin edited on the website holds ``""`` where the same edit
         from the mobile app holds ``NULL``, and every ``field__isnull`` filter
@@ -379,7 +383,9 @@ class PinPatchPartialSemanticsTests(_PinPatchTestCase):
     def test_explicit_null_clears_the_date_fields(self) -> None:
         self._populate()
 
-        response = self._patch({"date_built": None, "date_abandoned": None, "date_last_active": None, "last_visited": None})
+        response = self._patch(
+            {"date_built": None, "date_abandoned": None, "date_last_active": None, "last_visited": None}
+        )
 
         self.assertEqual(response.status_code, 200, response.content)
         self.pin.refresh_from_db()
@@ -395,7 +401,13 @@ class PinPatchPartialSemanticsTests(_PinPatchTestCase):
         a mapping the client did not ask for."""
         self._populate()
 
-        for payload in ({"priority": None}, {"danger": None}, {"vulnerability": None}, {"pin_type": None}, {"security": {"locked": None}}):
+        for payload in (
+            {"priority": None},
+            {"danger": None},
+            {"vulnerability": None},
+            {"pin_type": None},
+            {"security": {"locked": None}},
+        ):
             with self.subTest(payload=payload):
                 response = self._patch(payload)
                 self.assertEqual(response.status_code, 400, response.content)
@@ -448,7 +460,9 @@ class PinPatchLabelReplacementTests(_PinPatchTestCase):
 
     def _tombstoned(self) -> set[str]:
         """The label values tombstoned on the fixture pin."""
-        return set(PinAutoRemoval.objects.filter(pin=self.pin, kind=AutoRemovalKind.LABEL).values_list("value", flat=True))
+        return set(
+            PinAutoRemoval.objects.filter(pin=self.pin, kind=AutoRemovalKind.LABEL).values_list("value", flat=True)
+        )
 
     def test_the_submitted_set_becomes_the_pin_s_whole_organize_label_set(self) -> None:
         response = self._patch({"label_uuids": [str(self.status.uuid)]})
@@ -798,7 +812,15 @@ class PinPatchNotWritableHereTests(_PinPatchTestCase):
         """Guards the other direction: a field added to the serializer that the
         shared edit service does not handle would be refused at runtime with a
         400 that names it - a contract break discovered by a user, not a test."""
-        serializer_columns = set(PinUpdateSerializer().fields) - {"latitude", "longitude", "parent_id", "label_uuids", "visited", "confirm_wiki_loss", "security"}
+        serializer_columns = set(PinUpdateSerializer().fields) - {
+            "latitude",
+            "longitude",
+            "parent_id",
+            "label_uuids",
+            "visited",
+            "confirm_wiki_loss",
+            "security",
+        }
         self.assertLessEqual(serializer_columns, EDITABLE_PIN_FIELDS)
 
 
@@ -829,7 +851,9 @@ class PinPatchAuthorizationTests(_PinPatchTestCase):
         theirs = create_pin_for_profile(self.other_profile, name="Not yours", latitude=1.0, longitude=1.0).pin
 
         hidden = self._patch({"description": "hijacked"}, pin=theirs)
-        missing = self.client.patch(f"{BASE}/{uuid4()}/", {"description": "hijacked"}, content_type="application/json", **_bearer(self.raw_key))
+        missing = self.client.patch(
+            f"{BASE}/{uuid4()}/", {"description": "hijacked"}, content_type="application/json", **_bearer(self.raw_key)
+        )
 
         self.assertEqual(hidden.status_code, missing.status_code)
         self.assertEqual(hidden.content, missing.content)
@@ -909,7 +933,9 @@ class PinUpdateEditMappingTests(SimpleTestCase):
         st.sets(st.sampled_from(sorted(SECURITY_EDIT_FIELDS))),
     )
     @hypothesis_settings(deadline=None, max_examples=60)
-    def test_any_subset_of_the_optional_fields_yields_exactly_that_subset(self, fields: set[str], security_fields: set[str]) -> None:
+    def test_any_subset_of_the_optional_fields_yields_exactly_that_subset(
+        self, fields: set[str], security_fields: set[str]
+    ) -> None:
         """The property behind "absent means untouched".
 
         ``apply_pin_edits`` writes precisely the columns it is handed, so a key

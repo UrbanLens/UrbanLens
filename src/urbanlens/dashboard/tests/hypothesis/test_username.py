@@ -39,13 +39,13 @@ class NormalizeUsernameKeyTests(SimpleTestCase):
 
     def test_common_leet_substitutions(self) -> None:
         pairs = (
-            ("alpha", "4lpha"),   # a=4
-            ("elite", "e1ite"),   # l=1
-            ("gates", "g4tes"),   # a=4
-            ("blaze", "8laze"),   # b=8
-            ("trend", "7rend"),   # t=7
-            ("snooze", "snooz3"), # e=3
-            ("pizza", "p1zza"),   # i=1
+            ("alpha", "4lpha"),  # a=4
+            ("elite", "e1ite"),  # l=1
+            ("gates", "g4tes"),  # a=4
+            ("blaze", "8laze"),  # b=8
+            ("trend", "7rend"),  # t=7
+            ("snooze", "snooz3"),  # e=3
+            ("pizza", "p1zza"),  # i=1
         )
         for plain, variant in pairs:
             with self.subTest(plain=plain, variant=variant):

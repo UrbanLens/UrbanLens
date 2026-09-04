@@ -14,7 +14,12 @@ from __future__ import annotations
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind, ConsensusRound, ConsensusSession, ConsensusSessionStatus
+from urbanlens.dashboard.models.consensus.model import (
+    ConsensusFieldKind,
+    ConsensusRound,
+    ConsensusSession,
+    ConsensusSessionStatus,
+)
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
@@ -60,7 +65,9 @@ class RecordInRoundUploadTests(TestCase):
         profile = _make_profile()
         wiki = baker.make(Wiki, location=baker.make(Location))
         session = ConsensusSession.objects.create(host_profile=profile, status=ConsensusSessionStatus.ACTIVE)
-        round_ = ConsensusRound.objects.create(session=session, sequence_index=0, wiki=wiki, field_kind=ConsensusFieldKind.PHOTO_COORDINATES)
+        round_ = ConsensusRound.objects.create(
+            session=session, sequence_index=0, wiki=wiki, field_kind=ConsensusFieldKind.PHOTO_COORDINATES
+        )
         image = baker.make(Image, wiki=None, profile=profile)
 
         record_in_round_upload(round_, image, profile)
@@ -73,7 +80,9 @@ class RecordInRoundUploadTests(TestCase):
         original_wiki = baker.make(Wiki, location=baker.make(Location))
         round_wiki = baker.make(Wiki, location=baker.make(Location))
         session = ConsensusSession.objects.create(host_profile=profile, status=ConsensusSessionStatus.ACTIVE)
-        round_ = ConsensusRound.objects.create(session=session, sequence_index=0, wiki=round_wiki, field_kind=ConsensusFieldKind.PHOTO_COORDINATES)
+        round_ = ConsensusRound.objects.create(
+            session=session, sequence_index=0, wiki=round_wiki, field_kind=ConsensusFieldKind.PHOTO_COORDINATES
+        )
         image = baker.make(Image, wiki=original_wiki, profile=profile)
 
         record_in_round_upload(round_, image, profile)

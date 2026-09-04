@@ -30,7 +30,10 @@ class ResolveLocationPlaceNameTaskTests(TestCase):
         from urbanlens.dashboard.tasks import resolve_location_place_name
 
         location = baker.make(Location, latitude="40.0", longitude="-74.0", google_place=None)
-        with patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value="Old Factory"):
+        with patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value="Old Factory",
+        ):
             result = resolve_location_place_name(location.pk)
         self.assertEqual(result, "Old Factory")
         location.refresh_from_db()
@@ -66,7 +69,11 @@ class PinViewDispatchesPlaceNameResolutionTests(TestCase):
     def _dispatched_location_ids(self, mock_enqueue) -> list[int]:
         from urbanlens.dashboard.tasks import resolve_location_place_name
 
-        return [call.args[1] for call in mock_enqueue.call_args_list if call.args and call.args[0] is resolve_location_place_name]
+        return [
+            call.args[1]
+            for call in mock_enqueue.call_args_list
+            if call.args and call.args[0] is resolve_location_place_name
+        ]
 
     def test_dispatches_when_uncached_and_apis_enabled(self) -> None:
         self.profile.external_apis_enabled = True
@@ -105,7 +112,9 @@ class PinViewDispatchesPlaceNameResolutionTests(TestCase):
         self.profile.save(update_fields=["external_apis_enabled"])
         with (
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue,
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name") as mock_resolve,
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name"
+            ) as mock_resolve,
         ):
             response = self._get_pin_page()
         self.assertEqual(response.status_code, 200)

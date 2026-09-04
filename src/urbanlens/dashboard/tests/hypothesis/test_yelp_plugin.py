@@ -20,7 +20,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
-_GATEWAY_PATH = "urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway.RedataPointsOfInterestGateway"
+_GATEWAY_PATH = (
+    "urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway.RedataPointsOfInterestGateway"
+)
 _CONFIGURED_PATH = "urbanlens.dashboard.plugins.builtin.yelp.redata_configured"
 
 
@@ -50,7 +52,10 @@ class BusinessFromPoiTests(SimpleTestCase):
         self.assertEqual(business["categories"], [])
 
     def test_photos_populate_image_url_from_the_first_entry(self) -> None:
-        poi = {"name": "Photogenic Place", "attributes": {"photos": ["https://example.test/1.jpg", "https://example.test/2.jpg"]}}
+        poi = {
+            "name": "Photogenic Place",
+            "attributes": {"photos": ["https://example.test/1.jpg", "https://example.test/2.jpg"]},
+        }
         business = _business_from_poi(poi)
         self.assertEqual(business["photos"], ["https://example.test/1.jpg", "https://example.test/2.jpg"])
         self.assertEqual(business["image_url"], "https://example.test/1.jpg")
@@ -120,7 +125,13 @@ class YelpPanelSourceFetchTests(TestCase):
 class YelpPanelSourceMediaItemsTests(SimpleTestCase):
     def test_builds_a_media_item_per_photo(self) -> None:
         source = YelpPanelSource()
-        data = {"business": {"name": "Joe's Diner", "url": "https://yelp.com/biz/joes-diner", "photos": ["https://example.test/1.jpg"]}}
+        data = {
+            "business": {
+                "name": "Joe's Diner",
+                "url": "https://yelp.com/biz/joes-diner",
+                "photos": ["https://example.test/1.jpg"],
+            }
+        }
         items = source.media_items(data)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].url, "https://example.test/1.jpg")

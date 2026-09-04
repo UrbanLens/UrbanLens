@@ -33,7 +33,9 @@ class ProfileIdentityEditableRenderingTests(TestCase):
     """Own-profile view only: email/username/name render as click-to-edit."""
 
     def setUp(self) -> None:
-        self.user = baker.make(User, username="urbex_jane", email="jane@example.com", first_name="Jane", last_name="Doe")
+        self.user = baker.make(
+            User, username="urbex_jane", email="jane@example.com", first_name="Jane", last_name="Doe"
+        )
         self.profile = self.user.profile
         self.client.force_login(self.user)
 
@@ -62,7 +64,9 @@ class ProfileIdentityEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         content = _strip_scripts(response.content.decode())
         self.assertIn("Jane Doe", content)
         self.assertNotIn('class="profile-name-editable"', content)

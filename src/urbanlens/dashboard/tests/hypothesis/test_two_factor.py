@@ -164,7 +164,10 @@ class VerifyTotpCodeTests(TestCase):
         from django.db import connection
 
         with connection.cursor() as cursor:
-            cursor.execute(f"UPDATE {TOTPDevice._meta.db_table} SET secret = %s WHERE user_id = %s", ["not-a-valid-fernet-token", self.user.pk])  # noqa: S608 - table name from Django _meta, not user input
+            cursor.execute(
+                f"UPDATE {TOTPDevice._meta.db_table} SET secret = %s WHERE user_id = %s",
+                ["not-a-valid-fernet-token", self.user.pk],
+            )  # noqa: S608 - table name from Django _meta, not user input
 
         self.assertFalse(two_factor.verify_totp_code(self.user, "000000"))
 
@@ -175,7 +178,10 @@ class VerifyTotpCodeTests(TestCase):
         codes = two_factor.generate_backup_codes(self.user)
 
         with connection.cursor() as cursor:
-            cursor.execute(f"UPDATE {TOTPDevice._meta.db_table} SET secret = %s WHERE user_id = %s", ["not-a-valid-fernet-token", self.user.pk])  # noqa: S608 - table name from Django _meta, not user input
+            cursor.execute(
+                f"UPDATE {TOTPDevice._meta.db_table} SET secret = %s WHERE user_id = %s",
+                ["not-a-valid-fernet-token", self.user.pk],
+            )  # noqa: S608 - table name from Django _meta, not user input
 
         self.assertTrue(two_factor.verify_login_code(self.user, codes[0]))
 
@@ -307,7 +313,9 @@ class TOTPSetupControllerTests(TestCase):
     def test_htmx_confirm_with_wrong_code_shows_inline_error_not_a_redirect(self) -> None:
         self.client.post(reverse("settings.security.totp.start"))
 
-        response = self.client.post(reverse("settings.security.totp.confirm"), {"code": "000000"}, HTTP_HX_REQUEST="true")
+        response = self.client.post(
+            reverse("settings.security.totp.confirm"), {"code": "000000"}, HTTP_HX_REQUEST="true"
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(two_factor.has_totp(self.user))
@@ -398,7 +406,9 @@ class LoginTwoFactorCodeViewTests(TestCase):
         self.client.logout()
         self.user.set_password("correct horse battery staple")
         self.user.save()
-        response = self.client.post(reverse("login"), {"username": "totp_only", "password": "correct horse battery staple"})
+        response = self.client.post(
+            reverse("login"), {"username": "totp_only", "password": "correct horse battery staple"}
+        )
         self.assertRedirects(response, reverse("login.2fa"))
         self.assertNotIn("_auth_user_id", self.client.session)
 
@@ -442,7 +452,9 @@ class LoginIpThrottleTests(TestCase):
 
     def _login(self, ip: str):
         """A correct-credential login attempt for the real account from ``ip``."""
-        return self.client.post(reverse("login"), {"username": self.user.username, "password": self.PASSWORD}, REMOTE_ADDR=ip)
+        return self.client.post(
+            reverse("login"), {"username": self.user.username, "password": self.PASSWORD}, REMOTE_ADDR=ip
+        )
 
     def test_spraying_different_usernames_blocks_the_ip(self) -> None:
         for i in range(3):

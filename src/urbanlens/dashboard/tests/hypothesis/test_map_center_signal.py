@@ -1,10 +1,11 @@
-﻿"""Tests for the pin_invalidate_map_center post_save signal.
+"""Tests for the pin_invalidate_map_center post_save signal.
 
 Invariants verified:
   - Creating a new Pin clears the profile's cached centroid (lat/lng → None).
   - Saving an *existing* Pin does NOT clear the cache.
   - A Pin with no profile_id does not crash and does not affect any profile.
 """
+
 from __future__ import annotations
 
 import decimal
@@ -109,6 +110,7 @@ class InvalidateMapCenterNoProfileTests(TestCase):
     def test_pin_without_profile_does_not_raise(self) -> None:
         # baker.make sets profile; we test the signal guard by calling it directly.
         from urbanlens.dashboard.models.pin.signals import invalidate_profile_map_center
+
         other_profile: Profile = baker.make(User).profile
         _set_cached_centroid(other_profile)
 

@@ -61,7 +61,9 @@ class SearchNearbyTests(SimpleTestCase):
         session = mock.Mock()
         session.get.return_value = _response(200, [{"place_id": "p1", "name": "Sydney Opera House"}])
 
-        result = _gateway(session).search_nearby(1.0, 2.0, radius_meters=500, included_types=["historical_landmark"], max_results=10)
+        result = _gateway(session).search_nearby(
+            1.0, 2.0, radius_meters=500, included_types=["historical_landmark"], max_results=10
+        )
 
         self.assertEqual(result, [{"place_id": "p1", "name": "Sydney Opera House"}])
         params = session.get.call_args.kwargs["params"]
@@ -120,7 +122,10 @@ class SearchTextTests(SimpleTestCase):
 class AutocompleteTests(SimpleTestCase):
     def test_parses_the_bare_array_response(self) -> None:
         session = mock.Mock()
-        session.get.return_value = _response(200, [{"kind": "place", "place_id": "p1", "main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"}])
+        session.get.return_value = _response(
+            200,
+            [{"kind": "place", "place_id": "p1", "main_text": "Sydney Opera House", "secondary_text": "Sydney NSW"}],
+        )
 
         result = _gateway(session).autocomplete("sydney opera")
 

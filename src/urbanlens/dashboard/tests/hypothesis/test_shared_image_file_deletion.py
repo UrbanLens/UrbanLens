@@ -37,7 +37,11 @@ class SharedImageFileDeletionTests(TestCase):
         self.stored_name = self.image.image.name
 
         share = PinShare.objects.create(
-            pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, status=PinShareStatus.PENDING,
+            pin=self.pin,
+            location=self.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
         )
         share.images.set([self.image])
         self.recipient_pin = create_pin_from_share(share)

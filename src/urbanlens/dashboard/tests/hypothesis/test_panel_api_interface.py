@@ -59,7 +59,12 @@ if TYPE_CHECKING:
 #: A square footprint around the recipe location's first coordinate pair, used
 #: wherever a test needs a *real* building outline rather than the degenerate
 #: Point REData sends when a county published none.
-_FOOTPRINT = {"type": "Polygon", "coordinates": [[[-74.0015, 40.0005], [-74.0005, 40.0005], [-74.0005, 40.0015], [-74.0015, 40.0015], [-74.0015, 40.0005]]]}
+_FOOTPRINT = {
+    "type": "Polygon",
+    "coordinates": [
+        [[-74.0015, 40.0005], [-74.0005, 40.0005], [-74.0005, 40.0015], [-74.0015, 40.0015], [-74.0015, 40.0005]]
+    ],
+}
 
 
 class _StubPanelSource(PanelSource):
@@ -158,12 +163,17 @@ class InfoPanelApiPayloadTests(TestCase):
         assert isinstance(self.source, InfoPanelSource)
 
     def test_no_cache_row_yields_none(self) -> None:
-        """"Not fetched yet" is None, so the caller knows to schedule a fetch."""
+        """ "Not fetched yet" is None, so the caller knows to schedule a fetch."""
         self.assertIsNone(self.source.api_payload(self.pin))
 
     def test_payload_is_derived_from_render_context(self) -> None:
         """The same facts the web card shows, under the info key."""
-        LocationCache.set(self.pin.location, "photon", {"locality": "Poughkeepsie", "region": "New York", "country": "United States"}, query_key="")
+        LocationCache.set(
+            self.pin.location,
+            "photon",
+            {"locality": "Poughkeepsie", "region": "New York", "country": "United States"},
+            query_key="",
+        )
         payload = self.source.api_payload(self.pin)
         assert payload is not None
         self.assertEqual(payload[PanelApiKind.INFO.value]["heading_name"], "Poughkeepsie")
@@ -181,7 +191,9 @@ class InfoPanelApiPayloadTests(TestCase):
         straight copy of the render context, it - and anything else a plugin
         stashes there - starts appearing in the API response.
         """
-        card = info_card_from_render_context({"heading_name": "X", "nested": True, "internal_raw_response": {"secret": 1}})
+        card = info_card_from_render_context(
+            {"heading_name": "X", "nested": True, "internal_raw_response": {"secret": 1}}
+        )
         self.assertNotIn("nested", card)
         self.assertNotIn("internal_raw_response", card)
 
@@ -353,13 +365,31 @@ class ParcelBuildingsApiPayloadTests(TestCase):
         # any boundary derived from it, and far enough from the Powerhouse
         # child pin not to be matched to it.
         self.buildings = [
-            {"name": "Powerhouse", "building_number": "9", "source": "cris", "latitude": 40.0010, "longitude": -74.0010, "geometry": _FOOTPRINT},
-            {"name": "Tool Shed", "building_number": "154", "source": "osm", "latitude": float(self.pin.location.latitude), "longitude": float(self.pin.location.longitude)},
+            {
+                "name": "Powerhouse",
+                "building_number": "9",
+                "source": "cris",
+                "latitude": 40.0010,
+                "longitude": -74.0010,
+                "geometry": _FOOTPRINT,
+            },
+            {
+                "name": "Tool Shed",
+                "building_number": "154",
+                "source": "osm",
+                "latitude": float(self.pin.location.latitude),
+                "longitude": float(self.pin.location.longitude),
+            },
         ]
 
     def _cache(self, provider: str = "redata") -> None:
         """Land a parcel-buildings cache row for the pin's location."""
-        LocationCache.set(self.pin.location, self.source.cache_source, {"buildings": self.buildings, "provider": provider}, query_key="q")
+        LocationCache.set(
+            self.pin.location,
+            self.source.cache_source,
+            {"buildings": self.buildings, "provider": provider},
+            query_key="q",
+        )
 
     def test_declares_the_buildings_kind(self) -> None:
         """A building row is neither an info card nor a media item."""
@@ -419,7 +449,9 @@ class ParcelBuildingsApiPayloadTests(TestCase):
         payload = self.source.api_payload(self.pin)
         assert payload is not None
 
-        self.assertEqual(payload["unpinned_count"], sum(1 for row in payload[PanelApiKind.BUILDINGS.value] if row["can_create"]))
+        self.assertEqual(
+            payload["unpinned_count"], sum(1 for row in payload[PanelApiKind.BUILDINGS.value] if row["can_create"])
+        )
 
     def test_the_count_matches_what_the_web_dialog_would_add(self) -> None:
         """The two surfaces must not answer this differently.
@@ -452,8 +484,12 @@ class ParcelBuildingsApiPayloadTests(TestCase):
         Without it a mobile client would offer to create a duplicate pin for a
         building someone has already pinned.
         """
-        covering_location = baker.make("dashboard.Location", latitude=40.0010, longitude=-74.0010, official_name="Powerhouse pin")
-        child: Pin = baker.make_recipe("dashboard.pin", profile=self.profile, parent_pin=self.pin, location=covering_location)
+        covering_location = baker.make(
+            "dashboard.Location", latitude=40.0010, longitude=-74.0010, official_name="Powerhouse pin"
+        )
+        child: Pin = baker.make_recipe(
+            "dashboard.pin", profile=self.profile, parent_pin=self.pin, location=covering_location
+        )
         self._cache()
         payload = self.source.api_payload(self.pin)
         assert payload is not None
@@ -561,7 +597,11 @@ class CrisBuildingApiPayloadTests(TestCase):
         LocationCache.set(
             self.pin.location,
             self.source.cache_source,
-            {"USNName": "Tool Shed", "resource_uuid": "abc-123", "attachments": [{"id": 7, "kind": "PHOTO", "name": "Front"}]},
+            {
+                "USNName": "Tool Shed",
+                "resource_uuid": "abc-123",
+                "attachments": [{"id": 7, "kind": "PHOTO", "name": "Front"}],
+            },
             query_key="q",
         )
         payload = self.source.api_payload(self.pin)
@@ -634,7 +674,9 @@ class BespokeInfoPanelApiPayloadTests(TestCase):
     def test_nps_activity_chips_are_capped(self) -> None:
         """Dozens of activity tags stop characterizing a place and become noise."""
         source = NpsPanelSource()
-        self._cache(source, {"full_name": "Big Park", "activities": [{"name": f"Activity {index}"} for index in range(30)]})
+        self._cache(
+            source, {"full_name": "Big Park", "activities": [{"name": f"Activity {index}"} for index in range(30)]}
+        )
         payload = source.api_payload(self.pin)
         assert payload is not None
         self.assertEqual(len(payload[PanelApiKind.INFO.value]["chips"]), 8)
@@ -664,7 +706,9 @@ class BespokeInfoPanelApiPayloadTests(TestCase):
         assert payload is not None
         card = payload[PanelApiKind.INFO.value]
         self.assertEqual(card["chips"], ["Historic building"])
-        self.assertEqual(card["facts"][0], {"icon": "language", "text": "https://mill.example", "href": "https://mill.example"})
+        self.assertEqual(
+            card["facts"][0], {"icon": "language", "text": "https://mill.example", "href": "https://mill.example"}
+        )
         self.assertEqual(card["facts"][1]["href"], "tel:+1 555 0100")
         hrefs = {row["label"]: row["href"] for row in card["meta"]}
         self.assertEqual(hrefs["Wikipedia"], "https://de.wikipedia.org/wiki/Alte Mühle")
@@ -685,7 +729,12 @@ class BespokeInfoPanelApiPayloadTests(TestCase):
                 "formatted_address": "1 Main St, Springfield",
                 "admin_district": "NY",
                 "country": "United States",
-                "poi": {"name": "Old Mill", "categories": ["landmark"], "phone": "+1 555 0100", "distance_meters": 12.4},
+                "poi": {
+                    "name": "Old Mill",
+                    "categories": ["landmark"],
+                    "phone": "+1 555 0100",
+                    "distance_meters": 12.4,
+                },
             },
         )
         payload = source.api_payload(self.pin)
@@ -709,7 +758,12 @@ class BespokeInfoPanelApiPayloadTests(TestCase):
             source,
             {
                 "items": [
-                    {"title": "Poughkeepsie, NY", "publicationDate": "1893-01-01", "downloadURL": "https://usgs.example/1.pdf", "previewGraphicURL": "https://usgs.example/1.jpg"},
+                    {
+                        "title": "Poughkeepsie, NY",
+                        "publicationDate": "1893-01-01",
+                        "downloadURL": "https://usgs.example/1.pdf",
+                        "previewGraphicURL": "https://usgs.example/1.jpg",
+                    },
                     {"title": "No download", "publicationDate": "1901-01-01"},
                 ],
             },
@@ -744,14 +798,18 @@ class WikipediaTagUrlTests(SimpleTestCase):
 class InfoCardContractTests(SimpleTestCase):
     """``info_card`` is the one shape every INFO panel promises; hold it steady."""
 
-    _KEYS = frozenset({"heading_name", "chips", "facts", "meta", "header_link", "footer_link", "image_url", "description"})
+    _KEYS = frozenset(
+        {"heading_name", "chips", "facts", "meta", "header_link", "footer_link", "image_url", "description"}
+    )
 
     @given(
         heading_name=st.one_of(st.none(), st.text()),
         chips=st.lists(st.text()),
         description=st.one_of(st.none(), st.text()),
     )
-    def test_key_set_is_stable_for_any_input(self, heading_name: str | None, chips: list[str], description: str | None) -> None:
+    def test_key_set_is_stable_for_any_input(
+        self, heading_name: str | None, chips: list[str], description: str | None
+    ) -> None:
         """A consumer lays the card out once, so keys can't come and go.
 
         A missing key is indistinguishable from an older server to a client, so

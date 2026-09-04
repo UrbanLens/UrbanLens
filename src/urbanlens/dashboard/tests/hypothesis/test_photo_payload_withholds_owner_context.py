@@ -39,7 +39,9 @@ class PhotoPayloadWithholdsOwnerContextTests(TestCase):
         self.owner = baker.make(User).profile
         self.neighbour = baker.make(User).profile
         self.location = baker.make(Location, latitude=41.7361, longitude=-73.9361)
-        self.owner_pin = baker.make(Pin, profile=self.owner, location=self.location, parent_pin=None, name=PRIVATE_PIN_NAME)
+        self.owner_pin = baker.make(
+            Pin, profile=self.owner, location=self.location, parent_pin=None, name=PRIVATE_PIN_NAME
+        )
         baker.make(Pin, profile=self.neighbour, location=self.location, parent_pin=None)
         # Shared as widely as possible, so the photo itself is legitimately
         # visible and only the context around it is in question.
@@ -83,4 +85,6 @@ class PhotoPayloadWithholdsOwnerContextTests(TestCase):
 
         self.assertIn("owner_slug", payload)
         if payload["owner_slug"] is not None:
-            self.assertEqual(payload["owner_slug"], self.owner.slug, "owner_slug should be the owner's own slug when not masked")
+            self.assertEqual(
+                payload["owner_slug"], self.owner.slug, "owner_slug should be the owner's own slug when not masked"
+            )

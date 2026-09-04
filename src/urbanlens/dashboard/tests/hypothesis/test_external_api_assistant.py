@@ -32,7 +32,9 @@ def _bearer(raw_key: str) -> dict:
 
 
 def _enqueued(task_id: str = "task-abc-123"):
-    return patch("urbanlens.dashboard.external_api.views_assistant.safely_enqueue_task", return_value=mock.Mock(id=task_id))
+    return patch(
+        "urbanlens.dashboard.external_api.views_assistant.safely_enqueue_task", return_value=mock.Mock(id=task_id)
+    )
 
 
 class _AssistantApiTestCase(TestCase):
@@ -62,7 +64,9 @@ class _AssistantApiTestCase(TestCase):
         body = {"message": message, "history": history or []}
         if page_path is not None:
             body["page_path"] = page_path
-        return self.client.post(reverse("external_api:assistant.message"), body, content_type="application/json", **_bearer(self.raw_key))
+        return self.client.post(
+            reverse("external_api:assistant.message"), body, content_type="application/json", **_bearer(self.raw_key)
+        )
 
     def _poll(self, turn_id: str, attempt: int | None = None):
         url = reverse("external_api:assistant.turn", args=[turn_id])
@@ -81,7 +85,12 @@ class AssistantMessageTests(_AssistantApiTestCase):
 
     def test_missing_scope_is_refused(self) -> None:
         raw_key = self._key_with_scopes([ApiKeyScope.PINS_READ.value])
-        response = self.client.post(reverse("external_api:assistant.message"), {"message": "hi"}, content_type="application/json", **_bearer(raw_key))
+        response = self.client.post(
+            reverse("external_api:assistant.message"),
+            {"message": "hi"},
+            content_type="application/json",
+            **_bearer(raw_key),
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_enqueues_and_returns_a_pollable_turn_id(self) -> None:
@@ -94,12 +103,20 @@ class AssistantMessageTests(_AssistantApiTestCase):
         self.assertGreater(body["poll_after_seconds"], 0)
 
     def test_message_is_required(self) -> None:
-        response = self.client.post(reverse("external_api:assistant.message"), {"message": ""}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.post(
+            reverse("external_api:assistant.message"),
+            {"message": ""},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_message_over_the_length_cap_is_rejected(self) -> None:
         response = self.client.post(
-            reverse("external_api:assistant.message"), {"message": "x" * (MAX_MESSAGE_CHARS + 1)}, content_type="application/json", **_bearer(self.raw_key)
+            reverse("external_api:assistant.message"),
+            {"message": "x" * (MAX_MESSAGE_CHARS + 1)},
+            content_type="application/json",
+            **_bearer(self.raw_key),
         )
         self.assertEqual(response.status_code, 400)
 
@@ -148,21 +165,28 @@ class AssistantTurnPollTests(_AssistantApiTestCase):
 
     def test_still_pending_returns_202(self) -> None:
         turn_id = self._start_turn()
-        with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=TaskProgress(task_id="task-abc-123", state="PROGRESS")):
+        with patch(
+            "urbanlens.dashboard.external_api.views_assistant.get_task_progress",
+            return_value=TaskProgress(task_id="task-abc-123", state="PROGRESS"),
+        ):
             response = self._poll(turn_id)
         self.assertEqual(response.status_code, 202)
         self.assertFalse(response.json()["ready"])
 
     def test_success_returns_reply_and_history(self) -> None:
         turn_id = self._start_turn("hi", history=[])
-        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Hi there!", "actions": ["Searched your pins"]})
+        progress = TaskProgress(
+            task_id="task-abc-123", state="SUCCESS", result={"reply": "Hi there!", "actions": ["Searched your pins"]}
+        )
         with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=progress):
             response = self._poll(turn_id)
         self.assertEqual(response.status_code, 200, response.content)
         body = response.json()
         self.assertEqual(body["reply"], "Hi there!")
         self.assertEqual(body["actions"], ["Searched your pins"])
-        self.assertEqual(body["history"], [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "Hi there!"}])
+        self.assertEqual(
+            body["history"], [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "Hi there!"}]
+        )
 
     def test_history_is_capped_to_max_entries(self) -> None:
         long_history = [{"role": "user", "content": f"message {i}"} for i in range(MAX_HISTORY_ENTRIES + 10)]
@@ -194,7 +218,9 @@ class AssistantTurnPollTests(_AssistantApiTestCase):
         self.assertEqual(first.status_code, 200, first.content)
 
         forgotten = TaskProgress(task_id="task-abc-123", state="PENDING")
-        with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=forgotten) as backend:
+        with patch(
+            "urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=forgotten
+        ) as backend:
             second = self._poll(turn_id)
         self.assertEqual(second.status_code, 200, second.content)
         self.assertEqual(second.json(), first.json())
@@ -207,7 +233,9 @@ class AssistantTurnPollTests(_AssistantApiTestCase):
             first = self._poll(turn_id)
 
         forgotten = TaskProgress(task_id="task-abc-123", state="PENDING")
-        with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=forgotten) as backend:
+        with patch(
+            "urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=forgotten
+        ) as backend:
             second = self._poll(turn_id)
         self.assertEqual(second.status_code, 200)
         self.assertEqual(second.json(), first.json())
@@ -233,11 +261,15 @@ class AssistantTurnPollTests(_AssistantApiTestCase):
     def test_success_includes_proposals_without_args(self) -> None:
         turn_id = self._start_turn()
         proposal = {"n": 0, "tool": "create_trip", "args": {"name": "X"}, "confirm_label": "Create trip"}
-        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "ok", "actions": [], "proposals": [proposal]})
+        progress = TaskProgress(
+            task_id="task-abc-123", state="SUCCESS", result={"reply": "ok", "actions": [], "proposals": [proposal]}
+        )
         with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=progress):
             response = self._poll(turn_id)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["proposals"], [{"n": 0, "tool": "create_trip", "confirm_label": "Create trip"}])
+        self.assertEqual(
+            response.json()["proposals"], [{"n": 0, "tool": "create_trip", "confirm_label": "Create trip"}]
+        )
 
 
 class AssistantProposalConfirmTests(_AssistantApiTestCase):
@@ -245,7 +277,11 @@ class AssistantProposalConfirmTests(_AssistantApiTestCase):
 
     def _resolve_with_proposal(self, proposal: dict) -> str:
         turn_id = self._start_turn("make me a trip")
-        progress = TaskProgress(task_id="task-abc-123", state="SUCCESS", result={"reply": "Confirm to create it.", "actions": [], "proposals": [proposal]})
+        progress = TaskProgress(
+            task_id="task-abc-123",
+            state="SUCCESS",
+            result={"reply": "Confirm to create it.", "actions": [], "proposals": [proposal]},
+        )
         with patch("urbanlens.dashboard.external_api.views_assistant.get_task_progress", return_value=progress):
             self._poll(turn_id)
         return turn_id
@@ -253,7 +289,9 @@ class AssistantProposalConfirmTests(_AssistantApiTestCase):
     def test_confirm_runs_the_write_exactly_once(self) -> None:
         from urbanlens.dashboard.models.trips.model import Trip
 
-        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "Confirmed Trip"}, "confirm_label": "Create trip"})
+        turn_id = self._resolve_with_proposal(
+            {"n": 0, "tool": "create_trip", "args": {"name": "Confirmed Trip"}, "confirm_label": "Create trip"}
+        )
         self.assertFalse(Trip.objects.filter(name="Confirmed Trip").exists())
 
         url = reverse("external_api:assistant.proposal.confirm", args=[turn_id, 0])
@@ -268,18 +306,34 @@ class AssistantProposalConfirmTests(_AssistantApiTestCase):
         self.assertEqual(Trip.objects.filter(name="Confirmed Trip").count(), 1)
 
     def test_confirm_404s_for_an_unknown_or_out_of_range_proposal(self) -> None:
-        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "X"}, "confirm_label": "Create trip"})
-        self.assertEqual(self.client.post(reverse("external_api:assistant.proposal.confirm", args=[turn_id, 5]), **_bearer(self.raw_key)).status_code, 404)
-        self.assertEqual(self.client.post(reverse("external_api:assistant.proposal.confirm", args=["never-issued", 0]), **_bearer(self.raw_key)).status_code, 404)
+        turn_id = self._resolve_with_proposal(
+            {"n": 0, "tool": "create_trip", "args": {"name": "X"}, "confirm_label": "Create trip"}
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse("external_api:assistant.proposal.confirm", args=[turn_id, 5]), **_bearer(self.raw_key)
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse("external_api:assistant.proposal.confirm", args=["never-issued", 0]), **_bearer(self.raw_key)
+            ).status_code,
+            404,
+        )
 
     def test_confirm_404s_for_another_profiles_proposal(self) -> None:
         from urbanlens.dashboard.models.trips.model import Trip
 
-        turn_id = self._resolve_with_proposal({"n": 0, "tool": "create_trip", "args": {"name": "Not Yours"}, "confirm_label": "Create trip"})
+        turn_id = self._resolve_with_proposal(
+            {"n": 0, "tool": "create_trip", "args": {"name": "Not Yours"}, "confirm_label": "Create trip"}
+        )
         other_user = baker.make(User)
         other_key = self._key_with_scopes([ApiKeyScope.ASSISTANT_WRITE.value], user=other_user)
 
-        response = self.client.post(reverse("external_api:assistant.proposal.confirm", args=[turn_id, 0]), **_bearer(other_key))
+        response = self.client.post(
+            reverse("external_api:assistant.proposal.confirm", args=[turn_id, 0]), **_bearer(other_key)
+        )
         self.assertEqual(response.status_code, 404)
         self.assertFalse(Trip.objects.filter(name="Not Yours").exists())
 

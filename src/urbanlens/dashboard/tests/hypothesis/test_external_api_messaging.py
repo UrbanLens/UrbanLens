@@ -51,7 +51,9 @@ from urbanlens.dashboard.services.messaging.direct_messages import create_direct
 #: A real 1x1 PNG - ImageField stores whatever bytes it's given, but the
 #: upload pipeline sniffs content, so a valid file avoids testing the wrong
 #: rejection path.
-_PNG_BYTES = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
 
 AccessToken = get_access_token_model()
 
@@ -78,7 +80,9 @@ def _token_for(user: User, scope: str = READ_WRITE) -> str:
 
 
 def _open_dms(*profiles: Profile) -> None:
-    Profile.objects.filter(pk__in=[profile.pk for profile in profiles]).update(direct_message_visibility=VisibilityChoice.ANYONE)
+    Profile.objects.filter(pk__in=[profile.pk for profile in profiles]).update(
+        direct_message_visibility=VisibilityChoice.ANYONE
+    )
     for profile in profiles:
         profile.refresh_from_db()
 
@@ -115,7 +119,9 @@ class MessagingBaseTestCase(TestCase):
         return reverse("external_api:messages.thread", kwargs={"peer_slug": (peer or self.partner).ensure_slug()})
 
     def _post_json(self, url: str, payload: dict, **extra):
-        return self.client.post(url, data=json.dumps(payload), content_type="application/json", **{**self.auth, **extra})
+        return self.client.post(
+            url, data=json.dumps(payload), content_type="application/json", **{**self.auth, **extra}
+        )
 
 
 class ReactionEmojiLengthTests(MessagingBaseTestCase):
@@ -132,7 +138,9 @@ class ReactionEmojiLengthTests(MessagingBaseTestCase):
     """
 
     def _react_url(self, message_id: int) -> str:
-        return reverse("external_api:messages.react", kwargs={"peer_slug": self.partner.ensure_slug(), "message_id": message_id})
+        return reverse(
+            "external_api:messages.react", kwargs={"peer_slug": self.partner.ensure_slug(), "message_id": message_id}
+        )
 
     def _message(self):
         from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
@@ -142,7 +150,9 @@ class ReactionEmojiLengthTests(MessagingBaseTestCase):
     def test_an_over_long_emoji_is_refused(self) -> None:
         message = self._message()
         # 11 code points: four people, four skin tones, three joiners.
-        long_emoji = "\U0001F468\U0001F3FB\u200D\U0001F469\U0001F3FB\u200D\U0001F467\U0001F3FB\u200D\U0001F466\U0001F3FB"
+        long_emoji = (
+            "\U0001f468\U0001f3fb\u200d\U0001f469\U0001f3fb\u200d\U0001f467\U0001f3fb\u200d\U0001f466\U0001f3fb"
+        )
         self.assertGreater(len(long_emoji), 10, "precondition: longer than the column")
 
         response = self._post_json(self._react_url(message.pk), {"emoji": long_emoji})
@@ -152,7 +162,7 @@ class ReactionEmojiLengthTests(MessagingBaseTestCase):
     def test_an_ordinary_emoji_still_works(self) -> None:
         message = self._message()
 
-        response = self._post_json(self._react_url(message.pk), {"emoji": "\U0001F44D"})
+        response = self._post_json(self._react_url(message.pk), {"emoji": "\U0001f44d"})
 
         self.assertIn(response.status_code, (200, 201))
 
@@ -164,13 +174,17 @@ class SendMessageTests(MessagingBaseTestCase):
         response = self._post_json(self._thread_url(), {"body": "on my way"})
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["body"], "on my way")
-        self.assertTrue(DirectMessage.objects.filter(sender=self.sender, recipient=self.partner, body="on my way").exists())
+        self.assertTrue(
+            DirectMessage.objects.filter(sender=self.sender, recipient=self.partner, body="on my way").exists()
+        )
 
     def test_empty_message_is_rejected(self) -> None:
         self.assertEqual(self._post_json(self._thread_url(), {"body": "   "}).status_code, 400)
 
     def test_plaintext_and_ciphertext_together_are_rejected(self) -> None:
-        response = self._post_json(self._thread_url(), {"body": "hi", "ciphertext": "AAAA", "nonce": "BBBB", "key_version": 1})
+        response = self._post_json(
+            self._thread_url(), {"body": "hi", "ciphertext": "AAAA", "nonce": "BBBB", "key_version": 1}
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_ciphertext_without_a_nonce_is_rejected(self) -> None:
@@ -178,19 +192,29 @@ class SendMessageTests(MessagingBaseTestCase):
 
     def test_ciphertext_with_key_version_zero_is_rejected(self) -> None:
         """Version 0 means plaintext - such a message could never be decrypted."""
-        self.assertEqual(self._post_json(self._thread_url(), {"ciphertext": "AAAA", "nonce": "BBBB", "key_version": 0}).status_code, 400)
+        self.assertEqual(
+            self._post_json(self._thread_url(), {"ciphertext": "AAAA", "nonce": "BBBB", "key_version": 0}).status_code,
+            400,
+        )
 
     def test_two_shares_at_once_are_rejected(self) -> None:
         response = self._post_json(self._thread_url(), {"body": "x", "shared_pin_id": "a", "shared_trip_slug": "b"})
         self.assertEqual(response.status_code, 400)
 
     def test_unknown_peer_is_404(self) -> None:
-        self.assertEqual(self._post_json(reverse("external_api:messages.thread", kwargs={"peer_slug": "nobody-here"}), {"body": "x"}).status_code, 404)
+        self.assertEqual(
+            self._post_json(
+                reverse("external_api:messages.thread", kwargs={"peer_slug": "nobody-here"}), {"body": "x"}
+            ).status_code,
+            404,
+        )
 
 
 def _make_image(profile: Profile, **kwargs) -> Image:
     """Create an Image row owned by *profile* with a real stored file."""
-    return Image.objects.create(image=SimpleUploadedFile("photo.png", _PNG_BYTES, content_type="image/png"), profile=profile, **kwargs)
+    return Image.objects.create(
+        image=SimpleUploadedFile("photo.png", _PNG_BYTES, content_type="image/png"), profile=profile, **kwargs
+    )
 
 
 class SendMessageAttachmentTests(MessagingBaseTestCase):
@@ -206,10 +230,14 @@ class SendMessageAttachmentTests(MessagingBaseTestCase):
     def test_image_ids_and_image_uuids_together_both_attach(self) -> None:
         by_id = _make_image(self.sender)
         by_uuid = _make_image(self.sender)
-        response = self._post_json(self._thread_url(), {"body": "two photos", "image_ids": [by_id.pk], "image_uuids": [str(by_uuid.uuid)]})
+        response = self._post_json(
+            self._thread_url(), {"body": "two photos", "image_ids": [by_id.pk], "image_uuids": [str(by_uuid.uuid)]}
+        )
         self.assertEqual(response.status_code, 201)
         message = DirectMessage.objects.get(sender=self.sender, body="two photos")
-        self.assertEqual(set(Image.objects.filter(direct_message=message).values_list("pk", flat=True)), {by_id.pk, by_uuid.pk})
+        self.assertEqual(
+            set(Image.objects.filter(direct_message=message).values_list("pk", flat=True)), {by_id.pk, by_uuid.pk}
+        )
 
     def test_another_profiles_image_uuid_is_not_attached(self) -> None:
         """image_uuids is scoped to the sender's own images, matching image_ids."""
@@ -225,12 +253,18 @@ class CredentialKindTests(MessagingBaseTestCase):
 
     def test_pat_api_key_is_refused_even_holding_messaging_scopes(self) -> None:
         key, raw = generate_api_key(self.sender.user, "leaky-key")
-        ApiKey.objects.filter(pk=key.pk).update(scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value])
-        self.assertEqual(self.client.get(reverse("external_api:messages.conversations"), **_bearer(raw)).status_code, 403)
+        ApiKey.objects.filter(pk=key.pk).update(
+            scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value]
+        )
+        self.assertEqual(
+            self.client.get(reverse("external_api:messages.conversations"), **_bearer(raw)).status_code, 403
+        )
 
     def test_read_only_token_cannot_send(self) -> None:
         token = _token_for(self.sender.user, ApiKeyScope.MESSAGES_READ.value)
-        response = self.client.post(self._thread_url(), data=json.dumps({"body": "x"}), content_type="application/json", **_bearer(token))
+        response = self.client.post(
+            self._thread_url(), data=json.dumps({"body": "x"}), content_type="application/json", **_bearer(token)
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_read_only_token_cannot_mark_read(self) -> None:
@@ -286,7 +320,9 @@ class PinShareProvenanceTests(MessagingBaseTestCase):
         card and no exposure row at all.
         """
         before = LocationExposure.objects.filter(profile=self.partner, location=self.location).count()
-        response = self._post_json(self._thread_url(), {"body": "check this out", "shared_pin_id": self.pin.ensure_slug()})
+        response = self._post_json(
+            self._thread_url(), {"body": "check this out", "shared_pin_id": self.pin.ensure_slug()}
+        )
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["share"]["kind"], "pin")
@@ -294,7 +330,9 @@ class PinShareProvenanceTests(MessagingBaseTestCase):
         self.assertEqual(after, before + 1, "sharing a pin must record the recipient's exposure to its location")
 
     def test_sharing_an_unknown_pin_is_404(self) -> None:
-        self.assertEqual(self._post_json(self._thread_url(), {"body": "x", "shared_pin_id": "no-such-pin"}).status_code, 404)
+        self.assertEqual(
+            self._post_json(self._thread_url(), {"body": "x", "shared_pin_id": "no-such-pin"}).status_code, 404
+        )
 
     def test_cannot_share_someone_elses_pin(self) -> None:
         """Pin resolution is scoped to the sender's own pins.

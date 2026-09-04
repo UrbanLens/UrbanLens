@@ -1,7 +1,7 @@
 """The `infrastructure` repo's staging pipeline names this repo's table names.
 
 ``bin/opslib/staging.py`` (now in the sibling ``infrastructure`` repo, see
-``docs/OPS_TOOLING.md``) hardcodes a short list of tables it compares before
+``../infrastructure/docs/OPS_TOOLING.md``) hardcodes a short list of tables it compares before
 and after a staging data clone, to catch a restore that silently produced an
 empty or partial database. Getting one of those names wrong is silent: it
 matches no table, every count comes back -1, and the comparison used to read
@@ -73,7 +73,9 @@ class VerifiedTablesTests(SimpleTestCase):
 
         missing = [table for table in _VERIFIED_TABLES if table not in known]
 
-        self.assertEqual(missing, [], "a name no model owns can never be counted, so it silently drops out of the comparison")
+        self.assertEqual(
+            missing, [], "a name no model owns can never be counted, so it silently drops out of the comparison"
+        )
 
     def test_the_pins_table_is_named_the_way_the_model_names_it(self) -> None:
         """`dashboard_pins` was checked for a year and exists nowhere."""

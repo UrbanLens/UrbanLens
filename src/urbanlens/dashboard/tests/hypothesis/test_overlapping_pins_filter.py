@@ -69,8 +69,18 @@ class OverlappingPinsQuerySetTests(TestCase):
         # markers themselves sit well outside each other's default circle radius.
         a = _pin_at(self.profile, "A", 42.0000, -73.0000)
         b = _pin_at(self.profile, "B", 42.0020, -73.0020)
-        Boundary.objects.create(pin=a, profile=self.profile, boundary_type=BoundaryType.PROPERTY, polygon=_square_polygon(42.0000, -73.0000, 0.003))
-        Boundary.objects.create(pin=b, profile=self.profile, boundary_type=BoundaryType.PROPERTY, polygon=_square_polygon(42.0020, -73.0020, 0.003))
+        Boundary.objects.create(
+            pin=a,
+            profile=self.profile,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_square_polygon(42.0000, -73.0000, 0.003),
+        )
+        Boundary.objects.create(
+            pin=b,
+            profile=self.profile,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_square_polygon(42.0020, -73.0020, 0.003),
+        )
         result = {p.pk for p in Pin.objects.filter(profile=self.profile).overlapping()}
         self.assertEqual(result, {a.pk, b.pk})
 

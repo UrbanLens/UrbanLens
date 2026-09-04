@@ -1,1 +1,1 @@
-from urbanlens.dashboard.services.core.gateway import Service, Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway, Service

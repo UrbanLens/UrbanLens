@@ -35,7 +35,9 @@ class TripReorderSyncsCalendarTests(TestCase):
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
         self.trip = baker.make(Trip, creator=self.profile, allow_edit_activities="everyone")
-        self.activities = [baker.make(TripActivity, trip=self.trip, title=f"Stop {i}", order=i, scheduled_at=None) for i in range(3)]
+        self.activities = [
+            baker.make(TripActivity, trip=self.trip, title=f"Stop {i}", order=i, scheduled_at=None) for i in range(3)
+        ]
 
     def test_reordering_queues_exactly_one_calendar_push(self) -> None:
         new_order = [self.activities[2].pk, self.activities[0].pk, self.activities[1].pk]
@@ -64,7 +66,10 @@ class TripReorderSyncsCalendarTests(TestCase):
             with CaptureQueriesContext(connection) as small_ctx:
                 reorder_activities(self.trip, self.profile, small)
 
-            extra = [baker.make(TripActivity, trip=self.trip, title=f"Extra {i}", order=10 + i, scheduled_at=None) for i in range(3)]
+            extra = [
+                baker.make(TripActivity, trip=self.trip, title=f"Extra {i}", order=10 + i, scheduled_at=None)
+                for i in range(3)
+            ]
             allsix = [a.pk for a in reversed(self.activities + extra)]
             with CaptureQueriesContext(connection) as large_ctx:
                 reorder_activities(self.trip, self.profile, allsix)

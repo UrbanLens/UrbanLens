@@ -26,11 +26,19 @@ from urbanlens.dashboard.services.locations.imagery_timeline import flatten_time
 class FlattenTimelineTests(SimpleTestCase):
     def test_captures_and_ranges_both_appear(self) -> None:
         envelope = {
-            "captures": [{"captured_on": "2025-03-18", "provider": "esri_wayback", "asset": {"url": "https://x/1.png"}}],
+            "captures": [
+                {"captured_on": "2025-03-18", "provider": "esri_wayback", "asset": {"url": "https://x/1.png"}}
+            ],
             "providers_timeline": [
                 {
                     "provider": "nasa_gibs",
-                    "time_series": [{"time_series_asset_uuid": "abc", "continuous": True, "intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]}],
+                    "time_series": [
+                        {
+                            "time_series_asset_uuid": "abc",
+                            "continuous": True,
+                            "intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}],
+                        }
+                    ],
                 },
             ],
         }
@@ -44,7 +52,16 @@ class FlattenTimelineTests(SimpleTestCase):
         """Offering a date that 404s is worse than saying the range is patchy."""
         envelope = {
             "providers_timeline": [
-                {"provider": "nasa_gibs", "time_series": [{"time_series_asset_uuid": "hls", "continuous": False, "intervals": [{"start": "2013-03-22", "end": "2026-08-06"}]}]},
+                {
+                    "provider": "nasa_gibs",
+                    "time_series": [
+                        {
+                            "time_series_asset_uuid": "hls",
+                            "continuous": False,
+                            "intervals": [{"start": "2013-03-22", "end": "2026-08-06"}],
+                        }
+                    ],
+                },
             ],
         }
 
@@ -55,13 +72,17 @@ class FlattenTimelineTests(SimpleTestCase):
 
     def test_an_unresolved_esri_date_is_flagged_as_inexact(self) -> None:
         """captured_on is Esri's publication date until REData resolves it."""
-        envelope = {"captures": [{"captured_on": "2025-03-18", "provider": "esri_wayback", "capture_date_resolved": False}]}
+        envelope = {
+            "captures": [{"captured_on": "2025-03-18", "provider": "esri_wayback", "capture_date_resolved": False}]
+        }
 
         self.assertFalse(flatten_timeline(envelope)[0]["date_is_exact"])
 
     def test_a_resolved_or_absent_flag_reads_as_exact(self) -> None:
         """null means the source publishes no acquisition date; only false is a warning."""
-        envelope = {"captures": [{"captured_on": "2025-03-18", "capture_date_resolved": True}, {"captured_on": "2024-01-01"}]}
+        envelope = {
+            "captures": [{"captured_on": "2025-03-18", "capture_date_resolved": True}, {"captured_on": "2024-01-01"}]
+        }
 
         self.assertTrue(all(entry["date_is_exact"] for entry in flatten_timeline(envelope)))
 
@@ -72,8 +93,16 @@ class FlattenTimelineTests(SimpleTestCase):
                 {
                     "provider": "nasa_gibs",
                     "time_series": [
-                        {"time_series_asset_uuid": "modis", "continuous": True, "intervals": [{"start": "2000-02-24", "end": "2026-08-06"}]},
-                        {"time_series_asset_uuid": "viirs", "continuous": True, "intervals": [{"start": "2012-01-01", "end": "2026-08-06"}]},
+                        {
+                            "time_series_asset_uuid": "modis",
+                            "continuous": True,
+                            "intervals": [{"start": "2000-02-24", "end": "2026-08-06"}],
+                        },
+                        {
+                            "time_series_asset_uuid": "viirs",
+                            "continuous": True,
+                            "intervals": [{"start": "2012-01-01", "end": "2026-08-06"}],
+                        },
                     ],
                 },
             ],
@@ -84,14 +113,19 @@ class FlattenTimelineTests(SimpleTestCase):
         self.assertEqual(uuids, {"modis", "viirs"})
 
     def test_newest_first(self) -> None:
-        envelope = {"captures": [{"captured_on": "1919-06-01"}, {"captured_on": "2025-03-18"}, {"captured_on": "1870-01-01"}]}
+        envelope = {
+            "captures": [{"captured_on": "1919-06-01"}, {"captured_on": "2025-03-18"}, {"captured_on": "1870-01-01"}]
+        }
 
         dates = [entry["captured_on"] for entry in flatten_timeline(envelope)]
 
         self.assertEqual(dates, ["2025-03-18", "1919-06-01", "1870-01-01"])
 
     def test_undated_and_malformed_rows_are_dropped_not_crashed_on(self) -> None:
-        envelope = {"captures": [{"provider": "x"}, "nonsense", {"captured_on": "2020-01-01"}], "providers_timeline": ["nonsense"]}
+        envelope = {
+            "captures": [{"provider": "x"}, "nonsense", {"captured_on": "2020-01-01"}],
+            "providers_timeline": ["nonsense"],
+        }
 
         entries = flatten_timeline(envelope)
 
@@ -145,7 +179,11 @@ class HistoricalCarouselSlideTests(SimpleTestCase):
             return list(provider._historical_slides(gateway, 41.7, -73.9, seen if seen is not None else set()))
 
     def test_a_dated_capture_becomes_a_slide(self) -> None:
-        envelope = {"captures": [{"captured_on": "1998-06-01", "provider": "esri_wayback", "asset": {"url": "https://x/old.png"}}]}
+        envelope = {
+            "captures": [
+                {"captured_on": "1998-06-01", "provider": "esri_wayback", "asset": {"url": "https://x/old.png"}}
+            ]
+        }
 
         slides = self._slides(envelope)
 
@@ -156,7 +194,16 @@ class HistoricalCarouselSlideTests(SimpleTestCase):
         """A range is dates to materialise, not images that already exist."""
         envelope = {
             "providers_timeline": [
-                {"provider": "nasa_gibs", "time_series": [{"time_series_asset_uuid": "modis", "continuous": True, "intervals": [{"start": "2000-01-01", "end": "2026-01-01"}]}]},
+                {
+                    "provider": "nasa_gibs",
+                    "time_series": [
+                        {
+                            "time_series_asset_uuid": "modis",
+                            "continuous": True,
+                            "intervals": [{"start": "2000-01-01", "end": "2026-01-01"}],
+                        }
+                    ],
+                },
             ],
         }
 
@@ -164,7 +211,11 @@ class HistoricalCarouselSlideTests(SimpleTestCase):
 
     def test_an_unresolved_date_is_labelled_as_published(self) -> None:
         """Captioning Esri's publication date as the acquisition date is a lie of months."""
-        envelope = {"captures": [{"captured_on": "2025-03-18", "capture_date_resolved": False, "asset": {"url": "https://x/a.png"}}]}
+        envelope = {
+            "captures": [
+                {"captured_on": "2025-03-18", "capture_date_resolved": False, "asset": {"url": "https://x/a.png"}}
+            ]
+        }
 
         self.assertIn("published", self._slides(envelope)[0].date)
 

@@ -46,7 +46,12 @@ from django.test import override_settings
 import yaml
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.sandbox import DirectInferenceError, DirectInferencePolicy, check_direct_inference, current_direct_inference_policy
+from urbanlens.dashboard.services.sandbox import (
+    DirectInferenceError,
+    DirectInferencePolicy,
+    check_direct_inference,
+    current_direct_inference_policy,
+)
 
 
 class UrbanlensAiIsolationTests(SimpleTestCase):
@@ -65,7 +70,14 @@ class UrbanlensAiIsolationTests(SimpleTestCase):
             "assert 'urbanlens' not in sys.modules, 'urbanlens leaked into urbanlens_ai'\n"
             "print('OK')\n"
         )
-        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30, env=_subprocess_env(), check=False)
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=_subprocess_env(),
+            check=False,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("OK", result.stdout)
 
@@ -78,7 +90,14 @@ class UrbanlensAiIsolationTests(SimpleTestCase):
             "assert 'urbanlens' not in sys.modules, 'urbanlens leaked into urbanlens_ai.wsgi'\n"
             "print('OK')\n"
         )
-        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30, env=_subprocess_env(), check=False)
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=_subprocess_env(),
+            check=False,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("OK", result.stdout)
 
@@ -151,20 +170,32 @@ class LocalInferenceClientGuardTests(SimpleTestCase):
     def test_a_deployed_role_never_reaches_the_provider_config(self) -> None:
         from urbanlens.dashboard.services.ai.inference_client import InferenceRequest, LocalInferenceClient, Message
 
-        request = InferenceRequest(provider="anthropic", model="claude-sonnet-5", messages=[Message(role="user", content="hi")], max_tokens=100)
+        request = InferenceRequest(
+            provider="anthropic", model="claude-sonnet-5", messages=[Message(role="user", content="hi")], max_tokens=100
+        )
         with self.assertRaises(DirectInferenceError):
             LocalInferenceClient().send(request)
 
     def test_unspecified_role_reaches_past_the_guard(self) -> None:
         from unittest.mock import patch
 
-        from urbanlens.dashboard.services.ai.inference_client import InferenceError, InferenceRequest, LocalInferenceClient, Message
+        from urbanlens.dashboard.services.ai.inference_client import (
+            InferenceError,
+            InferenceRequest,
+            LocalInferenceClient,
+            Message,
+        )
 
-        request = InferenceRequest(provider="anthropic", model="claude-sonnet-5", messages=[Message(role="user", content="hi")], max_tokens=100)
+        request = InferenceRequest(
+            provider="anthropic", model="claude-sonnet-5", messages=[Message(role="user", content="hi")], max_tokens=100
+        )
         # No provider key configured under test settings - proves the guard
         # passed by reaching the *next* failure (no key configured) instead
         # of being stopped at the guard itself.
-        with patch("urbanlens.UrbanLens.settings.app.settings.anthropic_api_key", None), self.assertRaises(InferenceError) as ctx:
+        with (
+            patch("urbanlens.UrbanLens.settings.app.settings.anthropic_api_key", None),
+            self.assertRaises(InferenceError) as ctx,
+        ):
             LocalInferenceClient().send(request)
         self.assertIn("Anthropic", str(ctx.exception))
 
@@ -202,13 +233,26 @@ class PolicyTests(SimpleTestCase):
         from urbanlens_ai.policy import validate_tools
         from urbanlens_ai.schema import ToolSpec
 
-        validate_tools([ToolSpec(name="search_pins", description="search the requester's own pins", input_schema={"type": "object", "properties": {}})])
+        validate_tools(
+            [
+                ToolSpec(
+                    name="search_pins",
+                    description="search the requester's own pins",
+                    input_schema={"type": "object", "properties": {}},
+                )
+            ]
+        )
 
     def test_over_cap_max_tokens_is_rejected(self) -> None:
         from urbanlens_ai.policy import MAX_ALLOWED_TOKENS, PolicyError, validate_request
         from urbanlens_ai.schema import InferenceRequest, Message
 
-        request = InferenceRequest(provider="anthropic", model="claude-sonnet-5", messages=[Message(role="user", content="hi")], max_tokens=MAX_ALLOWED_TOKENS + 1)
+        request = InferenceRequest(
+            provider="anthropic",
+            model="claude-sonnet-5",
+            messages=[Message(role="user", content="hi")],
+            max_tokens=MAX_ALLOWED_TOKENS + 1,
+        )
         with self.assertRaises(PolicyError):
             validate_request(request)
 
@@ -216,7 +260,12 @@ class PolicyTests(SimpleTestCase):
         from urbanlens_ai.policy import MAX_ALLOWED_TOKENS, validate_request
         from urbanlens_ai.schema import InferenceRequest, Message
 
-        request = InferenceRequest(provider="anthropic", model="claude-sonnet-5", messages=[Message(role="user", content="hi")], max_tokens=MAX_ALLOWED_TOKENS)
+        request = InferenceRequest(
+            provider="anthropic",
+            model="claude-sonnet-5",
+            messages=[Message(role="user", content="hi")],
+            max_tokens=MAX_ALLOWED_TOKENS,
+        )
         validate_request(request)  # does not raise
 
     def test_cloudflare_never_gets_tools(self) -> None:
@@ -279,7 +328,15 @@ class ComposeTopologyTests(SimpleTestCase):
     def test_ai_inference_env_carries_no_db_cache_or_secret_credential(self) -> None:
         compose = _compose()
         env = compose["services"]["ai-inference"]["environment"]
-        forbidden_prefixes = ("UL_DB_", "UL_FIELD_ENCRYPTION_KEY", "UL_VALKEY_URL", "DJANGO_SECRET_KEY", "UL_REDATA_", "UL_GOOGLE_", "UL_DISCORD_")
+        forbidden_prefixes = (
+            "UL_DB_",
+            "UL_FIELD_ENCRYPTION_KEY",
+            "UL_VALKEY_URL",
+            "DJANGO_SECRET_KEY",
+            "UL_REDATA_",
+            "UL_GOOGLE_",
+            "UL_DISCORD_",
+        )
         leaked = [key for key in env if any(key.startswith(prefix) for prefix in forbidden_prefixes)]
         self.assertEqual(leaked, [])
 
@@ -314,7 +371,9 @@ class ComposeTopologyTests(SimpleTestCase):
         # (app, celery-worker), which would make a proxy bug a foothold with
         # somewhere to go.
         compose = _compose()
-        members = {name for name, service in compose["services"].items() if "proxy_network" in (service.get("networks") or {})}
+        members = {
+            name for name, service in compose["services"].items() if "proxy_network" in (service.get("networks") or {})
+        }
         self.assertEqual(members, {"egress-proxy", "ai-worker", "ai-inference"})
 
     def test_proxy_network_is_internal(self) -> None:
@@ -342,7 +401,9 @@ class ComposeTopologyTests(SimpleTestCase):
 
     def test_ai_egress_network_has_no_other_member(self) -> None:
         compose = _compose()
-        members = {name for name, service in compose["services"].items() if "ai_egress_network" in service.get("networks", {})}
+        members = {
+            name for name, service in compose["services"].items() if "ai_egress_network" in service.get("networks", {})
+        }
         self.assertEqual(members, {"egress-proxy"})
 
     def test_inference_network_is_internal(self) -> None:
@@ -363,7 +424,11 @@ class ComposeTopologyTests(SimpleTestCase):
         compose = _compose()
         for env_name in ("x-app-env", "x-sandbox-env", "x-ai-env", "x-beat-env"):
             keys = set(compose[env_name])
-            leaked = {key for key in keys if any(token in key for token in ("ANTHROPIC", "OPENAI", "CLOUDFLARE_AI", "CLOUDFLARE_WORKER"))}
+            leaked = {
+                key
+                for key in keys
+                if any(token in key for token in ("ANTHROPIC", "OPENAI", "CLOUDFLARE_AI", "CLOUDFLARE_WORKER"))
+            }
             self.assertEqual(leaked, set(), f"{env_name} carries provider credential(s): {sorted(leaked)}")
 
     def test_provider_keys_are_not_interpolated_from_the_host_env(self) -> None:
@@ -373,7 +438,12 @@ class ComposeTopologyTests(SimpleTestCase):
         # land on them regardless of which service the ${...} appeared under.
         # ai-inference reads .env.ai directly for exactly this reason.
         raw = _COMPOSE_PATH.read_text(encoding="utf-8")
-        for key in ("UL_ANTHROPIC_API_KEY", "UL_OPENAI_API_KEY", "UL_CLOUDFLARE_AI_API_KEY", "UL_CLOUDFLARE_WORKER_AI_ENDPOINT"):
+        for key in (
+            "UL_ANTHROPIC_API_KEY",
+            "UL_OPENAI_API_KEY",
+            "UL_CLOUDFLARE_AI_API_KEY",
+            "UL_CLOUDFLARE_WORKER_AI_ENDPOINT",
+        ):
             self.assertNotIn(
                 "${" + key + "}",
                 raw,
@@ -462,7 +532,14 @@ class ComposeTopologyTests(SimpleTestCase):
     def test_ai_worker_env_carries_no_redata_oauth_or_provider_credential(self) -> None:
         compose = _compose()
         env = compose["services"]["ai-worker"]["environment"]
-        forbidden_prefixes = ("UL_REDATA_", "UL_GOOGLE_", "UL_DISCORD_", "UL_ANTHROPIC_", "UL_OPENAI_", "UL_CLOUDFLARE_")
+        forbidden_prefixes = (
+            "UL_REDATA_",
+            "UL_GOOGLE_",
+            "UL_DISCORD_",
+            "UL_ANTHROPIC_",
+            "UL_OPENAI_",
+            "UL_CLOUDFLARE_",
+        )
         leaked = [key for key in env if any(key.startswith(prefix) for prefix in forbidden_prefixes)]
         self.assertEqual(leaked, [])
 
@@ -482,7 +559,9 @@ class ComposeTopologyTests(SimpleTestCase):
 
     def test_ai_worker_networks_are_exactly_ai_inference_and_proxy(self) -> None:
         compose = _compose()
-        self.assertEqual(set(compose["services"]["ai-worker"]["networks"]), {"ai_network", "inference_network", "proxy_network"})
+        self.assertEqual(
+            set(compose["services"]["ai-worker"]["networks"]), {"ai_network", "inference_network", "proxy_network"}
+        )
 
     def test_ai_worker_drains_the_ai_queue(self) -> None:
         compose = _compose()
@@ -497,7 +576,11 @@ def _egress_filter_lines() -> list[str]:
     import pathlib
 
     path = pathlib.Path(__file__).resolve().parents[5] / "src" / "urbanlens" / "config" / "egress" / "filter"
-    return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.strip().startswith("#")]
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
 
 
 class EgressFilterTests(SimpleTestCase):
@@ -535,7 +618,10 @@ class EgressFilterTests(SimpleTestCase):
         patterns = [re.compile(line) for line in _egress_filter_lines()]
         for host in expected_hosts:
             with self.subTest(host=host):
-                self.assertTrue(any(pattern.match(host) for pattern in patterns), f"{host!r} has no matching entry in the egress filter")
+                self.assertTrue(
+                    any(pattern.match(host) for pattern in patterns),
+                    f"{host!r} has no matching entry in the egress filter",
+                )
 
 
 #: A module or submodule name is forbidden if its root matches one of these
@@ -582,6 +668,10 @@ class ToolsPackageImportTests(SimpleTestCase):
         from urbanlens.dashboard.services.ai import tools
 
         tools_dir = pathlib.Path(tools.__file__).parent
-        violations = {path.name: bad for path in tools_dir.glob("*.py") if (bad := {name for name in _imported_module_names(path) if _is_forbidden_import(name)})}
+        violations = {
+            path.name: bad
+            for path in tools_dir.glob("*.py")
+            if (bad := {name for name in _imported_module_names(path) if _is_forbidden_import(name)})
+        }
 
         self.assertFalse(violations, f"forbidden imports found in services/ai/tools/: {violations}")

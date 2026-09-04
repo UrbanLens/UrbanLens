@@ -62,14 +62,22 @@ class PhotoUploadViewContentTypeTests(TestCase):
         self.assertEqual(image.media_type, MediaKind.VIDEO)
 
     def test_document_upload_rejected_without_feature(self) -> None:
-        doc_file = SimpleUploadedFile("notes.docx", b"doc-bytes", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        doc_file = SimpleUploadedFile(
+            "notes.docx",
+            b"doc-bytes",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
         response = self.client.post(_UPLOAD_URL, {"image": doc_file})
         self.assertEqual(response.status_code, 403)
         self.assertFalse(Image.objects.filter(profile__user=self.user).exists())
 
     def test_document_upload_allowed_with_feature(self) -> None:
         _grant_feature(SiteFeature.DOCUMENT_UPLOADS)
-        doc_file = SimpleUploadedFile("notes.docx", b"doc-bytes", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        doc_file = SimpleUploadedFile(
+            "notes.docx",
+            b"doc-bytes",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
         response = self.client.post(_UPLOAD_URL, {"image": doc_file})
         self.assertEqual(response.status_code, 201)
         image = Image.objects.get(profile__user=self.user)

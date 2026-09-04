@@ -129,7 +129,11 @@ class TriviaSessionConsumerTests(TransactionTestCase):
 
             closed = await comm.receive_output(timeout=5)
 
-        self.assertEqual(closed["type"], "websocket.close", "a kicked participant's socket stays open and keeps receiving session broadcasts")
+        self.assertEqual(
+            closed["type"],
+            "websocket.close",
+            "a kicked participant's socket stays open and keeps receiving session broadcasts",
+        )
         await comm.disconnect()
 
     def test_an_unauthenticated_connection_is_rejected(self) -> None:

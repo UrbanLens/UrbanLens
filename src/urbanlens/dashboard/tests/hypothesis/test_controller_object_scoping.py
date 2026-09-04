@@ -12,6 +12,7 @@ client-supplied identifiers without scoping them to the requesting user:
 - Comment reactions accepted any comment id, and trip-comment reactions never
   checked trip membership.
 """
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User
@@ -130,7 +131,12 @@ class MapEndpointLabelVisibilityTests(TestCase):
     def test_add_pin_ignores_foreign_label_ids(self) -> None:
         response = self.client.post(
             reverse("pin.add"),
-            data={"name": "Test", "latitude": "42.65", "longitude": "-73.75", "label_ids": [self.own_label.id, self.foreign_label.id]},
+            data={
+                "name": "Test",
+                "latitude": "42.65",
+                "longitude": "-73.75",
+                "label_ids": [self.own_label.id, self.foreign_label.id],
+            },
         )
         self.assertEqual(response.status_code, 200)
         pin = Pin.objects.get(profile=self.user.profile)

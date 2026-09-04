@@ -56,7 +56,9 @@ class PinMoveWikiLossTests(TestCase):
         self.wiki = baker.make(Wiki, location=self.wiki_location, name="Old Asylum")
 
         # The owner's pin sits inside the wiki's boundary, on its own Location.
-        self.pin = baker.make(Pin, profile=self.profile, location=Location.objects.create(latitude=40.0005, longitude=-74.0005))
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=Location.objects.create(latitude=40.0005, longitude=-74.0005)
+        )
 
     def _patch(self, **body):
         return self.client.patch(
@@ -142,12 +144,16 @@ class WikisHiddenByPinMoveServiceTests(TestCase):
         self.wiki = baker.make(Wiki, location=self.wiki_location, name="Old Asylum")
 
     def test_lists_the_wiki_a_move_would_hide(self) -> None:
-        pin = baker.make(Pin, profile=self.profile, location=Location.objects.create(latitude=40.0005, longitude=-74.0005))
+        pin = baker.make(
+            Pin, profile=self.profile, location=Location.objects.create(latitude=40.0005, longitude=-74.0005)
+        )
 
         self.assertEqual([w.pk for w in wikis_hidden_by_pin_move(pin, 41.0, -73.0)], [self.wiki.pk])
 
     def test_empty_when_the_pin_stays_inside_the_boundary(self) -> None:
-        pin = baker.make(Pin, profile=self.profile, location=Location.objects.create(latitude=40.0005, longitude=-74.0005))
+        pin = baker.make(
+            Pin, profile=self.profile, location=Location.objects.create(latitude=40.0005, longitude=-74.0005)
+        )
 
         self.assertEqual(wikis_hidden_by_pin_move(pin, 40.001, -74.001), [])
 
@@ -166,7 +172,9 @@ class WikisHiddenByPinMoveServiceTests(TestCase):
         """Someone else's pin at the place says nothing about this owner's access."""
         other = baker.make(User).profile
         baker.make(Pin, profile=other, location=Location.objects.create(latitude=40.001, longitude=-74.001))
-        pin = baker.make(Pin, profile=self.profile, location=Location.objects.create(latitude=40.0005, longitude=-74.0005))
+        pin = baker.make(
+            Pin, profile=self.profile, location=Location.objects.create(latitude=40.0005, longitude=-74.0005)
+        )
 
         self.assertEqual([w.pk for w in wikis_hidden_by_pin_move(pin, 41.0, -73.0)], [self.wiki.pk])
 
@@ -194,7 +202,9 @@ class WikisHiddenByPinMoveServiceTests(TestCase):
         far_wiki_location = Location.objects.create(latitude=10.0, longitude=20.0)
         official_geometry(far_wiki_location, _square(20.0, 10.0, 0.003))
         baker.make(Wiki, location=far_wiki_location, name="Somewhere Else")
-        pin = baker.make(Pin, profile=self.profile, location=Location.objects.create(latitude=40.0005, longitude=-74.0005))
+        pin = baker.make(
+            Pin, profile=self.profile, location=Location.objects.create(latitude=40.0005, longitude=-74.0005)
+        )
 
         names = [w.name for w in wikis_hidden_by_pin_move(pin, 41.0, -73.0)]
 

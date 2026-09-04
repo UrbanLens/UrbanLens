@@ -52,7 +52,11 @@ class LabelEditViewConcurrentWriteTests(TestCase):
         self.assertEqual(response.status_code, 200)
         label.refresh_from_db()
         self.assertEqual(label.name, "New")
-        self.assertEqual(label.keywords, "Changed elsewhere", "a concurrent edit to another field was reverted by this request's save")
+        self.assertEqual(
+            label.keywords,
+            "Changed elsewhere",
+            "a concurrent edit to another field was reverted by this request's save",
+        )
 
 
 class LabelDetailViewConcurrentWriteTests(TestCase):
@@ -62,7 +66,9 @@ class LabelDetailViewConcurrentWriteTests(TestCase):
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         _key, self.raw_key = generate_api_key(self.user, "Labels client")
-        ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value])
+        ApiKey.objects.filter(user=self.user).update(
+            scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value]
+        )
 
     def _bearer(self) -> dict:
         return {"HTTP_AUTHORIZATION": f"Bearer {self.raw_key}"}
@@ -87,4 +93,8 @@ class LabelDetailViewConcurrentWriteTests(TestCase):
         self.assertEqual(response.status_code, 200)
         label.refresh_from_db()
         self.assertEqual(label.name, "New")
-        self.assertEqual(label.keywords, "Changed elsewhere", "a concurrent edit to another field was reverted by this request's save")
+        self.assertEqual(
+            label.keywords,
+            "Changed elsewhere",
+            "a concurrent edit to another field was reverted by this request's save",
+        )

@@ -70,6 +70,7 @@ def grant_wiki_scopes(user) -> None:
         ],
     )
 
+
 #: Every wiki route, as (method, path suffix after the location slug).
 #: Sub-resource ids are arbitrary - resolution must fail at the wiki gate,
 #: before any id is ever looked up.
@@ -155,7 +156,11 @@ class WikiDiscoveryOracleTests(TestCase):
             # Byte-for-byte, not merely equal-when-parsed.
             bodies = {label: response.content for label, response in responses.items()}
             with self.subTest(method=method, suffix=suffix, check="identical bytes"):
-                self.assertEqual(len(set(bodies.values())), 1, f"Responses differ across cases for {method.upper()} {suffix}: {bodies}")
+                self.assertEqual(
+                    len(set(bodies.values())),
+                    1,
+                    f"Responses differ across cases for {method.upper()} {suffix}: {bodies}",
+                )
 
     def test_the_control_wiki_is_actually_reachable(self) -> None:
         """A pinned place's wiki really does resolve - the 404s above mean something."""
@@ -196,7 +201,9 @@ class WikiCrossScopeIdTests(TestCase):
         baker.make("dashboard.Pin", profile=self.profile, location=self.location_b)
 
         # Resources that belong to wiki B.
-        self.b_edit = baker.make("dashboard.WikiEdit", wiki=self.wiki_b, editor=self.profile, changes={"name": {"from": "x", "to": "y"}})
+        self.b_edit = baker.make(
+            "dashboard.WikiEdit", wiki=self.wiki_b, editor=self.profile, changes={"name": {"from": "x", "to": "y"}}
+        )
         self.b_alias = baker.make("dashboard.WikiAlias", wiki=self.wiki_b, name="B alias")
         self.b_link = baker.make("dashboard.WikiLink", wiki=self.wiki_b, url="https://example.com/b")
         self.b_comment = baker.make("dashboard.Comment", wiki=self.wiki_b, profile=self.profile, text="B comment")

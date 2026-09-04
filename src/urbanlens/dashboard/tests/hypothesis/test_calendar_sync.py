@@ -25,7 +25,11 @@ from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
+from urbanlens.dashboard.models.calendar_sync.model import (
+    CalendarSyncDirection,
+    GoogleCalendarAccount,
+    TripCalendarLink,
+)
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.notifications.meta import NotificationType
@@ -33,7 +37,11 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.apis.calendar.google import ACTIVITY_ID_EVENT_PROPERTY, TRIP_UUID_EVENT_PROPERTY, CalendarEventNotFoundError
+from urbanlens.dashboard.services.apis.calendar.google import (
+    ACTIVITY_ID_EVENT_PROPERTY,
+    TRIP_UUID_EVENT_PROPERTY,
+    CalendarEventNotFoundError,
+)
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.trips.calendar_sync import (
     DEFAULT_ACTIVITY_EVENT_DURATION,
@@ -93,7 +101,9 @@ class TripToEventBodyTests(TestCase):
         self.assertTrue(event_originated_from_urbanlens(body))
 
     def test_appends_trip_url_to_description(self):
-        trip = Trip(name="X", description="Notes.", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 1))
+        trip = Trip(
+            name="X", description="Notes.", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 1)
+        )
         body = trip_to_event_body(trip, trip_url="https://example.com/trips/abc/")
         self.assertIn("Notes.", body["description"])
         self.assertIn("https://example.com/trips/abc/", body["description"])
@@ -119,7 +129,9 @@ class TripToEventBodyTests(TestCase):
 
     def test_trip_event_uses_first_activity_location(self):
         """The all-day trip event carries the first shareable activity location."""
-        trip = Trip.objects.create(name="Located", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 2))
+        trip = Trip.objects.create(
+            name="Located", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 2)
+        )
         TripActivity.objects.create(
             trip=trip,
             title="Second stop",
@@ -139,7 +151,9 @@ class TripToEventBodyTests(TestCase):
 
     def test_trip_event_skips_hidden_locations(self):
         """Secret activity locations never leak into the trip-level event."""
-        trip = Trip.objects.create(name="Secretive", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 2))
+        trip = Trip.objects.create(
+            name="Secretive", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 2)
+        )
         TripActivity.objects.create(
             trip=trip,
             title="Secret first stop",
@@ -292,8 +306,20 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
         """
         gateway = self._patch_gateway()
         gateway.get_event.side_effect = [
-            {"id": "timed1", "summary": "One", "location": "Somewhere", "start": {"dateTime": "2026-06-01T10:00:00Z"}, "end": {"dateTime": "2026-06-01T12:00:00Z"}},
-            {"id": "timed2", "summary": "Two", "location": "Elsewhere", "start": {"dateTime": "2026-06-02T10:00:00Z"}, "end": {"dateTime": "2026-06-02T12:00:00Z"}},
+            {
+                "id": "timed1",
+                "summary": "One",
+                "location": "Somewhere",
+                "start": {"dateTime": "2026-06-01T10:00:00Z"},
+                "end": {"dateTime": "2026-06-01T12:00:00Z"},
+            },
+            {
+                "id": "timed2",
+                "summary": "Two",
+                "location": "Elsewhere",
+                "start": {"dateTime": "2026-06-02T10:00:00Z"},
+                "end": {"dateTime": "2026-06-02T12:00:00Z"},
+            },
         ]
 
         created_one, _skipped, _invited = import_events_as_trips(self.account, ["timed1"])
@@ -338,7 +364,9 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
             "end": {"dateTime": "2026-09-04T12:00:00-04:00"},
         }
 
-        created, _skipped, _invited = import_events_as_trips(self.account, [{"event_id": "evt-loc", "create_activity": True}])
+        created, _skipped, _invited = import_events_as_trips(
+            self.account, [{"event_id": "evt-loc", "create_activity": True}]
+        )
 
         activity = created[0].activities.get()
         self.assertEqual(activity.title, "123 Factory Rd, Utica, NY")
@@ -356,7 +384,9 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
             "end": {"date": "2026-09-05"},
         }
 
-        created, _skipped, _invited = import_events_as_trips(self.account, [{"event_id": "evt-loc2", "create_activity": False}])
+        created, _skipped, _invited = import_events_as_trips(
+            self.account, [{"event_id": "evt-loc2", "create_activity": False}]
+        )
 
         self.assertEqual(created[0].activities.count(), 0)
 
@@ -369,7 +399,9 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
             "end": {"date": "2026-09-05"},
         }
 
-        created, _skipped, _invited = import_events_as_trips(self.account, [{"event_id": "evt-noloc", "create_activity": True}])
+        created, _skipped, _invited = import_events_as_trips(
+            self.account, [{"event_id": "evt-noloc", "create_activity": True}]
+        )
 
         self.assertEqual(created[0].activities.count(), 0)
 
@@ -382,7 +414,9 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
             "end": {"date": "2026-09-05"},
         }
 
-        created, _skipped, _invited = import_events_as_trips(self.account, [{"event_id": "evt-sync", "auto_sync": True}])
+        created, _skipped, _invited = import_events_as_trips(
+            self.account, [{"event_id": "evt-sync", "auto_sync": True}]
+        )
 
         link = TripCalendarLink.objects.get(trip=created[0], profile=self.profile)
         self.assertTrue(link.auto_sync)
@@ -449,8 +483,18 @@ class ListImportableEventsTests(_CalendarSyncDBTestCase):
 
         gateway = self._patch_gateway()
         gateway.list_events.return_value = [
-            {"id": "evt-plain", "summary": "Plain event", "start": {"date": "2026-09-04"}, "end": {"date": "2026-09-05"}},
-            {"id": "evt-linked", "summary": "Already imported", "start": {"date": "2026-09-04"}, "end": {"date": "2026-09-05"}},
+            {
+                "id": "evt-plain",
+                "summary": "Plain event",
+                "start": {"date": "2026-09-04"},
+                "end": {"date": "2026-09-05"},
+            },
+            {
+                "id": "evt-linked",
+                "summary": "Already imported",
+                "start": {"date": "2026-09-04"},
+                "end": {"date": "2026-09-05"},
+            },
             {
                 "id": "evt-exported",
                 "summary": "Round trip",
@@ -511,7 +555,9 @@ class MatchEventAttendeesTests(_CalendarSyncDBTestCase):
         """Calendar resources (rooms, equipment) are never people, friend or otherwise."""
         from urbanlens.dashboard.services.trips.calendar_sync import match_event_attendees
 
-        event = {"attendees": [{"email": "room-42@resource.calendar.google.com", "displayName": "Room 42", "resource": True}]}
+        event = {
+            "attendees": [{"email": "room-42@resource.calendar.google.com", "displayName": "Room 42", "resource": True}]
+        }
         friends, others = match_event_attendees(self.profile, event)
 
         self.assertEqual(friends, [])
@@ -693,7 +739,12 @@ class DisconnectMemberCalendarSyncTests(_CalendarSyncDBTestCase):
     """
 
     def _trip_with_link(self, *, auto_sync: bool = True) -> tuple[Trip, TripCalendarLink]:
-        trip = Trip.objects.create(name="Shared trip", creator=self.profile, start_date=datetime.date(2026, 11, 1), end_date=datetime.date(2026, 11, 2))
+        trip = Trip.objects.create(
+            name="Shared trip",
+            creator=self.profile,
+            start_date=datetime.date(2026, 11, 1),
+            end_date=datetime.date(2026, 11, 2),
+        )
         link = TripCalendarLink.objects.create(
             trip=trip,
             profile=self.profile,
@@ -759,7 +810,12 @@ class TripMemberRemovalCalendarSyncTests(_CalendarSyncDBTestCase):
         super().setUp()
         self.creator_user = User.objects.create_user(username="trip-creator")
         self.creator = self.creator_user.profile
-        self.trip = Trip.objects.create(name="Group trip", creator=self.creator, start_date=datetime.date(2026, 12, 10), end_date=datetime.date(2026, 12, 12))
+        self.trip = Trip.objects.create(
+            name="Group trip",
+            creator=self.creator,
+            start_date=datetime.date(2026, 12, 10),
+            end_date=datetime.date(2026, 12, 12),
+        )
         TripMembership.objects.create(trip=self.trip, profile=self.profile, status=TripMembership.STATUS_JOINED)
         self.link = TripCalendarLink.objects.create(
             trip=self.trip,
@@ -775,7 +831,9 @@ class TripMemberRemovalCalendarSyncTests(_CalendarSyncDBTestCase):
         self.creator_user.save()
         self.client.force_login(self.creator_user)
 
-        response = self.client.delete(reverse("trips.member.remove", kwargs={"trip_slug": self.trip.slug, "profile_id": self.profile.pk}))
+        response = self.client.delete(
+            reverse("trips.member.remove", kwargs={"trip_slug": self.trip.slug, "profile_id": self.profile.pk})
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(TripCalendarLink.objects.filter(pk=self.link.pk).exists())
@@ -797,13 +855,19 @@ class TripMemberRemovalCalendarSyncTests(_CalendarSyncDBTestCase):
         other_profile = other_user.profile
         TripMembership.objects.create(trip=self.trip, profile=other_profile, status=TripMembership.STATUS_JOINED)
         other_link = TripCalendarLink.objects.create(
-            trip=self.trip, profile=other_profile, google_event_id="evt-other", direction=CalendarSyncDirection.EXPORTED, auto_sync=True,
+            trip=self.trip,
+            profile=other_profile,
+            google_event_id="evt-other",
+            direction=CalendarSyncDirection.EXPORTED,
+            auto_sync=True,
         )
         self.creator_user.set_password("pw")
         self.creator_user.save()
         self.client.force_login(self.creator_user)
 
-        self.client.delete(reverse("trips.member.remove", kwargs={"trip_slug": self.trip.slug, "profile_id": self.profile.pk}))
+        self.client.delete(
+            reverse("trips.member.remove", kwargs={"trip_slug": self.trip.slug, "profile_id": self.profile.pk})
+        )
 
         self.assertTrue(TripCalendarLink.objects.filter(pk=other_link.pk).exists())
 
@@ -817,14 +881,19 @@ class TripCalendarExportViewTests(_CalendarSyncDBTestCase):
         self.user.save()
         self.client.force_login(self.user)
         self.trip = Trip.objects.create(
-            name="Export via view", creator=self.profile, start_date=datetime.date(2026, 12, 1), end_date=datetime.date(2026, 12, 2),
+            name="Export via view",
+            creator=self.profile,
+            start_date=datetime.date(2026, 12, 1),
+            end_date=datetime.date(2026, 12, 2),
         )
 
     def test_export_with_auto_sync_checked_sets_flag(self):
         gateway = self._patch_gateway()
         gateway.create_event.return_value = {"id": "view-evt"}
 
-        response = self.client.post(reverse("trips.calendar.export", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
+        response = self.client.post(
+            reverse("trips.calendar.export", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"}
+        )
 
         self.assertEqual(response.status_code, 200)
         link = TripCalendarLink.objects.get(trip=self.trip, profile=self.profile, activity__isnull=True)
@@ -852,15 +921,23 @@ class TripCalendarAutoSyncViewTests(_CalendarSyncDBTestCase):
         self.trip = Trip.objects.create(name="Toggle me", creator=self.profile)
 
     def test_requires_existing_export_link(self):
-        response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
+        response = self.client.post(
+            reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"}
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_turns_auto_sync_on(self):
         TripCalendarLink.objects.create(
-            trip=self.trip, profile=self.profile, google_event_id="evt-toggle", direction=CalendarSyncDirection.EXPORTED, auto_sync=False,
+            trip=self.trip,
+            profile=self.profile,
+            google_event_id="evt-toggle",
+            direction=CalendarSyncDirection.EXPORTED,
+            auto_sync=False,
         )
 
-        response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
+        response = self.client.post(
+            reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"}
+        )
 
         self.assertEqual(response.status_code, 200)
         link = TripCalendarLink.objects.get(trip=self.trip, profile=self.profile, activity__isnull=True)
@@ -868,7 +945,11 @@ class TripCalendarAutoSyncViewTests(_CalendarSyncDBTestCase):
 
     def test_turns_auto_sync_off(self):
         TripCalendarLink.objects.create(
-            trip=self.trip, profile=self.profile, google_event_id="evt-toggle2", direction=CalendarSyncDirection.EXPORTED, auto_sync=True,
+            trip=self.trip,
+            profile=self.profile,
+            google_event_id="evt-toggle2",
+            direction=CalendarSyncDirection.EXPORTED,
+            auto_sync=True,
         )
 
         response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {})
@@ -881,7 +962,11 @@ class TripCalendarAutoSyncViewTests(_CalendarSyncDBTestCase):
         """Flipping the flag is a pure DB update - it must not spend an API call."""
         gateway = self._patch_gateway()
         TripCalendarLink.objects.create(
-            trip=self.trip, profile=self.profile, google_event_id="evt-toggle3", direction=CalendarSyncDirection.EXPORTED, auto_sync=False,
+            trip=self.trip,
+            profile=self.profile,
+            google_event_id="evt-toggle3",
+            direction=CalendarSyncDirection.EXPORTED,
+            auto_sync=False,
         )
 
         self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
@@ -921,7 +1006,9 @@ class ActivityEventBodyTests(SimpleTestCase):
 
     def test_end_before_start_uses_default_duration(self):
         start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
-        body = activity_to_event_body(self._activity(scheduled_at=start, scheduled_end=start - datetime.timedelta(hours=1)))
+        body = activity_to_event_body(
+            self._activity(scheduled_at=start, scheduled_end=start - datetime.timedelta(hours=1))
+        )
         self.assertEqual(body["end"]["dateTime"], (start + DEFAULT_ACTIVITY_EVENT_DURATION).isoformat())
 
     def test_summary_includes_trip_and_activity_names(self):
@@ -937,7 +1024,9 @@ class ActivityEventBodyTests(SimpleTestCase):
 
     def test_hidden_location_not_exported(self):
         start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
-        body = activity_to_event_body(self._activity(scheduled_at=start, location_hidden=True, lat_override=41.5, lng_override=-73.9))
+        body = activity_to_event_body(
+            self._activity(scheduled_at=start, location_hidden=True, lat_override=41.5, lng_override=-73.9)
+        )
         self.assertNotIn("location", body)
 
     def test_coordinate_override_exported_as_location(self):
@@ -1004,7 +1093,9 @@ class ExportActivityEventsTests(_CalendarSyncDBTestCase):
 
         self.assertEqual(activity_count, 0)
         gateway.delete_event.assert_called_once_with("act-evt")
-        self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile, activity__isnull=False).exists())
+        self.assertFalse(
+            TripCalendarLink.objects.filter(trip=trip, profile=self.profile, activity__isnull=False).exists()
+        )
 
     def test_remove_deletes_activity_events_too(self):
         gateway = self._patch_gateway()
@@ -1036,7 +1127,11 @@ class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
         gateway.update_event.side_effect = lambda event_id, _body: {"id": event_id}
         trip = self._trip()
         TripCalendarLink.objects.create(
-            trip=trip, profile=self.profile, google_event_id="evt-auto", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
+            trip=trip,
+            profile=self.profile,
+            google_event_id="evt-auto",
+            direction=CalendarSyncDirection.IMPORTED,
+            auto_sync=True,
         )
 
         synced = push_auto_synced_trip_changes(trip)
@@ -1049,7 +1144,11 @@ class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
         gateway = self._patch_gateway()
         trip = self._trip()
         TripCalendarLink.objects.create(
-            trip=trip, profile=self.profile, google_event_id="evt-manual", direction=CalendarSyncDirection.EXPORTED, auto_sync=False,
+            trip=trip,
+            profile=self.profile,
+            google_event_id="evt-manual",
+            direction=CalendarSyncDirection.EXPORTED,
+            auto_sync=False,
         )
 
         synced = push_auto_synced_trip_changes(trip)
@@ -1078,10 +1177,18 @@ class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
         )
         trip = self._trip()
         TripCalendarLink.objects.create(
-            trip=trip, profile=self.profile, google_event_id="evt-fails", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
+            trip=trip,
+            profile=self.profile,
+            google_event_id="evt-fails",
+            direction=CalendarSyncDirection.IMPORTED,
+            auto_sync=True,
         )
         TripCalendarLink.objects.create(
-            trip=trip, profile=other_profile, google_event_id="evt-ok", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
+            trip=trip,
+            profile=other_profile,
+            google_event_id="evt-ok",
+            direction=CalendarSyncDirection.IMPORTED,
+            auto_sync=True,
         )
 
         gateway_cls = mock.patch("urbanlens.dashboard.services.trips.calendar_sync.GoogleCalendarGateway").start()
@@ -1200,8 +1307,12 @@ class CalendarInviteIdentityMaskingTests(TestCase):
 
         self._invite()
 
-        message = NotificationLog.objects.get(profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP).message
-        self.assertNotIn("hidden_importer", message, "the calendar importer leaked a username the app masks everywhere else")
+        message = NotificationLog.objects.get(
+            profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP
+        ).message
+        self.assertNotIn(
+            "hidden_importer", message, "the calendar importer leaked a username the app masks everywhere else"
+        )
 
     def test_an_ordinary_friend_is_still_named(self) -> None:
         """Anti-vacuity: masking must not swallow the normal case."""
@@ -1210,7 +1321,9 @@ class CalendarInviteIdentityMaskingTests(TestCase):
 
         self._invite()
 
-        message = NotificationLog.objects.get(profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP).message
+        message = NotificationLog.objects.get(
+            profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP
+        ).message
         self.assertIn("hidden_importer", message)
 
     def test_the_notification_records_its_source_profile(self) -> None:

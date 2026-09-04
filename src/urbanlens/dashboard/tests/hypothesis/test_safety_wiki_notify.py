@@ -26,7 +26,11 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, No
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinStatus
 from urbanlens.dashboard.services.notifications.mentions import render_comment_text
-from urbanlens.dashboard.services.visits.safety import escalate_checkin, find_community_wiki, post_checkin_to_community_wiki
+from urbanlens.dashboard.services.visits.safety import (
+    escalate_checkin,
+    find_community_wiki,
+    post_checkin_to_community_wiki,
+)
 
 WIKI_LAT = 40.0
 WIKI_LNG = -74.0
@@ -100,7 +104,9 @@ class EscalationWikiNotifyTests(TestCase):
         self.assertEqual(comment.profile, self.owner)
         self.assertIn(str(checkin.uuid), comment.text)
 
-        log = NotificationLog.objects.get(profile=self.pin_owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN)
+        log = NotificationLog.objects.get(
+            profile=self.pin_owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN
+        )
         self.assertEqual(log.source_profile, self.owner)
         self.assertIn("Old Mill", log.title)
 
@@ -114,7 +120,11 @@ class EscalationWikiNotifyTests(TestCase):
 
         escalate_checkin(checkin)
 
-        self.assertFalse(NotificationLog.objects.filter(profile=self.owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN).exists())
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN
+            ).exists()
+        )
         self.assertNotIn(["owner@example.com"], [m.to for m in self._wiki_emails()])
 
     def test_pref_none_suppresses_notification_and_email(self):
@@ -125,7 +135,11 @@ class EscalationWikiNotifyTests(TestCase):
 
         # The comment is still posted - the preference only governs personal alerts.
         self.assertTrue(Comment.objects.filter(wiki=self.wiki).exists())
-        self.assertFalse(NotificationLog.objects.filter(profile=self.pin_owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN).exists())
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.pin_owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN
+            ).exists()
+        )
         self.assertEqual(self._wiki_emails(), [])
 
     def test_pref_site_only_skips_the_email(self):
@@ -134,7 +148,11 @@ class EscalationWikiNotifyTests(TestCase):
 
         escalate_checkin(checkin)
 
-        self.assertTrue(NotificationLog.objects.filter(profile=self.pin_owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.pin_owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN
+            ).exists()
+        )
         self.assertEqual(self._wiki_emails(), [])
 
     def test_pref_email_only_skips_the_site_notification(self):
@@ -143,7 +161,11 @@ class EscalationWikiNotifyTests(TestCase):
 
         escalate_checkin(checkin)
 
-        self.assertFalse(NotificationLog.objects.filter(profile=self.pin_owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN).exists())
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.pin_owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN
+            ).exists()
+        )
         self.assertEqual(len(self._wiki_emails()), 1)
 
     def test_no_wiki_post_when_owner_did_not_opt_in(self):
@@ -156,7 +178,12 @@ class EscalationWikiNotifyTests(TestCase):
         self.assertFalse(Comment.objects.filter(wiki=self.wiki).exists())
 
     def test_no_wiki_post_when_destination_has_no_wiki(self):
-        checkin = _checkin(self.owner, notify_community_wiki=True, destination_latitude=str(WIKI_LAT + 5), destination_longitude=str(WIKI_LNG + 5))
+        checkin = _checkin(
+            self.owner,
+            notify_community_wiki=True,
+            destination_latitude=str(WIKI_LAT + 5),
+            destination_longitude=str(WIKI_LNG + 5),
+        )
 
         escalate_checkin(checkin)
 
@@ -172,7 +199,12 @@ class EscalationWikiNotifyTests(TestCase):
         post_checkin_to_community_wiki(checkin)
 
         self.assertEqual(Comment.objects.filter(wiki=self.wiki).count(), 1)
-        self.assertEqual(NotificationLog.objects.filter(profile=self.pin_owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN).count(), 1)
+        self.assertEqual(
+            NotificationLog.objects.filter(
+                profile=self.pin_owner, notification_type=NotificationType.WIKI_SAFETY_CHECKIN
+            ).count(),
+            1,
+        )
 
 
 class WikiOptionEndpointTests(TestCase):
@@ -188,7 +220,9 @@ class WikiOptionEndpointTests(TestCase):
         baker.make("dashboard.Pin", profile=self.user.profile, location=location, parent_pin=None)
 
     def test_shows_toggle_when_destination_has_a_wiki(self):
-        response = self.client.get(reverse("safety.checkin.wiki_option"), {"destination_latitude": WIKI_LAT, "destination_longitude": WIKI_LNG})
+        response = self.client.get(
+            reverse("safety.checkin.wiki_option"), {"destination_latitude": WIKI_LAT, "destination_longitude": WIKI_LNG}
+        )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "notify_community_wiki")
         self.assertContains(response, "Old Mill")
@@ -202,7 +236,10 @@ class WikiOptionEndpointTests(TestCase):
         self.assertContains(response, "checked")
 
     def test_empty_when_no_wiki_covers_the_destination(self):
-        response = self.client.get(reverse("safety.checkin.wiki_option"), {"destination_latitude": WIKI_LAT + 1, "destination_longitude": WIKI_LNG})
+        response = self.client.get(
+            reverse("safety.checkin.wiki_option"),
+            {"destination_latitude": WIKI_LAT + 1, "destination_longitude": WIKI_LNG},
+        )
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "notify_community_wiki")
 
@@ -221,7 +258,13 @@ class CreateCheckinFlagTests(TestCase):
 
     def _post(self, extra: dict) -> None:
         checkin_by = (timezone.now() + datetime.timedelta(hours=3)).isoformat()
-        data = {"checkin_by": checkin_by, "title": "Trip", "destination_latitude": str(WIKI_LAT), "destination_longitude": str(WIKI_LNG), **extra}
+        data = {
+            "checkin_by": checkin_by,
+            "title": "Trip",
+            "destination_latitude": str(WIKI_LAT),
+            "destination_longitude": str(WIKI_LNG),
+            **extra,
+        }
         response = self.client.post(reverse("safety.checkin.create"), data)
         self.assertEqual(response.status_code, 302)
 
@@ -244,7 +287,13 @@ class CommunityStatusPageTests(TestCase):
         _location_with_wiki()
 
     def test_non_owner_sees_community_page_for_wiki_posted_checkin(self):
-        checkin = _checkin(self.owner, notify_community_wiki=True, wiki_notified_at=timezone.now(), plan_details="Secret plan", contact_message="Private message")
+        checkin = _checkin(
+            self.owner,
+            notify_community_wiki=True,
+            wiki_notified_at=timezone.now(),
+            plan_details="Secret plan",
+            contact_message="Private message",
+        )
         response = self.client.get(reverse("safety.checkin.detail", kwargs={"checkin_slug": str(checkin.uuid)}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, checkin.title)

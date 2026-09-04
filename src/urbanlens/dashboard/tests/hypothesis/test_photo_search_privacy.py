@@ -38,7 +38,9 @@ class PhotoSearchRespectsUploaderVisibilityTests(TestCase):
         self.location = baker.make(Location, latitude=41.7361, longitude=-73.9361)
         # Both have a pin at the same place: that is what makes the third
         # disjunct match, and it is an ordinary situation rather than an attack.
-        self.owner_pin = baker.make(Pin, profile=self.owner, location=self.location, parent_pin=None, name="Owner's private survey")
+        self.owner_pin = baker.make(
+            Pin, profile=self.owner, location=self.location, parent_pin=None, name="Owner's private survey"
+        )
         self.neighbour_pin = baker.make(Pin, profile=self.neighbour, location=self.location, parent_pin=None)
         self.photo = Image.objects.create(
             image=SimpleUploadedFile("secret.jpg", b"not-a-real-jpeg", content_type="image/jpeg"),
@@ -83,7 +85,9 @@ class PhotoSearchRespectsUploaderVisibilityTests(TestCase):
 
         results = self._search(self.owner)
 
-        self.assertTrue(any(_NONCE in (r.title or "") for r in results), "the uploader lost their own photo from search")
+        self.assertTrue(
+            any(_NONCE in (r.title or "") for r in results), "the uploader lost their own photo from search"
+        )
 
     def test_a_photo_shared_widely_is_still_found_by_a_neighbour(self) -> None:
         """The positive control: this suite must not pass by breaking search.
@@ -102,4 +106,6 @@ class PhotoSearchRespectsUploaderVisibilityTests(TestCase):
 
         results = self._search(self.neighbour)
 
-        self.assertTrue(any(_NONCE in (r.title or "") for r in results), "a photo shared with anyone stopped being findable")
+        self.assertTrue(
+            any(_NONCE in (r.title or "") for r in results), "a photo shared with anyone stopped being findable"
+        )

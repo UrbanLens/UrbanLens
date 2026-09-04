@@ -243,7 +243,9 @@ class LocationAliasNicknameTests(TestCase):
         self.assertEqual(alias.kind, AliasType.NICKNAME)
 
     def test_create_alias_without_checkbox_is_not_nickname(self) -> None:
-        response = self.client.post(reverse("location.wiki.aliases", args=[self.location.slug]), {"name": "Formal Name"})
+        response = self.client.post(
+            reverse("location.wiki.aliases", args=[self.location.slug]), {"name": "Formal Name"}
+        )
         self.assertEqual(response.status_code, 200)
         alias = self.wiki.aliases.get(name="Formal Name")
         self.assertEqual(alias.kind, AliasType.ALTERNATE)
@@ -308,7 +310,10 @@ class PersistOfficialAliasesForLocationBackfillsPinsTests(TestCase):
     def test_backfills_both_wiki_and_pin_aliases(self) -> None:
         from urbanlens.dashboard.services.locations.naming import persist_official_aliases_for_location
 
-        with patch("urbanlens.dashboard.services.locations.naming.external_name_candidates_for_location", return_value=self._candidates()):
+        with patch(
+            "urbanlens.dashboard.services.locations.naming.external_name_candidates_for_location",
+            return_value=self._candidates(),
+        ):
             changed = persist_official_aliases_for_location(self.location)
 
         self.assertTrue(changed)
@@ -317,7 +322,9 @@ class PersistOfficialAliasesForLocationBackfillsPinsTests(TestCase):
 
     def test_pin_alias_view_triggers_the_backfill(self) -> None:
         self.client.force_login(self.user)
-        with patch("urbanlens.dashboard.controllers.aliases.persist_official_aliases_for_location", return_value=True) as mocked:
+        with patch(
+            "urbanlens.dashboard.controllers.aliases.persist_official_aliases_for_location", return_value=True
+        ) as mocked:
             response = self.client.get(reverse("pin.aliases", args=[self.pin.slug]))
 
         self.assertEqual(response.status_code, 200)

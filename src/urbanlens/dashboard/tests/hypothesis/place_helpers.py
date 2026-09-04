@@ -102,7 +102,11 @@ def nest_by_containment(place: Place) -> Place:
     if container is not None:
         lineage.set_parent(place, container, PlaceRelation.PART_OF)
 
-    for inner in Place.objects.current().filter(geometry__isnull=False, geometry__within=place.geometry, parent__isnull=True).exclude(pk=place.pk):
+    for inner in (
+        Place.objects.current()
+        .filter(geometry__isnull=False, geometry__within=place.geometry, parent__isnull=True)
+        .exclude(pk=place.pk)
+    ):
         lineage.set_parent(inner, place, PlaceRelation.PART_OF)
 
     place.refresh_from_db()

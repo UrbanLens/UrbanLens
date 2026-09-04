@@ -111,7 +111,12 @@ class InviteToSessionTests(TestCase):
     def test_inviting_twice_does_not_double_notify(self) -> None:
         invite_to_session(self.session, self.host, self.guest)
         invite_to_session(self.session, self.host, self.guest)
-        self.assertEqual(NotificationLog.objects.filter(profile=self.guest, notification_type=NotificationType.TRIVIA_INVITE).count(), 1)
+        self.assertEqual(
+            NotificationLog.objects.filter(
+                profile=self.guest, notification_type=NotificationType.TRIVIA_INVITE
+            ).count(),
+            1,
+        )
         self.assertEqual(TriviaSessionParticipant.objects.filter(session=self.session, profile=self.guest).count(), 1)
 
 

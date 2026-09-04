@@ -14,7 +14,7 @@ neither can act on it, permanently.
 **Why the existing tests missed it, which is the transferable part.** Every
 friendship test starts from nothing and builds the state it needs. This defect
 requires a *prior* relationship in a particular end state, so no amount of
-testing the happy path from a clean slate reaches it. `docs/TEST_COVERAGE_GAPS.md`
+testing the happy path from a clean slate reaches it. `docs/audits/TEST_COVERAGE_GAPS.md`
 records it as its own category for that reason: not an adversarial input nobody
 tried, but a starting state nobody started from.
 
@@ -30,7 +30,11 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
-from urbanlens.dashboard.services.social.friendship import accept_friend_request, remove_friend, request_or_accept_friendship
+from urbanlens.dashboard.services.social.friendship import (
+    accept_friend_request,
+    remove_friend,
+    request_or_accept_friendship,
+)
 
 
 class RevivedRequestDirectionTests(TestCase):
@@ -134,7 +138,7 @@ class RevivedRequestDirectionTests(TestCase):
 class StatusesThatCannotBeRevivedTests(TestCase):
     """The other end of the same rule.
 
-    `docs/TEST_COVERAGE_GAPS.md` suggested generalising the re-orientation
+    `docs/audits/TEST_COVERAGE_GAPS.md` suggested generalising the re-orientation
     above to every status `between()` can return - `Declined`, `Ignored`,
     `Blocked`. Only the first of those is right: `can_request` admits
     `Declined` and `Removed` and nothing else, so for `Blocked` and `Ignored`
@@ -167,7 +171,9 @@ class StatusesThatCannotBeRevivedTests(TestCase):
     def test_an_ignored_row_is_not_revived_or_reoriented(self) -> None:
         self._existing(FriendshipStatus.IGNORED)
 
-        self.assertIsNone(Friendship.request(self.bob, self.alice), "an ignored request could be re-sent by the other side")
+        self.assertIsNone(
+            Friendship.request(self.bob, self.alice), "an ignored request could be re-sent by the other side"
+        )
 
         row = Friendship.objects.all().between(self.alice, self.bob)
         assert row is not None

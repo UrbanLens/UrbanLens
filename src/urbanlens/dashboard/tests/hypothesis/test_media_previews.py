@@ -51,7 +51,13 @@ class FormatDecisionTests(SimpleTestCase):
         self.assertTrue(is_web_safe("/x", "image/png; charset=binary"))
 
     def test_known_bad_formats_need_a_preview(self) -> None:
-        for url, content_type in (("/x.tif", ""), ("/x.pdf", ""), ("/x", "image/tiff"), ("/x", "application/pdf"), ("/x.heic", "")):
+        for url, content_type in (
+            ("/x.tif", ""),
+            ("/x.pdf", ""),
+            ("/x", "image/tiff"),
+            ("/x", "application/pdf"),
+            ("/x.heic", ""),
+        ):
             with self.subTest(url=url, content_type=content_type):
                 self.assertTrue(needs_server_side_preview(url, content_type))
 
@@ -73,7 +79,10 @@ class FormatDecisionTests(SimpleTestCase):
 class PreviewUrlTests(TestCase):
     def test_an_in_app_proxy_url_gets_the_preview_flag(self) -> None:
         """It already holds the bytes - a signed round trip would re-download them."""
-        self.assertEqual(preview_thumb_url("/dashboard/cris/attachment/r1/2/", "application/pdf"), "/dashboard/cris/attachment/r1/2/?preview=1")
+        self.assertEqual(
+            preview_thumb_url("/dashboard/cris/attachment/r1/2/", "application/pdf"),
+            "/dashboard/cris/attachment/r1/2/?preview=1",
+        )
 
     def test_an_existing_query_string_is_preserved(self) -> None:
         self.assertEqual(preview_thumb_url("/x/?a=b", "image/tiff"), "/x/?a=b&preview=1")
@@ -182,7 +191,9 @@ class MediaPreviewViewTests(TestCase):
 
     def test_a_signature_does_not_transfer_to_another_url(self) -> None:
         with patch("urbanlens.dashboard.controllers.media_preview._fetch_source") as mock_fetch:
-            response = self.client.get(self.url, {"u": "https://evil.test/internal", "sig": sign_source_url(self.source)})
+            response = self.client.get(
+                self.url, {"u": "https://evil.test/internal", "sig": sign_source_url(self.source)}
+            )
         self.assertEqual(response.status_code, 404)
         mock_fetch.assert_not_called()
 
@@ -195,7 +206,10 @@ class MediaPreviewViewTests(TestCase):
 
         signed = {"u": self.source, "sig": sign_source_url(self.source)}
         with (
-            patch("urbanlens.dashboard.controllers.media_preview._fetch_source", return_value=(_image_bytes("TIFF"), "image/tiff")),
+            patch(
+                "urbanlens.dashboard.controllers.media_preview._fetch_source",
+                return_value=(_image_bytes("TIFF"), "image/tiff"),
+            ),
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             self.assertEqual(self.client.get(self.url, signed).status_code, 404)
@@ -218,7 +232,9 @@ class MediaPreviewViewTests(TestCase):
 
         signed = {"u": self.source, "sig": sign_source_url(self.source)}
         with (
-            patch("urbanlens.dashboard.controllers.media_preview._fetch_source", return_value=(b"junk", "image/tiff")) as mock_fetch,
+            patch(
+                "urbanlens.dashboard.controllers.media_preview._fetch_source", return_value=(b"junk", "image/tiff")
+            ) as mock_fetch,
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             self.assertEqual(self.client.get(self.url, signed).status_code, 404)
@@ -234,7 +250,10 @@ class MediaPreviewViewTests(TestCase):
         # 60MB download.
         signed = {"u": self.source, "sig": sign_source_url(self.source)}
         with (
-            patch("urbanlens.dashboard.controllers.media_preview._fetch_source", return_value=(_image_bytes("TIFF"), "image/tiff")) as mock_fetch,
+            patch(
+                "urbanlens.dashboard.controllers.media_preview._fetch_source",
+                return_value=(_image_bytes("TIFF"), "image/tiff"),
+            ) as mock_fetch,
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             for _ in range(3):

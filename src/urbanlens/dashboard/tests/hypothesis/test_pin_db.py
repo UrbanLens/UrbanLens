@@ -4,6 +4,7 @@ Covers PinManager.get_nearby_or_create and the major PinQuerySet filters.
 Each @given example runs inside its own atomic savepoint (rolled back
 automatically by hypothesis.extra.django.TestCase).
 """
+
 from __future__ import annotations
 
 import math
@@ -38,6 +39,7 @@ def _make_location(lat: float = 40.0, lon: float = -74.0) -> Location:
 
 
 # -- PinManager.get_nearby_or_create -------------------------------------------
+
 
 class GetNearbyOrCreateNullGuardsTests(TestCase):
     """get_nearby_or_create must return (None, False) for degenerate inputs."""
@@ -160,6 +162,7 @@ class GetNearbyOrCreateCreationTests(TestCase):
 
 # -- PinQuerySet structural filters --------------------------------------------
 
+
 class PinQuerySetRootPinsTests(TestCase):
     """root_pins() must exclude all child-pin variants."""
 
@@ -200,6 +203,7 @@ class PinQuerySetRootPinsTests(TestCase):
 
 # -- PinQuerySet visit filters -------------------------------------------------
 
+
 class PinQuerySetVisitFiltersTests(TestCase):
     """never_visited() and related visit filters."""
 
@@ -236,6 +240,7 @@ class PinQuerySetVisitFiltersTests(TestCase):
 
 
 # -- PinQuerySet name filter ---------------------------------------------------
+
 
 class PinQuerySetByNameTests(TestCase):
     """by_name() performs a case-insensitive substring search on name."""
@@ -279,8 +284,8 @@ class PinQuerySetByNameTests(TestCase):
         self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
 
-
 # -- PinQuerySet priority filter -----------------------------------------------
+
 
 class PinQuerySetPriorityTests(TestCase):
     """by_priority() is an exact-match filter."""

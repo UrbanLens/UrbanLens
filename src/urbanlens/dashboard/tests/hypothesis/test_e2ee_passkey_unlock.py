@@ -217,7 +217,9 @@ class PasskeyWrapEndpointTests(TestCase):
         bundle = _enroll(profile)
         credential = _credential(profile, login_factor=False)
 
-        response = _client_for(profile).post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json")
+        response = _client_for(profile).post(
+            reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json"
+        )
 
         self.assertEqual(response.status_code, 201)
         wrap = E2EEPasskeyWrap.objects.get(credential=credential)
@@ -230,9 +232,19 @@ class PasskeyWrapEndpointTests(TestCase):
         credential = _credential(profile)
         client = _client_for(profile)
 
-        missing = client.post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json")
-        wrong = client.post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential, current_password="nope"), content_type="application/json")  # noqa: S106 - deliberately wrong test credential
-        right = client.post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential, current_password=PASSWORD), content_type="application/json")
+        missing = client.post(
+            reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json"
+        )
+        wrong = client.post(
+            reverse("e2ee.passkey_wrap"),
+            data=_wrap_payload(credential, current_password="nope"),
+            content_type="application/json",
+        )  # noqa: S106 - deliberately wrong test credential
+        right = client.post(
+            reverse("e2ee.passkey_wrap"),
+            data=_wrap_payload(credential, current_password=PASSWORD),
+            content_type="application/json",
+        )
 
         self.assertEqual(missing.status_code, 403)
         self.assertEqual(wrong.status_code, 403)
@@ -244,7 +256,9 @@ class PasskeyWrapEndpointTests(TestCase):
         other = _profile()
         foreign_credential = _credential(other)
 
-        response = _client_for(profile).post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(foreign_credential), content_type="application/json")
+        response = _client_for(profile).post(
+            reverse("e2ee.passkey_wrap"), data=_wrap_payload(foreign_credential), content_type="application/json"
+        )
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(E2EEPasskeyWrap.objects.exists())
@@ -256,7 +270,9 @@ class PasskeyWrapEndpointTests(TestCase):
         old = _wrap(bundle, credential)
         client = _client_for(profile)
 
-        response = client.post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json")
+        response = client.post(
+            reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json"
+        )
 
         self.assertEqual(response.status_code, 200)
         wrap = E2EEPasskeyWrap.objects.get(credential=credential)
@@ -266,7 +282,9 @@ class PasskeyWrapEndpointTests(TestCase):
         profile = _profile()
         credential = _credential(profile)
 
-        response = _client_for(profile).post(reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json")
+        response = _client_for(profile).post(
+            reverse("e2ee.passkey_wrap"), data=_wrap_payload(credential), content_type="application/json"
+        )
 
         self.assertEqual(response.status_code, 404)
 
@@ -283,7 +301,9 @@ class PasskeyWrapEndpointTests(TestCase):
 
         for payload in (bad_input, bad_secret):
             with self.subTest(payload=payload):
-                response = client.post(reverse("e2ee.passkey_wrap"), data=json.dumps(payload), content_type="application/json")
+                response = client.post(
+                    reverse("e2ee.passkey_wrap"), data=json.dumps(payload), content_type="application/json"
+                )
                 self.assertEqual(response.status_code, 400)
 
     def test_delete_removes_the_wrap_with_proof(self) -> None:

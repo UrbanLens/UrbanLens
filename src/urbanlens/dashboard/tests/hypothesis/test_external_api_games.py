@@ -41,7 +41,15 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind, GameRound, GameSession, GameSessionStatus, Guess, SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import (
+    GamePhotoFeedback,
+    GamePhotoFeedbackKind,
+    GameRound,
+    GameSession,
+    GameSessionStatus,
+    Guess,
+    SpotGuessrMode,
+)
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session, start_solo_session
@@ -108,7 +116,12 @@ class _SpotGuessrApiTestCase(TestCase):
     def _make_location(self) -> Location:
         """A location with coordinates distinct from every other one this module makes."""
         offset = next(_coordinate_counter)
-        return baker.make(Location, latitude=f"42.{650_000 + offset}", longitude=f"-73.{760_000 + offset}", official_name="Old Mill House")
+        return baker.make(
+            Location,
+            latitude=f"42.{650_000 + offset}",
+            longitude=f"-73.{760_000 + offset}",
+            official_name="Old Mill House",
+        )
 
     def _key_with_scopes(self, scopes: list[str], user: User | None = None) -> str:
         """Issue a key carrying exactly *scopes* and return its raw value."""
@@ -122,11 +135,15 @@ class _SpotGuessrApiTestCase(TestCase):
 
     def _post(self, name: str, *args, body: dict | None = None, key: str | None = None):
         """POST JSON to a named external-API route with a bearer key."""
-        return self.client.post(reverse(name, args=args), body or {}, content_type="application/json", **_bearer(key or self.raw_key))
+        return self.client.post(
+            reverse(name, args=args), body or {}, content_type="application/json", **_bearer(key or self.raw_key)
+        )
 
     def _patch(self, name: str, *args, body: dict | None = None, key: str | None = None):
         """PATCH JSON to a named external-API route with a bearer key."""
-        return self.client.patch(reverse(name, args=args), body or {}, content_type="application/json", **_bearer(key or self.raw_key))
+        return self.client.patch(
+            reverse(name, args=args), body or {}, content_type="application/json", **_bearer(key or self.raw_key)
+        )
 
     def _start_session(self) -> dict:
         """Start a solo session over the API and return the response body."""
@@ -217,7 +234,10 @@ class SpotGuessrSessionCreateTests(_SpotGuessrApiTestCase):
 
     def test_geo_bounds_is_a_geojson_object_not_a_string(self) -> None:
         """A JSON client already has an object; making it re-encode invites double encoding."""
-        polygon = {"type": "Polygon", "coordinates": [[[-74.0, 42.0], [-74.0, 43.0], [-73.0, 43.0], [-73.0, 42.0], [-74.0, 42.0]]]}
+        polygon = {
+            "type": "Polygon",
+            "coordinates": [[[-74.0, 42.0], [-74.0, 43.0], [-73.0, 43.0], [-73.0, 42.0], [-74.0, 42.0]]],
+        }
         response = self._post("external_api:games.spotguessr.sessions", body={"geo_bounds": polygon})
         self.assertEqual(response.status_code, 201, response.content)
         session = GameSession.objects.get(pk=response.json()["session_id"])
@@ -337,7 +357,9 @@ class SpotGuessrGuessTests(_SpotGuessrApiTestCase):
     def test_a_second_guess_on_the_same_round_is_a_400(self) -> None:
         payload = {"latitude": 42.0, "longitude": -73.0}
         self._post("external_api:games.spotguessr.sessions.rounds.guess", self.session_id, self.round_id, body=payload)
-        response = self._post("external_api:games.spotguessr.sessions.rounds.guess", self.session_id, self.round_id, body=payload)
+        response = self._post(
+            "external_api:games.spotguessr.sessions.rounds.guess", self.session_id, self.round_id, body=payload
+        )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Guess.objects.filter(round_id=self.round_id, profile=self.profile).count(), 1)
 
@@ -490,15 +512,24 @@ class MultiplayerContainmentTests(_SpotGuessrApiTestCase):
         )
 
     def test_the_round_image_endpoint_refuses_multiplayer(self) -> None:
-        round_ = GameRound.objects.create(session=self.begun, sequence_index=0, location=self.location, image=self.image)
+        round_ = GameRound.objects.create(
+            session=self.begun, sequence_index=0, location=self.location, image=self.image
+        )
         media_key = self._key_with_scopes([*_GAME_SCOPES, ApiKeyScope.MEDIA_READ.value])
-        self._assert_refused(self._get("external_api:games.spotguessr.sessions.rounds.image", self.begun.pk, round_.pk, key=media_key))
+        self._assert_refused(
+            self._get("external_api:games.spotguessr.sessions.rounds.image", self.begun.pk, round_.pk, key=media_key)
+        )
 
     def test_no_lobby_or_invite_route_is_exposed(self) -> None:
         """Multiplayer is not partially mirrored - there is nothing to half-use."""
         from django.urls import NoReverseMatch
 
-        for name in ("games.spotguessr.sessions.invite", "games.spotguessr.sessions.join", "games.spotguessr.sessions.begin", "games.spotguessr.sessions.chat"):
+        for name in (
+            "games.spotguessr.sessions.invite",
+            "games.spotguessr.sessions.join",
+            "games.spotguessr.sessions.begin",
+            "games.spotguessr.sessions.chat",
+        ):
             with self.assertRaises(NoReverseMatch):
                 reverse(f"external_api:{name}", args=[self.begun.pk])
 
@@ -510,13 +541,22 @@ class SpotGuessrRoundImageTests(_SpotGuessrApiTestCase):
         """Give the round a real JPEG whose EXIF points straight at the answer."""
         super().setUp()
         self.session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig())
-        self.image.image.save("gps.jpg", SimpleUploadedFile("gps.jpg", _gps_jpeg_bytes(), content_type="image/jpeg"), save=True)
-        self.round = GameRound.objects.create(session=self.session, sequence_index=0, location=self.location, image=self.image)
+        self.image.image.save(
+            "gps.jpg", SimpleUploadedFile("gps.jpg", _gps_jpeg_bytes(), content_type="image/jpeg"), save=True
+        )
+        self.round = GameRound.objects.create(
+            session=self.session, sequence_index=0, location=self.location, image=self.image
+        )
         self.media_key = self._key_with_scopes([*_GAME_SCOPES, ApiKeyScope.MEDIA_READ.value])
 
     def _fetch(self, key: str | None = None):
         """GET the round image with the given (default: fully scoped) key."""
-        return self._get("external_api:games.spotguessr.sessions.rounds.image", self.session.pk, self.round.pk, key=key or self.media_key)
+        return self._get(
+            "external_api:games.spotguessr.sessions.rounds.image",
+            self.session.pk,
+            self.round.pk,
+            key=key or self.media_key,
+        )
 
     def test_the_stored_file_really_does_carry_gps(self) -> None:
         """Guards the test itself: a fixture with no EXIF would make the next test vacuous."""
@@ -546,13 +586,21 @@ class SpotGuessrRoundImageTests(_SpotGuessrApiTestCase):
 
     def test_another_users_round_is_a_404(self) -> None:
         theirs = start_solo_session(self.other_profile, SpotGuessrMode.PHOTOS, GameConfig())
-        their_round = GameRound.objects.create(session=theirs, sequence_index=0, location=self.location, image=self.image)
-        response = self._get("external_api:games.spotguessr.sessions.rounds.image", theirs.pk, their_round.pk, key=self.media_key)
+        their_round = GameRound.objects.create(
+            session=theirs, sequence_index=0, location=self.location, image=self.image
+        )
+        response = self._get(
+            "external_api:games.spotguessr.sessions.rounds.image", theirs.pk, their_round.pk, key=self.media_key
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_a_round_with_no_photo_is_a_404(self) -> None:
-        text_round = GameRound.objects.create(session=self.session, sequence_index=1, location=self.location, display_text="Old Mill House")
-        response = self._get("external_api:games.spotguessr.sessions.rounds.image", self.session.pk, text_round.pk, key=self.media_key)
+        text_round = GameRound.objects.create(
+            session=self.session, sequence_index=1, location=self.location, display_text="Old Mill House"
+        )
+        response = self._get(
+            "external_api:games.spotguessr.sessions.rounds.image", self.session.pk, text_round.pk, key=self.media_key
+        )
         self.assertEqual(response.status_code, 404)
 
 
@@ -567,13 +615,18 @@ class SpotGuessrPreferencesTests(_SpotGuessrApiTestCase):
         self.assertFalse(body["show_ratings_to_friends"])
 
     def test_last_config_is_not_writable_here(self) -> None:
-        response = self._patch("external_api:games.spotguessr.preferences", body={"show_ratings_to_friends": True, "last_config": {"difficulty": 0.9}})
+        response = self._patch(
+            "external_api:games.spotguessr.preferences",
+            body={"show_ratings_to_friends": True, "last_config": {"difficulty": 0.9}},
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertNotIn("last_config", response.json())
 
     def test_needs_the_write_scope(self) -> None:
         read_key = self._key_with_scopes([ApiKeyScope.GAMES_READ.value])
-        response = self._patch("external_api:games.spotguessr.preferences", body={"show_ratings_to_friends": False}, key=read_key)
+        response = self._patch(
+            "external_api:games.spotguessr.preferences", body={"show_ratings_to_friends": False}, key=read_key
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_missing_field_is_a_400(self) -> None:
@@ -586,7 +639,18 @@ class SpotGuessrEligibleCountTests(_SpotGuessrApiTestCase):
 
     def _polygon_around(self, location: Location) -> dict:
         lat, lng = float(location.latitude), float(location.longitude)
-        return {"type": "Polygon", "coordinates": [[[lng - 0.01, lat - 0.01], [lng - 0.01, lat + 0.01], [lng + 0.01, lat + 0.01], [lng + 0.01, lat - 0.01], [lng - 0.01, lat - 0.01]]]}
+        return {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [lng - 0.01, lat - 0.01],
+                    [lng - 0.01, lat + 0.01],
+                    [lng + 0.01, lat + 0.01],
+                    [lng + 0.01, lat - 0.01],
+                    [lng - 0.01, lat - 0.01],
+                ]
+            ],
+        }
 
     def test_counts_pins_inside_the_area(self) -> None:
         geo_bounds = json.dumps(self._polygon_around(self.location))
@@ -612,7 +676,9 @@ class SpotGuessrEligibleCountTests(_SpotGuessrApiTestCase):
     def test_a_read_only_credential_is_enough(self) -> None:
         read_key = self._key_with_scopes([ApiKeyScope.GAMES_READ.value])
         geo_bounds = json.dumps(self._polygon_around(self.location))
-        response = self._get("external_api:games.spotguessr.eligible-count", data={"geo_bounds": geo_bounds}, key=read_key)
+        response = self._get(
+            "external_api:games.spotguessr.eligible-count", data={"geo_bounds": geo_bounds}, key=read_key
+        )
         self.assertEqual(response.status_code, 200)
 
 
@@ -650,7 +716,18 @@ class SpotGuessrEligiblePinsTests(_SpotGuessrApiTestCase):
         baker.make(Pin, profile=self.profile, location=elsewhere)
 
         lat, lng = float(self.location.latitude), float(self.location.longitude)
-        polygon = {"type": "Polygon", "coordinates": [[[lng - 0.01, lat - 0.01], [lng - 0.01, lat + 0.01], [lng + 0.01, lat + 0.01], [lng + 0.01, lat - 0.01], [lng - 0.01, lat - 0.01]]]}
+        polygon = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [lng - 0.01, lat - 0.01],
+                    [lng - 0.01, lat + 0.01],
+                    [lng + 0.01, lat + 0.01],
+                    [lng + 0.01, lat - 0.01],
+                    [lng - 0.01, lat - 0.01],
+                ]
+            ],
+        }
         body = self._get("external_api:games.spotguessr.eligible-pins", data={"geo_bounds": json.dumps(polygon)}).json()
         self.assertEqual(body["count"], 1)
 
@@ -699,7 +776,9 @@ class SpotGuessrRoundExpireTests(_SpotGuessrApiTestCase):
 
     def test_needs_the_write_scope(self) -> None:
         read_key = self._key_with_scopes([ApiKeyScope.GAMES_READ.value])
-        response = self._post("external_api:games.spotguessr.sessions.rounds.expire", self.session_id, self.round.pk, key=read_key)
+        response = self._post(
+            "external_api:games.spotguessr.sessions.rounds.expire", self.session_id, self.round.pk, key=read_key
+        )
         self.assertEqual(response.status_code, 403)
 
 
@@ -731,7 +810,11 @@ class SpotGuessrRoundFeedbackTests(_SpotGuessrApiTestCase):
         )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["kind"], GamePhotoFeedbackKind.THUMBS_UP)
-        self.assertTrue(GamePhotoFeedback.objects.filter(round_id=self.round_id, profile=self.profile, kind=GamePhotoFeedbackKind.THUMBS_UP).exists())
+        self.assertTrue(
+            GamePhotoFeedback.objects.filter(
+                round_id=self.round_id, profile=self.profile, kind=GamePhotoFeedbackKind.THUMBS_UP
+            ).exists()
+        )
 
     def test_a_repeat_reaction_overwrites_the_first(self) -> None:
         self._guess()
@@ -748,7 +831,10 @@ class SpotGuessrRoundFeedbackTests(_SpotGuessrApiTestCase):
             body={"kind": GamePhotoFeedbackKind.REPORTED},
         )
         self.assertEqual(GamePhotoFeedback.objects.filter(round_id=self.round_id, profile=self.profile).count(), 1)
-        self.assertEqual(GamePhotoFeedback.objects.get(round_id=self.round_id, profile=self.profile).kind, GamePhotoFeedbackKind.REPORTED)
+        self.assertEqual(
+            GamePhotoFeedback.objects.get(round_id=self.round_id, profile=self.profile).kind,
+            GamePhotoFeedbackKind.REPORTED,
+        )
 
     def test_reacting_before_guessing_is_refused(self) -> None:
         response = self._post(
@@ -771,7 +857,9 @@ class SpotGuessrRoundFeedbackTests(_SpotGuessrApiTestCase):
 
     def test_a_round_with_no_photo_has_nothing_to_react_to(self) -> None:
         text_session = start_solo_session(self.profile, SpotGuessrMode.NAMED_PLACE, GameConfig())
-        text_round = GameRound.objects.create(session=text_session, sequence_index=0, location=self.location, display_text="Old Mill House")
+        text_round = GameRound.objects.create(
+            session=text_session, sequence_index=0, location=self.location, display_text="Old Mill House"
+        )
         Guess.objects.create(round=text_round, profile=self.profile, guess_point=self.location.point)
         response = self._post(
             "external_api:games.spotguessr.sessions.rounds.feedback",

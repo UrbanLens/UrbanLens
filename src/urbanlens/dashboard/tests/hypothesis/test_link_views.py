@@ -103,7 +103,9 @@ class PinDetailsPageLinksCardTests(TestCase):
         baker.make("auth.User")  # first user is auto-promoted to bootstrap site admin
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
-        self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, name="Old Mill", description="A creaky old mill.")
+        self.pin = baker.make_recipe(
+            "dashboard.pin", profile=self.profile, name="Old Mill", description="A creaky old mill."
+        )
         self.client.force_login(self.user)
 
     def test_links_card_renders_with_its_own_heading(self) -> None:
@@ -202,7 +204,9 @@ class LocationLinkViewTests(TestCase):
     def test_requires_the_requester_to_have_this_location_pinned(self) -> None:
         outsider = baker.make("auth.User")
         self.client.force_login(outsider)
-        response = self.client.post(reverse("location.wiki.links", args=[self.location.slug]), {"url": "https://example.org"})
+        response = self.client.post(
+            reverse("location.wiki.links", args=[self.location.slug]), {"url": "https://example.org"}
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_empty_row_shows_placeholder_text(self) -> None:

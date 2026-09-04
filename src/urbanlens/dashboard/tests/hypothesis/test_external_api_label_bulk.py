@@ -38,12 +38,16 @@ class LabelBulkTestCase(TestCase):
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         _api_key, self.raw_key = generate_api_key(self.user, "Label bulk client")
-        ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value])
+        ApiKey.objects.filter(user=self.user).update(
+            scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value]
+        )
         self.label_a = ensure_label(profile=self.profile, name="Rusty", kind=KIND_TAG)
         self.label_b = ensure_label(profile=self.profile, name="Overgrown", kind=KIND_TAG)
 
     def _post(self, path: str, payload: dict):
-        return self.client.post(f"{_BASE}{path}", data=payload, content_type="application/json", **_bearer(self.raw_key))
+        return self.client.post(
+            f"{_BASE}{path}", data=payload, content_type="application/json", **_bearer(self.raw_key)
+        )
 
 
 class LabelReorderTests(LabelBulkTestCase):
@@ -104,7 +108,10 @@ class LabelBulkDeleteTests(LabelBulkTestCase):
 
 class LabelBulkEditTests(LabelBulkTestCase):
     def test_sets_icon_and_color_on_every_label(self) -> None:
-        response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "icon": "star", "color": "#F44336"})
+        response = self._post(
+            "bulk/edit/",
+            {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "icon": "star", "color": "#F44336"},
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["count"], 2)
         self.label_a.refresh_from_db()
@@ -143,18 +150,26 @@ class LabelBulkEditTests(LabelBulkTestCase):
 
     def test_adds_a_parent_to_every_label(self) -> None:
         parent = ensure_label(profile=self.profile, name="Structures", kind=KIND_TAG)
-        response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "add_parent_uuids": [str(parent.uuid)]})
+        response = self._post(
+            "bulk/edit/",
+            {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "add_parent_uuids": [str(parent.uuid)]},
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertTrue(self.label_a.parents.filter(pk=parent.pk).exists())
         self.assertTrue(self.label_b.parents.filter(pk=parent.pk).exists())
 
     def test_unresolvable_parent_uuid_is_a_400(self) -> None:
-        response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid)], "add_parent_uuids": ["00000000-0000-0000-0000-000000000000"]})
+        response = self._post(
+            "bulk/edit/",
+            {"uuids": [str(self.label_a.uuid)], "add_parent_uuids": ["00000000-0000-0000-0000-000000000000"]},
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_a_parent_assignment_that_would_cycle_is_skipped(self) -> None:
         self.label_a.parents.add(self.label_b)
-        response = self._post("bulk/edit/", {"uuids": [str(self.label_b.uuid)], "add_parent_uuids": [str(self.label_a.uuid)]})
+        response = self._post(
+            "bulk/edit/", {"uuids": [str(self.label_b.uuid)], "add_parent_uuids": [str(self.label_a.uuid)]}
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertFalse(self.label_b.parents.filter(pk=self.label_a.pk).exists())
 
@@ -187,7 +202,9 @@ class LabelBulkEditTests(LabelBulkTestCase):
 
 class LabelBulkConvertTests(LabelBulkTestCase):
     def test_converts_tags_to_categories(self) -> None:
-        response = self._post("bulk/convert/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "target_kind": KIND_CATEGORY})
+        response = self._post(
+            "bulk/convert/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "target_kind": KIND_CATEGORY}
+        )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["converted"], 2)
         self.label_a.refresh_from_db()

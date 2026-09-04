@@ -52,7 +52,9 @@ class RecordGeolocationPinVisitsTests(TestCase):
     def test_creates_geolocation_visit_when_point_is_inside_pin_boundary(self):
         visited_at = timezone.make_aware(datetime.datetime(2026, 7, 6, 15, 30, 0))
 
-        visits = record_geolocation_pin_visits(self.profile, latitude=40.0002, longitude=-74.0002, visited_at=visited_at)
+        visits = record_geolocation_pin_visits(
+            self.profile, latitude=40.0002, longitude=-74.0002, visited_at=visited_at
+        )
 
         self.assertEqual(len(visits), 1)
         visit = PinVisit.objects.get(pin=self.pin)
@@ -116,7 +118,9 @@ class RecordGeolocationPinVisitsTests(TestCase):
             baker.make("dashboard.Pin", profile=self.profile, location=distant_location)
 
         with CaptureQueriesContext(connection) as with_distant_pins:
-            visits = record_geolocation_pin_visits(self.profile, latitude=40.0002, longitude=-74.0002, visited_at=timezone.now())
+            visits = record_geolocation_pin_visits(
+                self.profile, latitude=40.0002, longitude=-74.0002, visited_at=timezone.now()
+            )
 
         self.assertEqual(visits, [])
         self.assertEqual(len(with_distant_pins.captured_queries), baseline_query_count)

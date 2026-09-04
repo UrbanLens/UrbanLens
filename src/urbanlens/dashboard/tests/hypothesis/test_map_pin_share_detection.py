@@ -21,7 +21,12 @@ from urbanlens.dashboard.services.sharing.map_pin_share_detection import (
     is_zoomed_in,
     viewport_bounds,
 )
-from urbanlens.dashboard.tests.hypothesis.strategies import coord_pair_float, lat_float, lon_float, two_distant_coord_pairs
+from urbanlens.dashboard.tests.hypothesis.strategies import (
+    coord_pair_float,
+    lat_float,
+    lon_float,
+    two_distant_coord_pairs,
+)
 
 
 def _markup_item(coordinates: list[list[float]]) -> SimpleNamespace:
@@ -31,11 +36,15 @@ def _markup_item(coordinates: list[list[float]]) -> SimpleNamespace:
 
 # -- is_zoomed_in -----------------------------------------------------------------
 
+
 class IsZoomedInTests(SimpleTestCase):
     def test_none_zoom_is_never_zoomed_in(self) -> None:
         self.assertFalse(is_zoomed_in(None))
 
-    @given(st.floats(min_value=-10, max_value=100, allow_nan=False), st.floats(min_value=-10, max_value=100, allow_nan=False))
+    @given(
+        st.floats(min_value=-10, max_value=100, allow_nan=False),
+        st.floats(min_value=-10, max_value=100, allow_nan=False),
+    )
     @settings(max_examples=200)
     def test_threshold_boundary(self, zoom: float, threshold: float) -> None:
         result = is_zoomed_in(zoom, threshold=threshold)
@@ -43,6 +52,7 @@ class IsZoomedInTests(SimpleTestCase):
 
 
 # -- bearing_degrees ----------------------------------------------------------------
+
 
 class BearingDegreesTests(SimpleTestCase):
     @given(two_distant_coord_pairs())
@@ -72,6 +82,7 @@ class BearingDegreesTests(SimpleTestCase):
 
 # -- viewport_bounds ----------------------------------------------------------------
 
+
 class ViewportBoundsTests(SimpleTestCase):
     @given(lat_float, lon_float, st.floats(min_value=1, max_value=20, allow_nan=False))
     @settings(max_examples=200)
@@ -97,6 +108,7 @@ class ViewportBoundsTests(SimpleTestCase):
 
 
 # -- geometry_to_geos ---------------------------------------------------------------
+
 
 class GeometryToGeosTests(SimpleTestCase):
     def test_none_geometry_returns_none(self) -> None:
@@ -133,6 +145,7 @@ class GeometryToGeosTests(SimpleTestCase):
 
 
 # -- arrow_points_toward -------------------------------------------------------------
+
 
 class ArrowPointsTowardTests(SimpleTestCase):
     @given(two_distant_coord_pairs())

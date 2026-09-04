@@ -32,7 +32,9 @@ BASE = "/dashboard/api/external/v1/wikis"
 
 _SQUARE_GEOJSON = {
     "type": "Polygon",
-    "coordinates": [[[-105.001, 40.001], [-105.001, 40.002], [-105.002, 40.002], [-105.002, 40.001], [-105.001, 40.001]]],
+    "coordinates": [
+        [[-105.001, 40.001], [-105.001, 40.002], [-105.002, 40.002], [-105.002, 40.001], [-105.001, 40.001]]
+    ],
 }
 
 
@@ -112,7 +114,10 @@ class WikiBoundaryTests(_WikiExtrasTestCase):
 
     def test_post_saves_a_custom_polygon_and_records_an_edit(self) -> None:
         response = self.client.post(
-            self.url("boundary/"), {"boundary_type": "property", "polygon": _SQUARE_GEOJSON}, content_type="application/json", **self.headers()
+            self.url("boundary/"),
+            {"boundary_type": "property", "polygon": _SQUARE_GEOJSON},
+            content_type="application/json",
+            **self.headers(),
         )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["boundaries"]["property"]["source"], "wiki")
@@ -122,19 +127,37 @@ class WikiBoundaryTests(_WikiExtrasTestCase):
         self.assertEqual(edit.editor, self.profile)
 
     def test_post_with_null_polygon_clears_a_previously_saved_one(self) -> None:
-        self.client.post(self.url("boundary/"), {"boundary_type": "property", "polygon": _SQUARE_GEOJSON}, content_type="application/json", **self.headers())
-        response = self.client.post(self.url("boundary/"), {"boundary_type": "property", "polygon": None}, content_type="application/json", **self.headers())
+        self.client.post(
+            self.url("boundary/"),
+            {"boundary_type": "property", "polygon": _SQUARE_GEOJSON},
+            content_type="application/json",
+            **self.headers(),
+        )
+        response = self.client.post(
+            self.url("boundary/"),
+            {"boundary_type": "property", "polygon": None},
+            content_type="application/json",
+            **self.headers(),
+        )
 
         self.assertEqual(response.status_code, 200, response.content)
         self.assertNotEqual(response.json()["boundaries"]["property"]["source"], "wiki")
 
     def test_post_rejects_an_invalid_boundary_type(self) -> None:
-        response = self.client.post(self.url("boundary/"), {"boundary_type": "county", "polygon": None}, content_type="application/json", **self.headers())
+        response = self.client.post(
+            self.url("boundary/"),
+            {"boundary_type": "county", "polygon": None},
+            content_type="application/json",
+            **self.headers(),
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_post_rejects_malformed_geometry(self) -> None:
         response = self.client.post(
-            self.url("boundary/"), {"boundary_type": "property", "polygon": {"type": "Point", "coordinates": [1, 2]}}, content_type="application/json", **self.headers()
+            self.url("boundary/"),
+            {"boundary_type": "property", "polygon": {"type": "Point", "coordinates": [1, 2]}},
+            content_type="application/json",
+            **self.headers(),
         )
         self.assertEqual(response.status_code, 400)
 
@@ -146,7 +169,12 @@ class WikiBoundaryTests(_WikiExtrasTestCase):
 
     def test_post_requires_wiki_write(self) -> None:
         ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.WIKI_READ.value])
-        response = self.client.post(self.url("boundary/"), {"boundary_type": "property", "polygon": None}, content_type="application/json", **self.headers())
+        response = self.client.post(
+            self.url("boundary/"),
+            {"boundary_type": "property", "polygon": None},
+            content_type="application/json",
+            **self.headers(),
+        )
         self.assertEqual(response.status_code, 403)
 
 
@@ -155,7 +183,9 @@ class WikiCoverPhotoTests(_WikiExtrasTestCase):
 
     def test_put_sets_the_cover_photo_from_the_wikis_gallery(self) -> None:
         image = baker.make(Image, profile=self.profile, wiki=self.wiki)
-        response = self.client.put(self.url("cover-photo/"), {"image_uuid": str(image.uuid)}, content_type="application/json", **self.headers())
+        response = self.client.put(
+            self.url("cover-photo/"), {"image_uuid": str(image.uuid)}, content_type="application/json", **self.headers()
+        )
 
         self.assertEqual(response.status_code, 200, response.content)
         self.wiki.refresh_from_db()
@@ -164,14 +194,18 @@ class WikiCoverPhotoTests(_WikiExtrasTestCase):
     def test_put_rejects_an_image_not_in_this_wikis_gallery(self) -> None:
         other_wiki = baker.make("dashboard.Wiki", location=baker.make("dashboard.Location"))
         image = baker.make(Image, profile=self.profile, wiki=other_wiki)
-        response = self.client.put(self.url("cover-photo/"), {"image_uuid": str(image.uuid)}, content_type="application/json", **self.headers())
+        response = self.client.put(
+            self.url("cover-photo/"), {"image_uuid": str(image.uuid)}, content_type="application/json", **self.headers()
+        )
 
         self.assertEqual(response.status_code, 404)
         self.wiki.refresh_from_db()
         self.assertIsNone(self.wiki.cover_photo_id)
 
     def test_put_rejects_an_unknown_image_uuid(self) -> None:
-        response = self.client.put(self.url("cover-photo/"), {"image_uuid": str(uuid4())}, content_type="application/json", **self.headers())
+        response = self.client.put(
+            self.url("cover-photo/"), {"image_uuid": str(uuid4())}, content_type="application/json", **self.headers()
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_delete_clears_the_cover_photo(self) -> None:
@@ -189,7 +223,9 @@ class WikiCoverPhotoTests(_WikiExtrasTestCase):
     def test_put_requires_wiki_write(self) -> None:
         ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.WIKI_READ.value])
         image = baker.make(Image, profile=self.profile, wiki=self.wiki)
-        response = self.client.put(self.url("cover-photo/"), {"image_uuid": str(image.uuid)}, content_type="application/json", **self.headers())
+        response = self.client.put(
+            self.url("cover-photo/"), {"image_uuid": str(image.uuid)}, content_type="application/json", **self.headers()
+        )
         self.assertEqual(response.status_code, 403)
 
 

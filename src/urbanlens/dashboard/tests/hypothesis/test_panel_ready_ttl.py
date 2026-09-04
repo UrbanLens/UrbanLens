@@ -28,10 +28,10 @@ from django.core.cache import cache
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.apis.locations.base import SlideFetch
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.apis.locations.base import SlideFetch
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, ServiceDisabledError
 from urbanlens.dashboard.services.pins.external_data import (
     FAILURE_SKIP_TTL_SECONDS,
@@ -63,7 +63,9 @@ class PanelReadyTtlTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.profile = Profile.objects.get(user=baker.make("auth.User"))
-        self.pin = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=41.35, longitude=-71.45))
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=baker.make(Location, latitude=41.35, longitude=-71.45)
+        )
         self.source = SatellitePanelSource()
         cache.delete(self.source.ready_key(self.pin))
 
@@ -83,7 +85,9 @@ class PanelReadyTtlTests(TestCase):
         ):
             self.source.fetch(self.pin)
 
-        marker_calls = [call for call in cache_set.call_args_list if call.args and call.args[0] == self.source.ready_key(self.pin)]
+        marker_calls = [
+            call for call in cache_set.call_args_list if call.args and call.args[0] == self.source.ready_key(self.pin)
+        ]
         self.assertEqual(len(marker_calls), 1, "fetch must stamp the ready marker exactly once")
         return marker_calls[0].args[2]
 

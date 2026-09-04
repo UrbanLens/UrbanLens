@@ -58,7 +58,10 @@ class BlockRevokesMapShareTests(TestCase):
 
         block_profile(self.blocker, self.blocked)
 
-        self.assertFalse(MarkupMapShare.objects.filter(pk=share.pk).exists(), "a blocked profile keeps live access to the blocker's map")
+        self.assertFalse(
+            MarkupMapShare.objects.filter(pk=share.pk).exists(),
+            "a blocked profile keeps live access to the blocker's map",
+        )
 
     def test_a_map_the_blocked_profile_shared_is_revoked_too(self) -> None:
         """Mutual disengagement, matching how blocking already treats safety partners."""
@@ -66,7 +69,10 @@ class BlockRevokesMapShareTests(TestCase):
 
         block_profile(self.blocker, self.blocked)
 
-        self.assertFalse(MarkupMapShare.objects.filter(pk=share.pk).exists(), "the blocker kept watching a map belonging to someone they blocked")
+        self.assertFalse(
+            MarkupMapShare.objects.filter(pk=share.pk).exists(),
+            "the blocker kept watching a map belonging to someone they blocked",
+        )
 
     def test_an_unrelated_share_is_untouched(self) -> None:
         """The revocation must be scoped to the two profiles involved."""
@@ -75,7 +81,9 @@ class BlockRevokesMapShareTests(TestCase):
 
         block_profile(self.blocker, self.blocked)
 
-        self.assertTrue(MarkupMapShare.objects.filter(pk=share.pk).exists(), "blocking one profile revoked an unrelated share")
+        self.assertTrue(
+            MarkupMapShare.objects.filter(pk=share.pk).exists(), "blocking one profile revoked an unrelated share"
+        )
 
     def test_an_unrelated_share_involving_the_blocked_profile_is_untouched(self) -> None:
         """Scoping must hold from the blocked profile's side too, not just the blocker's.
@@ -90,7 +98,10 @@ class BlockRevokesMapShareTests(TestCase):
 
         block_profile(self.blocker, self.blocked)
 
-        self.assertTrue(MarkupMapShare.objects.filter(pk=share.pk).exists(), "blocking revoked a share between the blocked profile and someone else")
+        self.assertTrue(
+            MarkupMapShare.objects.filter(pk=share.pk).exists(),
+            "blocking revoked a share between the blocked profile and someone else",
+        )
 
     def test_all_shares_between_the_pair_are_revoked_not_just_one(self) -> None:
         """The delete must be a bulk queryset delete, not "find one match and stop".
@@ -104,7 +115,10 @@ class BlockRevokesMapShareTests(TestCase):
 
         block_profile(self.blocker, self.blocked)
 
-        self.assertFalse(MarkupMapShare.objects.filter(pk__in=[outbound.pk, inbound.pk]).exists(), "blocking left at least one of several shares between the pair in place")
+        self.assertFalse(
+            MarkupMapShare.objects.filter(pk__in=[outbound.pk, inbound.pk]).exists(),
+            "blocking left at least one of several shares between the pair in place",
+        )
 
     def test_the_map_itself_is_not_deleted(self) -> None:
         """Only the grant goes - the owner's own map is not collateral."""
@@ -113,4 +127,6 @@ class BlockRevokesMapShareTests(TestCase):
 
         block_profile(self.blocker, self.blocked)
 
-        self.assertTrue(MarkupMap.objects.filter(pk=map_pk).exists(), "blocking deleted the blocker's own map, not just the share")
+        self.assertTrue(
+            MarkupMap.objects.filter(pk=map_pk).exists(), "blocking deleted the blocker's own map, not just the share"
+        )

@@ -44,7 +44,9 @@ class DelayedDirectMessageEmailTests(TestCase):
         self.sender = _profile("sender@example.com")
         self.recipient = _profile("recipient@example.com")
         Friendship.objects.create(from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.ACCEPTED)
-        self.message = baker.make(DirectMessage, sender=self.sender, recipient=self.recipient, body="meet me at the old mill at nine")
+        self.message = baker.make(
+            DirectMessage, sender=self.sender, recipient=self.recipient, body="meet me at the old mill at nine"
+        )
         mail.outbox.clear()
 
     def test_an_unsent_message_is_not_emailed(self) -> None:
@@ -74,7 +76,9 @@ class DelayedDirectMessageEmailTests(TestCase):
 
         send_direct_message_email_if_unread(self.message.pk)
 
-        self.assertEqual(mail.outbox, [], "the delayed email delivered a message from a sender the recipient had blocked")
+        self.assertEqual(
+            mail.outbox, [], "the delayed email delivered a message from a sender the recipient had blocked"
+        )
 
     def test_an_ordinary_unread_message_is_still_emailed(self) -> None:
         """The guard must not break the feature it is guarding."""

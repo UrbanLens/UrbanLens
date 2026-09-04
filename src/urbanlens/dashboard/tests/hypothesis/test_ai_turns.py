@@ -40,7 +40,9 @@ class TurnPollDelayTests(SimpleTestCase):
         seen = [turn_poll_delay(i) for i in range(len(TURN_POLL_INTERVAL_SECONDS) + 5)]
         self.assertEqual(seen[: len(TURN_POLL_INTERVAL_SECONDS)], list(TURN_POLL_INTERVAL_SECONDS))
         # Past the schedule's end, every further attempt gets its last value.
-        self.assertTrue(all(value == TURN_POLL_INTERVAL_SECONDS[-1] for value in seen[len(TURN_POLL_INTERVAL_SECONDS) :]))
+        self.assertTrue(
+            all(value == TURN_POLL_INTERVAL_SECONDS[-1] for value in seen[len(TURN_POLL_INTERVAL_SECONDS) :])
+        )
 
     def test_negative_attempt_is_treated_as_zero(self) -> None:
         self.assertEqual(turn_poll_delay(-5), TURN_POLL_INTERVAL_SECONDS[0])

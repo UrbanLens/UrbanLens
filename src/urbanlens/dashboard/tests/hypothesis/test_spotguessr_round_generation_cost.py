@@ -30,7 +30,9 @@ class RoundGenerationCostTests(TestCase):
         super().setUp()
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.profile = baker.make(User).profile
-        self.locations = [Location.objects.create(latitude=40.0 + n / 1000, longitude=-74.0 - n / 1000) for n in range(6)]
+        self.locations = [
+            Location.objects.create(latitude=40.0 + n / 1000, longitude=-74.0 - n / 1000) for n in range(6)
+        ]
         for location in self.locations:
             baker.make(Pin, profile=self.profile, location=location)
         self.config = spotguessr_session.GameConfig()
@@ -44,7 +46,10 @@ class RoundGenerationCostTests(TestCase):
             return None if calls["n"] <= failures else {"built": True}
 
         strategy = mock.Mock(build_round=mock.Mock(side_effect=build_round))
-        with mock.patch("urbanlens.dashboard.services.spotguessr.modes.get_strategy", return_value=strategy), mock.patch(_ELIGIBLE, wraps=eligibility.eligible_locations) as eligible:
+        with (
+            mock.patch("urbanlens.dashboard.services.spotguessr.modes.get_strategy", return_value=strategy),
+            mock.patch(_ELIGIBLE, wraps=eligibility.eligible_locations) as eligible,
+        ):
             result = spotguessr_session.generate_round_content(
                 mode="classic",
                 config=self.config,

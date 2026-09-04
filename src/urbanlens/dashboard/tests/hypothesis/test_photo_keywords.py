@@ -94,7 +94,9 @@ class GenerateKeywordsPipelineTests(TestCase):
         self.image = baker.make("dashboard.Image", profile=self.profile, _create_files=True)
 
     def _run_with(self, providers):
-        with patch("urbanlens.dashboard.plugins.registry.plugin_registry.photo_keyword_providers", return_value=providers):
+        with patch(
+            "urbanlens.dashboard.plugins.registry.plugin_registry.photo_keyword_providers", return_value=providers
+        ):
             return generate_keywords_for_image(self.image.pk)
 
     def test_stores_keywords_attributed_to_provider(self):
@@ -115,8 +117,12 @@ class GenerateKeywordsPipelineTests(TestCase):
         self._run_with([_StaticProvider()])
         baker.make("dashboard.ImageKeyword", image=self.image, source="other_plugin", keyword="untouched")
         self._run_with([_StaticProvider(keywords=[KeywordResult("fresh")])])
-        self.assertEqual({row.keyword for row in ImageKeyword.objects.filter(image=self.image, source="test_static")}, {"fresh"})
-        self.assertTrue(ImageKeyword.objects.filter(image=self.image, source="other_plugin", keyword="untouched").exists())
+        self.assertEqual(
+            {row.keyword for row in ImageKeyword.objects.filter(image=self.image, source="test_static")}, {"fresh"}
+        )
+        self.assertTrue(
+            ImageKeyword.objects.filter(image=self.image, source="other_plugin", keyword="untouched").exists()
+        )
 
     def test_user_setting_disables_generation(self):
         self.profile.generate_photo_keywords = False
@@ -136,7 +142,10 @@ class GenerateKeywordsPipelineTests(TestCase):
     def test_missing_image_is_a_noop(self):
         image_id = self.image.pk
         self.image.delete()
-        with patch("urbanlens.dashboard.plugins.registry.plugin_registry.photo_keyword_providers", return_value=[_StaticProvider()]):
+        with patch(
+            "urbanlens.dashboard.plugins.registry.plugin_registry.photo_keyword_providers",
+            return_value=[_StaticProvider()],
+        ):
             self.assertEqual(generate_keywords_for_image(image_id), {})
 
 

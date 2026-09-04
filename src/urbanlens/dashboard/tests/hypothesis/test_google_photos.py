@@ -27,7 +27,12 @@ from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
 from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.apis.photos.google import GooglePhotosGateway, PickedMediaItem, PickerSession, media_item_web_url
+from urbanlens.dashboard.services.apis.photos.google import (
+    GooglePhotosGateway,
+    PickedMediaItem,
+    PickerSession,
+    media_item_web_url,
+)
 
 
 def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None, content: bytes = b""):
@@ -45,7 +50,11 @@ def _account(**kwargs) -> GooglePhotosAccount:
 
     from django.utils import timezone
 
-    defaults = {"access_token": "access", "refresh_token": "refresh", "token_expiry": timezone.now() + datetime.timedelta(hours=1)}
+    defaults = {
+        "access_token": "access",
+        "refresh_token": "refresh",
+        "token_expiry": timezone.now() + datetime.timedelta(hours=1),
+    }
     defaults.update(kwargs)
     user = baker.make(User)
     return GooglePhotosAccount(profile=user.profile, **defaults)
@@ -60,10 +69,24 @@ class GooglePhotosGatewayTests(TestCase):
     def test_create_session_parses_polling_config(self) -> None:
         gw = self._gateway()
         gw.session.post.return_value = _mock_response(
-            json_data={"id": "sess1", "pickerUri": "https://photos.google.com/picker/sess1", "pollingConfig": {"pollInterval": "5s", "timeoutIn": "300s"}, "mediaItemsSet": False},
+            json_data={
+                "id": "sess1",
+                "pickerUri": "https://photos.google.com/picker/sess1",
+                "pollingConfig": {"pollInterval": "5s", "timeoutIn": "300s"},
+                "mediaItemsSet": False,
+            },
         )
         result = gw.create_session()
-        self.assertEqual(result, PickerSession(id="sess1", picker_uri="https://photos.google.com/picker/sess1", media_items_set=False, poll_interval_s=5, timeout_s=300))
+        self.assertEqual(
+            result,
+            PickerSession(
+                id="sess1",
+                picker_uri="https://photos.google.com/picker/sess1",
+                media_items_set=False,
+                poll_interval_s=5,
+                timeout_s=300,
+            ),
+        )
 
     def test_create_session_raises_on_error(self) -> None:
         from urbanlens.dashboard.services.core.gateway import GatewayRequestError
@@ -76,8 +99,27 @@ class GooglePhotosGatewayTests(TestCase):
     def test_list_session_media_items_follows_pagination(self) -> None:
         gw = self._gateway()
         gw.session.get.side_effect = [
-            _mock_response(json_data={"mediaItems": [{"id": "a", "mediaFile": {"baseUrl": "https://x/a", "mimeType": "image/jpeg", "filename": "a.jpg"}}], "nextPageToken": "p2"}),
-            _mock_response(json_data={"mediaItems": [{"id": "b", "mediaFile": {"baseUrl": "https://x/b", "mimeType": "image/jpeg", "filename": "b.jpg"}}]}),
+            _mock_response(
+                json_data={
+                    "mediaItems": [
+                        {
+                            "id": "a",
+                            "mediaFile": {"baseUrl": "https://x/a", "mimeType": "image/jpeg", "filename": "a.jpg"},
+                        }
+                    ],
+                    "nextPageToken": "p2",
+                }
+            ),
+            _mock_response(
+                json_data={
+                    "mediaItems": [
+                        {
+                            "id": "b",
+                            "mediaFile": {"baseUrl": "https://x/b", "mimeType": "image/jpeg", "filename": "b.jpg"},
+                        }
+                    ]
+                }
+            ),
         ]
         items = gw.list_session_media_items("sess1")
         self.assertEqual([i.id for i in items], ["a", "b"])
@@ -162,7 +204,13 @@ class PinGooglePhotosSessionTests(TestCase):
         self.account = GooglePhotosAccount.objects.create(profile=self.profile, access_token="a", refresh_token="r")
 
     def test_session_create_returns_waiting_state(self) -> None:
-        picker_session = PickerSession(id="sess1", picker_uri="https://photos.google.com/picker/sess1", media_items_set=False, poll_interval_s=5, timeout_s=300)
+        picker_session = PickerSession(
+            id="sess1",
+            picker_uri="https://photos.google.com/picker/sess1",
+            media_items_set=False,
+            poll_interval_s=5,
+            timeout_s=300,
+        )
         with mock.patch.object(GooglePhotosGateway, "create_session", return_value=picker_session):
             response = self.client.post(reverse("pin.google_photos.session.create", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
@@ -170,7 +218,13 @@ class PinGooglePhotosSessionTests(TestCase):
 
     def test_session_status_still_waiting(self) -> None:
         cache.set("ul_gphotos_session_owner_sess1", self.profile.id, 600)
-        picker_session = PickerSession(id="sess1", picker_uri="https://photos.google.com/picker/sess1", media_items_set=False, poll_interval_s=5, timeout_s=300)
+        picker_session = PickerSession(
+            id="sess1",
+            picker_uri="https://photos.google.com/picker/sess1",
+            media_items_set=False,
+            poll_interval_s=5,
+            timeout_s=300,
+        )
         with mock.patch.object(GooglePhotosGateway, "get_session", return_value=picker_session):
             response = self.client.get(reverse("pin.google_photos.session.status", args=[self.pin.slug, "sess1"]))
         self.assertEqual(response.status_code, 200)
@@ -178,8 +232,16 @@ class PinGooglePhotosSessionTests(TestCase):
 
     def test_session_status_ready_lists_all_picked_items_as_candidates(self) -> None:
         cache.set("ul_gphotos_session_owner_sess1", self.profile.id, 600)
-        picker_session = PickerSession(id="sess1", picker_uri="https://photos.google.com/picker/sess1", media_items_set=True, poll_interval_s=5, timeout_s=300)
-        item = PickedMediaItem(id="item1", base_url="https://x/item1", mime_type="image/jpeg", filename="item1.jpg", create_time=None)
+        picker_session = PickerSession(
+            id="sess1",
+            picker_uri="https://photos.google.com/picker/sess1",
+            media_items_set=True,
+            poll_interval_s=5,
+            timeout_s=300,
+        )
+        item = PickedMediaItem(
+            id="item1", base_url="https://x/item1", mime_type="image/jpeg", filename="item1.jpg", create_time=None
+        )
         with (
             mock.patch.object(GooglePhotosGateway, "get_session", return_value=picker_session),
             mock.patch.object(GooglePhotosGateway, "list_session_media_items", return_value=[item]),
@@ -189,7 +251,9 @@ class PinGooglePhotosSessionTests(TestCase):
 
     def test_status_for_unowned_session_is_404(self) -> None:
         # Never registered as owned by this profile.
-        response = self.client.get(reverse("pin.google_photos.session.status", args=[self.pin.slug, "someone-elses-session"]))
+        response = self.client.get(
+            reverse("pin.google_photos.session.status", args=[self.pin.slug, "someone-elses-session"])
+        )
         self.assertEqual(response.status_code, 404)
 
 
@@ -212,7 +276,9 @@ class ImportGooglePhotosTaskTests(TestCase):
         cache.set(session_items_cache_key(session_id), items, 3600)
 
     def test_imports_a_new_item_and_logs_a_visit(self) -> None:
-        self._seed_cache("sess1", {"item1": {"base_url": "https://x/item1", "mime_type": "image/jpeg", "filename": "item1.jpg"}})
+        self._seed_cache(
+            "sess1", {"item1": {"base_url": "https://x/item1", "mime_type": "image/jpeg", "filename": "item1.jpg"}}
+        )
         with (
             mock.patch.object(GooglePhotosGateway, "download_media_item", return_value=b"jpeg-bytes"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
@@ -233,7 +299,9 @@ class ImportGooglePhotosTaskTests(TestCase):
         content = b"already-here"
         checksum = hashlib.sha256(content).hexdigest()
         baker.make(Image, pin=self.pin, profile=self.profile, checksum=checksum)
-        self._seed_cache("sess1", {"dup": {"base_url": "https://x/dup", "mime_type": "image/jpeg", "filename": "dup.jpg"}})
+        self._seed_cache(
+            "sess1", {"dup": {"base_url": "https://x/dup", "mime_type": "image/jpeg", "filename": "dup.jpg"}}
+        )
 
         with (
             mock.patch.object(GooglePhotosGateway, "download_media_item", return_value=content),
@@ -263,7 +331,9 @@ class ImportGooglePhotosTaskTests(TestCase):
         """Regression test: this bulk-import path used to check-then-create with no
         locking at all, unlike every interactive upload path (see
         per_profile_upload_lock's docstring)."""
-        self._seed_cache("sess1", {"item1": {"base_url": "https://x/item1", "mime_type": "image/jpeg", "filename": "item1.jpg"}})
+        self._seed_cache(
+            "sess1", {"item1": {"base_url": "https://x/item1", "mime_type": "image/jpeg", "filename": "item1.jpg"}}
+        )
         with (
             mock.patch.object(GooglePhotosGateway, "download_media_item", return_value=b"jpeg-bytes"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),

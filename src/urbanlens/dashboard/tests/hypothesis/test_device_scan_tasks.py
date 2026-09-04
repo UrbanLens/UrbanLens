@@ -96,7 +96,10 @@ class ProcessDeviceScanUploadTaskTests(_DeviceScanWikiTestCase):
 
         with (
             patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.device_scan.clustering.recompute_wiki_device_markers", side_effect=RuntimeError("boom")),
+            patch(
+                "urbanlens.dashboard.services.device_scan.clustering.recompute_wiki_device_markers",
+                side_effect=RuntimeError("boom"),
+            ),
         ):
             result = process_device_scan_upload(upload.pk)
 
@@ -195,7 +198,11 @@ class ProcessScanUploadAbsenceRoutingTests(_DeviceScanWikiTestCase):
         upload = ingest_scan_upload(
             None,
             client_session_uuid="",
-            devices=[_device_dict(detected=False, expected_marker_uuid=None, estimated_latitude=50.0, estimated_longitude=50.0)],
+            devices=[
+                _device_dict(
+                    detected=False, expected_marker_uuid=None, estimated_latitude=50.0, estimated_longitude=50.0
+                )
+            ],
         )
 
         process_scan_upload(upload)

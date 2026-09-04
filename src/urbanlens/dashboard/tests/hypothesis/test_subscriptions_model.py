@@ -10,7 +10,12 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription
-from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, active_subscription_roles, user_has_feature
+from urbanlens.dashboard.models.subscriptions import (
+    SiteFeature,
+    SubscriptionRole,
+    active_subscription_roles,
+    user_has_feature,
+)
 
 
 class VipRoleSeedTests(TestCase):
@@ -57,20 +62,44 @@ class PaidSubscriptionFeatureGrantTests(TestCase):
         self.role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)
 
     def test_active_threshold_met_subscription_grants_the_feature(self) -> None:
-        baker.make(RoleSubscription, user=self.user, role=self.role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True)
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.ACTIVE,
+            threshold_met=True,
+        )
         self.assertTrue(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
 
     def test_active_threshold_met_subscription_is_in_active_subscription_roles(self) -> None:
-        baker.make(RoleSubscription, user=self.user, role=self.role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True)
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.ACTIVE,
+            threshold_met=True,
+        )
         self.assertIn(self.role, active_subscription_roles(self.user))
 
     def test_threshold_not_met_does_not_grant_the_feature(self) -> None:
-        baker.make(RoleSubscription, user=self.user, role=self.role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=False)
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.ACTIVE,
+            threshold_met=False,
+        )
         self.assertFalse(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
         self.assertNotIn(self.role, active_subscription_roles(self.user))
 
     def test_canceled_subscription_does_not_grant_the_feature(self) -> None:
-        baker.make(RoleSubscription, user=self.user, role=self.role, status=BillingSubscriptionStatus.CANCELED, threshold_met=True)
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.CANCELED,
+            threshold_met=True,
+        )
         self.assertFalse(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
         self.assertNotIn(self.role, active_subscription_roles(self.user))
 

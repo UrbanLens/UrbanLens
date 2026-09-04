@@ -30,7 +30,11 @@ from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.trips.trip_access import can_perform, get_trip_for_viewer, has_joined, is_organizer
-from urbanlens.dashboard.services.trips.trip_activities import build_activity_rows, complete_activity, compute_activity_index_map
+from urbanlens.dashboard.services.trips.trip_activities import (
+    build_activity_rows,
+    complete_activity,
+    compute_activity_index_map,
+)
 from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripPermissionError
 from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
 from urbanlens.dashboard.services.trips.trip_membership import resolve_trip_member
@@ -121,7 +125,9 @@ class ActivityIndexNumberingPropertyTests(SimpleTestCase):
         ),
     )
     @settings(max_examples=200, deadline=None)
-    def test_only_visible_uncompleted_located_activities_are_numbered(self, specs: list[tuple[bool, bool, str]]) -> None:
+    def test_only_visible_uncompleted_located_activities_are_numbered(
+        self, specs: list[tuple[bool, bool, str]]
+    ) -> None:
         """Exactly the activities that earn a marker get one."""
         activities = [
             _StubActivity(
@@ -134,7 +140,11 @@ class ActivityIndexNumberingPropertyTests(SimpleTestCase):
             for index, (has_coords, hidden, status) in enumerate(specs)
         ]
         index_map = compute_activity_index_map(activities)
-        expected = {act.id for act in activities if act.lat_override is not None and not act.location_hidden and act.status != TripActivity.STATUS_COMPLETED}
+        expected = {
+            act.id
+            for act in activities
+            if act.lat_override is not None and not act.location_hidden and act.status != TripActivity.STATUS_COMPLETED
+        }
         self.assertEqual(set(index_map), expected)
 
     @given(
@@ -261,7 +271,11 @@ class ResolveTripMemberTests(TestCase):
 
     def test_a_real_profile_off_the_trip_is_not_found(self) -> None:
         """Regression guard for the global profile-enumeration defect."""
-        for kwargs in ({"slug": self.outsider.slug}, {"profile_id": self.outsider.pk}, {"slug": str(self.outsider.uuid)}):
+        for kwargs in (
+            {"slug": self.outsider.slug},
+            {"profile_id": self.outsider.pk},
+            {"slug": str(self.outsider.uuid)},
+        ):
             with self.subTest(**kwargs), self.assertRaises(TripNotFoundError):
                 resolve_trip_member(self.trip, **kwargs)
 
@@ -290,7 +304,9 @@ class BuildTripMapPointsInvariantTests(TestCase):
         location = None
         if located:
             offset = next(self._coords)
-            location = Location.objects.create(latitude=40 + offset * 0.01, longitude=-80 - offset * 0.01, official_name=f"Place {offset}")
+            location = Location.objects.create(
+                latitude=40 + offset * 0.01, longitude=-80 - offset * 0.01, official_name=f"Place {offset}"
+            )
         return TripActivity.objects.create(
             trip=self.trip,
             location=location,

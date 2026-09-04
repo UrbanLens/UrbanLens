@@ -25,7 +25,12 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinStatus
+from urbanlens.dashboard.models.safety.model import (
+    SafetyCheckin,
+    SafetyCheckinContact,
+    SafetyCheckinPartner,
+    SafetyCheckinStatus,
+)
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.visits.safety import create_checkin, save_contact_defaults
@@ -69,7 +74,9 @@ class _SafetyApiTestCase(TestCase):
         ``SafetyCheckin.objects.active()`` - the queryset enforcing one active
         check-in per scope - keys off status alone.
         """
-        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(status=SafetyCheckinStatus.CHECKED_IN, resolved_at=timezone.now())
+        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(
+            status=SafetyCheckinStatus.CHECKED_IN, resolved_at=timezone.now()
+        )
 
 
 class SafetyScopeTests(_SafetyApiTestCase):
@@ -86,7 +93,9 @@ class SafetyScopeTests(_SafetyApiTestCase):
 
     def test_patch_requires_safety_write(self) -> None:
         ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.SAFETY_READ.value])
-        response = self.client.patch(self.detail_url, {"title": "x"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.detail_url, {"title": "x"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_delete_requires_safety_write(self) -> None:
@@ -122,7 +131,9 @@ class SafetyOwnerIsolationTests(_SafetyApiTestCase):
             checkin_by=timezone.now() + datetime.timedelta(hours=3),
             grace_period=datetime.timedelta(hours=1),
         )
-        self.other_url = reverse("external_api:safety.checkins.detail", kwargs={"checkin_slug": self.other_checkin.slug})
+        self.other_url = reverse(
+            "external_api:safety.checkins.detail", kwargs={"checkin_slug": self.other_checkin.slug}
+        )
 
     def test_other_profiles_checkin_is_404_not_403(self) -> None:
         """A 403 would confirm the slug names a real check-in belonging to someone."""
@@ -130,7 +141,9 @@ class SafetyOwnerIsolationTests(_SafetyApiTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_other_profiles_checkin_cannot_be_patched(self) -> None:
-        response = self.client.patch(self.other_url, {"title": "Hijacked"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.other_url, {"title": "Hijacked"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 404)
         self.other_checkin.refresh_from_db()
         self.assertEqual(self.other_checkin.title, "Someone else's trip")
@@ -186,7 +199,9 @@ class SafetyContactTokenExposureTests(_SafetyApiTestCase):
         self._assert_no_token_anywhere(self.client.get(self.list_url, **_bearer(self.raw_key)).json())
 
     def test_patch_payload_has_no_contact_token(self) -> None:
-        response = self.client.patch(self.detail_url, {"plan_details": "Updated"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.detail_url, {"plan_details": "Updated"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self._assert_no_token_anywhere(response.json())
 
     def test_contact_defaults_payload_has_no_contact_token(self) -> None:
@@ -411,7 +426,9 @@ class SafetyPartnerTests(_SafetyApiTestCase):
         self.partners_url = reverse("external_api:safety.checkins.partners", kwargs={"checkin_slug": self.checkin.slug})
 
     def _invite(self, username: str):
-        return self.client.post(self.partners_url, {"username": username}, content_type="application/json", **_bearer(self.raw_key))
+        return self.client.post(
+            self.partners_url, {"username": username}, content_type="application/json", **_bearer(self.raw_key)
+        )
 
     def test_unknown_username_is_400_with_the_services_own_message(self) -> None:
         response = self._invite("nobody-here")
@@ -464,14 +481,20 @@ class SafetyPartnerTests(_SafetyApiTestCase):
         self._invite("apartner")
         partner = SafetyCheckinPartner.objects.get(checkin=self.checkin)
 
-        url = reverse("external_api:safety.checkins.partners.detail", kwargs={"checkin_slug": self.checkin.slug, "partner_id": partner.pk})
+        url = reverse(
+            "external_api:safety.checkins.partners.detail",
+            kwargs={"checkin_slug": self.checkin.slug, "partner_id": partner.pk},
+        )
         response = self.client.delete(url, **_bearer(self.raw_key))
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(SafetyCheckinPartner.objects.filter(pk=partner.pk).exists())
 
     def test_removing_another_checkins_partner_is_404(self) -> None:
-        url = reverse("external_api:safety.checkins.partners.detail", kwargs={"checkin_slug": self.checkin.slug, "partner_id": 999999})
+        url = reverse(
+            "external_api:safety.checkins.partners.detail",
+            kwargs={"checkin_slug": self.checkin.slug, "partner_id": 999999},
+        )
         self.assertEqual(self.client.delete(url, **_bearer(self.raw_key)).status_code, 404)
 
 
@@ -487,14 +510,20 @@ class SafetyPreferencesApiTests(_SafetyApiTestCase):
         self.assertIsInstance(payload["default_grace_period_seconds"], int)
 
     def test_patch_is_partial(self) -> None:
-        self.client.patch(self.url, {"default_message": "Call me"}, content_type="application/json", **_bearer(self.raw_key))
-        payload = self.client.patch(self.url, {"auto_delete_after_days": 30}, content_type="application/json", **_bearer(self.raw_key)).json()
+        self.client.patch(
+            self.url, {"default_message": "Call me"}, content_type="application/json", **_bearer(self.raw_key)
+        )
+        payload = self.client.patch(
+            self.url, {"auto_delete_after_days": 30}, content_type="application/json", **_bearer(self.raw_key)
+        ).json()
 
         self.assertEqual(payload["default_message"], "Call me")
         self.assertEqual(payload["auto_delete_after_days"], 30)
 
     def test_grace_period_floor_is_enforced(self) -> None:
-        response = self.client.patch(self.url, {"default_grace_period_seconds": 10}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self.url, {"default_grace_period_seconds": 10}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 400)
 
 
@@ -551,7 +580,9 @@ class SafetyCheckinMapsTests(_SafetyApiTestCase):
 
         own_map = MarkupMap.objects.create(profile=self.profile, title="Mine")
 
-        response = self.client.post(self.maps_url, {"map_uuid": str(own_map.uuid)}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.post(
+            self.maps_url, {"map_uuid": str(own_map.uuid)}, content_type="application/json", **_bearer(self.raw_key)
+        )
 
         self.assertEqual(response.status_code, 200)
         body = response.json()

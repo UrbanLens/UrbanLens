@@ -43,7 +43,9 @@ def _jpeg_bytes(width: int = 64, height: int = 48) -> bytes:
 
 def _make_location() -> Location:
     offset = next(_coordinate_counter)
-    return baker.make(Location, latitude=f"42.{650_000 + offset}", longitude=f"-73.{760_000 + offset}", google_place=None)
+    return baker.make(
+        Location, latitude=f"42.{650_000 + offset}", longitude=f"-73.{760_000 + offset}", google_place=None
+    )
 
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
@@ -66,7 +68,9 @@ class SaveEnrichedImageTests(TestCase):
 
     def test_creates_wiki_attached_profile_less_image(self) -> None:
         location = _make_location()
-        image = photo_enrichment._save_enriched_image(location, _jpeg_bytes(1200, 900), source=ImageSource.GOOGLE_MAPS, max_dimension=800)
+        image = photo_enrichment._save_enriched_image(
+            location, _jpeg_bytes(1200, 900), source=ImageSource.GOOGLE_MAPS, max_dimension=800
+        )
         self.assertEqual(image.location_id, location.pk)
         self.assertIsNotNone(image.wiki_id)
         self.assertIsNone(image.profile_id)
@@ -78,7 +82,9 @@ class SaveEnrichedImageTests(TestCase):
         # scanned and re-encoded - and a profile-less row has no owner to be
         # visible to in the meantime, so this hides it from everyone.
         location = _make_location()
-        image = photo_enrichment._save_enriched_image(location, _jpeg_bytes(1200, 900), source=ImageSource.GOOGLE_MAPS, max_dimension=800)
+        image = photo_enrichment._save_enriched_image(
+            location, _jpeg_bytes(1200, 900), source=ImageSource.GOOGLE_MAPS, max_dimension=800
+        )
         self.assertTrue(image.pending_scan)
         self.assertFalse(self._process(image).pending_scan)
 
@@ -87,7 +93,11 @@ class SaveEnrichedImageTests(TestCase):
         # therefore no plan policy - without it the task skipped them entirely
         # and the provider's full-size original stayed on disk.
         location = _make_location()
-        image = self._process(photo_enrichment._save_enriched_image(location, _jpeg_bytes(1200, 900), source=ImageSource.GOOGLE_MAPS, max_dimension=800))
+        image = self._process(
+            photo_enrichment._save_enriched_image(
+                location, _jpeg_bytes(1200, 900), source=ImageSource.GOOGLE_MAPS, max_dimension=800
+            )
+        )
         self.assertTrue(image.image.name.endswith(".webp"))
         with image.image.open("rb") as fh:
             pil = PILImage.open(fh)
@@ -97,7 +107,9 @@ class SaveEnrichedImageTests(TestCase):
     def test_reuses_an_already_existing_wiki(self) -> None:
         location = _make_location()
         wiki = baker.make(Wiki, location=location)
-        image = photo_enrichment._save_enriched_image(location, _jpeg_bytes(), source=ImageSource.GOOGLE_SATELLITE, max_dimension=800)
+        image = photo_enrichment._save_enriched_image(
+            location, _jpeg_bytes(), source=ImageSource.GOOGLE_SATELLITE, max_dimension=800
+        )
         self.assertEqual(image.wiki_id, wiki.pk)
 
 
@@ -119,9 +131,15 @@ class PlacePhotoEnrichmentSourceTests(TestCase):
             self.assertTrue(self.source.gate())
 
     def test_service_keys_prefers_redata_when_configured(self) -> None:
-        with mock.patch.object(app_settings, "redata_api_url", "https://redata.example.test"), mock.patch.object(app_settings, "redata_api_key", "k"):
+        with (
+            mock.patch.object(app_settings, "redata_api_url", "https://redata.example.test"),
+            mock.patch.object(app_settings, "redata_api_key", "k"),
+        ):
             self.assertEqual(self.source.service_keys, ("redata_places",))
-        with mock.patch.object(app_settings, "redata_api_url", None), mock.patch.object(app_settings, "redata_api_key", None):
+        with (
+            mock.patch.object(app_settings, "redata_api_url", None),
+            mock.patch.object(app_settings, "redata_api_key", None),
+        ):
             self.assertEqual(self.source.service_keys, ("google_places",))
 
     def test_missing_filter_excludes_already_attempted_locations(self) -> None:
@@ -180,7 +198,9 @@ class PlacePhotoEnrichmentSourceTests(TestCase):
 
     def test_reuses_a_fresh_google_maps_photos_cache_instead_of_refetching(self) -> None:
         location = _make_location()
-        LocationCache.set(location, photo_enrichment._PLACE_PHOTO_LIST_CACHE_SOURCE, {"place_id": "p1", "photo_names": ["x"]})
+        LocationCache.set(
+            location, photo_enrichment._PLACE_PHOTO_LIST_CACHE_SOURCE, {"place_id": "p1", "photo_names": ["x"]}
+        )
         with (
             mock.patch(f"{_PLACES_MODULE}.find_nearest_place_photos") as find_mock,
             mock.patch(f"{_PLACES_MODULE}.download_photo", return_value=(_jpeg_bytes(), "image/jpeg")),
@@ -270,7 +290,9 @@ class GetSatelliteImageBytesTests(SimpleTestCase):
         from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide
 
         gateway = GoogleMapsGateway(api_key="key")
-        slide = SatelliteSlide(img_src="data:image/jpeg;base64,aGVsbG8=", source="Google Maps", date="Current", detail="")
+        slide = SatelliteSlide(
+            img_src="data:image/jpeg;base64,aGVsbG8=", source="Google Maps", date="Current", detail=""
+        )
         with mock.patch.object(gateway, "_generate_satellite_slides", return_value=iter([slide])):
             self.assertEqual(gateway.get_satellite_image_bytes(1.0, 2.0), b"hello")
 

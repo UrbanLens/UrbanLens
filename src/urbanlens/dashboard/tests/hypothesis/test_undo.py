@@ -37,7 +37,9 @@ def _expire(undo_action: UndoAction) -> None:
     refresh - production callers always re-fetch the row, so the staleness
     is a test-fixture artifact, not something restore() needs to guard.
     """
-    UndoAction.objects.filter(pk=undo_action.pk).update(created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1))
+    UndoAction.objects.filter(pk=undo_action.pk).update(
+        created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1)
+    )
     undo_action.refresh_from_db()
 
 
@@ -256,7 +258,9 @@ class SavedFilterUndoHandlerTests(TestCase):
         self.profile = self.user.profile
 
     def test_restores_fields(self) -> None:
-        saved_filter = baker.make(SavedFilter, profile=self.profile, name="4-star tags", icon="star", criteria={"min_rating": 4}, order=2)
+        saved_filter = baker.make(
+            SavedFilter, profile=self.profile, name="4-star tags", icon="star", criteria={"min_rating": 4}, order=2
+        )
 
         undo_action = stash_for_undo("saved_filter", [saved_filter], self.profile)
         saved_filter.delete()
@@ -444,7 +448,10 @@ class UndoDescriptionFitsItsColumnTests(TestCase):
         from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
 
         limit = Label._meta.get_field("name").max_length
-        labels = [baker.make(Label, profile=self.profile, kind=KIND_TAG, name=f"{index}" + "y" * (limit - 1)) for index in range(3)]
+        labels = [
+            baker.make(Label, profile=self.profile, kind=KIND_TAG, name=f"{index}" + "y" * (limit - 1))
+            for index in range(3)
+        ]
 
         action = stash_for_undo(LABEL_MODEL_LABEL, labels, self.profile)
 

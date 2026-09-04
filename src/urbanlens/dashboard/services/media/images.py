@@ -542,7 +542,7 @@ def extract_taken_at(image_file: IO[bytes]) -> datetime | None:
     if not raw_value:
         return None
     try:
-        naive = datetime.strptime(str(raw_value), _EXIF_DATETIME_FORMAT)
+        naive = datetime.strptime(str(raw_value), _EXIF_DATETIME_FORMAT)  # noqa: DTZ007  # EXIF carries no zone; make_aware() applies one below
     except ValueError:
         logger.debug("Unparseable EXIF DateTimeOriginal value: %s", raw_value)
         return None

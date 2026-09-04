@@ -50,4 +50,6 @@ class GpsRecenterGuardRenderedTests(TestCase):
         self.assertNotEqual(capture_index, -1, "Guard variable not found in rendered page")
         callback_index = body.find("navigator.geolocation.getCurrentPosition(", capture_index)
         self.assertNotEqual(callback_index, -1, "geolocation call not found after the guard capture")
-        self.assertLess(capture_index, callback_index, "Guard must be captured before the async geolocation call starts")
+        self.assertLess(
+            capture_index, callback_index, "Guard must be captured before the async geolocation call starts"
+        )

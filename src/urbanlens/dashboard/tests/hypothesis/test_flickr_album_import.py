@@ -28,11 +28,18 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.images.model import Image, ImageSource
-from urbanlens.dashboard.services.apis.flickr.public import FlickrAlbumPhoto, FlickrPublicGateway, parse_album_url, photo_web_url
+from urbanlens.dashboard.services.apis.flickr.public import (
+    FlickrAlbumPhoto,
+    FlickrPublicGateway,
+    parse_album_url,
+    photo_web_url,
+)
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 
-def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None, content: bytes = b"", headers: dict | None = None):
+def _mock_response(
+    *, ok: bool = True, status_code: int = 200, json_data=None, content: bytes = b"", headers: dict | None = None
+):
     resp = mock.MagicMock()
     resp.ok = ok
     resp.status_code = status_code
@@ -50,12 +57,28 @@ _GET_PHOTOS_OK = {
         "ownername": "somebody",
         "total": "2",
         "photo": [
-            {"id": "1", "title": "First", "url_z": "https://example.com/1_z.jpg", "url_o": "https://example.com/1_o.jpg", "ownername": "somebody", "datetaken": "2024-01-01 00:00:00"},
-            {"id": "2", "title": "Second", "url_z": "https://example.com/2_z.jpg", "ownername": "somebody", "datetaken": "2024-01-02 00:00:00"},
+            {
+                "id": "1",
+                "title": "First",
+                "url_z": "https://example.com/1_z.jpg",
+                "url_o": "https://example.com/1_o.jpg",
+                "ownername": "somebody",
+                "datetaken": "2024-01-01 00:00:00",
+            },
+            {
+                "id": "2",
+                "title": "Second",
+                "url_z": "https://example.com/2_z.jpg",
+                "ownername": "somebody",
+                "datetaken": "2024-01-02 00:00:00",
+            },
         ],
     },
 }
-_GET_INFO_OK = {"stat": "ok", "photoset": {"id": "72177720000000001", "username": "somebody", "title": {"_content": "My Album"}}}
+_GET_INFO_OK = {
+    "stat": "ok",
+    "photoset": {"id": "72177720000000001", "username": "somebody", "title": {"_content": "My Album"}},
+}
 
 
 class ParseAlbumUrlTests(SimpleTestCase):
@@ -94,7 +117,9 @@ class FlickrPublicGatewayTests(TestCase):
     def test_get_album_with_raw_nsid_skips_lookup_call(self) -> None:
         gw = self._gateway()
         gw.session.get.side_effect = [_mock_response(json_data=_GET_PHOTOS_OK), _mock_response(json_data=_GET_INFO_OK)]
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.public._consumer_credentials", return_value=("key", "secret")):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.flickr.public._consumer_credentials", return_value=("key", "secret")
+        ):
             album = gw.get_album("https://www.flickr.com/photos/12345678@N00/albums/72177720000000001")
 
         self.assertEqual(gw.session.get.call_count, 2)  # getPhotos + getInfo, no lookupUser
@@ -114,7 +139,9 @@ class FlickrPublicGatewayTests(TestCase):
             _mock_response(json_data=_GET_PHOTOS_OK),
             _mock_response(json_data=_GET_INFO_OK),
         ]
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.public._consumer_credentials", return_value=("key", "secret")):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.flickr.public._consumer_credentials", return_value=("key", "secret")
+        ):
             album = gw.get_album("https://www.flickr.com/photos/someuser/albums/72177720000000001")
         self.assertEqual(gw.session.get.call_count, 3)  # lookupUser + getPhotos + getInfo
         self.assertEqual(album.owner_nsid, "12345678@N00")
@@ -127,19 +154,31 @@ class FlickrPublicGatewayTests(TestCase):
     def test_private_or_missing_album_raises_gateway_error(self) -> None:
         gw = self._gateway()
         gw.session.get.return_value = _mock_response(json_data={"stat": "fail", "message": "Photoset not found"})
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.public._consumer_credentials", return_value=("key", "secret")), self.assertRaises(GatewayRequestError):
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.apis.flickr.public._consumer_credentials", return_value=("key", "secret")
+            ),
+            self.assertRaises(GatewayRequestError),
+        ):
             gw.get_album("https://www.flickr.com/photos/12345678@N00/albums/1")
 
     def test_http_error_status_raises(self) -> None:
         gw = self._gateway()
         gw.session.get.return_value = _mock_response(ok=False, status_code=500)
-        with mock.patch("urbanlens.dashboard.services.apis.flickr.public._consumer_credentials", return_value=("key", "secret")), self.assertRaises(GatewayRequestError):
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.apis.flickr.public._consumer_credentials", return_value=("key", "secret")
+            ),
+            self.assertRaises(GatewayRequestError),
+        ):
             gw.get_album("https://www.flickr.com/photos/12345678@N00/albums/1")
 
     def test_download_photo_returns_bytes(self) -> None:
         gw = self._gateway()
         gw.session.get.return_value = _mock_response(content=b"jpeg-bytes", headers={"Content-Type": "image/jpeg"})
-        photo = FlickrAlbumPhoto(id="1", title="", thumbnail_url=None, download_url="https://example.com/1_o.jpg", author=None, taken_at=None)
+        photo = FlickrAlbumPhoto(
+            id="1", title="", thumbnail_url=None, download_url="https://example.com/1_o.jpg", author=None, taken_at=None
+        )
         content, _filename, content_type = gw.download_photo(photo)
         self.assertEqual(content, b"jpeg-bytes")
         self.assertEqual(content_type, "image/jpeg")
@@ -171,7 +210,10 @@ class PinFlickrAlbumLookupViewTests(TestCase):
 
     def test_not_configured_shows_an_error(self) -> None:
         with mock.patch("urbanlens.dashboard.controllers.flickr.flickr_is_configured", return_value=False):
-            response = self.client.post(reverse("pin.flickr_album.lookup", args=[self.pin.slug]), {"album_url": "https://www.flickr.com/photos/x/albums/1"})
+            response = self.client.post(
+                reverse("pin.flickr_album.lookup", args=[self.pin.slug]),
+                {"album_url": "https://www.flickr.com/photos/x/albums/1"},
+            )
         self.assertContains(response, "not configured")
 
     def test_valid_album_flags_already_imported_photo(self) -> None:
@@ -187,11 +229,27 @@ class PinFlickrAlbumLookupViewTests(TestCase):
                 owner_username="somebody",
                 total=2,
                 photos=[
-                    FlickrAlbumPhoto(id="1", title="", thumbnail_url="https://example.com/1_z.jpg", download_url="https://example.com/1_o.jpg", author=None, taken_at=None),
-                    FlickrAlbumPhoto(id="2", title="", thumbnail_url="https://example.com/2_z.jpg", download_url="https://example.com/2_o.jpg", author=None, taken_at=None),
+                    FlickrAlbumPhoto(
+                        id="1",
+                        title="",
+                        thumbnail_url="https://example.com/1_z.jpg",
+                        download_url="https://example.com/1_o.jpg",
+                        author=None,
+                        taken_at=None,
+                    ),
+                    FlickrAlbumPhoto(
+                        id="2",
+                        title="",
+                        thumbnail_url="https://example.com/2_z.jpg",
+                        download_url="https://example.com/2_o.jpg",
+                        author=None,
+                        taken_at=None,
+                    ),
                 ],
             )
-            response = self.client.post(reverse("pin.flickr_album.lookup", args=[self.pin.slug]), {"album_url": album_url})
+            response = self.client.post(
+                reverse("pin.flickr_album.lookup", args=[self.pin.slug]), {"album_url": album_url}
+            )
         assets = response.context["assets"]
         self.assertTrue(assets[0]["already_imported"])
         self.assertFalse(assets[1]["already_imported"])
@@ -201,7 +259,10 @@ class PinFlickrAlbumLookupViewTests(TestCase):
             mock.patch("urbanlens.dashboard.controllers.flickr.flickr_is_configured", return_value=True),
             mock.patch.object(FlickrPublicGateway, "get_album", side_effect=GatewayRequestError("Photoset not found")),
         ):
-            response = self.client.post(reverse("pin.flickr_album.lookup", args=[self.pin.slug]), {"album_url": "https://www.flickr.com/photos/x/albums/1"})
+            response = self.client.post(
+                reverse("pin.flickr_album.lookup", args=[self.pin.slug]),
+                {"album_url": "https://www.flickr.com/photos/x/albums/1"},
+            )
         self.assertContains(response, "Photoset not found")
 
 
@@ -213,7 +274,10 @@ class PinFlickrAlbumImportViewTests(TestCase):
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile)
 
     def test_no_photos_selected_is_rejected(self) -> None:
-        response = self.client.post(reverse("pin.flickr_album.import", args=[self.pin.slug]), {"album_url": "https://www.flickr.com/photos/x/albums/1"})
+        response = self.client.post(
+            reverse("pin.flickr_album.import", args=[self.pin.slug]),
+            {"album_url": "https://www.flickr.com/photos/x/albums/1"},
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_enqueues_the_import_task(self) -> None:
@@ -226,7 +290,9 @@ class PinFlickrAlbumImportViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         args, _kwargs = mock_enqueue.call_args
         self.assertEqual(args[0], tasks.import_flickr_album_photos)
-        self.assertEqual(args[1:], ("pin", self.pin.pk, self.profile.pk, "https://www.flickr.com/photos/x/albums/1", ["1", "2"]))
+        self.assertEqual(
+            args[1:], ("pin", self.pin.pk, self.profile.pk, "https://www.flickr.com/photos/x/albums/1", ["1", "2"])
+        )
 
 
 class WikiFlickrAlbumViewTests(TestCase):
@@ -243,7 +309,10 @@ class WikiFlickrAlbumViewTests(TestCase):
     def test_unpinned_location_is_a_404(self) -> None:
         other_location = baker.make("dashboard.Location")
         other_wiki = baker.make("dashboard.Wiki", location=other_location)
-        response = self.client.post(reverse("location.wiki.flickr_album.lookup", args=[other_wiki.location.slug]), {"album_url": "https://www.flickr.com/photos/x/albums/1"})
+        response = self.client.post(
+            reverse("location.wiki.flickr_album.lookup", args=[other_wiki.location.slug]),
+            {"album_url": "https://www.flickr.com/photos/x/albums/1"},
+        )
         self.assertEqual(response.status_code, 404)
 
     def test_enqueues_the_import_task_with_wiki_target(self) -> None:
@@ -256,7 +325,9 @@ class WikiFlickrAlbumViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         args, _kwargs = mock_enqueue.call_args
         self.assertEqual(args[0], tasks.import_flickr_album_photos)
-        self.assertEqual(args[1:], ("wiki", self.wiki.pk, self.profile.pk, "https://www.flickr.com/photos/x/albums/1", ["1"]))
+        self.assertEqual(
+            args[1:], ("wiki", self.wiki.pk, self.profile.pk, "https://www.flickr.com/photos/x/albums/1", ["1"])
+        )
 
 
 class ImportFlickrAlbumPhotosTaskTests(TestCase):
@@ -269,7 +340,14 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
         self.wiki = baker.make("dashboard.Wiki", location=self.location)
         self.album_url = "https://www.flickr.com/photos/12345678@N00/albums/1"
-        self.photo = FlickrAlbumPhoto(id="1", title="A Photo", thumbnail_url="https://example.com/1_z.jpg", download_url="https://example.com/1_o.jpg", author="somebody", taken_at=None)
+        self.photo = FlickrAlbumPhoto(
+            id="1",
+            title="A Photo",
+            thumbnail_url="https://example.com/1_z.jpg",
+            download_url="https://example.com/1_o.jpg",
+            author="somebody",
+            taken_at=None,
+        )
 
     def _fake_album(self, photos=None):
         return mock.MagicMock(owner_nsid="12345678@N00", photos=photos if photos is not None else [self.photo])
@@ -277,7 +355,9 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
     def test_imports_onto_a_pin(self) -> None:
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
-            mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
+            mock.patch.object(
+                FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")
+            ),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
@@ -293,7 +373,9 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
     def test_imports_onto_a_wiki(self) -> None:
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
-            mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
+            mock.patch.object(
+                FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")
+            ),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
@@ -306,7 +388,9 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
     def test_does_not_log_a_visit(self) -> None:
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
-            mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
+            mock.patch.object(
+                FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")
+            ),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch("urbanlens.dashboard.services.memories.photos.log_visit_on_pin") as mock_log_visit,
@@ -316,10 +400,18 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
 
     def test_duplicate_checksum_is_skipped(self) -> None:
         checksum = hashlib.sha256(b"jpeg-bytes").hexdigest()
-        baker.make(Image, pin=self.pin, profile=self.profile, checksum=checksum, image=ContentFile(b"existing", name="existing.jpg"))
+        baker.make(
+            Image,
+            pin=self.pin,
+            profile=self.profile,
+            checksum=checksum,
+            image=ContentFile(b"existing", name="existing.jpg"),
+        )
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
-            mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
+            mock.patch.object(
+                FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
@@ -337,8 +429,12 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
     def test_quota_exceeded_is_counted_as_failed(self) -> None:
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
-            mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
-            mock.patch("urbanlens.dashboard.services.media.storage.quota_error_for_upload", return_value="Storage full."),
+            mock.patch.object(
+                FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")
+            ),
+            mock.patch(
+                "urbanlens.dashboard.services.media.storage.quota_error_for_upload", return_value="Storage full."
+            ),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
@@ -355,7 +451,9 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         per_profile_upload_lock's docstring)."""
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
-            mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
+            mock.patch.object(
+                FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")
+            ),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire,
@@ -364,6 +462,11 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
 
     def test_unresolvable_photo_ids_are_silently_dropped(self) -> None:
-        with mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()), mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
-            counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["does-not-exist"])
+        with (
+            mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
+            counts = tasks.import_flickr_album_photos(
+                "pin", self.pin.pk, self.profile.pk, self.album_url, ["does-not-exist"]
+            )
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})

@@ -42,7 +42,9 @@ class SmartBoundaryAntimeridianTests(TestCase):
         self.profile = Profile.objects.get(user=baker.make("auth.User"))
 
     def _pin(self, name: str, longitude: float, latitude: float = -15.0) -> Pin:
-        return baker.make(Pin, profile=self.profile, name=name, location=baker.make(Location, latitude=latitude, longitude=longitude))
+        return baker.make(
+            Pin, profile=self.profile, name=name, location=baker.make(Location, latitude=latitude, longitude=longitude)
+        )
 
     def _list(self, region: MultiPolygon) -> PinList:
         return baker.make(PinList, profile=self.profile, name="Across the line", smart_boundary=region)

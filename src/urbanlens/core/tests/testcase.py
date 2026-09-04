@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import logging
@@ -13,6 +12,7 @@ class _MessagePrefixMixin:
     """
     Shared message-prefixing behavior for our custom TestCase/SimpleTestCase variants.
     """
+
     # Deprecated, in favor of fn. Named with a leading underscore (unlike a
     # plain "target"/"method_name") because those are exactly the attribute
     # names test subclasses reach for on their own domain objects (see e.g.

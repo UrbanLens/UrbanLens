@@ -105,7 +105,9 @@ class LocationSearchTests(LocationSearchTestCase):
         # Offset well clear of the setUp pin's coordinates - a pin resolving to
         # an already-pinned Location is refused by create_pin_for_profile.
         for index in range(4):
-            create_pin_for_profile(self.profile, name=f"Mill House {index}", latitude=40.0 + index, longitude=-70.0 - index)
+            create_pin_for_profile(
+                self.profile, name=f"Mill House {index}", latitude=40.0 + index, longitude=-70.0 - index
+            )
         body = self._search(q="Mill", sources="local", limit=2).json()
         self.assertEqual(len(body["results"]), 2)
 

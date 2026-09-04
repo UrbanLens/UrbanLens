@@ -120,7 +120,11 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
 
         self.pin_a.delete()  # his only pin, now resolved onto N
         self.assertEqual(Pin.objects.filter(profile=self.user_a).count(), 0)
-        self.assertEqual(self._sees(self.user_a), {"m", "n", "o", "p"}, "grandfathering is permanent - losing every pin must not take it away")
+        self.assertEqual(
+            self._sees(self.user_a),
+            {"m", "n", "o", "p"},
+            "grandfathering is permanent - losing every pin must not take it away",
+        )
 
         # Re-pinning a *different* successor changes nothing: he already had it all.
         pin_on(self.user_a, self.place_p, lat=40.0, lng=-73.98)
@@ -137,7 +141,11 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         self.assertEqual(self._sees(self.user_b), {"n", "o"}, "missing P - M must stay unreached")
 
         pin_on(self.user_b, self.place_p, lat=40.0, lng=-73.979)
-        self.assertEqual(self._sees(self.user_b), {"m", "n", "o", "p"}, "holding every current successor earns the whole family, M included")
+        self.assertEqual(
+            self._sees(self.user_b),
+            {"m", "n", "o", "p"},
+            "holding every current successor earns the whole family, M included",
+        )
 
     def test_user_b_cannot_discover_the_parent_wiki_before_earning_it(self) -> None:
         self._split()
@@ -156,14 +164,18 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         self.assertEqual(self._sees(self.user_b), {"m", "n", "o", "p"})
 
         pin_o.delete()
-        self.assertEqual(self._sees(self.user_b), {"m", "n", "o", "p"}, "earned once, permanent - one missing pin changes nothing")
+        self.assertEqual(
+            self._sees(self.user_b), {"m", "n", "o", "p"}, "earned once, permanent - one missing pin changes nothing"
+        )
 
         pin_p.delete()
         self.assertEqual(self._sees(self.user_b), {"m", "n", "o", "p"})
 
         pin_n.delete()
         self.assertEqual(Pin.objects.filter(profile=self.user_b).count(), 0)
-        self.assertEqual(self._sees(self.user_b), {"m", "n", "o", "p"}, "zero pins left anywhere in the family - still permanent")
+        self.assertEqual(
+            self._sees(self.user_b), {"m", "n", "o", "p"}, "zero pins left anywhere in the family - still permanent"
+        )
 
         # A distinct coordinate: pin_n.delete() removed the Pin, not the
         # underlying (latitude, longitude)-unique Location row.
@@ -178,11 +190,19 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         pin_on(self.user_b, self.place_p, lat=40.0, lng=-73.979)
         location_visible_to(self.wiki_m.location, self.user_b)  # triggers the snapshot
 
-        granted_places = set(PlaceAccessGrant.objects.filter(profile=self.user_b, reason=GrantReason.GRANDFATHERED_SPLIT).values_list("place_id", flat=True))
+        granted_places = set(
+            PlaceAccessGrant.objects.filter(profile=self.user_b, reason=GrantReason.GRANDFATHERED_SPLIT).values_list(
+                "place_id", flat=True
+            )
+        )
         self.assertEqual(granted_places, {self.parcel.pk, self.place_n.pk, self.place_o.pk, self.place_p.pk})
 
         # User A's split-time snapshot covers the identical set.
-        granted_a = set(PlaceAccessGrant.objects.filter(profile=self.user_a, reason=GrantReason.GRANDFATHERED_SPLIT).values_list("place_id", flat=True))
+        granted_a = set(
+            PlaceAccessGrant.objects.filter(profile=self.user_a, reason=GrantReason.GRANDFATHERED_SPLIT).values_list(
+                "place_id", flat=True
+            )
+        )
         self.assertEqual(granted_a, {self.parcel.pk, self.place_n.pk, self.place_o.pk, self.place_p.pk})
 
     def test_an_unrelated_profile_reaches_nothing(self) -> None:
@@ -221,10 +241,17 @@ class WikiEngagementGrandfatheringTests(TestCase):
         self.client.force_login(self.viewer.user)
         response = self.client.get(reverse("location.wiki", args=[self.wiki_x.location.slug]))
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(PlaceAccessGrant.objects.filter(profile=self.viewer, place=self.place_x, reason=GrantReason.GRANDFATHERED_ENGAGEMENT).exists())
+        self.assertTrue(
+            PlaceAccessGrant.objects.filter(
+                profile=self.viewer, place=self.place_x, reason=GrantReason.GRANDFATHERED_ENGAGEMENT
+            ).exists()
+        )
 
         self.pin_x.delete()
-        self.assertTrue(location_visible_to(self.wiki_x.location, self.viewer), "viewed it while access was held - must survive losing the pin")
+        self.assertTrue(
+            location_visible_to(self.wiki_x.location, self.viewer),
+            "viewed it while access was held - must survive losing the pin",
+        )
 
     def test_sharing_content_grandfathers_the_sharer_after_the_pin_is_gone(self) -> None:
         self.assertTrue(location_visible_to(self.wiki_y.location, self.sharer))
@@ -233,23 +260,39 @@ class WikiEngagementGrandfatheringTests(TestCase):
 
         wiki, shared = WikiShareService().share_from_pin(self.pin_y, include_fields={"danger"})
         self.assertTrue(shared)
-        self.assertTrue(PlaceAccessGrant.objects.filter(profile=self.sharer, place=self.place_y, reason=GrantReason.GRANDFATHERED_ENGAGEMENT).exists())
+        self.assertTrue(
+            PlaceAccessGrant.objects.filter(
+                profile=self.sharer, place=self.place_y, reason=GrantReason.GRANDFATHERED_ENGAGEMENT
+            ).exists()
+        )
 
         self.pin_y.delete()
-        self.assertTrue(location_visible_to(self.wiki_y.location, self.sharer), "shared content while access was held - must survive losing the pin")
+        self.assertTrue(
+            location_visible_to(self.wiki_y.location, self.sharer),
+            "shared content while access was held - must survive losing the pin",
+        )
 
     def test_never_viewing_or_sharing_loses_access_once_the_last_pin_is_gone(self) -> None:
         self.assertTrue(location_visible_to(self.wiki_z.location, self.silent))
         self.assertFalse(PlaceAccessGrant.objects.filter(profile=self.silent, place=self.place_z).exists())
 
         self.pin_z.delete()
-        self.assertFalse(location_visible_to(self.wiki_z.location, self.silent), "never viewed or shared - no pin left, no grandfathering")
+        self.assertFalse(
+            location_visible_to(self.wiki_z.location, self.silent),
+            "never viewed or shared - no pin left, no grandfathering",
+        )
 
     def test_opening_the_share_dialog_without_contributing_anything_does_not_grandfather(self) -> None:
         """Gated on `shared`, not merely reaching the method - see wiki_share.py."""
-        wiki, shared = WikiShareService().share_from_pin(self.pin_y, include_fields=set(), alias_ids=set(), image_ids=set())
+        wiki, shared = WikiShareService().share_from_pin(
+            self.pin_y, include_fields=set(), alias_ids=set(), image_ids=set()
+        )
         self.assertFalse(shared)
-        self.assertFalse(PlaceAccessGrant.objects.filter(profile=self.sharer, place=self.place_y, reason=GrantReason.GRANDFATHERED_ENGAGEMENT).exists())
+        self.assertFalse(
+            PlaceAccessGrant.objects.filter(
+                profile=self.sharer, place=self.place_y, reason=GrantReason.GRANDFATHERED_ENGAGEMENT
+            ).exists()
+        )
 
     def test_a_stranger_viewing_a_page_they_cannot_see_grants_nothing(self) -> None:
         """resolve_visible_wiki 404s before the engagement hook is ever reached."""

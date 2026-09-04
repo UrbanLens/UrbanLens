@@ -219,7 +219,7 @@ class ViewProfileView(LoginRequiredMixin, View):
         context["viewer_notes"] = ProfileNote.objects.for_pair(my_profile, profile)
         nickname = ProfileNickname.objects.for_pair(my_profile, profile).first()
         context["nickname"] = nickname.nickname if nickname else ""
-        user_labels = Label.objects.user_labels().visible_to(my_profile).ordered()
+        user_labels = Label.objects.user_labels().visible_to(my_profile).in_display_order()
         assigned_label_ids = set(
             ProfileLabelAssignment.objects.filter(author=my_profile, subject=profile).values_list(
                 "label_id",
@@ -503,7 +503,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             raw = request.POST.get("value", "").strip()
             if raw:
                 try:
-                    parsed = datetime.strptime(raw, "%Y-%m-%d").date()
+                    parsed = datetime.strptime(raw, "%Y-%m-%d").date()  # noqa: DTZ007  # .date() discards the time; the field is a DateField
                 except ValueError:
                     return JsonResponse({"error": "Invalid date format."}, status=400)
                 validator = validate_birth_date if field == "birth_date" else validate_started_exploring
@@ -1182,7 +1182,7 @@ def _render_profile_annotation_partial(
     from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
     viewer_notes = ProfileNote.objects.for_pair(author, subject)
-    user_labels = Label.objects.user_labels().visible_to(author).ordered()
+    user_labels = Label.objects.user_labels().visible_to(author).in_display_order()
     assigned_ids = set(
         ProfileLabelAssignment.objects.filter(author=author, subject=subject).values_list("label_id", flat=True),
     )

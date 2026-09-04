@@ -25,7 +25,9 @@ class NotificationChannelGatingTests(TestCase):
         self.profile.whatsapp_number = ""
         self.profile.save(update_fields=["whatsapp_number"])
 
-        response = self.client.post(reverse("notifications.preferences"), {"message__site": "1", "message_whatsapp": "1"})
+        response = self.client.post(
+            reverse("notifications.preferences"), {"message__site": "1", "message_whatsapp": "1"}
+        )
 
         self.assertEqual(response.status_code, 200)
         prefs = NotificationPreference.objects.get(profile=self.profile)
@@ -45,7 +47,9 @@ class NotificationChannelGatingTests(TestCase):
         self.profile.whatsapp_number = "+15550001111"
         self.profile.save(update_fields=["whatsapp_number"])
 
-        response = self.client.post(reverse("notifications.preferences"), {"message__site": "1", "message_whatsapp": "1"})
+        response = self.client.post(
+            reverse("notifications.preferences"), {"message__site": "1", "message_whatsapp": "1"}
+        )
 
         self.assertEqual(response.status_code, 200)
         prefs = NotificationPreference.objects.get(profile=self.profile)

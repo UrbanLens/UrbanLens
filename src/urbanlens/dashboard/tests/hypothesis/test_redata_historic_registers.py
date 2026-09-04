@@ -62,7 +62,10 @@ class ProviderDiscoveryTests(TestCase):
     def test_the_registers_asked_come_from_redatas_capability_index(self) -> None:
         with (
             mock.patch(f"{_GATEWAY}.applicable_provider_tags", return_value=["nps_nrhp", "md_mihp"]) as tags,
-            mock.patch(f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources", return_value=LocationContextEnvelope(count=0, complete=True)) as near,
+            mock.patch(
+                f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources",
+                return_value=LocationContextEnvelope(count=0, complete=True),
+            ) as near,
         ):
             self.source.fetch_envelope(39.3, -76.6)
 
@@ -72,7 +75,10 @@ class ProviderDiscoveryTests(TestCase):
     def test_a_register_redata_added_yesterday_is_asked_without_a_code_change(self) -> None:
         with (
             mock.patch(f"{_GATEWAY}.applicable_provider_tags", return_value=["some_register_added_yesterday"]),
-            mock.patch(f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources", return_value=LocationContextEnvelope(count=0, complete=True)) as near,
+            mock.patch(
+                f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources",
+                return_value=LocationContextEnvelope(count=0, complete=True),
+            ) as near,
         ):
             self.source.fetch_envelope(39.3, -76.6)
 
@@ -82,7 +88,10 @@ class ProviderDiscoveryTests(TestCase):
         """Including it would show the same USN record twice, the second time vaguer."""
         with (
             mock.patch(f"{_GATEWAY}.applicable_provider_tags", return_value=["ny_cris", "nps_nrhp"]),
-            mock.patch(f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources", return_value=LocationContextEnvelope(count=0, complete=True)) as near,
+            mock.patch(
+                f"{_GATEWAY}.RedataCulturalResourcesGateway.near_resources",
+                return_value=LocationContextEnvelope(count=0, complete=True),
+            ) as near,
         ):
             self.source.fetch_envelope(42.7, -73.8)
 
@@ -114,9 +123,21 @@ class ProviderDiscoveryTests(TestCase):
 
     def test_only_the_standardized_fields_are_cached(self) -> None:
         """`attributes`/`detail_payload`/`geometry` are per-provider, large, or both."""
-        stored = self.source.transform_rows([{**_resource(), "attributes": {"USNNum": "x"}, "detail_payload": {"big": "blob"}, "geometry": {"type": "Polygon"}}])
+        stored = self.source.transform_rows(
+            [
+                {
+                    **_resource(),
+                    "attributes": {"USNNum": "x"},
+                    "detail_payload": {"big": "blob"},
+                    "geometry": {"type": "Polygon"},
+                }
+            ]
+        )
 
-        self.assertEqual(set(stored[0]), {"provider", "resource_type", "scope", "name", "status", "year_built", "architectural_style", "use_type"})
+        self.assertEqual(
+            set(stored[0]),
+            {"provider", "resource_type", "scope", "name", "status", "year_built", "architectural_style", "use_type"},
+        )
 
 
 class RegisterLabelTests(SimpleTestCase):
@@ -195,7 +216,13 @@ class RenderTests(TestCase):
         context = self.source.render_context(self.pin, {"resources": [_resource()]})
 
         assert context is not None
-        self.assertEqual(context["meta"][0], {"label": "Maryland MIHP", "value": "Hutzler Brothers Palace - 1888, Commercial, Romanesque Revival, Listed"})
+        self.assertEqual(
+            context["meta"][0],
+            {
+                "label": "Maryland MIHP",
+                "value": "Hutzler Brothers Palace - 1888, Commercial, Romanesque Revival, Listed",
+            },
+        )
 
     def test_nothing_found_renders_nothing(self) -> None:
         self.assertIsNone(self.source.render_context(self.pin, {"resources": []}))

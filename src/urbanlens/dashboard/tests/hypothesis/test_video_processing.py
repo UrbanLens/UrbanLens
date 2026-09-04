@@ -49,7 +49,10 @@ class ParseIso6709Tests(SimpleTestCase):
 
 class ExtractVideoMetadataTests(SimpleTestCase):
     def test_no_ffmpeg_returns_empty(self) -> None:
-        with patch("urbanlens.dashboard.services.media.videos.ffmpeg_available", return_value=False):
+        with (
+            patch("urbanlens.dashboard.services.media.videos.ffmpeg_available", return_value=False),
+            patch("urbanlens.dashboard.services.media.videos.ffprobe_path", return_value=None),
+        ):
             self.assertEqual(extract_video_metadata("video.mp4"), {})
 
     def test_parses_creation_time_location_and_dimensions(self) -> None:
@@ -78,7 +81,10 @@ class ProcessUploadedVideoTests(TestCase):
         )
 
     def test_no_ffmpeg_returns_no_metadata_no_resize(self) -> None:
-        with patch("urbanlens.dashboard.services.media.videos.ffmpeg_available", return_value=False):
+        with (
+            patch("urbanlens.dashboard.services.media.videos.ffmpeg_available", return_value=False),
+            patch("urbanlens.dashboard.services.media.videos.ffprobe_path", return_value=None),
+        ):
             metadata, new_size = process_uploaded_video(self.image, 1080)
         self.assertEqual(metadata, {})
         self.assertIsNone(new_size)

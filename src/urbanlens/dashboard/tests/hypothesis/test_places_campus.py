@@ -48,7 +48,14 @@ def square(lng: float, lat: float, delta: float) -> MultiPolygon:
     return MultiPolygon(Polygon(ring, srid=4326), srid=4326)
 
 
-def make_place(kind: str, geometry: MultiPolygon | None, *, parent: Place | None = None, relation: str = PlaceRelation.PART_OF, name: str = "") -> Place:
+def make_place(
+    kind: str,
+    geometry: MultiPolygon | None,
+    *,
+    parent: Place | None = None,
+    relation: str = PlaceRelation.PART_OF,
+    name: str = "",
+) -> Place:
     """Create a place with its derived columns filled, as provisioning would."""
     place = Place.objects.create(kind=kind, geometry=geometry, name=name)
     if geometry is not None:
@@ -84,7 +91,9 @@ class CampusTests(TestCase):
         # Somebody's pin on the grounds, and the property's community page.
         self.lawn_location = Location.objects.create(latitude=41.7345, longitude=-73.9345)
         resolution.resolve_location_place(self.lawn_location)
-        self.wiki = Wiki.objects.create(name="Hudson River State Hospital", location=self.lawn_location, place=self.parcel)
+        self.wiki = Wiki.objects.create(
+            name="Hudson River State Hospital", location=self.lawn_location, place=self.parcel
+        )
 
     def test_a_pin_on_the_campus_has_no_competing_places(self) -> None:
         """The reported bug: 124 buildings must not read as 124 rival places."""

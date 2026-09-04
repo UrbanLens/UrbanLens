@@ -45,20 +45,31 @@ class SearxngImageOutageTests(TestCase):
         return LocationCache.objects.filter(location=self.pin.location, source=self._source().cache_source).count()
 
     def test_an_outage_leaves_the_source_unfetched(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_search_gateway.RedataSearchGateway.search_web", side_effect=LocationContextUnavailableError("source_error", "503")):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_search_gateway.RedataSearchGateway.search_web",
+            side_effect=LocationContextUnavailableError("source_error", "503"),
+        ):
             self._source().fetch(self.pin)
 
-        self.assertEqual(self._cached(), 0, "caching the outage makes it permanent - nothing refetches a source that has a row")
+        self.assertEqual(
+            self._cached(), 0, "caching the outage makes it permanent - nothing refetches a source that has a row"
+        )
 
     def test_a_genuine_empty_result_is_cached(self) -> None:
         """Asked and told nothing is a real answer, and must not be refetched forever."""
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_search_gateway.RedataSearchGateway.search_web", return_value=[]):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_search_gateway.RedataSearchGateway.search_web",
+            return_value=[],
+        ):
             self._source().fetch(self.pin)
 
         self.assertEqual(self._cached(), 1)
 
     def test_results_are_cached(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_search_gateway.RedataSearchGateway.search_web", return_value=[{"url": "https://example.test/a.jpg"}]):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_search_gateway.RedataSearchGateway.search_web",
+            return_value=[{"url": "https://example.test/a.jpg"}],
+        ):
             self._source().fetch(self.pin)
 
         self.assertEqual(self._cached(), 1)
@@ -86,9 +97,11 @@ class SiteConditionsOutageTests(TestCase):
             "urbanlens.dashboard.services.apis.locations.redata_walkability_gateway.RedataWalkabilityGateway.get_walkability",
             "urbanlens.dashboard.services.apis.locations.redata_soil_gateway.RedataSoilGateway.get_soil_components",
         ]
-        with mock.patch(targets[0], side_effect=LocationContextUnavailableError("source_error", "down")), \
-             mock.patch(targets[1], side_effect=LocationContextUnavailableError("source_error", "down")), \
-             mock.patch(targets[2], side_effect=LocationContextUnavailableError("source_error", "down")):
+        with (
+            mock.patch(targets[0], side_effect=LocationContextUnavailableError("source_error", "down")),
+            mock.patch(targets[1], side_effect=LocationContextUnavailableError("source_error", "down")),
+            mock.patch(targets[2], side_effect=LocationContextUnavailableError("source_error", "down")),
+        ):
             self._source().fetch(self.pin)
 
         self.assertEqual(self._cached(), 0)
@@ -143,7 +156,11 @@ class RedataPartialProviderOutageTests(TestCase):
     def test_a_partial_answer_with_rows_is_cached(self) -> None:
         """One flaky provider must not stop the other four's rows being stored."""
         source = self._source()
-        with mock.patch.object(type(source), "fetch_envelope", return_value=self._envelope(complete=False, results=[{"permit_number": "A-1"}])):
+        with mock.patch.object(
+            type(source),
+            "fetch_envelope",
+            return_value=self._envelope(complete=False, results=[{"permit_number": "A-1"}]),
+        ):
             source.fetch(self.pin)
 
         self.assertEqual(self._cached(), 1)
@@ -158,5 +175,12 @@ class RedataPartialProviderOutageTests(TestCase):
 
         for source_cls in RedataInfoPanelSource.__subclasses__():
             with self.subTest(panel=source_cls.__name__):
-                self.assertIs(source_cls.fetch, RedataInfoPanelSource.fetch, f"{source_cls.__name__} overrides fetch and so opts out of the outage rule")
-                self.assertTrue(getattr(source_cls, "payload_key", ""), f"{source_cls.__name__} declares no payload_key, so the inherited fetch has nowhere to write")
+                self.assertIs(
+                    source_cls.fetch,
+                    RedataInfoPanelSource.fetch,
+                    f"{source_cls.__name__} overrides fetch and so opts out of the outage rule",
+                )
+                self.assertTrue(
+                    getattr(source_cls, "payload_key", ""),
+                    f"{source_cls.__name__} declares no payload_key, so the inherited fetch has nowhere to write",
+                )

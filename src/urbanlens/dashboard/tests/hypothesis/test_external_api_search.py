@@ -299,7 +299,9 @@ class GlobalSearchIdentifierTests(_SearchApiTestCase):
         pin = self._make_pin(name="Anchor Mill")
         baker.make("dashboard.Trip", creator=self.profile, name="Anchor Mill weekend")
         baker.make("dashboard.PinVisit", pin=pin, visited_at=timezone.now(), notes="Anchor Mill service tunnel")
-        baker.make("dashboard.Image", profile=self.profile, caption="Anchor Mill turbine hall", image="photos/anchor.jpg")
+        baker.make(
+            "dashboard.Image", profile=self.profile, caption="Anchor Mill turbine hall", image="photos/anchor.jpg"
+        )
 
         results = self._all_results(self._search(q="anchor mill").json())
         self.assertTrue(results, "fixture produced no results to assert against")
@@ -335,7 +337,9 @@ class GlobalSearchIdentifierTests(_SearchApiTestCase):
 
     def test_photo_result_is_uuid_addressed_with_no_slug(self) -> None:
         """Photos have no slug anywhere; the uuid is the whole handle."""
-        image = baker.make("dashboard.Image", profile=self.profile, caption="Anchor Mill turbine hall", image="photos/anchor.jpg")
+        image = baker.make(
+            "dashboard.Image", profile=self.profile, caption="Anchor Mill turbine hall", image="photos/anchor.jpg"
+        )
         group = self._group(self._search(q="anchor mill", types="photos").json(), "photos")
         assert group is not None
         result = group["results"][0]
@@ -386,7 +390,9 @@ class GlobalSearchScopeTests(_SearchApiTestCase):
         """Populate one findable row in several different domains."""
         super().setUp()
         self.pin = self._make_pin(name="Anchor Mill")
-        self.image = baker.make("dashboard.Image", profile=self.profile, caption="Anchor Mill turbine hall", image="photos/anchor.jpg")
+        self.image = baker.make(
+            "dashboard.Image", profile=self.profile, caption="Anchor Mill turbine hall", image="photos/anchor.jpg"
+        )
         self.trip = baker.make("dashboard.Trip", creator=self.profile, name="Anchor Mill weekend")
 
     def test_no_search_scope_at_all_is_403(self) -> None:
@@ -419,7 +425,9 @@ class GlobalSearchScopeTests(_SearchApiTestCase):
 
     def test_missing_photo_scope_drops_the_photo_section(self) -> None:
         """A denied section is absent and named, never empty and unexplained."""
-        raw = self._key_with_scopes([ApiKeyScope.SEARCH_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.TRIPS_READ.value])
+        raw = self._key_with_scopes(
+            [ApiKeyScope.SEARCH_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.TRIPS_READ.value]
+        )
         body = self._search(raw_key=raw, q="anchor mill").json()
         self.assertIsNone(self._group(body, "photos"))
         self.assertIn("photos", body["omitted_types"])
@@ -463,11 +471,17 @@ class GlobalSearchCrossDomainScopeTests(_SearchApiTestCase):
         super().setUp()
         self.pin = self._make_pin(name="Anchor Mill")
         self.pin_article = baker.make("dashboard.Article", pin=self.pin, content="private basement blueprint notes")
-        self.wiki = baker.make("dashboard.Wiki", location=self._location(), created_by=self.profile, name="Anchor Mill Wiki")
+        self.wiki = baker.make(
+            "dashboard.Wiki", location=self._location(), created_by=self.profile, name="Anchor Mill Wiki"
+        )
         self.wiki_article = baker.make("dashboard.Article", wiki=self.wiki, content="public wiki blueprint notes")
-        self.wiki_comment = baker.make("dashboard.Comment", wiki=self.wiki, profile=self.profile, text="blueprint notes in the comments")
+        self.wiki_comment = baker.make(
+            "dashboard.Comment", wiki=self.wiki, profile=self.profile, text="blueprint notes in the comments"
+        )
         self.trip = baker.make("dashboard.Trip", creator=self.profile, name="Anchor trip")
-        self.trip_comment = baker.make("dashboard.TripComment", trip=self.trip, author=self.profile, text="blueprint notes on the trip")
+        self.trip_comment = baker.make(
+            "dashboard.TripComment", trip=self.trip, author=self.profile, text="blueprint notes on the trip"
+        )
 
     def test_wiki_scope_alone_does_not_reach_private_pin_articles(self) -> None:
         """``wiki:read`` without ``pins:read`` must not open a section that includes private pin articles."""
@@ -485,7 +499,9 @@ class GlobalSearchCrossDomainScopeTests(_SearchApiTestCase):
 
     def test_pins_and_wiki_scope_together_reach_articles(self) -> None:
         """Holding both domain scopes is what actually opens the section."""
-        raw = self._key_with_scopes([ApiKeyScope.SEARCH_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.WIKI_READ.value])
+        raw = self._key_with_scopes(
+            [ApiKeyScope.SEARCH_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.WIKI_READ.value]
+        )
         body = self._search(raw_key=raw, q="blueprint").json()
         self.assertIsNotNone(self._group(body, "articles"))
         self.assertNotIn("articles", body["omitted_types"])
@@ -500,7 +516,12 @@ class GlobalSearchCrossDomainScopeTests(_SearchApiTestCase):
     def test_every_comment_domain_scope_together_reaches_comments(self) -> None:
         """Holding pins, wiki and trips together is what actually opens the section."""
         raw = self._key_with_scopes(
-            [ApiKeyScope.SEARCH_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.WIKI_READ.value, ApiKeyScope.TRIPS_READ.value],
+            [
+                ApiKeyScope.SEARCH_READ.value,
+                ApiKeyScope.PINS_READ.value,
+                ApiKeyScope.WIKI_READ.value,
+                ApiKeyScope.TRIPS_READ.value,
+            ],
         )
         body = self._search(raw_key=raw, q="blueprint").json()
         self.assertIsNotNone(self._group(body, "comments"))
@@ -696,7 +717,9 @@ class EngineTypeRestrictionTests(TestCase):
             The created pin.
         """
         self._location_seq += 1
-        location = baker.make("dashboard.Location", latitude=f"39.{100 + self._location_seq}", longitude="-84.51", locality="Cincinnati")
+        location = baker.make(
+            "dashboard.Location", latitude=f"39.{100 + self._location_seq}", longitude="-84.51", locality="Cincinnati"
+        )
         return baker.make("dashboard.Pin", profile=self.profile, location=location, name=name)
 
     def _slugs(self, response) -> set[str]:

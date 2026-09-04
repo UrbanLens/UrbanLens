@@ -74,7 +74,7 @@ class SanitizeOptionalColorTests(SimpleTestCase):
     @given(st.text())
     def test_output_is_always_hex_none_or_empty(self, value: str):
         result = sanitize_optional_color(value)
-        self.assertTrue(result == "" or result == "none" or len(result) == 7, result)
+        self.assertTrue(result in {"", "none"} or len(result) == 7, result)
 
 
 class PinMarkupBulkCreateColorTests(TestCase):

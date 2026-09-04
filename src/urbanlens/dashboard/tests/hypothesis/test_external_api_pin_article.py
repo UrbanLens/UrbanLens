@@ -102,7 +102,7 @@ class PinArticleApiTests(TestCase):
         return response.json()
 
     def test_pin_without_an_article_is_a_404(self) -> None:
-        """"Not written yet" and "not yours" answer identically."""
+        """ "Not written yet" and "not yours" answer identically."""
         response = self.client.get(self._url(), **self._headers())
 
         self.assertEqual(response.status_code, 404)
@@ -155,7 +155,9 @@ class PinArticleApiTests(TestCase):
 
     def test_omitting_base_revision_id_is_a_400(self) -> None:
         """Required, so an accidentally-omitted key cannot silently clobber."""
-        response = self.client.put(self._url(), {"content": "No opinion"}, content_type="application/json", **self._headers())
+        response = self.client.put(
+            self._url(), {"content": "No opinion"}, content_type="application/json", **self._headers()
+        )
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "Invalid request.")
@@ -199,7 +201,9 @@ class PinArticleApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["content"], "original")
         self.assertEqual(ArticleRevision.objects.filter(article__pin=self.pin).count(), 3)
-        self.assertEqual(ArticleRevision.objects.filter(article__pin=self.pin, restored_from_id=first_revision_id).count(), 1)
+        self.assertEqual(
+            ArticleRevision.objects.filter(article__pin=self.pin, restored_from_id=first_revision_id).count(), 1
+        )
 
     def test_another_users_pin_article_is_not_found(self) -> None:
         """Every handler resolves through the owner-scoped pin lookup."""
@@ -221,7 +225,9 @@ class PinArticleApiTests(TestCase):
         """
         self._save("mine")
         their_pin = create_pin_for_profile(self.other_profile, name="Theirs", latitude=1.0, longitude=1.0).pin
-        _their_article, their_revision = save_article(editor=self.other_profile, content="Their private notes", pin=their_pin)
+        _their_article, their_revision = save_article(
+            editor=self.other_profile, content="Their private notes", pin=their_pin
+        )
         assert their_revision is not None
 
         detail = self.client.get(self._url(f"revisions/{their_revision.pk}/"), **self._headers())
@@ -242,7 +248,12 @@ class PinArticleApiTests(TestCase):
         raw = self._key_with_scopes([ApiKeyScope.WIKI_READ.value, ApiKeyScope.WIKI_WRITE.value])
 
         read = self.client.get(self._url(), **self._headers(raw))
-        write = self.client.put(self._url(), {"content": "x", "base_revision_id": None}, content_type="application/json", **self._headers(raw))
+        write = self.client.put(
+            self._url(),
+            {"content": "x", "base_revision_id": None},
+            content_type="application/json",
+            **self._headers(raw),
+        )
         revisions = self.client.get(self._url("revisions/"), **self._headers(raw))
 
         self.assertEqual(read.status_code, 403)
@@ -255,6 +266,11 @@ class PinArticleApiTests(TestCase):
         raw = self._key_with_scopes([ApiKeyScope.PINS_READ.value])
 
         self.assertEqual(self.client.get(self._url(), **self._headers(raw)).status_code, 200)
-        write = self.client.put(self._url(), {"content": "x", "base_revision_id": None}, content_type="application/json", **self._headers(raw))
+        write = self.client.put(
+            self._url(),
+            {"content": "x", "base_revision_id": None},
+            content_type="application/json",
+            **self._headers(raw),
+        )
         self.assertEqual(write.status_code, 403)
         self.assertEqual(Article.objects.get(pin=self.pin).content, "private")

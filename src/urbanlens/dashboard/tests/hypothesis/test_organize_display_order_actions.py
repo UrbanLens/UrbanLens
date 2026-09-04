@@ -67,7 +67,7 @@ class DisplayOrderActionsTests(TestCase):
 
     def test_each_kind_targets_its_own_rows_container(self) -> None:
         """The delete re-renders the owning tab's rows, so its ids must line up."""
-        ensure_label( profile=self.profile, kind=KIND_CATEGORY, name="Hospital")
+        ensure_label(profile=self.profile, kind=KIND_CATEGORY, name="Hospital")
         baker.make(Label, profile=self.profile, kind=KIND_STATUS, name="Sealed")
 
         html = self._priority_html()

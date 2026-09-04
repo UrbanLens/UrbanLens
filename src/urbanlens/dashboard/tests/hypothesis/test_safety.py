@@ -79,7 +79,9 @@ class SafetyCheckinLifecycleTests(TestCase):
     def test_escalate_checkin_notifies_contacts_without_resolving(self):
         checkin = _checkin(self.profile, status=SafetyCheckinStatus.AWAITING_CHECKIN)
         contact_profile = baker.make("auth.User").profile
-        contact = baker.make("dashboard.SafetyCheckinContact", checkin=checkin, contact_profile=contact_profile, email=None)
+        contact = baker.make(
+            "dashboard.SafetyCheckinContact", checkin=checkin, contact_profile=contact_profile, email=None
+        )
 
         escalate_checkin(checkin)
 
@@ -94,7 +96,9 @@ class SafetyCheckinLifecycleTests(TestCase):
         checkin = _checkin(self.profile, status=SafetyCheckinStatus.OVERDUE)
         finder_profile = baker.make("auth.User").profile
         other_profile = baker.make("auth.User").profile
-        finder = baker.make("dashboard.SafetyCheckinContact", checkin=checkin, contact_profile=finder_profile, email=None)
+        finder = baker.make(
+            "dashboard.SafetyCheckinContact", checkin=checkin, contact_profile=finder_profile, email=None
+        )
         baker.make("dashboard.SafetyCheckinContact", checkin=checkin, contact_profile=other_profile, email=None)
 
         mark_found_safe(finder)
@@ -107,7 +111,12 @@ class SafetyCheckinLifecycleTests(TestCase):
 
     def test_mark_found_safe_does_not_re_resolve_an_already_resolved_checkin(self):
         checkin = _checkin(self.profile, status=SafetyCheckinStatus.CHECKED_IN, resolved_at=timezone.now())
-        contact = baker.make("dashboard.SafetyCheckinContact", checkin=checkin, contact_profile=baker.make("auth.User").profile, email=None)
+        contact = baker.make(
+            "dashboard.SafetyCheckinContact",
+            checkin=checkin,
+            contact_profile=baker.make("auth.User").profile,
+            email=None,
+        )
 
         mark_found_safe(contact)
 
@@ -125,8 +134,18 @@ class SafetyCheckinLifecycleTests(TestCase):
         both pass, which would double-notify everyone and double-schedule archival.
         """
         checkin = _checkin(self.profile, status=SafetyCheckinStatus.OVERDUE)
-        first = baker.make("dashboard.SafetyCheckinContact", checkin=checkin, contact_profile=baker.make("auth.User").profile, email=None)
-        second = baker.make("dashboard.SafetyCheckinContact", checkin=checkin, contact_profile=baker.make("auth.User").profile, email=None)
+        first = baker.make(
+            "dashboard.SafetyCheckinContact",
+            checkin=checkin,
+            contact_profile=baker.make("auth.User").profile,
+            email=None,
+        )
+        second = baker.make(
+            "dashboard.SafetyCheckinContact",
+            checkin=checkin,
+            contact_profile=baker.make("auth.User").profile,
+            email=None,
+        )
         # Both handlers loaded the same pre-resolution `checkin` row before either wrote -
         # mirrors two concurrent requests each holding their own stale in-memory copy.
         first.checkin.refresh_from_db()
@@ -159,19 +178,37 @@ class VisitSuggestionOriginConstraintTests(TestCase):
 
     def test_safety_checkin_origin_alone_is_valid(self):
         checkin = _checkin(self.suggested_to)
-        suggestion = baker.make("dashboard.VisitSuggestion", origin_visit=None, trip_activity=None, safety_checkin=checkin, **self._base_kwargs())
+        suggestion = baker.make(
+            "dashboard.VisitSuggestion",
+            origin_visit=None,
+            trip_activity=None,
+            safety_checkin=checkin,
+            **self._base_kwargs(),
+        )
         self.assertEqual(suggestion.safety_checkin_id, checkin.pk)
 
     def test_no_origin_violates_constraint(self):
         with pytest.raises(IntegrityError), transaction.atomic():
-            baker.make("dashboard.VisitSuggestion", origin_visit=None, trip_activity=None, safety_checkin=None, **self._base_kwargs())
+            baker.make(
+                "dashboard.VisitSuggestion",
+                origin_visit=None,
+                trip_activity=None,
+                safety_checkin=None,
+                **self._base_kwargs(),
+            )
 
     def test_two_origins_violates_constraint(self):
         checkin = _checkin(self.suggested_to)
         pin = baker.make("dashboard.Pin", profile=self.suggested_to)
         visit = baker.make("dashboard.PinVisit", pin=pin)
         with pytest.raises(IntegrityError), transaction.atomic():
-            baker.make("dashboard.VisitSuggestion", origin_visit=visit, trip_activity=None, safety_checkin=checkin, **self._base_kwargs())
+            baker.make(
+                "dashboard.VisitSuggestion",
+                origin_visit=visit,
+                trip_activity=None,
+                safety_checkin=checkin,
+                **self._base_kwargs(),
+            )
 
 
 class SafetyCheckinQuerySetTests(TestCase):
@@ -181,15 +218,25 @@ class SafetyCheckinQuerySetTests(TestCase):
         self.profile = baker.make("auth.User").profile
 
     def test_due_for_reminder_only_includes_scheduled_past_due(self):
-        due = _checkin(self.profile, status=SafetyCheckinStatus.SCHEDULED, checkin_by=timezone.now() - datetime.timedelta(minutes=1))
-        not_yet = _checkin(self.profile, status=SafetyCheckinStatus.SCHEDULED, checkin_by=timezone.now() + datetime.timedelta(hours=1))
+        due = _checkin(
+            self.profile,
+            status=SafetyCheckinStatus.SCHEDULED,
+            checkin_by=timezone.now() - datetime.timedelta(minutes=1),
+        )
+        not_yet = _checkin(
+            self.profile, status=SafetyCheckinStatus.SCHEDULED, checkin_by=timezone.now() + datetime.timedelta(hours=1)
+        )
         past_grace = _checkin(
             self.profile,
             status=SafetyCheckinStatus.SCHEDULED,
             checkin_by=timezone.now() - datetime.timedelta(hours=2),
             grace_period=datetime.timedelta(hours=1),
         )
-        already_reminded = _checkin(self.profile, status=SafetyCheckinStatus.AWAITING_CHECKIN, checkin_by=timezone.now() - datetime.timedelta(minutes=1))
+        already_reminded = _checkin(
+            self.profile,
+            status=SafetyCheckinStatus.AWAITING_CHECKIN,
+            checkin_by=timezone.now() - datetime.timedelta(minutes=1),
+        )
 
         results = set(SafetyCheckin.objects.due_for_reminder().values_list("pk", flat=True))
 
@@ -250,7 +297,9 @@ class SafetyCheckinContactByTokenTests(TestCase):
         self.checkin = _checkin(self.profile)
 
     def test_returns_the_matching_contact(self):
-        contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+        contact = baker.make(
+            "dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None
+        )
         self.assertEqual(SafetyCheckinContact.objects.by_token(contact.token).first(), contact)
 
     def test_empty_for_an_unknown_token(self):
@@ -259,8 +308,12 @@ class SafetyCheckinContactByTokenTests(TestCase):
     def test_chains_with_select_related(self):
         """Every real call site chains select_related(...) before by_token() -
         confirm that composition still resolves to exactly the right row."""
-        contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
-        result = SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(contact.token).first()
+        contact = baker.make(
+            "dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None
+        )
+        result = (
+            SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(contact.token).first()
+        )
         self.assertEqual(result, contact)
         self.assertEqual(result.checkin_id, self.checkin.pk)
 
@@ -269,7 +322,7 @@ class SafetyContactPortalEscalationGateTests(TestCase):
     """The token contact portal (and its markup JSON) must not disclose the plan, message,
     route, or photos before the check-in has actually escalated - the token is only ever
     emailed at escalation, but nothing previously stopped a leaked/guessed/forwarded token
-    from returning the full plan regardless of check-in state. See docs/GOALS_CODE_AUDIT.md
+    from returning the full plan regardless of check-in state. See docs/audits/GOALS_CODE_AUDIT.md
     ("Safety check-ins")."""
 
     def setUp(self):
@@ -279,7 +332,9 @@ class SafetyContactPortalEscalationGateTests(TestCase):
             plan_details="Meet at the north gate, follow the fence line.",
             contact_message="Call the ranger station if I'm late.",
         )
-        self.contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+        self.contact = baker.make(
+            "dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None
+        )
 
     def _escalate(self):
         self.checkin.escalated_at = timezone.now()
@@ -304,14 +359,18 @@ class SafetyContactPortalEscalationGateTests(TestCase):
         self.assertIn("Call the ranger station", content)
 
     def test_portal_hides_photos_before_escalation(self):
-        baker.make("dashboard.Image", safety_checkin=self.checkin, profile=self.profile, image="checkin_photos/trailhead.jpg")
+        baker.make(
+            "dashboard.Image", safety_checkin=self.checkin, profile=self.profile, image="checkin_photos/trailhead.jpg"
+        )
 
         response = self.client.get(reverse("safety.contact.portal", kwargs={"token": self.contact.token}))
 
         self.assertNotIn("safety-photo-thumb", response.content.decode())
 
     def test_portal_shows_photos_once_escalated(self):
-        baker.make("dashboard.Image", safety_checkin=self.checkin, profile=self.profile, image="checkin_photos/trailhead.jpg")
+        baker.make(
+            "dashboard.Image", safety_checkin=self.checkin, profile=self.profile, image="checkin_photos/trailhead.jpg"
+        )
         self._escalate()
 
         response = self.client.get(reverse("safety.contact.portal", kwargs={"token": self.contact.token}))
@@ -322,7 +381,13 @@ class SafetyContactPortalEscalationGateTests(TestCase):
         markup_map = baker.make("dashboard.MarkupMap", profile=self.profile)
         self.checkin.markup_map = markup_map
         self.checkin.save(update_fields=["markup_map", "updated"])
-        baker.make("dashboard.PinMarkup", parent_map=markup_map, profile=self.profile, markup_type="line", geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]})
+        baker.make(
+            "dashboard.PinMarkup",
+            parent_map=markup_map,
+            profile=self.profile,
+            markup_type="line",
+            geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+        )
 
         response = self.client.get(reverse("safety.contact.markup.json", kwargs={"token": self.contact.token}))
 
@@ -333,7 +398,13 @@ class SafetyContactPortalEscalationGateTests(TestCase):
         markup_map = baker.make("dashboard.MarkupMap", profile=self.profile)
         self.checkin.markup_map = markup_map
         self.checkin.save(update_fields=["markup_map", "updated"])
-        baker.make("dashboard.PinMarkup", parent_map=markup_map, profile=self.profile, markup_type="line", geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]})
+        baker.make(
+            "dashboard.PinMarkup",
+            parent_map=markup_map,
+            profile=self.profile,
+            markup_type="line",
+            geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+        )
         self._escalate()
 
         response = self.client.get(reverse("safety.contact.markup.json", kwargs={"token": self.contact.token}))
@@ -345,7 +416,9 @@ class SafetyContactPortalEscalationGateTests(TestCase):
         self.assertEqual(self.client.get(reverse("safety.contact.portal", kwargs={"token": uuid4()})).status_code, 404)
 
     def test_markup_json_is_a_404_for_an_unknown_token(self):
-        self.assertEqual(self.client.get(reverse("safety.contact.markup.json", kwargs={"token": uuid4()})).status_code, 404)
+        self.assertEqual(
+            self.client.get(reverse("safety.contact.markup.json", kwargs={"token": uuid4()})).status_code, 404
+        )
 
 
 class OneActiveCheckinAtATimeTests(TestCase):
@@ -358,22 +431,47 @@ class OneActiveCheckinAtATimeTests(TestCase):
         self.assertIsNone(get_active_checkin(self.profile))
 
     def test_get_active_checkin_returns_the_unresolved_checkin(self):
-        checkin = create_checkin(profile=self.profile, title="Ridge Hike", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1))
+        checkin = create_checkin(
+            profile=self.profile,
+            title="Ridge Hike",
+            checkin_by=timezone.now() + datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+        )
         self.assertEqual(get_active_checkin(self.profile), checkin)
 
     def test_create_checkin_rejects_a_second_active_checkin(self):
-        create_checkin(profile=self.profile, title="Ridge Hike", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1))
+        create_checkin(
+            profile=self.profile,
+            title="Ridge Hike",
+            checkin_by=timezone.now() + datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+        )
 
         with pytest.raises(ValueError):
-            create_checkin(profile=self.profile, title="Another Hike", checkin_by=timezone.now() + datetime.timedelta(hours=3), grace_period=datetime.timedelta(hours=1))
+            create_checkin(
+                profile=self.profile,
+                title="Another Hike",
+                checkin_by=timezone.now() + datetime.timedelta(hours=3),
+                grace_period=datetime.timedelta(hours=1),
+            )
 
         self.assertEqual(SafetyCheckin.objects.filter(profile=self.profile).count(), 1)
 
     def test_create_checkin_allowed_again_once_prior_is_resolved(self):
-        first = create_checkin(profile=self.profile, title="Ridge Hike", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1))
+        first = create_checkin(
+            profile=self.profile,
+            title="Ridge Hike",
+            checkin_by=timezone.now() + datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+        )
         cancel_checkin(first)
 
-        second = create_checkin(profile=self.profile, title="Another Hike", checkin_by=timezone.now() + datetime.timedelta(hours=3), grace_period=datetime.timedelta(hours=1))
+        second = create_checkin(
+            profile=self.profile,
+            title="Another Hike",
+            checkin_by=timezone.now() + datetime.timedelta(hours=3),
+            grace_period=datetime.timedelta(hours=1),
+        )
 
         self.assertEqual(get_active_checkin(self.profile), second)
         self.assertEqual(SafetyCheckin.objects.filter(profile=self.profile).count(), 2)
@@ -389,35 +487,87 @@ class TripScopedActiveCheckinTests(TestCase):
         self.other_trip = baker.make("dashboard.Trip", creator=self.profile)
 
     def test_general_and_trip_scoped_checkins_can_both_be_active(self):
-        general = create_checkin(profile=self.profile, title="General", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1))
-        trip_checkin = create_checkin(profile=self.profile, title="Trip", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+        general = create_checkin(
+            profile=self.profile,
+            title="General",
+            checkin_by=timezone.now() + datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+        )
+        trip_checkin = create_checkin(
+            profile=self.profile,
+            title="Trip",
+            checkin_by=timezone.now() + datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+            trip=self.trip,
+        )
 
         self.assertEqual(get_active_checkin(self.profile, trip=None), general)
         self.assertEqual(get_active_checkin(self.profile, trip=self.trip), trip_checkin)
 
     def test_two_different_trips_can_both_have_active_checkins(self):
-        first = create_checkin(profile=self.profile, title="Trip A", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1), trip=self.trip)
-        second = create_checkin(profile=self.profile, title="Trip B", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1), trip=self.other_trip)
+        first = create_checkin(
+            profile=self.profile,
+            title="Trip A",
+            checkin_by=timezone.now() + datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+            trip=self.trip,
+        )
+        second = create_checkin(
+            profile=self.profile,
+            title="Trip B",
+            checkin_by=timezone.now() + datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+            trip=self.other_trip,
+        )
 
         self.assertEqual(get_active_checkin(self.profile, trip=self.trip), first)
         self.assertEqual(get_active_checkin(self.profile, trip=self.other_trip), second)
 
     def test_create_checkin_rejects_a_second_active_checkin_for_the_same_trip(self):
-        create_checkin(profile=self.profile, title="First", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+        create_checkin(
+            profile=self.profile,
+            title="First",
+            checkin_by=timezone.now() + datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+            trip=self.trip,
+        )
 
         with pytest.raises(ValueError):
-            create_checkin(profile=self.profile, title="Second", checkin_by=timezone.now() + datetime.timedelta(hours=3), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+            create_checkin(
+                profile=self.profile,
+                title="Second",
+                checkin_by=timezone.now() + datetime.timedelta(hours=3),
+                grace_period=datetime.timedelta(hours=1),
+                trip=self.trip,
+            )
 
         self.assertEqual(SafetyCheckin.objects.filter(profile=self.profile, trip=self.trip).count(), 1)
 
     def test_get_active_checkins_returns_every_scope(self):
-        general = create_checkin(profile=self.profile, title="General", checkin_by=timezone.now() + datetime.timedelta(hours=3), grace_period=datetime.timedelta(hours=1))
-        trip_checkin = create_checkin(profile=self.profile, title="Trip", checkin_by=timezone.now() + datetime.timedelta(hours=1), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+        general = create_checkin(
+            profile=self.profile,
+            title="General",
+            checkin_by=timezone.now() + datetime.timedelta(hours=3),
+            grace_period=datetime.timedelta(hours=1),
+        )
+        trip_checkin = create_checkin(
+            profile=self.profile,
+            title="Trip",
+            checkin_by=timezone.now() + datetime.timedelta(hours=1),
+            grace_period=datetime.timedelta(hours=1),
+            trip=self.trip,
+        )
 
         self.assertEqual(list(get_active_checkins(self.profile)), [trip_checkin, general])
 
     def test_get_active_checkins_excludes_resolved(self):
-        checkin = create_checkin(profile=self.profile, title="Trip", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+        checkin = create_checkin(
+            profile=self.profile,
+            title="Trip",
+            checkin_by=timezone.now() + datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+            trip=self.trip,
+        )
         cancel_checkin(checkin)
 
         self.assertEqual(list(get_active_checkins(self.profile)), [])
@@ -433,16 +583,32 @@ class EmergencyContactDefaultQuerySetTests(TestCase):
         self.other_profile = baker.make("auth.User").profile
 
     def test_returns_only_the_owners_defaults(self):
-        mine = baker.make("dashboard.EmergencyContactDefault", owner=self.profile, email="a@example.com", contact_profile=None)
-        baker.make("dashboard.EmergencyContactDefault", owner=self.other_profile, email="b@example.com", contact_profile=None)
+        mine = baker.make(
+            "dashboard.EmergencyContactDefault", owner=self.profile, email="a@example.com", contact_profile=None
+        )
+        baker.make(
+            "dashboard.EmergencyContactDefault", owner=self.other_profile, email="b@example.com", contact_profile=None
+        )
         self.assertEqual(list(EmergencyContactDefault.objects.for_owner(self.profile)), [mine])
 
     def test_empty_for_a_profile_with_no_defaults(self):
         self.assertFalse(EmergencyContactDefault.objects.for_owner(self.profile).exists())
 
     def test_respects_default_order(self):
-        second = baker.make("dashboard.EmergencyContactDefault", owner=self.profile, email="second@example.com", contact_profile=None, order=1)
-        first = baker.make("dashboard.EmergencyContactDefault", owner=self.profile, email="first@example.com", contact_profile=None, order=0)
+        second = baker.make(
+            "dashboard.EmergencyContactDefault",
+            owner=self.profile,
+            email="second@example.com",
+            contact_profile=None,
+            order=1,
+        )
+        first = baker.make(
+            "dashboard.EmergencyContactDefault",
+            owner=self.profile,
+            email="first@example.com",
+            contact_profile=None,
+            order=0,
+        )
         self.assertEqual(list(EmergencyContactDefault.objects.for_owner(self.profile)), [first, second])
 
 
@@ -494,7 +660,9 @@ class SafetyContactOptOutBlocksNotificationTests(TestCase):
             contact_profile=None,
         )
         self.assertTrue(is_contact_opted_out(None, "contact@example.com", owner=self.owner, checkin=self.checkin))
-        self.assertFalse(is_contact_opted_out(None, "contact@example.com", owner=self.owner, checkin=self.other_checkin))
+        self.assertFalse(
+            is_contact_opted_out(None, "contact@example.com", owner=self.owner, checkin=self.other_checkin)
+        )
         self.assertFalse(is_contact_opted_out(None, "contact@example.com", owner=self.owner))
 
     def test_matches_by_contact_profile_not_email(self):
@@ -529,13 +697,20 @@ class RecordContactOptOutDedupTests(TestCase):
     def setUp(self):
         self.owner = baker.make("auth.User").profile
         self.checkin = _checkin(self.owner)
-        self.contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+        self.contact = baker.make(
+            "dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None
+        )
 
     def test_repeat_calls_do_not_duplicate_a_checkin_scoped_opt_out(self):
         record_contact_opt_out(self.contact, SafetyContactOptOutScope.CHECKIN)
         record_contact_opt_out(self.contact, SafetyContactOptOutScope.CHECKIN)
 
-        self.assertEqual(SafetyContactOptOut.objects.filter(email="contact@example.com", scope=SafetyContactOptOutScope.CHECKIN, checkin=self.checkin).count(), 1)
+        self.assertEqual(
+            SafetyContactOptOut.objects.filter(
+                email="contact@example.com", scope=SafetyContactOptOutScope.CHECKIN, checkin=self.checkin
+            ).count(),
+            1,
+        )
 
     def test_a_second_identical_row_is_rejected_at_the_database(self) -> None:
         """Direct proof the constraint - not just the service function's own call

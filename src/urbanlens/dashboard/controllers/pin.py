@@ -307,7 +307,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin_alias_suggestions": pin.aliases.order_by(Case(When(kind=AliasType.OFFICIAL, then=0), default=1), "name"),
                 "detail_pin_icon_choices": detail_pin_icon_choices,
                 "color_choices": COLOR_CHOICES,
-                "all_categories": Label.objects.categories().ordered(),
+                "all_categories": Label.objects.categories().in_display_order(),
                 "default_map_view": profile.default_map_view,
                 "markup_fill_color": profile.markup_fill_color,
                 "markup_fill_opacity": profile.markup_fill_opacity,
@@ -1270,7 +1270,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 status=400,
             )
 
-        labels = Label.objects.visible_to(profile).location_labels().ordered()
+        labels = Label.objects.visible_to(profile).location_labels().in_display_order()
 
         previewed = sum(len(lst["pins"]) for lst in lists)
         if previewed >= gateway.MAX_PREVIEW_PINS:

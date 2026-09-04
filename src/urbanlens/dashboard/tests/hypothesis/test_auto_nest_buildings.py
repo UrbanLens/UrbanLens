@@ -78,10 +78,17 @@ class AutoNestPinTests(TestCase):
     def _pin(self, **kwargs) -> Pin:
         self._seq += 1
         location = baker.make(Location, latitude=_LAT + self._seq, longitude=_LNG)
-        return baker.make(Pin, profile=self.profile, location=location, parent_pin=None, name=f"Site {self._seq}", **kwargs)
+        return baker.make(
+            Pin, profile=self.profile, location=location, parent_pin=None, name=f"Site {self._seq}", **kwargs
+        )
 
     def _cache(self, pin: Pin, buildings: list[dict]) -> None:
-        LocationCache.set(pin.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": buildings, "provider": "redata"}, query_key="test")
+        LocationCache.set(
+            pin.location,
+            PARCEL_BUILDINGS_CACHE_SOURCE,
+            {"buildings": buildings, "provider": "redata"},
+            query_key="test",
+        )
 
     def test_confident_buildings_become_child_pins(self) -> None:
         pin = self._pin()
@@ -122,7 +129,9 @@ class AutoNestPinTests(TestCase):
 
         self.assertEqual(auto_nest_pin(pin), 0)
         pin.refresh_from_db()
-        self.assertIsNone(pin.buildings_auto_nested_at, "a below-threshold sweep must not stamp - more buildings may become known")
+        self.assertIsNone(
+            pin.buildings_auto_nested_at, "a below-threshold sweep must not stamp - more buildings may become known"
+        )
 
     def test_the_profile_toggle_turns_it_off(self) -> None:
         self.profile.auto_create_building_pins = False
@@ -173,14 +182,20 @@ class AutoNestPinTests(TestCase):
 
         parent = pin.detail_pins.get(name="Building 1")
         child = Pin.objects.get(name="Building 2")
-        self.assertEqual(child.parent_pin_id, parent.pk, "a contained building's pin should nest under its container's pin")
+        self.assertEqual(
+            child.parent_pin_id, parent.pk, "a contained building's pin should nest under its container's pin"
+        )
 
     def test_the_location_sweep_covers_every_root_pin(self) -> None:
         pin = self._pin()
-        other = baker.make(Pin, profile=baker.make(User).profile, location=pin.location, parent_pin=None, name="Other user's")
+        other = baker.make(
+            Pin, profile=baker.make(User).profile, location=pin.location, parent_pin=None, name="Other user's"
+        )
         self._cache(pin, [_building(1), _building(2)])
 
         created = auto_nest_location(pin.location)
 
-        self.assertEqual(created, 4, "what stands on a property is a fact about the property, for every user pinned there")
+        self.assertEqual(
+            created, 4, "what stands on a property is a fact about the property, for every user pinned there"
+        )
         self.assertEqual(other.detail_pins.count(), 2)

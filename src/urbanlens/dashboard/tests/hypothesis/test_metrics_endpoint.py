@@ -42,10 +42,10 @@ import prometheus_client
 import yaml
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.UrbanLens.settings import _metrics
 from urbanlens.dashboard.checks import check_metrics_endpoint_is_guarded
 from urbanlens.dashboard.controllers.metrics import MULTIPROC_DIR_ENV, MetricsController, _build_registry
 from urbanlens.dashboard.services.security.client_ip import address_in_networks, client_ip, parse_networks
+from urbanlens.UrbanLens.settings import _metrics
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 
@@ -63,7 +63,9 @@ class MetricsSettingsExistTests(SimpleTestCase):
     def test_settings_are_defined_without_an_override(self) -> None:
         for name in ("UL_METRICS_ENABLED", "UL_METRICS_TOKEN", "UL_METRICS_ALLOWED_CIDRS"):
             with self.subTest(setting=name):
-                self.assertTrue(hasattr(settings, name), f"{name} is not defined in settings; every guard reading it is dead code.")
+                self.assertTrue(
+                    hasattr(settings, name), f"{name} is not defined in settings; every guard reading it is dead code."
+                )
 
     def test_disabled_by_default(self) -> None:
         # The default has to be off: this endpoint describes the application,
@@ -206,7 +208,9 @@ class MetricsNetworkGateTests(SimpleTestCase):
     def test_both_gates_must_pass_when_both_are_configured(self) -> None:
         self.assertEqual(self._get("10.2.0.9", forwarded="10.2.0.9").status_code, 401)
         response = MetricsController.as_view()(
-            self.factory.get("/metrics", REMOTE_ADDR="10.2.0.9", HTTP_X_FORWARDED_FOR="10.2.0.9", HTTP_AUTHORIZATION="Bearer tok"),
+            self.factory.get(
+                "/metrics", REMOTE_ADDR="10.2.0.9", HTTP_X_FORWARDED_FOR="10.2.0.9", HTTP_AUTHORIZATION="Bearer tok"
+            ),
         )
         self.assertEqual(response.status_code, 200)
 
@@ -215,7 +219,10 @@ class ClientIpHelperTests(SimpleTestCase):
     """The shared address helpers, at the edges the gate depends on."""
 
     def test_parse_networks_drops_unparseable_entries(self) -> None:
-        self.assertEqual(parse_networks("10.0.0.0/8, garbage, 192.168.0.0/16"), (ipaddress.ip_network("10.0.0.0/8"), ipaddress.ip_network("192.168.0.0/16")))
+        self.assertEqual(
+            parse_networks("10.0.0.0/8, garbage, 192.168.0.0/16"),
+            (ipaddress.ip_network("10.0.0.0/8"), ipaddress.ip_network("192.168.0.0/16")),
+        )
 
     def test_parse_networks_returns_an_immutable_result(self) -> None:
         # It is cached and shared between callers; a list would let one caller
@@ -293,7 +300,9 @@ class MetricsStartupCheckTests(SimpleTestCase):
     def test_a_token_alone_satisfies_the_check(self) -> None:
         self.assertEqual(check_metrics_endpoint_is_guarded(), [])
 
-    @override_settings(UL_METRICS_ENABLED=True, UL_METRICS_TOKEN="", UL_METRICS_ALLOWED_CIDRS="10.2.0.0/24", IS_PRODUCTION=True)
+    @override_settings(
+        UL_METRICS_ENABLED=True, UL_METRICS_TOKEN="", UL_METRICS_ALLOWED_CIDRS="10.2.0.0/24", IS_PRODUCTION=True
+    )
     def test_an_allowlist_alone_satisfies_the_check(self) -> None:
         self.assertEqual(check_metrics_endpoint_is_guarded(), [])
 
@@ -327,7 +336,10 @@ class MetricsInstrumentationGateTests(SimpleTestCase):
         # there has to be considered here rather than silently instrumented.
         for role in ("websocket", "worker", "panels", "beat", "metrics", "sandbox", "inference", "ai"):
             with self.subTest(role=role):
-                self.assertFalse(_metrics.instrumentation_wanted(metrics_enabled=True, process_role=role), f"{role!r} is never scraped; instrumenting it costs a middleware pair whose counters nothing reads.")
+                self.assertFalse(
+                    _metrics.instrumentation_wanted(metrics_enabled=True, process_role=role),
+                    f"{role!r} is never scraped; instrumenting it costs a middleware pair whose counters nothing reads.",
+                )
 
     def test_the_web_role_is_instrumented(self) -> None:
         self.assertTrue(_metrics.instrumentation_wanted(metrics_enabled=True, process_role="web"))
@@ -343,9 +355,11 @@ class MetricsInstrumentationGateTests(SimpleTestCase):
     def test_a_missing_package_names_the_setting(self) -> None:
         # The failure being replaced: a bare ModuleNotFoundError for a module the
         # operator never heard of, crash-looping every Django process at once.
-        with mock.patch.dict(sys.modules, {"django_prometheus": None}):
-            with self.assertRaises(ImproperlyConfigured) as caught:
-                _metrics.require_django_prometheus()
+        with (
+            mock.patch.dict(sys.modules, {"django_prometheus": None}),
+            self.assertRaises(ImproperlyConfigured) as caught,
+        ):
+            _metrics.require_django_prometheus()
         self.assertIn("UL_METRICS_ENABLED", str(caught.exception))
         self.assertIsInstance(caught.exception.__cause__, ImportError)
 
@@ -374,11 +388,17 @@ class MetricsInstrumentationGateTests(SimpleTestCase):
                 gate = None
             if "django_prometheus" not in line or line.lstrip().startswith("#"):
                 continue
-            self.assertEqual(gate, "UL_METRICS_INSTRUMENTED", f"{line.strip()!r} is registered under {gate!r}, which does not account for UL_PROCESS_ROLE.")
+            self.assertEqual(
+                gate,
+                "UL_METRICS_INSTRUMENTED",
+                f"{line.strip()!r} is registered under {gate!r}, which does not account for UL_PROCESS_ROLE.",
+            )
             # The quote is what separates a registration from the import guard
             # that shares the name (`_metrics.require_django_prometheus()`).
             registrations += '"django_prometheus' in line
-        self.assertEqual(registrations, 3, "Expected the INSTALLED_APPS entry and both middlewares; adjust this count deliberately.")
+        self.assertEqual(
+            registrations, 3, "Expected the INSTALLED_APPS entry and both middlewares; adjust this count deliberately."
+        )
 
 
 class MetricsDeploymentWiringTests(SimpleTestCase):
@@ -392,15 +412,24 @@ class MetricsDeploymentWiringTests(SimpleTestCase):
         # volume, which is why this one is handled separately.
         compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
         multiproc = compose["services"]["app"]["environment"]["PROMETHEUS_MULTIPROC_DIR"]
-        mounted = {mount.split(":")[1] for service in compose["services"].values() for mount in service.get("volumes", []) if isinstance(mount, str) and ":" in mount}
-        self.assertNotIn(multiproc, mounted, f"{multiproc} is a mounted volume; metrics from different services would be blended into one scrape.")
+        mounted = {
+            mount.split(":")[1]
+            for service in compose["services"].values()
+            for mount in service.get("volumes", [])
+            if isinstance(mount, str) and ":" in mount
+        }
+        self.assertNotIn(
+            multiproc,
+            mounted,
+            f"{multiproc} is a mounted volume; metrics from different services would be blended into one scrape.",
+        )
 
     def test_entrypoint_creates_and_clears_the_directory(self) -> None:
         # Creating it is not enough. The files are keyed by pid and survive a
         # restart of the same container, so a stale one is summed into every
         # later scrape.
         entrypoint = (REPO_ROOT / "docker-entrypoint.sh").read_text()
-        self.assertIn("mkdir -p \"${PROMETHEUS_MULTIPROC_DIR}\"", entrypoint)
+        self.assertIn('mkdir -p "${PROMETHEUS_MULTIPROC_DIR}"', entrypoint)
         self.assertRegex(entrypoint, r"rm -f \"\$\{PROMETHEUS_MULTIPROC_DIR\}\"/\*\.db")
 
     def test_gunicorn_retires_dead_workers(self) -> None:
@@ -420,16 +449,34 @@ class MetricsDeploymentWiringTests(SimpleTestCase):
         # but the public vhost should not be the thing standing between a
         # misconfiguration and the internet.
         conf = (REPO_ROOT / "src/urbanlens/config/nginx/django.conf").read_text()
-        self.assertRegex(conf, r"location\s*=\s*/metrics\s*\{[^}]*return\s+404", "The public vhost proxies /metrics to the app.")
+        self.assertRegex(
+            conf, r"location\s*=\s*/metrics\s*\{[^}]*return\s+404", "The public vhost proxies /metrics to the app."
+        )
 
     def test_each_service_that_could_serve_metrics_decides_explicitly(self) -> None:
         # Enabling it per service is the point, and every service that *could*
         # serve an endpoint has to say which way - including the ones saying no.
         compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
-        declared = {name: (service.get("environment") or {}).get("UL_METRICS_ENABLED") for name, service in compose["services"].items() if "UL_METRICS_ENABLED" in (service.get("environment") or {})}
-        self.assertEqual(declared.get("app"), "${UL_METRICS_ENABLED:-false}", "The web service should follow the env var, defaulting off.")
-        self.assertEqual(declared.get("celery-metrics"), "${UL_METRICS_ENABLED:-false}", "The Celery exporter follows the same flag: it exits rather than binding an unguarded port, so deploying it while metrics are off is a restart loop.")
-        self.assertEqual(declared.get("app-ws"), "false", "app-ws must pin this off explicitly - it shares .env with app, and environment: outranks env_file:, so merely omitting it would let a UL_METRICS_ENABLED meant for app enable a second endpoint here.")
+        declared = {
+            name: (service.get("environment") or {}).get("UL_METRICS_ENABLED")
+            for name, service in compose["services"].items()
+            if "UL_METRICS_ENABLED" in (service.get("environment") or {})
+        }
+        self.assertEqual(
+            declared.get("app"),
+            "${UL_METRICS_ENABLED:-false}",
+            "The web service should follow the env var, defaulting off.",
+        )
+        self.assertEqual(
+            declared.get("celery-metrics"),
+            "${UL_METRICS_ENABLED:-false}",
+            "The Celery exporter follows the same flag: it exits rather than binding an unguarded port, so deploying it while metrics are off is a restart loop.",
+        )
+        self.assertEqual(
+            declared.get("app-ws"),
+            "false",
+            "app-ws must pin this off explicitly - it shares .env with app, and environment: outranks env_file:, so merely omitting it would let a UL_METRICS_ENABLED meant for app enable a second endpoint here.",
+        )
         self.assertEqual(set(declared), {"app", "app-ws", "celery-metrics"})
 
     def test_every_service_sharing_the_env_file_decides_explicitly(self) -> None:
@@ -456,7 +503,9 @@ class MetricsDeploymentWiringTests(SimpleTestCase):
         # The pair only means anything in that order: the difference between the
         # two timers is what the rest of the stack costs.
         base = (REPO_ROOT / "src/urbanlens/UrbanLens/settings/base.py").read_text()
-        self.assertRegex(base, r"MIDDLEWARE\.insert\(0,\s*[\"']django_prometheus\.middleware\.PrometheusBeforeMiddleware")
+        self.assertRegex(
+            base, r"MIDDLEWARE\.insert\(0,\s*[\"']django_prometheus\.middleware\.PrometheusBeforeMiddleware"
+        )
         self.assertRegex(base, r"MIDDLEWARE\.append\(\s*[\"']django_prometheus\.middleware\.PrometheusAfterMiddleware")
 
     def test_dependency_is_declared_and_locked(self) -> None:
@@ -482,10 +531,14 @@ class MetricsDeploymentWiringTests(SimpleTestCase):
         # in different files, so the comment saying "keep these in step" is only
         # worth as much as this assertion.
         conf = (REPO_ROOT / "src/urbanlens/config/nginx/django.conf").read_text()
-        match = re.search(r"location\s*/\s*\{[^}]*?proxy_read_timeout\s+(\d+)s", conf, re.S)
+        match = re.search(r"location\s*/\s*\{[^}]*?proxy_read_timeout\s+(\d+)s", conf, re.DOTALL)
         self.assertIsNotNone(match, "Could not find proxy_read_timeout for the main location block.")
         timeout = float(match.group(1))
-        self.assertIn(timeout, settings.PROMETHEUS_LATENCY_BUCKETS, f"nginx times out at {timeout}s but no latency bucket matches it; proxy-timed-out requests would be indistinguishable from merely slow ones.")
+        self.assertIn(
+            timeout,
+            settings.PROMETHEUS_LATENCY_BUCKETS,
+            f"nginx times out at {timeout}s but no latency bucket matches it; proxy-timed-out requests would be indistinguishable from merely slow ones.",
+        )
 
 
 class CeleryQueueDepthCollectorTests(SimpleTestCase):
@@ -573,14 +626,24 @@ class CeleryEventMetricsTests(SimpleTestCase):
         """Guards the isolation the assertions in this class depend on."""
         from prometheus_client import values
 
-        self.assertEqual(values.ValueClass.__qualname__, "MutexValue", "tests are running in prometheus multiprocess mode, where counters bleed across registries")
+        self.assertEqual(
+            values.ValueClass.__qualname__,
+            "MutexValue",
+            "tests are running in prometheus multiprocess mode, where counters bleed across registries",
+        )
 
     def test_succeeded_records_outcome_and_runtime(self) -> None:
         m = self._metrics()
         m.on_task_event({"type": "task-succeeded", "runtime": 2.5}, "urbanlens.tasks.real_task")
-        self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task="urbanlens.tasks.real_task", state="succeeded"), 1.0)
-        self.assertEqual(self._value(m, "urbanlens_celery_task_runtime_seconds_count", task="urbanlens.tasks.real_task"), 1.0)
-        self.assertEqual(self._value(m, "urbanlens_celery_task_runtime_seconds_sum", task="urbanlens.tasks.real_task"), 2.5)
+        self.assertEqual(
+            self._value(m, "urbanlens_celery_tasks_total", task="urbanlens.tasks.real_task", state="succeeded"), 1.0
+        )
+        self.assertEqual(
+            self._value(m, "urbanlens_celery_task_runtime_seconds_count", task="urbanlens.tasks.real_task"), 1.0
+        )
+        self.assertEqual(
+            self._value(m, "urbanlens_celery_task_runtime_seconds_sum", task="urbanlens.tasks.real_task"), 2.5
+        )
 
     def test_failed_records_outcome_but_no_runtime(self) -> None:
         # A failed task's duration is the time to the exception, which is not
@@ -588,8 +651,12 @@ class CeleryEventMetricsTests(SimpleTestCase):
         # percentiles toward whatever the failure happened to cost.
         m = self._metrics()
         m.on_task_event({"type": "task-failed", "runtime": 99.0}, "urbanlens.tasks.real_task")
-        self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task="urbanlens.tasks.real_task", state="failed"), 1.0)
-        self.assertEqual(self._value(m, "urbanlens_celery_task_runtime_seconds_count", task="urbanlens.tasks.real_task"), 0.0)
+        self.assertEqual(
+            self._value(m, "urbanlens_celery_tasks_total", task="urbanlens.tasks.real_task", state="failed"), 1.0
+        )
+        self.assertEqual(
+            self._value(m, "urbanlens_celery_task_runtime_seconds_count", task="urbanlens.tasks.real_task"), 0.0
+        )
 
     def test_transitions_are_not_counted_as_outcomes(self) -> None:
         # task-received and task-started precede every task. Counting them
@@ -610,7 +677,10 @@ class CeleryEventMetricsTests(SimpleTestCase):
         # cannot afford to import the task registry, so an allowlist built from
         # it was empty and every real task collapsed into one useless bucket.
         m = self._metrics()
-        for name in ("urbanlens.dashboard.tasks.sweep_achievements", "urbanlens.dashboard.tasks.run_scheduled_database_backup"):
+        for name in (
+            "urbanlens.dashboard.tasks.sweep_achievements",
+            "urbanlens.dashboard.tasks.run_scheduled_database_backup",
+        ):
             m.on_task_event({"type": "task-succeeded", "runtime": 1.0}, name)
             with self.subTest(name=name):
                 self.assertEqual(self._value(m, "urbanlens_celery_tasks_total", task=name, state="succeeded"), 1.0)
@@ -735,7 +805,10 @@ class MetricsScrapeTargetHostTests(SimpleTestCase):
         compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
         aliases = compose["services"]["app"]["networks"]["app_network"]["aliases"]
         legal = [a for a in aliases if "_" not in a]
-        self.assertTrue(legal, f"app needs a network alias that is a legal hostname; got {aliases}. A scraper cannot use an underscored one.")
+        self.assertTrue(
+            legal,
+            f"app needs a network alias that is a legal hostname; got {aliases}. A scraper cannot use an underscored one.",
+        )
 
     def test_django_really_rejects_the_underscored_alias(self) -> None:
         # Pins the reason the alias above exists, so nobody 'simplifies' it away.

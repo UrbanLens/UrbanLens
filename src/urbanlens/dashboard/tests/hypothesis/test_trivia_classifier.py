@@ -44,7 +44,9 @@ class ClassifyTriviaQuestionTests(TestCase):
         self.location = _make_location()
 
     def _classify(self, answer_token: str | None):
-        with patch("urbanlens.dashboard.services.trivia.classifier.get_gateway", return_value=_FakeGateway(answer_token)):
+        with patch(
+            "urbanlens.dashboard.services.trivia.classifier.get_gateway", return_value=_FakeGateway(answer_token)
+        ):
             return classify_trivia_question("What year was it built?", "1937", self.location)
 
     def test_approve_token_approves(self) -> None:
@@ -103,7 +105,10 @@ class ClassifyTriviaQuestionTests(TestCase):
                 captured["prompt"] = prompt
                 return self._answer
 
-        with patch("urbanlens.dashboard.services.trivia.classifier.get_gateway", return_value=_CapturingGateway("<ANSWER>APPROVE</ANSWER>")):
+        with patch(
+            "urbanlens.dashboard.services.trivia.classifier.get_gateway",
+            return_value=_CapturingGateway("<ANSWER>APPROVE</ANSWER>"),
+        ):
             classify_trivia_question("What year was it built?", "1937", self.location)
 
         self.assertIn("<USER_DATA>", captured["prompt"])
@@ -132,7 +137,9 @@ class ClassifyTriviaQuestionProfileGateTests(TestCase):
 
     def test_no_submitting_profile_is_unaffected(self) -> None:
         """AI-generated questions (profile=None) skip the per-profile gate entirely."""
-        with patch("urbanlens.dashboard.services.trivia.classifier.get_gateway", return_value=_FakeGateway("APPROVE")) as mock_get_gateway:
+        with patch(
+            "urbanlens.dashboard.services.trivia.classifier.get_gateway", return_value=_FakeGateway("APPROVE")
+        ) as mock_get_gateway:
             verdict = classify_trivia_question("What year was it built?", "1937", self.location)
         self.assertTrue(verdict.approved)
         self.assertIsNone(mock_get_gateway.call_args.kwargs["profile"])

@@ -117,7 +117,9 @@ class RevertSignalTests(TestCase):
         )
 
     def _event(self) -> ReputationEvent:
-        return ReputationEvent.objects.get(rule_key="wiki_field_edit", target_kind=TargetKind.WIKI_EDIT, target_id=self.edit.pk)
+        return ReputationEvent.objects.get(
+            rule_key="wiki_field_edit", target_kind=TargetKind.WIKI_EDIT, target_id=self.edit.pk
+        )
 
     def test_reverting_the_edit_retracts_its_row(self) -> None:
         """A contribution somebody undid should not go on paying."""

@@ -188,11 +188,17 @@ class ConversationLastMessageReactionPrefetchTests(TestCase):
         with CaptureQueriesContext(connection) as ctx:
             reactions = list(rows[0]["last_message"].reactions.all())
         self.assertEqual(len(reactions), 1)
-        self.assertEqual(len(ctx.captured_queries), 0, "reactions were not prefetched on conversations_for's last_message")
+        self.assertEqual(
+            len(ctx.captured_queries), 0, "reactions were not prefetched on conversations_for's last_message"
+        )
 
     def test_group_last_message_reactions_and_shares_are_prefetched(self) -> None:
         from urbanlens.dashboard.models.reactions.model import Reaction
-        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, create_group_message, group_conversations_for
+        from urbanlens.dashboard.services.messaging.group_chats import (
+            create_group_chat,
+            create_group_message,
+            group_conversations_for,
+        )
 
         member = baker.make(User).profile
         Profile.objects.filter(pk__in=[self.me.pk, member.pk]).update(direct_message_visibility=VisibilityChoice.ANYONE)
@@ -209,4 +215,8 @@ class ConversationLastMessageReactionPrefetchTests(TestCase):
             shares = list(rows[0]["last_message"].shares.all())
         self.assertEqual(len(reactions), 1)
         self.assertEqual(shares, [])
-        self.assertEqual(len(ctx.captured_queries), 0, "reactions/shares were not prefetched on group_conversations_for's last_message")
+        self.assertEqual(
+            len(ctx.captured_queries),
+            0,
+            "reactions/shares were not prefetched on group_conversations_for's last_message",
+        )

@@ -5,11 +5,12 @@ mistake would be treating "has a wiki" as public: wiki visibility is earned per
 viewer, and exporting on that basis would publish every location any user has
 pinned. These tests pin the definition.
 """
+
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
+import tempfile
 
 from django.core.management import call_command
 from model_bakery import baker
@@ -30,7 +31,9 @@ def _export() -> dict:
 class PublicLocationExportTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.location = baker.make(Location, latitude="41.700000", longitude="-73.900000", google_place=None, official_name="Passed Place")
+        self.location = baker.make(
+            Location, latitude="41.700000", longitude="-73.900000", google_place=None, official_name="Passed Place"
+        )
 
     def test_a_passed_candidate_is_exported(self) -> None:
         baker.make(PublicPinCandidate, location=self.location, status=PublicPinCandidateStatus.PASSED)

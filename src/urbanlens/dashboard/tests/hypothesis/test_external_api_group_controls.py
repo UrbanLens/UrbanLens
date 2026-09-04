@@ -51,7 +51,12 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
-from urbanlens.dashboard.services.messaging.group_chats import add_group_members, create_group_chat, set_group_muted, share_pin_in_group_message
+from urbanlens.dashboard.services.messaging.group_chats import (
+    add_group_members,
+    create_group_chat,
+    set_group_muted,
+    share_pin_in_group_message,
+)
 
 AccessToken = get_access_token_model()
 
@@ -87,7 +92,9 @@ def _token_for(user: User, scope: str = READ_WRITE) -> str:
 
 def _open_dms(*profiles: Profile) -> None:
     """Let these profiles message each other, which group creation requires."""
-    Profile.objects.filter(pk__in=[profile.pk for profile in profiles]).update(direct_message_visibility=VisibilityChoice.ANYONE)
+    Profile.objects.filter(pk__in=[profile.pk for profile in profiles]).update(
+        direct_message_visibility=VisibilityChoice.ANYONE
+    )
     for profile in profiles:
         profile.refresh_from_db()
 
@@ -125,7 +132,9 @@ class GroupControlsBaseTestCase(TestCase):
         self.member_auth = _bearer(_token_for(self.member.user))
         self.stranger_auth = _bearer(_token_for(self.stranger.user))
 
-    def _message(self, sender: Profile | None = None, body: str = "hello", group: GroupChat | None = None) -> GroupMessage:
+    def _message(
+        self, sender: Profile | None = None, body: str = "hello", group: GroupChat | None = None
+    ) -> GroupMessage:
         """Put one message in a group without going through the send endpoint."""
         return GroupMessage.objects.create(group=group or self.group, sender=sender or self.creator, body=body)
 
@@ -235,7 +244,9 @@ class GroupMessageReactionTests(GroupControlsBaseTestCase):
     def test_pat_credential_is_refused_even_holding_the_scope(self) -> None:
         """Messaging is OAuth2-only; a leaked bearer key is not a way in."""
         key, raw = generate_api_key(self.member.user, "leaky-key")
-        ApiKey.objects.filter(pk=key.pk).update(scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value])
+        ApiKey.objects.filter(pk=key.pk).update(
+            scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value]
+        )
         self.assertEqual(self._post_json(self.url, {"emoji": "👍"}, _bearer(raw)).status_code, 403)
 
     def test_read_scope_alone_cannot_react(self) -> None:
@@ -353,7 +364,9 @@ class GroupLeaveTests(GroupControlsBaseTestCase):
 
     def test_unknown_group_is_404(self) -> None:
         """An unknown uuid answers the same as a group the caller can't see."""
-        url = reverse("external_api:messages.groups.leave", kwargs={"group_uuid": "11111111-1111-1111-1111-111111111111"})
+        url = reverse(
+            "external_api:messages.groups.leave", kwargs={"group_uuid": "11111111-1111-1111-1111-111111111111"}
+        )
         self.assertEqual(self.client.post(url, **self.member_auth).status_code, 404)
 
     def test_creator_may_leave_their_own_group(self) -> None:
@@ -425,7 +438,9 @@ class GroupMuteTests(GroupControlsBaseTestCase):
         self._message(body="still here")
         self.client.put(self.url, **self.member_auth)
         payload = self.client.get(reverse("external_api:messages.conversations"), **self.member_auth).json()
-        groups = [row for row in payload["results"] if row["kind"] == "group" and row["group_uuid"] == str(self.group.uuid)]
+        groups = [
+            row for row in payload["results"] if row["kind"] == "group" and row["group_uuid"] == str(self.group.uuid)
+        ]
         self.assertEqual(len(groups), 1, "a muted group must still be listed")
         self.assertTrue(groups[0]["is_muted"])
         self.assertEqual(groups[0]["unread_count"], 1, "muting must not zero the unread count either")
@@ -438,7 +453,9 @@ class GroupMuteTests(GroupControlsBaseTestCase):
 
     def test_unknown_group_is_404(self) -> None:
         """An unknown uuid is indistinguishable from a group the caller can't see."""
-        url = reverse("external_api:messages.groups.mute", kwargs={"group_uuid": "11111111-1111-1111-1111-111111111111"})
+        url = reverse(
+            "external_api:messages.groups.mute", kwargs={"group_uuid": "11111111-1111-1111-1111-111111111111"}
+        )
         self.assertEqual(self.client.put(url, **self.member_auth).status_code, 404)
 
     def test_read_scope_alone_cannot_write_the_flag(self) -> None:
@@ -558,7 +575,9 @@ class ConversationMuteTests(GroupControlsBaseTestCase):
     def test_pat_credential_is_refused(self) -> None:
         """Messaging stays OAuth2-only on the new routes as well."""
         key, raw = generate_api_key(self.creator.user, "leaky-key")
-        ApiKey.objects.filter(pk=key.pk).update(scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value])
+        ApiKey.objects.filter(pk=key.pk).update(
+            scopes=[ApiKeyScope.MESSAGES_READ.value, ApiKeyScope.MESSAGES_WRITE.value]
+        )
         self.assertEqual(self.client.put(self.url, **_bearer(raw)).status_code, 403)
 
 
@@ -635,8 +654,14 @@ class GroupMessagePayloadTests(GroupControlsBaseTestCase):
         self._post_json(react_url, {"emoji": "🔥"}, self.member_auth)
 
         payload = self.client.get(reverse("external_api:messages.conversations"), **self.creator_auth).json()
-        row = next(item for item in payload["results"] if item["kind"] == "group" and item["group_uuid"] == str(self.group.uuid))
-        self.assertEqual(row["last_message"]["reactions"], [{"emoji": "🔥", "count": 1, "slugs": [self.member.slug or ""]}])
+        row = next(
+            item
+            for item in payload["results"]
+            if item["kind"] == "group" and item["group_uuid"] == str(self.group.uuid)
+        )
+        self.assertEqual(
+            row["last_message"]["reactions"], [{"emoji": "🔥", "count": 1, "slugs": [self.member.slug or ""]}]
+        )
         self.assertIn("pin_share_id", row["last_message"])
 
     def test_thread_reactions_mask_hidden_reactor_slug_per_viewer(self) -> None:
@@ -680,7 +705,17 @@ class GroupMessagePayloadTests(GroupControlsBaseTestCase):
 
         creator_payload = self.client.get(reverse("external_api:messages.conversations"), **self.creator_auth).json()
         hidden_payload = self.client.get(reverse("external_api:messages.conversations"), **hidden_auth).json()
-        creator_row = next(item for item in creator_payload["results"] if item["kind"] == "group" and item["group_uuid"] == str(self.group.uuid))
-        hidden_row = next(item for item in hidden_payload["results"] if item["kind"] == "group" and item["group_uuid"] == str(self.group.uuid))
+        creator_row = next(
+            item
+            for item in creator_payload["results"]
+            if item["kind"] == "group" and item["group_uuid"] == str(self.group.uuid)
+        )
+        hidden_row = next(
+            item
+            for item in hidden_payload["results"]
+            if item["kind"] == "group" and item["group_uuid"] == str(self.group.uuid)
+        )
         self.assertEqual(creator_row["last_message"]["reactions"], [{"emoji": "🔥", "count": 1, "slugs": [""]}])
-        self.assertEqual(hidden_row["last_message"]["reactions"], [{"emoji": "🔥", "count": 1, "slugs": [hidden.slug or ""]}])
+        self.assertEqual(
+            hidden_row["last_message"]["reactions"], [{"emoji": "🔥", "count": 1, "slugs": [hidden.slug or ""]}]
+        )

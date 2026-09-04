@@ -6,6 +6,7 @@ tag hierarchy traversal (by_tag), and the proximity-based manager method.
 
 All tests require the database.
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -34,12 +35,16 @@ class PinQuerySetStructureTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         # Root: no parent_pin
         self.root = baker.make(
-            Pin, profile=self.profile, location=self.location,
+            Pin,
+            profile=self.profile,
+            location=self.location,
             parent_pin=None,
         )
         # Detail: parent_pin set
         self.detail = baker.make(
-            Pin, profile=self.profile, location=self.location,
+            Pin,
+            profile=self.profile,
+            location=self.location,
             parent_pin=self.root,
         )
 
@@ -64,8 +69,12 @@ class PinQuerySetWithinBoundsTests(TestCase):
 
     def setUp(self):
         self.profile = baker.make("auth.User").profile
-        self.inside = baker.make(Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="40.0", longitude="-74.0"))
-        self.outside = baker.make(Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="45.0", longitude="-80.0"))
+        self.inside = baker.make(
+            Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
+        )
+        self.outside = baker.make(
+            Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="45.0", longitude="-80.0")
+        )
 
     def _qs(self):
         return Pin.objects.filter(profile=self.profile)
@@ -126,6 +135,7 @@ class WikiQuerySetStructureTests(TestCase):
 
 # -- never_visited -------------------------------------------------------------
 
+
 class PinQuerySetNeverVisitedTests(TestCase):
     """never_visited() returns only pins with last_visited == None."""
 
@@ -145,6 +155,7 @@ class PinQuerySetNeverVisitedTests(TestCase):
 
 
 # -- rated / rated_over / rated_under -----------------------------------------
+
 
 class PinQuerySetRatingTests(TestCase):
     """rated() / rated_over() / rated_under() filter by linked review score."""
@@ -185,6 +196,7 @@ class PinQuerySetRatingTests(TestCase):
 
 
 # -- by_tag --------------------------------------------------------------------
+
 
 class PinQuerySetByTagTests(TestCase):
     """by_tag() traverses the Label parents M2M to include descendant tags."""
@@ -236,6 +248,7 @@ class PinQuerySetByTagTests(TestCase):
 
 # -- PinManager.get_nearby_or_create -------------------------------------------
 
+
 class PinManagerGetNearbyOrCreateGuardTests(TestCase):
     """get_nearby_or_create() returns (None, False) for invalid inputs."""
 
@@ -266,7 +279,9 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
         loc = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         # Seed an existing pin at a known coordinate using the manager.
         self.existing, _ = Pin.objects.get_nearby_or_create(
-            40.0, -74.0, self.profile,
+            40.0,
+            -74.0,
+            self.profile,
             threshold_meters=100,
             defaults={"location": loc},
         )
@@ -279,7 +294,10 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
     def test_distant_point_creates_new_pin(self) -> None:
         loc: Location = baker.make(Location, latitude="51.5", longitude="-0.1")
         pin, created = Pin.objects.get_nearby_or_create(
-            51.5, -0.1, self.profile, defaults={"location": loc},
+            51.5,
+            -0.1,
+            self.profile,
+            defaults={"location": loc},
         )
         self.assertTrue(created)
         self.assertNotEqual(pin.pk, self.existing.pk)
@@ -287,7 +305,10 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
     def test_created_pin_is_persisted(self) -> None:
         loc: Location = baker.make(Location, latitude="51.5", longitude="-0.1")
         pin, created = Pin.objects.get_nearby_or_create(
-            51.5, -0.1, self.profile, defaults={"location": loc},
+            51.5,
+            -0.1,
+            self.profile,
+            defaults={"location": loc},
         )
         self.assertTrue(created)
         self.assertTrue(Pin.objects.filter(pk=pin.pk).exists())

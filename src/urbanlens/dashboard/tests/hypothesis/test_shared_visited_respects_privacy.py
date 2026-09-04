@@ -1,4 +1,4 @@
-""""Visited Together" must obey the same opt-in as "Places in Common".
+""" "Visited Together" must obey the same opt-in as "Places in Common".
 
 ``_add_common_context`` gates ``common_pin_count`` behind
 ``Profile.can_view_common_pins_with`` - deliberately mutual, because, as that
@@ -45,7 +45,7 @@ class SharedVisitedPrivacyTests(TestCase):
         self.location = baker.make(Location)
         for profile in (self.viewer, self.subject):
             pin = baker.make(Pin, profile=profile, location=self.location)
-            pin.labels.add(ensure_label( profile=profile, kind=KIND_STATUS, name="Visited", is_protected=True))
+            pin.labels.add(ensure_label(profile=profile, kind=KIND_STATUS, name="Visited", is_protected=True))
 
         self.client.force_login(self.viewer_user)
 
@@ -55,7 +55,9 @@ class SharedVisitedPrivacyTests(TestCase):
         return response.context
 
     def _allow_both(self) -> None:
-        Profile.objects.filter(pk__in=[self.viewer.pk, self.subject.pk]).update(common_pins_visibility=VisibilityChoice.ANYONE)
+        Profile.objects.filter(pk__in=[self.viewer.pk, self.subject.pk]).update(
+            common_pins_visibility=VisibilityChoice.ANYONE
+        )
 
     def test_it_is_shown_when_both_sides_permit_it(self) -> None:
         """Anchors the rest: without this, a passing privacy test could be vacuous."""

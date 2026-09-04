@@ -24,7 +24,15 @@ def _gateway(session: mock.Mock) -> RedataGeocodeGateway:
 class GeocodeTests(SimpleTestCase):
     def test_sends_query_and_optional_bias_coordinates(self) -> None:
         session = mock.Mock()
-        session.get.return_value = _response(200, {"count": 1, "complete": True, "results": [{"provider": "nominatim", "latitude": 1.0, "longitude": 2.0}], "providers": []})
+        session.get.return_value = _response(
+            200,
+            {
+                "count": 1,
+                "complete": True,
+                "results": [{"provider": "nominatim", "latitude": 1.0, "longitude": 2.0}],
+                "providers": [],
+            },
+        )
 
         envelope = _gateway(session).geocode("123 Main St", latitude=1.0, longitude=2.0, limit=1)
 
@@ -49,7 +57,9 @@ class GeocodeTests(SimpleTestCase):
 class ReverseGeocodeTests(SimpleTestCase):
     def test_sends_coordinates(self) -> None:
         session = mock.Mock()
-        session.get.return_value = _response(200, {"count": 1, "complete": True, "results": [{"provider": "nominatim"}], "providers": []})
+        session.get.return_value = _response(
+            200, {"count": 1, "complete": True, "results": [{"provider": "nominatim"}], "providers": []}
+        )
 
         envelope = _gateway(session).reverse_geocode(38.456, -77.123, provider="nominatim")
 

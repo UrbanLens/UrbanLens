@@ -15,7 +15,12 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip
 from urbanlens.dashboard.models.undo import UndoAction
-from urbanlens.dashboard.services.undo.service import UndoExpiredError, redo_undo_action, restore_undo_action, stash_for_undo
+from urbanlens.dashboard.services.undo.service import (
+    UndoExpiredError,
+    redo_undo_action,
+    restore_undo_action,
+    stash_for_undo,
+)
 
 
 class UndoRedoIsSingleUseTests(TestCase):

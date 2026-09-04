@@ -105,7 +105,9 @@ class PhotoUploadGauntletTests(TestCase):
 
     def test_documents_are_not_extension_restricted(self) -> None:
         """`.docx` has no entry in the document extension set and is converted after upload."""
-        upload = SimpleUploadedFile("report.docx", b"PK\x03\x04 not really a docx", content_type="application/octet-stream")
+        upload = SimpleUploadedFile(
+            "report.docx", b"PK\x03\x04 not really a docx", content_type="application/octet-stream"
+        )
 
         self.assertIsNone(image_upload_error(upload, MediaKind.DOCUMENT, skip_malware_scan=True))
 

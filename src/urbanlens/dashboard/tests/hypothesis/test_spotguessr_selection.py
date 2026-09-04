@@ -19,7 +19,12 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import DEFAULT_RATING, GLICKO2_SCALE, LocationModeRating, SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import (
+    DEFAULT_RATING,
+    GLICKO2_SCALE,
+    LocationModeRating,
+    SpotGuessrMode,
+)
 from urbanlens.dashboard.services.spotguessr.selection import (
     DIFFICULTY_BANDWIDTH,
     MAX_LOCATION_RATING,
@@ -107,7 +112,12 @@ class DifficultyWeightTests(TestCase):
         location = _make_location()
         for _ in range(25):
             baker.make(Pin, profile=_make_profile(), location=location)
-        rating = baker.make(LocationModeRating, location=location, mode=SpotGuessrMode.PHOTOS, games_played=MIN_GAMES_FOR_DIFFICULTY_WEIGHTING)
+        rating = baker.make(
+            LocationModeRating,
+            location=location,
+            mode=SpotGuessrMode.PHOTOS,
+            games_played=MIN_GAMES_FOR_DIFFICULTY_WEIGHTING,
+        )
         target = target_rating_for_difficulty(0.5)
 
         expected = math.exp(-((rating.rating - target) ** 2) / (2 * DIFFICULTY_BANDWIDTH**2))
@@ -125,7 +135,9 @@ class DifficultyWeightTests(TestCase):
         # here, since the location is saturated with pins).
         games_played = 2
         earned_mu = (MAX_LOCATION_RATING - DEFAULT_RATING) / GLICKO2_SCALE
-        rating = baker.make(LocationModeRating, location=location, mode=SpotGuessrMode.PHOTOS, games_played=games_played, mu=earned_mu)
+        rating = baker.make(
+            LocationModeRating, location=location, mode=SpotGuessrMode.PHOTOS, games_played=games_played, mu=earned_mu
+        )
 
         target = target_rating_for_difficulty(0.5)
         proxy_rating = _proxy_difficulty_rating(location)

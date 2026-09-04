@@ -53,6 +53,8 @@ class JournalSourceScopeCoverageTests(SimpleTestCase):
         """``filter_sources_by_grants`` deliberately does not assume the view's
         own ``required_scopes`` were satisfied, so each entry must list them."""
         base = MemoriesJournalView.required_scopes_by_method["GET"]
-        missing = sorted(key for key, scopes in MemoriesJournalView.JOURNAL_SOURCE_SCOPES.items() if not base <= set(scopes))
+        missing = sorted(
+            key for key, scopes in MemoriesJournalView.JOURNAL_SOURCE_SCOPES.items() if not base <= set(scopes)
+        )
 
         self.assertEqual(missing, [], "these sections could be granted without the endpoint's base scope")

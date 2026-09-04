@@ -1,4 +1,4 @@
-﻿"""Property-based tests for Label hierarchy.
+"""Property-based tests for Label hierarchy.
 
 Label.get_label_and_descendants performs a BFS over the self-referential
 parents M2M.  Key invariants:
@@ -9,6 +9,7 @@ parents M2M.  Key invariants:
 4. The algorithm terminates even when cycles are present.
 5. The result is monotonically non-decreasing as more descendants are added.
 """
+
 from __future__ import annotations
 
 import itertools

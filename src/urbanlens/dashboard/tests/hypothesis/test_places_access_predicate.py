@@ -27,7 +27,14 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceRelation, PlaceStatus
+from urbanlens.dashboard.models.place.model import (
+    GrantReason,
+    Place,
+    PlaceAccessGrant,
+    PlaceKind,
+    PlaceRelation,
+    PlaceStatus,
+)
 from urbanlens.dashboard.services.places import lineage, resolution
 from urbanlens.dashboard.services.wiki.wiki_access import accessible_domain_ids, place_visible_to
 
@@ -57,7 +64,10 @@ class DomainSymmetryTests(TestCase):
         Pin.objects.filter(profile=self.profile).delete()
         Place.objects.filter(parent=self.parcel).delete()
 
-        buildings = [make_place(PlaceKind.BUILDING, square(-74.0 + i * 0.001, 40.0, 0.0002), parent=self.parcel) for i in range(building_count)]
+        buildings = [
+            make_place(PlaceKind.BUILDING, square(-74.0 + i * 0.001, 40.0, 0.0002), parent=self.parcel)
+            for i in range(building_count)
+        ]
         target = buildings[pinned_index % building_count]
         pin_on(self.profile, target, lat=40.0, lng=-74.0 + (pinned_index % building_count) * 0.001)
 
@@ -91,7 +101,12 @@ class AggregateEarningTests(TestCase):
         Place.objects.all().delete()
 
         site = make_place(PlaceKind.SITE, None)
-        members = [make_place(PlaceKind.PARCEL, square(-74.0 + i * 0.05, 40.0, 0.01), parent=site, relation=PlaceRelation.MEMBER_OF) for i in range(member_count)]
+        members = [
+            make_place(
+                PlaceKind.PARCEL, square(-74.0 + i * 0.05, 40.0, 0.01), parent=site, relation=PlaceRelation.MEMBER_OF
+            )
+            for i in range(member_count)
+        ]
         site.refresh_from_db()
 
         held = min(held, member_count)
@@ -104,9 +119,15 @@ class AggregateEarningTests(TestCase):
         """campus -> {A, B}; A -> {A1, A2}. Pins in A1, A2 and B earn the campus."""
         campus = make_place(PlaceKind.SITE, None)
         parcel_a = make_place(PlaceKind.PARCEL, None, parent=campus, relation=PlaceRelation.MEMBER_OF)
-        parcel_b = make_place(PlaceKind.PARCEL, square(-73.0, 40.0, 0.01), parent=campus, relation=PlaceRelation.MEMBER_OF)
-        sub_1 = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.005), parent=parcel_a, relation=PlaceRelation.MEMBER_OF)
-        sub_2 = make_place(PlaceKind.PARCEL, square(-74.02, 40.0, 0.005), parent=parcel_a, relation=PlaceRelation.MEMBER_OF)
+        parcel_b = make_place(
+            PlaceKind.PARCEL, square(-73.0, 40.0, 0.01), parent=campus, relation=PlaceRelation.MEMBER_OF
+        )
+        sub_1 = make_place(
+            PlaceKind.PARCEL, square(-74.0, 40.0, 0.005), parent=parcel_a, relation=PlaceRelation.MEMBER_OF
+        )
+        sub_2 = make_place(
+            PlaceKind.PARCEL, square(-74.02, 40.0, 0.005), parent=parcel_a, relation=PlaceRelation.MEMBER_OF
+        )
 
         pin_on(self.profile, sub_1, lat=40.0, lng=-74.0)
         self.assertFalse(place_visible_to(parcel_a, self.profile))
@@ -155,7 +176,13 @@ class AntiGamingTests(TestCase):
         return MultiPolygon(Polygon(ring, srid=4326), srid=4326)
 
     def test_a_pin_owned_boundary_grants_nothing(self) -> None:
-        Boundary.objects.create(pin=self.pin, profile=self.profile, boundary_type=BoundaryType.PROPERTY, polygon=self._huge(), generated_polygon=self._huge())
+        Boundary.objects.create(
+            pin=self.pin,
+            profile=self.profile,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=self._huge(),
+            generated_polygon=self._huge(),
+        )
         self.assertFalse(place_visible_to(self.target, self.profile))
 
     def test_a_community_drawn_wiki_boundary_grants_nothing(self) -> None:
@@ -178,8 +205,12 @@ class SupersessionTests(TestCase):
         super().setUp()
         self.profile = baker.make(User).profile
         self.old_campus = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.05))
-        self.new_a = make_place(PlaceKind.PARCEL, square(-74.02, 40.0, 0.01), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF)
-        self.new_b = make_place(PlaceKind.PARCEL, square(-73.98, 40.0, 0.01), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF)
+        self.new_a = make_place(
+            PlaceKind.PARCEL, square(-74.02, 40.0, 0.01), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF
+        )
+        self.new_b = make_place(
+            PlaceKind.PARCEL, square(-73.98, 40.0, 0.01), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF
+        )
         Place.objects.filter(pk=self.old_campus.pk).update(status=PlaceStatus.SUPERSEDED)
         self.old_campus.refresh_from_db()
 

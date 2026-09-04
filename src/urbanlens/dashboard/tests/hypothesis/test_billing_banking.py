@@ -26,7 +26,9 @@ class AdvanceUsageLedgerTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.sub = baker.make(RoleSubscription, user=self.user, role=self.role)
         self.start = timezone.now() - timedelta(days=200)
         _set_created(self.sub, self.start)
@@ -115,7 +117,9 @@ class AdvanceUsageLedgerTests(TestCase):
     def test_price_change_only_affects_periods_ticked_after_the_change(self) -> None:
         """A dynamic-threshold role's cost can move between periods - each period is priced
         as of its own start, not the price in effect when advance_usage_ledger is finally called."""
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
+        )
         sub = baker.make(RoleSubscription, user=baker.make(User), role=role, total_paid_cents=2000)
         _set_created(sub, self.start)
 
@@ -123,7 +127,9 @@ class AdvanceUsageLedgerTests(TestCase):
             # $5/mo for the first period, $10/mo from the second period onward.
             return 500 if as_of is not None and as_of < self.start + timedelta(days=30) else 1000
 
-        with mock.patch("urbanlens.dashboard.services.billing.banking.pricing.role_pwyw_threshold_cents", side_effect=fake_threshold):
+        with mock.patch(
+            "urbanlens.dashboard.services.billing.banking.pricing.role_pwyw_threshold_cents", side_effect=fake_threshold
+        ):
             banking.advance_usage_ledger(sub, as_of=self.start + timedelta(days=90))
         sub.refresh_from_db()
         # Period 1 costs 500 (total used 500, balance 1500 remaining), period 2 costs 1000 at
@@ -136,7 +142,9 @@ class ApplyPaymentTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.sub = baker.make(RoleSubscription, user=self.user, role=self.role)
         _set_created(self.sub, timezone.now() - timedelta(days=1))
 
@@ -181,7 +189,9 @@ class ApplyPaymentTests(TestCase):
 
     def test_zero_threshold_pwyw_role_always_affords_once_paid(self) -> None:
         """A plain PWYW role with no minimum ticks for free every period once any payment lands."""
-        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=None)
+        role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=None
+        )
         sub = baker.make(RoleSubscription, user=self.user, role=role)
         _set_created(sub, timezone.now() - timedelta(days=31))
         banking.apply_payment(sub, 1)
@@ -194,7 +204,9 @@ class ApplyRefundTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.sub = baker.make(RoleSubscription, user=self.user, role=self.role, total_paid_cents=2000)
         _set_created(self.sub, timezone.now() - timedelta(days=1))
 
@@ -279,7 +291,9 @@ class RefundRoundTripPropertyTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.sub = baker.make(RoleSubscription, user=self.user, role=self.role)
         _set_created(self.sub, timezone.now() - timedelta(days=45))
 

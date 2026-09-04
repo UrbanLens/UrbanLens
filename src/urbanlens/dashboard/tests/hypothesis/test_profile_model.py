@@ -1,8 +1,9 @@
-﻿"""Tests for Profile model properties and helper functions.
+"""Tests for Profile model properties and helper functions.
 
 Pure-function tests use unittest.TestCase (no DB).
 DB-backed tests use django.test.TestCase with baker.
 """
+
 from __future__ import annotations
 
 from django.contrib.auth.models import User
@@ -25,6 +26,7 @@ _hyp_db = settings(max_examples=20, deadline=None)
 
 
 # -- _haversine_km -------------------------------------------------------------
+
 
 class HaversineTests(SimpleTestCase):
     """_haversine_km computes great-circle distances in kilometres."""
@@ -76,9 +78,12 @@ class HaversineTests(SimpleTestCase):
     @settings(max_examples=50, deadline=None)
     def test_triangle_inequality(
         self,
-        lat1: float, lon1: float,
-        lat2: float, lon2: float,
-        lat3: float, lon3: float,
+        lat1: float,
+        lon1: float,
+        lat2: float,
+        lon2: float,
+        lat3: float,
+        lon3: float,
     ) -> None:
         d12 = _haversine_km((lat1, lon1), (lat2, lon2))
         d23 = _haversine_km((lat2, lon2), (lat3, lon3))
@@ -88,15 +93,14 @@ class HaversineTests(SimpleTestCase):
 
     @given(lat_float, lon_float, lat_float, lon_float)
     @_hyp
-    def test_bounded_by_half_earth_circumference(
-        self, lat1: float, lon1: float, lat2: float, lon2: float
-    ) -> None:
+    def test_bounded_by_half_earth_circumference(self, lat1: float, lon1: float, lat2: float, lon2: float) -> None:
         # Maximum distance on Earth ≈ 20,038 km
         dist = _haversine_km((lat1, lon1), (lat2, lon2))
         self.assertLessEqual(dist, 20040.0)
 
 
 # -- Profile proxy properties --------------------------------------------------
+
 
 class ProfileProxyPropertyTests(TestCase):
     """Profile proxies user.username, email, first_name, last_name, full_name."""
@@ -131,6 +135,7 @@ class ProfileProxyPropertyTests(TestCase):
 
 
 # -- Profile.get_map_center ----------------------------------------------------
+
 
 class ProfileGetMapCenterTests(TestCase):
     """get_map_center() returns coordinates based on the mode setting."""
@@ -202,6 +207,7 @@ class ProfileGetMapCenterTests(TestCase):
 
 # -- Profile.compute_map_center ------------------------------------------------
 
+
 class ProfileComputeMapCenterTests(TestCase):
     """compute_map_center() returns the centroid of the user's pins."""
 
@@ -247,10 +253,10 @@ class ProfileComputeMapCenterTests(TestCase):
         # Four pins in Europe and one in North America - the European cluster should win.
         user: User = baker.make(User)
         europe_coords = [
-            ("48.850000", "2.350000"),    # Paris
-            ("51.500000", "-0.120000"),   # London
-            ("52.370000", "4.890000"),    # Amsterdam
-            ("48.200000", "16.370000"),   # Vienna
+            ("48.850000", "2.350000"),  # Paris
+            ("51.500000", "-0.120000"),  # London
+            ("52.370000", "4.890000"),  # Amsterdam
+            ("48.200000", "16.370000"),  # Vienna
         ]
         for lat, lng in europe_coords:
             loc = baker.make(Location, latitude=lat, longitude=lng)
@@ -295,6 +301,7 @@ class ProfileComputeMapCenterTests(TestCase):
 
 # -- VisibilityChoice / MapViewChoice / MapCenterMode --------------------------
 
+
 class ProfileChoiceTests(SimpleTestCase):
     """Choice enumerations have expected values."""
 
@@ -327,6 +334,7 @@ class ProfileChoiceTests(SimpleTestCase):
 
 
 # -- Profile.get_map_center - custom mode with only one coord None -------------
+
 
 class ProfileGetMapCenterEdgeCaseTests(TestCase):
     """get_map_center() edge: CUSTOM mode with only one coordinate set returns None."""

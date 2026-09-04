@@ -10,7 +10,12 @@ from __future__ import annotations
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.consensus.model import ConsensusProfile, ConsensusRound, ConsensusSession, ConsensusSessionStatus
+from urbanlens.dashboard.models.consensus.model import (
+    ConsensusProfile,
+    ConsensusRound,
+    ConsensusSession,
+    ConsensusSessionStatus,
+)
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -59,7 +64,9 @@ class WikiEditPointsHookTests(TestCase):
         # Mirrors what services.consensus.session._apply_and_record_edit does:
         # award points directly, then create the WikiEdit with consensus_round set.
         points.award_points(profile.pk, points.SOLO_ANSWER_POINTS, reason="solo_answer")
-        WikiEdit.objects.create(wiki=wiki, editor=profile, changes={"name": {"from": "Old", "to": "New"}}, consensus_round=round_)
+        WikiEdit.objects.create(
+            wiki=wiki, editor=profile, changes={"name": {"from": "Old", "to": "New"}}, consensus_round=round_
+        )
 
         consensus_profile = ConsensusProfile.objects.get(profile=profile)
         self.assertEqual(consensus_profile.total_points, points.SOLO_ANSWER_POINTS)

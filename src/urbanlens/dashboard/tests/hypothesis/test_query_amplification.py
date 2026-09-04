@@ -176,13 +176,21 @@ class WikiPageAmplificationTests(_AmplificationTestCase):
 
         def add_link() -> None:
             counter["n"] += 1
-            baker.make(WikiLink, wiki=self.wiki, name=f"Link {counter['n']}", url=f"https://example.test/{counter['n']}", created_by=self.profile)
+            baker.make(
+                WikiLink,
+                wiki=self.wiki,
+                name=f"Link {counter['n']}",
+                url=f"https://example.test/{counter['n']}",
+                created_by=self.profile,
+            )
 
         self.assert_flat(add_link, self._measure)
 
     def test_the_page_is_flat_in_edit_history_count(self) -> None:
         def add_edit() -> None:
-            baker.make(WikiEdit, wiki=self.wiki, editor=baker.make(User).profile, changes={"name": {"from": "a", "to": "b"}})
+            baker.make(
+                WikiEdit, wiki=self.wiki, editor=baker.make(User).profile, changes={"name": {"from": "a", "to": "b"}}
+            )
 
         self.assert_flat(add_edit, self._measure)
 
@@ -193,7 +201,9 @@ class TripDetailAmplificationTests(_AmplificationTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.client.force_login(self.user)
-        self.trip = baker.make(Trip, creator=self.profile, allow_edit_activities="everyone", allow_add_activities="everyone")
+        self.trip = baker.make(
+            Trip, creator=self.profile, allow_edit_activities="everyone", allow_add_activities="everyone"
+        )
         self.trip.profiles.add(self.profile)
         self.url = reverse("trips.detail", kwargs={"trip_slug": self.trip.slug})
 
@@ -205,7 +215,13 @@ class TripDetailAmplificationTests(_AmplificationTestCase):
 
         def add_activity() -> None:
             counter["n"] += 1
-            baker.make(TripActivity, trip=self.trip, title=f"Stop {counter['n']}", location=self._next_location(), order=counter["n"])
+            baker.make(
+                TripActivity,
+                trip=self.trip,
+                title=f"Stop {counter['n']}",
+                location=self._next_location(),
+                order=counter["n"],
+            )
 
         self.assert_flat(add_activity, self._measure)
 

@@ -79,7 +79,9 @@ class AuthSessionApiKeyTests(TestCase):
     def test_reported_scopes_gate_what_the_client_may_try(self) -> None:
         """A narrowed key reports the narrowed grant, not the issuing default."""
         ApiKey.objects.filter(pk=self.key.pk).update(scopes=[ApiKeyScope.PINS_READ.value])
-        self.assertEqual(self.client.get(self.url, **_bearer(self.raw_key)).json()["scopes"], [ApiKeyScope.PINS_READ.value])
+        self.assertEqual(
+            self.client.get(self.url, **_bearer(self.raw_key)).json()["scopes"], [ApiKeyScope.PINS_READ.value]
+        )
 
 
 class AuthSessionOauth2Tests(TestCase):
@@ -133,7 +135,9 @@ class UnscopedViewContractTests(TestCase):
         unscoped = {
             name
             for name in dir(views)
-            if isinstance(getattr(views, name), type) and issubclass(getattr(views, name), UnscopedExternalApiView) and getattr(views, name) is not UnscopedExternalApiView
+            if isinstance(getattr(views, name), type)
+            and issubclass(getattr(views, name), UnscopedExternalApiView)
+            and getattr(views, name) is not UnscopedExternalApiView
         }
         self.assertEqual(unscoped, {"AuthSessionView"})
 

@@ -88,17 +88,17 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
     # Render the cards without them so the page paints immediately; each tab's
     # rows re-fetch themselves with real counts via HTMX once shown (see
     # organize_label_panel.html's `hx-trigger="revealed"`).
-    tags = _rows_if_active("tags", Label.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_hierarchy())
-    categories = _rows_if_active("categories", Label.objects.categories().for_profile(profile).ordered().with_customizations_for(profile).with_hierarchy())
-    statuses = _rows_if_active("status", Label.objects.statuses().for_profile(profile).ordered().with_customizations_for(profile).with_hierarchy())
-    user_labels = _rows_if_active("people", Label.objects.user_labels().visible_to(profile).ordered().with_customizations_for(profile).with_hierarchy())
-    media_labels = _rows_if_active("media", Label.objects.media().visible_to(profile).ordered().with_hierarchy())
+    tags = _rows_if_active("tags", Label.objects.tags().visible_to(profile).in_display_order().with_customizations_for(profile).with_hierarchy())
+    categories = _rows_if_active("categories", Label.objects.categories().for_profile(profile).in_display_order().with_customizations_for(profile).with_hierarchy())
+    statuses = _rows_if_active("status", Label.objects.statuses().for_profile(profile).in_display_order().with_customizations_for(profile).with_hierarchy())
+    user_labels = _rows_if_active("people", Label.objects.user_labels().visible_to(profile).in_display_order().with_customizations_for(profile).with_hierarchy())
+    media_labels = _rows_if_active("media", Label.objects.media().visible_to(profile).in_display_order().with_hierarchy())
     # Always materialized, unlike the lists above: every tab's "create" dialog
     # needs it as the parent-picker's candidate list, not only the Display
     # Order tab that renders it directly. Already skips both the pin-count
     # annotation and the hierarchy prefetch, so evaluating it unconditionally
     # here was never the expensive part.
-    priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).ordered()
+    priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).in_display_order()
     # People/media have no `priority_items` equivalent (that queryset excludes
     # both kinds), and their own create dialog's parent-picker can't be fed
     # from `user_labels`/`media_labels` above once those are deferred - a
@@ -106,8 +106,8 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
     # candidate list and never see the real one, since the HTMX reveal fetch
     # only replaces the rows, not the dialog. Plain and unprefetched, like
     # `priority_items`, so evaluating them unconditionally costs nothing.
-    people_parent_items = Label.objects.user_labels().visible_to(profile).ordered()
-    media_parent_items = Label.objects.media().visible_to(profile).ordered()
+    people_parent_items = Label.objects.user_labels().visible_to(profile).in_display_order()
+    media_parent_items = Label.objects.media().visible_to(profile).in_display_order()
 
     return {
         **_BASE_CTX,
@@ -175,7 +175,7 @@ class OrganizePriorityListView(LoginRequiredMixin, View):
             raise TypeError("Expected an authenticated user")
         profile: Profile = request.user.profile
         # _priority_list.html never renders pin counts - no need for with_pin_counts() here.
-        priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).ordered()
+        priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).in_display_order()
         return render(request, "dashboard/partials/labels/_priority_list.html", {"priority_items": priority_items})
 
 

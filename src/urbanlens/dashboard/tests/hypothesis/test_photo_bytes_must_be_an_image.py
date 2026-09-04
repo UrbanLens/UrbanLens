@@ -7,7 +7,7 @@ extension and the declared content type - are supplied by the caller, so neither
 is evidence of anything.
 
 The reason no existing test caught it is worth stating, because it is the theme
-running through `docs/TEST_COVERAGE_GAPS.md`: every upload test uploads a real
+running through `docs/audits/TEST_COVERAGE_GAPS.md`: every upload test uploads a real
 image. The adversarial case was never tried, because a test written alongside a
 feature is written by somebody thinking about the feature working.
 

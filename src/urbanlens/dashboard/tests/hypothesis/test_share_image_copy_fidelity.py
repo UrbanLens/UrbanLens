@@ -39,9 +39,15 @@ class SharedImageCopyFidelityTests(TestCase):
 
     def _share_image(self, **image_kwargs) -> Image:
         """Share the pin with one image attached, accept it, and return the copy."""
-        image = Image.objects.create(pin=self.pin, location=self.location, profile=self.sender, image="photos/original.jpg", **image_kwargs)
+        image = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.sender, image="photos/original.jpg", **image_kwargs
+        )
         share = PinShare.objects.create(
-            pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, status=PinShareStatus.PENDING,
+            pin=self.pin,
+            location=self.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
         )
         share.images.set([image])
 
@@ -125,7 +131,9 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         from urbanlens.dashboard.models.pin_share.model import PinShare
         from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
 
-        share = PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient)
+        share = PinShare.objects.create(
+            pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient
+        )
         return create_pin_from_share(share)
 
     def test_what_was_observed_at_the_site_travels(self) -> None:
@@ -144,7 +152,9 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
 
         new_pin = self._accept()
 
-        self.assertNotIn("zzq-my-private-notes", new_pin.description or "", "the recipient received the sender's personal notes")
+        self.assertNotIn(
+            "zzq-my-private-notes", new_pin.description or "", "the recipient received the sender's personal notes"
+        )
 
     def test_the_senders_styling_does_not_travel(self) -> None:
         new_pin = self._accept()
@@ -174,7 +184,9 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
 
         new_pin = self._accept()
 
-        self.assertNotIn("zzq-my-old-school", new_pin.name or "", "the recipient inherited the sender's name for the pin")
+        self.assertNotIn(
+            "zzq-my-old-school", new_pin.name or "", "the recipient inherited the sender's name for the pin"
+        )
         self.assertEqual(new_pin.name, "Hudson River State Hospital")
 
     def test_a_deliberate_shared_name_is_used(self) -> None:
@@ -182,7 +194,13 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         from urbanlens.dashboard.models.pin_share.model import PinShare
         from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
 
-        share = PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, shared_name="The old hospital")
+        share = PinShare.objects.create(
+            pin=self.pin,
+            location=self.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            shared_name="The old hospital",
+        )
 
         self.assertEqual(create_pin_from_share(share).name, "The old hospital")
 
@@ -203,7 +221,9 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         from urbanlens.dashboard.models.pin_share.model import PinShare
         from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
 
-        share = PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient)
+        share = PinShare.objects.create(
+            pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient
+        )
         share.images.set([photo])
 
         new_pin = create_pin_from_share(share)
@@ -265,12 +285,24 @@ class PendingScanImagesAreNotSharedTests(TestCase):
         self.pin = Pin.objects.create(profile=self.sender, location=self.location, name="Shared place")
 
     def test_a_pending_photo_is_not_copied_into_the_accepted_share(self) -> None:
-        pending = Image.objects.create(pin=self.pin, location=self.location, profile=self.sender, image="photos/raw.jpg", pending_scan=True)
-        ready = Image.objects.create(pin=self.pin, location=self.location, profile=self.sender, image="photos/processed.jpg", pending_scan=False)
-        share = PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, status=PinShareStatus.PENDING)
+        pending = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.sender, image="photos/raw.jpg", pending_scan=True
+        )
+        ready = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.sender, image="photos/processed.jpg", pending_scan=False
+        )
+        share = PinShare.objects.create(
+            pin=self.pin,
+            location=self.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
+        )
         share.images.set([pending, ready])
 
         new_pin = create_pin_from_share(share)
         copied_sources = set(Image.objects.filter(pin=new_pin, profile=self.recipient).values_list("image", flat=True))
 
-        self.assertEqual(copied_sources, {"photos/processed.jpg"}, "a pending photo's raw bytes reached the recipient's pin")
+        self.assertEqual(
+            copied_sources, {"photos/processed.jpg"}, "a pending photo's raw bytes reached the recipient's pin"
+        )

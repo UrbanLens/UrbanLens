@@ -1,4 +1,4 @@
-﻿"""Tests for MapCenterForm, StyleSettingsForm, and MapDisplayForm.
+"""Tests for MapCenterForm, StyleSettingsForm, and MapDisplayForm.
 
 Invariants verified:
   - MapCenterForm.clean_map_default_zoom returns 13 when the field is omitted,
@@ -9,6 +9,7 @@ Invariants verified:
     and produces False; submitting it produces True.
   - MapDisplayForm saves use_pin_cache correctly to the Profile.
 """
+
 from __future__ import annotations
 
 from hypothesis import HealthCheck, given, settings, strategies as st
@@ -38,6 +39,7 @@ def _profile() -> Profile:
 
 
 # -- MapCenterForm.clean_map_default_zoom --------------------------------------
+
 
 class MapCenterFormZoomCleanTests(TestCase):
     """clean_map_default_zoom must default to 13 when the field is blank."""
@@ -87,6 +89,7 @@ class MapCenterFormZoomCleanTests(TestCase):
 
 # -- MapCenterForm - mode choices ----------------------------------------------
 
+
 class MapCenterFormModeTests(TestCase):
     """All three MapCenterMode values must be accepted by the form."""
 
@@ -121,6 +124,7 @@ class MapCenterFormModeTests(TestCase):
 
 # -- KeywordTaggingSettingsForm --------------------------------------------------
 
+
 class KeywordTaggingSettingsFormTests(TestCase):
     """Unchecked BooleanFields are optional and persist as False; the form saves all four fields."""
 
@@ -154,6 +158,7 @@ class KeywordTaggingSettingsFormTests(TestCase):
 
 
 # -- MapDisplayForm.use_pin_cache ----------------------------------------------
+
 
 class MapDisplayFormUsePinCacheTests(TestCase):
     """use_pin_cache is optional; omitting it (unchecked) must be valid and produce False."""
@@ -203,6 +208,7 @@ class MapDisplayFormUsePinCacheTests(TestCase):
 
 # -- MapCenterForm.save() ------------------------------------------------------
 
+
 class MapCenterFormSaveTests(TestCase):
     """MapCenterForm.save() preserves DB custom coordinates when mode is not CUSTOM."""
 
@@ -226,9 +232,11 @@ class MapCenterFormSaveTests(TestCase):
 
     def test_auto_mode_preserves_db_custom_coordinates(self) -> None:
         from decimal import Decimal
+
         profile = _profile()
         # Pre-set custom coords in the DB.
         from urbanlens.dashboard.models.profile.model import Profile
+
         Profile.objects.filter(pk=profile.pk).update(
             map_custom_latitude=Decimal("40.000000"),
             map_custom_longitude=Decimal("-75.000000"),
@@ -243,8 +251,10 @@ class MapCenterFormSaveTests(TestCase):
 
     def test_gps_mode_preserves_db_custom_coordinates(self) -> None:
         from decimal import Decimal
+
         profile = _profile()
         from urbanlens.dashboard.models.profile.model import Profile
+
         Profile.objects.filter(pk=profile.pk).update(
             map_custom_latitude=Decimal("51.500000"),
             map_custom_longitude=Decimal("-0.120000"),
@@ -259,6 +269,7 @@ class MapCenterFormSaveTests(TestCase):
         profile = _profile()
         # Ensure no custom coords stored.
         from urbanlens.dashboard.models.profile.model import Profile
+
         Profile.objects.filter(pk=profile.pk).update(
             map_custom_latitude=None,
             map_custom_longitude=None,
@@ -272,6 +283,7 @@ class MapCenterFormSaveTests(TestCase):
     def test_save_with_commit_false_does_not_write_to_db(self) -> None:
         profile = _profile()
         from urbanlens.dashboard.models.profile.model import Profile
+
         original_mode = profile.map_center_mode
         form = self._submit(profile, MapCenterMode.GPS)
         form.save(commit=False)
@@ -281,6 +293,7 @@ class MapCenterFormSaveTests(TestCase):
 
 
 # -- StyleSettingsForm ---------------------------------------------------------
+
 
 class StyleSettingsFormTests(TestCase):
     """StyleSettingsForm persists theme_mode to the Profile.
@@ -347,6 +360,7 @@ class StyleSettingsFormTests(TestCase):
 
 # -- ContactSettingsForm -------------------------------------------------------
 
+
 class ContactSettingsFormTests(TestCase):
     """ContactSettingsForm validates an email address field (no DB access needed)."""
 
@@ -379,8 +393,12 @@ class ContactSettingsFormTests(TestCase):
     # unquoted local part are invalid (RFC 5321) and Django's EmailValidator
     # correctly rejects them - filter those out so the strategy only produces
     # genuinely well-formed addresses (hypothesis found "0..0" here once).
-    @given(local=st.from_regex(r"[a-zA-Z0-9_%+][a-zA-Z0-9_%+.-]{0,18}[a-zA-Z0-9_%+-]", fullmatch=True).filter(lambda s: ".." not in s),
-           domain=st.from_regex(r"[a-zA-Z0-9]([a-zA-Z0-9-]{0,18}[a-zA-Z0-9])?\.[a-zA-Z]{2,6}", fullmatch=True))
+    @given(
+        local=st.from_regex(r"[a-zA-Z0-9_%+][a-zA-Z0-9_%+.-]{0,18}[a-zA-Z0-9_%+-]", fullmatch=True).filter(
+            lambda s: ".." not in s
+        ),
+        domain=st.from_regex(r"[a-zA-Z0-9]([a-zA-Z0-9-]{0,18}[a-zA-Z0-9])?\.[a-zA-Z]{2,6}", fullmatch=True),
+    )
     @settings(max_examples=50, deadline=None)
     def test_well_formed_emails_are_valid(self, local, domain) -> None:
         form = ContactSettingsForm(data={"email": f"{local}@{domain}"})
@@ -388,6 +406,7 @@ class ContactSettingsFormTests(TestCase):
 
 
 # -- MapDisplayForm - cluster_radius and default_map_view ---------------------
+
 
 class MapDisplayFormClusterRadiusTests(TestCase):
     """MapDisplayForm.cluster_radius is optional and bounded 1-500."""

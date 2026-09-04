@@ -34,7 +34,9 @@ def _id_token(claims: dict) -> str:
 
 class BuildAuthorizationUrlTests(SimpleTestCase):
     def test_url_carries_all_flow_parameters(self) -> None:
-        url = build_authorization_url("client-123", "https://app.example/callback", ["scope.a", "scope.b"], "signed-state")
+        url = build_authorization_url(
+            "client-123", "https://app.example/callback", ["scope.a", "scope.b"], "signed-state"
+        )
         parsed = urlparse(url)
         self.assertEqual(f"{parsed.scheme}://{parsed.netloc}{parsed.path}", GOOGLE_AUTH_URL)
         params = parse_qs(parsed.query)
@@ -57,13 +59,19 @@ class TokenExchangeTests(SimpleTestCase):
 
     def test_failed_exchange_raises_gateway_error(self) -> None:
         response = Mock(status_code=400, text='{"error": "invalid_grant"}')
-        with patch("urbanlens.dashboard.services.auth.google_oauth.requests.post", return_value=response), self.assertRaises(GatewayRequestError):
+        with (
+            patch("urbanlens.dashboard.services.auth.google_oauth.requests.post", return_value=response),
+            self.assertRaises(GatewayRequestError),
+        ):
             exchange_code_for_tokens("cid", "secret", "bad-code", "https://app.example/callback")
 
     def test_failed_refresh_raises_gateway_error(self) -> None:
         """Callers branch on this to prompt a reconnect when access was revoked."""
         response = Mock(status_code=400, text='{"error": "invalid_grant"}')
-        with patch("urbanlens.dashboard.services.auth.google_oauth.requests.post", return_value=response), self.assertRaises(GatewayRequestError):
+        with (
+            patch("urbanlens.dashboard.services.auth.google_oauth.requests.post", return_value=response),
+            self.assertRaises(GatewayRequestError),
+        ):
             refresh_access_token("cid", "secret", "revoked-refresh-token")
 
     def test_successful_refresh_returns_the_payload(self) -> None:
@@ -74,7 +82,9 @@ class TokenExchangeTests(SimpleTestCase):
         self.assertEqual(mock_post.call_args.kwargs["data"]["grant_type"], "refresh_token")
 
     def test_revoke_is_best_effort_on_network_failure(self) -> None:
-        with patch("urbanlens.dashboard.services.auth.google_oauth.requests.post", side_effect=requests.ConnectionError):
+        with patch(
+            "urbanlens.dashboard.services.auth.google_oauth.requests.post", side_effect=requests.ConnectionError
+        ):
             self.assertFalse(revoke_token("token"))
 
     def test_revoke_reports_google_confirmation(self) -> None:

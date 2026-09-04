@@ -30,7 +30,12 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.fields import EncryptedTextField, UndecryptableValue, encryption_keys, reset_encryption_keys
+from urbanlens.dashboard.models.fields import (
+    EncryptedTextField,
+    UndecryptableValue,
+    encryption_keys,
+    reset_encryption_keys,
+)
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.UrbanLens.settings.app import AppSettings, settings as app_settings
 

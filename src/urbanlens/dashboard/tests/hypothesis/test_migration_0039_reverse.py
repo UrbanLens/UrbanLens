@@ -35,9 +35,13 @@ def _encrypted_alter_field_count(migration_module, columns: tuple[tuple[str, str
     functions themselves use keeps the count tied to encryption, not to the
     squash's unrelated churn.
     """
-    table_to_model = {model._meta.db_table: model.__name__.lower() for model in apps.get_app_config("dashboard").get_models()}
+    table_to_model = {
+        model._meta.db_table: model.__name__.lower() for model in apps.get_app_config("dashboard").get_models()
+    }
     expected = {(table_to_model[table], column) for table, column in columns}
-    actual = {(op.model_name, op.name) for op in migration_module.Migration.operations if type(op).__name__ == "AlterField"}
+    actual = {
+        (op.model_name, op.name) for op in migration_module.Migration.operations if type(op).__name__ == "AlterField"
+    }
     return len(expected & actual)
 
 
@@ -46,22 +50,36 @@ class Migration0039ReverseTests(SimpleTestCase):
     def test_encrypt_decrypt_round_trips_and_ciphertext_is_discriminable(self, plaintext: str) -> None:
         field = EncryptedTextField()
         ciphertext = field.get_prep_value(plaintext)
-        self.assertTrue(ciphertext.startswith("gAAAA"), "the reverse's LIKE 'gAAAA%' discriminator would miss this token")
+        self.assertTrue(
+            ciphertext.startswith("gAAAA"), "the reverse's LIKE 'gAAAA%' discriminator would miss this token"
+        )
         self.assertEqual(field.from_db_value(ciphertext, None, None), plaintext)
 
     def test_the_migration_wires_the_real_reverse(self) -> None:
-        run_python_ops = [op for op in _migration.Migration.operations if type(op).__name__ == "RunPython" and op.code is _migration._0039_encrypt_existing_contact_and_note_fields]
+        run_python_ops = [
+            op
+            for op in _migration.Migration.operations
+            if type(op).__name__ == "RunPython" and op.code is _migration._0039_encrypt_existing_contact_and_note_fields
+        ]
         self.assertEqual(len(run_python_ops), 1)
         self.assertIs(run_python_ops[0].reverse_code, _migration._0039_decrypt_existing_contact_and_note_fields)
 
     def test_forward_and_reverse_cover_the_same_columns(self) -> None:
         """The shared _ENCRYPTED_COLUMNS constant is what makes drift impossible - pin its size against the AlterFields."""
-        self.assertEqual(len(_migration._ENCRYPTED_COLUMNS), _encrypted_alter_field_count(_migration, _migration._ENCRYPTED_COLUMNS))
+        self.assertEqual(
+            len(_migration._ENCRYPTED_COLUMNS), _encrypted_alter_field_count(_migration, _migration._ENCRYPTED_COLUMNS)
+        )
 
     def test_migration_0007_wires_its_token_decrypt_reverse_too(self) -> None:
         """0007 encrypts credential tokens with the same in-place pattern; its rollback must decrypt, not noop."""
-        migration_0007 = importlib.import_module("urbanlens.dashboard.migrations.0007_pinshare_bundled_with_markup_map_removed_flags")
-        token_ops = [op for op in migration_0007.Migration.operations if type(op).__name__ == "RunPython" and op.code is migration_0007.encrypt_existing_tokens]
+        migration_0007 = importlib.import_module(
+            "urbanlens.dashboard.migrations.0007_pinshare_bundled_with_markup_map_removed_flags"
+        )
+        token_ops = [
+            op
+            for op in migration_0007.Migration.operations
+            if type(op).__name__ == "RunPython" and op.code is migration_0007.encrypt_existing_tokens
+        ]
         self.assertEqual(len(token_ops), 1)
         self.assertIs(token_ops[0].reverse_code, migration_0007.decrypt_existing_tokens)
 
@@ -82,14 +100,20 @@ class Migration0048ReverseTests(SimpleTestCase):
 
     def test_the_migration_wires_the_real_reverse(self) -> None:
         # See the identical comment on Migration0039ReverseTests' version of this test.
-        run_python_ops = [op for op in _migration_0048.Migration.operations if type(op).__name__ == "RunPython" and op.code is _migration_0048._0048_encrypt_existing_preference_fields]
+        run_python_ops = [
+            op
+            for op in _migration_0048.Migration.operations
+            if type(op).__name__ == "RunPython" and op.code is _migration_0048._0048_encrypt_existing_preference_fields
+        ]
 
         self.assertEqual(len(run_python_ops), 1)
         self.assertIs(run_python_ops[0].reverse_code, _migration_0048._0048_decrypt_existing_preference_fields)
 
     def test_forward_and_reverse_cover_the_same_columns(self) -> None:
         """Both directions walk `_COLUMNS`, so drift between them is impossible by construction."""
-        self.assertEqual(len(_migration_0048._COLUMNS), _encrypted_alter_field_count(_migration_0048, _migration_0048._COLUMNS))
+        self.assertEqual(
+            len(_migration_0048._COLUMNS), _encrypted_alter_field_count(_migration_0048, _migration_0048._COLUMNS)
+        )
 
     def test_the_reverse_can_tell_ciphertext_from_plaintext(self) -> None:
         """The `gAAAA%` discriminator is what stops a rollback corrupting real plaintext.

@@ -85,22 +85,30 @@ class InviteByEmailPrivacyTests(TestCase):
         self.assertEqual(resp_open.status_code, resp_closed.status_code)
         self.assertEqual(resp_open.content, resp_closed.content)
         # The request should have actually gone through for the open target...
-        self.assertTrue(Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=open_target.profile).exists())
+        self.assertTrue(
+            Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=open_target.profile).exists()
+        )
         # ...but silently not for the one who disabled friend requests.
-        self.assertFalse(Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=closed_target.profile).exists())
+        self.assertFalse(
+            Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=closed_target.profile).exists()
+        )
 
     def test_existing_user_actually_receives_friend_request(self) -> None:
         target = make_invitable_user(username="realuser", email="target@example.com", is_active=True)
 
         self.client.post(self.url, {"email": target.email})
 
-        self.assertTrue(Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=target.profile).exists())
+        self.assertTrue(
+            Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=target.profile).exists()
+        )
 
     @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_nonexistent_user_gets_invitation_record(self, mock_send) -> None:
         self.client.post(self.url, {"email": "brandnew@example.com"})
 
-        self.assertTrue(FriendInvitation.objects.filter(inviter=self.inviter.profile, email="brandnew@example.com").exists())
+        self.assertTrue(
+            FriendInvitation.objects.filter(inviter=self.inviter.profile, email="brandnew@example.com").exists()
+        )
 
     @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_reinviting_a_gmail_variant_replaces_the_pending_invitation(self, mock_send) -> None:
@@ -121,7 +129,9 @@ class InviteByEmailPrivacyTests(TestCase):
 
         self.client.post(self.url, {"email": "Jake.Smith+invite@gmail.com"})
 
-        self.assertTrue(Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=target.profile).exists())
+        self.assertTrue(
+            Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=target.profile).exists()
+        )
 
     def test_own_email_is_rejected(self) -> None:
         response = self.client.post(self.url, {"email": self.inviter.email})
@@ -173,7 +183,9 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
         so the widget's shape can never be used to distinguish that case from an
         email-guess request (which the sender should NOT be able to identify)."""
         target = baker.make(User, username="directtarget", email="direct@example.com", is_active=True)
-        Friendship.objects.create(from_profile=self.inviter.profile, to_profile=target.profile, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.inviter.profile, to_profile=target.profile, status=FriendshipStatus.REQUESTED
+        )
 
         response = self.client.get(self._widget_url())
 
@@ -200,7 +212,9 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
         """The widget was removed from the main profile page's compact friend list -
         it only remains on the dedicated "View all friends" page (see the class docstring)."""
         other = baker.make(User, username="compacttarget", email="compacttarget@example.com")
-        Friendship.objects.create(from_profile=self.inviter.profile, to_profile=other.profile, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.inviter.profile, to_profile=other.profile, status=FriendshipStatus.REQUESTED
+        )
 
         response = self.client.get(self._friend_list_url())
 
@@ -210,7 +224,9 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
         from urbanlens.dashboard.controllers.friendship import _friend_list_ctx
 
         other = baker.make(User, username="counterother", email="counterother@example.com")
-        Friendship.objects.create(from_profile=self.inviter.profile, to_profile=other.profile, status=FriendshipStatus.REQUESTED)
+        Friendship.objects.create(
+            from_profile=self.inviter.profile, to_profile=other.profile, status=FriendshipStatus.REQUESTED
+        )
         FriendInvitation.objects.create(inviter=self.inviter.profile, email="unmatched-count@example.com")
 
         ctx = _friend_list_ctx(self.inviter.profile, self.inviter.profile)
@@ -256,7 +272,9 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
         unmatched_only = self.client.get(self._widget_url(other_inviter)).content.decode()
 
         def pending_section(content: str) -> str:
-            match = re.search(r'<ul class="friend-request-list friend-request-list--page">.*?</ul>', content, flags=re.DOTALL)
+            match = re.search(
+                r'<ul class="friend-request-list friend-request-list--page">.*?</ul>', content, flags=re.DOTALL
+            )
             assert match is not None
             return re.sub(r"/pending/[0-9a-f]+/cancel/", "/pending/TOKEN/cancel/", match.group(0))
 
@@ -281,16 +299,24 @@ class CancelPendingViewTests(TestCase):
         self.client.post(reverse("friend.invite_email"), {"email": "cancel-me@example.com"})
         invitation = FriendInvitation.objects.get(inviter=self.inviter.profile, email="cancel-me@example.com")
 
-        response = self.client.post(reverse("friend.cancel_pending", kwargs={"token": self._token("invitation", invitation.pk)}), HTTP_HX_REQUEST="true")
+        response = self.client.post(
+            reverse("friend.cancel_pending", kwargs={"token": self._token("invitation", invitation.pk)}),
+            HTTP_HX_REQUEST="true",
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(FriendInvitation.objects.filter(pk=invitation.pk).exists())
 
     def test_cancel_removes_a_pending_friendship_request(self) -> None:
         target = baker.make(User, username="cancelfriendtarget", email="cancelfriendtarget@example.com", is_active=True)
-        friendship = Friendship.objects.create(from_profile=self.inviter.profile, to_profile=target.profile, status=FriendshipStatus.REQUESTED)
+        friendship = Friendship.objects.create(
+            from_profile=self.inviter.profile, to_profile=target.profile, status=FriendshipStatus.REQUESTED
+        )
 
-        response = self.client.post(reverse("friend.cancel_pending", kwargs={"token": self._token("friendship", friendship.pk)}), HTTP_HX_REQUEST="true")
+        response = self.client.post(
+            reverse("friend.cancel_pending", kwargs={"token": self._token("friendship", friendship.pk)}),
+            HTTP_HX_REQUEST="true",
+        )
 
         self.assertEqual(response.status_code, 200)
         friendship.refresh_from_db()
@@ -307,7 +333,9 @@ class CancelPendingViewTests(TestCase):
         # Even the RIGHT token for the row 404s for the wrong caller: tokens
         # are scoped to the sender's own profile pk, so the other user's
         # recomputed set can never contain this one.
-        response = self.client.post(reverse("friend.cancel_pending", kwargs={"token": self._token("invitation", invitation.pk)}))
+        response = self.client.post(
+            reverse("friend.cancel_pending", kwargs={"token": self._token("invitation", invitation.pk)})
+        )
 
         self.assertEqual(response.status_code, 404)
         self.assertTrue(FriendInvitation.objects.filter(pk=invitation.pk).exists())
@@ -320,9 +348,13 @@ class CancelPendingViewTests(TestCase):
         """Only REQUESTED rows are in the recomputed set - an accepted
         friendship's token must not resolve (unfriending has its own flow)."""
         target = baker.make(User, username="acceptedtarget", email="acceptedtarget@example.com", is_active=True)
-        friendship = Friendship.objects.create(from_profile=self.inviter.profile, to_profile=target.profile, status=FriendshipStatus.ACCEPTED)
+        friendship = Friendship.objects.create(
+            from_profile=self.inviter.profile, to_profile=target.profile, status=FriendshipStatus.ACCEPTED
+        )
 
-        response = self.client.post(reverse("friend.cancel_pending", kwargs={"token": self._token("friendship", friendship.pk)}))
+        response = self.client.post(
+            reverse("friend.cancel_pending", kwargs={"token": self._token("friendship", friendship.pk)})
+        )
 
         self.assertEqual(response.status_code, 404)
         friendship.refresh_from_db()

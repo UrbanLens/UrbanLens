@@ -18,7 +18,10 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import LocationExposure, PinShare, PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares, record_trip_shares_for_member
+from urbanlens.dashboard.services.trips.trip_share_tracking import (
+    record_trip_activity_shares,
+    record_trip_shares_for_member,
+)
 
 
 class _TripShareTestCase(TestCase):
@@ -29,12 +32,23 @@ class _TripShareTestCase(TestCase):
         self.location = baker.make(Location, latitude="42.100000", longitude="-73.900000")
         self.owner_pin = Pin.objects.create(profile=self.profiles["owner"], location=self.location)
         self.trip = Trip.objects.create(name="Mill run", creator=self.profiles["owner"])
-        TripMembership.objects.create(trip=self.trip, profile=self.profiles["owner"], status=TripMembership.STATUS_JOINED)
-        TripMembership.objects.create(trip=self.trip, profile=self.profiles["member"], status=TripMembership.STATUS_JOINED)
-        TripMembership.objects.create(trip=self.trip, profile=self.profiles["invited"], status=TripMembership.STATUS_INVITED)
+        TripMembership.objects.create(
+            trip=self.trip, profile=self.profiles["owner"], status=TripMembership.STATUS_JOINED
+        )
+        TripMembership.objects.create(
+            trip=self.trip, profile=self.profiles["member"], status=TripMembership.STATUS_JOINED
+        )
+        TripMembership.objects.create(
+            trip=self.trip, profile=self.profiles["invited"], status=TripMembership.STATUS_INVITED
+        )
 
     def _activity(self, **kwargs) -> TripActivity:
-        defaults = {"trip": self.trip, "pin": self.owner_pin, "location": self.location, "added_by": self.profiles["owner"]}
+        defaults = {
+            "trip": self.trip,
+            "pin": self.owner_pin,
+            "location": self.location,
+            "added_by": self.profiles["owner"],
+        }
         defaults.update(kwargs)
         return TripActivity.objects.create(**defaults)
 
@@ -79,7 +93,9 @@ class RecordTripMemberJoinTests(_TripShareTestCase):
         activity = self._activity()
         record_trip_activity_shares(activity)
 
-        TripMembership.objects.filter(trip=self.trip, profile=self.profiles["invited"]).update(status=TripMembership.STATUS_JOINED)
+        TripMembership.objects.filter(trip=self.trip, profile=self.profiles["invited"]).update(
+            status=TripMembership.STATUS_JOINED
+        )
         shares = record_trip_shares_for_member(self.trip, self.profiles["invited"])
 
         self.assertEqual(len(shares), 1)

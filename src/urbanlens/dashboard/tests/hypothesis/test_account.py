@@ -1,8 +1,9 @@
-﻿"""Tests for EmailVerification model (dashboard/models/account/).
+"""Tests for EmailVerification model (dashboard/models/account/).
 
 All tests are DB-backed; EmailVerification.created is auto_now_add so we
 back-date it via queryset.update() where time-sensitivity matters.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -39,9 +40,7 @@ class EmailVerificationIsValidTests(TestCase):
         return baker.make(EmailVerification, user=user, **kwargs)
 
     def _backdate(self, ev: EmailVerification, hours: float) -> EmailVerification:
-        EmailVerification.objects.filter(pk=ev.pk).update(
-            created=timezone.now() - timedelta(hours=hours)
-        )
+        EmailVerification.objects.filter(pk=ev.pk).update(created=timezone.now() - timedelta(hours=hours))
         ev.refresh_from_db()
         return ev
 

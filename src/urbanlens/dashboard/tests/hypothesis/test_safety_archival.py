@@ -33,7 +33,12 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyContactOptOutScope,
 )
 from urbanlens.dashboard.services.notifications.notifications import NotificationEvent
-from urbanlens.dashboard.services.visits.safety import MAX_ARCHIVE_ATTEMPTS, _seal_archive_payload, archive_checkin, schedule_checkin_archival
+from urbanlens.dashboard.services.visits.safety import (
+    MAX_ARCHIVE_ATTEMPTS,
+    _seal_archive_payload,
+    archive_checkin,
+    schedule_checkin_archival,
+)
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -91,7 +96,9 @@ class SealArchivePayloadInteropTests(TestCase):
         ciphertext_b64, nonce_b64, sealed_key_b64 = _seal_archive_payload(payload, public_key_b64)
 
         symmetric_key = nacl.public.SealedBox(keypair).decrypt(base64.b64decode(sealed_key_b64))
-        recovered_json = nacl.secret.SecretBox(symmetric_key).decrypt(base64.b64decode(ciphertext_b64), base64.b64decode(nonce_b64))
+        recovered_json = nacl.secret.SecretBox(symmetric_key).decrypt(
+            base64.b64decode(ciphertext_b64), base64.b64decode(nonce_b64)
+        )
         self.assertEqual(json.loads(recovered_json), payload)
 
     def test_a_different_keypair_cannot_open_the_sealed_key(self):
@@ -208,7 +215,11 @@ class ArchiveCheckinTests(TestCase):
 
         archive = SafetyCheckinArchive.objects.get(checkin=self.checkin)
         symmetric_key = nacl.public.SealedBox(keypair).decrypt(base64.b64decode(archive.sealed_key))
-        payload = json.loads(nacl.secret.SecretBox(symmetric_key).decrypt(base64.b64decode(archive.ciphertext), base64.b64decode(archive.nonce)))
+        payload = json.loads(
+            nacl.secret.SecretBox(symmetric_key).decrypt(
+                base64.b64decode(archive.ciphertext), base64.b64decode(archive.nonce)
+            )
+        )
         self.assertEqual(payload["destination_location"], {"name": "Old Mill", "address": location.address})
         self.assertEqual(payload["trip"], {"name": "Weekend trip"})
         self.assertEqual([m["title"] for m in payload["maps"]], ["Route"])
@@ -217,7 +228,9 @@ class ArchiveCheckinTests(TestCase):
         _enroll(self.owner)
         contact_profile = _profile()
         contact = SafetyCheckinContact.objects.create(checkin=self.checkin, contact_profile=contact_profile, email=None)
-        opt_out = SafetyContactOptOut.objects.create(contact_profile=contact_profile, scope=SafetyContactOptOutScope.CHECKIN, checkin=self.checkin)
+        opt_out = SafetyContactOptOut.objects.create(
+            contact_profile=contact_profile, scope=SafetyContactOptOutScope.CHECKIN, checkin=self.checkin
+        )
 
         archive_checkin(self.checkin)
 
@@ -285,7 +298,10 @@ class ArchiveCheckinFailureCapTests(TestCase):
             with self.assertRaises(Exception):
                 archive_checkin(self.checkin)
 
-        with mock.patch("urbanlens.dashboard.services.notifications.notifications.notify") as mock_notify, self.assertRaises(Exception):
+        with (
+            mock.patch("urbanlens.dashboard.services.notifications.notifications.notify") as mock_notify,
+            self.assertRaises(Exception),
+        ):
             archive_checkin(self.checkin)
 
         self.checkin.refresh_from_db()
@@ -350,7 +366,12 @@ class ChatBlockedAfterArchivalTests(TestCase):
         from urbanlens.dashboard.services.visits.safety import mark_found_safe_by_partner
 
         partner_profile = _profile()
-        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=partner_profile, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
+        SafetyCheckinPartner.objects.create(
+            checkin=self.checkin,
+            profile=partner_profile,
+            invited_by=self.owner,
+            status=SafetyCheckinPartnerStatus.ACCEPTED,
+        )
 
         mark_found_safe_by_partner(self.checkin, partner_profile)
 
@@ -418,7 +439,9 @@ class ScheduleCheckinArchivalTests(TestCase):
         checkin = _checkin(owner)
         if has_partner:
             partner_profile = _profile()
-            SafetyCheckinPartner.objects.create(checkin=checkin, profile=partner_profile, invited_by=owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
+            SafetyCheckinPartner.objects.create(
+                checkin=checkin, profile=partner_profile, invited_by=owner, status=SafetyCheckinPartnerStatus.ACCEPTED
+            )
         if has_contact:
             SafetyCheckinContact.objects.create(checkin=checkin, email="contact@example.com")
 
@@ -434,7 +457,9 @@ class ScheduleCheckinArchivalTests(TestCase):
         owner = _profile()
         checkin = _checkin(owner)
         partner_profile = _profile()
-        SafetyCheckinPartner.objects.create(checkin=checkin, profile=partner_profile, invited_by=owner)  # default status: invited
+        SafetyCheckinPartner.objects.create(
+            checkin=checkin, profile=partner_profile, invited_by=owner
+        )  # default status: invited
 
         schedule_checkin_archival(checkin)
 
@@ -492,7 +517,9 @@ class ArchiveCountdownRenderingTests(TestCase):
         owner = _profile()
         checkin = _checkin(owner)
         partner_profile = _profile()
-        SafetyCheckinPartner.objects.create(checkin=checkin, profile=partner_profile, invited_by=owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
+        SafetyCheckinPartner.objects.create(
+            checkin=checkin, profile=partner_profile, invited_by=owner, status=SafetyCheckinPartnerStatus.ACCEPTED
+        )
         schedule_checkin_archival(checkin)
         checkin.refresh_from_db()
 

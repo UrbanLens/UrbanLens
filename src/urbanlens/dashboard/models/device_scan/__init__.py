@@ -21,7 +21,7 @@ __all__ = [
     "DeviceType",
     "DeviceTypeSource",
     "MarkerStatus",
-    "ScannedDevice",
     "ScanUploadStatus",
+    "ScannedDevice",
     "WikiDeviceMarker",
 ]

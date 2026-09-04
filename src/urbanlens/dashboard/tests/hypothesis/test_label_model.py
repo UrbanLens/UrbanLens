@@ -323,13 +323,13 @@ class LabelQuerySetOrderedTests(TestCase):
     def test_ordered_returns_queryset(self) -> None:
         baker.make("dashboard.Label", name="z", order=1, profile=None, kind=KIND_TAG)
         baker.make("dashboard.Label", name="a", order=2, profile=None, kind=KIND_TAG)
-        qs = Label.objects.ordered()
+        qs = Label.objects.in_display_order()
         self.assertGreater(qs.count(), 0)
 
     def test_ordered_higher_order_comes_first(self) -> None:
         b_low: Label = baker.make(Label, name="low", order=1, profile=None, kind=KIND_TAG)
         b_high: Label = baker.make(Label, name="high", order=10, profile=None, kind=KIND_TAG)
-        pks = list(Label.objects.filter(pk__in=[b_low.pk, b_high.pk]).ordered().values_list("pk", flat=True))
+        pks = list(Label.objects.filter(pk__in=[b_low.pk, b_high.pk]).in_display_order().values_list("pk", flat=True))
         self.assertEqual(pks[0], b_high.pk)
 
 
@@ -525,11 +525,11 @@ class LabelInitialOrderForParentsTests(TestCase):
         self.assertIsNone(Label.initial_order_for_parents(self.profile, [hidden.pk]))
 
     def test_single_parent_order_minus_one(self) -> None:
-        parent = ensure_label( name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
+        parent = ensure_label(name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
         self.assertEqual(Label.initial_order_for_parents(self.profile, [parent.pk]), 19)
 
     def test_multiple_parents_uses_lowest_order(self) -> None:
-        hospital = ensure_label( name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
+        hospital = ensure_label(name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
         pennsylvania = baker.make(Label, name="Pennsylvania", profile=self.profile, kind=KIND_TAG, order=35)
         self.assertEqual(
             Label.initial_order_for_parents(self.profile, [hospital.pk, pennsylvania.pk]),

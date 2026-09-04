@@ -83,7 +83,9 @@ class CreateTripTests(TestCase):
         self.assertNotIn("error", result.data)
         trip = Trip.objects.get(slug=result.data["created"]["slug"])
         self.assertEqual(trip.creator_id, self.profile.id)
-        self.assertTrue(TripMembership.objects.filter(trip=trip, profile=self.profile, status=TripMembership.STATUS_JOINED).exists())
+        self.assertTrue(
+            TripMembership.objects.filter(trip=trip, profile=self.profile, status=TripMembership.STATUS_JOINED).exists()
+        )
 
     def test_blank_name_generates_one(self) -> None:
         result = execute("create_trip", {}, _context(self.profile))
@@ -113,24 +115,38 @@ class AddTripActivityTests(TestCase):
         self.profile = _plain_profile()
         self.other = _plain_profile()
         self.location = baker.make(Location, latitude="42.5", longitude="-73.5")
-        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Steel Mill", name_is_user_provided=True)
-        self.foreign_pin = baker.make(Pin, profile=self.other, location=self.location, name="Not Yours", name_is_user_provided=True)
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=self.location, name="Steel Mill", name_is_user_provided=True
+        )
+        self.foreign_pin = baker.make(
+            Pin, profile=self.other, location=self.location, name="Not Yours", name_is_user_provided=True
+        )
         trip_result = execute("create_trip", {"name": "Scoped Trip"}, _context(self.profile))
         self.trip_slug = trip_result.data["created"]["slug"]
 
     def test_foreign_trip_is_rejected(self) -> None:
         foreign_trip = baker.make(Trip, name="Not Yours Either", creator=self.other)
-        result = execute("add_trip_activity", {"trip_slug": foreign_trip.slug, "pin_slug": self.pin.slug}, _context(self.profile))
+        result = execute(
+            "add_trip_activity", {"trip_slug": foreign_trip.slug, "pin_slug": self.pin.slug}, _context(self.profile)
+        )
         self.assertIn("error", result.data)
         self.assertEqual(TripActivity.objects.filter(trip=foreign_trip).count(), 0)
 
     def test_foreign_pin_is_rejected(self) -> None:
-        result = execute("add_trip_activity", {"trip_slug": self.trip_slug, "pin_slug": self.foreign_pin.slug}, _context(self.profile))
+        result = execute(
+            "add_trip_activity",
+            {"trip_slug": self.trip_slug, "pin_slug": self.foreign_pin.slug},
+            _context(self.profile),
+        )
         self.assertIn("error", result.data)
         self.assertEqual(TripActivity.objects.filter(pin=self.foreign_pin).count(), 0)
 
     def test_adds_activity_with_scheduled_date(self) -> None:
-        result = execute("add_trip_activity", {"trip_slug": self.trip_slug, "pin_slug": self.pin.slug, "scheduled_date": "2026-08-01"}, _context(self.profile))
+        result = execute(
+            "add_trip_activity",
+            {"trip_slug": self.trip_slug, "pin_slug": self.pin.slug, "scheduled_date": "2026-08-01"},
+            _context(self.profile),
+        )
         self.assertNotIn("error", result.data)
         activity = TripActivity.objects.get(pk=result.data["added"]["activity_id"])
         self.assertEqual(activity.status, TripActivity.STATUS_PROPOSED)
@@ -143,16 +159,24 @@ class AddTripActivityTests(TestCase):
         settings.save()
         # A profile can only have one pin per location (db_pin_unique_location_per_profile) - needs its own.
         second_location = baker.make(Location, latitude="43.0", longitude="-74.0")
-        second_pin = baker.make(Pin, profile=self.profile, location=second_location, name="Second Pin", name_is_user_provided=True)
+        second_pin = baker.make(
+            Pin, profile=self.profile, location=second_location, name="Second Pin", name_is_user_provided=True
+        )
 
-        first = execute("add_trip_activity", {"trip_slug": self.trip_slug, "pin_slug": self.pin.slug}, _context(self.profile))
+        first = execute(
+            "add_trip_activity", {"trip_slug": self.trip_slug, "pin_slug": self.pin.slug}, _context(self.profile)
+        )
         self.assertNotIn("error", first.data)
 
-        blocked = execute("add_trip_activity", {"trip_slug": self.trip_slug, "pin_slug": second_pin.slug}, _context(self.profile))
+        blocked = execute(
+            "add_trip_activity", {"trip_slug": self.trip_slug, "pin_slug": second_pin.slug}, _context(self.profile)
+        )
         self.assertIn("error", blocked.data)
         self.assertEqual(TripActivity.objects.filter(trip__slug=self.trip_slug).count(), 1)
 
     def test_trip_and_pin_names_are_wrapped_as_user_content(self) -> None:
-        result = execute("add_trip_activity", {"trip_slug": self.trip_slug, "pin_slug": self.pin.slug}, _context(self.profile))
+        result = execute(
+            "add_trip_activity", {"trip_slug": self.trip_slug, "pin_slug": self.pin.slug}, _context(self.profile)
+        )
         self.assertTrue(result.data["added"]["trip"].startswith("<USER_DATA>"))
         self.assertTrue(result.data["added"]["pin"].startswith("<USER_DATA>"))

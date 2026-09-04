@@ -48,11 +48,15 @@ class PhotoKeywordRerunTests(TestCase):
         self.profile: Profile = baker.make("auth.User").profile
         self.location = Location.objects.create(latitude=44.4, longitude=-71.1)
         self.pin = Pin.objects.create(profile=self.profile, location=self.location, name="Keyworded")
-        self.image = Image.objects.create(pin=self.pin, location=self.location, profile=self.profile, image="photos/k.jpg")
+        self.image = Image.objects.create(
+            pin=self.pin, location=self.location, profile=self.profile, image="photos/k.jpg"
+        )
 
     def _run(self, keywords: list[str]) -> dict:
         provider = _StubProvider(keywords)
-        with mock.patch("urbanlens.dashboard.plugins.registry.plugin_registry.photo_keyword_providers", return_value=[provider]):
+        with mock.patch(
+            "urbanlens.dashboard.plugins.registry.plugin_registry.photo_keyword_providers", return_value=[provider]
+        ):
             return generate_keywords_for_image(self.image.pk)
 
     def _stored(self) -> set[str]:

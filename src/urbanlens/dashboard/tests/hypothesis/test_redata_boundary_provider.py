@@ -20,7 +20,10 @@ from django.contrib.gis.geos import MultiPolygon, Point, Polygon
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.base import esri_rings_to_polygon, geojson_polygon_to_geos
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider, suggested_boundary
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_SOURCE_ERROR, PropertyRecordsUnavailableError
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+    REASON_SOURCE_ERROR,
+    PropertyRecordsUnavailableError,
+)
 from urbanlens.UrbanLens.settings.app import settings
 
 # A clockwise square (exterior shell) around the origin.
@@ -121,7 +124,9 @@ class GeojsonPolygonToGeosTests(SimpleTestCase):
         self.assertFalse(result.contains(Point(5.0, 5.0, srid=4326)))
 
     def test_multipolygon_is_parsed_into_a_geos_multipolygon(self) -> None:
-        result = geojson_polygon_to_geos({"type": "MultiPolygon", "coordinates": [[_GEOJSON_SQUARE], [_GEOJSON_SQUARE_2]]})
+        result = geojson_polygon_to_geos(
+            {"type": "MultiPolygon", "coordinates": [[_GEOJSON_SQUARE], [_GEOJSON_SQUARE_2]]}
+        )
         assert isinstance(result, MultiPolygon)
         self.assertEqual(len(result), 2)
 
@@ -138,7 +143,10 @@ class RedataBoundaryProviderNotConfiguredTests(SimpleTestCase):
         self.assertEqual(result, {})
 
     def test_missing_key_only_returns_empty_dict(self) -> None:
-        with mock.patch.object(settings, "redata_api_url", "https://redata.example.test"), mock.patch.object(settings, "redata_api_key", None):
+        with (
+            mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
+            mock.patch.object(settings, "redata_api_key", None),
+        ):
             result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
         self.assertEqual(result, {})
 
@@ -168,7 +176,9 @@ class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
 
     def test_parcel_geometry_only_fills_the_property_slot(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
-            gw_cls.return_value.lookup_parcel.return_value = {"parcel_geometry": {"type": "Polygon", "coordinates": [_GEOJSON_SQUARE]}}
+            gw_cls.return_value.lookup_parcel.return_value = {
+                "parcel_geometry": {"type": "Polygon", "coordinates": [_GEOJSON_SQUARE]}
+            }
             result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
         self.assertIsInstance(result["property"], Polygon)
         self.assertIsNone(result["building"])
@@ -192,7 +202,9 @@ class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
 
     def test_get_boundary_reduces_a_multipolygon_to_its_largest_shell(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
-            gw_cls.return_value.lookup_parcel.return_value = {"parcel_geometry": {"type": "MultiPolygon", "coordinates": [[_GEOJSON_SQUARE], [_GEOJSON_SQUARE_2]]}}
+            gw_cls.return_value.lookup_parcel.return_value = {
+                "parcel_geometry": {"type": "MultiPolygon", "coordinates": [[_GEOJSON_SQUARE], [_GEOJSON_SQUARE_2]]}
+            }
             result = RedataBoundaryProvider().get_boundary(42.65, -73.75)
         self.assertIsInstance(result, Polygon)
 
@@ -255,7 +267,10 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
     def test_fewer_than_three_buildings_leaves_property_none(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_buildings.return_value = [self._building(42.0, -73.0), self._building(42.0, -73.01)]
+            gw_cls.return_value.lookup_buildings.return_value = [
+                self._building(42.0, -73.0),
+                self._building(42.0, -73.01),
+            ]
             result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
         self.assertIsNone(result["property"])
 
@@ -286,7 +301,9 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
     def test_buildings_lookup_failure_leaves_property_none(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_buildings.side_effect = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
+            gw_cls.return_value.lookup_buildings.side_effect = PropertyRecordsUnavailableError(
+                REASON_SOURCE_ERROR, "down"
+            )
             result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
         self.assertIsNone(result["property"])
 
@@ -317,7 +334,9 @@ class SuggestedBoundaryTests(SimpleTestCase):
 
         polygon = suggested_boundary(candidates)
 
-        self.assertAlmostEqual(polygon.area, 0.0001, places=8, msg="the flagged candidate lost to a higher raw confidence")
+        self.assertAlmostEqual(
+            polygon.area, 0.0001, places=8, msg="the flagged candidate lost to a higher raw confidence"
+        )
 
     def test_position_in_the_array_does_not_decide(self) -> None:
         """The array is explicitly not sorted by confidence."""
@@ -335,13 +354,19 @@ class SuggestedBoundaryTests(SimpleTestCase):
         self.assertAlmostEqual(suggested_boundary(candidates).area, 1.0, places=6)
 
     def test_confidence_orders_candidates_of_the_same_kind(self) -> None:
-        candidates = [self._candidate(1.0, kind="area", confidence=0.2), self._candidate(0.5, kind="area", confidence=0.8)]
+        candidates = [
+            self._candidate(1.0, kind="area", confidence=0.2),
+            self._candidate(0.5, kind="area", confidence=0.8),
+        ]
 
         self.assertAlmostEqual(suggested_boundary(candidates).area, 0.25, places=6)
 
     def test_ties_break_to_the_smallest_area(self) -> None:
         """REData's own rule, and the safer direction: too large is what broke this pin."""
-        candidates = [self._candidate(1.0, kind="area", confidence=0.5), self._candidate(0.5, kind="area", confidence=0.5)]
+        candidates = [
+            self._candidate(1.0, kind="area", confidence=0.5),
+            self._candidate(0.5, kind="area", confidence=0.5),
+        ]
 
         self.assertAlmostEqual(suggested_boundary(candidates).area, 0.25, places=6)
 
@@ -406,7 +431,9 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
     def test_an_unavailable_ranking_is_not_fatal(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_boundaries.side_effect = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
+            gw_cls.return_value.lookup_boundaries.side_effect = PropertyRecordsUnavailableError(
+                REASON_SOURCE_ERROR, "down"
+            )
             gw_cls.return_value.lookup_buildings.return_value = []
 
             result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)

@@ -195,7 +195,9 @@ class BulkAgreementExhaustiveTests(TestCase):
 
     def test_seeders_cover_every_registered_metric(self) -> None:
         """A metric registered without a SEEDERS entry would silently skip every check below."""
-        self.assertEqual(set(SEEDERS), {metric.key for metric in all_metrics()}, "SEEDERS has drifted from the metric registry")
+        self.assertEqual(
+            set(SEEDERS), {metric.key for metric in all_metrics()}, "SEEDERS has drifted from the metric registry"
+        )
 
     def test_bulk_agrees_with_per_profile_for_every_builtin_metric(self) -> None:
         counts = (0, 1, 3)

@@ -29,7 +29,9 @@ def _location(**kwargs) -> Location:
     """A Location with per-call unique coordinates (Location is unique per lat/lng)."""
     global _coord_counter
     _coord_counter += 1
-    return baker.make(Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001, **kwargs)
+    return baker.make(
+        Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001, **kwargs
+    )
 
 
 def _wiki_with_pin(profile, **wiki_kwargs) -> Wiki:
@@ -41,7 +43,13 @@ def _wiki_with_pin(profile, **wiki_kwargs) -> Wiki:
 
 
 def _make_accepted_friendship(a, b) -> Friendship:
-    return Friendship.objects.create(from_profile=a, to_profile=b, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+    return Friendship.objects.create(
+        from_profile=a,
+        to_profile=b,
+        status=FriendshipStatus.ACCEPTED,
+        relationship_type=FriendshipType.FRIEND,
+        permissions=Permission.VIEW_PROFILE,
+    )
 
 
 class ImageAssociationsTests(TestCase):
@@ -68,7 +76,9 @@ class ImageAssociationsTests(TestCase):
         wiki = _wiki_with_pin(self.profile, name="Sunset Ridge")
         image = baker.make(Image, profile=self.profile, wiki=wiki, pin=None, media_type=MediaKind.PHOTO)
         result = image_associations(image, self.profile)
-        self.assertEqual(result["wiki"], {"name": "Sunset Ridge", "url": reverse("location.wiki", args=[wiki.location.slug])})
+        self.assertEqual(
+            result["wiki"], {"name": "Sunset Ridge", "url": reverse("location.wiki", args=[wiki.location.slug])}
+        )
 
     def test_reports_pin_album_membership(self) -> None:
         pin = baker.make(Pin, profile=self.profile, location=_location(), name="Old Mill")
@@ -101,7 +111,9 @@ class ImageAssociationsTests(TestCase):
         self.assertEqual(len(albums), 1)
         self.assertEqual(albums[0]["owner_label"], "Wiki album")
         self.assertEqual(albums[0]["owner_name"], "Sunset Ridge")
-        self.assertEqual(albums[0]["url"], reverse("location.wiki.albums.detail", args=[wiki.location.slug, album.slug]))
+        self.assertEqual(
+            albums[0]["url"], reverse("location.wiki.albums.detail", args=[wiki.location.slug, album.slug])
+        )
 
     def test_wiki_filing_is_omitted_for_a_concealed_viewer(self) -> None:
         from unittest.mock import patch
@@ -194,7 +206,9 @@ class PhotoPinSearchViewLightboxModeTests(TestCase):
     def test_lightbox_mode_renders_a_data_pin_slug_button(self) -> None:
         pin = baker.make(Pin, profile=self.profile, location=_location(), name="Old Mill")
         image = baker.make(Image, profile=self.profile, pin=None, wiki=None, media_type=MediaKind.PHOTO)
-        response = self.client.get(reverse("vault.photos.pin_search"), {"q": "Old Mill", "image_id": image.pk, "lightbox": "1"})
+        response = self.client.get(
+            reverse("vault.photos.pin_search"), {"q": "Old Mill", "image_id": image.pk, "lightbox": "1"}
+        )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Old Mill")
         self.assertContains(response, f'data-pin-slug="{pin.slug}"')

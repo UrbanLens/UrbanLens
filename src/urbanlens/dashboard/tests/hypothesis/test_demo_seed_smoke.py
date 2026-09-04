@@ -1,4 +1,5 @@
 """Smoke: the demo seeder runs against the real models and produces a usable account."""
+
 from __future__ import annotations
 
 from unittest import mock
@@ -102,7 +103,10 @@ class SeedingCommitOrderingTests(django_test.TransactionTestCase):
         # tests), so no Pin - and no signal - would fire without this: give
         # the seeder one real Location to actually pin.
         location = baker.make(Location, google_place=None)
-        with mock.patch("urbanlens.dashboard.services.demo.seeding.pool_locations", return_value=[location]), mock.patch.object(ensure_wiki_for_location, "apply_async") as apply_async:
+        with (
+            mock.patch("urbanlens.dashboard.services.demo.seeding.pool_locations", return_value=[location]),
+            mock.patch.object(ensure_wiki_for_location, "apply_async") as apply_async,
+        ):
             seed_demo_account()
 
         apply_async.assert_not_called()

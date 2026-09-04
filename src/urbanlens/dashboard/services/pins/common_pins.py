@@ -32,7 +32,7 @@ def pinned_place_keys(profile: Profile) -> set[tuple[str, int]]:
     profiles/pins share a place" check in the codebase (profile common-pin
     visibility, wiki community counts, trip common-pin visibility) rather
     than each reimplementing the same place-vs-location fallback - see
-    docs/GOALS_CODE_AUDIT.md ("Cross-pin aggregate comparison level").
+    docs/audits/GOALS_CODE_AUDIT.md ("Cross-pin aggregate comparison level").
 
     Args:
         profile: The profile whose pins to key.

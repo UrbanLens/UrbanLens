@@ -299,7 +299,9 @@ class SafetyArchivedStateTests(TestCase):
         from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinArchive
 
         archived = baker.make(SafetyCheckin, profile=self.profile, title="Old Hike")
-        SafetyCheckinArchive.objects.create(checkin=archived, ciphertext="x", nonce="y", sealed_key="z", key_bundle_version=1)
+        SafetyCheckinArchive.objects.create(
+            checkin=archived, ciphertext="x", nonce="y", sealed_key="z", key_bundle_version=1
+        )
         baker.make(SafetyCheckin, profile=self.profile, title="Live Hike")
 
         response = GlobalSearchEngine().search(self.profile, "is:archived")

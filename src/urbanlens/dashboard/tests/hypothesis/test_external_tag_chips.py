@@ -36,8 +36,16 @@ class PopulatedTagsRenderChipsTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.place = baker.make(Place)
-        PlaceExternalTag.objects.create(place=self.place, source=ExternalTagSource.OSM, key="amenity", value="restaurant", is_primary=True)
-        PlaceExternalTag.objects.create(place=self.place, source=ExternalTagSource.OVERTURE, key="building_subtype", value="single_family_residential", is_primary=True)
+        PlaceExternalTag.objects.create(
+            place=self.place, source=ExternalTagSource.OSM, key="amenity", value="restaurant", is_primary=True
+        )
+        PlaceExternalTag.objects.create(
+            place=self.place,
+            source=ExternalTagSource.OVERTURE,
+            key="building_subtype",
+            value="single_family_residential",
+            is_primary=True,
+        )
 
     def test_the_card_renders(self) -> None:
         html = _render(self.place.external_tags.all())

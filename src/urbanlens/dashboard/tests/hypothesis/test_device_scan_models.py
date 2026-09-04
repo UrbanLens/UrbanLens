@@ -63,8 +63,12 @@ class DeviceScanEntryQuerySetTests(TestCase):
         other_device, _created = ScannedDevice.objects.get_or_create_for_mac("11:22:33:44:55:66")
         upload_one = DeviceScanUpload.objects.create()
         upload_two = DeviceScanUpload.objects.create()
-        entry_one = DeviceScanEntry.objects.create(upload=upload_one, device=device, location=Point(0.0, 0.0, srid=4326))
-        entry_two = DeviceScanEntry.objects.create(upload=upload_two, device=device, location=Point(0.0, 0.0, srid=4326))
+        entry_one = DeviceScanEntry.objects.create(
+            upload=upload_one, device=device, location=Point(0.0, 0.0, srid=4326)
+        )
+        entry_two = DeviceScanEntry.objects.create(
+            upload=upload_two, device=device, location=Point(0.0, 0.0, srid=4326)
+        )
         DeviceScanEntry.objects.create(upload=upload_one, device=other_device, location=Point(0.0, 0.0, srid=4326))
 
         result = set(DeviceScanEntry.objects.for_device(device).values_list("pk", flat=True))

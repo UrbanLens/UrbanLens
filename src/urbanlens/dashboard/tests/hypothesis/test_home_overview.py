@@ -290,7 +290,11 @@ class DisabledWidgetsCostNothingTests(TestCase):
         self._layout("recent_photos")
         without = len(self._queries())
 
-        self.assertLess(without, with_both - 8, f"{with_both} queries with both widgets, {without} without - the counts are still running")
+        self.assertLess(
+            without,
+            with_both - 8,
+            f"{with_both} queries with both widgets, {without} without - the counts are still running",
+        )
 
     def test_recent_comments_are_built_when_the_widget_is_on(self) -> None:
         self._layout("recent_comments")

@@ -21,14 +21,22 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.article.model import EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, Article, ArticleRevision
 from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+from urbanlens.dashboard.models.article.model import EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, Article, ArticleRevision
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki.revision import WikiFieldRevision
-from urbanlens.dashboard.services.wiki.concealment import accepted_friend_ids, conceal_article, conceal_wiki, concealed_field_values, is_concealed, visible_rows, writable_wiki
+from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.wiki.concealment import (
+    accepted_friend_ids,
+    conceal_article,
+    conceal_wiki,
+    concealed_field_values,
+    is_concealed,
+    visible_rows,
+    writable_wiki,
+)
 
 
 class ConcealedValueTests(TestCase):
@@ -184,7 +192,9 @@ class AggregateConcealmentTests(TestCase):
         for _ in range(4):
             WikiStatVote.objects.cast(self.wiki, baker.make(User).profile, WikiStatField.VULNERABILITY, 5)
 
-        composite = WikiStatVote.objects.composite(self.wiki, WikiStatField.VULNERABILITY, viewer_conceals=True, viewer=self.viewer)
+        composite = WikiStatVote.objects.composite(
+            self.wiki, WikiStatField.VULNERABILITY, viewer_conceals=True, viewer=self.viewer
+        )
 
         self.assertIsNone(composite.rounded)
         self.assertIsNone(composite.exact)
@@ -208,7 +218,9 @@ class AggregateConcealmentTests(TestCase):
             WikiStatVote.objects.cast(self.wiki, baker.make(User).profile, WikiStatField.VULNERABILITY, 5)
         WikiStatVote.objects.cast(self.wiki, self.viewer, WikiStatField.VULNERABILITY, 2)
 
-        composite = WikiStatVote.objects.composite(self.wiki, WikiStatField.VULNERABILITY, viewer_conceals=True, viewer=self.viewer)
+        composite = WikiStatVote.objects.composite(
+            self.wiki, WikiStatField.VULNERABILITY, viewer_conceals=True, viewer=self.viewer
+        )
 
         self.assertEqual(composite.rounded, 2, "the viewer's own vote, not the community's 5s")
         self.assertEqual(composite.count, 0)
@@ -368,7 +380,11 @@ class RelatedRowConcealmentTests(TestCase):
 
         for row in personal:
             with self.subTest(source=row.source):
-                self.assertNotIn(row, visible, f"a stranger's own {row.source} photo must be concealed, like any other photo they took")
+                self.assertNotIn(
+                    row,
+                    visible,
+                    f"a stranger's own {row.source} photo must be concealed, like any other photo they took",
+                )
 
     def test_automatic_imagery_belonging_to_nobody_stays(self) -> None:
         """``photo_enrichment`` writes profile-less rows, and they are not a contribution.
@@ -432,7 +448,9 @@ class RelatedRowConcealmentTests(TestCase):
         from urbanlens.dashboard.models.aliases.model import AliasSource, WikiAlias
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
-        from_rename = baker.make(WikiAlias, wiki=self.wiki, name="A Stranger's Name For It", source=AliasSource.USER, created_by=None)
+        from_rename = baker.make(
+            WikiAlias, wiki=self.wiki, name="A Stranger's Name For It", source=AliasSource.USER, created_by=None
+        )
 
         visible = conceal_rows(WikiAlias.objects.filter(wiki=self.wiki), self.viewer)
 
@@ -473,7 +491,9 @@ class ProjectionTests(TestCase):
         self.stranger = baker.make(User).profile
 
         with writing_as(WriteSource.USER, actor=self.stranger.pk):
-            Wiki.objects.filter(pk=self.wiki.pk).update(description="A stranger's notes", cameras=SecurityLevel.EVERYWHERE)
+            Wiki.objects.filter(pk=self.wiki.pk).update(
+                description="A stranger's notes", cameras=SecurityLevel.EVERYWHERE
+            )
         self.wiki.refresh_from_db()
 
     def _concealed(self, viewer=None):

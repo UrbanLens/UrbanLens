@@ -22,7 +22,12 @@ from model_bakery import baker
 from webauthn.authentication.verify_authentication_response import VerifiedAuthentication
 from webauthn.helpers import bytes_to_base64url
 from webauthn.helpers.exceptions import InvalidAuthenticationResponse, InvalidRegistrationResponse
-from webauthn.helpers.structs import AttestationFormat, AuthenticatorTransport, CredentialDeviceType, PublicKeyCredentialType
+from webauthn.helpers.structs import (
+    AttestationFormat,
+    AuthenticatorTransport,
+    CredentialDeviceType,
+    PublicKeyCredentialType,
+)
 from webauthn.registration.verify_registration_response import VerifiedRegistration
 
 from urbanlens.core.tests.testcase import TestCase
@@ -116,7 +121,12 @@ class VerifyAndSaveRegistrationTests(TestCase):
         user: User = baker.make(User)
         request = _request_with_session()
         webauthn_service.build_registration_options(request, user)
-        with patch.object(webauthn_service, "verify_registration_response", side_effect=InvalidRegistrationResponse("bad")), self.assertRaises(webauthn_service.WebAuthnError):
+        with (
+            patch.object(
+                webauthn_service, "verify_registration_response", side_effect=InvalidRegistrationResponse("bad")
+            ),
+            self.assertRaises(webauthn_service.WebAuthnError),
+        ):
             webauthn_service.verify_and_save_registration(request, user, "{}", "My key")
 
     def test_successful_verification_creates_credential(self) -> None:
@@ -205,7 +215,8 @@ class VerifyAndSaveRegistrationTests(TestCase):
 
         with (
             patch.object(webauthn_service, "verify_registration_response", return_value=_fake_verified_registration()),
-            patch.object(webauthn_service, "parse_registration_credential_json", return_value=fake_parsed),self.assertRaises(webauthn_service.WebAuthnError)
+            patch.object(webauthn_service, "parse_registration_credential_json", return_value=fake_parsed),
+            self.assertRaises(webauthn_service.WebAuthnError),
         ):
             webauthn_service.verify_and_save_registration(request, user, "{}", "Dupe")
 
@@ -251,7 +262,9 @@ class VerifyAuthenticationTests(TestCase):
 
     def test_successful_verification_updates_sign_count_and_last_used(self) -> None:
         user: User = baker.make(User)
-        credential: WebAuthnCredential = baker.make(WebAuthnCredential, user=user, credential_id=b"cred-id-123", sign_count=1, last_used_at=None)
+        credential: WebAuthnCredential = baker.make(
+            WebAuthnCredential, user=user, credential_id=b"cred-id-123", sign_count=1, last_used_at=None
+        )
         request = _request_with_session()
         webauthn_service.build_authentication_options(request, user)
 
@@ -277,7 +290,12 @@ class VerifyAuthenticationTests(TestCase):
         request = _request_with_session()
         webauthn_service.build_authentication_options(request, user)
         raw_id = bytes_to_base64url(b"cred-id-123")
-        with patch.object(webauthn_service, "verify_authentication_response", side_effect=InvalidAuthenticationResponse("bad")), self.assertRaises(webauthn_service.WebAuthnError):
+        with (
+            patch.object(
+                webauthn_service, "verify_authentication_response", side_effect=InvalidAuthenticationResponse("bad")
+            ),
+            self.assertRaises(webauthn_service.WebAuthnError),
+        ):
             webauthn_service.verify_authentication(request, user, f'{{"rawId": "{raw_id}"}}')
 
 
@@ -290,14 +308,18 @@ class LoginTwoFactorGateTests(TestCase):
         self.user.save()
 
     def test_password_only_account_logs_in_directly(self) -> None:
-        response = self.client.post(reverse("login"), {"username": "hasnopasskey", "password": "correct horse battery staple"})
+        response = self.client.post(
+            reverse("login"), {"username": "hasnopasskey", "password": "correct horse battery staple"}
+        )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("post_login"))
         self.assertIn("_auth_user_id", self.client.session)
 
     def test_account_with_passkey_is_redirected_to_2fa_and_not_logged_in_yet(self) -> None:
         baker.make(WebAuthnCredential, user=self.user)
-        response = self.client.post(reverse("login"), {"username": "hasnopasskey", "password": "correct horse battery staple"})
+        response = self.client.post(
+            reverse("login"), {"username": "hasnopasskey", "password": "correct horse battery staple"}
+        )
         self.assertRedirects(response, reverse("login.2fa"))
         self.assertNotIn("_auth_user_id", self.client.session)
         self.assertEqual(self.client.session.get(account_controllers._WEBAUTHN_PENDING_USER_KEY), self.user.pk)
@@ -352,7 +374,9 @@ class LoginTwoFactorVerifyViewTests(TestCase):
         self.assertNotIn(account_controllers._WEBAUTHN_PENDING_USER_KEY, self.client.session)
 
     def test_failed_assertion_does_not_log_in(self) -> None:
-        with patch.object(webauthn_service, "verify_authentication", side_effect=webauthn_service.WebAuthnError("nope")):
+        with patch.object(
+            webauthn_service, "verify_authentication", side_effect=webauthn_service.WebAuthnError("nope")
+        ):
             response = self.client.post(reverse("login.2fa.verify"), data="{}", content_type="application/json")
 
         self.assertEqual(response.status_code, 400)
@@ -369,14 +393,18 @@ class PasskeyOwnershipTests(TestCase):
 
     def test_owner_can_rename_their_own_credential(self) -> None:
         self.client.force_login(self.owner)
-        response = self.client.post(reverse("settings.security.passkeys.rename", args=[self.credential.pk]), {"name": "Renamed"})
+        response = self.client.post(
+            reverse("settings.security.passkeys.rename", args=[self.credential.pk]), {"name": "Renamed"}
+        )
         self.assertEqual(response.status_code, 302)
         self.credential.refresh_from_db()
         self.assertEqual(self.credential.name, "Renamed")
 
     def test_other_user_cannot_rename_credential(self) -> None:
         self.client.force_login(self.other)
-        response = self.client.post(reverse("settings.security.passkeys.rename", args=[self.credential.pk]), {"name": "Hijacked"})
+        response = self.client.post(
+            reverse("settings.security.passkeys.rename", args=[self.credential.pk]), {"name": "Hijacked"}
+        )
         self.assertEqual(response.status_code, 404)
         self.credential.refresh_from_db()
         self.assertEqual(self.credential.name, "Original")
@@ -407,7 +435,9 @@ class PasskeyRegistrationEndpointTests(TestCase):
         self.client.force_login(self.user)
 
     def test_options_endpoint_returns_service_json(self) -> None:
-        with patch("urbanlens.dashboard.controllers.webauthn.build_registration_options", return_value='{"challenge": "abc"}'):
+        with patch(
+            "urbanlens.dashboard.controllers.webauthn.build_registration_options", return_value='{"challenge": "abc"}'
+        ):
             response = self.client.post(reverse("settings.security.passkeys.options"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/json")
@@ -432,14 +462,18 @@ class PasskeyRegistrationEndpointTests(TestCase):
             "urbanlens.dashboard.controllers.webauthn.verify_and_save_registration",
             side_effect=webauthn_service.WebAuthnError("Verification failed."),
         ):
-            response = self.client.post(reverse("settings.security.passkeys.register"), {"credential": "{}", "name": "My Key"})
+            response = self.client.post(
+                reverse("settings.security.passkeys.register"), {"credential": "{}", "name": "My Key"}
+            )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"error": "Verification failed."})
 
     def test_register_endpoint_returns_201_with_the_saved_name(self) -> None:
         credential = baker.make(WebAuthnCredential, user=self.user, name="Saved Key")
         with patch("urbanlens.dashboard.controllers.webauthn.verify_and_save_registration", return_value=credential):
-            response = self.client.post(reverse("settings.security.passkeys.register"), {"credential": "{}", "name": "Saved Key"})
+            response = self.client.post(
+                reverse("settings.security.passkeys.register"), {"credential": "{}", "name": "Saved Key"}
+            )
         self.assertEqual(response.status_code, 201)
         # The id is what lets an unlock enrollment delete a credential whose
         # authenticator turns out not to support PRF.

@@ -20,7 +20,13 @@ from model_bakery import baker
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus
+from urbanlens.dashboard.models.safety.model import (
+    SafetyCheckin,
+    SafetyCheckinContact,
+    SafetyCheckinPartner,
+    SafetyCheckinPartnerStatus,
+    SafetyCheckinStatus,
+)
 from urbanlens.dashboard.services.visits.safety import set_live_location_sharing, update_live_location
 
 if TYPE_CHECKING:
@@ -162,7 +168,9 @@ class SafetyCheckinLocationGroupScopingTests(TransactionTestCase):
         self.checkin = _checkin(self.owner_profile)
 
     def _session_communicator(self, user) -> WebsocketCommunicator:
-        comm = WebsocketCommunicator(SafetyCheckinChatConsumer.as_asgi(), f"/ws/safety/checkin/{self.checkin.uuid}/chat/")
+        comm = WebsocketCommunicator(
+            SafetyCheckinChatConsumer.as_asgi(), f"/ws/safety/checkin/{self.checkin.uuid}/chat/"
+        )
         comm.scope["url_route"] = {"kwargs": {"checkin_uuid": str(self.checkin.uuid), "token": None}}
         comm.scope["user"] = user
         return comm
@@ -181,7 +189,9 @@ class SafetyCheckinLocationGroupScopingTests(TransactionTestCase):
         def _setup():
             dual_user = baker.make("auth.User")
             dual_profile = dual_user.profile
-            contact = SafetyCheckinContact.objects.create(checkin=self.checkin, contact_profile=dual_profile, email=None)
+            contact = SafetyCheckinContact.objects.create(
+                checkin=self.checkin, contact_profile=dual_profile, email=None
+            )
             SafetyCheckinPartner.objects.create(
                 checkin=self.checkin,
                 profile=dual_profile,
@@ -239,7 +249,9 @@ class SafetyCheckinLocationGroupScopingTests(TransactionTestCase):
         self.assertTrue(connected)
 
         with broadcasts_delivered_inline():
-            await database_sync_to_async(update_live_location)(self.checkin, latitude=40.0, longitude=-74.0, accuracy=5.0)
+            await database_sync_to_async(update_live_location)(
+                self.checkin, latitude=40.0, longitude=-74.0, accuracy=5.0
+            )
             msg = json.loads(await partner_comm.receive_from())
         self.assertEqual(msg["type"], "location_update")
         self.assertEqual(msg["latitude"], 40.0)

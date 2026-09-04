@@ -115,7 +115,7 @@ class SearchForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.profile = profile
         self.custom_fields: list[CustomField] = []
-        visible_labels = Label.objects.visible_to(profile).ordered() if profile else Label.objects.global_only().ordered()
+        visible_labels = Label.objects.visible_to(profile).in_display_order() if profile else Label.objects.global_only().in_display_order()
         tags_field = self.fields["tags"]
         exclude_tags_field = self.fields["exclude_tags"]
         if isinstance(tags_field, forms.ModelMultipleChoiceField):

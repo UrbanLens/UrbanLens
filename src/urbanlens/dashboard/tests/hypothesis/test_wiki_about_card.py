@@ -87,7 +87,9 @@ class WikiAboutCardIdentityFieldsTests(TestCase):
             street_number="42",
             route="Mill St",
         )
-        wiki = baker.make(Wiki, location=location, name="Riverside", description=None, date_abandoned=None, **_ALL_UNKNOWN)
+        wiki = baker.make(
+            Wiki, location=location, name="Riverside", description=None, date_abandoned=None, **_ALL_UNKNOWN
+        )
         html = _render_about_card(wiki)
         self.assertIn("Official Name", html)
         self.assertIn("Riverside Mill", html)

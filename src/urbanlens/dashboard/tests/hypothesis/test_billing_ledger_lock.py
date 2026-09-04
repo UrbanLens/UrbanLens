@@ -40,7 +40,9 @@ class LedgerLockTests(TransactionTestCase):
         enqueue.start()
         self.addCleanup(enqueue.stop)
         baker.make(User)  # absorbs the bootstrap site-admin promotion
-        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.role = baker.make(
+            SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500
+        )
         self.subscription = baker.make(RoleSubscription, user=baker.make(User), role=self.role)
 
     def _pay(self, amount: int):
@@ -56,7 +58,9 @@ class LedgerLockTests(TransactionTestCase):
         run_concurrently([self._pay(1000), self._pay(2000)])
 
         self.subscription.refresh_from_db()
-        self.assertEqual(self.subscription.total_paid_cents, 3000, "a concurrent payment was lost - the ledger row was not locked")
+        self.assertEqual(
+            self.subscription.total_paid_cents, 3000, "a concurrent payment was lost - the ledger row was not locked"
+        )
 
     def test_many_concurrent_payments_all_land(self) -> None:
         """Four writers, because two can pass by luck of scheduling."""

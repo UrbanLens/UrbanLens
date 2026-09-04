@@ -48,6 +48,8 @@ class LabelConvertEscapesNamesTests(TestCase):
         )
 
         body = response.content.decode()
-        self.assertEqual(response.status_code, 400, f"expected a conflict refusal, got {response.status_code}: {body[:200]}")
+        self.assertEqual(
+            response.status_code, 400, f"expected a conflict refusal, got {response.status_code}: {body[:200]}"
+        )
         self.assertNotIn("<img", body, "the refusal echoed the label name as raw markup")
         self.assertIn("&lt;img", body, "the label name should appear escaped, not omitted")

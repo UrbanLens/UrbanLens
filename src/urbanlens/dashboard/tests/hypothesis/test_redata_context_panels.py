@@ -23,7 +23,10 @@ from urbanlens.dashboard.plugins.builtin.redata_incidents import PoliceIncidents
 from urbanlens.dashboard.plugins.builtin.redata_permits import BuildingPermitsPanelSource
 from urbanlens.dashboard.plugins.builtin.redata_site_conditions import SiteConditionsPanelSource
 from urbanlens.dashboard.plugins.builtin.redata_underground import UndergroundPanelSource
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope, LocationContextUnavailableError
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
+    LocationContextEnvelope,
+    LocationContextUnavailableError,
+)
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -58,7 +61,16 @@ class UndergroundPanelTests(TestCase):
         self.assertIn("1 enterable", ctx["chips"])
 
     def test_disused_provenance_survives_to_the_row(self) -> None:
-        data = {"structures": [{"kind": "station_level", "name": "Lower platform", "is_enterable": True, "attributes": {"abandoned:railway": "station"}}]}
+        data = {
+            "structures": [
+                {
+                    "kind": "station_level",
+                    "name": "Lower platform",
+                    "is_enterable": True,
+                    "attributes": {"abandoned:railway": "station"},
+                }
+            ]
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertIn("disused/abandoned", ctx["meta"][0]["value"])
@@ -70,9 +82,17 @@ class UndergroundPanelTests(TestCase):
         envelope = LocationContextEnvelope(
             count=1,
             complete=True,
-            results=[{"kind": "chamber", "is_enterable": True, "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]}}],
+            results=[
+                {
+                    "kind": "chamber",
+                    "is_enterable": True,
+                    "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+                }
+            ],
         )
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_underground_gateway.RedataUndergroundGateway") as gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_underground_gateway.RedataUndergroundGateway"
+        ) as gateway_cls:
             gateway_cls.return_value.get_underground_structures.return_value = envelope
             self.source.fetch(self.pin)
 
@@ -92,7 +112,13 @@ class BuildingPermitsPanelTests(TestCase):
         """A capped count is a floor, not a total - the chip must say so."""
         data = {
             "filings": [
-                {"kind": "permit", "issued_at": "2025-06-01", "work_type": "Renovation", "status": "issued", "attributes": {"result_capped": True}},
+                {
+                    "kind": "permit",
+                    "issued_at": "2025-06-01",
+                    "work_type": "Renovation",
+                    "status": "issued",
+                    "attributes": {"result_capped": True},
+                },
             ],
         }
         ctx = self.source.render_context(self.pin, data)
@@ -100,17 +126,34 @@ class BuildingPermitsPanelTests(TestCase):
         self.assertIn("more than shown", ctx["chips"])
 
     def test_deep_link_and_declared_cost_render(self) -> None:
-        data = {"filings": [{"kind": "permit", "issued_at": "2025-06-01", "work_type": "Demolition", "status": "final", "estimated_cost": 250000, "url": "https://city.example/p/1"}]}
+        data = {
+            "filings": [
+                {
+                    "kind": "permit",
+                    "issued_at": "2025-06-01",
+                    "work_type": "Demolition",
+                    "status": "final",
+                    "estimated_cost": 250000,
+                    "url": "https://city.example/p/1",
+                }
+            ]
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["meta"][0]["href"], "https://city.example/p/1")
         self.assertIn("declared $250,000", ctx["meta"][0]["value"])
 
     def test_gate_requires_us_coordinates(self) -> None:
-        abroad = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=baker.make("dashboard.Location", latitude=48.86, longitude=2.35))
+        abroad = baker.make_recipe(
+            "dashboard.pin",
+            profile=baker.make(User).profile,
+            location=baker.make("dashboard.Location", latitude=48.86, longitude=2.35),
+        )
         # Patched at its definition site: the REData half of these gates now
         # lives on RedataInfoPanelSource, which imports it inside gate().
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        ):
             self.assertFalse(self.source.gate(abroad))
             self.assertTrue(self.source.gate(self.pin))
 
@@ -166,7 +209,12 @@ class HydrologyPanelTests(TestCase):
         """Blank names and null distances are the sources' own answers, not gaps to drop."""
         data = {
             "features": [
-                {"kind": "wetland", "name": "", "distance_meters": None, "attributes": {"water_regime": "Seasonally Flooded"}},
+                {
+                    "kind": "wetland",
+                    "name": "",
+                    "distance_meters": None,
+                    "attributes": {"water_regime": "Seasonally Flooded"},
+                },
                 {"kind": "stream", "name": "", "distance_meters": 45.0},
             ],
         }
@@ -197,16 +245,26 @@ class SiteConditionsPanelTests(TestCase):
     def test_one_failing_domain_does_not_blank_the_others(self) -> None:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        land_cover = LocationContextEnvelope(count=1, complete=True, results=[{"class_name": "Developed, High Intensity", "class_code": 24}])
-        walkability = LocationContextEnvelope(count=1, complete=True, results=[{"index": 17.0, "band": "Most walkable", "transit_distance_meters": None}])
+        land_cover = LocationContextEnvelope(
+            count=1, complete=True, results=[{"class_name": "Developed, High Intensity", "class_code": 24}]
+        )
+        walkability = LocationContextEnvelope(
+            count=1, complete=True, results=[{"index": 17.0, "band": "Most walkable", "transit_distance_meters": None}]
+        )
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.redata_land_cover_gateway.RedataLandCoverGateway") as land_cls,
-            mock.patch("urbanlens.dashboard.services.apis.locations.redata_walkability_gateway.RedataWalkabilityGateway") as walk_cls,
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.redata_land_cover_gateway.RedataLandCoverGateway"
+            ) as land_cls,
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.redata_walkability_gateway.RedataWalkabilityGateway"
+            ) as walk_cls,
             mock.patch("urbanlens.dashboard.services.apis.locations.redata_soil_gateway.RedataSoilGateway") as soil_cls,
         ):
             land_cls.return_value.get_land_cover.return_value = land_cover
             walk_cls.return_value.get_walkability.return_value = walkability
-            soil_cls.return_value.get_soil_components.side_effect = LocationContextUnavailableError("source_error", "boom")
+            soil_cls.return_value.get_soil_components.side_effect = LocationContextUnavailableError(
+                "source_error", "boom"
+            )
             self.source.fetch(self.pin)
 
         cached = LocationCache.get_fresh(self.pin.location, "redata_site_conditions")
@@ -224,8 +282,20 @@ class SiteConditionsPanelTests(TestCase):
     def test_soil_composition_renders_dominant_first_with_no_average(self) -> None:
         data = {
             "soil": [
-                {"component_name": "Clarion", "component_percent": 85.0, "drainage_class": "Well drained", "hydrologic_group": "B", "map_unit_name": "Clarion loam"},
-                {"component_name": "Nicollet", "component_percent": 5.0, "drainage_class": "Somewhat poorly drained", "hydrologic_group": "B/D", "map_unit_name": "Clarion loam"},
+                {
+                    "component_name": "Clarion",
+                    "component_percent": 85.0,
+                    "drainage_class": "Well drained",
+                    "hydrologic_group": "B",
+                    "map_unit_name": "Clarion loam",
+                },
+                {
+                    "component_name": "Nicollet",
+                    "component_percent": 5.0,
+                    "drainage_class": "Somewhat poorly drained",
+                    "hydrologic_group": "B/D",
+                    "map_unit_name": "Clarion loam",
+                },
             ],
         }
         ctx = self.source.render_context(self.pin, data)
@@ -237,7 +307,17 @@ class SiteConditionsPanelTests(TestCase):
 
     def test_unrated_urban_component_is_labelled_unrated(self) -> None:
         """A blank drainage class is the survey's silence - shown as Unrated, never invented."""
-        data = {"soil": [{"component_name": "Urban land", "component_percent": 90.0, "drainage_class": "", "hydrologic_group": "", "map_unit_name": ""}]}
+        data = {
+            "soil": [
+                {
+                    "component_name": "Urban land",
+                    "component_percent": 90.0,
+                    "drainage_class": "",
+                    "hydrologic_group": "",
+                    "map_unit_name": "",
+                }
+            ]
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["meta"][0]["value"], "Unrated")

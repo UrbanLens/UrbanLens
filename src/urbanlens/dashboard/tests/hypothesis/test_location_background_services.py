@@ -84,7 +84,9 @@ class PlaceNameResolverChainTests(SimpleTestCase):
     @given(name=st.text(min_size=1, max_size=80).filter(is_meaningful_name))
     @hyp_settings(max_examples=25)
     def test_returns_first_meaningful_name(self, name: str) -> None:
-        chain = PlaceNameResolverChain(resolvers=(_Resolver(None), _Resolver("No Information Available"), _Resolver(name)))
+        chain = PlaceNameResolverChain(
+            resolvers=(_Resolver(None), _Resolver("No Information Available"), _Resolver(name))
+        )
         self.assertEqual(chain.resolve(40.0, -74.0), name)
 
     def test_returns_none_when_no_resolver_finds_name(self) -> None:
@@ -193,10 +195,11 @@ class PlaceNameResolverChainTests(SimpleTestCase):
         with mock.patch.object(
             GoogleGeocodingGateway,
             "geocode_coordinates",
-            return_value={"results": [{"formatted_address": "Poughkeepsie, NY 12603, USA", "types": ["locality", "political"]}]},
+            return_value={
+                "results": [{"formatted_address": "Poughkeepsie, NY 12603, USA", "types": ["locality", "political"]}]
+            },
         ):
             self.assertIsNone(gateway.get_place_name(40.0, -74.0))
-
 
 
 class BoundaryProviderChainTests(SimpleTestCase):
@@ -353,7 +356,10 @@ class OverpassGatewayTests(SimpleTestCase):
         error on every request. Clauses must instead be split into separate unioned
         statements.
         """
-        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import _DEFAULT_FEATURE_TAG_FILTER, OverpassGateway
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import (
+            _DEFAULT_FEATURE_TAG_FILTER,
+            OverpassGateway,
+        )
 
         query = OverpassGateway._nearby_features_query(
             40.0,
@@ -782,7 +788,9 @@ class NominatimInfoViewTests(TestCase):
     def test_address_breakdown_only_result_is_rendered_not_204(self) -> None:
         """A point with no OSM tags of its own, only the neighbourhood/postcode/
         county now folded into extra_details, still renders."""
-        response = self._cache_and_fetch({"extra_details": [{"key": "postcode", "label": "Postcode", "value": "45237"}]})
+        response = self._cache_and_fetch(
+            {"extra_details": [{"key": "postcode", "label": "Postcode", "value": "45237"}]}
+        )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "45237")
 

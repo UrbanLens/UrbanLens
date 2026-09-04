@@ -58,7 +58,9 @@ EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
     },
 }
 
-EXPECTED_SANDBOX_TASKS = {f"urbanlens.dashboard.tasks.{name}" for names in EXPECTED_SANDBOX_TASKS_BY_CONSTANT.values() for name in names}
+EXPECTED_SANDBOX_TASKS = {
+    f"urbanlens.dashboard.tasks.{name}" for names in EXPECTED_SANDBOX_TASKS_BY_CONSTANT.values() for name in names
+}
 
 
 def _declared_queue_constants() -> dict[str, set[str]]:
@@ -188,7 +190,11 @@ class DecoratedParserTests(SimpleTestCase):
                 func(object())  # type: ignore[arg-type]  # guard fires before the argument is touched
 
     def test_image_decode_is_guarded(self) -> None:
-        from urbanlens.dashboard.services.media.images import downscale_stored_image, write_image_marker_thumbnail, write_image_thumbnail
+        from urbanlens.dashboard.services.media.images import (
+            downscale_stored_image,
+            write_image_marker_thumbnail,
+            write_image_thumbnail,
+        )
 
         with self.assertRaises(UnsandboxedParseError):
             downscale_stored_image(object(), None, False)  # type: ignore[arg-type]
@@ -209,7 +215,11 @@ class DecoratedParserTests(SimpleTestCase):
     def test_archive_extraction_is_guarded(self) -> None:
         # Both branches, because a ZIP and a .tar.gz reach different stdlib
         # parsers and only one of them was ever the obvious one.
-        from urbanlens.dashboard.services.import_export.archive_extractor import ExtractionBudget, _extract_tgz, _extract_zip
+        from urbanlens.dashboard.services.import_export.archive_extractor import (
+            ExtractionBudget,
+            _extract_tgz,
+            _extract_zip,
+        )
 
         for func in (_extract_zip, _extract_tgz):
             with self.subTest(func=func.__name__), self.assertRaises(UnsandboxedParseError):
@@ -301,7 +311,11 @@ class SandboxQueueRoutingTests(SimpleTestCase):
     def test_every_untrusted_parse_task_declares_the_sandbox_queue(self) -> None:
         from urbanlens.dashboard import tasks
 
-        routed = {task.name for task in (getattr(tasks, name) for name in dir(tasks)) if getattr(task, "queue", None) == tasks.SANDBOX_QUEUE and hasattr(task, "name")}
+        routed = {
+            task.name
+            for task in (getattr(tasks, name) for name in dir(tasks))
+            if getattr(task, "queue", None) == tasks.SANDBOX_QUEUE and hasattr(task, "name")
+        }
         self.assertEqual(routed, EXPECTED_SANDBOX_TASKS)
 
     def test_batch_and_interactive_sandbox_queues_are_distinct(self) -> None:
@@ -318,7 +332,10 @@ class SandboxQueueRoutingTests(SimpleTestCase):
 
     def test_each_task_declares_the_right_one_of_the_two_sandbox_queues(self) -> None:
         declared = _declared_queue_constants()
-        self.assertEqual({name: tasks for name, tasks in declared.items() if name.startswith("SANDBOX")}, EXPECTED_SANDBOX_TASKS_BY_CONSTANT)
+        self.assertEqual(
+            {name: tasks for name, tasks in declared.items() if name.startswith("SANDBOX")},
+            EXPECTED_SANDBOX_TASKS_BY_CONSTANT,
+        )
 
     def test_sandbox_queue_constant_is_resolved_once_at_import(self) -> None:
         # Under test settings UL_SANDBOX_ENABLED is False, so the constant is the

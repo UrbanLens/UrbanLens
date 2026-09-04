@@ -7,7 +7,7 @@ local catalog with no per-source attribution (``{"count","results"}``, no
 :meth:`RedataLocationContextGateway.near_point` the way every other gateway in
 this package does: ``near_point`` always sends ``lat``/``lng``, but this
 endpoint's whole point for the demo is browsing the catalog *without* a
-coordinate - see REData's ``docs/api-reference.md``, "Public locations".
+coordinate - see REData's ``../REData/docs/api-reference.md``, "Public locations".
 
 As of 2026-08-20 this endpoint exists on REData's own working tree but is not
 yet deployed anywhere UrbanLens can reach. Every caller here is written to

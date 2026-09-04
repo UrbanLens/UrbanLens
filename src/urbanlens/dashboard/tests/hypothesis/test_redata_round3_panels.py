@@ -13,9 +13,16 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.plugins.builtin.hazard_history import HazardHistoryPanelSource
-from urbanlens.dashboard.plugins.builtin.property_records import _assessment_history, _render_available, _supplementary_sales
+from urbanlens.dashboard.plugins.builtin.property_records import (
+    _assessment_history,
+    _render_available,
+    _supplementary_sales,
+)
 from urbanlens.dashboard.plugins.builtin.redata_aerial_media import AerialMediaSource
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope, LocationContextUnavailableError
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
+    LocationContextEnvelope,
+    LocationContextUnavailableError,
+)
 
 
 class AssessmentHistoryTests(SimpleTestCase):
@@ -74,7 +81,14 @@ class SupplementarySalesTests(SimpleTestCase):
         self.assertEqual(sales[0]["date"], "2021-04-14")
 
     def test_matches_by_raw_pin_when_the_address_differs(self) -> None:
-        rows = [{"situs_address": "UNIT 4B", "sale_date": "2019-06-01", "sale_price": "150000", "attributes": {"pin": "16-07-114-011-0000"}}]
+        rows = [
+            {
+                "situs_address": "UNIT 4B",
+                "sale_date": "2019-06-01",
+                "sale_price": "150000",
+                "attributes": {"pin": "16-07-114-011-0000"},
+            }
+        ]
         sales = _supplementary_sales(rows, "323 Beaver St", "1607114011 0000")
         self.assertEqual(len(sales), 1)
 
@@ -86,8 +100,18 @@ class SupplementarySalesTests(SimpleTestCase):
     def test_non_arms_length_rows_are_excluded(self) -> None:
         """A $1 trust conveyance or a bundle sale is a real transfer but not this parcel's market price."""
         rows = [
-            {"situs_address": "323 Beaver St", "sale_date": "2021-04-14", "sale_price": "1", "attributes": {"arms_length": False}},
-            {"situs_address": "323 Beaver St", "sale_date": "2018-02-02", "sale_price": "200000", "attributes": {"arms_length": True}},
+            {
+                "situs_address": "323 Beaver St",
+                "sale_date": "2021-04-14",
+                "sale_price": "1",
+                "attributes": {"arms_length": False},
+            },
+            {
+                "situs_address": "323 Beaver St",
+                "sale_date": "2018-02-02",
+                "sale_price": "200000",
+                "attributes": {"arms_length": True},
+            },
             {"situs_address": "323 Beaver St", "sale_date": "2015-03-03", "sale_price": "180000"},
         ]
         sales = _supplementary_sales(rows, "323 Beaver St", "")
@@ -121,7 +145,9 @@ class HazardHistoryPanelTests(TestCase):
                 {"provider": "fema_disasters", "event_type": "flood", "occurred_at": "2011-04-22"},
             ],
         )
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_hazards_gateway.RedataHazardsGateway") as gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_hazards_gateway.RedataHazardsGateway"
+        ) as gateway_cls:
             gateway_cls.return_value.get_hazard_events.return_value = envelope
             self.source.fetch(self.pin)
 
@@ -131,12 +157,22 @@ class HazardHistoryPanelTests(TestCase):
         self.assertEqual(providers, {"nifc_wildfires", "fema_disasters"})
         # ?provider= restricts which sources RUN - the earthquake catalog must
         # not be fetched just to be discarded.
-        self.assertEqual(gateway_cls.return_value.get_hazard_events.call_args.kwargs.get("providers"), ["nifc_wildfires", "fema_disasters"])
+        self.assertEqual(
+            gateway_cls.return_value.get_hazard_events.call_args.kwargs.get("providers"),
+            ["nifc_wildfires", "fema_disasters"],
+        )
 
     def test_render_names_programs_and_sizes(self) -> None:
         data = {
             "events": [
-                {"provider": "nifc_wildfires", "event_type": "wildfire", "occurred_at": "1988-01-01", "title": "Canyon Fire", "magnitude": 12500.0, "magnitude_scale": "acres_burned"},
+                {
+                    "provider": "nifc_wildfires",
+                    "event_type": "wildfire",
+                    "occurred_at": "1988-01-01",
+                    "title": "Canyon Fire",
+                    "magnitude": 12500.0,
+                    "magnitude_scale": "acres_burned",
+                },
                 {
                     "provider": "fema_disasters",
                     "event_type": "flood",
@@ -167,8 +203,12 @@ class AerialMediaSourceTests(TestCase):
     def test_fetch_requests_aerial_only_and_caches(self) -> None:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_media_gateway.RedataMediaGateway") as gateway_cls:
-            gateway_cls.return_value.lookup.return_value = [{"url": "https://example.test/a.mp4", "title": "Drone flyover"}]
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_media_gateway.RedataMediaGateway"
+        ) as gateway_cls:
+            gateway_cls.return_value.lookup.return_value = [
+                {"url": "https://example.test/a.mp4", "title": "Drone flyover"}
+            ]
             self.source.fetch(self.pin)
 
         gateway_cls.return_value.lookup.assert_called_once_with(40.5, -74.5, is_aerial=True, limit=24)
@@ -177,7 +217,12 @@ class AerialMediaSourceTests(TestCase):
         self.assertEqual(len(cached.data["items"]), 1)
 
     def test_media_items_maps_rows_and_skips_urlless(self) -> None:
-        data = {"items": [{"url": "https://example.test/a.jpg", "title": "Roof view", "credit": "Wikimedia Commons"}, {"title": "no url"}]}
+        data = {
+            "items": [
+                {"url": "https://example.test/a.jpg", "title": "Roof view", "credit": "Wikimedia Commons"},
+                {"title": "no url"},
+            ]
+        }
         items = self.source.media_items(data)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].caption, "Roof view")
@@ -194,7 +239,9 @@ class RedataCapabilitiesHelperTests(TestCase):
     def test_unconfigured_redata_yields_none_without_a_request(self) -> None:
         from urbanlens.dashboard.controllers.site_admin import _redata_capabilities
 
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=False):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=False
+        ):
             self.assertIsNone(_redata_capabilities())
 
     def test_the_index_is_cached_for_subsequent_loads(self) -> None:
@@ -202,8 +249,13 @@ class RedataCapabilitiesHelperTests(TestCase):
 
         body = {"domains": [{"tag": "weather", "endpoint": "/api/v1/weather/", "providers": []}], "text_domains": []}
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True),
-            mock.patch("urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway.RedataCapabilitiesGateway") as gateway_cls,
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured",
+                return_value=True,
+            ),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway.RedataCapabilitiesGateway"
+            ) as gateway_cls,
         ):
             gateway_cls.return_value.get_capabilities.return_value = body
             first = _redata_capabilities()
@@ -217,10 +269,17 @@ class RedataCapabilitiesHelperTests(TestCase):
         from urbanlens.dashboard.controllers.site_admin import _redata_capabilities
 
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True),
-            mock.patch("urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway.RedataCapabilitiesGateway") as gateway_cls,
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured",
+                return_value=True,
+            ),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway.RedataCapabilitiesGateway"
+            ) as gateway_cls,
         ):
-            gateway_cls.return_value.get_capabilities.side_effect = LocationContextUnavailableError("source_error", "down")
+            gateway_cls.return_value.get_capabilities.side_effect = LocationContextUnavailableError(
+                "source_error", "down"
+            )
             first = _redata_capabilities()
             second = _redata_capabilities()
 
@@ -232,7 +291,9 @@ class RedataCapabilitiesHelperTests(TestCase):
 class ChroniclingAmericaProviderTests(SimpleTestCase):
     def test_flags_match_the_loc_family(self) -> None:
         """Same LOC search infrastructure as library_of_congress; a modern street address is never signal for 1794-1963 newspaper text."""
-        from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import ChroniclingAmericaMediaProvider
+        from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import (
+            ChroniclingAmericaMediaProvider,
+        )
 
         self.assertEqual(ChroniclingAmericaMediaProvider._redata_provider, "chronicling_america")
         self.assertFalse(ChroniclingAmericaMediaProvider.include_address)

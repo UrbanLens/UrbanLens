@@ -36,9 +36,15 @@ class PinCommentsAggregationTests(TestCase):
         self.client.force_login(self.user)
         self.profile = self.user.profile
         self.parent = baker.make(Pin, profile=self.profile, location=_make_location(), slug="campus")
-        self.child = baker.make(Pin, profile=self.profile, parent_pin=self.parent, location=_make_location(), name="Tool Shed")
-        self.parent_note = baker.make(Comment, pin=self.parent, wiki=None, profile=self.profile, text="a note on the parent")
-        self.child_note = baker.make(Comment, pin=self.child, wiki=None, profile=self.profile, text="a note on the child")
+        self.child = baker.make(
+            Pin, profile=self.profile, parent_pin=self.parent, location=_make_location(), name="Tool Shed"
+        )
+        self.parent_note = baker.make(
+            Comment, pin=self.parent, wiki=None, profile=self.profile, text="a note on the parent"
+        )
+        self.child_note = baker.make(
+            Comment, pin=self.child, wiki=None, profile=self.profile, text="a note on the child"
+        )
 
     def test_default_view_shows_only_the_parents_own_notes(self) -> None:
         response = self.client.get(reverse("pin.comments", kwargs={"pin_slug": self.parent.slug}))
@@ -79,20 +85,28 @@ class PinCommentsAggregationTests(TestCase):
     def test_deleting_a_child_notes_comment_via_the_parent_url_works(self) -> None:
         """The delete button always posts back to the parent pin's URL (see
         _comment_body.html), even for a note that lives on a child pin."""
-        response = self.client.delete(reverse("pin.comment.delete", kwargs={"pin_slug": self.parent.slug, "comment_id": self.child_note.pk}))
+        response = self.client.delete(
+            reverse("pin.comment.delete", kwargs={"pin_slug": self.parent.slug, "comment_id": self.child_note.pk})
+        )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Comment.objects.filter(pk=self.child_note.pk).exists())
 
     def test_cannot_delete_a_note_outside_the_pins_own_subtree(self) -> None:
         unrelated = baker.make(Pin, profile=self.profile, location=_make_location())
-        unrelated_note = baker.make(Comment, pin=unrelated, wiki=None, profile=self.profile, text="not part of this hierarchy")
-        response = self.client.delete(reverse("pin.comment.delete", kwargs={"pin_slug": self.parent.slug, "comment_id": unrelated_note.pk}))
+        unrelated_note = baker.make(
+            Comment, pin=unrelated, wiki=None, profile=self.profile, text="not part of this hierarchy"
+        )
+        response = self.client.delete(
+            reverse("pin.comment.delete", kwargs={"pin_slug": self.parent.slug, "comment_id": unrelated_note.pk})
+        )
         self.assertEqual(response.status_code, 404)
         self.assertTrue(Comment.objects.filter(pk=unrelated_note.pk).exists())
 
     def test_deleting_someone_elses_note_within_the_subtree_is_forbidden(self) -> None:
         other_profile = baker.make(User).profile
         others_note = baker.make(Comment, pin=self.child, wiki=None, profile=other_profile, text="someone else's note")
-        response = self.client.delete(reverse("pin.comment.delete", kwargs={"pin_slug": self.parent.slug, "comment_id": others_note.pk}))
+        response = self.client.delete(
+            reverse("pin.comment.delete", kwargs={"pin_slug": self.parent.slug, "comment_id": others_note.pk})
+        )
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Comment.objects.filter(pk=others_note.pk).exists())

@@ -233,7 +233,9 @@ class ValidatePasswordPolicyViewTests(TestCase):
     def _post(self, body: dict):
         import json as jsonlib
 
-        return self.client.post(reverse("validate_password_policy"), jsonlib.dumps(body), content_type="application/json")
+        return self.client.post(
+            reverse("validate_password_policy"), jsonlib.dumps(body), content_type="application/json"
+        )
 
     def test_strong_password_is_valid(self) -> None:
         with patch(_HIBP_PATCH, return_value=False):

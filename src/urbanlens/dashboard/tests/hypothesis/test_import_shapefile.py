@@ -5,6 +5,7 @@ same-stem sidecar files rather than a single file, so ``extract_shapefile_bundle
 must correctly group parts by stem *before* ``shapefile_to_dict()`` ever runs -
 that grouping step is the main regression risk covered here.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -57,8 +58,10 @@ class ExtractShapefileBundlesTests(SimpleTestCase):
 
     def test_multiple_bundles_grouped_independently(self):
         files = [
-            ("a.shp", b"a-shp"), ("a.dbf", b"a-dbf"),
-            ("b.shp", b"b-shp"), ("b.dbf", b"b-dbf"),
+            ("a.shp", b"a-shp"),
+            ("a.dbf", b"a-dbf"),
+            ("b.shp", b"b-shp"),
+            ("b.dbf", b"b-dbf"),
         ]
 
         bundles, _ = extract_shapefile_bundles(files)

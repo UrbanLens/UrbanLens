@@ -40,7 +40,10 @@ class SpecialLandUseRowTests(SimpleTestCase):
             },
         )
 
-        self.assertEqual([row["category"] for row in rows], ["military_installation", "correctional_facility", "national_park", "college_university"])
+        self.assertEqual(
+            [row["category"] for row in rows],
+            ["military_installation", "correctional_facility", "national_park", "college_university"],
+        )
 
     def test_a_category_the_parcel_is_outside_is_skipped(self) -> None:
         """REData reports every category, with None for the ones that missed."""
@@ -57,12 +60,18 @@ class SpecialLandUseRowTests(SimpleTestCase):
         """
         rows = special_land_use_rows({"correctional_facility": {"geoid": "9"}})
 
-        self.assertEqual(rows, [{"category": "correctional_facility", "label": "Correctional facility", "name": "Correctional facility"}])
+        self.assertEqual(
+            rows,
+            [{"category": "correctional_facility", "label": "Correctional facility", "name": "Correctional facility"}],
+        )
 
     def test_malformed_input_does_not_raise(self) -> None:
         self.assertEqual(special_land_use_rows(None), [])
         self.assertEqual(special_land_use_rows(["not", "a", "dict"]), [])
-        self.assertEqual(special_land_use_rows({"military_installation": "Fort Example"}), [{"category": "military_installation", "label": "Military installation", "name": "Military installation"}])
+        self.assertEqual(
+            special_land_use_rows({"military_installation": "Fort Example"}),
+            [{"category": "military_installation", "label": "Military installation", "name": "Military installation"}],
+        )
 
 
 class PropertyCardRenderTests(SimpleTestCase):
@@ -78,7 +87,7 @@ class PropertyCardRenderTests(SimpleTestCase):
         self.assertEqual(values["Military installation"], "Fort Example")
 
     def test_land_use_chips_precede_the_property_condition_chips(self) -> None:
-        """"Delinquent taxes" is a fact about the property; this is about the visit."""
+        """ "Delinquent taxes" is a fact about the property; this is about the visit."""
         context = self._context(
             special_land_use_areas={"correctional_facility": _area("State Penitentiary")},
             tax_history=[{"delinquent": True}],
@@ -99,7 +108,9 @@ class PropertyCardRenderTests(SimpleTestCase):
         context = self._context(deed_document_links=["https://recorder.example/deed/1"])
 
         links = [entry for entry in context["meta"] if entry.get("href")]
-        self.assertEqual(links, [{"label": "Recorded document", "value": "View document", "href": "https://recorder.example/deed/1"}])
+        self.assertEqual(
+            links, [{"label": "Recorded document", "value": "View document", "href": "https://recorder.example/deed/1"}]
+        )
 
     def test_a_long_document_list_is_truncated_and_numbered(self) -> None:
         context = self._context(deed_document_links=[f"https://recorder.example/deed/{index}" for index in range(20)])
@@ -112,7 +123,11 @@ class PropertyCardRenderTests(SimpleTestCase):
         context = self._context(deed_document_links=["", "   ", None, 7, "https://recorder.example/deed/1"])
 
         links = [entry for entry in context["meta"] if entry.get("href")]
-        self.assertEqual(links, [{"label": "Recorded document", "value": "View document", "href": "https://recorder.example/deed/1"}], "numbering follows displayed position, not source position")
+        self.assertEqual(
+            links,
+            [{"label": "Recorded document", "value": "View document", "href": "https://recorder.example/deed/1"}],
+            "numbering follows displayed position, not source position",
+        )
 
     def test_a_record_without_any_of_these_fields_renders_unchanged(self) -> None:
         """Every one of them is optional; a sparse county record must not break."""

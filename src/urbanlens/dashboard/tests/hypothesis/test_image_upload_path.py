@@ -43,7 +43,9 @@ _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 # The filename that triggered the production crash: a real archival-photo
 # title, well past the field's old 100-character default max_length once
 # "pin_images/" and Django's own dedupe suffix are accounted for.
-_OVERLONG_FILENAME = "POS-0005_-_October_1st_1941_Postmarked_-_Birdseye_View_of_State_Hospital_Poughkeepsie_N._Y._-_Historic.jpg"
+_OVERLONG_FILENAME = (
+    "POS-0005_-_October_1st_1941_Postmarked_-_Birdseye_View_of_State_Hospital_Poughkeepsie_N._Y._-_Historic.jpg"
+)
 
 
 def _jpeg_bytes() -> bytes:
@@ -67,7 +69,9 @@ class PinImageUploadPathTests(SimpleTestCase):
     def test_two_uploads_of_the_same_name_get_different_directories_and_filenames(self):
         first = pin_image_upload_path(Image(), "photo.jpg")
         second = pin_image_upload_path(Image(), "photo.jpg")
-        self.assertNotEqual(first, second, "both the directory and the filename must differ per upload, or the path is guessable")
+        self.assertNotEqual(
+            first, second, "both the directory and the filename must differ per upload, or the path is guessable"
+        )
 
     def test_overlong_name_never_reaches_storage(self):
         path = pin_image_upload_path(Image(), _OVERLONG_FILENAME)
@@ -104,6 +108,8 @@ class ImageUploadOverlongFilenameTests(TestCase):
     """Creating an Image row with a real-world overlong filename must not raise SuspiciousFileOperation."""
 
     def test_overlong_filename_upload_succeeds(self):
-        image = Image.objects.create(image=SimpleUploadedFile(_OVERLONG_FILENAME, _jpeg_bytes(), content_type="image/jpeg"))
+        image = Image.objects.create(
+            image=SimpleUploadedFile(_OVERLONG_FILENAME, _jpeg_bytes(), content_type="image/jpeg")
+        )
         self.assertNotIn("POS-0005", image.image.name)
         self.assertEqual(image.original_filename, _OVERLONG_FILENAME)

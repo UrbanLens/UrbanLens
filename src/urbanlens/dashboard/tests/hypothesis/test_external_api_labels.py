@@ -112,7 +112,11 @@ class LabelCollectionTests(LabelApiTestCase):
         label = self._global("Shared")
         LabelCustomization.objects.create(profile=self.profile, label=label, name="My name", color="#ff0000")
 
-        row = next(r for r in self.client.get(_scoped(), **_bearer(self.raw_key)).json()["results"] if r["uuid"] == str(label.uuid))
+        row = next(
+            r
+            for r in self.client.get(_scoped(), **_bearer(self.raw_key)).json()["results"]
+            if r["uuid"] == str(label.uuid)
+        )
         self.assertEqual(row["name"], f"{_TOKEN}Shared")
         self.assertEqual(row["effective_name"], "My name")
         self.assertEqual(row["effective_color"], "#ff0000")
@@ -121,7 +125,10 @@ class LabelCollectionTests(LabelApiTestCase):
     def test_is_global_and_is_editable_flags(self) -> None:
         self._mine("Mine")
         self._global("Shared")
-        rows = {r["name"].removeprefix(_TOKEN): r for r in self.client.get(_scoped(), **_bearer(self.raw_key)).json()["results"]}
+        rows = {
+            r["name"].removeprefix(_TOKEN): r
+            for r in self.client.get(_scoped(), **_bearer(self.raw_key)).json()["results"]
+        }
         self.assertFalse(rows["Mine"]["is_global"])
         self.assertTrue(rows["Mine"]["is_editable"])
         self.assertTrue(rows["Shared"]["is_global"])
@@ -129,7 +136,11 @@ class LabelCollectionTests(LabelApiTestCase):
 
     def test_protected_label_is_not_editable(self) -> None:
         label = self._mine("Locked", is_protected=True)
-        row = next(r for r in self.client.get(_scoped(), **_bearer(self.raw_key)).json()["results"] if r["uuid"] == str(label.uuid))
+        row = next(
+            r
+            for r in self.client.get(_scoped(), **_bearer(self.raw_key)).json()["results"]
+            if r["uuid"] == str(label.uuid)
+        )
         self.assertFalse(row["is_editable"])
 
     def test_counts_are_absent_unless_requested(self) -> None:
@@ -168,7 +179,9 @@ class LabelCollectionTests(LabelApiTestCase):
         self.assertEqual(Label.objects.get(name="New tag").profile, self.profile)
 
     def test_create_requires_kind(self) -> None:
-        response = self.client.post(_BASE, {"name": "No kind"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.post(
+            _BASE, {"name": "No kind"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_create_with_unknown_parent_is_400(self) -> None:
@@ -213,7 +226,9 @@ class LabelDetailTests(LabelApiTestCase):
 
     def test_patch_own_label(self) -> None:
         label = self._mine("Old")
-        response = self.client.patch(self._url(label), {"name": "New"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self._url(label), {"name": "New"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         label.refresh_from_db()
         self.assertEqual(label.name, "New")
@@ -221,14 +236,18 @@ class LabelDetailTests(LabelApiTestCase):
     def test_patch_global_label_is_403(self) -> None:
         label = self._global("Shared")
         original_name = label.name
-        response = self.client.patch(self._url(label), {"name": "Hijack"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self._url(label), {"name": "Hijack"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 403)
         label.refresh_from_db()
         self.assertEqual(label.name, original_name)
 
     def test_patch_protected_label_is_403(self) -> None:
         label = self._mine("Visited", is_protected=True)
-        response = self.client.patch(self._url(label), {"name": "Nope"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self._url(label), {"name": "Nope"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_patch_cannot_change_kind(self) -> None:
@@ -352,13 +371,17 @@ class LabelCustomizationEndpointTests(LabelApiTestCase):
     def test_requires_labels_write_scope(self) -> None:
         label = self._global("Shared")
         self._grant(ApiKeyScope.LABELS_READ)
-        response = self.client.put(self._url(label), {"name": "x"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.put(
+            self._url(label), {"name": "x"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_another_users_label_is_404(self) -> None:
         other = baker.make(User)
         theirs = ensure_label(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
-        response = self.client.put(self._url(theirs), {"name": "x"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.put(
+            self._url(theirs), {"name": "x"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 404)
 
 

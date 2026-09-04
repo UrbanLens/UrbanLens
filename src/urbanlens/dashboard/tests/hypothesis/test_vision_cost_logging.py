@@ -48,7 +48,10 @@ class OpenAIVisionCostLoggingTests(TestCase):
         SiteSettings.objects.filter(pk=settings.pk).update(ai_provider="openai")
 
     def _run(self, usage: Usage) -> ApiCallLog:
-        with mock.patch("urbanlens.dashboard.services.ai.inference_client.get_inference_client", return_value=_client("brick, mill, rust", usage)):
+        with mock.patch(
+            "urbanlens.dashboard.services.ai.inference_client.get_inference_client",
+            return_value=_client("brick, mill, rust", usage),
+        ):
             keywords = vision.describe_photo_keywords(b"fake-image-bytes")
 
         self.assertEqual(keywords, ["brick", "mill", "rust"])

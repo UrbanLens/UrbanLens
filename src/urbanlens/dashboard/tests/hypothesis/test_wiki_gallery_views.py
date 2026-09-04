@@ -4,6 +4,7 @@ Covers the regression where a Location without a Wiki (wikis are opt-in -
 see Wiki.objects.get_for_location) caused ``Image.objects.filter(wiki=None)``
 to match every wiki-less image site-wide instead of scoping to the location.
 """
+
 from __future__ import annotations
 
 import tempfile
@@ -24,7 +25,9 @@ _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 
 
 def _make_image(**kwargs) -> Image:
-    return Image.objects.create(image=SimpleUploadedFile("photo.jpg", b"fake image bytes", content_type="image/jpeg"), **kwargs)
+    return Image.objects.create(
+        image=SimpleUploadedFile("photo.jpg", b"fake image bytes", content_type="image/jpeg"), **kwargs
+    )
 
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
@@ -66,10 +69,14 @@ class WikiGalleryScopingTests(TestCase):
         self.wiki = baker.make(Wiki, location=self.location)
         # Wikis are only visible to profiles with a pin at that location.
         baker.make(Pin, profile=self.profile, location=self.location)
-        self.own_image = _make_image(wiki=self.wiki, location=self.location, profile=self.profile, latitude="1.0", longitude="2.0")
+        self.own_image = _make_image(
+            wiki=self.wiki, location=self.location, profile=self.profile, latitude="1.0", longitude="2.0"
+        )
 
         other_pin = baker.make(Pin, profile=self.profile)
-        self.unrelated_image = _make_image(pin=other_pin, wiki=None, profile=self.profile, latitude="3.0", longitude="4.0")
+        self.unrelated_image = _make_image(
+            pin=other_pin, wiki=None, profile=self.profile, latitude="3.0", longitude="4.0"
+        )
 
     def test_gallery_panel_excludes_unrelated_wiki_less_images(self) -> None:
         response = self.client.get(reverse("location.wiki.gallery", args=[self.location.slug]))

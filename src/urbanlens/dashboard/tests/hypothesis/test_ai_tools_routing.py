@@ -61,7 +61,11 @@ class DistanceAndDriveTimeTests(TestCase):
 
     def test_two_of_the_profiles_own_pins(self) -> None:
         with mock.patch(_OSRM, return_value={"distance_meters": 10_000, "duration_seconds": 900}):
-            result = execute("distance_and_drive_time", {"from_pin_slug": self.origin.slug, "to_pin_slug": self.destination.slug}, _context(self.profile))
+            result = execute(
+                "distance_and_drive_time",
+                {"from_pin_slug": self.origin.slug, "to_pin_slug": self.destination.slug},
+                _context(self.profile),
+            )
         self.assertNotIn("error", result.data)
         expected_km = haversine_km(42.5, -73.5, 43.0, -74.0)
         self.assertAlmostEqual(result.data["distance_km"], round(expected_km, 1))
@@ -70,18 +74,30 @@ class DistanceAndDriveTimeTests(TestCase):
 
     def test_explicit_coordinates_for_both_endpoints(self) -> None:
         with mock.patch(_OSRM, return_value=None):
-            result = execute("distance_and_drive_time", {"from_lat": 42.5, "from_lng": -73.5, "to_lat": 43.0, "to_lng": -74.0}, _context(self.profile))
+            result = execute(
+                "distance_and_drive_time",
+                {"from_lat": 42.5, "from_lng": -73.5, "to_lat": 43.0, "to_lng": -74.0},
+                _context(self.profile),
+            )
         self.assertNotIn("error", result.data)
         self.assertGreater(result.data["distance_km"], 0)
 
     def test_a_mixed_pin_and_coordinate_endpoint(self) -> None:
         with mock.patch(_OSRM, return_value=None):
-            result = execute("distance_and_drive_time", {"from_pin_slug": self.origin.slug, "to_lat": 43.0, "to_lng": -74.0}, _context(self.profile))
+            result = execute(
+                "distance_and_drive_time",
+                {"from_pin_slug": self.origin.slug, "to_lat": 43.0, "to_lng": -74.0},
+                _context(self.profile),
+            )
         self.assertNotIn("error", result.data)
 
     def test_osrm_failure_still_returns_haversine_distance_with_unavailable_source(self) -> None:
         with mock.patch(_OSRM, return_value=None):
-            result = execute("distance_and_drive_time", {"from_pin_slug": self.origin.slug, "to_pin_slug": self.destination.slug}, _context(self.profile))
+            result = execute(
+                "distance_and_drive_time",
+                {"from_pin_slug": self.origin.slug, "to_pin_slug": self.destination.slug},
+                _context(self.profile),
+            )
         self.assertNotIn("error", result.data)
         self.assertEqual(result.data["source"], "unavailable")
         self.assertNotIn("drive_time_minutes", result.data)
@@ -93,14 +109,22 @@ class DistanceAndDriveTimeTests(TestCase):
 
     def test_another_profiles_pin_slug_never_resolves(self) -> None:
         theirs = _pin(self.other, "44.0", "-75.0", "Theirs")
-        result = execute("distance_and_drive_time", {"from_pin_slug": self.origin.slug, "to_pin_slug": theirs.slug}, _context(self.profile))
+        result = execute(
+            "distance_and_drive_time",
+            {"from_pin_slug": self.origin.slug, "to_pin_slug": theirs.slug},
+            _context(self.profile),
+        )
         self.assertIn("error", result.data)
 
     def test_both_units_are_returned_with_the_profiles_preference_first(self) -> None:
         self.profile.distance_units = DistanceUnit.MILES
         self.profile.save(update_fields=["distance_units"])
         with mock.patch(_OSRM, return_value=None):
-            result = execute("distance_and_drive_time", {"from_pin_slug": self.origin.slug, "to_pin_slug": self.destination.slug}, _context(self.profile))
+            result = execute(
+                "distance_and_drive_time",
+                {"from_pin_slug": self.origin.slug, "to_pin_slug": self.destination.slug},
+                _context(self.profile),
+            )
         self.assertEqual(result.data["preferred_unit"], "mi")
         self.assertIn("distance_km", result.data)
         self.assertIn("distance_mi", result.data)
@@ -109,7 +133,14 @@ class DistanceAndDriveTimeTests(TestCase):
         """The bypass rationale in the module docstring, verified: no REData routing gateway is touched."""
         with (
             mock.patch(_OSRM, return_value=None),
-            mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", side_effect=AssertionError("must not be called")),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured",
+                side_effect=AssertionError("must not be called"),
+            ),
         ):
-            result = execute("distance_and_drive_time", {"from_pin_slug": self.origin.slug, "to_pin_slug": self.destination.slug}, _context(self.profile))
+            result = execute(
+                "distance_and_drive_time",
+                {"from_pin_slug": self.origin.slug, "to_pin_slug": self.destination.slug},
+                _context(self.profile),
+            )
         self.assertNotIn("error", result.data)

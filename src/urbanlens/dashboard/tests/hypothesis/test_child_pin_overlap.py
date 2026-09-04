@@ -31,7 +31,11 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, create_pin_for_profile, resolve_child_pin_location
+from urbanlens.dashboard.services.pins.pin_creation import (
+    PinCreationError,
+    create_pin_for_profile,
+    resolve_child_pin_location,
+)
 
 # DB-backed @given tests never touch self.client - only ORM/service calls - per
 # this repo's documented rule that hypothesis's per-example DB flush and the
@@ -147,11 +151,15 @@ class ChildPinExactOverlapServiceTests(TestCase):
 
     def test_child_stacked_on_its_parent_is_rejected(self) -> None:
         with self.assertRaises(PinCreationError):
-            create_pin_for_profile(self.profile, name="Stacked", latitude=41.0, longitude=-75.0, parent_id=self.root.uuid)
+            create_pin_for_profile(
+                self.profile, name="Stacked", latitude=41.0, longitude=-75.0, parent_id=self.root.uuid
+            )
         self.assertFalse(Pin.objects.filter(profile=self.profile, parent_pin=self.root).exists())
 
     def test_child_near_its_parent_is_accepted(self) -> None:
-        result = create_pin_for_profile(self.profile, name="Entrance", latitude=41.00010, longitude=-75.00010, parent_id=self.root.uuid)
+        result = create_pin_for_profile(
+            self.profile, name="Entrance", latitude=41.00010, longitude=-75.00010, parent_id=self.root.uuid
+        )
 
         self.assertTrue(result.created)
         self.assertEqual(result.pin.parent_pin_id, self.root.pk)
@@ -200,7 +208,9 @@ class ChildPinLocationResolutionPropertyTests(TestCase):
         lon_offset=st.floats(min_value=0.0001, max_value=0.001, allow_nan=False, allow_infinity=False),
     )
     @_db_settings
-    def test_distinct_points_resolve_to_distinct_locations(self, lat: float, lon: float, lat_offset: float, lon_offset: float) -> None:
+    def test_distinct_points_resolve_to_distinct_locations(
+        self, lat: float, lon: float, lat_offset: float, lon_offset: float
+    ) -> None:
         """Nearby-but-distinct child pins keep their own coordinates - no proximity snap."""
         profile = baker.make(User).profile
 

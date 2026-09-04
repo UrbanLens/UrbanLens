@@ -26,7 +26,12 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinPartner, SafetyCheckinPartnerStatus
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
-from urbanlens.dashboard.services.visits.safety import accept_checkin_partner_invite, invite_checkin_partner, is_owner_or_accepted_partner, remove_checkin_partner
+from urbanlens.dashboard.services.visits.safety import (
+    accept_checkin_partner_invite,
+    invite_checkin_partner,
+    is_owner_or_accepted_partner,
+    remove_checkin_partner,
+)
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -124,7 +129,9 @@ class AcceptCheckinPartnerInviteTests(TestCase):
         self.owner = _profile()
         self.checkin = _checkin(self.owner)
         self.invitee = _profile()
-        self.partner = SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=self.invitee, invited_by=self.owner)
+        self.partner = SafetyCheckinPartner.objects.create(
+            checkin=self.checkin, profile=self.invitee, invited_by=self.owner
+        )
 
     def test_repeat_accept_is_a_no_op(self):
         accept_checkin_partner_invite(self.partner)
@@ -260,7 +267,9 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         self.checkin = _checkin(self.owner_profile)
 
     def _session_communicator(self, user) -> WebsocketCommunicator:
-        comm = WebsocketCommunicator(SafetyCheckinChatConsumer.as_asgi(), f"/ws/safety/checkin/{self.checkin.uuid}/chat/")
+        comm = WebsocketCommunicator(
+            SafetyCheckinChatConsumer.as_asgi(), f"/ws/safety/checkin/{self.checkin.uuid}/chat/"
+        )
         comm.scope["url_route"] = {"kwargs": {"checkin_uuid": str(self.checkin.uuid), "token": None}}
         comm.scope["user"] = user
         return comm

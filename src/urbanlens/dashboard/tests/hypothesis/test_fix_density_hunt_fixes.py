@@ -97,7 +97,9 @@ class ActivityLocationRefTests(TestCase):
         """
         from pathlib import Path
 
-        row = Path("src/urbanlens/dashboard/templates/dashboard/partials/trips/trip_activities_panel.html").read_text(encoding="utf-8")
+        row = Path("src/urbanlens/dashboard/templates/dashboard/partials/trips/trip_activities_panel.html").read_text(
+            encoding="utf-8"
+        )
         dialog = Path("src/urbanlens/dashboard/templates/dashboard/pages/trips/detail.html").read_text(encoding="utf-8")
 
         self.assertIn("data-act-location-ref=", row)
@@ -143,7 +145,7 @@ class HiddenActivityLocationTests(TestCase):
         self.assertEqual(self._row(hidden=True)["display_title"], "Secret Location")
 
     def test_a_hidden_activity_keeps_a_title_its_author_typed(self) -> None:
-        """"Meet at the gate" was written for the other members to read."""
+        """ "Meet at the gate" was written for the other members to read."""
         self.assertEqual(self._row(hidden=True, title="Meet at the gate")["display_title"], "Meet at the gate")
 
     def test_a_visible_activity_is_unchanged(self) -> None:
@@ -162,7 +164,9 @@ class HiddenActivityLocationTests(TestCase):
         """
         from pathlib import Path
 
-        panel = Path("src/urbanlens/dashboard/templates/dashboard/partials/trips/trip_activities_panel.html").read_text(encoding="utf-8")
+        panel = Path("src/urbanlens/dashboard/templates/dashboard/partials/trips/trip_activities_panel.html").read_text(
+            encoding="utf-8"
+        )
 
         self.assertNotIn("act.effective_title", panel)
         self.assertNotIn("act.location.", panel)
@@ -174,7 +178,9 @@ class HiddenActivityLocationTests(TestCase):
         owner's *visibility setting* was told the location was not hidden."""
         from pathlib import Path
 
-        panel = Path("src/urbanlens/dashboard/templates/dashboard/partials/trips/trip_activities_panel.html").read_text(encoding="utf-8")
+        panel = Path("src/urbanlens/dashboard/templates/dashboard/partials/trips/trip_activities_panel.html").read_text(
+            encoding="utf-8"
+        )
 
         self.assertIn('data-act-location-hidden="{{ item.effective_location_hidden', panel)
         self.assertNotIn("act.location_hidden", panel)
@@ -212,7 +218,11 @@ class LabelIconUploadValidationTests(TestCase):
         return self.client.post(reverse("label.create", kwargs={"label_kind": "tag"}), body)
 
     def test_a_scripted_svg_is_refused_by_the_create_path(self) -> None:
-        svg = SimpleUploadedFile("evil.svg", b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', content_type="image/svg+xml")
+        svg = SimpleUploadedFile(
+            "evil.svg",
+            b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+            content_type="image/svg+xml",
+        )
 
         response = self._create(svg)
 
@@ -222,9 +232,14 @@ class LabelIconUploadValidationTests(TestCase):
     def test_the_edit_path_refuses_it_too_which_is_the_asymmetry_that_existed(self) -> None:
         """Anti-vacuity in the other direction: the guard the create path lacked."""
         label = baker.make(Label, profile=self.profile, name="Existing", kind="tag")
-        svg = SimpleUploadedFile("evil.svg", b"<svg xmlns='http://www.w3.org/2000/svg'></svg>", content_type="image/svg+xml")
+        svg = SimpleUploadedFile(
+            "evil.svg", b"<svg xmlns='http://www.w3.org/2000/svg'></svg>", content_type="image/svg+xml"
+        )
 
-        response = self.client.post(reverse("label.edit", kwargs={"label_kind": "tag", "label_id": label.pk}), {"name": "Existing", "custom_icon-edit": svg})
+        response = self.client.post(
+            reverse("label.edit", kwargs={"label_kind": "tag", "label_id": label.pk}),
+            {"name": "Existing", "custom_icon-edit": svg},
+        )
 
         self.assertEqual(response.status_code, 400)
         label.refresh_from_db()
@@ -259,7 +274,9 @@ class LabelIconUploadValidationTests(TestCase):
         source = Path("src/urbanlens/dashboard/controllers/labels.py").read_text(encoding="utf-8")
 
         self.assertEqual(source.count("_validated_custom_icon("), 3, "one definition and both call sites")
-        self.assertEqual(source.count("_uploaded_custom_icon("), 2, "the raw helper is reached only from the validating one")
+        self.assertEqual(
+            source.count("_uploaded_custom_icon("), 2, "the raw helper is reached only from the validating one"
+        )
 
 
 class TwoFactorLockoutCounterTests(TestCase):

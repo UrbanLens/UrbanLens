@@ -12,6 +12,7 @@ Neither test class hits the database or a real network - ``RedataSearchGateway``
 itself is replaced with a mock, so its real constructor (which validates
 ``UL_REDATA_API_URL``/``UL_REDATA_API_KEY``) never runs.
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -50,7 +51,9 @@ class SearchWebRedataConfiguredTests(SimpleTestCase):
             patch("urbanlens.dashboard.services.search.search.redata_configured", return_value=True),
             patch(_GATEWAY_CLASS_PATH) as mock_gateway_class,
         ):
-            mock_gateway_class.return_value.search_web.side_effect = LocationContextUnavailableError("all_providers_unavailable", "every source failed")
+            mock_gateway_class.return_value.search_web.side_effect = LocationContextUnavailableError(
+                "all_providers_unavailable", "every source failed"
+            )
             results = search_web("query")
 
         self.assertEqual(results, [])

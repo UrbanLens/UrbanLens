@@ -250,12 +250,16 @@ class WikiAliasIsCurrentFlagTests(_WikiAliasUseTestCase):
 
     def test_a_newly_created_alias_reports_the_flag(self) -> None:
         """The POST response carries the same shape as the list, flag included."""
-        created = self.client.post(self.url("aliases/"), {"name": "Mill Ruins"}, content_type="application/json", **self.headers())
+        created = self.client.post(
+            self.url("aliases/"), {"name": "Mill Ruins"}, content_type="application/json", **self.headers()
+        )
         self.assertEqual(created.status_code, 201, created.content)
         self.assertIs(created.json()["is_current"], False)
 
     @hyp_settings(max_examples=15, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
-    @given(st.text(alphabet=st.characters(whitelist_categories=("Lu", "Ll"), max_codepoint=127), min_size=3, max_size=20))
+    @given(
+        st.text(alphabet=st.characters(whitelist_categories=("Lu", "Ll"), max_codepoint=127), min_size=3, max_size=20)
+    )
     def test_promoting_any_alias_leaves_exactly_one_current(self, name: str) -> None:
         """The invariant a client's list rendering depends on, over arbitrary names.
 
@@ -276,7 +280,9 @@ class WikiAliasIsCurrentFlagTests(_WikiAliasUseTestCase):
         flagged = [row for row in rows if row["is_current"]]
         self.assertEqual(len(flagged), 1, rows)
         self.wiki.refresh_from_db()
-        self.assertEqual(normalize_name_for_comparison(flagged[0]["name"]), normalize_name_for_comparison(self.wiki.name))
+        self.assertEqual(
+            normalize_name_for_comparison(flagged[0]["name"]), normalize_name_for_comparison(self.wiki.name)
+        )
 
 
 class WikiAliasUseScopeTests(_WikiAliasUseTestCase):

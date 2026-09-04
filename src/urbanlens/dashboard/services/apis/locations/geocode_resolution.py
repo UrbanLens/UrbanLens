@@ -9,7 +9,7 @@ decision, mirroring ``cid_resolution.py``/``places_resolution.py``/
   registered provider (nominatim/photon/google/azure_maps/openhistoricalmap)
   in one call; the first result of the first provider REData lists is used,
   matching the "take the first result of the first provider you trust"
-  guidance in REData's own ``docs/api-reference.md``.
+  guidance in REData's own ``../REData/docs/api-reference.md``.
 - REData not configured, or its request fails - falls back to a direct
   Nominatim search through :class:`NominatimGateway`, so the fallback is
   rate-limited, cost-logged and timeout-bounded like every other outbound

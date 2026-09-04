@@ -24,7 +24,11 @@ class PinExternalTagAutocompleteTests(TestCase):
         self.place = baker.make(Place)
         self.location = baker.make("dashboard.Location", latitude="39.10", longitude="-84.51", place=self.place)
         self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location, name="The Grand Eatery")
-        PlaceExternalTag.sync_for_source(self.place, ExternalTagSource.OVERTURE, [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            self.place,
+            ExternalTagSource.OVERTURE,
+            [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)],
+        )
 
     def test_finds_the_pin_by_its_tag(self):
         results = search_local("restaurant", self.profile)
@@ -38,7 +42,11 @@ class PinExternalTagAutocompleteTests(TestCase):
         other_place = baker.make(Place)
         other_location = baker.make("dashboard.Location", latitude="10.0", longitude="10.0", place=other_place)
         baker.make("dashboard.Pin", profile=self.other_profile, location=other_location, name="Someone Else's Diner")
-        PlaceExternalTag.sync_for_source(other_place, ExternalTagSource.OVERTURE, [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            other_place,
+            ExternalTagSource.OVERTURE,
+            [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)],
+        )
 
         results = search_local("restaurant", self.profile)
 

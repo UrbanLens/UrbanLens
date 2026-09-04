@@ -16,7 +16,7 @@
 #      `bun run build` because `docker cp` had handed
 #      dashboard/frontend/static/dashboard/js to uid 3300 and the build's own
 #      `rm -rf` of its output directory got EACCES. The same mechanism took the
-#      logs directory out on 2026-08-14 (see docs/PROBLEMS-ARCHIVE.md).
+#      logs directory out on 2026-08-14 (see docs/archive/PROBLEMS-ARCHIVE.md).
 #   2. `docker cp` only ever adds and overwrites. A file deleted on the host
 #      stays in the container forever, so a deleted module still satisfies the
 #      import that should have broken and a deleted template still renders.

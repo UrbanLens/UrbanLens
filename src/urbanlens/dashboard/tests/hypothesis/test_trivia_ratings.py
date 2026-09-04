@@ -33,7 +33,9 @@ def _make_profile() -> Profile:
 
 
 def _make_round_and_answer(profile: Profile, *, is_correct: bool) -> tuple[TriviaRound, TriviaAnswer]:
-    question = baker.make(TriviaQuestion, location=baker.make(Location), source=TriviaQuestionSource.DETERMINISTIC, answer="1937")
+    question = baker.make(
+        TriviaQuestion, location=baker.make(Location), source=TriviaQuestionSource.DETERMINISTIC, answer="1937"
+    )
     session = baker.make(TriviaSession, host_profile=profile)
     baker.make(TriviaSessionParticipant, session=session, profile=profile)
     round_ = baker.make(TriviaRound, session=session, question=question, sequence_index=0)
@@ -50,7 +52,9 @@ def _make_round_and_answer(profile: Profile, *, is_correct: bool) -> tuple[Trivi
 
 class ApplyRoundRatingsTests(TestCase):
     def test_no_answers_is_a_no_op(self) -> None:
-        question = baker.make(TriviaQuestion, location=baker.make(Location), source=TriviaQuestionSource.DETERMINISTIC, answer="1937")
+        question = baker.make(
+            TriviaQuestion, location=baker.make(Location), source=TriviaQuestionSource.DETERMINISTIC, answer="1937"
+        )
         session = baker.make(TriviaSession, host_profile=_make_profile())
         round_ = baker.make(TriviaRound, session=session, question=question, sequence_index=0)
         apply_round_ratings(round_, [])

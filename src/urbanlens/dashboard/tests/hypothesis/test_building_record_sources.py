@@ -1,7 +1,7 @@
 """Building provenance survives REData's move to a reconciled response.
 
 REData now reconciles `/parcels/{uuid}/buildings/` into one record per physical
-building (its `docs/buildings-dedup-spec.md`), which removed the top-level
+building (its `../REData/docs/archive/buildings-dedup-spec.md`), which removed the top-level
 `source` string a per-observation record used to carry and replaced it with a
 `sources[]` array - one entry per source referencing that building, ordered by
 `BUILDING_SOURCES` precedence.
@@ -69,7 +69,9 @@ class BuildingRowSourceLabelTests(SimpleTestCase):
     def test_a_reconciled_building_is_labelled_for_both_sources(self) -> None:
         row = self._row({"name": "Main Building", "sources": [{"source": "cris"}, {"source": "osm"}]})
 
-        self.assertEqual(row["source"], "cris", "the richest source stays the row's primary, which is what sorting and the API use")
+        self.assertEqual(
+            row["source"], "cris", "the richest source stays the row's primary, which is what sorting and the API use"
+        )
         self.assertEqual(row["source_label"], "NY SHPO (CRIS) + OpenStreetMap")
 
     def test_a_flat_building_is_labelled_as_before(self) -> None:

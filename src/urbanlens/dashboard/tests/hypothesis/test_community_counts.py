@@ -22,7 +22,11 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.wiki import community_counts
-from urbanlens.dashboard.services.wiki.community_counts import MIN_VISIBLE_PIN_COUNT, approximate_pin_count, wiki_community_summary
+from urbanlens.dashboard.services.wiki.community_counts import (
+    MIN_VISIBLE_PIN_COUNT,
+    approximate_pin_count,
+    wiki_community_summary,
+)
 
 _LOCMEM_CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 
@@ -41,7 +45,10 @@ class ApproximatePinCountTests(SimpleTestCase):
         self.assertTrue(result["is_low"])
         self.assertIsNone(result["value"])
 
-    @given(count=st.integers(min_value=MIN_VISIBLE_PIN_COUNT, max_value=500), wiki_id=st.integers(min_value=1, max_value=10_000))
+    @given(
+        count=st.integers(min_value=MIN_VISIBLE_PIN_COUNT, max_value=500),
+        wiki_id=st.integers(min_value=1, max_value=10_000),
+    )
     def test_fuzz_stays_within_two_and_at_least_threshold(self, count, wiki_id):
         cache.clear()
         result = approximate_pin_count(wiki_id=wiki_id, exact_count=count)
@@ -79,14 +86,17 @@ class WikiCommunitySummaryPlaceAwareTests(TestCase):
     caller's own (possibly non-canonical) Location to differ from
     ``wiki.location`` so long as they share a Place, so counting only the
     passed-in Location undercounts "N users have this pinned" whenever more
-    than one Location exists under the Place. See docs/GOALS_CODE_AUDIT.md
+    than one Location exists under the Place. See docs/audits/GOALS_CODE_AUDIT.md
     ("Cross-pin aggregate comparison level")."""
 
     def _spy_exact_count(self, wiki: Wiki, location: Location) -> int:
         """Call wiki_community_summary and return the exact_count it computed,
         bypassing approximate_pin_count's fuzz/threshold so small counts are
         directly assertable."""
-        with mock.patch("urbanlens.dashboard.services.wiki.community_counts.approximate_pin_count", wraps=community_counts.approximate_pin_count) as spy:
+        with mock.patch(
+            "urbanlens.dashboard.services.wiki.community_counts.approximate_pin_count",
+            wraps=community_counts.approximate_pin_count,
+        ) as spy:
             wiki_community_summary(wiki, location)
         return spy.call_args[0][1]
 

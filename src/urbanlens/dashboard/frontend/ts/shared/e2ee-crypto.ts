@@ -2,7 +2,7 @@
  * Pure crypto primitives for direct-message end-to-end encryption.
  *
  * Every operation here happens in the browser; the server only ever stores
- * the base64 blobs these functions emit. The scheme (see docs/e2ee.md):
+ * the base64 blobs these functions emit. The scheme (see docs/designs/e2ee.md):
  *
  * - X25519 identity keypair per user (crypto_box).
  * - Private key stored server-side only wrapped: under an Argon2id key

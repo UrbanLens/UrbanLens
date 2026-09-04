@@ -50,7 +50,9 @@ class ProfileBioEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         self.assertContains(response, "Urban explorer since 2015.")
         # The wiring script's `querySelector('.profile-bio-full--editable')`
         # legitimately contains this class name as inert text on every render
@@ -65,7 +67,9 @@ class ProfileBioEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         # Same caveat: the wiring script hardcodes 'Add a bio...' as its
         # revert-to-placeholder fallback string, present in every render
         # regardless of viewer - check for the text as actual element content.

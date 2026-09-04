@@ -6,6 +6,7 @@ Covers:
 - _dir_size_mb() size computation and error handling
 - SiteAdminStatsView access control and context completeness
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -91,9 +92,12 @@ class ServerUptimeTests(SimpleTestCase):
 
     def _uptime_at(self, elapsed_seconds: float) -> str:
         """Return _app_uptime() when monotonic has advanced by ``elapsed_seconds``."""
-        with mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 0.0), mock.patch(
-            "urbanlens.dashboard.controllers.site_admin.time.monotonic",
-            return_value=elapsed_seconds,
+        with (
+            mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 0.0),
+            mock.patch(
+                "urbanlens.dashboard.controllers.site_admin.time.monotonic",
+                return_value=elapsed_seconds,
+            ),
         ):
             return _app_uptime()
 
@@ -109,9 +113,12 @@ class ServerUptimeTests(SimpleTestCase):
         self.assertEqual(self._uptime_at(3600), "0d 1h 0m")
 
     def test_never_returns_negative_uptime(self) -> None:
-        with mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 100.0), mock.patch(
-            "urbanlens.dashboard.controllers.site_admin.time.monotonic",
-            return_value=50.0,
+        with (
+            mock.patch("urbanlens.dashboard.controllers.site_admin._APP_STARTED_MONOTONIC", 100.0),
+            mock.patch(
+                "urbanlens.dashboard.controllers.site_admin.time.monotonic",
+                return_value=50.0,
+            ),
         ):
             result = _app_uptime()
         self.assertEqual(result, "0d 0h 0m")
@@ -337,8 +344,17 @@ class SiteAdminHomeViewTests(TestCase):
         from urbanlens.dashboard.services.admin.infrastructure_stats import InfrastructureServiceStat
 
         fake_services = (
-            InfrastructureServiceStat(key="postgres", name="PostgreSQL", icon="storage", status="healthy", status_label="Connected", metrics=()),
-            InfrastructureServiceStat(key="valkey", name="Valkey", icon="memory", status="unhealthy", status_label="Down", metrics=()),
+            InfrastructureServiceStat(
+                key="postgres",
+                name="PostgreSQL",
+                icon="storage",
+                status="healthy",
+                status_label="Connected",
+                metrics=(),
+            ),
+            InfrastructureServiceStat(
+                key="valkey", name="Valkey", icon="memory", status="unhealthy", status_label="Down", metrics=()
+            ),
         )
         with mock.patch(
             "urbanlens.dashboard.services.admin.infrastructure_stats.collect_infrastructure_service_stats",

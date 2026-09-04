@@ -151,7 +151,7 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
     PinShareStatus.DETECTED's docstring: "never actionable"). Unlike an EXPLICIT share
     awaiting accept/reject, the recipient never consented to see anything about these, so
     unconditionally reading share.pin/share.place_label - which the goal's own litmus test
-    flags as a live reference - was a real leak. See docs/GOALS_CODE_AUDIT.md
+    flags as a live reference - was a real leak. See docs/audits/GOALS_CODE_AUDIT.md
     ("Trip activities sourcing")."""
 
     def setUp(self) -> None:
@@ -200,7 +200,12 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
 
     def test_an_explicit_pending_share_still_shows_the_pin(self):
         """The fix must not hide a share the recipient actually needs to decide on."""
-        share = PinShare.objects.create(pin=self.pin_a, from_profile=self.profiles["a"], to_profile=self.profiles["b"], status=PinShareStatus.PENDING)
+        share = PinShare.objects.create(
+            pin=self.pin_a,
+            from_profile=self.profiles["a"],
+            to_profile=self.profiles["b"],
+            status=PinShareStatus.PENDING,
+        )
         self.client.force_login(self.users["b"])
 
         response = self.client.get(reverse("memories.sharing"))
@@ -215,7 +220,12 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
     def test_a_mixed_group_with_one_actionable_share_still_shows_the_pin(self):
         """A DETECTED share for a pin the recipient ALSO has a real (pending/accepted) share
         for must not lose the pin - there's a legitimate share justifying the reveal."""
-        PinShare.objects.create(pin=self.pin_a, from_profile=self.profiles["a"], to_profile=self.profiles["b"], status=PinShareStatus.PENDING)
+        PinShare.objects.create(
+            pin=self.pin_a,
+            from_profile=self.profiles["a"],
+            to_profile=self.profiles["b"],
+            status=PinShareStatus.PENDING,
+        )
         self._detected_share(origin=PinShareOrigin.MAP_DETECTED)
         self.client.force_login(self.users["b"])
 
@@ -232,8 +242,12 @@ class MemoriesSharingMapsPageTests(_ShareChainTestCase):
 
     def test_page_groups_map_shares_by_map(self):
         markup_map = MarkupMap.objects.create(profile=self.profiles["a"], title="Old Mill route")
-        MarkupMapShare.objects.create(markup_map=markup_map, from_profile=self.profiles["a"], to_profile=self.profiles["b"])
-        MarkupMapShare.objects.create(markup_map=markup_map, from_profile=self.profiles["a"], to_profile=self.profiles["c"])
+        MarkupMapShare.objects.create(
+            markup_map=markup_map, from_profile=self.profiles["a"], to_profile=self.profiles["b"]
+        )
+        MarkupMapShare.objects.create(
+            markup_map=markup_map, from_profile=self.profiles["a"], to_profile=self.profiles["c"]
+        )
         self.client.force_login(self.users["a"])
 
         response = self.client.get(reverse("memories.sharing"))
@@ -242,11 +256,15 @@ class MemoriesSharingMapsPageTests(_ShareChainTestCase):
         groups = response.context["map_share_groups"]
         self.assertEqual(len(groups), 1)
         self.assertEqual(groups[0]["map"], markup_map)
-        self.assertEqual({share.to_profile_id for share in groups[0]["shares"]}, {self.profiles["b"].pk, self.profiles["c"].pk})
+        self.assertEqual(
+            {share.to_profile_id for share in groups[0]["shares"]}, {self.profiles["b"].pk, self.profiles["c"].pk}
+        )
 
     def test_page_only_shows_own_map_shares(self):
         markup_map = MarkupMap.objects.create(profile=self.profiles["b"], title="Not mine")
-        MarkupMapShare.objects.create(markup_map=markup_map, from_profile=self.profiles["b"], to_profile=self.profiles["c"])
+        MarkupMapShare.objects.create(
+            markup_map=markup_map, from_profile=self.profiles["b"], to_profile=self.profiles["c"]
+        )
         self.client.force_login(self.users["a"])
 
         response = self.client.get(reverse("memories.sharing"))

@@ -137,7 +137,9 @@ class ScopeAndOwnershipTests(_PanelsApiTestCase):
 
     def test_another_profiles_pin_is_404_on_list_and_detail(self) -> None:
         self.assertEqual(self.client.get(self._list_url(self.other_pin), **_bearer(self.raw_key)).status_code, 404)
-        self.assertEqual(self.client.get(self._detail_url("satellite", self.other_pin), **_bearer(self.raw_key)).status_code, 404)
+        self.assertEqual(
+            self.client.get(self._detail_url("satellite", self.other_pin), **_bearer(self.raw_key)).status_code, 404
+        )
 
 
 class StubbedSourceListTests(_PanelsApiTestCase):

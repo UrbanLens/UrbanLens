@@ -28,7 +28,10 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.messaging.direct_message_shares import recommend_friend_in_message, share_pin_in_message
+from urbanlens.dashboard.services.messaging.direct_message_shares import (
+    recommend_friend_in_message,
+    share_pin_in_message,
+)
 from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message, serialize_direct_message
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
@@ -203,7 +206,9 @@ class MessageShareRespondViewTests(TestCase):
         message = share_pin_in_message(self.sender, self.recipient, self.pin, "hi")
         self.client.force_login(self.sender.user)
         response = self.client.post(
-            reverse("messages.share.pin.respond", kwargs={"profile_slug": self.recipient.slug, "message_id": message.pk}),
+            reverse(
+                "messages.share.pin.respond", kwargs={"profile_slug": self.recipient.slug, "message_id": message.pk}
+            ),
             {"action": "accept"},
         )
         self.assertEqual(response.status_code, 404)
@@ -214,7 +219,9 @@ class MessageShareRespondViewTests(TestCase):
         message = recommend_friend_in_message(self.sender, self.recipient, recommended, "meet them")
         self.client.force_login(self.recipient.user)
         response = self.client.post(
-            reverse("messages.share.friend.respond", kwargs={"profile_slug": self.sender.slug, "message_id": message.pk}),
+            reverse(
+                "messages.share.friend.respond", kwargs={"profile_slug": self.sender.slug, "message_id": message.pk}
+            ),
         )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(
@@ -259,7 +266,11 @@ class MessageShareTripScopingTests(TestCase):
         response = self._invite(trip.slug)
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(TripMembership.objects.filter(trip=trip, profile=self.recipient, status=TripMembership.STATUS_INVITED).exists())
+        self.assertTrue(
+            TripMembership.objects.filter(
+                trip=trip, profile=self.recipient, status=TripMembership.STATUS_INVITED
+            ).exists()
+        )
 
     def test_someone_elses_trip_and_a_nonexistent_trip_are_indistinguishable(self) -> None:
         from urbanlens.dashboard.models.trips.model import Trip, TripMembership
@@ -333,7 +344,10 @@ class ShareStatusNotLeakedToSharerTests(TestCase):
         self.client.force_login(self.sender.user)
         response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.recipient.slug}))
         content = response.content.decode()
-        self.assertNotContains(response, reverse("messages.share.pin.respond", kwargs={"profile_slug": self.sender.slug, "message_id": message.pk}))
+        self.assertNotContains(
+            response,
+            reverse("messages.share.pin.respond", kwargs={"profile_slug": self.sender.slug, "message_id": message.pk}),
+        )
         self.assertIn("Pin shared.", content)
 
     def test_recipient_does_see_their_own_status(self) -> None:
@@ -413,7 +427,9 @@ class ShareCompositeAtomicityTests(TestCase):
         _make_accepted_friendship(self.sender, recommended)
         with self.assertRaises(PermissionError):
             recommend_friend_in_message(self.sender, self.recipient, recommended, "meet my friend")
-        self.assertFalse(DirectMessageTemporaryAccess.objects.filter(profile=recommended, granted_to=self.recipient).exists())
+        self.assertFalse(
+            DirectMessageTemporaryAccess.objects.filter(profile=recommended, granted_to=self.recipient).exists()
+        )
 
 
 class RecommendationBlockTests(TestCase):
@@ -449,7 +465,9 @@ class RecommendationBlockTests(TestCase):
         self._block(self.recommended, self.recipient)
         with self.assertRaises(PermissionError):
             recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
-        self.assertFalse(DirectMessageTemporaryAccess.objects.filter(profile=self.recommended, granted_to=self.recipient).exists())
+        self.assertFalse(
+            DirectMessageTemporaryAccess.objects.filter(profile=self.recommended, granted_to=self.recipient).exists()
+        )
         self.assertFalse(DirectMessage.objects.between(self.sender, self.recipient).exists())
 
     def test_block_in_the_other_direction_is_also_refused(self) -> None:

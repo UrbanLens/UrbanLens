@@ -23,8 +23,10 @@ class PinSearchTests(TestCase):
 
         self.location = baker.make(
             "dashboard.Location",
-            latitude="39.10", longitude="-84.51",
-            locality="Cincinnati", administrative_area_level_1="OH",
+            latitude="39.10",
+            longitude="-84.51",
+            locality="Cincinnati",
+            administrative_area_level_1="OH",
         )
         self.pin = baker.make(
             "dashboard.Pin",
@@ -102,8 +104,12 @@ class PinSearchTests(TestCase):
     def test_duplicate_named_pins_get_distinguishing_subtitles(self):
         other_location = baker.make(
             "dashboard.Location",
-            latitude="41.0", longitude="-85.0",
-            street_number="55", route="Oak Ave", locality="Dayton", administrative_area_level_1="OH",
+            latitude="41.0",
+            longitude="-85.0",
+            street_number="55",
+            route="Oak Ave",
+            locality="Dayton",
+            administrative_area_level_1="OH",
         )
         self.location.street_number = "123"
         self.location.route = "Main St"
@@ -202,18 +208,38 @@ class PinSearchTests(TestCase):
 
         # term, (expected titles), (unexpected titles)
         terms = [
-            ("factory near me",
+            (
+                "factory near me",
                 ("Old factory in PA", "old factory that's Near Me", "old factory Near Mellissa"),
-                ("Another pin I saw", "Belnear Medical Center", "church far away", "Shared in messages from Sarah")),
-            ("old factory",
+                ("Another pin I saw", "Belnear Medical Center", "church far away", "Shared in messages from Sarah"),
+            ),
+            (
+                "old factory",
                 ("Old factory in PA", "old factory that's Near Me", "old factory Near Mellissa"),
-                ("Another pin I saw", "Belnear Medical Center", "church far away", "Shared in messages from Sarah")),
-            ("pin near me",
-                ("Another pin I saw", "Belnear Medical Center", "old factory Near Mellissa", "Old factory in PA", "old factory that's Near Me"),
-                ("church far away", "Shared in messages from Sarah")),
-            ("messages from Sarah",
+                ("Another pin I saw", "Belnear Medical Center", "church far away", "Shared in messages from Sarah"),
+            ),
+            (
+                "pin near me",
+                (
+                    "Another pin I saw",
+                    "Belnear Medical Center",
+                    "old factory Near Mellissa",
+                    "Old factory in PA",
+                    "old factory that's Near Me",
+                ),
+                ("church far away", "Shared in messages from Sarah"),
+            ),
+            (
+                "messages from Sarah",
                 ("Shared in messages from Sarah",),
-                ("Old factory in PA", "old factory that's Near Me", "church far away", "Belnear Medical Center", "old factory Near Mellissa"))
+                (
+                    "Old factory in PA",
+                    "old factory that's Near Me",
+                    "church far away",
+                    "Belnear Medical Center",
+                    "old factory Near Mellissa",
+                ),
+            ),
         ]
         for term, expected_titles, unexpected_titles in terms:
             response = GlobalSearchEngine().search(self.profile, term)
@@ -222,6 +248,7 @@ class PinSearchTests(TestCase):
                 self.assertIn(expected_title, titles)
             for unexpected_title in unexpected_titles:
                 self.assertNotIn(unexpected_title, titles)
+
 
 class PinExternalTagSearchTests(TestCase):
     """Pins found by external tag: plain text, "pin with tag X" phrasing, provider synonyms, privacy."""
@@ -242,7 +269,11 @@ class PinExternalTagSearchTests(TestCase):
         self.place = baker.make(Place)
         self.location = baker.make("dashboard.Location", latitude="39.10", longitude="-84.51", place=self.place)
         self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location, name="The Grand Eatery")
-        PlaceExternalTag.sync_for_source(self.place, ExternalTagSource.OVERTURE, [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)])
+        PlaceExternalTag.sync_for_source(
+            self.place,
+            ExternalTagSource.OVERTURE,
+            [ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)],
+        )
 
     def _titles(self, response, slug="pins"):
         for group in response.groups:
@@ -267,10 +298,16 @@ class PinExternalTagSearchTests(TestCase):
         from urbanlens.dashboard.models.place.external_tag_group import ExternalTagVocabularyEntry
         from urbanlens.dashboard.services.locations.external_tag_groups import create_group
 
-        osm_entry, _ = ExternalTagVocabularyEntry.objects.get_or_create(source=self.ExternalTagSource.OSM, key="amenity", value="eatery")
-        overture_entry = ExternalTagVocabularyEntry.objects.get(source=self.ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant")
+        osm_entry, _ = ExternalTagVocabularyEntry.objects.get_or_create(
+            source=self.ExternalTagSource.OSM, key="amenity", value="eatery"
+        )
+        overture_entry = ExternalTagVocabularyEntry.objects.get(
+            source=self.ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant"
+        )
         create_group([osm_entry.pk, overture_entry.pk])
-        self.PlaceExternalTag.objects.bulk_create([self.PlaceExternalTag(place=self.place, source=self.ExternalTagSource.OSM, key="amenity", value="eatery")])
+        self.PlaceExternalTag.objects.bulk_create(
+            [self.PlaceExternalTag(place=self.place, source=self.ExternalTagSource.OSM, key="amenity", value="eatery")]
+        )
 
         response = GlobalSearchEngine().search(self.profile, "eatery")
 
@@ -282,7 +319,11 @@ class PinExternalTagSearchTests(TestCase):
         other_place = baker.make(Place)
         other_location = baker.make("dashboard.Location", latitude="10.0", longitude="10.0", place=other_place)
         baker.make("dashboard.Pin", profile=self.other_profile, location=other_location, name="Someone Else's Diner")
-        self.PlaceExternalTag.sync_for_source(other_place, self.ExternalTagSource.OVERTURE, [self.ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)])
+        self.PlaceExternalTag.sync_for_source(
+            other_place,
+            self.ExternalTagSource.OVERTURE,
+            [self.ExtractedTag(key="building_subtype", value="restaurant", is_primary=True)],
+        )
 
         response = GlobalSearchEngine().search(self.profile, "restaurant")
 
@@ -343,7 +384,13 @@ class PinShareSearchTests(TestCase):
     def test_finds_pin_materialized_from_an_accepted_share(self):
         location = baker.make("dashboard.Location")
         sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Warehouse")
-        share = baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        share = baker.make(
+            "dashboard.PinShare",
+            pin=sharer_pin,
+            from_profile=self.sharer,
+            to_profile=self.viewer,
+            status=self.status.ACCEPTED,
+        )
         baker.make("dashboard.Pin", profile=self.viewer, location=location, source_share=share, name="Cool Warehouse")
         response = GlobalSearchEngine().search(self.viewer, "pin from johnsmith")
         self.assertIn("Cool Warehouse", self._pin_titles(response))
@@ -354,7 +401,13 @@ class PinShareSearchTests(TestCase):
         # find it by location, not just via the source_share/inferred FKs.
         location = baker.make("dashboard.Location")
         sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Copy")
-        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        baker.make(
+            "dashboard.PinShare",
+            pin=sharer_pin,
+            from_profile=self.sharer,
+            to_profile=self.viewer,
+            status=self.status.ACCEPTED,
+        )
         baker.make("dashboard.Pin", profile=self.viewer, location=location, name="My Old Factory")
         response = GlobalSearchEngine().search(self.viewer, "pin from johnsmith")
         self.assertIn("My Old Factory", self._pin_titles(response))
@@ -362,7 +415,13 @@ class PinShareSearchTests(TestCase):
     def test_matches_sharer_by_first_name(self):
         location = baker.make("dashboard.Location")
         sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Pin")
-        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        baker.make(
+            "dashboard.PinShare",
+            pin=sharer_pin,
+            from_profile=self.sharer,
+            to_profile=self.viewer,
+            status=self.status.ACCEPTED,
+        )
         baker.make("dashboard.Pin", profile=self.viewer, location=location, name="Given Warehouse")
         response = GlobalSearchEngine().search(self.viewer, "pin from John")
         self.assertIn("Given Warehouse", self._pin_titles(response))
@@ -370,7 +429,13 @@ class PinShareSearchTests(TestCase):
     def test_matches_sharer_by_full_name(self):
         location = baker.make("dashboard.Location")
         sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Pin")
-        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        baker.make(
+            "dashboard.PinShare",
+            pin=sharer_pin,
+            from_profile=self.sharer,
+            to_profile=self.viewer,
+            status=self.status.ACCEPTED,
+        )
         baker.make("dashboard.Pin", profile=self.viewer, location=location, name="Given Warehouse")
         response = GlobalSearchEngine().search(self.viewer, "pin from John Smith")
         self.assertIn("Given Warehouse", self._pin_titles(response))
@@ -379,7 +444,13 @@ class PinShareSearchTests(TestCase):
         baker.make("dashboard.ProfileNickname", author=self.viewer, subject=self.sharer, nickname="Johnny")
         location = baker.make("dashboard.Location")
         sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Pin")
-        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        baker.make(
+            "dashboard.PinShare",
+            pin=sharer_pin,
+            from_profile=self.sharer,
+            to_profile=self.viewer,
+            status=self.status.ACCEPTED,
+        )
         baker.make("dashboard.Pin", profile=self.viewer, location=location, name="Given Warehouse")
         response = GlobalSearchEngine().search(self.viewer, "pin from Johnny")
         self.assertIn("Given Warehouse", self._pin_titles(response))
@@ -392,7 +463,13 @@ class PinShareSearchTests(TestCase):
     def test_pending_share_does_not_count(self):
         location = baker.make("dashboard.Location")
         sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Pin")
-        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.PENDING)
+        baker.make(
+            "dashboard.PinShare",
+            pin=sharer_pin,
+            from_profile=self.sharer,
+            to_profile=self.viewer,
+            status=self.status.PENDING,
+        )
         baker.make("dashboard.Pin", profile=self.viewer, location=location, name="Not Yet Accepted")
         response = GlobalSearchEngine().search(self.viewer, "pin from johnsmith")
         self.assertNotIn("Not Yet Accepted", self._pin_titles(response))
@@ -400,7 +477,13 @@ class PinShareSearchTests(TestCase):
     def test_does_not_match_unrelated_sharer(self):
         location = baker.make("dashboard.Location")
         sharer_pin = baker.make("dashboard.Pin", profile=self.sharer, location=location, name="Sharer's Pin")
-        baker.make("dashboard.PinShare", pin=sharer_pin, from_profile=self.sharer, to_profile=self.viewer, status=self.status.ACCEPTED)
+        baker.make(
+            "dashboard.PinShare",
+            pin=sharer_pin,
+            from_profile=self.sharer,
+            to_profile=self.viewer,
+            status=self.status.ACCEPTED,
+        )
         baker.make("dashboard.Pin", profile=self.viewer, location=location, name="Given Warehouse")
         response = GlobalSearchEngine().search(self.viewer, "pin from stranger")
         self.assertNotIn("Given Warehouse", self._pin_titles(response))
@@ -414,7 +497,14 @@ class DirectMessageSearchTests(TestCase):
         self.bob = baker.make("auth.User", username="bob").profile
         self.eve = baker.make("auth.User", username="eve").profile
         baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="Meet at the old asylum gate")
-        baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="", ciphertext="deadbeef", nonce="abc")
+        baker.make(
+            "dashboard.DirectMessage",
+            sender=self.alice,
+            recipient=self.bob,
+            body="",
+            ciphertext="deadbeef",
+            nonce="abc",
+        )
 
     def _message_results(self, response):
         for group in response.groups:

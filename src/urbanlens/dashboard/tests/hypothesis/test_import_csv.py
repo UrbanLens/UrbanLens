@@ -6,6 +6,7 @@ etc.) that carry their own latitude/longitude columns. This file only covers
 the generic-column path; Takeout-URL parsing is exercised elsewhere via the
 Google Maps import tests.
 """
+
 from __future__ import annotations
 
 from hypothesis import given, settings as hyp_settings, strategies as st
@@ -135,7 +136,9 @@ class CsvRowIterLatLonTests(SimpleTestCase):
             alphabet=st.characters(blacklist_categories=("Cs", "Cc"), blacklist_characters=',\r\n"'),
             min_size=1,
             max_size=40,
-        ).map(str.strip).filter(bool),
+        )
+        .map(str.strip)
+        .filter(bool),
         lat=st.floats(min_value=-89, max_value=89, allow_nan=False, allow_infinity=False),
         lon=st.floats(min_value=-179, max_value=179, allow_nan=False, allow_infinity=False),
     )
@@ -172,7 +175,10 @@ class CsvRowIterS2GuessFlagTests(SimpleTestCase):
         self.assertEqual(pins[0]["cid"], 0x59AC8820518A7E79)
         # Carried through to a deferred REData lookup (cid_resolution.resolve_cids) -
         # resolving via the place's own URL is faster/more reliable than cid alone.
-        self.assertEqual(pins[0]["maps_url"], "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79")
+        self.assertEqual(
+            pins[0]["maps_url"],
+            "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79",
+        )
 
     def test_search_url_without_a_data_segment_is_not_flagged(self):
         csv_text = 'Title,URL\nSome Place,"https://maps.google.com/maps/search/1.0,2.0"'

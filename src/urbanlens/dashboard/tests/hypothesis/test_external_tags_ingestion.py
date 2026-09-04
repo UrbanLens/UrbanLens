@@ -78,7 +78,10 @@ class NominatimPanelSourceIngestionTests(TestCase):
         # rows sync_for_source itself writes, so replacing it outright would
         # make every fetch look "not fresh" (nothing was ever really synced)
         # and defeat the very behavior this test is checking.
-        with mock.patch.object(NominatimGateway, "reverse_geocode", return_value=dict(_NOMINATIM_RESULT)), mock.patch.object(PlaceExternalTag, "sync_for_source", wraps=PlaceExternalTag.sync_for_source) as sync:
+        with (
+            mock.patch.object(NominatimGateway, "reverse_geocode", return_value=dict(_NOMINATIM_RESULT)),
+            mock.patch.object(PlaceExternalTag, "sync_for_source", wraps=PlaceExternalTag.sync_for_source) as sync,
+        ):
             NominatimPanelSource().fetch(pin_a)
             NominatimPanelSource().fetch(pin_b)
 
@@ -118,7 +121,14 @@ class OvertureBuildingAttributesPanelSourceIngestionTests(TestCase):
     def test_fetch_syncs_tags_onto_the_locations_place(self):
         pin = _make_pin(with_place=True)
 
-        with mock.patch.object(OvertureMapsGateway, "get_building_attributes", return_value={"subtype": "single_family_residential", "class_": "residential"}), mock.patch.object(OvertureMapsGateway, "get_nearby_places", return_value=[]):
+        with (
+            mock.patch.object(
+                OvertureMapsGateway,
+                "get_building_attributes",
+                return_value={"subtype": "single_family_residential", "class_": "residential"},
+            ),
+            mock.patch.object(OvertureMapsGateway, "get_nearby_places", return_value=[]),
+        ):
             OvertureBuildingAttributesPanelSource().fetch(pin)
 
         tags = set(pin.location.place.external_tags.values_list("source", "key", "value"))
@@ -128,7 +138,16 @@ class OvertureBuildingAttributesPanelSourceIngestionTests(TestCase):
     def test_nearby_places_categories_never_become_this_places_tags(self):
         pin = _make_pin(with_place=True)
 
-        with mock.patch.object(OvertureMapsGateway, "get_building_attributes", return_value={"subtype": "single_family_residential"}), mock.patch.object(OvertureMapsGateway, "get_nearby_places", return_value=[{"name": "Corner Bakery", "category": "bakery", "distance_m": 8.0}]):
+        with (
+            mock.patch.object(
+                OvertureMapsGateway, "get_building_attributes", return_value={"subtype": "single_family_residential"}
+            ),
+            mock.patch.object(
+                OvertureMapsGateway,
+                "get_nearby_places",
+                return_value=[{"name": "Corner Bakery", "category": "bakery", "distance_m": 8.0}],
+            ),
+        ):
             OvertureBuildingAttributesPanelSource().fetch(pin)
 
         values = set(pin.location.place.external_tags.values_list("value", flat=True))
@@ -137,7 +156,12 @@ class OvertureBuildingAttributesPanelSourceIngestionTests(TestCase):
     def test_fetch_skips_tag_sync_cleanly_when_location_has_no_place(self):
         pin = _make_pin(with_place=False)
 
-        with mock.patch.object(OvertureMapsGateway, "get_building_attributes", return_value={"subtype": "single_family_residential"}), mock.patch.object(OvertureMapsGateway, "get_nearby_places", return_value=[]):
+        with (
+            mock.patch.object(
+                OvertureMapsGateway, "get_building_attributes", return_value={"subtype": "single_family_residential"}
+            ),
+            mock.patch.object(OvertureMapsGateway, "get_nearby_places", return_value=[]),
+        ):
             OvertureBuildingAttributesPanelSource().fetch(pin)  # must not raise
 
         self.assertFalse(PlaceExternalTag.objects.exists())
@@ -145,7 +169,10 @@ class OvertureBuildingAttributesPanelSourceIngestionTests(TestCase):
     def test_fetch_with_no_attributes_writes_no_tags(self):
         pin = _make_pin(with_place=True)
 
-        with mock.patch.object(OvertureMapsGateway, "get_building_attributes", return_value=None), mock.patch.object(OvertureMapsGateway, "get_nearby_places", return_value=[]):
+        with (
+            mock.patch.object(OvertureMapsGateway, "get_building_attributes", return_value=None),
+            mock.patch.object(OvertureMapsGateway, "get_nearby_places", return_value=[]),
+        ):
             OvertureBuildingAttributesPanelSource().fetch(pin)  # must not raise
 
         self.assertFalse(PlaceExternalTag.objects.exists())

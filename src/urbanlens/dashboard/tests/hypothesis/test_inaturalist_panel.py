@@ -35,7 +35,12 @@ class INaturalistPanelSourceTests(TestCase):
     def test_meta_entry_links_to_the_specific_observation(self) -> None:
         data = {
             "observations": [
-                {"common_name": "Red Fox", "scientific_name": "Vulpes vulpes", "observed_on": "2025-05-01", "url": "https://www.inaturalist.org/observations/12345"},
+                {
+                    "common_name": "Red Fox",
+                    "scientific_name": "Vulpes vulpes",
+                    "observed_on": "2025-05-01",
+                    "url": "https://www.inaturalist.org/observations/12345",
+                },
             ],
         }
         ctx = self.source.render_context(self.pin, data)
@@ -43,7 +48,9 @@ class INaturalistPanelSourceTests(TestCase):
         self.assertEqual(ctx["meta"][0]["href"], "https://www.inaturalist.org/observations/12345")
 
     def test_observation_with_no_url_has_no_href(self) -> None:
-        data = {"observations": [{"common_name": "Red Fox", "scientific_name": "", "observed_on": "2025-05-01", "url": ""}]}
+        data = {
+            "observations": [{"common_name": "Red Fox", "scientific_name": "", "observed_on": "2025-05-01", "url": ""}]
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["meta"][0]["href"], "")
@@ -55,7 +62,11 @@ class INaturalistPanelSourceTests(TestCase):
         location = baker.make("dashboard.Location", latitude=40.5, longitude=-74.5)
         pin: Pin = baker.make_recipe("dashboard.pin", profile=self.pin.profile, location=location)
 
-        data = {"observations": [{"common_name": "Red Fox", "scientific_name": "", "observed_on": "2025-05-01", "url": "https://x"}]}
+        data = {
+            "observations": [
+                {"common_name": "Red Fox", "scientific_name": "", "observed_on": "2025-05-01", "url": "https://x"}
+            ]
+        }
         ctx = self.source.render_context(pin, data)
 
         assert ctx is not None
@@ -83,7 +94,17 @@ class INaturalistPanelSourceTests(TestCase):
         self.assertIn("approximate location", ctx["meta"][0]["value"])
 
     def test_non_obscured_observation_has_no_approximate_location_note(self) -> None:
-        data = {"observations": [{"common_name": "Red Fox", "scientific_name": "", "observed_on": "2025-05-01", "url": "", "attributes": {"obscured": False}}]}
+        data = {
+            "observations": [
+                {
+                    "common_name": "Red Fox",
+                    "scientific_name": "",
+                    "observed_on": "2025-05-01",
+                    "url": "",
+                    "attributes": {"obscured": False},
+                }
+            ]
+        }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertNotIn("approximate location", ctx["meta"][0]["value"])
@@ -104,22 +125,36 @@ class INaturalistPanelSourceFetchTests(TestCase):
         envelope = LocationContextEnvelope(
             count=1,
             complete=True,
-            results=[{"provider": "inaturalist", "common_name": "Red Fox", "scientific_name": "Vulpes vulpes", "observed_on": "2025-05-01", "url": "https://x"}],
+            results=[
+                {
+                    "provider": "inaturalist",
+                    "common_name": "Red Fox",
+                    "scientific_name": "Vulpes vulpes",
+                    "observed_on": "2025-05-01",
+                    "url": "https://x",
+                }
+            ],
         )
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_nature_gateway.RedataNatureObservationsGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_nature_gateway.RedataNatureObservationsGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_nearby_observations.return_value = envelope
             self.source.fetch(self.pin)
 
         cached = LocationCache.get_fresh(self.pin.location, "inaturalist")
         assert cached is not None
         self.assertEqual(cached.data["observations"], envelope.results)
-        mock_gateway_cls.return_value.get_nearby_observations.assert_called_once_with(40.5, -74.5, radius_meters=2000, limit=10)
+        mock_gateway_cls.return_value.get_nearby_observations.assert_called_once_with(
+            40.5, -74.5, radius_meters=2000, limit=10
+        )
 
     def test_fetch_caches_an_explicit_empty_result(self) -> None:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         envelope = LocationContextEnvelope(count=0, complete=True, results=[])
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_nature_gateway.RedataNatureObservationsGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_nature_gateway.RedataNatureObservationsGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_nearby_observations.return_value = envelope
             self.source.fetch(self.pin)
 

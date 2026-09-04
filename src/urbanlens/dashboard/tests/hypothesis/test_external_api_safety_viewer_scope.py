@@ -86,7 +86,9 @@ class SafetyCheckinViewerScopeTests(TestCase):
         Returns:
             The created partner row.
         """
-        return SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=profile, invited_by=self.owner, status=status)
+        return SafetyCheckinPartner.objects.create(
+            checkin=self.checkin, profile=profile, invited_by=self.owner, status=status
+        )
 
     def test_owner_resolves_their_own_checkin(self) -> None:
         """The owner is always a legitimate viewer of their own check-in."""
@@ -139,7 +141,12 @@ class SafetyCheckinViewerScopeTests(TestCase):
             contact_message="Call me",
             contacts=[(None, "other@example.com", "Other")],
         )
-        SafetyCheckinPartner.objects.create(checkin=other_checkin, profile=self.accepted, invited_by=self.stranger, status=SafetyCheckinPartnerStatus.ACCEPTED)
+        SafetyCheckinPartner.objects.create(
+            checkin=other_checkin,
+            profile=self.accepted,
+            invited_by=self.stranger,
+            status=SafetyCheckinPartnerStatus.ACCEPTED,
+        )
 
         self.assertIsNone(self.view.get_viewable_checkin(self._request(self.accepted), self.checkin.slug))
 

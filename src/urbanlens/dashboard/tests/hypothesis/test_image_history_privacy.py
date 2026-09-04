@@ -53,7 +53,9 @@ class ProcessImageUploadLocationPrivacyTests(TestCase):
         profile = User.objects.create(username=f"u{Image.objects.count()}").profile
         profile.track_pin_visits = track_pin_visits
         profile.save(update_fields=["track_pin_visits"])
-        return Image.objects.create(image=SimpleUploadedFile("photo.jpg", _geotagged_jpeg_bytes(), content_type="image/jpeg"), profile=profile)
+        return Image.objects.create(
+            image=SimpleUploadedFile("photo.jpg", _geotagged_jpeg_bytes(), content_type="image/jpeg"), profile=profile
+        )
 
     def test_tracking_off_strips_lat_lng_exif_and_file(self):
         row = self._make_image_row(track_pin_visits=False)

@@ -42,7 +42,9 @@ class RepairPlaceBoundariesTests(TestCase):
         super().setUp()
         self._seq = 0
 
-    def _parcel(self, *, generated_at=None, size: float = 1.0, area_sqm: float = 1_000_000.0, with_location: bool = True) -> Place:
+    def _parcel(
+        self, *, generated_at=None, size: float = 1.0, area_sqm: float = 1_000_000.0, with_location: bool = True
+    ) -> Place:
         self._seq += 1
         place = baker.make(
             Place,
@@ -70,12 +72,20 @@ class RepairPlaceBoundariesTests(TestCase):
             Place.objects.filter(pk=place.pk).update(geometry=corrected, area_sqm=100.0)
             return place
 
-        with mock.patch(f"{_MODULE}.ensure_place_for_location", side_effect=shrink), mock.patch(f"{_MODULE}.resolution") as resolution:
+        with (
+            mock.patch(f"{_MODULE}.ensure_place_for_location", side_effect=shrink),
+            mock.patch(f"{_MODULE}.resolution") as resolution,
+        ):
             resolution.resolve_locations_in.return_value = 3
             self._run()
 
         swept = resolution.resolve_locations_in.call_args.args[0]
-        self.assertAlmostEqual(swept.area, old_geometry.area, places=9, msg="swept the corrected polygon, leaving wrongly re-homed pins outside it untouched")
+        self.assertAlmostEqual(
+            swept.area,
+            old_geometry.area,
+            places=9,
+            msg="swept the corrected polygon, leaving wrongly re-homed pins outside it untouched",
+        )
         self.assertGreater(swept.area, corrected.area, "the sweep must cover the area the bad boundary captured")
 
     def test_re_resolution_is_forced(self) -> None:
@@ -119,7 +129,10 @@ class RepairPlaceBoundariesTests(TestCase):
     def test_dry_run_neither_fetches_nor_sweeps(self) -> None:
         self._parcel()
 
-        with mock.patch(f"{_MODULE}.ensure_place_for_location") as ensure, mock.patch(f"{_MODULE}.resolution") as resolution:
+        with (
+            mock.patch(f"{_MODULE}.ensure_place_for_location") as ensure,
+            mock.patch(f"{_MODULE}.resolution") as resolution,
+        ):
             output = self._run("--dry-run")
 
         ensure.assert_not_called()
@@ -142,7 +155,10 @@ class RepairPlaceBoundariesTests(TestCase):
         self._parcel()
         self._parcel()
 
-        with mock.patch(f"{_MODULE}.ensure_place_for_location", side_effect=[DatabaseError("boom"), mock.DEFAULT]), mock.patch(f"{_MODULE}.resolution"):
+        with (
+            mock.patch(f"{_MODULE}.ensure_place_for_location", side_effect=[DatabaseError("boom"), mock.DEFAULT]),
+            mock.patch(f"{_MODULE}.resolution"),
+        ):
             output = self._run()
 
         self.assertIn("failed 1", output)

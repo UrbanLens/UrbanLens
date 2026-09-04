@@ -37,8 +37,12 @@ def _aware(year: int, month: int, day: int) -> datetime.datetime:
 def _make_pin(profile, *, last_visited=None, name=None, parent_pin=None) -> Pin:
     """Create a test pin with a uniquely-located Location to dodge the unique constraint."""
     offset = next(_COORDS)
-    location = baker.make("dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}")
-    return baker.make("dashboard.Pin", profile=profile, location=location, last_visited=last_visited, name=name, parent_pin=parent_pin)
+    location = baker.make(
+        "dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}"
+    )
+    return baker.make(
+        "dashboard.Pin", profile=profile, location=location, last_visited=last_visited, name=name, parent_pin=parent_pin
+    )
 
 
 class VisitedWithoutRecordQuerySetTests(TestCase):
@@ -66,7 +70,7 @@ class VisitedWithoutRecordQuerySetTests(TestCase):
 
     def test_pin_with_visited_label_but_no_record_is_included(self) -> None:
         pin = _make_pin(self.profile, last_visited=None)
-        label = ensure_label( profile=self.profile, kind="status", name="Visited")
+        label = ensure_label(profile=self.profile, kind="status", name="Visited")
         pin.labels.add(label)
         self.assertIn(pin, self._unlogged())
 
@@ -345,7 +349,9 @@ class MemoriesVisitsBulkActionViewTests(TestCase):
         payload = {"pin_slugs": slugs}
         if visited_date is not None:
             payload["visited_date"] = visited_date
-        return self.client.post(reverse("memories.visits.bulk", args=[action]), data=json.dumps(payload), content_type="application/json")
+        return self.client.post(
+            reverse("memories.visits.bulk", args=[action]), data=json.dumps(payload), content_type="application/json"
+        )
 
     def test_log_creates_a_dated_visit_for_each_pin(self) -> None:
         first = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
@@ -423,5 +429,9 @@ class MemoriesVisitsBulkActionViewTests(TestCase):
 
     def test_unknown_action_is_404(self) -> None:
         pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
-        response = self.client.post(reverse("memories.visits.bulk", args=["explode"]), data=json.dumps({"pin_slugs": [pin.slug]}), content_type="application/json")
+        response = self.client.post(
+            reverse("memories.visits.bulk", args=["explode"]),
+            data=json.dumps({"pin_slugs": [pin.slug]}),
+            content_type="application/json",
+        )
         self.assertEqual(response.status_code, 404)

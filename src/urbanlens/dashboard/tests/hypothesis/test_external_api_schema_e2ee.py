@@ -24,7 +24,11 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.external_api.schema import PUBLISHED_SCHEMA_PREFIXES, SCHEMA_PATH_PREFIX_PATTERN, preprocess_external_api_only
+from urbanlens.dashboard.external_api.schema import (
+    PUBLISHED_SCHEMA_PREFIXES,
+    SCHEMA_PATH_PREFIX_PATTERN,
+    preprocess_external_api_only,
+)
 
 #: Every bearer-authenticated ``/dashboard/e2ee/`` route - the eight
 #: ``DualAuthJsonView`` subclasses, which is the whole key-exchange contract a
@@ -108,9 +112,15 @@ class SchemaPrefixFilterTests(SimpleTestCase):
         would leave every branch after the first free to match mid-path and
         mangle the operation ids of unrelated routes.
         """
-        self.assertTrue(SCHEMA_PATH_PREFIX_PATTERN.startswith("^(?:"), f"{SCHEMA_PATH_PREFIX_PATTERN!r} must be an anchored non-capturing group.")
+        self.assertTrue(
+            SCHEMA_PATH_PREFIX_PATTERN.startswith("^(?:"),
+            f"{SCHEMA_PATH_PREFIX_PATTERN!r} must be an anchored non-capturing group.",
+        )
         compiled = re.compile(SCHEMA_PATH_PREFIX_PATTERN)
-        self.assertIsNone(compiled.search("/dashboard/rest/dashboard/e2ee/keys/"), "A later branch is matching mid-path - the alternation is not anchored.")
+        self.assertIsNone(
+            compiled.search("/dashboard/rest/dashboard/e2ee/keys/"),
+            "A later branch is matching mid-path - the alternation is not anchored.",
+        )
         # Every published mount must be stripped, version segment included -
         # otherwise its routes are tagged 'v1' instead of by resource.
         self.assertEqual(compiled.sub("", "/dashboard/api/external/v1/pins/"), "/pins/")

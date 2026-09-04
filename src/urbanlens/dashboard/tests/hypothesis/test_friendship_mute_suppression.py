@@ -172,7 +172,9 @@ class ProfilesMutingTests(TestCase):
         self.assertEqual(len(queries.captured_queries), 1)
 
 
-def _notify(recipient: Profile, source: Profile | None, notification_type: str = NotificationType.PIN_SHARED) -> NotificationLog | None:
+def _notify(
+    recipient: Profile, source: Profile | None, notification_type: str = NotificationType.PIN_SHARED
+) -> NotificationLog | None:
     """Raise one notification through the sanctioned entry point."""
     return NotificationLog.objects.notify(
         profile=recipient,
@@ -267,7 +269,9 @@ class ReciprocalRowsTests(TestCase):
         """Whichever row the recipient's own button happened to write."""
         for row in (self.forward, self.backward):
             with self.subTest(row=row.pk):
-                Friendship.objects.filter(pk__in=[self.forward.pk, self.backward.pk]).update(muted_by_from_profile=False, muted_by_to_profile=False)
+                Friendship.objects.filter(pk__in=[self.forward.pk, self.backward.pk]).update(
+                    muted_by_from_profile=False, muted_by_to_profile=False
+                )
                 row.refresh_from_db()
                 row.mute(self.recipient)
 
@@ -317,7 +321,9 @@ class MuteSurvivesOtherWritesTests(TestCase):
     def test_every_transition_leaves_the_mute_columns_alone(self) -> None:
         for transition in ("accept", "decline", "ignore", "remove"):
             with self.subTest(transition=transition):
-                Friendship.objects.filter(pk=self.friendship.pk).update(status=FriendshipStatus.REQUESTED, muted_by_from_profile=False, muted_by_to_profile=False)
+                Friendship.objects.filter(pk=self.friendship.pk).update(
+                    status=FriendshipStatus.REQUESTED, muted_by_from_profile=False, muted_by_to_profile=False
+                )
                 stale = self._stale()
                 Friendship.objects.all().between(self.actor, self.other).mute(self.other)
 
@@ -486,6 +492,13 @@ class ExemptTypeTests(SimpleTestCase):
 
     def test_nothing_social_slipped_into_the_exemption(self) -> None:
         """The list is for safety, not for whatever seemed important that day."""
-        social = {NotificationType.PIN_SHARED, NotificationType.MAP_SHARED, NotificationType.FRIEND_REQUEST, NotificationType.COMMENT_REPLY, NotificationType.MESSAGE, NotificationType.ADDED_TO_TRIP}
+        social = {
+            NotificationType.PIN_SHARED,
+            NotificationType.MAP_SHARED,
+            NotificationType.FRIEND_REQUEST,
+            NotificationType.COMMENT_REPLY,
+            NotificationType.MESSAGE,
+            NotificationType.ADDED_TO_TRIP,
+        }
 
         self.assertEqual(social & set(MUTE_EXEMPT_TYPES), set())

@@ -104,7 +104,9 @@ class RatingSyncTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             review.rating = 5
             review.save()
-        self.assertEqual(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="rating").count(), 1)
+        self.assertEqual(
+            WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="rating").count(), 1
+        )
         self.assertEqual(WikiStatVote.objects.get(wiki=self.pin.wiki, profile=self.profile, field="rating").value, 5)
 
     def test_deleting_a_review_removes_the_vote(self) -> None:
@@ -154,7 +156,9 @@ class PinStatSyncTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             self.pin.save(update_fields=["danger", "updated"])
         self.assertTrue(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="danger").exists())
-        self.assertFalse(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists())
+        self.assertFalse(
+            WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists()
+        )
 
     def test_per_field_opt_out_is_independent(self) -> None:
         Profile.objects.filter(pk=self.profile.pk).update(sync_danger_to_wiki=False)
@@ -164,19 +168,25 @@ class PinStatSyncTests(TestCase):
         self.pin.danger = 5
         with self.captureOnCommitCallbacks(execute=True):
             self.pin.save(update_fields=["priority", "danger", "updated"])
-        self.assertTrue(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists())
+        self.assertTrue(
+            WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists()
+        )
         self.assertFalse(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="danger").exists())
 
     def test_dropping_a_value_to_zero_clears_the_vote(self) -> None:
         self.pin.priority = 3
         with self.captureOnCommitCallbacks(execute=True):
             self.pin.save(update_fields=["priority", "updated"])
-        self.assertTrue(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists())
+        self.assertTrue(
+            WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists()
+        )
 
         self.pin.priority = 0
         with self.captureOnCommitCallbacks(execute=True):
             self.pin.save(update_fields=["priority", "updated"])
-        self.assertFalse(WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists())
+        self.assertFalse(
+            WikiStatVote.objects.filter(wiki=self.pin.wiki, profile=self.profile, field="priority").exists()
+        )
 
     def test_no_wiki_means_no_vote_and_no_crash(self) -> None:
         location = baker.make(Location, latitude=42.0, longitude=-76.0)
@@ -416,7 +426,9 @@ class MediaCacheInvalidationOnNewAliasTests(TestCase):
 
     def _seed_cache(self) -> None:
         for source in ("wikipedia", "wikimedia", "wikipedia_media", "nominatim"):
-            LocationCache.objects.update_or_create(location=self.pin.location, source=source, defaults={"data": {"stub": True}})
+            LocationCache.objects.update_or_create(
+                location=self.pin.location, source=source, defaults={"data": {"stub": True}}
+            )
 
     def _cached_sources(self) -> set[str]:
         return set(LocationCache.objects.filter(location=self.pin.location).values_list("source", flat=True))

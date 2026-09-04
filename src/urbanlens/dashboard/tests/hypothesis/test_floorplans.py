@@ -142,15 +142,37 @@ class FloorplanDocumentTests(TestCase):
             "name": "As built",
             "plan_origin": _ORIGIN,
             "rotation_degrees": 12.5,
-            "source_pool": [{"uuid": "src-1", "title": "HABS sheet 4", "author": "HABS", "url": "https://loc.gov/habs/4"}],
-            "reference_pool": [{"uuid": "ref-1", "kind": "photo", "title": "Boiler room, 2019", "url": "https://example.test/p.jpg"}],
+            "source_pool": [
+                {"uuid": "src-1", "title": "HABS sheet 4", "author": "HABS", "url": "https://loc.gov/habs/4"}
+            ],
+            "reference_pool": [
+                {"uuid": "ref-1", "kind": "photo", "title": "Boiler room, 2019", "url": "https://example.test/p.jpg"}
+            ],
             "floors": [
                 {
                     "level": 0,
                     "name": "Ground",
                     "walls": walls,
-                    "rooms": [{"uuid": "room-1", "name": "Boiler room", "x": 5.0, "y": 5.0, "condition": "collapsed", "references": ["ref-1"]}],
-                    "markers": [{"uuid": "m-1", "kind": "stair", "name": "North stair", "x": 2.0, "y": 8.0, "connector_id": "stair-a"}],
+                    "rooms": [
+                        {
+                            "uuid": "room-1",
+                            "name": "Boiler room",
+                            "x": 5.0,
+                            "y": 5.0,
+                            "condition": "collapsed",
+                            "references": ["ref-1"],
+                        }
+                    ],
+                    "markers": [
+                        {
+                            "uuid": "m-1",
+                            "kind": "stair",
+                            "name": "North stair",
+                            "x": 2.0,
+                            "y": 8.0,
+                            "connector_id": "stair-a",
+                        }
+                    ],
                 },
             ],
         }
@@ -268,7 +290,9 @@ class FloorplanDocumentTests(TestCase):
         """
         walls = _square_walls()
         walls[0] = {**walls[0], "openings": [{"kind": "door", "t_start": 0.4, "t_end": 0.6, "swing": "double"}]}
-        save_document(self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile)
+        save_document(
+            self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile
+        )
 
         opening = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]
         self.assertEqual(opening["swing"], "double")
@@ -282,17 +306,27 @@ class FloorplanDocumentTests(TestCase):
         """
         walls = _square_walls()
         walls[0] = {**walls[0], "name": "the original south wall"}
-        save_document(self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile)
+        save_document(
+            self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile
+        )
 
         replacement = _square_walls()
         replacement[0] = {**replacement[0], "name": "a replacement"}
-        replacement[2] = {**replacement[2], "openings": [{"kind": "door", "t_start": 0.4, "t_end": 0.6, "swing": "sideways"}]}
+        replacement[2] = {
+            **replacement[2],
+            "openings": [{"kind": "door", "t_start": 0.4, "t_end": 0.6, "swing": "sideways"}],
+        }
         with pytest.raises(ValueError, match="opening swing"):
-            save_document(self.floorplan, {"floors": [{"level": 0, "walls": replacement, "rooms": [], "markers": []}]}, profile=self.profile)
+            save_document(
+                self.floorplan,
+                {"floors": [{"level": 0, "walls": replacement, "rooms": [], "markers": []}]},
+                profile=self.profile,
+            )
 
         document = document_for(self.floorplan)
         self.assertEqual(len(document["floors"][0]["walls"]), 4)
         self.assertEqual(document["floors"][0]["walls"][0]["name"], "the original south wall")
+
 
 class FloorplanRoomSeedTests(TestCase):
     """Room identity is a point, so wall edits cannot destroy it."""
@@ -333,7 +367,10 @@ class FloorplanRoomSeedTests(TestCase):
         """
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": [], "rooms": [{"name": "Somewhere", "x": 900.0, "y": 900.0}]}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [{"level": 0, "walls": [], "rooms": [{"name": "Somewhere", "x": 900.0, "y": 900.0}]}],
+            },
             profile=self.profile,
         )
 
@@ -387,7 +424,21 @@ class FloorplanOpeningConstraintTests(TestCase):
         catches it first and names what is wrong, which a client can act on."""
         document = {
             "plan_origin": _ORIGIN,
-            "floors": [{"level": 0, "walls": [{"kind": "interior", "ax": 0, "ay": 0, "bx": 5, "by": 0, "openings": [{"kind": "door", "t_start": 0.9, "t_end": 0.1}]}]}],
+            "floors": [
+                {
+                    "level": 0,
+                    "walls": [
+                        {
+                            "kind": "interior",
+                            "ax": 0,
+                            "ay": 0,
+                            "bx": 5,
+                            "by": 0,
+                            "openings": [{"kind": "door", "t_start": 0.9, "t_end": 0.1}],
+                        }
+                    ],
+                }
+            ],
         }
 
         with self.assertRaises(ValueError) as caught:
@@ -416,7 +467,12 @@ class FloorplanLockTests(TestCase):
 
     def _document(self, locks: list[dict] | None = None) -> dict:
         """A one-wall plan whose single door carries ``locks``."""
-        door = {"kind": "door", "t_start": 0.4, "t_end": 0.6, "locks": [dict(self._PADLOCK)] if locks is None else locks}
+        door = {
+            "kind": "door",
+            "t_start": 0.4,
+            "t_end": 0.6,
+            "locks": [dict(self._PADLOCK)] if locks is None else locks,
+        }
         wall = {"kind": "exterior", "ax": 0.0, "ay": 0.0, "bx": 10.0, "by": 0.0, "openings": [door]}
         return {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": [wall]}]}
 
@@ -443,7 +499,9 @@ class FloorplanLockTests(TestCase):
             "opens_with": None,
             "confirmed": False,
         }
-        save_document(self.floorplan, self._document([{"name": "deadbolt", "key_attributes": recorded}]), profile=self.profile)
+        save_document(
+            self.floorplan, self._document([{"name": "deadbolt", "key_attributes": recorded}]), profile=self.profile
+        )
 
         self.assertEqual(self._locks_in(document_for(self.floorplan))[0]["key_attributes"], recorded)
 
@@ -515,7 +573,9 @@ class FloorplanLockTests(TestCase):
         """Silently falling back to "unknown" is how a door that was recorded
         as locked reads as unrecorded, with nothing to show it happened."""
         with self.assertRaises(ValueError) as caught:
-            save_document(self.floorplan, self._document([{"name": "padlock", "state": "jammed"}]), profile=self.profile)
+            save_document(
+                self.floorplan, self._document([{"name": "padlock", "state": "jammed"}]), profile=self.profile
+            )
 
         self.assertIn("jammed", str(caught.exception))
         self.assertEqual(FloorplanLock.objects.count(), 0)
@@ -524,7 +584,11 @@ class FloorplanLockTests(TestCase):
         """Free-form is not shapeless: a list reaches the database intact and
         breaks readers later, so it is a 400 here rather than a 500 there."""
         with self.assertRaises(ValueError) as caught:
-            save_document(self.floorplan, self._document([{"name": "padlock", "key_attributes": ["bitting", "44213"]}]), profile=self.profile)
+            save_document(
+                self.floorplan,
+                self._document([{"name": "padlock", "key_attributes": ["bitting", "44213"]}]),
+                profile=self.profile,
+            )
 
         self.assertIn("key_attributes", str(caught.exception))
 
@@ -532,8 +596,20 @@ class FloorplanLockTests(TestCase):
         """A lock is a floorplan item like any other - its condition and
         references are how physical state is recorded, which is why ``state``
         carries only whether it is shut."""
-        document = self._document([{"name": "padlock", "state": "locked", "condition": "rusted", "description": "hasp bent", "references": ["ref-1"]}])
-        document["reference_pool"] = [{"uuid": "ref-1", "kind": "photo", "title": "Door 3, 2019", "url": "https://example.test/d3.jpg"}]
+        document = self._document(
+            [
+                {
+                    "name": "padlock",
+                    "state": "locked",
+                    "condition": "rusted",
+                    "description": "hasp bent",
+                    "references": ["ref-1"],
+                }
+            ]
+        )
+        document["reference_pool"] = [
+            {"uuid": "ref-1", "kind": "photo", "title": "Door 3, 2019", "url": "https://example.test/d3.jpg"}
+        ]
 
         save_document(self.floorplan, document, profile=self.profile)
 
@@ -580,7 +656,11 @@ class FloorplanResolutionTests(TestCase):
 
     def test_redata_fills_when_local_is_absent(self) -> None:
         url_patch, key_patch = self._configured()
-        with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway, url_patch, key_patch:
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway,
+            url_patch,
+            key_patch,
+        ):
             gateway.return_value.lookup_floorplans.return_value = [{"uuid": "fp-1", "building_ref": "cris:res-1"}]
             gateway.return_value.lookup_floorplan_document.return_value = {"name": "REData plan", "floors": []}
 
@@ -588,12 +668,18 @@ class FloorplanResolutionTests(TestCase):
 
         self.assertEqual(document["origin"], "redata")
         self.assertEqual(document["name"], "REData plan")
-        gateway.return_value.lookup_floorplans.assert_called_once_with("parcel-uuid-1", building_ref="cris:res-1", on_date=None)
+        gateway.return_value.lookup_floorplans.assert_called_once_with(
+            "parcel-uuid-1", building_ref="cris:res-1", on_date=None
+        )
         gateway.return_value.lookup_floorplan_document.assert_called_once_with("fp-1")
 
     def test_an_empty_summary_list_is_a_quiet_none(self) -> None:
         url_patch, key_patch = self._configured()
-        with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway, url_patch, key_patch:
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway,
+            url_patch,
+            key_patch,
+        ):
             gateway.return_value.lookup_floorplans.return_value = []
 
             self.assertIsNone(resolve_document(self.place, profile=self.profile))
@@ -602,7 +688,11 @@ class FloorplanResolutionTests(TestCase):
 
     def test_upstream_trouble_is_never_load_bearing(self) -> None:
         url_patch, key_patch = self._configured()
-        with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway, url_patch, key_patch:
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway,
+            url_patch,
+            key_patch,
+        ):
             gateway.return_value.lookup_floorplans.side_effect = RuntimeError("boom")
 
             self.assertIsNone(resolve_document(self.place, profile=self.profile))
@@ -617,12 +707,18 @@ class FloorplanResolutionTests(TestCase):
 
     def test_the_date_flows_through_to_upstream(self) -> None:
         url_patch, key_patch = self._configured()
-        with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway, url_patch, key_patch:
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway,
+            url_patch,
+            key_patch,
+        ):
             gateway.return_value.lookup_floorplans.return_value = []
 
             resolve_document(self.place, profile=self.profile, on_date=datetime.date(1954, 1, 1))
 
-        gateway.return_value.lookup_floorplans.assert_called_once_with("parcel-uuid-1", building_ref="cris:res-1", on_date="1954-01-01")
+        gateway.return_value.lookup_floorplans.assert_called_once_with(
+            "parcel-uuid-1", building_ref="cris:res-1", on_date="1954-01-01"
+        )
 
 
 class ResolveFloorplanRowTests(TestCase):
@@ -663,7 +759,12 @@ class ResolveFloorplanRowTests(TestCase):
     def test_a_published_plan_is_returned_when_the_wiki_is_visible_and_no_local_plan_exists(self) -> None:
         from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
 
-        community = Floorplan.objects.create(place=self.place, wiki=baker.make("dashboard.Wiki", place=self.place), profile=baker.make(User).profile, name="theirs")
+        community = Floorplan.objects.create(
+            place=self.place,
+            wiki=baker.make("dashboard.Wiki", place=self.place),
+            profile=baker.make(User).profile,
+            name="theirs",
+        )
 
         with mock.patch("urbanlens.dashboard.services.floorplans.resolution._community_plan", return_value=community):
             row = resolve_floorplan_row(self.place, profile=self.profile)
@@ -676,7 +777,13 @@ class ResolveFloorplanRowTests(TestCase):
         for an unreachable wiki is exactly what a caller lacking access must see."""
         from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
 
-        baker.make(Floorplan, place=self.place, wiki=baker.make("dashboard.Wiki", place=self.place), profile=baker.make(User).profile, name="theirs")
+        baker.make(
+            Floorplan,
+            place=self.place,
+            wiki=baker.make("dashboard.Wiki", place=self.place),
+            profile=baker.make(User).profile,
+            name="theirs",
+        )
 
         with mock.patch("urbanlens.dashboard.services.floorplans.resolution._community_plan", return_value=None):
             self.assertIsNone(resolve_floorplan_row(self.place, profile=self.profile))
@@ -718,7 +825,14 @@ class FloorplanEndpointTests(TestCase):
         document = {
             "name": "As built",
             "plan_origin": _ORIGIN,
-            "floors": [{"level": 0, "name": "Ground", "walls": _square_walls(), "rooms": [{"name": "Boiler room", "x": 5.0, "y": 5.0}]}],
+            "floors": [
+                {
+                    "level": 0,
+                    "name": "Ground",
+                    "walls": _square_walls(),
+                    "rooms": [{"name": "Boiler room", "x": 5.0, "y": 5.0}],
+                }
+            ],
         }
         save = self._save(document)
         self.assertEqual(save.status_code, 200, save.content)
@@ -746,7 +860,9 @@ class FloorplanEndpointTests(TestCase):
         from urbanlens.dashboard.models.pin.model import Pin
 
         other_location = baker.make(Location, latitude=41.9, longitude=-73.9, place=self.place)
-        other = baker.make(Pin, profile=baker.make(User).profile, location=other_location, parent_pin=None, slug="not-mine")
+        other = baker.make(
+            Pin, profile=baker.make(User).profile, location=other_location, parent_pin=None, slug="not-mine"
+        )
 
         self.assertEqual(self.client.get(f"/dashboard/map/pin/{other.slug}/floorplan/json/").status_code, 404)
 
@@ -762,7 +878,12 @@ class FloorplanEndpointTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_a_missing_wall_coordinate_is_a_400_naming_the_defect(self) -> None:
-        response = self._save({"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": [{"kind": "interior", "ax": 0, "ay": 0, "bx": 5}]}]})
+        response = self._save(
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [{"level": 0, "walls": [{"kind": "interior", "ax": 0, "ay": 0, "bx": 5}]}],
+            }
+        )
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("by", response.json()["error"])
@@ -868,8 +989,12 @@ class FloorplanVersionListingTests(TestCase):
         self.place = baker.make(Place, kind=PlaceKind.BUILDING, parent=parcel)
         location = baker.make(Location, latitude=41.7331, longitude=-73.9281, place=self.place)
         self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, slug="hrsh-kirkbride")
-        self.baseline = Floorplan.objects.create(place=self.place, profile=self.user.profile, name="as built", valid_from=None)
-        self.later = Floorplan.objects.create(place=self.place, profile=self.user.profile, name="after fire", valid_from=datetime.date(1962, 5, 1))
+        self.baseline = Floorplan.objects.create(
+            place=self.place, profile=self.user.profile, name="as built", valid_from=None
+        )
+        self.later = Floorplan.objects.create(
+            place=self.place, profile=self.user.profile, name="after fire", valid_from=datetime.date(1962, 5, 1)
+        )
 
     def _get(self, query: str = ""):
         return self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/json/{query}")
@@ -917,7 +1042,10 @@ class FloorplanDocumentOrderTests(TestCase):
                 "floors": [
                     {
                         "level": 0,
-                        "walls": [{"kind": "interior", "ax": float(i), "ay": 0.0, "bx": float(i) + 1, "by": 0.0, "name": name} for i, name in enumerate(names)],
+                        "walls": [
+                            {"kind": "interior", "ax": float(i), "ay": 0.0, "bx": float(i) + 1, "by": 0.0, "name": name}
+                            for i, name in enumerate(names)
+                        ],
                     },
                 ],
             },
@@ -998,8 +1126,14 @@ class FloorplanFeatureCollectionTests(TestCase):
                 },
             ],
         }
-        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile)
-        wall = next(f for f in self._collection()["features"] if f["properties"]["item_type"] == "wall" and f["properties"]["openings"])
+        save_document(
+            self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile
+        )
+        wall = next(
+            f
+            for f in self._collection()["features"]
+            if f["properties"]["item_type"] == "wall" and f["properties"]["openings"]
+        )
         return wall["properties"]["openings"][0]
 
     def test_a_door_reports_whether_it_opens(self) -> None:
@@ -1123,7 +1257,13 @@ class FloorplanCommunityTests(TestCase):
         self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile, name="mine")
         save_document(
             self.floorplan,
-            {"name": "mine", "plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls(), "rooms": [{"name": "Boiler room", "x": 5.0, "y": 5.0}]}]},
+            {
+                "name": "mine",
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {"level": 0, "walls": _square_walls(), "rooms": [{"name": "Boiler room", "x": 5.0, "y": 5.0}]}
+                ],
+            },
             profile=self.profile,
         )
 
@@ -1183,8 +1323,10 @@ class FloorplanCommunityTests(TestCase):
         self.assertTrue(WikiEdit.objects.filter(wiki=wiki, editor=self.profile).exists())
 
     def test_a_personal_plan_is_still_not_served_to_others(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.floorplans.resolution._redata_document", return_value=None), \
-             mock.patch("urbanlens.dashboard.services.floorplans.resolution._community_plan", return_value=None):
+        with (
+            mock.patch("urbanlens.dashboard.services.floorplans.resolution._redata_document", return_value=None),
+            mock.patch("urbanlens.dashboard.services.floorplans.resolution._community_plan", return_value=None),
+        ):
             self.assertIsNone(resolve_document(self.place, profile=self.other))
 
 
@@ -1207,7 +1349,9 @@ class FloorplanCommunityOverwriteTests(TestCase):
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         self.parcel = baker.make(Place, kind=PlaceKind.PARCEL)
-        self.place = baker.make(Place, kind=PlaceKind.BUILDING, parent=self.parcel, parent_relation=PlaceRelation.PART_OF)
+        self.place = baker.make(
+            Place, kind=PlaceKind.BUILDING, parent=self.parcel, parent_relation=PlaceRelation.PART_OF
+        )
         # Without a domain root the wiki is visible to nobody, can_edit_community
         # is False for everyone, and these tests would pass by never reaching
         # the in-place community write they exist to pin down.
@@ -1220,11 +1364,16 @@ class FloorplanCommunityOverwriteTests(TestCase):
 
         assert place_visible_to(self.place, self.visitor.profile), "test setup must actually grant wiki access"
 
-
         personal = Floorplan.objects.create(place=self.place, profile=self.author, name="author's plan")
         save_document(
             personal,
-            {"name": "author's plan", "plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls(), "rooms": [{"name": "Boiler room", "x": 5.0, "y": 5.0}]}]},
+            {
+                "name": "author's plan",
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {"level": 0, "walls": _square_walls(), "rooms": [{"name": "Boiler room", "x": 5.0, "y": 5.0}]}
+                ],
+            },
             profile=self.author,
         )
         from urbanlens.dashboard.services.floorplans.resolution import publish_to_wiki
@@ -1243,7 +1392,9 @@ class FloorplanCommunityOverwriteTests(TestCase):
     def test_saving_a_community_plans_uuid_does_not_destroy_it(self) -> None:
         """The whole-document save deletes by omission, so an overwrite here
         wipes every wall and room the author published."""
-        response = self._save({"uuid": str(self.community.uuid), "plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": []}]})
+        response = self._save(
+            {"uuid": str(self.community.uuid), "plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": []}]}
+        )
 
         self.assertEqual(response.status_code, 200, response.content)
         document = document_for(Floorplan.objects.get(pk=self.community.pk))
@@ -1254,7 +1405,13 @@ class FloorplanCommunityOverwriteTests(TestCase):
         """serialization._sync_linked_pin documents that a wiki copy has no
         owning pin; adopting one mints detail pins in that account for other
         people's markers."""
-        self._save({"uuid": str(self.community.uuid), "plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]})
+        self._save(
+            {
+                "uuid": str(self.community.uuid),
+                "plan_origin": _ORIGIN,
+                "floors": [{"level": 0, "walls": _square_walls()}],
+            }
+        )
 
         self.community.refresh_from_db()
         self.assertIsNone(self.community.pin_id)
@@ -1368,19 +1525,38 @@ class FloorplanOpeningRehostTests(TestCase):
         return out
 
     def test_moving_an_opening_to_another_wall_keeps_its_row(self) -> None:
-        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(0, {"kind": "door", "t_start": 0.4, "t_end": 0.6})}]}, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [{"level": 0, "walls": self._walls_with(0, {"kind": "door", "t_start": 0.4, "t_end": 0.6})}],
+            },
+            profile=self.profile,
+        )
         first = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]
 
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(2, {"uuid": str(first["uuid"]), "kind": "door", "t_start": 0.4, "t_end": 0.6})}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {
+                        "level": 0,
+                        "walls": self._walls_with(
+                            2, {"uuid": str(first["uuid"]), "kind": "door", "t_start": 0.4, "t_end": 0.6}
+                        ),
+                    }
+                ],
+            },
             profile=self.profile,
         )
 
         after = document_for(self.floorplan)["floors"][0]["walls"]
         self.assertEqual(after[0]["openings"], [])
         self.assertEqual(len(after[2]["openings"]), 1)
-        self.assertEqual(str(after[2]["openings"][0]["uuid"]), str(first["uuid"]), "the opening was recreated instead of moved")
+        self.assertEqual(
+            str(after[2]["openings"][0]["uuid"]), str(first["uuid"]), "the opening was recreated instead of moved"
+        )
 
     def test_a_floor_payload_with_no_uuid_updates_that_storey_rather_than_replacing_it(self) -> None:
         """Everything on a storey hangs off its row, so building a second floor and
@@ -1395,7 +1571,23 @@ class FloorplanOpeningRehostTests(TestCase):
         """
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(0, {"kind": "door", "t_start": 0.4, "t_end": 0.6, "locks": [{"name": "Padlock", "state": "locked"}]})}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {
+                        "level": 0,
+                        "walls": self._walls_with(
+                            0,
+                            {
+                                "kind": "door",
+                                "t_start": 0.4,
+                                "t_end": 0.6,
+                                "locks": [{"name": "Padlock", "state": "locked"}],
+                            },
+                        ),
+                    }
+                ],
+            },
             profile=self.profile,
         )
         before = document_for(self.floorplan)["floors"][0]
@@ -1404,15 +1596,50 @@ class FloorplanOpeningRehostTests(TestCase):
         # Exactly what the first save sent: a level, and no floor uuid.
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(0, {"uuid": str(before["walls"][0]["openings"][0]["uuid"]), "kind": "door", "t_start": 0.4, "t_end": 0.6, "locks": [{"uuid": str(before["walls"][0]["openings"][0]["locks"][0]["uuid"]), "name": "Padlock", "state": "locked"}]})}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {
+                        "level": 0,
+                        "walls": self._walls_with(
+                            0,
+                            {
+                                "uuid": str(before["walls"][0]["openings"][0]["uuid"]),
+                                "kind": "door",
+                                "t_start": 0.4,
+                                "t_end": 0.6,
+                                "locks": [
+                                    {
+                                        "uuid": str(before["walls"][0]["openings"][0]["locks"][0]["uuid"]),
+                                        "name": "Padlock",
+                                        "state": "locked",
+                                    }
+                                ],
+                            },
+                        ),
+                    }
+                ],
+            },
             profile=self.profile,
         )
 
-        self.assertEqual(FloorplanFloor.objects.filter(floorplan=self.floorplan).count(), 1, "the storey was replaced rather than updated")
-        self.assertEqual(FloorplanFloor.objects.get(floorplan=self.floorplan).pk, floor_pk, "the storey is a different row than it was")
+        self.assertEqual(
+            FloorplanFloor.objects.filter(floorplan=self.floorplan).count(),
+            1,
+            "the storey was replaced rather than updated",
+        )
+        self.assertEqual(
+            FloorplanFloor.objects.get(floorplan=self.floorplan).pk,
+            floor_pk,
+            "the storey is a different row than it was",
+        )
         after = document_for(self.floorplan)["floors"][0]
         self.assertEqual(str(after["uuid"]), str(before["uuid"]))
-        self.assertEqual([str(w["uuid"]) for w in after["walls"]], [str(w["uuid"]) for w in before["walls"]], "the walls were rebuilt under new identities")
+        self.assertEqual(
+            [str(w["uuid"]) for w in after["walls"]],
+            [str(w["uuid"]) for w in before["walls"]],
+            "the walls were rebuilt under new identities",
+        )
         self.assertEqual(len(after["walls"][0]["openings"][0]["locks"]), 1, "the lock went with the replaced storey")
 
     def test_a_moved_opening_keeps_its_locks(self) -> None:
@@ -1420,13 +1647,39 @@ class FloorplanOpeningRehostTests(TestCase):
         would destroy the lock silently."""
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(0, {"kind": "door", "t_start": 0.4, "t_end": 0.6, "locks": [{"name": "Padlock", "state": "locked"}]})}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {
+                        "level": 0,
+                        "walls": self._walls_with(
+                            0,
+                            {
+                                "kind": "door",
+                                "t_start": 0.4,
+                                "t_end": 0.6,
+                                "locks": [{"name": "Padlock", "state": "locked"}],
+                            },
+                        ),
+                    }
+                ],
+            },
             profile=self.profile,
         )
         first = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]
-        moved = {"uuid": str(first["uuid"]), "kind": "door", "t_start": 0.4, "t_end": 0.6, "locks": [{"uuid": str(first["locks"][0]["uuid"]), "name": "Padlock", "state": "locked"}]}
+        moved = {
+            "uuid": str(first["uuid"]),
+            "kind": "door",
+            "t_start": 0.4,
+            "t_end": 0.6,
+            "locks": [{"uuid": str(first["locks"][0]["uuid"]), "name": "Padlock", "state": "locked"}],
+        }
 
-        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(1, moved)}]}, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(1, moved)}]},
+            profile=self.profile,
+        )
 
         after = document_for(self.floorplan)["floors"][0]["walls"][1]["openings"][0]
         self.assertEqual(len(after["locks"]), 1)
@@ -1439,9 +1692,20 @@ class FloorplanOpeningRehostTests(TestCase):
 
     def test_an_opening_left_out_entirely_is_still_deleted(self) -> None:
         """The plan-wide match must not turn omission into permanence."""
-        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(0, {"kind": "door", "t_start": 0.4, "t_end": 0.6})}]}, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [{"level": 0, "walls": self._walls_with(0, {"kind": "door", "t_start": 0.4, "t_end": 0.6})}],
+            },
+            profile=self.profile,
+        )
 
-        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(99, {})}]}, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(99, {})}]},
+            profile=self.profile,
+        )
 
         walls = document_for(self.floorplan)["floors"][0]["walls"]
         self.assertEqual(sum(len(w["openings"]) for w in walls), 0)
@@ -1458,7 +1722,9 @@ class FloorplanFenceAndGateTests(TestCase):
         self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile, name="plan")
 
     def _save(self, walls: list[dict]) -> None:
-        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile)
+        save_document(
+            self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile
+        )
 
     def test_a_fence_round_trips(self) -> None:
         self._save([{"kind": "fence", "ax": 0.0, "ay": 0.0, "bx": 10.0, "by": 0.0}])
@@ -1466,7 +1732,18 @@ class FloorplanFenceAndGateTests(TestCase):
         self.assertEqual(document_for(self.floorplan)["floors"][0]["walls"][0]["kind"], "fence")
 
     def test_a_gate_round_trips(self) -> None:
-        self._save([{"kind": "fence", "ax": 0.0, "ay": 0.0, "bx": 10.0, "by": 0.0, "openings": [{"kind": "gate", "t_start": 0.4, "t_end": 0.6}]}])
+        self._save(
+            [
+                {
+                    "kind": "fence",
+                    "ax": 0.0,
+                    "ay": 0.0,
+                    "bx": 10.0,
+                    "by": 0.0,
+                    "openings": [{"kind": "gate", "t_start": 0.4, "t_end": 0.6}],
+                }
+            ]
+        )
 
         opening = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]
         self.assertEqual(opening["kind"], "gate")
@@ -1501,7 +1778,11 @@ class FloorplanConcurrencyTests(TestCase):
         self.profile = baker.make(User).profile
         self.place = _building()
         self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile, name="plan")
-        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]}, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]},
+            profile=self.profile,
+        )
 
     def test_a_save_carrying_the_current_token_is_accepted(self) -> None:
         document = document_for(self.floorplan)
@@ -1527,7 +1808,11 @@ class FloorplanConcurrencyTests(TestCase):
     def test_a_document_with_no_token_still_saves(self) -> None:
         """An older client, and a deliberate fork, both send none - refusing
         those to catch a rarer problem is the wrong trade."""
-        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]}, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]},
+            profile=self.profile,
+        )
 
     def test_the_endpoint_answers_409_rather_than_400(self) -> None:
         from urbanlens.dashboard.models.location.model import Location
@@ -1538,7 +1823,9 @@ class FloorplanConcurrencyTests(TestCase):
         pin = baker.make(Pin, profile=user.profile, location=location, parent_pin=None, slug="concurrent-pin")
         self.client.force_login(user)
         own = Floorplan.objects.create(place=self.place, profile=user.profile, pin=pin)
-        save_document(own, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]}, profile=user.profile)
+        save_document(
+            own, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]}, profile=user.profile
+        )
         stale = document_for(own)
         newer = document_for(own)
         newer["name"] = "renamed by the other tab"
@@ -1569,13 +1856,17 @@ class FloorplanDocumentLimitsTests(TestCase):
         """Django does not enforce max_length on save, so this used to surface
         as a DataError - a 500 saying nothing about which field was wrong."""
         with self.assertRaises(ValueError):
-            save_document(self.floorplan, {"plan_origin": _ORIGIN, "name": "x" * 300, "floors": []}, profile=self.profile)
+            save_document(
+                self.floorplan, {"plan_origin": _ORIGIN, "name": "x" * 300, "floors": []}, profile=self.profile
+            )
 
     def test_an_over_long_wall_name_is_refused(self) -> None:
         walls = _square_walls()
         walls[0]["name"] = "y" * 300
         with self.assertRaises(ValueError):
-            save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile)
+            save_document(
+                self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile
+            )
 
     def test_too_many_floors_is_refused_before_anything_is_written(self) -> None:
         document = {"plan_origin": _ORIGIN, "floors": [{"level": index} for index in range(400)]}
@@ -1589,7 +1880,9 @@ class FloorplanDocumentLimitsTests(TestCase):
         walls = [{"kind": "interior", "ax": float(i), "ay": 0.0, "bx": float(i), "by": 1.0} for i in range(2100)]
 
         with self.assertRaises(ValueError):
-            save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile)
+            save_document(
+                self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile
+            )
 
     def test_a_normal_plan_is_nowhere_near_the_ceilings(self) -> None:
         """The limits exist to stop one request writing a million rows, not to
@@ -1752,8 +2045,18 @@ class FloorplanMarkerTests(TestCase):
             {
                 "plan_origin": _ORIGIN,
                 "floors": [
-                    {"level": 0, "markers": [{"kind": "stair", "name": "North stair", "x": 2.0, "y": 8.0, "connector_id": "north"}]},
-                    {"level": 1, "markers": [{"kind": "stair", "name": "North stair", "x": 2.0, "y": 8.0, "connector_id": "north"}]},
+                    {
+                        "level": 0,
+                        "markers": [
+                            {"kind": "stair", "name": "North stair", "x": 2.0, "y": 8.0, "connector_id": "north"}
+                        ],
+                    },
+                    {
+                        "level": 1,
+                        "markers": [
+                            {"kind": "stair", "name": "North stair", "x": 2.0, "y": 8.0, "connector_id": "north"}
+                        ],
+                    },
                 ],
             },
             profile=self.profile,
@@ -1766,7 +2069,10 @@ class FloorplanMarkerTests(TestCase):
     def test_a_marker_keeps_its_facing(self) -> None:
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "facing_degrees": 217.5}]}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "facing_degrees": 217.5}]}],
+            },
             profile=self.profile,
         )
 
@@ -1807,7 +2113,17 @@ class FloorplanMarkerAppearanceTests(TestCase):
     def test_an_icon_and_colour_survive_the_round_trip(self) -> None:
         """The document has always *read* these off the linked pin; nothing
         wrote them back, so anything set in the editor vanished on save."""
-        saved = self._save({"kind": "hazard", "x": 1.0, "y": 2.0, "lat": 41.7401, "lng": -73.9401, "icon": "warning", "color": "#F44336"})
+        saved = self._save(
+            {
+                "kind": "hazard",
+                "x": 1.0,
+                "y": 2.0,
+                "lat": 41.7401,
+                "lng": -73.9401,
+                "icon": "warning",
+                "color": "#F44336",
+            }
+        )
 
         self.assertEqual(saved["icon"], "warning")
         self.assertEqual(saved["color"], "#F44336")
@@ -1815,19 +2131,50 @@ class FloorplanMarkerAppearanceTests(TestCase):
     def test_clearing_a_colour_returns_the_kind_default(self) -> None:
         """Blank means "no override", which has to be distinguishable from a
         payload that simply did not mention the field."""
-        first = self._save({"kind": "hazard", "x": 1.0, "y": 2.0, "lat": 41.7401, "lng": -73.9401, "icon": "warning", "color": "#F44336"})
+        first = self._save(
+            {
+                "kind": "hazard",
+                "x": 1.0,
+                "y": 2.0,
+                "lat": 41.7401,
+                "lng": -73.9401,
+                "icon": "warning",
+                "color": "#F44336",
+            }
+        )
         # Asserted before clearing: without it this test passes whenever the
         # colour is never written at all, which is the bug it exists to catch.
         self.assertEqual(first["color"], "#F44336")
 
-        saved = self._save({"uuid": str(first["uuid"]), "kind": "hazard", "x": 1.0, "y": 2.0, "lat": 41.7401, "lng": -73.9401, "icon": "", "color": ""})
+        saved = self._save(
+            {
+                "uuid": str(first["uuid"]),
+                "kind": "hazard",
+                "x": 1.0,
+                "y": 2.0,
+                "lat": 41.7401,
+                "lng": -73.9401,
+                "icon": "",
+                "color": "",
+            }
+        )
 
         self.assertIsNone(saved["color"])
 
     def test_appearance_is_not_stored_on_the_marker(self) -> None:
         """One value, not two: FloorplanMarker must stay free of appearance
         columns or the pin page and the floorplan can disagree."""
-        self._save({"kind": "hazard", "x": 1.0, "y": 2.0, "lat": 41.7401, "lng": -73.9401, "icon": "warning", "color": "#F44336"})
+        self._save(
+            {
+                "kind": "hazard",
+                "x": 1.0,
+                "y": 2.0,
+                "lat": 41.7401,
+                "lng": -73.9401,
+                "icon": "warning",
+                "color": "#F44336",
+            }
+        )
 
         marker = self.floorplan.floors.first().markers.first()
         self.assertFalse(hasattr(marker, "color"))
@@ -1854,7 +2201,17 @@ class FloorplanMarkerLinkedPinTests(TestCase):
     def test_a_marker_creates_a_linked_detail_pin(self) -> None:
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "name": "Wet floor", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {
+                        "level": 0,
+                        "markers": [
+                            {"kind": "hazard", "name": "Wet floor", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}
+                        ],
+                    }
+                ],
+            },
             profile=self.profile,
         )
 
@@ -1887,7 +2244,9 @@ class FloorplanMarkerLinkedPinTests(TestCase):
             profile=self.profile,
         )
 
-        kinds = {marker.kind: marker.linked_pin.pin_type for marker in FloorplanMarker.objects.select_related("linked_pin")}
+        kinds = {
+            marker.kind: marker.linked_pin.pin_type for marker in FloorplanMarker.objects.select_related("linked_pin")
+        }
         self.assertEqual(kinds, {"stair": "stair", "elevator": "elevator"})
 
     def test_a_marker_without_coordinates_gets_no_linked_pin(self) -> None:
@@ -1907,7 +2266,12 @@ class FloorplanMarkerLinkedPinTests(TestCase):
 
         save_document(
             placeless,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}
+                ],
+            },
             profile=self.profile,
         )
 
@@ -1918,7 +2282,12 @@ class FloorplanMarkerLinkedPinTests(TestCase):
 
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}
+                ],
+            },
             profile=self.profile,
         )
         marker = FloorplanMarker.objects.get()
@@ -1927,7 +2296,11 @@ class FloorplanMarkerLinkedPinTests(TestCase):
 
         # Same floor uuid, but its markers list is now empty - an in-place
         # edit, not a floor being torn down and rebuilt.
-        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"uuid": floor_uuid, "level": 0, "markers": []}]}, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"uuid": floor_uuid, "level": 0, "markers": []}]},
+            profile=self.profile,
+        )
 
         self.assertFalse(FloorplanMarker.objects.exists())
         self.assertFalse(Pin.objects.filter(pk=linked_pk).exists())
@@ -1937,7 +2310,12 @@ class FloorplanMarkerLinkedPinTests(TestCase):
         must not leave a floorplan marker pointing at nothing."""
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}
+                ],
+            },
             profile=self.profile,
         )
         marker = FloorplanMarker.objects.get()
@@ -1956,7 +2334,12 @@ class FloorplanMarkerLinkedPinTests(TestCase):
 
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}
+                ],
+            },
             profile=self.profile,
         )
         marker = FloorplanMarker.objects.get()
@@ -1976,8 +2359,34 @@ class FloorplanMarkerLinkedPinTests(TestCase):
             {
                 "plan_origin": _ORIGIN,
                 "floors": [
-                    {"level": 0, "markers": [{"kind": "stair", "name": "Main stair", "x": 2.0, "y": 8.0, "connector_id": "main", "lat": 41.7331, "lng": -73.9299}]},
-                    {"level": 1, "markers": [{"kind": "stair", "name": "Main stair", "x": 2.0, "y": 8.0, "connector_id": "main", "lat": 41.7331, "lng": -73.9299}]},
+                    {
+                        "level": 0,
+                        "markers": [
+                            {
+                                "kind": "stair",
+                                "name": "Main stair",
+                                "x": 2.0,
+                                "y": 8.0,
+                                "connector_id": "main",
+                                "lat": 41.7331,
+                                "lng": -73.9299,
+                            }
+                        ],
+                    },
+                    {
+                        "level": 1,
+                        "markers": [
+                            {
+                                "kind": "stair",
+                                "name": "Main stair",
+                                "x": 2.0,
+                                "y": 8.0,
+                                "connector_id": "main",
+                                "lat": 41.7331,
+                                "lng": -73.9299,
+                            }
+                        ],
+                    },
                 ],
             },
             profile=self.profile,
@@ -1993,7 +2402,12 @@ class FloorplanMarkerLinkedPinTests(TestCase):
     def test_moving_a_marker_moves_its_linked_pin(self) -> None:
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}
+                ],
+            },
             profile=self.profile,
         )
         marker = FloorplanMarker.objects.get()
@@ -2002,7 +2416,18 @@ class FloorplanMarkerLinkedPinTests(TestCase):
 
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"uuid": floor_uuid, "level": 0, "markers": [{"uuid": uuid, "kind": "hazard", "x": 5.0, "y": 5.0, "lat": 41.7355, "lng": -73.9311}]}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {
+                        "uuid": floor_uuid,
+                        "level": 0,
+                        "markers": [
+                            {"uuid": uuid, "kind": "hazard", "x": 5.0, "y": 5.0, "lat": 41.7355, "lng": -73.9311}
+                        ],
+                    }
+                ],
+            },
             profile=self.profile,
         )
 
@@ -2016,7 +2441,17 @@ class FloorplanMarkerLinkedPinTests(TestCase):
         last saved here."""
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "name": "Wet floor", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {
+                        "level": 0,
+                        "markers": [
+                            {"kind": "hazard", "name": "Wet floor", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}
+                        ],
+                    }
+                ],
+            },
             profile=self.profile,
         )
         marker = FloorplanMarker.objects.get()
@@ -2069,7 +2504,9 @@ class FloorplanSessionItemIdentityTests(TestCase):
             floor["uuid"] = saved_floor["uuid"]
             for wall, saved_wall in zip(floor.get("walls", []), saved_floor.get("walls", []), strict=False):
                 wall["uuid"] = saved_wall["uuid"]
-                for opening, saved_opening in zip(wall.get("openings", []), saved_wall.get("openings", []), strict=False):
+                for opening, saved_opening in zip(
+                    wall.get("openings", []), saved_wall.get("openings", []), strict=False
+                ):
                     opening["uuid"] = saved_opening["uuid"]
             for room, saved_room in zip(floor.get("rooms", []), saved_floor.get("rooms", []), strict=False):
                 room["uuid"] = saved_room["uuid"]
@@ -2103,7 +2540,9 @@ class FloorplanSessionItemIdentityTests(TestCase):
         save_document(self.floorplan, second_payload, profile=self.profile)
 
         self.assertEqual(FloorplanFloor.objects.get().pk, floor_pk, "the floor was destroyed and recreated")
-        self.assertEqual(set(FloorplanWall.objects.values_list("pk", flat=True)), wall_pks, "walls were destroyed and recreated")
+        self.assertEqual(
+            set(FloorplanWall.objects.values_list("pk", flat=True)), wall_pks, "walls were destroyed and recreated"
+        )
         self.assertEqual(FloorplanRoomSeed.objects.get().pk, room_pk, "the room seed was destroyed and recreated")
         second_marker = FloorplanMarker.objects.get()
         self.assertEqual(second_marker.pk, marker_pk, "the marker was destroyed and recreated")
@@ -2116,7 +2555,9 @@ class FloorplanSessionItemIdentityTests(TestCase):
         client-only local id untouched."""
         document = {
             "plan_origin": _ORIGIN,
-            "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}],
+            "floors": [
+                {"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}
+            ],
         }
         save_document(self.floorplan, document, profile=self.profile)
         marker_pk = FloorplanMarker.objects.get().pk
@@ -2146,7 +2587,11 @@ class FloorplanDocumentContractTests(TestCase):
     def test_a_floor_carries_no_outline_of_its_own(self) -> None:
         """The storey's shape is whatever its walls enclose; a stored outline
         would be a second, divergent answer to the same question."""
-        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]}, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]},
+            profile=self.profile,
+        )
 
         self.assertNotIn("geometry", document_for(self.floorplan)["floors"][0])
 
@@ -2215,7 +2660,9 @@ class FloorplanMultiBuildingPickerTests(TestCase):
         from urbanlens.dashboard.models.pin.model import Pin
 
         child_location = baker.make(Location, latitude=41.7334, longitude=-73.9284, place=self.kirkbride)
-        child = baker.make(Pin, profile=self.user.profile, location=child_location, parent_pin=self.pin, slug="kirkbride")
+        child = baker.make(
+            Pin, profile=self.user.profile, location=child_location, parent_pin=self.pin, slug="kirkbride"
+        )
 
         response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
 
@@ -2269,7 +2716,14 @@ class PlacelessFloorplanTests(TestCase):
         return {
             "name": "Sketch",
             "plan_origin": _ORIGIN,
-            "floors": [{"level": 0, "name": "Ground", "walls": _square_walls(), "rooms": [{"name": "Hall", "x": 5.0, "y": 5.0}]}],
+            "floors": [
+                {
+                    "level": 0,
+                    "name": "Ground",
+                    "walls": _square_walls(),
+                    "rooms": [{"name": "Hall", "x": 5.0, "y": 5.0}],
+                }
+            ],
         }
 
     def test_saving_a_plan_for_a_pin_with_no_building_succeeds(self) -> None:
@@ -2312,7 +2766,9 @@ class PlacelessFloorplanTests(TestCase):
 
         other_user = baker.make(User)
         other_location = baker.make(Location, latitude=42.1, longitude=-74.1, place=None)
-        other_pin = baker.make(Pin, profile=other_user.profile, location=other_location, parent_pin=None, slug="other-placeless")
+        other_pin = baker.make(
+            Pin, profile=other_user.profile, location=other_location, parent_pin=None, slug="other-placeless"
+        )
         self.client.force_login(other_user)
 
         response = self.client.get(f"/dashboard/map/pin/{other_pin.slug}/floorplan/json/")
@@ -2366,7 +2822,11 @@ class FloorplanResponseOrderTests(TestCase):
             {"kind": "stair", "x": 1.0, "y": 1.0, "name": "alpha"},
             {"kind": "hazard", "x": 2.0, "y": 2.0, "name": "beta"},
         ]
-        save_document(self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": markers}]}, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": markers}]},
+            profile=self.profile,
+        )
 
         floor = document_for(self.floorplan)["floors"][0]
         self.assertEqual([wall["name"] for wall in floor["walls"][:3]], ["first", "second", "third"])
@@ -2401,7 +2861,9 @@ class FloorplanResponseOrderTests(TestCase):
                 },
             ],
         }
-        save_document(self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile)
+        save_document(
+            self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile
+        )
 
         lock = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]["locks"][0]
         self.assertEqual(lock["condition"], "seized, rusted shut")
@@ -2426,7 +2888,9 @@ class FloorplanResponseOrderTests(TestCase):
         save_document(
             self.floorplan,
             {
-                "reference_pool": [{"uuid": "local-ref-1", "kind": "photo", "title": "South elevation", "image_uuid": str(image.uuid)}],
+                "reference_pool": [
+                    {"uuid": "local-ref-1", "kind": "photo", "title": "South elevation", "image_uuid": str(image.uuid)}
+                ],
                 "floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}],
             },
             profile=self.profile,
@@ -2484,7 +2948,9 @@ class FloorplanResponseOrderTests(TestCase):
         saved = document_for(self.floorplan)
         first = FloorplanReference.objects.get(floorplan=self.floorplan).pk
 
-        save_document(self.floorplan, {"reference_pool": saved["reference_pool"], "floors": saved["floors"]}, profile=self.profile)
+        save_document(
+            self.floorplan, {"reference_pool": saved["reference_pool"], "floors": saved["floors"]}, profile=self.profile
+        )
 
         self.assertEqual(FloorplanReference.objects.get(floorplan=self.floorplan).pk, first)
 
@@ -2540,7 +3006,11 @@ class FloorplanResponseOrderTests(TestCase):
             },
             profile=self.profile,
         )
-        save_document(self.floorplan, {"reference_pool": [], "floors": [{"level": 0, "walls": _square_walls(), "rooms": [], "markers": []}]}, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {"reference_pool": [], "floors": [{"level": 0, "walls": _square_walls(), "rooms": [], "markers": []}]},
+            profile=self.profile,
+        )
 
         document = document_for(self.floorplan)
         self.assertEqual(document["reference_pool"], [])
@@ -2567,7 +3037,9 @@ class FloorplanResponseOrderTests(TestCase):
                 },
             ],
         }
-        save_document(self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile)
+        save_document(
+            self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile
+        )
 
         locks = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]["locks"]
         self.assertEqual([lock["name"] for lock in locks], ["padlock", "deadbolt", "chain"])
@@ -2578,7 +3050,12 @@ class FloorplanResponseOrderTests(TestCase):
         with pytest.raises(ValueError, match="share level"):
             save_document(
                 self.floorplan,
-                {"floors": [{"level": 1, "walls": [], "rooms": [], "markers": []}, {"level": 1, "walls": [], "rooms": [], "markers": []}]},
+                {
+                    "floors": [
+                        {"level": 1, "walls": [], "rooms": [], "markers": []},
+                        {"level": 1, "walls": [], "rooms": [], "markers": []},
+                    ]
+                },
                 profile=self.profile,
             )
 
@@ -2603,7 +3080,9 @@ class FloorplanFeatureScalingTests(QueryScalingMixin, TestCase):
         place = baker.make(Place, kind=PlaceKind.BUILDING, parent=parcel)
         location = baker.make(Location, latitude=41.733, longitude=-73.928, place=place)
         self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, slug="scaling-plan")
-        self.floorplan = Floorplan.objects.create(place=place, profile=self.user.profile, origin_lat=41.733, origin_lng=-73.928)
+        self.floorplan = Floorplan.objects.create(
+            place=place, profile=self.user.profile, origin_lat=41.733, origin_lng=-73.928
+        )
         self.floor = FloorplanFloor.objects.create(floorplan=self.floorplan, level=0)
         self.walls = 0
 

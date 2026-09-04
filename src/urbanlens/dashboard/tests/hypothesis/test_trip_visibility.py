@@ -10,6 +10,7 @@ trip_pin_location_visibility setting:
 
 All tests are DB-backed since the function queries Pin, Friendship, and related models.
 """
+
 from __future__ import annotations
 
 from model_bakery import baker
@@ -20,7 +21,9 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.trips.trip_visibility import apply_trip_visibility_filter as _apply_trip_visibility_filter
+from urbanlens.dashboard.services.trips.trip_visibility import (
+    apply_trip_visibility_filter as _apply_trip_visibility_filter,
+)
 
 
 def _make_user_with_profile(username=None):
@@ -66,18 +69,14 @@ class NoOneVisibilityTests(TestCase):
         TripMembership.objects.create(trip=self.trip, profile=self.viewer)
 
     def test_no_one_activity_always_hidden(self):
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.NO_ONE
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.NO_ONE)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertIn(act.id, hidden)
 
     def test_no_one_hidden_even_for_friend(self):
         _accept_friendship(self.viewer, self.adder)
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.NO_ONE
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.NO_ONE)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertIn(act.id, hidden)
@@ -87,9 +86,7 @@ class NoOneVisibilityTests(TestCase):
             profile=self.viewer,
             location=self.location,
         )
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.NO_ONE
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.NO_ONE)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertIn(act.id, hidden)
@@ -107,18 +104,14 @@ class FriendsVisibilityTests(TestCase):
         TripMembership.objects.create(trip=self.trip, profile=self.viewer)
 
     def test_non_friend_cannot_see_location(self):
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.FRIENDS
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.FRIENDS)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertIn(act.id, hidden)
 
     def test_friend_can_see_location(self):
         _accept_friendship(self.viewer, self.adder)
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.FRIENDS
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.FRIENDS)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertNotIn(act.id, hidden)
@@ -126,9 +119,7 @@ class FriendsVisibilityTests(TestCase):
     def test_reversed_friendship_still_visible(self):
         # Friend stored as (adder→viewer) rather than (viewer→adder)
         _accept_friendship(self.adder, self.viewer)
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.FRIENDS
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.FRIENDS)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertNotIn(act.id, hidden)
@@ -139,9 +130,7 @@ class FriendsVisibilityTests(TestCase):
             to_profile=self.adder,
             status=FriendshipStatus.PENDING,
         )
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.FRIENDS
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.FRIENDS)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertIn(act.id, hidden)
@@ -159,9 +148,7 @@ class CommonPinVisibilityTests(TestCase):
         TripMembership.objects.create(trip=self.trip, profile=self.viewer)
 
     def test_viewer_without_pin_cannot_see(self):
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.COMMON_PIN
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.COMMON_PIN)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertIn(act.id, hidden)
@@ -171,9 +158,7 @@ class CommonPinVisibilityTests(TestCase):
             profile=self.viewer,
             location=self.location,
         )
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.COMMON_PIN
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.COMMON_PIN)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertNotIn(act.id, hidden)
@@ -184,9 +169,7 @@ class CommonPinVisibilityTests(TestCase):
             profile=self.viewer,
             location=other_location,
         )
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.COMMON_PIN
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.COMMON_PIN)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertIn(act.id, hidden)
@@ -205,9 +188,7 @@ class CommonFriendVisibilityTests(TestCase):
         TripMembership.objects.create(trip=self.trip, profile=self.viewer)
 
     def test_no_shared_friend_cannot_see(self):
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.COMMON_FRIEND
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.COMMON_FRIEND)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertIn(act.id, hidden)
@@ -215,9 +196,7 @@ class CommonFriendVisibilityTests(TestCase):
     def test_shared_mutual_friend_grants_access(self):
         _accept_friendship(self.viewer, self.mutual_friend)
         _accept_friendship(self.adder, self.mutual_friend)
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.COMMON_FRIEND
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.COMMON_FRIEND)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertNotIn(act.id, hidden)
@@ -225,9 +204,7 @@ class CommonFriendVisibilityTests(TestCase):
     def test_unrelated_friend_does_not_grant_access(self):
         _, unrelated = _make_user_with_profile()
         _accept_friendship(self.viewer, unrelated)
-        act = _make_activity_for(
-            self.trip, self.adder, self.location, VisibilityChoice.COMMON_FRIEND
-        )
+        act = _make_activity_for(self.trip, self.adder, self.location, VisibilityChoice.COMMON_FRIEND)
         hidden = set()
         _apply_trip_visibility_filter([act], self.viewer, hidden)
         self.assertIn(act.id, hidden)

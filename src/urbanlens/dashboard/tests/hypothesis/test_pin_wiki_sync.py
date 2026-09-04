@@ -32,7 +32,15 @@ _coord_counter = 0
 #: inside the same building record's own polygon.
 _HALL_FOOTPRINT = {
     "type": "Polygon",
-    "coordinates": [[[-91.60060, 48.59990], [-91.59940, 48.59990], [-91.59940, 48.60010], [-91.60060, 48.60010], [-91.60060, 48.59990]]],
+    "coordinates": [
+        [
+            [-91.60060, 48.59990],
+            [-91.59940, 48.59990],
+            [-91.59940, 48.60010],
+            [-91.60060, 48.60010],
+            [-91.60060, 48.59990],
+        ]
+    ],
 }
 
 
@@ -52,13 +60,27 @@ class SendPinsToWikiTests(TestCase):
         self.parent = baker.make(Pin, profile=self.profile, location=self.location, slug="campus")
 
     def test_no_wiki_creates_nothing(self) -> None:
-        child = baker.make(Pin, profile=self.profile, parent_pin=self.parent, location=_make_location(), name="Tool Shed", pin_type=PinType.BUILDING)
+        child = baker.make(
+            Pin,
+            profile=self.profile,
+            parent_pin=self.parent,
+            location=_make_location(),
+            name="Tool Shed",
+            pin_type=PinType.BUILDING,
+        )
         self.assertEqual(send_pins_to_wiki(self.parent, [child], self.profile), 0)
         self.assertFalse(Wiki.objects.filter(location__isnull=False).exclude(location=self.location).exists())
 
     def test_creates_a_child_wiki_for_each_selected_pin(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        child = baker.make(Pin, profile=self.profile, parent_pin=self.parent, location=_make_location(), name="Tool Shed", pin_type=PinType.BUILDING)
+        child = baker.make(
+            Pin,
+            profile=self.profile,
+            parent_pin=self.parent,
+            location=_make_location(),
+            name="Tool Shed",
+            pin_type=PinType.BUILDING,
+        )
 
         created = send_pins_to_wiki(self.parent, [child], self.profile)
 
@@ -86,7 +108,9 @@ class SendPinsToWikiTests(TestCase):
 
     def test_only_the_selected_pins_are_sent(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        selected = baker.make(Pin, profile=self.profile, parent_pin=self.parent, location=_make_location(), name="Selected")
+        selected = baker.make(
+            Pin, profile=self.profile, parent_pin=self.parent, location=_make_location(), name="Selected"
+        )
         baker.make(Pin, profile=self.profile, parent_pin=self.parent, location=_make_location(), name="Not selected")
 
         send_pins_to_wiki(self.parent, [selected], self.profile)
@@ -96,7 +120,12 @@ class SendPinsToWikiTests(TestCase):
 
     def test_one_wiki_edit_covers_the_whole_batch(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        children = [baker.make(Pin, profile=self.profile, parent_pin=self.parent, location=_make_location(), name=f"Building {i}") for i in range(3)]
+        children = [
+            baker.make(
+                Pin, profile=self.profile, parent_pin=self.parent, location=_make_location(), name=f"Building {i}"
+            )
+            for i in range(3)
+        ]
 
         send_pins_to_wiki(self.parent, children, self.profile)
 
@@ -126,7 +155,15 @@ class BuildingFootprintMatchingTests(TestCase):
         self.location = _make_location()
         self.parent = baker.make(Pin, profile=self.profile, location=self.location, slug="campus")
         self.wiki = baker.make(Wiki, location=self.location, name="Campus")
-        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [{"name": "Dorm Hall", "geometry": _HALL_FOOTPRINT, "latitude": 48.60000, "longitude": -91.60000}]})
+        LocationCache.set(
+            self.location,
+            PARCEL_BUILDINGS_CACHE_SOURCE,
+            {
+                "buildings": [
+                    {"name": "Dorm Hall", "geometry": _HALL_FOOTPRINT, "latitude": 48.60000, "longitude": -91.60000}
+                ]
+            },
+        )
 
     def test_send_skips_a_far_apart_pin_inside_the_same_building_footprint(self) -> None:
         baker.make(
@@ -245,7 +282,9 @@ class BuildingFootprintMatchingTests(TestCase):
 
         created = send_pins_to_wiki(self.parent, [far_end], self.profile)
 
-        self.assertEqual(created, 1, "with no building data cached, proximity is the only signal, and these are far apart")
+        self.assertEqual(
+            created, 1, "with no building data cached, proximity is the only signal, and these are far apart"
+        )
 
 
 class PullChildrenFromWikiTests(TestCase):
@@ -304,7 +343,12 @@ class PullChildrenFromWikiTests(TestCase):
 
     def test_running_twice_does_not_duplicate(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        baker.make(Wiki, location=baker.make(Location, latitude="48.900000", longitude="-91.900000", google_place=None), parent_wiki=wiki, name="Powerhouse")
+        baker.make(
+            Wiki,
+            location=baker.make(Location, latitude="48.900000", longitude="-91.900000", google_place=None),
+            parent_wiki=wiki,
+            name="Powerhouse",
+        )
 
         pull_children_from_wiki(self.parent)
         second = pull_children_from_wiki(self.parent)
@@ -333,7 +377,9 @@ class SendToWikiViewTests(TestCase):
 
     def test_sends_the_selected_child_pin(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        child = baker.make(Pin, profile=self.user.profile, parent_pin=self.parent, location=_make_location(), name="Tool Shed")
+        child = baker.make(
+            Pin, profile=self.user.profile, parent_pin=self.parent, location=_make_location(), name="Tool Shed"
+        )
         response = self.client.post(self.url, {"child_pin_uuids": [str(child.uuid)]})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(wiki.child_wikis.count(), 1)
@@ -347,7 +393,9 @@ class SendToWikiViewTests(TestCase):
 
     def test_another_users_pin_is_not_reachable(self) -> None:
         other = baker.make(Pin, profile=baker.make(User).profile, location=_make_location(), slug="not-mine")
-        response = self.client.post(reverse("pin.detail_pins.send_to_wiki", kwargs={"pin_slug": other.slug}), {"child_pin_uuids": ["x"]})
+        response = self.client.post(
+            reverse("pin.detail_pins.send_to_wiki", kwargs={"pin_slug": other.slug}), {"child_pin_uuids": ["x"]}
+        )
         self.assertEqual(response.status_code, 404)
 
 
@@ -367,7 +415,12 @@ class PullFromWikiViewTests(TestCase):
 
     def test_pulls_child_wikis_into_child_pins(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        baker.make(Wiki, location=baker.make(Location, latitude="49.100000", longitude="-92.100000", google_place=None), parent_wiki=wiki, name="Powerhouse")
+        baker.make(
+            Wiki,
+            location=baker.make(Location, latitude="49.100000", longitude="-92.100000", google_place=None),
+            parent_wiki=wiki,
+            name="Powerhouse",
+        )
         response = self.client.post(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.parent.detail_pins.count(), 1)
@@ -375,4 +428,7 @@ class PullFromWikiViewTests(TestCase):
 
     def test_another_users_pin_is_not_reachable(self) -> None:
         other = baker.make(Pin, profile=baker.make(User).profile, location=_make_location(), slug="not-mine")
-        self.assertEqual(self.client.post(reverse("pin.detail_pins.pull_from_wiki", kwargs={"pin_slug": other.slug})).status_code, 404)
+        self.assertEqual(
+            self.client.post(reverse("pin.detail_pins.pull_from_wiki", kwargs={"pin_slug": other.slug})).status_code,
+            404,
+        )

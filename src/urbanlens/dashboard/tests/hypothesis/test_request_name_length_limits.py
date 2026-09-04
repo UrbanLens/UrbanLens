@@ -43,7 +43,9 @@ class RequestNameLengthTests(TestCase):
         self.client.force_login(self.user)
 
     def test_label_create_rejects_an_overlong_name(self) -> None:
-        response = self.client.post(reverse("label.create", kwargs={"label_kind": "tags"}), {"name": _too_long(Label, "name")})
+        response = self.client.post(
+            reverse("label.create", kwargs={"label_kind": "tags"}), {"name": _too_long(Label, "name")}
+        )
 
         self.assertEqual(response.status_code, 400)
         # Not `Label.objects.exists()` - the app seeds global labels, so only
@@ -57,7 +59,9 @@ class RequestNameLengthTests(TestCase):
         self.assertFalse(PinList.objects.exists())
 
     def test_saved_filter_create_rejects_an_overlong_name(self) -> None:
-        response = self.client.post(reverse("saved_filters.create"), {"filter_name": _too_long(SavedFilter, "name"), "search": "x"})
+        response = self.client.post(
+            reverse("saved_filters.create"), {"filter_name": _too_long(SavedFilter, "name"), "search": "x"}
+        )
 
         self.assertNotEqual(response.status_code, 500)
         self.assertFalse(SavedFilter.objects.filter(name__startswith="nnn").exists())
@@ -66,7 +70,9 @@ class RequestNameLengthTests(TestCase):
         """`sanitize_name` drops characters but does not bound length."""
         pin = baker.make("dashboard.Pin", profile=self.profile, location=baker.make("dashboard.Location"))
 
-        response = self.client.post(reverse("pin.aliases", kwargs={"pin_slug": pin.slug}), {"name": _too_long(PinAlias, "name")})
+        response = self.client.post(
+            reverse("pin.aliases", kwargs={"pin_slug": pin.slug}), {"name": _too_long(PinAlias, "name")}
+        )
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(PinAlias.objects.filter(name__startswith="nnn").exists())
@@ -81,7 +87,10 @@ class RequestNameLengthTests(TestCase):
         """
         label = baker.make(Label, profile=self.profile, kind="tag", name="original")
 
-        response = self.client.post(reverse("label.edit", kwargs={"label_kind": "tags", "label_id": label.pk}), {"name": _too_long(Label, "name")})
+        response = self.client.post(
+            reverse("label.edit", kwargs={"label_kind": "tags", "label_id": label.pk}),
+            {"name": _too_long(Label, "name")},
+        )
 
         self.assertEqual(response.status_code, 400)
         label.refresh_from_db()
@@ -91,7 +100,10 @@ class RequestNameLengthTests(TestCase):
         """Edit truncated arbitrary text; create runs it through clean_icon."""
         label = baker.make(Label, profile=self.profile, kind="tag", name="tagname", icon="star")
 
-        self.client.post(reverse("label.edit", kwargs={"label_kind": "tags", "label_id": label.pk}), {"name": "tagname", "icon": "not an icon at all"})
+        self.client.post(
+            reverse("label.edit", kwargs={"label_kind": "tags", "label_id": label.pk}),
+            {"name": "tagname", "icon": "not an icon at all"},
+        )
 
         label.refresh_from_db()
         self.assertNotEqual(label.icon, "not an icon at all", "edit stored free text as an icon")

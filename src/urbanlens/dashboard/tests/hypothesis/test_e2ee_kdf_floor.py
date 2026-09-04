@@ -180,7 +180,9 @@ class RewrapKdfParametersTests(TestCase):
         response = self._rewrap(kdf_opslimit=1, kdf_memlimit=1)
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(self._bundle().password_wrapped_secret, before, "a refused re-wrap must not have replaced the blob")
+        self.assertEqual(
+            self._bundle().password_wrapped_secret, before, "a refused re-wrap must not have replaced the blob"
+        )
 
     def test_a_recovery_only_rewrap_leaves_the_password_parameters_alone(self) -> None:
         """It replaces no password blob, so it describes no new password wrapping."""

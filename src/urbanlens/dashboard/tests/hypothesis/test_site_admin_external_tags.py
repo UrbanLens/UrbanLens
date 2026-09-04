@@ -52,7 +52,9 @@ class _AdminClientMixin:
 class SiteAdminExternalTagsGroupViewTests(_AdminClientMixin, TestCase):
     def test_grouping_two_entries_succeeds(self):
         a = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
-        b = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant")
+        b = ExternalTagVocabularyEntry.objects.create(
+            source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant"
+        )
 
         response = self.client.post(reverse("site_admin_external_tags_group"), {"entry_id": [a.pk, b.pk]})
 
@@ -76,7 +78,9 @@ class SiteAdminExternalTagsGroupViewTests(_AdminClientMixin, TestCase):
 class SiteAdminExternalTagsMoveViewTests(_AdminClientMixin, TestCase):
     def test_ungrouping_an_entry_returns_json_ok(self):
         a = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
-        b = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant")
+        b = ExternalTagVocabularyEntry.objects.create(
+            source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant"
+        )
         from urbanlens.dashboard.services.locations.external_tag_groups import create_group
 
         create_group([a.pk, b.pk])
@@ -106,7 +110,9 @@ class SiteAdminExternalTagsMoveViewTests(_AdminClientMixin, TestCase):
         self.assertFalse(response.json()["ok"])
 
     def test_unknown_entry_id_returns_400_json_not_500(self):
-        response = self.client.post(reverse("site_admin_external_tags_move"), {"entry_id": 999_999, "target_group_id": ""})
+        response = self.client.post(
+            reverse("site_admin_external_tags_move"), {"entry_id": 999_999, "target_group_id": ""}
+        )
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.json()["ok"])
@@ -115,12 +121,16 @@ class SiteAdminExternalTagsMoveViewTests(_AdminClientMixin, TestCase):
 class SiteAdminExternalTagsPreferredViewTests(_AdminClientMixin, TestCase):
     def test_setting_preferred_updates_the_flag(self):
         a = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
-        b = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant")
+        b = ExternalTagVocabularyEntry.objects.create(
+            source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant"
+        )
         from urbanlens.dashboard.services.locations.external_tag_groups import create_group
 
         group = create_group([a.pk, b.pk])
 
-        response = self.client.post(reverse("site_admin_external_tags_preferred"), {"entry_id": b.pk, "group_id": group.pk})
+        response = self.client.post(
+            reverse("site_admin_external_tags_preferred"), {"entry_id": b.pk, "group_id": group.pk}
+        )
 
         self.assertEqual(response.status_code, 200)
         a.refresh_from_db()

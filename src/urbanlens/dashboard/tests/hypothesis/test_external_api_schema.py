@@ -57,18 +57,26 @@ class SyncPayloadContractTests(TestCase):
         create_pin_for_profile(profile, name="Contract", latitude=42.5, longitude=-73.5)
         page = sync_pins_page(profile)
         (payload,) = page.pins
-        self.assertEqual(set(payload), set(SyncPinSerializer().fields), "SyncPinSerializer and services.pins.pin_sync.serialize_sync_pin have drifted apart - update both together.")
+        self.assertEqual(
+            set(payload),
+            set(SyncPinSerializer().fields),
+            "SyncPinSerializer and services.pins.pin_sync.serialize_sync_pin have drifted apart - update both together.",
+        )
 
     def test_tag_chips_carry_their_label_kind(self) -> None:
         baker.make(User)  # first user auto-promoted to bootstrap site admin
         user = baker.make(User)
         profile = Profile.objects.get(user=user)
         pin = create_pin_for_profile(profile, name="Contract", latitude=42.5, longitude=-73.5).pin
-        pin.labels.add(ensure_label( profile=profile, kind="status", name="Visited"))
+        pin.labels.add(ensure_label(profile=profile, kind="status", name="Visited"))
 
         (payload,) = sync_pins_page(profile).pins
         (tag,) = payload["tags"]
-        self.assertEqual(set(tag), set(SyncPinTagSerializer().fields), "SyncPinTagSerializer and services.pins.pin_sync.serialize_sync_pin have drifted apart - update both together.")
+        self.assertEqual(
+            set(tag),
+            set(SyncPinTagSerializer().fields),
+            "SyncPinTagSerializer and services.pins.pin_sync.serialize_sync_pin have drifted apart - update both together.",
+        )
         # kind is what lets an offline client tell a status from a category.
         self.assertEqual(tag["kind"], "status")
 
@@ -82,7 +90,11 @@ class PinDetailContractTests(TestCase):
         profile = Profile.objects.get(user=user)
         pin = create_pin_for_profile(profile, name="Contract", latitude=42.5, longitude=-73.5).pin
         payload = build_pin_detail(pin, profile)
-        self.assertEqual(set(payload), set(PinDetailSerializer().fields), "PinDetailSerializer and services.pins.pin_detail.build_pin_detail have drifted apart - update both together.")
+        self.assertEqual(
+            set(payload),
+            set(PinDetailSerializer().fields),
+            "PinDetailSerializer and services.pins.pin_detail.build_pin_detail have drifted apart - update both together.",
+        )
 
 
 class OAuth2TokenAuthTests(TestCase):

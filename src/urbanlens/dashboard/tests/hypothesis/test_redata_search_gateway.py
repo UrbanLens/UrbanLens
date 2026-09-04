@@ -15,7 +15,10 @@ import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
-from urbanlens.dashboard.services.apis.locations.redata_search_gateway import RedataNewsSearchGateway, RedataSearchGateway
+from urbanlens.dashboard.services.apis.locations.redata_search_gateway import (
+    RedataNewsSearchGateway,
+    RedataSearchGateway,
+)
 
 
 def _response(status_code: int, body: object) -> mock.Mock:
@@ -69,12 +72,18 @@ class SearchWebTests(SimpleTestCase):
         session = mock.Mock()
         session.get.return_value = _response(
             200,
-            {"count": 1, "results": [{"title": "T", "link": "http://x.com", "snippet": "s", "date": None, "thumbnail": None}], "provider": "brave"},
+            {
+                "count": 1,
+                "results": [{"title": "T", "link": "http://x.com", "snippet": "s", "date": None, "thumbnail": None}],
+                "provider": "brave",
+            },
         )
 
         results = _gateway(session).search_web("query")
 
-        self.assertEqual(results, [{"title": "T", "link": "http://x.com", "snippet": "s", "date": None, "thumbnail": None}])
+        self.assertEqual(
+            results, [{"title": "T", "link": "http://x.com", "snippet": "s", "date": None, "thumbnail": None}]
+        )
 
     def test_missing_results_key_returns_empty_list(self) -> None:
         session = mock.Mock()
@@ -96,7 +105,9 @@ class SearchWebTests(SimpleTestCase):
 
     def test_503_raises_location_context_unavailable(self) -> None:
         session = mock.Mock()
-        session.get.return_value = _response(503, {"error": "all_providers_unavailable", "message": "every source failed"})
+        session.get.return_value = _response(
+            503, {"error": "all_providers_unavailable", "message": "every source failed"}
+        )
 
         with pytest.raises(LocationContextUnavailableError) as ctx:
             _gateway(session).search_web("query")
@@ -137,7 +148,18 @@ class SearchNewsTests(SimpleTestCase):
         session = mock.Mock()
         session.get.return_value = _response(
             200,
-            {"count": 1, "results": [{"title": "T", "link": "http://x.com", "snippet": "example.com", "date": "20240105T120000Z", "thumbnail": None}]},
+            {
+                "count": 1,
+                "results": [
+                    {
+                        "title": "T",
+                        "link": "http://x.com",
+                        "snippet": "example.com",
+                        "date": "20240105T120000Z",
+                        "thumbnail": None,
+                    }
+                ],
+            },
         )
 
         results = _gateway(session).search_news("query")

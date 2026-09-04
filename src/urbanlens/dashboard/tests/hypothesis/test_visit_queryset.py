@@ -2,6 +2,7 @@
 
 All tests require the database - records are created with model_bakery.
 """
+
 from __future__ import annotations
 
 from django.utils import timezone
@@ -14,6 +15,7 @@ from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_visit(pin, source: str = VisitSource.MANUAL) -> PinVisit:
     """Create a PinVisit for the given pin with an explicit source."""
     return baker.make(PinVisit, pin=pin, source=source, visited_at=timezone.now())
@@ -22,6 +24,7 @@ def _make_visit(pin, source: str = VisitSource.MANUAL) -> PinVisit:
 # ---------------------------------------------------------------------------
 # for_pin
 # ---------------------------------------------------------------------------
+
 
 class VisitQuerySetForPinTests(TestCase):
     """for_pin(pin_id) returns only visits belonging to that pin."""
@@ -69,6 +72,7 @@ class VisitQuerySetForPinTests(TestCase):
 # manual
 # ---------------------------------------------------------------------------
 
+
 class VisitQuerySetManualTests(TestCase):
     """manual() returns only visits with source='manual'."""
 
@@ -101,6 +105,7 @@ class VisitQuerySetManualTests(TestCase):
 # ---------------------------------------------------------------------------
 # from_takeout
 # ---------------------------------------------------------------------------
+
 
 class VisitQuerySetFromTakeoutTests(TestCase):
     """from_takeout() returns only visits with source='history'."""

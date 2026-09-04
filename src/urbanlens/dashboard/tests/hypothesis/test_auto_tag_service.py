@@ -34,7 +34,9 @@ _COORDS = itertools.count()
 
 def _make_pin(profile: Profile) -> Pin:
     offset = next(_COORDS)
-    location = baker.make("dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}")
+    location = baker.make(
+        "dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}"
+    )
     return baker.make(Pin, profile=profile, location=location)
 
 
@@ -120,7 +122,9 @@ class SuggestForPinStageGatingTests(TestCase):
         with (
             mock.patch.object(AutoTagService, "_redata_match", return_value=[]) as redata_match,
             mock.patch.object(AutoTagService, "_ai_match", return_value=[]) as ai_match,
-            mock.patch.object(AutoTagService, "_eligible_labels", return_value=[baker.prepare(Label, kind=KIND_CATEGORY)]),
+            mock.patch.object(
+                AutoTagService, "_eligible_labels", return_value=[baker.prepare(Label, kind=KIND_CATEGORY)]
+            ),
             mock.patch("urbanlens.dashboard.models.subscriptions.model.user_has_feature", return_value=auto_tagging),
         ):
             AutoTagService(kinds=[KIND_CATEGORY]).suggest_for_pin(self.pin)

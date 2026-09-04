@@ -22,7 +22,14 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GameRound, GameSession, GameSessionStatus, Guess, PlayerModeRating, SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import (
+    GameRound,
+    GameSession,
+    GameSessionStatus,
+    Guess,
+    PlayerModeRating,
+    SpotGuessrMode,
+)
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import (
     GameConfig,
@@ -60,7 +67,14 @@ def _pinned_photo_location(*profiles: Profile) -> Location:
     location = _make_location()
     for profile in profiles:
         baker.make(Pin, profile=profile, location=location)
-    baker.make(Image, location=location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=location))
+    baker.make(
+        Image,
+        location=location,
+        media_type=MediaKind.PHOTO,
+        latitude=None,
+        longitude=None,
+        wiki=baker.make(Wiki, location=location),
+    )
     return location
 
 

@@ -20,8 +20,14 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.spotguessr.session import GameConfig as SpotGuessrConfig
 from urbanlens.dashboard.services.trivia.session import TriviaConfig
 
-_ACROSS = {"type": "Polygon", "coordinates": [[[179.0, -20.0], [181.0, -20.0], [181.0, -10.0], [179.0, -10.0], [179.0, -20.0]]]}
-_ORDINARY = {"type": "Polygon", "coordinates": [[[-72.0, 41.0], [-71.0, 41.0], [-71.0, 42.0], [-72.0, 42.0], [-72.0, 41.0]]]}
+_ACROSS = {
+    "type": "Polygon",
+    "coordinates": [[[179.0, -20.0], [181.0, -20.0], [181.0, -10.0], [179.0, -10.0], [179.0, -20.0]]],
+}
+_ORDINARY = {
+    "type": "Polygon",
+    "coordinates": [[[-72.0, 41.0], [-71.0, 41.0], [-71.0, 42.0], [-72.0, 42.0], [-72.0, 41.0]]],
+}
 
 
 class GameBoundsAntimeridianTests(SimpleTestCase):

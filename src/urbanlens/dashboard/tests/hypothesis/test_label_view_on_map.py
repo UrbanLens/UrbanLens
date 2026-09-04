@@ -66,7 +66,7 @@ class LabelRowsViewOnMapButtonTests(TestCase):
         self.assertContains(response, label_map_url(label.id))
 
     def test_status_row_includes_view_on_map_link(self) -> None:
-        label = ensure_label( profile=self.profile, kind=KIND_STATUS, name="Abandoned")
+        label = ensure_label(profile=self.profile, kind=KIND_STATUS, name="Abandoned")
         self._pin_labelled(label)
         response = self._rows("statuses")
         self.assertContains(response, label_map_url(label.id))

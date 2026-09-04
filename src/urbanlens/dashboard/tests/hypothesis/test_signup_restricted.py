@@ -25,6 +25,7 @@ def _get_response(factory: RequestFactory, method: str = "get", **query_params):
         request = factory.post("/accounts/signup/", data=query_params)
 
     from django.contrib.auth.models import AnonymousUser
+
     request.user = AnonymousUser()
     return SignupView.as_view()(request)
 

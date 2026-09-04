@@ -3,6 +3,7 @@
 Pure-function tests use unittest.TestCase (no DB).
 ModelForm tests use HypothesisTestCase / django.test.TestCase (DB).
 """
+
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
@@ -40,6 +41,7 @@ def _past_date(years_ago: int) -> date:
 
 
 # -- validate_birth_date -------------------------------------------------------
+
 
 class ValidateBirthDateTests(SimpleTestCase):
     """validate_birth_date returns None for valid dates and an error string otherwise."""
@@ -107,6 +109,7 @@ class ValidateBirthDateTests(SimpleTestCase):
 
 # -- validate_started_exploring ------------------------------------------------
 
+
 class ValidateStartedExploringTests(SimpleTestCase):
     """validate_started_exploring returns None for past/present dates and an error for future."""
 
@@ -148,6 +151,7 @@ class ValidateStartedExploringTests(SimpleTestCase):
 
 # -- MarkupDefaultsForm --------------------------------------------------------
 
+
 class MarkupDefaultsFormTests(TestCase):
     """MarkupDefaultsForm clean methods apply defaults and strip whitespace."""
 
@@ -178,15 +182,24 @@ class MarkupDefaultsFormTests(TestCase):
         self.assertEqual(form.cleaned_data["markup_fill_color"], "#aabbcc")
 
     def test_none_border_color_returns_empty_string(self) -> None:
-        form = self._submit(markup_fill_color="#ff0000", markup_fill_opacity=50, markup_border_color=None, markup_border_opacity=50)
+        form = self._submit(
+            markup_fill_color="#ff0000", markup_fill_opacity=50, markup_border_color=None, markup_border_opacity=50
+        )
         self.assertEqual(form.cleaned_data.get("markup_border_color", ""), "")
 
     def test_whitespace_border_color_is_stripped_to_empty(self) -> None:
-        form = self._submit(markup_fill_color="#ff0000", markup_fill_opacity=50, markup_border_color="  ", markup_border_opacity=50)
+        form = self._submit(
+            markup_fill_color="#ff0000", markup_fill_opacity=50, markup_border_color="  ", markup_border_opacity=50
+        )
         self.assertEqual(form.cleaned_data["markup_border_color"], "")
 
     def test_valid_border_color_is_stripped(self) -> None:
-        form = self._submit(markup_fill_color="#ff0000", markup_fill_opacity=50, markup_border_color=" #123456 ", markup_border_opacity=50)
+        form = self._submit(
+            markup_fill_color="#ff0000",
+            markup_fill_opacity=50,
+            markup_border_color=" #123456 ",
+            markup_border_opacity=50,
+        )
         self.assertEqual(form.cleaned_data["markup_border_color"], "#123456")
 
     def test_opacity_0_is_valid(self) -> None:
@@ -215,6 +228,7 @@ class MarkupDefaultsFormTests(TestCase):
 
 
 # -- PrivacySettingsForm -------------------------------------------------------
+
 
 class PrivacySettingsFormTests(TestCase):
     """PrivacySettingsForm excludes FRIENDS from friend_request_visibility."""
@@ -263,11 +277,13 @@ class PrivacySettingsFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
 
     def test_no_one_is_valid_for_all_fields(self) -> None:
-        form = self._submit(**self._default_data(
-            profile_visibility=VisibilityChoice.NO_ONE,
-            comment_visibility=VisibilityChoice.NO_ONE,
-            friend_request_visibility=VisibilityChoice.NO_ONE,
-        ))
+        form = self._submit(
+            **self._default_data(
+                profile_visibility=VisibilityChoice.NO_ONE,
+                comment_visibility=VisibilityChoice.NO_ONE,
+                friend_request_visibility=VisibilityChoice.NO_ONE,
+            )
+        )
         self.assertTrue(form.is_valid(), form.errors)
 
     def test_trip_pin_visibility_defaults_to_anyone(self) -> None:
@@ -290,6 +306,7 @@ class PrivacySettingsFormTests(TestCase):
 
 
 # -- ProfileForm ---------------------------------------------------------------
+
 
 class ProfileFormTests(TestCase):
     """ProfileForm.clean_birth_date and clean_started_exploring raise ValidationError for bad values."""
@@ -375,6 +392,7 @@ class ProfileFormTests(TestCase):
 
 # -- DiscordHandleForm ---------------------------------------------------------
 
+
 class DiscordHandleFormTests(TestCase):
     """DiscordHandleForm accepts an optional Discord username."""
 
@@ -400,11 +418,13 @@ class DiscordHandleFormTests(TestCase):
         form = DiscordHandleForm(data={"discord": "x" * 100})
         self.assertTrue(form.is_valid(), form.errors)
 
-    @given(handle=st.text(
-        alphabet=st.sampled_from("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._#-"),
-        min_size=2,
-        max_size=100,
-    ))
+    @given(
+        handle=st.text(
+            alphabet=st.sampled_from("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._#-"),
+            min_size=2,
+            max_size=100,
+        )
+    )
     @_hyp
     def test_any_valid_discord_handle_is_accepted(self, handle) -> None:
         form = DiscordHandleForm(data={"discord": handle})

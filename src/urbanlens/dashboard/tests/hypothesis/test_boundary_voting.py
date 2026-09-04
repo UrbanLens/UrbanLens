@@ -152,22 +152,52 @@ class BoundaryOptionsTests(TestCase):
         # must never be votable - the vote is strictly between official
         # external property datasets, so user drawings can't become the
         # official matching boundary.
-        baker.make(Boundary, location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_square(-73.762, 42.65))
-        baker.make(Boundary, location=self.location, boundary_type=BoundaryType.BUILDING, source=BoundarySource.OVERPASS, generated_polygon=_square(-73.763, 42.65))
+        baker.make(
+            Boundary,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            generated_polygon=_square(-73.762, 42.65),
+        )
+        baker.make(
+            Boundary,
+            location=self.location,
+            boundary_type=BoundaryType.BUILDING,
+            source=BoundarySource.OVERPASS,
+            generated_polygon=_square(-73.763, 42.65),
+        )
         wiki = baker.make(Wiki, location=self.location)
-        baker.make(Boundary, wiki=wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_square(-73.764, 42.65))
+        baker.make(
+            Boundary,
+            wiki=wiki,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_square(-73.764, 42.65),
+        )
 
         options = boundary_options(self.place)
         self.assertEqual([option.pk for option in options], [redata.pk, overpass.pk])
 
     def test_candidates_without_geometry_are_skipped(self) -> None:
-        baker.make(Boundary, place=self.place, location=None, boundary_type=BoundaryType.PROPERTY, source=BoundarySource.REDATA, generated_polygon=None)
+        baker.make(
+            Boundary,
+            place=self.place,
+            location=None,
+            boundary_type=BoundaryType.PROPERTY,
+            source=BoundarySource.REDATA,
+            generated_polygon=None,
+        )
         self.assertEqual(boundary_options(self.place), [])
 
     def test_a_drawn_row_is_never_a_candidate(self) -> None:
         """Only provider-sourced rows are votable - the point of the feature."""
         wiki = baker.make(Wiki, location=self.location, place=self.place)
-        baker.make(Boundary, wiki=wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_square(-73.761, 42.65))
+        baker.make(
+            Boundary,
+            wiki=wiki,
+            location=self.location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=_square(-73.761, 42.65),
+        )
         self.assertEqual(boundary_options(self.place), [])
 
     def test_none_place_has_no_options(self) -> None:
@@ -327,17 +357,25 @@ class WinnerMatchingIntegrationTests(TestCase):
             building_polygon=None,
             property_candidates=[("redata_boundary", redata_polygon), ("overpass", overpass_polygon)],
         )
-        with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
+        with patch(
+            "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
+            return_value=resolved,
+        ):
             place = generate_location_boundaries(location)
 
         assert place is not None
         candidates = boundary_options(place)
-        self.assertEqual([candidate.source for candidate in candidates], [BoundarySource.REDATA, BoundarySource.OVERPASS])
+        self.assertEqual(
+            [candidate.source for candidate in candidates], [BoundarySource.REDATA, BoundarySource.OVERPASS]
+        )
         self.assertEqual(place.geometry.wkb, redata_polygon.wkb)
 
         # A vote for overpass, then a regeneration: the vote must survive.
         cast_boundary_vote(place, self.voter, candidates[1].pk)
-        with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
+        with patch(
+            "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries",
+            return_value=resolved,
+        ):
             generate_location_boundaries(location)
         place.refresh_from_db()
         self.assertEqual(place.geometry.wkb, overpass_polygon.wkb)

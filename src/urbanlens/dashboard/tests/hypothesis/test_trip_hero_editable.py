@@ -93,7 +93,9 @@ class TripEditPartialUpdateTests(TestCase):
 
     def test_submitting_all_four_together_still_works(self) -> None:
         """Matches the existing "Edit Trip" dialog's behavior - unaffected by the fix."""
-        response = self._post({"name": "New Name", "description": "New desc.", "start_date": "2026-10-01", "end_date": "2026-10-05"})
+        response = self._post(
+            {"name": "New Name", "description": "New desc.", "start_date": "2026-10-01", "end_date": "2026-10-05"}
+        )
         self.assertEqual(response.status_code, 200)
         self.trip.refresh_from_db()
         self.assertEqual(self.trip.name, "New Name")

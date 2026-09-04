@@ -69,11 +69,25 @@ class ElevationPanelSourceFetchTests(TestCase):
             count=2,
             complete=True,
             results=[
-                {"provider": "usgs_epqs", "dataset": "3DEP", "resolution_meters": 10, "elevation_meters": 245.0, "status": "ok"},
-                {"provider": "open_meteo", "dataset": "Copernicus DEM GLO-90", "resolution_meters": 90, "elevation_meters": 240.0, "status": "ok"},
+                {
+                    "provider": "usgs_epqs",
+                    "dataset": "3DEP",
+                    "resolution_meters": 10,
+                    "elevation_meters": 245.0,
+                    "status": "ok",
+                },
+                {
+                    "provider": "open_meteo",
+                    "dataset": "Copernicus DEM GLO-90",
+                    "resolution_meters": 90,
+                    "elevation_meters": 240.0,
+                    "status": "ok",
+                },
             ],
         )
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_elevation_gateway.RedataElevationGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_elevation_gateway.RedataElevationGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_elevation.return_value = envelope
             self.source.fetch(self.pin)
         cached = LocationCache.get_fresh(self.pin.location, "open_elevation")
@@ -89,11 +103,25 @@ class ElevationPanelSourceFetchTests(TestCase):
             count=2,
             complete=True,
             results=[
-                {"provider": "usgs_epqs", "dataset": "3DEP", "resolution_meters": 10, "elevation_meters": None, "status": "ok"},
-                {"provider": "open_meteo", "dataset": "Copernicus DEM GLO-90", "resolution_meters": 90, "elevation_meters": 240.0, "status": "ok"},
+                {
+                    "provider": "usgs_epqs",
+                    "dataset": "3DEP",
+                    "resolution_meters": 10,
+                    "elevation_meters": None,
+                    "status": "ok",
+                },
+                {
+                    "provider": "open_meteo",
+                    "dataset": "Copernicus DEM GLO-90",
+                    "resolution_meters": 90,
+                    "elevation_meters": 240.0,
+                    "status": "ok",
+                },
             ],
         )
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_elevation_gateway.RedataElevationGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_elevation_gateway.RedataElevationGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_elevation.return_value = envelope
             self.source.fetch(self.pin)
         cached = LocationCache.get_fresh(self.pin.location, "open_elevation")
@@ -104,7 +132,9 @@ class ElevationPanelSourceFetchTests(TestCase):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         envelope = LocationContextEnvelope(count=0, complete=True, results=[])
-        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_elevation_gateway.RedataElevationGateway") as mock_gateway_cls:
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_elevation_gateway.RedataElevationGateway"
+        ) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_elevation.return_value = envelope
             self.source.fetch(self.pin)
         cached = LocationCache.get_fresh(self.pin.location, "open_elevation")

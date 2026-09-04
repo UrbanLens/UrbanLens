@@ -6,6 +6,7 @@ Covers:
 - extract_taken_at() - EXIF DateTimeOriginal extraction with mock PIL
 - image_to_gallery_json() - dict serialisation of Image instances
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -17,7 +18,13 @@ from django.utils import timezone
 from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.media.images import _dms_to_decimal, extract_gps_coords, extract_gps_direction, extract_taken_at, image_to_gallery_json
+from urbanlens.dashboard.services.media.images import (
+    _dms_to_decimal,
+    extract_gps_coords,
+    extract_gps_direction,
+    extract_taken_at,
+    image_to_gallery_json,
+)
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
 
@@ -25,6 +32,7 @@ _hyp = hyp_settings(max_examples=60, deadline=None)
 # ---------------------------------------------------------------------------
 # _dms_to_decimal
 # ---------------------------------------------------------------------------
+
 
 class DmsToDecimalTests(SimpleTestCase):
     """_dms_to_decimal converts degree/minute/second tuples to signed float."""
@@ -90,6 +98,7 @@ class DmsToDecimalTests(SimpleTestCase):
 # extract_gps_coords - via mocked PIL
 # ---------------------------------------------------------------------------
 
+
 class ExtractGpsCoordsMockTests(SimpleTestCase):
     """extract_gps_coords extracts GPS from EXIF via mocked PIL objects."""
 
@@ -105,12 +114,10 @@ class ExtractGpsCoordsMockTests(SimpleTestCase):
         mock_exif = MagicMock()
         mock_exif.__bool__ = lambda self: True
         mock_exif.get_ifd.return_value = {
-            k: v for k, v in {
-                "GPSLatitude": gps_data["GPSLatitude"],
-                "GPSLatitudeRef": gps_data["GPSLatitudeRef"],
-                "GPSLongitude": gps_data["GPSLongitude"],
-                "GPSLongitudeRef": gps_data["GPSLongitudeRef"],
-            }.items()
+            "GPSLatitude": gps_data["GPSLatitude"],
+            "GPSLatitudeRef": gps_data["GPSLatitudeRef"],
+            "GPSLongitude": gps_data["GPSLongitude"],
+            "GPSLongitudeRef": gps_data["GPSLongitudeRef"],
         }
 
         mock_img = MagicMock()
@@ -119,6 +126,7 @@ class ExtractGpsCoordsMockTests(SimpleTestCase):
         mock_file = io.BytesIO(b"fake_image_data")
 
         from PIL.ExifTags import GPSTAGS
+
         # The function uses GPSTAGS.get(k, k) to decode keys, so we need to
         # supply numeric tag keys matching the GPSTAGS mapping.
         # Build a reverse map: name → tag int
@@ -136,15 +144,17 @@ class ExtractGpsCoordsMockTests(SimpleTestCase):
 
     def test_returns_coords_for_valid_gps(self):
         mock_file, mock_img, _ = self._make_file_with_gps(
-            (40, 26, 46), "N",
-            (74, 0, 21), "W",
+            (40, 26, 46),
+            "N",
+            (74, 0, 21),
+            "W",
         )
         with patch("urbanlens.dashboard.services.media.images.PILImage.open", return_value=mock_img):
             result = extract_gps_coords(mock_file)
         self.assertIsNotNone(result)
         lat, lng = result
-        self.assertGreater(lat, 0)   # N
-        self.assertLess(lng, 0)      # W
+        self.assertGreater(lat, 0)  # N
+        self.assertLess(lng, 0)  # W
 
     def test_returns_none_when_no_exif(self):
         mock_img = MagicMock()
@@ -189,8 +199,10 @@ class ExtractGpsCoordsMockTests(SimpleTestCase):
         """Zero-denominator EXIF rationals (some phones write these for 'GPS on, no fix')
         decode to NaN; that must not reach callers, who store it as a DB decimal."""
         mock_file, mock_img, _ = self._make_file_with_gps(
-            (float("nan"), 0, 0), "N",
-            (74, 0, 21), "W",
+            (float("nan"), 0, 0),
+            "N",
+            (74, 0, 21),
+            "W",
         )
         with patch("urbanlens.dashboard.services.media.images.PILImage.open", return_value=mock_img):
             result = extract_gps_coords(mock_file)
@@ -198,8 +210,10 @@ class ExtractGpsCoordsMockTests(SimpleTestCase):
 
     def test_returns_none_for_infinite_gps(self):
         mock_file, mock_img, _ = self._make_file_with_gps(
-            (40, 26, 46), "N",
-            (float("inf"), 0, 0), "W",
+            (40, 26, 46),
+            "N",
+            (float("inf"), 0, 0),
+            "W",
         )
         with patch("urbanlens.dashboard.services.media.images.PILImage.open", return_value=mock_img):
             result = extract_gps_coords(mock_file)
@@ -209,6 +223,7 @@ class ExtractGpsCoordsMockTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # extract_gps_direction - via mocked PIL
 # ---------------------------------------------------------------------------
+
 
 class ExtractGpsDirectionMockTests(SimpleTestCase):
     """extract_gps_direction extracts the camera-facing bearing via mocked PIL objects."""
@@ -277,7 +292,10 @@ class ExtractGpsDirectionMockTests(SimpleTestCase):
 
     def test_returns_none_on_exception(self):
         mock_file = io.BytesIO(b"not a real image")
-        with patch("urbanlens.dashboard.services.media.images.PILImage.open", side_effect=Exception("cannot identify image file")):
+        with patch(
+            "urbanlens.dashboard.services.media.images.PILImage.open",
+            side_effect=Exception("cannot identify image file"),
+        ):
             result = extract_gps_direction(mock_file)
         self.assertIsNone(result)
 
@@ -300,6 +318,7 @@ class ExtractGpsDirectionMockTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # extract_taken_at - via mocked PIL
 # ---------------------------------------------------------------------------
+
 
 class ExtractTakenAtMockTests(SimpleTestCase):
     """extract_taken_at extracts EXIF DateTimeOriginal via mocked PIL objects."""
@@ -374,6 +393,7 @@ class ExtractTakenAtMockTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # image_to_gallery_json
 # ---------------------------------------------------------------------------
+
 
 class ImageToGalleryJsonTests(SimpleTestCase):
     """image_to_gallery_json serialises Image model instances to map-layer dicts."""

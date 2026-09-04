@@ -31,7 +31,9 @@ def _aware(year: int, month: int, day: int) -> datetime.datetime:
 def _make_pin(profile, *, name=None):
     """Create a test pin with a uniquely-located Location to dodge the unique constraint."""
     offset = next(_COORDS)
-    location = baker.make("dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}")
+    location = baker.make(
+        "dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}"
+    )
     return baker.make("dashboard.Pin", profile=profile, location=location, name=name)
 
 
@@ -114,7 +116,9 @@ class GetJournalEntriesTests(TestCase):
 
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].title, "Old Factory Wiki")
-        self.assertEqual(entries[0].url, reverse("location.wiki", kwargs={"location_slug": location.slug}) + "#tab-comments")
+        self.assertEqual(
+            entries[0].url, reverse("location.wiki", kwargs={"location_slug": location.slug}) + "#tab-comments"
+        )
 
     def test_trip_comment_links_to_trip(self) -> None:
         trip = baker.make("dashboard.Trip", creator=self.profile, name="Fall Roadtrip")
@@ -124,7 +128,9 @@ class GetJournalEntriesTests(TestCase):
 
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].title, "Fall Roadtrip")
-        self.assertEqual(entries[0].url, reverse("trips.detail", kwargs={"trip_slug": trip.slug}) + "#trip-comments-panel")
+        self.assertEqual(
+            entries[0].url, reverse("trips.detail", kwargs={"trip_slug": trip.slug}) + "#trip-comments-panel"
+        )
 
     def test_pin_article_edit_links_to_pin_detail(self) -> None:
         pin = _make_pin(self.profile, name="Old Factory")
@@ -151,7 +157,9 @@ class GetJournalEntriesTests(TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].title, "Old Factory Wiki")
         self.assertEqual(entries[0].subtitle, "Wiki article edit")
-        self.assertEqual(entries[0].url, reverse("location.wiki", kwargs={"location_slug": location.slug}) + "#tab-article")
+        self.assertEqual(
+            entries[0].url, reverse("location.wiki", kwargs={"location_slug": location.slug}) + "#tab-article"
+        )
 
     def test_article_edit_prefers_edit_summary_for_body(self) -> None:
         pin = _make_pin(self.profile, name="Old Factory")

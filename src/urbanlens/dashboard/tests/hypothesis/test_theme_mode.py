@@ -5,6 +5,7 @@ Covers:
 - Profile.theme_mode default and field persistence
 - StyleSettingsForm validation and save behaviour
 """
+
 from __future__ import annotations
 
 from hypothesis import HealthCheck, given, settings, strategies as st

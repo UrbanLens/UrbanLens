@@ -13,6 +13,7 @@ Invariants verified:
   - map_pins_meta returns null when the profile has no pins, and an ISO
     timestamp equal to the most-recently-updated pin's timestamp otherwise.
 """
+
 from __future__ import annotations
 
 import decimal
@@ -272,6 +273,7 @@ class ShowPinCountTests(TestCase):
 
 # -- map_pins_meta -------------------------------------------------------------
 
+
 class MapPinsMetaTests(TestCase):
     """map_pins_meta must return the latest pin update timestamp or null."""
 
@@ -297,6 +299,7 @@ class MapPinsMetaTests(TestCase):
         self.assertIsNotNone(data["last_updated"])
         # Must be parseable as ISO 8601.
         from datetime import datetime
+
         datetime.fromisoformat(data["last_updated"])
 
     def test_timestamp_matches_most_recently_updated_pin(self) -> None:

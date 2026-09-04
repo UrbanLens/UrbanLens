@@ -58,7 +58,9 @@ class SettingsFormFieldScopeTests(TestCase):
         form.save()
 
         self.profile.refresh_from_db()
-        self.assertIsNone(self.profile.map_center_latitude, "a settings save restored a map centre the pin signal had cleared")
+        self.assertIsNone(
+            self.profile.map_center_latitude, "a settings save restored a map centre the pin signal had cleared"
+        )
         self.assertIsNone(self.profile.map_center_longitude)
 
     def test_saving_one_section_does_not_revert_an_import(self) -> None:
@@ -72,7 +74,9 @@ class SettingsFormFieldScopeTests(TestCase):
         form.save()
 
         self.profile.refresh_from_db()
-        self.assertFalse(self.profile.allow_friend_recommendations, "a settings save reverted a field the importer had written")
+        self.assertFalse(
+            self.profile.allow_friend_recommendations, "a settings save reverted a field the importer had written"
+        )
 
     def test_the_form_still_writes_its_own_fields(self) -> None:
         """Narrowing the write must not narrow it to nothing - in both directions."""

@@ -22,7 +22,14 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 
-_CONTACT_FIELDS = ("phone_number", "whatsapp_number", "signal_username", "telegram_username", "discord_username", "matrix_handle")
+_CONTACT_FIELDS = (
+    "phone_number",
+    "whatsapp_number",
+    "signal_username",
+    "telegram_username",
+    "discord_username",
+    "matrix_handle",
+)
 _CONTACT_EDITABLE_CLASSES = {
     "phone_number": "profile-phone-editable",
     "whatsapp_number": "profile-whatsapp-editable",
@@ -82,7 +89,9 @@ class ProfileContactEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         self.assertContains(response, "555-0100")
         # Same "inert wiring-script text" caveat as the hero-meta/bio
         # precedents - check the actual rendered element's class, not just
@@ -97,7 +106,9 @@ class ProfileContactEditableRenderingTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
 
-        response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
+        response = self.client.get(
+            reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()})
+        )
         self.assertNotContains(response, ">Contact<")
 
 

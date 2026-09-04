@@ -31,7 +31,10 @@ def _signed_url(photo_name: str) -> str:
 
     from urbanlens.dashboard.controllers.media_proxy import sign_photo_name
 
-    return reverse("media.google_maps_photo", args=[quote(photo_name, safe="")]) + f"?sig={quote(sign_photo_name(photo_name), safe='')}"
+    return (
+        reverse("media.google_maps_photo", args=[quote(photo_name, safe="")])
+        + f"?sig={quote(sign_photo_name(photo_name), safe='')}"
+    )
 
 
 class GoogleMapsPhotoProxyViewTests(TestCase):
@@ -54,7 +57,9 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_expired_reference_is_cached_to_avoid_repeat_upstream_calls(self) -> None:
-        with mock.patch.object(GooglePlacesGateway, "get_photo_media", side_effect=_http_error(404, "Not Found")) as mocked:
+        with mock.patch.object(
+            GooglePlacesGateway, "get_photo_media", side_effect=_http_error(404, "Not Found")
+        ) as mocked:
             self.client.get(_signed_url("places/ABC/photos/XYZ"))
             response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 404)
@@ -66,7 +71,9 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
         self.assertEqual(response.status_code, 502)
 
     def test_connection_failure_returns_502(self) -> None:
-        with mock.patch.object(GooglePlacesGateway, "get_photo_media", side_effect=requests.exceptions.ConnectionError("boom")):
+        with mock.patch.object(
+            GooglePlacesGateway, "get_photo_media", side_effect=requests.exceptions.ConnectionError("boom")
+        ):
             response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 502)
 
@@ -78,7 +85,9 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
         self.assertEqual(response["Content-Type"], "image/jpeg")
 
     def test_successful_fetch_is_cached_to_avoid_repeat_upstream_calls(self) -> None:
-        with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")) as mocked:
+        with mock.patch.object(
+            GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")
+        ) as mocked:
             self.client.get(_signed_url("places/ABC/photos/XYZ"))
             response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 200)
@@ -97,7 +106,9 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
 
         wrong_sig = sign_photo_name("places/OTHER/photos/DIFFERENT")
         with mock.patch.object(GooglePlacesGateway, "get_photo_media") as mocked:
-            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]) + f"?sig={wrong_sig}")
+            response = self.client.get(
+                reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]) + f"?sig={wrong_sig}"
+            )
         self.assertEqual(response.status_code, 404)
         mocked.assert_not_called()
 

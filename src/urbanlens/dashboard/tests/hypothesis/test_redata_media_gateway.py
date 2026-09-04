@@ -66,7 +66,9 @@ class RedataMediaGatewayLookupTests(SimpleTestCase):
             },
         )
 
-        results = _gateway(session).lookup(38.456, -77.123, kind="photo", provider="mapillary", radius_meters=50, limit=5)
+        results = _gateway(session).lookup(
+            38.456, -77.123, kind="photo", provider="mapillary", radius_meters=50, limit=5
+        )
 
         self.assertEqual(results, [{"provider": "mapillary", "url": "https://example.test/a.jpg"}])
         params = session.get.call_args.kwargs["params"]
@@ -195,7 +197,11 @@ class _ProviderSlideMappingMixin(_MixinBase):
         must not duplicate that handling by swallowing the error itself."""
         with (
             mock.patch.object(RedataStreetViewGateway, "__post_init__", return_value=None),
-            mock.patch.object(RedataStreetViewGateway, "get_timeline", side_effect=LocationContextUnavailableError("source_error", "down")),
+            mock.patch.object(
+                RedataStreetViewGateway,
+                "get_timeline",
+                side_effect=LocationContextUnavailableError("source_error", "down"),
+            ),
             pytest.raises(LocationContextUnavailableError),
         ):
             list(self.provider_cls()._generate_street_view_slides(38.456, -77.123))

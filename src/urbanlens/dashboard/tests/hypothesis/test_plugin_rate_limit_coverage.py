@@ -42,6 +42,10 @@ class PluginRateLimitCoverageTests(SimpleTestCase):
 
     def test_every_service_has_a_display_name(self) -> None:
         """Site-admin cost and usage screens list services by this."""
-        nameless = sorted(name for name, defaults in all_service_defaults().items() if not (getattr(defaults, "display_name", "") or "").strip())
+        nameless = sorted(
+            name
+            for name, defaults in all_service_defaults().items()
+            if not (getattr(defaults, "display_name", "") or "").strip()
+        )
 
         self.assertEqual(nameless, [])

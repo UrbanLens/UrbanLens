@@ -57,7 +57,11 @@ class DecompressionBombHandlingTests(TestCase):
 
     def test_the_fixture_really_trips_pillows_guard(self) -> None:
         """Without this the test below could pass because nothing raised at all."""
-        with patch.object(PILImage, "MAX_IMAGE_PIXELS", 16), self.assertRaises(PILImage.DecompressionBombError), self.image.image.open("rb") as handle:
+        with (
+            patch.object(PILImage, "MAX_IMAGE_PIXELS", 16),
+            self.assertRaises(PILImage.DecompressionBombError),
+            self.image.image.open("rb") as handle,
+        ):
             PILImage.open(io.BytesIO(handle.read())).load()
 
     def test_a_bomb_does_not_raise_out_of_the_upload_pipeline(self) -> None:
@@ -68,7 +72,10 @@ class DecompressionBombHandlingTests(TestCase):
 
     def test_the_failure_is_logged_rather_than_swallowed(self) -> None:
         """Degrading quietly is not the same as degrading silently."""
-        with patch.object(PILImage, "MAX_IMAGE_PIXELS", 16), self.assertLogs("urbanlens.dashboard.tasks", level="WARNING") as logs:
+        with (
+            patch.object(PILImage, "MAX_IMAGE_PIXELS", 16),
+            self.assertLogs("urbanlens.dashboard.tasks", level="WARNING") as logs,
+        ):
             _process_photo_upload(self.image, self.image.pk, strip_location=False)
 
         self.assertTrue(any("Downscaling failed" in line for line in logs.output), logs.output)
@@ -129,10 +136,15 @@ class EnrichmentPathBombHandlingTests(TestCase):
         location = baker.make("dashboard.Location", latitude=44.5, longitude=-73.2)
         saved = _save_enriched_image(location, _jpeg(), source="wikimedia", max_dimension=800)
 
-        with patch.object(PILImage, "MAX_IMAGE_PIXELS", 16), self.assertLogs("urbanlens.dashboard.tasks", level="WARNING") as logs:
+        with (
+            patch.object(PILImage, "MAX_IMAGE_PIXELS", 16),
+            self.assertLogs("urbanlens.dashboard.tasks", level="WARNING") as logs,
+        ):
             process_image_upload(saved.pk, 800)
 
-        self.assertTrue(Image.objects.filter(pk=saved.pk).exists(), "the enrichment path should keep the stored image, not abort")
+        self.assertTrue(
+            Image.objects.filter(pk=saved.pk).exists(), "the enrichment path should keep the stored image, not abort"
+        )
         self.assertTrue(any("Downscaling failed" in line for line in logs.output), logs.output)
 
     def test_an_ordinary_enriched_image_is_unaffected(self) -> None:

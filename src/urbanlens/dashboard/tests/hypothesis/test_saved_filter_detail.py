@@ -26,7 +26,9 @@ def _make_pin(profile, **kwargs) -> Pin:
     location = kwargs.pop("location", None)
     if location is None:
         _coord_counter += 1
-        location = baker.make(Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001)
+        location = baker.make(
+            Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001
+        )
     return baker.make(Pin, profile=profile, location=location, **kwargs)
 
 
@@ -39,7 +41,9 @@ class SavedFilterDetailViewTests(TestCase):
         self.profile = self.user.profile
         self.matching = _make_pin(self.profile, name="Old Mill")
         self.non_matching = _make_pin(self.profile, name="New Factory")
-        self.saved_filter = SavedFilter.objects.create(profile=self.profile, name="Mills", icon="filter_alt", criteria={"name": "Mill"})
+        self.saved_filter = SavedFilter.objects.create(
+            profile=self.profile, name="Mills", icon="filter_alt", criteria={"name": "Mill"}
+        )
 
     def test_renders_the_filter_name_and_every_field_group(self) -> None:
         response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))

@@ -36,7 +36,12 @@ def _timeline(entries: list[tuple[float, float, str]]) -> tuple[str, bytes]:
         {
             "placeVisit": {
                 "visitConfidence": 100,
-                "location": {"latitudeE7": int(lat * 1e7), "longitudeE7": int(lng * 1e7), "name": "Somewhere", "placeId": "abc"},
+                "location": {
+                    "latitudeE7": int(lat * 1e7),
+                    "longitudeE7": int(lng * 1e7),
+                    "name": "Somewhere",
+                    "placeId": "abc",
+                },
                 "duration": {"startTimestamp": stamp},
             },
         }

@@ -51,7 +51,9 @@ class ConsensusPhotoVisibilityTests(TestCase):
 
     def _photo(self, uploader_visibility: str) -> Image:
         Profile.objects.filter(pk=self.uploader.pk).update(photo_upload_visibility=uploader_visibility)
-        return baker.make(Image, profile=self.uploader, wiki=self.wiki, image="pin_images/x.jpg", latitude=None, longitude=None)
+        return baker.make(
+            Image, profile=self.uploader, wiki=self.wiki, image="pin_images/x.jpg", latitude=None, longitude=None
+        )
 
     def _pool(self) -> list[Wiki]:
         return list(eligibility.eligible_wikis(self.player))
@@ -70,7 +72,9 @@ class ConsensusPhotoVisibilityTests(TestCase):
         """The player has the wiki. They do not have this photo."""
         hidden = self._photo(VisibilityChoice.FRIENDS)
 
-        self.assertNotIn(hidden.pk, self._offered_image_ids(), "a Consensus round offered a photo the uploader's settings exclude")
+        self.assertNotIn(
+            hidden.pk, self._offered_image_ids(), "a Consensus round offered a photo the uploader's settings exclude"
+        )
 
     def test_a_visible_photo_is_still_offered(self) -> None:
         """Positive control - without it, breaking the feature would pass."""
@@ -80,7 +84,9 @@ class ConsensusPhotoVisibilityTests(TestCase):
 
     def test_the_players_own_photo_is_offered_whatever_they_set(self) -> None:
         Profile.objects.filter(pk=self.player.pk).update(photo_upload_visibility=VisibilityChoice.NO_ONE)
-        mine = baker.make(Image, profile=self.player, wiki=self.wiki, image="pin_images/mine.jpg", latitude=None, longitude=None)
+        mine = baker.make(
+            Image, profile=self.player, wiki=self.wiki, image="pin_images/mine.jpg", latitude=None, longitude=None
+        )
 
         self.assertIn(mine.pk, self._offered_image_ids())
 

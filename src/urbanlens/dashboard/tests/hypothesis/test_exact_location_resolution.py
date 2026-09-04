@@ -95,7 +95,9 @@ class GetExactOrCreateTests(TestCase):
         because those are what the unique constraint is on.
         """
         nudged_lat, nudged_lon = lat + nudge, lon + nudge
-        same_point = quantize_coordinate(lat, "latitude") == quantize_coordinate(nudged_lat, "latitude") and quantize_coordinate(lon, "longitude") == quantize_coordinate(nudged_lon, "longitude")
+        same_point = quantize_coordinate(lat, "latitude") == quantize_coordinate(
+            nudged_lat, "latitude"
+        ) and quantize_coordinate(lon, "longitude") == quantize_coordinate(nudged_lon, "longitude")
 
         first, _ = Location.objects.get_exact_or_create(lat, lon)
         second, created = Location.objects.get_exact_or_create(nudged_lat, nudged_lon)
@@ -169,7 +171,9 @@ class MovePinToCoordinatesTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make(User).profile
-        self.pin = baker.make(Pin, profile=self.profile, location=Location.objects.create(latitude=10.0, longitude=20.0))
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=Location.objects.create(latitude=10.0, longitude=20.0)
+        )
 
     def test_sub_precision_move_onto_an_existing_location_does_not_error(self) -> None:
         existing = Location.objects.create(latitude=30.00000014, longitude=40.00000014)
@@ -204,7 +208,9 @@ class MovePinToCoordinatesTests(TestCase):
         """The uniqueness rule is root-pins-only; child pins keep their freedom
         to share a parcel, so the collision check must not over-reach."""
         root = baker.make(Pin, profile=self.profile, location=Location.objects.create(latitude=70.0, longitude=80.0))
-        child = baker.make(Pin, profile=self.profile, parent_pin=root, location=Location.objects.create(latitude=71.0, longitude=81.0))
+        child = baker.make(
+            Pin, profile=self.profile, parent_pin=root, location=Location.objects.create(latitude=71.0, longitude=81.0)
+        )
 
         move_pin_to_coordinates(child, 70.0, 80.0)
 

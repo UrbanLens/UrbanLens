@@ -108,7 +108,9 @@ class ExifStrippedFromStoredFileTests(TestCase):
         """Dropping tag 274 without rotating renders the photo ninety degrees wrong."""
         out = self._stored("JPEG", "jpg", _LARGE)
 
-        self.assertGreater(out.height, out.width, "a rotate-90 source came back landscape - the orientation was simply lost")
+        self.assertGreater(
+            out.height, out.width, "a rotate-90 source came back landscape - the orientation was simply lost"
+        )
 
     def test_png_loses_its_exif_as_well(self) -> None:
         """PNG carries EXIF in an eXIf chunk, which Pillow writes on save."""

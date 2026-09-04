@@ -6,6 +6,7 @@ sets it explicitly in defaults=, instead of VerifyEmailView relying on a
 Profile.objects.get_or_create(...).created check that always came back False
 because the signal had already created the row.
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -107,7 +108,9 @@ class WelcomeRedirectChainTests(TestCase):
 
     def test_welcome_complete_but_profile_setup_incomplete_goes_to_profile_edit(self) -> None:
         user: User = baker.make(User)
-        Profile.objects.filter(pk=user.profile.pk).update(welcome_onboarding_complete=True, profile_setup_complete=False)
+        Profile.objects.filter(pk=user.profile.pk).update(
+            welcome_onboarding_complete=True, profile_setup_complete=False
+        )
         user.refresh_from_db()
         self.assertEqual(self._get_redirect(user), reverse("profile.edit"))
 

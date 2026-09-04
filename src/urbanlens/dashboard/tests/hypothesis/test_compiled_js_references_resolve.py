@@ -83,20 +83,30 @@ class CompiledJsReferenceTests(SimpleTestCase):
                 if not (_JS_DIR / target.removeprefix("./")).is_file():
                     missing.append(f"{bundle.name} imports {target}, which the build did not emit")
 
-        self.assertEqual(missing, [], f"compiled JS imports a chunk that does not exist - {_REBUILD}:\n" + "\n".join(missing))
+        self.assertEqual(
+            missing, [], f"compiled JS imports a chunk that does not exist - {_REBUILD}:\n" + "\n".join(missing)
+        )
 
     def test_every_bundle_a_template_names_exists(self) -> None:
         missing = sorted(name for name in _template_referenced_bundles() if not (_JS_DIR / name).is_file())
 
-        self.assertEqual(missing, [], f"templates name compiled bundles this build did not emit - {_REBUILD}: {missing}")
+        self.assertEqual(
+            missing, [], f"templates name compiled bundles this build did not emit - {_REBUILD}: {missing}"
+        )
 
     # -- guard the guard ----------------------------------------------------
 
     def test_the_scan_finds_bundles_and_imports(self) -> None:
         """Both checks pass trivially if the directory or the regex stops matching."""
         bundles = _bundle_files()
-        imports = [target for bundle in bundles for target in _RELATIVE_IMPORT.findall(bundle.read_text(encoding="utf-8", errors="ignore"))]
+        imports = [
+            target
+            for bundle in bundles
+            for target in _RELATIVE_IMPORT.findall(bundle.read_text(encoding="utf-8", errors="ignore"))
+        ]
 
         self.assertGreater(len(bundles), 10, f"found only {len(bundles)} compiled bundles in {_JS_DIR}")
-        self.assertGreater(len(imports), 0, "no relative chunk imports matched - has the bundler's output format changed?")
+        self.assertGreater(
+            len(imports), 0, "no relative chunk imports matched - has the bundler's output format changed?"
+        )
         self.assertGreater(len(_template_referenced_bundles()), 5, "no templates appear to reference a compiled bundle")

@@ -45,8 +45,12 @@ class _SocialLinksTestCase(TestCase):
         for profile in (self.profile, self.other):
             profile.profile_visibility = VisibilityChoice.ANYONE
             profile.save(update_fields=["profile_visibility"])
-        self.raw_key = _key_with_scopes(self.user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE, ApiKeyScope.PROFILE_READ)
-        self.other_key = _key_with_scopes(self.other_user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE, ApiKeyScope.PROFILE_READ)
+        self.raw_key = _key_with_scopes(
+            self.user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE, ApiKeyScope.PROFILE_READ
+        )
+        self.other_key = _key_with_scopes(
+            self.other_user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE, ApiKeyScope.PROFILE_READ
+        )
         self.url = self._links_url(self.profile)
 
     def _links_url(self, profile: Profile) -> str:
@@ -106,7 +110,12 @@ class SocialLinksPutTests(_SocialLinksTestCase):
     def test_put_creates_links(self) -> None:
         response = self.client.put(
             self.url,
-            {"links": [{"platform": "instagram", "handle": "@explorer"}, {"platform": "website", "handle": "example.com/me"}]},
+            {
+                "links": [
+                    {"platform": "instagram", "handle": "@explorer"},
+                    {"platform": "website", "handle": "example.com/me"},
+                ]
+            },
             content_type="application/json",
             **_bearer(self.raw_key),
         )
@@ -116,14 +125,24 @@ class SocialLinksPutTests(_SocialLinksTestCase):
         self.assertEqual(payload["website"], "https://example.com/me")
 
     def test_put_strips_a_leading_at_sign(self) -> None:
-        self.client.put(self.url, {"links": [{"platform": "reddit", "handle": "@explorer"}]}, content_type="application/json", **_bearer(self.raw_key))
+        self.client.put(
+            self.url,
+            {"links": [{"platform": "reddit", "handle": "@explorer"}]},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
         link = SocialLink.objects.get(profile=self.profile, platform="reddit")
         self.assertEqual(link.handle, "explorer")
 
     def test_put_replaces_the_whole_set(self) -> None:
         """A platform omitted from the submission is removed, not left alone."""
         SocialLink.objects.create(profile=self.profile, platform="instagram", handle="old")
-        response = self.client.put(self.url, {"links": [{"platform": "reddit", "handle": "explorer"}]}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.put(
+            self.url,
+            {"links": [{"platform": "reddit", "handle": "explorer"}]},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
         self.assertEqual(response.status_code, 200)
         platforms = {link["platform"] for link in response.json()["links"]}
         self.assertEqual(platforms, {"reddit"})
@@ -137,13 +156,21 @@ class SocialLinksPutTests(_SocialLinksTestCase):
         self.assertFalse(SocialLink.objects.filter(profile=self.profile).exists())
 
     def test_put_rejects_an_invalid_handle(self) -> None:
-        response = self.client.put(self.url, {"links": [{"platform": "reddit", "handle": "no"}]}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.put(
+            self.url,
+            {"links": [{"platform": "reddit", "handle": "no"}]},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
         self.assertEqual(response.status_code, 400)
         self.assertFalse(SocialLink.objects.filter(profile=self.profile).exists())
 
     def test_put_rejects_a_non_http_website(self) -> None:
         response = self.client.put(
-            self.url, {"links": [{"platform": "website", "handle": "javascript:alert(1)"}]}, content_type="application/json", **_bearer(self.raw_key)
+            self.url,
+            {"links": [{"platform": "website", "handle": "javascript:alert(1)"}]},
+            content_type="application/json",
+            **_bearer(self.raw_key),
         )
         self.assertEqual(response.status_code, 400)
 
@@ -156,20 +183,29 @@ class SocialLinksPutTests(_SocialLinksTestCase):
         has to be checked before that prefixing happens.
         """
         response = self.client.put(
-            self.url, {"links": [{"platform": "website", "handle": "data:text/html,<script>alert(1)</script>"}]}, content_type="application/json", **_bearer(self.raw_key)
+            self.url,
+            {"links": [{"platform": "website", "handle": "data:text/html,<script>alert(1)</script>"}]},
+            content_type="application/json",
+            **_bearer(self.raw_key),
         )
         self.assertEqual(response.status_code, 400)
         self.assertFalse(SocialLink.objects.filter(profile=self.profile).exists())
 
     def test_put_rejects_an_invalid_discord_handle(self) -> None:
         response = self.client.put(
-            self.url, {"links": [{"platform": "discord", "handle": "no spaces!"}]}, content_type="application/json", **_bearer(self.raw_key)
+            self.url,
+            {"links": [{"platform": "discord", "handle": "no spaces!"}]},
+            content_type="application/json",
+            **_bearer(self.raw_key),
         )
         self.assertEqual(response.status_code, 400)
 
     def test_put_accepts_a_valid_discord_handle(self) -> None:
         response = self.client.put(
-            self.url, {"links": [{"platform": "discord", "handle": "explorer#1234"}]}, content_type="application/json", **_bearer(self.raw_key)
+            self.url,
+            {"links": [{"platform": "discord", "handle": "explorer#1234"}]},
+            content_type="application/json",
+            **_bearer(self.raw_key),
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["links"][0]["url"], None)
@@ -184,12 +220,20 @@ class SocialLinksPutTests(_SocialLinksTestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_put_rejects_an_unknown_platform(self) -> None:
-        response = self.client.put(self.url, {"links": [{"platform": "myspace", "handle": "explorer"}]}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.put(
+            self.url,
+            {"links": [{"platform": "myspace", "handle": "explorer"}]},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_cannot_put_someone_elses_links(self) -> None:
         response = self.client.put(
-            self._links_url(self.other), {"links": [{"platform": "instagram", "handle": "explorer"}]}, content_type="application/json", **_bearer(self.raw_key)
+            self._links_url(self.other),
+            {"links": [{"platform": "instagram", "handle": "explorer"}]},
+            content_type="application/json",
+            **_bearer(self.raw_key),
         )
         self.assertEqual(response.status_code, 404)
         self.assertFalse(SocialLink.objects.filter(profile=self.other).exists())

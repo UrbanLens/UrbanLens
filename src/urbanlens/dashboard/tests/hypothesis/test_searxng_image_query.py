@@ -32,7 +32,7 @@ class AssembleImageQueryTests(SimpleTestCase):
         self.assertEqual(
             query,
             '("Hudson River State Hospital" OR "HRSH") ("New York" OR "Poughkeepsie") '
-            + "(" + " OR ".join(f'"{t}"' for t in SUBJECT_TERMS) + ")",
+            "(" + " OR ".join(f'"{t}"' for t in SUBJECT_TERMS) + ")",
         )
 
     def test_no_aliases_yields_none(self):
@@ -64,11 +64,13 @@ class AssembleImageQueryTests(SimpleTestCase):
             self.assertIn(f'"{term}"', query)
 
     def test_ancestor_group_is_inserted_between_aliases_and_area(self):
-        query = assemble_image_query(["Superintendent's Cottage"], ["New York"], ["Hudson River State Hospital", "HRSH"])
+        query = assemble_image_query(
+            ["Superintendent's Cottage"], ["New York"], ["Hudson River State Hospital", "HRSH"]
+        )
         self.assertEqual(
             query,
             '("Superintendent\'s Cottage") ("Hudson River State Hospital" OR "HRSH") ("New York") '
-            + "(" + " OR ".join(f'"{t}"' for t in SUBJECT_TERMS) + ")",
+            "(" + " OR ".join(f'"{t}"' for t in SUBJECT_TERMS) + ")",
         )
 
     def test_ancestor_group_is_omitted_when_empty(self):
@@ -89,8 +91,18 @@ class AssembleImageQueryTests(SimpleTestCase):
     # is handled correctly is a separate question from how many groups there
     # are, and is not what this property is about.
     @given(
-        st.lists(st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s and "(" not in s), min_size=1, max_size=5, unique_by=lambda s: s.strip().casefold()),
-        st.lists(st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s and "(" not in s), min_size=0, max_size=3, unique_by=lambda s: s.strip().casefold()),
+        st.lists(
+            st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s and "(" not in s),
+            min_size=1,
+            max_size=5,
+            unique_by=lambda s: s.strip().casefold(),
+        ),
+        st.lists(
+            st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s and "(" not in s),
+            min_size=0,
+            max_size=3,
+            unique_by=lambda s: s.strip().casefold(),
+        ),
     )
     @_hyp
     def test_group_count_matches_present_components(self, aliases: list[str], area: list[str]):
@@ -103,7 +115,9 @@ class AssembleImageQueryTests(SimpleTestCase):
 class BuildImageQueryTests(TestCase):
     """build_image_query gathers nickname-excluded aliases and area terms off a Pin."""
 
-    def _pin(self, *, pin_name: str = "", locality: str = "", state: str = "", country: str = "", official_name: str = ""):
+    def _pin(
+        self, *, pin_name: str = "", locality: str = "", state: str = "", country: str = "", official_name: str = ""
+    ):
         from model_bakery import baker
 
         from urbanlens.dashboard.models.location.model import Location
@@ -158,9 +172,21 @@ class BuildImageQueryTests(TestCase):
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import Pin
 
-        parent_location = baker.make(Location, official_name="Hudson River State Hospital", locality="Poughkeepsie", administrative_area_level_1="New York", country="USA")
+        parent_location = baker.make(
+            Location,
+            official_name="Hudson River State Hospital",
+            locality="Poughkeepsie",
+            administrative_area_level_1="New York",
+            country="USA",
+        )
         parent = baker.make(Pin, location=parent_location, name="Hudson River State Hospital")
-        child_location = baker.make(Location, official_name="Superintendent's Cottage", locality="Poughkeepsie", administrative_area_level_1="New York", country="USA")
+        child_location = baker.make(
+            Location,
+            official_name="Superintendent's Cottage",
+            locality="Poughkeepsie",
+            administrative_area_level_1="New York",
+            country="USA",
+        )
         child = baker.make(Pin, location=child_location, name="Superintendent's Cottage", parent_pin=parent)
 
         query = build_image_query(child)

@@ -74,7 +74,9 @@ class PanelInfoDispatchTests(RedataConfiguredMixin, TestCase):
         # The third arg is the single-flight token (random per call): the fetch
         # releases the marker only while it is still its own, so the exact value
         # is deliberately not asserted.
-        fetch_task.apply_async.assert_called_once_with(args=("photon", self.pin.pk, mock.ANY), kwargs={}, queue="panel_fetch")
+        fetch_task.apply_async.assert_called_once_with(
+            args=("photon", self.pin.pk, mock.ANY), kwargs={}, queue="panel_fetch"
+        )
         self.assertContains(response, "Photon (OpenStreetMap)")
 
     def test_render_context_returning_none_yields_204(self) -> None:
@@ -99,7 +101,16 @@ class PanelInfoDispatchTests(RedataConfiguredMixin, TestCase):
         LocationCache.set(
             self.pin.location,
             "usgs_earthquakes",
-            {"events": [{"magnitude": 4.2, "title": "10km N of Nowhere", "occurred_at": "2026-01-01T00:00:00Z", "url": "https://example.com"}]},
+            {
+                "events": [
+                    {
+                        "magnitude": 4.2,
+                        "title": "10km N of Nowhere",
+                        "occurred_at": "2026-01-01T00:00:00Z",
+                        "url": "https://example.com",
+                    }
+                ]
+            },
             query_key="",
         )
         response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "usgs_earthquakes"]))
@@ -123,7 +134,15 @@ class PanelAiExtractButtonTests(RedataConfiguredMixin, TestCase):
         LocationCache.set(
             self.pin.location,
             "gdelt",
-            {"articles": [{"date": "20240101T120000Z", "title": "Mill fire investigated", "link": "https://news.example.com/mill-fire"}]},
+            {
+                "articles": [
+                    {
+                        "date": "20240101T120000Z",
+                        "title": "Mill fire investigated",
+                        "link": "https://news.example.com/mill-fire",
+                    }
+                ]
+            },
             query_key="",
         )
 
@@ -212,7 +231,9 @@ class PinDetailHeroSubnavTests(TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.client.force_login(self.user)
-        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile, name="Old Mill", name_is_user_provided=True)
+        self.pin: Pin = baker.make_recipe(
+            "dashboard.pin", profile=self.profile, name="Old Mill", name_is_user_provided=True
+        )
 
     def test_hero_renders_the_pin_name(self) -> None:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
@@ -255,7 +276,15 @@ class PinDetailHeroSubnavTests(TestCase):
         card is a different key (epa_echo_detail) and still auto-loads unconditionally."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         keys = [panel.key for panel in response.context["simple_info_panels"]]
-        for tabbed_key in ("census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes", "photon", "overture_building_attributes", "open_elevation"):
+        for tabbed_key in (
+            "census_tigerweb",
+            "epa_echo",
+            "inaturalist",
+            "usgs_earthquakes",
+            "photon",
+            "overture_building_attributes",
+            "open_elevation",
+        ):
             self.assertNotIn(tabbed_key, keys)
         self.assertIn("gdelt", keys)
         self.assertIn("epa_echo_detail", keys)
@@ -355,7 +384,9 @@ class NearbyResearchTabGatingTests(TestCase):
 
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         tabs = response.context["panel_tabs"]
-        self.assertEqual([tab["key"] for tab in tabs], ["census_tigerweb", "inaturalist", "usgs_earthquakes", "epa_echo"])
+        self.assertEqual(
+            [tab["key"] for tab in tabs], ["census_tigerweb", "inaturalist", "usgs_earthquakes", "epa_echo"]
+        )
         self.assertEqual(tabs[-1]["label"], "EPA")
 
     def test_only_one_tab_strip_card_renders_on_the_page(self) -> None:

@@ -61,7 +61,9 @@ class DeclineRevokesLiveAccessTests(TestCase):
         Returns:
             The created partner row.
         """
-        return SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=self.partner_profile, invited_by=self.owner, status=status)
+        return SafetyCheckinPartner.objects.create(
+            checkin=self.checkin, profile=self.partner_profile, invited_by=self.owner, status=status
+        )
 
     def test_declining_an_accepted_row_revokes_any_open_connection(self) -> None:
         """Resigning is a removal, and a removal has to reach the live socket."""

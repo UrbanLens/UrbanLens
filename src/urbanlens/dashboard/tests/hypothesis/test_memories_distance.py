@@ -1,4 +1,5 @@
 """Tests for services.memories.distance - combined travel-distance stat."""
+
 from __future__ import annotations
 
 import datetime
@@ -64,6 +65,7 @@ class InterVisitDistanceTests(TestCase):
         expected = _haversine_km(_NY, _CA) + _haversine_km(_CA, _OR)
         self.assertAlmostEqual(inter_visit_distance_km(self.profile), expected, places=3)
 
+
 class RecordedRouteDistanceTests(TestCase):
     """recorded_route_distance_km sums Route.distance_meters as kilometres."""
 
@@ -105,9 +107,13 @@ class TotalTravelDistanceTests(TestCase):
             started_at=timezone.now(),
         )
         for coord, day in ((_NY, 1), (_CA, 2)):
-            location = baker.make("dashboard.Location", latitude=Decimal(str(coord[0])), longitude=Decimal(str(coord[1])))
+            location = baker.make(
+                "dashboard.Location", latitude=Decimal(str(coord[0])), longitude=Decimal(str(coord[1]))
+            )
             pin = baker.make("dashboard.Pin", profile=self.profile, location=location)
-            PinVisit.objects.create(pin=pin, visited_at=timezone.make_aware(datetime.datetime(2024, 1, day)), source=VisitSource.MANUAL)
+            PinVisit.objects.create(
+                pin=pin, visited_at=timezone.make_aware(datetime.datetime(2024, 1, day)), source=VisitSource.MANUAL
+            )
 
         expected = 10.0 + _haversine_km(_NY, _CA)
         self.assertAlmostEqual(total_travel_distance_km(self.profile), expected, places=3)

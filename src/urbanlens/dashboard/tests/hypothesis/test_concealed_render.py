@@ -88,7 +88,9 @@ class ConcealedRenderTests(TestCase):
         """Return the wiki page as rendered with concealment forced on."""
         self.client.force_login(self.viewer_user)
         with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
-            response = self.client.get(reverse("location.wiki", kwargs={"location_slug": self.location.slug or str(self.location.uuid)}))
+            response = self.client.get(
+                reverse("location.wiki", kwargs={"location_slug": self.location.slug or str(self.location.uuid)})
+            )
         self.assertEqual(response.status_code, 200)
         return response.content.decode()
 
@@ -159,7 +161,11 @@ class ConcealedHistoryTests(TestCase):
     def _history(self) -> str:
         self.client.force_login(self.viewer_user)
         with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
-            response = self.client.get(reverse("location.wiki.history", kwargs={"location_slug": self.location.slug or str(self.location.uuid)}))
+            response = self.client.get(
+                reverse(
+                    "location.wiki.history", kwargs={"location_slug": self.location.slug or str(self.location.uuid)}
+                )
+            )
         self.assertEqual(response.status_code, 200)
         return response.content.decode()
 
@@ -245,7 +251,13 @@ class ConcealedPanelTests(TestCase):
 
     def test_the_links_row_omits_a_strangers_link(self) -> None:
         """A link somebody added is a contribution like any other."""
-        baker.make("dashboard.WikiLink", wiki=self.wiki, name="CANARY-LINK", url="https://example.invalid/x", created_by=self.stranger)
+        baker.make(
+            "dashboard.WikiLink",
+            wiki=self.wiki,
+            name="CANARY-LINK",
+            url="https://example.invalid/x",
+            created_by=self.stranger,
+        )
 
         self.assertNotIn("CANARY-LINK", self._get("location.wiki.links"))
 
@@ -371,7 +383,7 @@ class FriendVisibilityTests(TestCase):
         return response.content.decode()
 
     def test_a_friends_alias_still_reaches_the_panel(self) -> None:
-        """"I put a load of stuff on the wiki" has to remain true."""
+        """ "I put a load of stuff on the wiki" has to remain true."""
         from urbanlens.dashboard.models.aliases.model import AliasSource, WikiAlias
 
         baker.make(WikiAlias, wiki=self.wiki, name="FRIEND-ALIAS", source=AliasSource.USER, created_by=self.friend)

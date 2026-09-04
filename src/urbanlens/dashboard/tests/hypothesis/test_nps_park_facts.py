@@ -19,7 +19,9 @@ from urbanlens.dashboard.plugins.builtin.nps import entrance_fee_summary, park_f
 
 
 def _hours(**overrides: str) -> list[dict]:
-    week = dict.fromkeys(("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"), "9:00AM - 5:00PM")
+    week = dict.fromkeys(
+        ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"), "9:00AM - 5:00PM"
+    )
     week.update(overrides)
     return [{"name": "Park Hours", "standardHours": week}]
 
@@ -30,7 +32,10 @@ class EntranceFeeTests(SimpleTestCase):
         self.assertEqual(entrance_fee_summary([{"cost": "0.00", "title": "Entrance Fee - Free"}]), "Free")
 
     def test_a_single_fee_names_what_it_buys(self) -> None:
-        self.assertEqual(entrance_fee_summary([{"cost": "35.00", "title": "Entrance Fee - Private Vehicle"}]), "$35.00 (Private Vehicle)")
+        self.assertEqual(
+            entrance_fee_summary([{"cost": "35.00", "title": "Entrance Fee - Private Vehicle"}]),
+            "$35.00 (Private Vehicle)",
+        )
 
     def test_several_fees_report_the_cheapest_as_a_floor(self) -> None:
         fees = [
@@ -42,8 +47,11 @@ class EntranceFeeTests(SimpleTestCase):
         self.assertEqual(entrance_fee_summary(fees), "From $20.00 (Per Person)")
 
     def test_a_free_entry_among_paid_ones_is_not_reported_as_free(self) -> None:
-        """"Free" must mean free, not "one of the five options is"."""
-        fees = [{"cost": "0.00", "title": "Entrance Fee - Under 16"}, {"cost": "35.00", "title": "Entrance Fee - Private Vehicle"}]
+        """ "Free" must mean free, not "one of the five options is"."""
+        fees = [
+            {"cost": "0.00", "title": "Entrance Fee - Under 16"},
+            {"cost": "35.00", "title": "Entrance Fee - Private Vehicle"},
+        ]
 
         self.assertEqual(entrance_fee_summary(fees), "From $0.00 (Under 16)")
 
@@ -54,7 +62,10 @@ class EntranceFeeTests(SimpleTestCase):
 
     def test_an_unparseable_cost_is_skipped_not_guessed(self) -> None:
         self.assertEqual(entrance_fee_summary([{"cost": "varies", "title": "Entrance Fee - Group"}]), "")
-        self.assertEqual(entrance_fee_summary([{"cost": "varies"}, {"cost": "10.00", "title": "Entrance Fee - Per Person"}]), "$10.00 (Per Person)")
+        self.assertEqual(
+            entrance_fee_summary([{"cost": "varies"}, {"cost": "10.00", "title": "Entrance Fee - Per Person"}]),
+            "$10.00 (Per Person)",
+        )
 
     def test_malformed_rows_do_not_raise(self) -> None:
         self.assertEqual(entrance_fee_summary(["not a dict", None, 7]), "")
@@ -78,7 +89,7 @@ class StandardHoursTests(SimpleTestCase):
         self.assertEqual(summary, "Mon-Tue: 9:00AM - 5:00PM; Wed: Closed; Thu-Sun: 9:00AM - 5:00PM")
 
     def test_an_always_open_park_is_reported_verbatim(self) -> None:
-        """"All Day" is NPS's own wording for a park with no gate."""
+        """ "All Day" is NPS's own wording for a park with no gate."""
         week = dict.fromkeys(("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"), "All Day")
 
         self.assertEqual(standard_hours_summary([{"standardHours": week}]), "All Day daily")
@@ -92,7 +103,15 @@ class StandardHoursTests(SimpleTestCase):
 
     def test_only_the_parks_own_hours_are_read(self) -> None:
         """Later entries are individual visitor centres, not the unit."""
-        entries = [*_hours(), {"name": "Visitor Center", "standardHours": dict.fromkeys(("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"), "10:00AM - 4:00PM")}]
+        entries = [
+            *_hours(),
+            {
+                "name": "Visitor Center",
+                "standardHours": dict.fromkeys(
+                    ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"), "10:00AM - 4:00PM"
+                ),
+            },
+        ]
 
         self.assertEqual(standard_hours_summary(entries), "9:00AM - 5:00PM daily")
 
@@ -124,7 +143,9 @@ class ParkFactsTests(SimpleTestCase):
     def test_the_directions_row_carries_the_link(self) -> None:
         rows = park_facts({"directions_url": "https://www.nps.gov/hutr/directions.htm"})
 
-        self.assertEqual(rows, [{"label": "Directions", "value": "Getting there", "href": "https://www.nps.gov/hutr/directions.htm"}])
+        self.assertEqual(
+            rows, [{"label": "Directions", "value": "Getting there", "href": "https://www.nps.gov/hutr/directions.htm"}]
+        )
 
     def test_hours_come_before_the_cross_reference_code(self) -> None:
         """Reading order is by usefulness; "HUTR" is a cross-reference, not a fact about visiting."""

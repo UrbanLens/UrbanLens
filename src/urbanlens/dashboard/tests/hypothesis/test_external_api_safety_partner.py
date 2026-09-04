@@ -34,7 +34,12 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus
+from urbanlens.dashboard.models.safety.model import (
+    SafetyCheckin,
+    SafetyCheckinPartner,
+    SafetyCheckinPartnerStatus,
+    SafetyCheckinStatus,
+)
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.visits.safety import create_checkin
 
@@ -74,14 +79,24 @@ class _SafetyPartnerTestCase(TestCase):
             contact_message="Please call me",
             contacts=[(None, "friend@example.com", "Friend")],
         )
-        self.partner = SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=self.watcher, invited_by=self.owner)
+        self.partner = SafetyCheckinPartner.objects.create(
+            checkin=self.checkin, profile=self.watcher, invited_by=self.owner
+        )
 
         self.invites_url = reverse("external_api:safety.partner_invites")
-        self.accept_url = reverse("external_api:safety.partner_invites.accept", kwargs={"checkin_uuid": self.checkin.uuid})
-        self.decline_url = reverse("external_api:safety.partner_invites.decline", kwargs={"checkin_uuid": self.checkin.uuid})
+        self.accept_url = reverse(
+            "external_api:safety.partner_invites.accept", kwargs={"checkin_uuid": self.checkin.uuid}
+        )
+        self.decline_url = reverse(
+            "external_api:safety.partner_invites.decline", kwargs={"checkin_uuid": self.checkin.uuid}
+        )
         self.partner_list_url = reverse("external_api:safety.partner_checkins")
-        self.partner_detail_url = reverse("external_api:safety.partner_checkins.detail", kwargs={"checkin_uuid": self.checkin.uuid})
-        self.mark_safe_url = reverse("external_api:safety.partner_checkins.mark_safe", kwargs={"checkin_uuid": self.checkin.uuid})
+        self.partner_detail_url = reverse(
+            "external_api:safety.partner_checkins.detail", kwargs={"checkin_uuid": self.checkin.uuid}
+        )
+        self.mark_safe_url = reverse(
+            "external_api:safety.partner_checkins.mark_safe", kwargs={"checkin_uuid": self.checkin.uuid}
+        )
 
     def _issue_key(self, user: User, scopes: list[str] | None = None) -> str:
         """Issue an API key for *user*.
@@ -96,7 +111,9 @@ class _SafetyPartnerTestCase(TestCase):
         key, raw = generate_api_key(user, "Test")
         # scopes is editable=False, so it is set directly rather than through a
         # form. The default grant deliberately excludes safety:*.
-        ApiKey.objects.filter(pk=key.pk).update(scopes=scopes or [ApiKeyScope.SAFETY_READ.value, ApiKeyScope.SAFETY_WRITE.value])
+        ApiKey.objects.filter(pk=key.pk).update(
+            scopes=scopes or [ApiKeyScope.SAFETY_READ.value, ApiKeyScope.SAFETY_WRITE.value]
+        )
         return raw
 
     def _accept(self) -> None:
@@ -105,7 +122,9 @@ class _SafetyPartnerTestCase(TestCase):
         Used by tests about what an *accepted* partner may do, so they do not
         depend on the accept endpoint working.
         """
-        SafetyCheckinPartner.objects.filter(pk=self.partner.pk).update(status=SafetyCheckinPartnerStatus.ACCEPTED, accepted_at=timezone.now())
+        SafetyCheckinPartner.objects.filter(pk=self.partner.pk).update(
+            status=SafetyCheckinPartnerStatus.ACCEPTED, accepted_at=timezone.now()
+        )
 
 
 class SafetyPartnerInviteListTests(_SafetyPartnerTestCase):
@@ -208,11 +227,18 @@ class SafetyPartnerInviteAcceptTests(_SafetyPartnerTestCase):
         (and post a second system chat message) on every retry.
         """
         self.client.post(self.accept_url, **_bearer(self.watcher_key))
-        first_count = NotificationLog.objects.filter(profile=self.owner, notification_type=NotificationType.SAFETY_CHECKIN_PARTNER_ACCEPTED).count()
+        first_count = NotificationLog.objects.filter(
+            profile=self.owner, notification_type=NotificationType.SAFETY_CHECKIN_PARTNER_ACCEPTED
+        ).count()
         self.assertEqual(first_count, 1)
 
         self.client.post(self.accept_url, **_bearer(self.watcher_key))
-        self.assertEqual(NotificationLog.objects.filter(profile=self.owner, notification_type=NotificationType.SAFETY_CHECKIN_PARTNER_ACCEPTED).count(), 1)
+        self.assertEqual(
+            NotificationLog.objects.filter(
+                profile=self.owner, notification_type=NotificationType.SAFETY_CHECKIN_PARTNER_ACCEPTED
+            ).count(),
+            1,
+        )
 
     def test_cannot_accept_someone_elses_invitation(self) -> None:
         """The queryset is scoped to the caller's own row, not just the check-in.
@@ -317,7 +343,9 @@ class SafetyPartnerCheckinReadTests(_SafetyPartnerTestCase):
         """
         self._accept()
         second = Profile.objects.get(user=baker.make(User, username="second-watcher"))
-        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=second, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
+        SafetyCheckinPartner.objects.create(
+            checkin=self.checkin, profile=second, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED
+        )
 
         row = self.client.get(self.partner_list_url, **_bearer(self.watcher_key)).json()["results"][0]
         self.assertEqual(row["partner_count"], 2)
@@ -404,7 +432,11 @@ class SafetyPartnerMarkSafeTests(_SafetyPartnerTestCase):
         self._accept()
         self.client.post(self.mark_safe_url, **_bearer(self.watcher_key))
 
-        self.assertTrue(NotificationLog.objects.filter(profile=self.owner, notification_type=NotificationType.SAFETY_CHECKIN_RESOLVED).exists())
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.owner, notification_type=NotificationType.SAFETY_CHECKIN_RESOLVED
+            ).exists()
+        )
 
     def test_invited_partner_cannot_mark_safe(self) -> None:
         """The ACCEPTED clause is the whole check.
@@ -433,7 +465,9 @@ class SafetyPartnerMarkSafeTests(_SafetyPartnerTestCase):
         "you may not do this", so it can show the resolution instead of an error.
         """
         self._accept()
-        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(status=SafetyCheckinStatus.CHECKED_IN, resolved_at=timezone.now())
+        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(
+            status=SafetyCheckinStatus.CHECKED_IN, resolved_at=timezone.now()
+        )
 
         response = self.client.post(self.mark_safe_url, **_bearer(self.watcher_key))
         self.assertEqual(response.status_code, 409)

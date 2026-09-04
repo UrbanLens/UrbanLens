@@ -9,6 +9,7 @@ declaration, and Google MyMaps always nests Placemarks inside a Folder):
 - Reading ``k.features`` (a list attribute in fastkml>=1.4) as if it were a
   method, and assuming Placemarks sit exactly one level below the KML root.
 """
+
 from __future__ import annotations
 
 from hypothesis import given, settings as hyp_settings, strategies as st
@@ -113,7 +114,9 @@ class TakeoutKmlToDictTests(SimpleTestCase):
             alphabet=st.characters(blacklist_categories=("Cs", "Cc"), blacklist_characters="<>&\"'"),
             min_size=1,
             max_size=40,
-        ).map(str.strip).filter(bool),
+        )
+        .map(str.strip)
+        .filter(bool),
         lat=st.floats(min_value=-89, max_value=89, allow_nan=False, allow_infinity=False),
         lon=st.floats(min_value=-179, max_value=179, allow_nan=False, allow_infinity=False),
     )

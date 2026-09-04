@@ -67,7 +67,10 @@ class BlockRevokesSafetyPartnerTests(TestCase):
         with mock.patch("urbanlens.dashboard.services.visits.safety._broadcast_partner_access_revoked") as revoke:
             block_profile(self.blocker, self.blocked)
 
-        self.assertFalse(SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(), "a blocked profile still has partner access to the blocker's check-in")
+        self.assertFalse(
+            SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(),
+            "a blocked profile still has partner access to the blocker's check-in",
+        )
         # A bare `.delete()` would satisfy the assertion above too - this proves the
         # row went through `remove_checkin_partner`, which also closes any live
         # WebSocket, rather than a delete that silently skips that revocation.
@@ -86,7 +89,10 @@ class BlockRevokesSafetyPartnerTests(TestCase):
         with mock.patch("urbanlens.dashboard.services.visits.safety._broadcast_partner_access_revoked") as revoke:
             block_profile(self.blocker, self.blocked)
 
-        self.assertFalse(SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(), "the blocker kept watching a profile they blocked")
+        self.assertFalse(
+            SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(),
+            "the blocker kept watching a profile they blocked",
+        )
         revoke.assert_called_once_with(checkin, self.blocker.pk)
 
     def test_an_outstanding_invitation_is_revoked_too(self) -> None:
@@ -99,7 +105,9 @@ class BlockRevokesSafetyPartnerTests(TestCase):
 
         block_profile(self.blocker, self.blocked)
 
-        self.assertFalse(SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(), "an outstanding invitation survived the block")
+        self.assertFalse(
+            SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(), "an outstanding invitation survived the block"
+        )
 
     def test_an_unrelated_partner_is_untouched(self) -> None:
         """The revocation must be scoped to the two profiles involved."""
@@ -113,7 +121,10 @@ class BlockRevokesSafetyPartnerTests(TestCase):
 
         block_profile(self.blocker, self.blocked)
 
-        self.assertTrue(SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(), "blocking one profile removed an unrelated partner")
+        self.assertTrue(
+            SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(),
+            "blocking one profile removed an unrelated partner",
+        )
 
     def test_a_partnership_on_someone_elses_checkin_is_untouched(self) -> None:
         """The scoping is by *pair*, not by "either profile appears somewhere".
@@ -139,8 +150,14 @@ class BlockRevokesSafetyPartnerTests(TestCase):
 
         block_profile(self.blocker, self.blocked)
 
-        self.assertTrue(SafetyCheckinPartner.objects.filter(pk=blocked_elsewhere.pk).exists(), "blocking removed the blocked profile's partnership on an unrelated check-in")
-        self.assertTrue(SafetyCheckinPartner.objects.filter(pk=blocker_elsewhere.pk).exists(), "blocking removed the blocker's own partnership on an unrelated check-in")
+        self.assertTrue(
+            SafetyCheckinPartner.objects.filter(pk=blocked_elsewhere.pk).exists(),
+            "blocking removed the blocked profile's partnership on an unrelated check-in",
+        )
+        self.assertTrue(
+            SafetyCheckinPartner.objects.filter(pk=blocker_elsewhere.pk).exists(),
+            "blocking removed the blocker's own partnership on an unrelated check-in",
+        )
 
 
 class BlockWithdrawsPendingPinShareTests(TestCase):

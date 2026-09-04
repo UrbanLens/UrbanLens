@@ -11,7 +11,11 @@ from __future__ import annotations
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.place.external_tag import ExtractedTag
-from urbanlens.dashboard.services.locations.external_tags import extract_nominatim_tags, extract_overture_tags, humanize_tag_value
+from urbanlens.dashboard.services.locations.external_tags import (
+    extract_nominatim_tags,
+    extract_overture_tags,
+    humanize_tag_value,
+)
 
 
 class ExtractNominatimTagsTests(SimpleTestCase):
@@ -58,7 +62,9 @@ class ExtractNominatimTagsTests(SimpleTestCase):
     def test_nearby_places_key_is_not_a_field_this_function_reads(self):
         # Nominatim's normalised dict never carries "nearby_places" (that's an
         # Overture concept) - passing one anyway must not surface it as a tag.
-        tags = extract_nominatim_tags({"category": "amenity", "type": "cafe", "nearby_places": [{"category": "bakery"}]})
+        tags = extract_nominatim_tags(
+            {"category": "amenity", "type": "cafe", "nearby_places": [{"category": "bakery"}]}
+        )
 
         self.assertEqual(tags, [ExtractedTag(key="amenity", value="cafe", is_primary=True)])
 
@@ -95,7 +101,9 @@ class ExtractOvertureTagsTests(SimpleTestCase):
             },
         )
 
-        self.assertEqual(tags, [ExtractedTag(key="building_subtype", value="single_family_residential", is_primary=True)])
+        self.assertEqual(
+            tags, [ExtractedTag(key="building_subtype", value="single_family_residential", is_primary=True)]
+        )
 
 
 class HumanizeTagValueTests(SimpleTestCase):

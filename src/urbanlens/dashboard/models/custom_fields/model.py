@@ -603,7 +603,7 @@ class CustomFieldValue(abstract.DashboardModel):
                 raise CustomFieldValueError(f"{raw!r} is not a valid number.") from e
         elif field_type == CustomFieldType.DATE:
             try:
-                self.value_date = datetime.strptime(raw, "%Y-%m-%d").date()
+                self.value_date = datetime.strptime(raw, "%Y-%m-%d").date()  # noqa: DTZ007  # .date() discards the time; value_date is a DateField
             except ValueError as e:
                 raise CustomFieldValueError(f"{raw!r} is not a valid date (expected YYYY-MM-DD).") from e
         elif field_type == CustomFieldType.TIME:

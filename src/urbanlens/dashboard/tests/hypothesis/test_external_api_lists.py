@@ -97,7 +97,9 @@ class PinListsCollectionTests(ListsApiTestCase):
         self.assertEqual([row["name"] for row in body["results"]], ["Smart"])
 
     def test_create_returns_201_and_owns_the_list(self) -> None:
-        response = self.client.post(_BASE, {"name": "Roadtrip"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.post(
+            _BASE, {"name": "Roadtrip"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(PinList.objects.get(name="Roadtrip").profile, self.profile)
 
@@ -152,7 +154,9 @@ class PinListDetailTests(ListsApiTestCase):
         self.assertEqual(self.client.get(f"{_BASE}{uuid4()}/", **_bearer(self.raw_key)).status_code, 404)
 
     def test_patch_renames(self) -> None:
-        response = self.client.patch(self._url(), {"name": "Renamed"}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self._url(), {"name": "Renamed"}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         self.pin_list.refresh_from_db()
         self.assertEqual(self.pin_list.name, "Renamed")
@@ -164,14 +168,18 @@ class PinListDetailTests(ListsApiTestCase):
         removed by a resync - its survival is what proves none ran.
         """
         pin = self._make_pin("Kept")
-        item = PinListItem.objects.create(pin_list=self.pin_list, pin=pin, order=0, added_via=PinListItem.ADDED_SMART_FILTER)
+        item = PinListItem.objects.create(
+            pin_list=self.pin_list, pin=pin, order=0, added_via=PinListItem.ADDED_SMART_FILTER
+        )
         self.client.patch(self._url(), {"name": "Renamed"}, content_type="application/json", **_bearer(self.raw_key))
         self.assertTrue(PinListItem.objects.filter(pk=item.pk).exists())
 
     def test_changing_smart_rules_resyncs(self) -> None:
         pin = self._make_pin("Stale")
         PinListItem.objects.create(pin_list=self.pin_list, pin=pin, order=0, added_via=PinListItem.ADDED_SMART_FILTER)
-        response = self.client.patch(self._url(), {"is_smart": True}, content_type="application/json", **_bearer(self.raw_key))
+        response = self.client.patch(
+            self._url(), {"is_smart": True}, content_type="application/json", **_bearer(self.raw_key)
+        )
         self.assertEqual(response.status_code, 200)
         # No rules match it any more, and it was not manually added, so the
         # resync removed it.
@@ -215,12 +223,18 @@ class PinListDetailTests(ListsApiTestCase):
             return loaded
 
         with mock.patch.object(external_api_views, "_get_pin_list", side_effect=load_then_inject_concurrent_write):
-            response = self.client.patch(self._url(), {"name": "Renamed"}, content_type="application/json", **_bearer(self.raw_key))
+            response = self.client.patch(
+                self._url(), {"name": "Renamed"}, content_type="application/json", **_bearer(self.raw_key)
+            )
 
         self.assertEqual(response.status_code, 200)
         self.pin_list.refresh_from_db()
         self.assertEqual(self.pin_list.name, "Renamed")
-        self.assertEqual(self.pin_list.description, "Changed elsewhere", "a concurrent edit to another field was reverted by this request's save")
+        self.assertEqual(
+            self.pin_list.description,
+            "Changed elsewhere",
+            "a concurrent edit to another field was reverted by this request's save",
+        )
 
     def test_delete_removes_the_list_but_not_the_pins(self) -> None:
         pin = self._make_pin("Survivor")
@@ -269,7 +283,9 @@ class PinListItemsTests(ListsApiTestCase):
 
     def test_unknown_and_foreign_uuids_are_dropped_silently(self) -> None:
         other = baker.make(User)
-        foreign = create_pin_for_profile(Profile.objects.get(user=other), name="Theirs", latitude=1.0, longitude=1.0).pin
+        foreign = create_pin_for_profile(
+            Profile.objects.get(user=other), name="Theirs", latitude=1.0, longitude=1.0
+        ).pin
         response = self.client.post(
             self._items_url(),
             {"pin_uuids": [str(self.pin_a.uuid), str(foreign.uuid), str(uuid4())]},

@@ -68,7 +68,9 @@ class SetMapHeightViewTests(TestCase):
 
     def test_unauthenticated_request_redirects_to_login(self) -> None:
         client = Client()
-        response = client.post(reverse("pin.map_height"), data=json.dumps({"height": 600}), content_type="application/json")
+        response = client.post(
+            reverse("pin.map_height"), data=json.dumps({"height": 600}), content_type="application/json"
+        )
         self.assertIn(response.status_code, (301, 302))
 
 

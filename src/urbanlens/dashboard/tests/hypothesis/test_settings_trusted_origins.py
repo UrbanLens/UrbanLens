@@ -28,7 +28,9 @@ _PRODUCTION_HOSTS = ["urbanlens.org", "www.urbanlens.org", "localhost"]
 
 class OriginFromUrlTests(SimpleTestCase):
     def test_a_url_is_reduced_to_its_origin(self) -> None:
-        self.assertEqual(_origin_from_url("https://a1b2c3.dev.urbanlens.org/accounts/login/"), "https://a1b2c3.dev.urbanlens.org")
+        self.assertEqual(
+            _origin_from_url("https://a1b2c3.dev.urbanlens.org/accounts/login/"), "https://a1b2c3.dev.urbanlens.org"
+        )
 
     def test_a_port_is_kept_because_an_origin_includes_it(self) -> None:
         self.assertEqual(_origin_from_url("http://localhost:21811/"), "http://localhost:21811")
@@ -97,7 +99,9 @@ class DerivedTrustedOriginTests(SimpleTestCase):
 
     def test_junk_entries_are_skipped_rather_than_made_into_origins(self) -> None:
         """Read as a URL, each of these would mean something wider than the entry says."""
-        exact, wildcard = _derive_trusted_origins(["bad host", "evil.com/x", "user@host", "host:notaport", "*.*"], "", allow_http=True)
+        exact, wildcard = _derive_trusted_origins(
+            ["bad host", "evil.com/x", "user@host", "host:notaport", "*.*"], "", allow_http=True
+        )
 
         self.assertEqual((exact, wildcard), ([], []))
 
@@ -115,7 +119,9 @@ class DerivedTrustedOriginTests(SimpleTestCase):
         self.assertNotIn("https://*.dev.urbanlens.org", exact + wildcard)
 
     @given(st.lists(st.from_regex(r"\A[a-z][a-z0-9-]{0,20}\.example\.org\Z"), max_size=6), st.booleans())
-    def test_every_derived_origin_is_a_scheme_and_a_host_and_nothing_else(self, hosts: list[str], allow_http: bool) -> None:
+    def test_every_derived_origin_is_a_scheme_and_a_host_and_nothing_else(
+        self, hosts: list[str], allow_http: bool
+    ) -> None:
         exact, wildcard = _derive_trusted_origins(hosts, "", allow_http=allow_http)
 
         for origin in exact + wildcard:

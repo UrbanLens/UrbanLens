@@ -16,9 +16,9 @@ Deliberately silent and deliberately harmless:
 """
 
 import json
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
 
 TIMEOUT_SECONDS = 20
 

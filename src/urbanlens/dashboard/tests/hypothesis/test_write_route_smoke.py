@@ -121,7 +121,9 @@ class WriteRouteSmokeTests(TestCase):
             # The next tier of gates, measured after session_id landed: each is
             # one object and unlocks 5-14 routes. Album is the largest single
             # gate left at 14.
-            "album_slug": baker.make("dashboard.Album", profile=profile, parent_profile=profile, name="Smoke Album").slug,
+            "album_slug": baker.make(
+                "dashboard.Album", profile=profile, parent_profile=profile, name="Smoke Album"
+            ).slug,
             "activity_id": baker.make("dashboard.TripActivity", trip=trip).pk,
             "alias_id": baker.make("dashboard.PinAlias", pin=pin, name="smoke-alias").pk,
             "comment_id": baker.make("dashboard.Comment", profile=profile, pin=pin, text="smoke").pk,
@@ -133,7 +135,11 @@ class WriteRouteSmokeTests(TestCase):
             # views against a state the model already prohibits would be
             # defending against the test.
             "image_id": self._image_with_file(profile, pin, location).pk,
-            "token": str(baker.make("dashboard.SafetyCheckinContact", checkin=checkin, email="smoke@example.com", contact_profile=None).token),
+            "token": str(
+                baker.make(
+                    "dashboard.SafetyCheckinContact", checkin=checkin, email="smoke@example.com", contact_profile=None
+                ).token
+            ),
             "session_id": [
                 baker.make("dashboard.GameSession", host_profile=profile).pk,
                 baker.make("dashboard.TriviaSession", host_profile=profile).pk,
@@ -231,7 +237,11 @@ class WriteRouteSmokeTests(TestCase):
     def test_no_write_route_answers_a_minimal_request_with_a_server_error(self) -> None:
         unexpected = {name: how for name, how in self._crashing_routes().items() if name not in _KNOWN_CRASHES}
 
-        self.assertEqual(unexpected, {}, "write routes crashed on a minimal request:\n" + "\n".join(f"{n} {h}" for n, h in unexpected.items()))
+        self.assertEqual(
+            unexpected,
+            {},
+            "write routes crashed on a minimal request:\n" + "\n".join(f"{n} {h}" for n, h in unexpected.items()),
+        )
 
     def test_the_known_crash_is_still_crashing(self) -> None:
         """Stops an exemption outliving the bug it describes.

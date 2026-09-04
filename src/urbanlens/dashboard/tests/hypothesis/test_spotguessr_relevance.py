@@ -10,7 +10,13 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind, GameRound, GameSession, SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import (
+    GamePhotoFeedback,
+    GamePhotoFeedbackKind,
+    GameRound,
+    GameSession,
+    SpotGuessrMode,
+)
 from urbanlens.dashboard.services.spotguessr.relevance import backfill_no_reaction, record_feedback
 
 _coordinate_counter = count()

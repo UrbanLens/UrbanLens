@@ -9,6 +9,7 @@ Covers:
 - _compute_activity_index_map() - map-index assignment
 - _build_activity_forecasts() - weather slot matching
 """
+
 from __future__ import annotations
 
 import datetime
@@ -43,6 +44,7 @@ _hyp = hyp_settings(max_examples=40, deadline=None)
 # ---------------------------------------------------------------------------
 # _parse_scheduled_at
 # ---------------------------------------------------------------------------
+
 
 class ParseScheduledAtTests(SimpleTestCase):
     """_parse_scheduled_at combines ISO date and time strings."""
@@ -90,6 +92,7 @@ class ParseScheduledAtTests(SimpleTestCase):
 # ---------------------------------------------------------------------------
 # _activity_coords
 # ---------------------------------------------------------------------------
+
 
 class ActivityCoordsTests(SimpleTestCase):
     """_activity_coords resolves coordinates with correct priority."""
@@ -161,6 +164,7 @@ class ActivityCoordsTests(SimpleTestCase):
 # _expand_trip_dates (DB-backed)
 # ---------------------------------------------------------------------------
 
+
 class ExpandTripDatesTests(TestCase):
     """_expand_trip_dates extends the trip date range as needed."""
 
@@ -204,6 +208,7 @@ class ExpandTripDatesTests(TestCase):
 # ---------------------------------------------------------------------------
 # Trip.elapsed_day (pure - unsaved instances, no DB needed once dates are set)
 # ---------------------------------------------------------------------------
+
 
 class TripElapsedDayTests(TestCase):
     """Trip.elapsed_day - 1-indexed day-of-trip while active, else None.
@@ -261,6 +266,7 @@ class TripElapsedDayTests(TestCase):
 # _is_organizer (DB-backed)
 # ---------------------------------------------------------------------------
 
+
 class IsOrganizerTests(TestCase):
     """_is_organizer returns True for creators and designated organizers."""
 
@@ -293,6 +299,7 @@ class IsOrganizerTests(TestCase):
 # ---------------------------------------------------------------------------
 # _can_perform (DB-backed)
 # ---------------------------------------------------------------------------
+
 
 class CanPerformTests(TestCase):
     """_can_perform checks permission level against profile's relationship to trip."""
@@ -334,6 +341,7 @@ class CanPerformTests(TestCase):
 # ---------------------------------------------------------------------------
 # _compute_activity_index_map
 # ---------------------------------------------------------------------------
+
 
 class ComputeActivityIndexMapTests(SimpleTestCase):
     """_compute_activity_index_map assigns sequential 1-based indices to visible activities."""
@@ -467,6 +475,7 @@ class BuildActivityForecastsTests(SimpleTestCase):
 
     def test_gateway_exception_returns_no_slot(self):
         import requests as req_lib
+
         target = datetime.datetime(2025, 7, 4, 12, 0)
         act = self._make_activity(scheduled_at=target)
         with patch(_GET_RAW_FORECAST_SLOTS, side_effect=req_lib.RequestException("timeout")):
@@ -491,6 +500,7 @@ class BuildActivityForecastsTests(SimpleTestCase):
 # TripWeatherView - drops activities with nothing useful to show instead of
 # rendering an empty "No location data"/"Outside 5-day forecast" row
 # ---------------------------------------------------------------------------
+
 
 class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
     def setUp(self) -> None:
@@ -608,6 +618,7 @@ class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
 # "Needs location" badge
 # ---------------------------------------------------------------------------
 
+
 class ActivitiesPanelHasCoordsTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -619,14 +630,24 @@ class ActivitiesPanelHasCoordsTests(TestCase):
         TripMembership.objects.get_or_create(trip=self.trip, profile=self.profile, defaults={"rsvp": "yes"})
 
     def test_activity_with_no_coords_shows_needs_location_badge(self) -> None:
-        baker.make(TripActivity, trip=self.trip, title="Campground", lat_override=None, lng_override=None, pin=None, location=None)
+        baker.make(
+            TripActivity,
+            trip=self.trip,
+            title="Campground",
+            lat_override=None,
+            lng_override=None,
+            pin=None,
+            location=None,
+        )
 
         resp = self.client_.get(reverse("trips.activities", args=[self.trip.slug]))
 
         self.assertIn("Needs location", resp.content.decode())
 
     def test_activity_with_coords_does_not_show_needs_location_badge(self) -> None:
-        baker.make(TripActivity, trip=self.trip, title="Museum", lat_override=51.5, lng_override=-0.12, pin=None, location=None)
+        baker.make(
+            TripActivity, trip=self.trip, title="Museum", lat_override=51.5, lng_override=-0.12, pin=None, location=None
+        )
 
         resp = self.client_.get(reverse("trips.activities", args=[self.trip.slug]))
 
@@ -637,6 +658,7 @@ class ActivitiesPanelHasCoordsTests(TestCase):
 # TripMembershipQuerySet - custom queryset/manager (previously the bare
 # default manager, inconsistent with the rest of the codebase's convention)
 # ---------------------------------------------------------------------------
+
 
 class TripMembershipQuerySetTests(TestCase):
     def setUp(self) -> None:
