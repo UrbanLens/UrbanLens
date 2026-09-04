@@ -39,6 +39,11 @@ _CODE_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".html", ".yml", ".yaml",
 
 _SKIP_PREFIXES = ("docs/notes/ai/",)
 
+#: This file's own docstring names the broken paths it was written for, which it
+#: would otherwise report as live citations - the same trap
+#: `bin/check_doc_line_refs.py` falls into, one level over.
+_SKIP_FILES = {"bin/check_docs_refs.py"}
+
 
 def _tracked_files() -> list[str]:
     out = subprocess.run(["git", "ls-files", "-z"], capture_output=True, text=True, check=True)
@@ -84,6 +89,8 @@ def main() -> int:
     checked: dict[tuple[str, str], bool] = {}
 
     for name in _tracked_files():
+        if name in _SKIP_FILES:
+            continue
         path = root / name
         if path.suffix not in _CODE_SUFFIXES and path.suffix != ".md":
             continue

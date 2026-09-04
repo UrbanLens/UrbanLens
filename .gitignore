@@ -69,3 +69,7 @@ sample_data/Google Takeout.csv
 mutants/
 
 docs/audits/codeql-findings.md
+
+# Agent scratch files have landed at the repo root untracked more than once.
+/_tmp*
+/*.tmp.js

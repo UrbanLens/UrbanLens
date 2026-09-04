@@ -3571,3 +3571,43 @@ likely fix is popping the variable before `prometheus_client` can be imported -
 `src/urbanlens/conftest.py` or the settings package `__init__` - rather than in
 `settings/test.py`, which runs too late to win the race.
 
+## P71 — The Sphinx setup builds successfully and produces no API documentation at all
+
+`id: P71` · `status: open` · `updated: 2026-09-04`
+
+`docs/conf.py` and `docs/index.rst` exist and `sphinx-build -b html docs <out>`
+reports "build succeeded", but the output contains exactly `index.html`,
+`genindex.html` and `search.html`. No module pages: `index.rst` has no
+`automodule` directives and nothing runs `sphinx-apidoc`, so no docstring in
+`src/` is ever read. There is no `.readthedocs.yaml`, and nothing in
+`.github/workflows/`, `bin/` or `package.json` builds the docs.
+
+`sphinx` and `sphinx-rtd-theme` are dev dependencies paying for this.
+
+Why it matters beyond the wasted config: the Google-docstring completeness
+standard is justified in `CLAUDE.md` by "Sphinx consumes them", and that
+pipeline does not exist. The standard is still worth keeping - a complete
+docstring is worth writing for the next reader regardless - but it should not
+rest on a claim that is checkably false.
+
+Two ways out, neither attempted here because both are product decisions: wire it
+up (`sphinx-apidoc`, `myst-parser` for the `.md` files, a CI job) or delete
+`docs/conf.py` and `docs/index.rst` and drop the two dependencies.
+
+## P72 — `bun run typecheck` reads 87 TypeScript files fewer than the pre-commit hook fires on
+
+`id: P72` · `status: open` · `updated: 2026-09-04`
+
+`tsconfig.json` sets `include: ["src/urbanlens/dashboard/frontend/ts/**/*.ts"]`.
+`git ls-files '*.ts' | grep -vc '^src/urbanlens/dashboard/frontend/ts/'` returns
+87 - `frontend/browser/`, `tests/integration/` and the rest are outside the
+project and are never checked.
+
+The manual `tsc` hook in `.pre-commit-config.yaml` matches `\.tsx?$`, so editing
+any of those 87 files triggers a typecheck that then does not look at the file
+that triggered it. Passing means nothing about the change.
+
+Not fixed here because `frontend/browser/` has never been typechecked, so
+widening `include` will surface a first wave of real errors that wants its own
+pass rather than being folded into a tooling cleanup.
+

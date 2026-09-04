@@ -42,8 +42,7 @@ grep -E '\| blocking ' docs/INDEX.md     # everything blocking
 
 ## House style
 
-These four rules are why this directory was rebuilt; the previous version
-broke all of them.
+These are why this directory was rebuilt; the previous version broke all of them.
 
 - **A title is a claim, not a category.** "Path casing is not normalised on
   write, so joins silently drop rows" — not "Casing issue".
@@ -58,8 +57,10 @@ than believe you.
 
 ## The disclaimer block
 
-Every standalone file under `docs/` opens with this, immediately after its
-title:
+`INDEX.md`, `PROBLEMS.md` and any new standalone file open with this,
+immediately after the title. Older documents predate the convention and are
+being converted as they are next edited, rather than in one sweep that would
+touch every file without reading it:
 
 ```markdown
 > **Written by a Claude agent. Not authoritative.**
