@@ -17,7 +17,7 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, strategies as st
+from hypothesis import assume, given, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
@@ -53,9 +53,21 @@ class HashEmailTests(SimpleTestCase):
 
     @given(email=_EMAILS)
     def test_hash_does_not_contain_address(self, email):
+        """The stored digest is not a place the address can be read back out of.
+
+        Local parts made only of hex digits are excluded, and not for
+        convenience: the digest is itself 64 hex characters, so a short all-hex
+        local part turns up inside one by coincidence often enough to fail this
+        at random - ``0846@a.com`` hashes to ``5ece20846df4...``. Those examples
+        say nothing about whether the address was stored, and without the
+        exclusion this test fails a few runs in a hundred on an address it was
+        never meant to be making a claim about.
+        """
         local = email.split("@", 1)[0].lower()
-        if len(local) >= 4:
-            self.assertNotIn(local, hash_email(email))
+        assume(len(local) >= 4)
+        assume(not all(character in "0123456789abcdef" for character in local))
+
+        self.assertNotIn(local, hash_email(email))
 
 
 class EmailLimitResolutionTests(TestCase):
