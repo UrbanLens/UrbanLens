@@ -570,6 +570,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.requeue_stalled_pending_uploads",
         "schedule": crontab(minute=19),
     },
+    # The other end of that recovery: an upload the sweep gave up on is offered
+    # back to its owner to retry, and thrown away if they never do. Daily rather
+    # than hourly - the window it enforces is a week, so an hourly pass would be
+    # 167 queries that find nothing for every one that does.
+    "discard-unretried-failed-uploads": {
+        "task": "urbanlens.dashboard.tasks.discard_unretried_failed_uploads",
+        "schedule": crontab(minute=9, hour=4),
+    },
     # Preview sources staged on the media volume whose render task never ran -
     # render_media_preview removes its own, so these are from a failed enqueue.
     "sweep-stale-preview-sources": {

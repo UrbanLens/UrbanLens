@@ -1472,19 +1472,73 @@ def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     #
     # Oldest first: a row that has been invisible longest is the one whose
     # uploader has been waiting longest.
-    stalled = list(Image.objects.filter(pending_scan=True, created__lt=cutoff).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED).order_by("created").values_list("pk", "profile_id", "source")[:batch])
+    # `upload_failed_at__isnull=True` is what stops this being a loop. A row
+    # whose child keeps dying used to be re-fed every tick, costing a sandbox
+    # slot each time on a file that has already killed a worker, and never
+    # telling the uploader anything - see services.media.upload_failures.
+    stalled = list(
+        Image.objects.filter(pending_scan=True, created__lt=cutoff, upload_failed_at__isnull=True).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED).order_by("created").values_list("pk", "profile_id", "source", "upload_sweep_attempts")[:batch]
+    )
     if not stalled:
         return _clear_orphaned_dedup_siblings(cutoff)
 
-    for image_id, profile_id, source in stalled:
+    from django.db.models import F
+
+    from urbanlens.dashboard.services.media.upload_failures import MAX_SWEEP_ATTEMPTS, record_upload_processing_failure
+
+    requeued = 0
+    for image_id, profile_id, source, attempts in stalled:
+        if attempts >= MAX_SWEEP_ATTEMPTS:
+            record_upload_processing_failure(image_id, "This photo could not be processed after several attempts. Retry it, or discard it and upload again.")
+            continue
         # A profile-less row is a provider photo, and its cap lived only at the
         # call site that created it - recovered here from its source so the
         # reprocessed file matches what it should have been, rather than
         # falling back to the generic default.
         max_dimension = None if profile_id is not None else enriched_max_dimension(source)
+        Image.objects.filter(pk=image_id).update(upload_sweep_attempts=F("upload_sweep_attempts") + 1)
         safely_enqueue_task(process_image_upload, image_id, max_dimension)
-    logger.info("Re-enqueued %s upload(s) still pending after %s", len(stalled), STALLED_UPLOAD_AGE)
-    return len(stalled)
+        requeued += 1
+    logger.info("Re-enqueued %s upload(s) still pending after %s (%s gave up)", requeued, STALLED_UPLOAD_AGE, len(stalled) - requeued)
+    return requeued
+
+
+@shared_task
+def discard_unretried_failed_uploads(limit: int | None = None) -> int:
+    """Throw away failed uploads nobody came back for.
+
+    The second half of the rule: the user retries, and if they do not, the
+    upload is discarded. Without this a photo whose processing died sits
+    ``pending_scan`` forever - invisible to everyone but its owner, counted
+    against their storage quota, and holding bytes no scan ever cleared.
+
+    The failure row itself is kept. Its filename is how the uploader recognises
+    which picture went away, and once the bytes are gone it is the only trace.
+
+    Deliberately not on the sandbox queue - it deletes files, it does not parse
+    them.
+
+    Args:
+        limit: Override the batch size. Beat does not pass this; tests do.
+
+    Returns:
+        How many uploads were discarded.
+    """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoUploadFailure
+    from urbanlens.dashboard.services.media.upload_failures import UNRETRIED_DISCARD_AGE, discard_failed_upload
+
+    cutoff = timezone.now() - UNRETRIED_DISCARD_AGE
+    batch = STALLED_UPLOAD_BATCH if limit is None else max(1, limit)
+    stale = list(
+        PhotoUploadFailure.objects.filter(status=PhotoIssueStatus.PENDING, image__isnull=False, image__upload_failed_at__lt=cutoff).select_related("image").order_by("created")[:batch],
+    )
+    for failure in stale:
+        discard_failed_upload(failure)
+    if stale:
+        logger.info("Discarded %s failed upload(s) untouched for %s", len(stale), UNRETRIED_DISCARD_AGE)
+    return len(stale)
 
 
 def _clear_orphaned_dedup_siblings(cutoff) -> int:

@@ -10,25 +10,7 @@ Expects upload_failures and metadata_conflicts querysets.
   </div>
   <ul class="photos-issue-list">
     {% for failure in upload_failures %}
-    <li class="photos-issue-card" id="photo-failure-{{ failure.pk }}">
-      <p class="photos-issue-title">{{ failure.filename }}</p>
-      <p class="photos-issue-error">{{ failure.error }}</p>
-      {% if failure.pin %}<p class="photos-issue-meta">{{ failure.pin.effective_name }}</p>{% endif %}
-      <div class="photos-issue-actions">
-        <label class="btn btn--primary btn--sm">
-          <i class="material-symbols-outlined">upload</i> Retry
-          <input type="file" accept="image/*" hidden data-retry-failure="{{ failure.pk }}"
-                 data-retry-url="{% if failure.pin %}{% url 'pin.gallery' failure.pin.slug %}{% endif %}"
-                 data-dismiss-url="{% url 'vault.photos.failures.dismiss' failure.pk %}">
-        </label>
-        <button type="button" class="btn btn--ghost btn--sm"
-                hx-post="{% url 'vault.photos.failures.dismiss' failure.pk %}"
-                hx-target="#photo-failure-{{ failure.pk }}"
-                hx-swap="outerHTML">
-          Dismiss
-        </button>
-      </div>
-    </li>
+    {% include "dashboard/partials/vault/_photo_issue_card.html" %}
     {% endfor %}
   </ul>
 </section>

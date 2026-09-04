@@ -77,7 +77,11 @@ def _attention_cards(profile: Profile) -> list[dict]:
         capped at ``_ATTENTION_LIMIT``. Only actionable states are included
         (``filed`` photos are dropped).
     """
-    images = list(Image.objects.needs_attention(profile).photos().select_related("location")[:_ATTENTION_LIMIT])
+    # A photo whose processing died already has a card of its own under
+    # "Couldn't upload", where the actions are Retry and Discard. Leaving it
+    # here too offers a second card asking the owner to file a photo that does
+    # not yet exist as far as anyone else is concerned.
+    images = list(Image.objects.needs_attention(profile).photos().filter(upload_failed_at__isnull=True).select_related("location")[:_ATTENTION_LIMIT])
     pending = {
         s.origin_image_id: s
         for s in VisitSuggestion.objects.filter(
@@ -103,7 +107,10 @@ def _attention_cards(profile: Profile) -> list[dict]:
 
 def _photo_issues(profile: Profile) -> dict:
     """Pending upload failures and metadata conflicts for Vault → Photos."""
-    failures = list(PhotoUploadFailure.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING).select_related("pin", "album").order_by("-created")[:40])
+    # pin__location, not just pin: the card renders Pin.effective_name, which
+    # falls through to the location's display name whenever the pin has no
+    # custom one - a query per card without this.
+    failures = list(PhotoUploadFailure.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING).select_related("pin__location", "album", "image").order_by("-created")[:40])
     conflicts = list(PhotoMetadataConflict.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING).select_related("existing_image", "new_image").order_by("-created")[:40])
     return {"upload_failures": failures, "metadata_conflicts": conflicts}
 
@@ -158,6 +165,28 @@ def _render_card(request: HttpRequest, image: Image, *, toast: str, level: str =
     suggestion = VisitSuggestion.objects.filter(origin_image=image, status=VisitSuggestionStatus.PENDING).select_related("location").first()
     state = "suggested" if suggestion else classify_photo(image)
     response = render(request, "dashboard/partials/vault/_photo_card.html", {"image": image, "state": state, "suggestion": suggestion})
+    response["HX-Trigger"] = json.dumps({"showToast": {"message": toast, "level": level}})
+    return response
+
+
+def _render_failure_card(request: HttpRequest, failure: PhotoUploadFailure, toast: str, level: str = "warning") -> HttpResponse:
+    """Re-render one upload-failure card unchanged, with a toast.
+
+    The counterpart of :func:`_render_card` for the "Couldn't upload" list. A
+    refusal reached from a card-swapping button must put the card back -
+    returning ``_toast`` there would report the problem and remove the card
+    anyway, leaving nothing to act on.
+
+    Args:
+        request: The current request.
+        failure: The failure to re-render.
+        toast: Toast message to fire.
+        level: toastr level.
+
+    Returns:
+        The rendered card carrying a ``showToast`` HX-Trigger header.
+    """
+    response = render(request, "dashboard/partials/vault/_photo_issue_card.html", {"failure": failure})
     response["HX-Trigger"] = json.dumps({"showToast": {"message": toast, "level": level}})
     return response
 
@@ -719,6 +748,57 @@ class PhotoUploadFailureDismissView(LoginRequiredMixin, View):
         failure.status = PhotoIssueStatus.DISMISSED
         failure.save(update_fields=["status", "updated"])
         return _toast("Dismissed.", refresh_queue=True)
+
+
+class PhotoUploadFailureRetryView(LoginRequiredMixin, View):
+    """Re-run processing for an upload whose task died.
+
+    Only for a failure that still has its stored row - a rejected upload never
+    became one, and retrying that means picking the file again, which is what
+    the file input on those cards is for.
+    """
+
+    def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
+        """Queue the re-run, or say why not.
+
+        Args:
+            request: The HTMX request.
+            failure_id: The failure row to retry.
+
+        Returns:
+            A toast. On refusal the card is re-rendered rather than swapped
+            away - see ``_toast``'s note on why an empty body is wrong there.
+        """
+        from urbanlens.dashboard.services.media.upload_failures import MAX_USER_RETRIES, retry_upload_processing
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        failure = get_object_or_404(PhotoUploadFailure.objects.select_related("image"), pk=failure_id, profile=profile)
+        if retry_upload_processing(failure, profile):
+            return _toast("Trying that photo again. It will appear once processing finishes.", refresh_queue=True)
+        if failure.user_retries >= MAX_USER_RETRIES:
+            return _render_failure_card(request, failure, "That photo has been retried as many times as it is going to be. Discard it and upload it again.")
+        return _render_failure_card(request, failure, "There is nothing left to retry for that photo.")
+
+
+class PhotoUploadFailureDiscardView(LoginRequiredMixin, View):
+    """Throw away the photo behind a failed upload, at its owner's request."""
+
+    def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
+        """Delete the stored row and close the failure.
+
+        Args:
+            request: The HTMX request.
+            failure_id: The failure row to discard.
+
+        Returns:
+            A toast; the card is swapped away.
+        """
+        from urbanlens.dashboard.services.media.upload_failures import discard_failed_upload
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        failure = get_object_or_404(PhotoUploadFailure.objects.select_related("image"), pk=failure_id, profile=profile)
+        discard_failed_upload(failure)
+        return _toast("Discarded.", refresh_queue=True)
 
 
 class PhotoMetadataConflictResolveView(LoginRequiredMixin, View):

@@ -1,0 +1,48 @@
+{% comment %}
+One "Couldn't upload" card. Its own partial so a refused action can re-render
+exactly what the list rendered - see _render_failure_card.
+
+Two shapes, by failure.kind:
+
+- processing_failed with a surviving image: the bytes are on the server and its
+  task died, so the server can re-run it. Retry and Discard are hx-posts.
+- everything else: the upload never became a row, so "retry" means picking the
+  file again - a file input, which is what this card has always been.
+{% endcomment %}
+<li class="photos-issue-card" id="photo-failure-{{ failure.pk }}">
+  <p class="photos-issue-title">{{ failure.filename }}</p>
+  <p class="photos-issue-error">{{ failure.error }}</p>
+  {% if failure.pin %}<p class="photos-issue-meta">{{ failure.pin.effective_name }}</p>{% endif %}
+  <div class="photos-issue-actions">
+    {% if failure.kind == "processing_failed" and failure.image_id %}
+    <button type="button" class="btn btn--primary btn--sm"
+            hx-post="{% url 'vault.photos.failures.retry' failure.pk %}"
+            hx-target="#photo-failure-{{ failure.pk }}"
+            hx-swap="outerHTML"
+            hx-indicator="#photo-failure-{{ failure.pk }}-busy">
+      <i class="material-symbols-outlined">refresh</i> Try again
+    </button>
+    <button type="button" class="btn btn--ghost btn--sm"
+            hx-post="{% url 'vault.photos.failures.discard' failure.pk %}"
+            hx-target="#photo-failure-{{ failure.pk }}"
+            hx-swap="outerHTML"
+            hx-confirm="Discard this photo? The file will be deleted.">
+      Discard
+    </button>
+    <span id="photo-failure-{{ failure.pk }}-busy" class="htmx-indicator">Working…</span>
+    {% else %}
+    <label class="btn btn--primary btn--sm">
+      <i class="material-symbols-outlined">upload</i> Retry
+      <input type="file" accept="image/*" hidden data-retry-failure="{{ failure.pk }}"
+             data-retry-url="{% if failure.pin %}{% url 'pin.gallery' failure.pin.slug %}{% endif %}"
+             data-dismiss-url="{% url 'vault.photos.failures.dismiss' failure.pk %}">
+    </label>
+    {% endif %}
+    <button type="button" class="btn btn--ghost btn--sm"
+            hx-post="{% url 'vault.photos.failures.dismiss' failure.pk %}"
+            hx-target="#photo-failure-{{ failure.pk }}"
+            hx-swap="outerHTML">
+      Dismiss
+    </button>
+  </div>
+</li>

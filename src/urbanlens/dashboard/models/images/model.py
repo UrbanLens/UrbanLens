@@ -23,6 +23,7 @@ from django.db.models import (
     JSONField,
     ManyToManyField,
     PositiveIntegerField,
+    PositiveSmallIntegerField,
     Q,
     TextField,
     URLField,
@@ -553,6 +554,19 @@ class Image(abstract.FrontendDashboardModel):
     # Set once process_image_upload has had a chance to copy metadata to the row
     # and rewrite the stored file without embedded EXIF/location blocks.
     upload_processed_at = DateTimeField(null=True, blank=True)
+    # The counterpart, and the reason it exists: without it nothing on the row
+    # distinguished a task that is still running from one that died three days
+    # ago. The uploader saw a photo that never finished, with no error and no
+    # retry, because `autoretry_for` runs inside the child and cannot see a
+    # failure that killed the child. See services.media.upload_failures.
+    upload_failed_at = DateTimeField(null=True, blank=True)
+    # How many times the recovery sweep has re-enqueued this row. Incremented by
+    # the sweep, deliberately not by the task: the task legitimately re-runs on
+    # already-processed rows (wiki_share, the thumbnail backfill) and has its own
+    # retry ladder, so counting there would count several unrelated things at
+    # once. Bounded so a file that kills its worker every time stops being fed
+    # back to a two-slot sandbox queue.
+    upload_sweep_attempts = PositiveSmallIntegerField(default=0)
     # Why this row's bytes don't count against its profile's storage quota
     # (empty = they do). Set at creation by whichever path produced a row that
     # owns no exclusive storage of its own - services.media.media_materialize
