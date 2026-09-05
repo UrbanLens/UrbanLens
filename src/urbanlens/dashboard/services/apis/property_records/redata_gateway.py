@@ -388,7 +388,7 @@ class RedataGateway(Gateway):
         Returns:
             One dict per *physical building* (possibly empty), not one per
             source observation - REData reconciles them (its
-            ``../REData/docs/archive/buildings-dedup-spec.md``). Each carries at least a
+            ``../REData/docs/buildings-dedup-spec.md``). Each carries at least a
             coordinate; ``geometry`` is standard GeoJSON (a ``Point`` when no
             boundary is available).
 

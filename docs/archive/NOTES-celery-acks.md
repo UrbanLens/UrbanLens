@@ -10,7 +10,7 @@ should weigh the two options, a second route into the same unbounded branch that
 the note does not cover, a reason the failure was cheaper to trigger than
 "an extreme image" suggests, and one number for your memory sizing.
 
-Durable version of all of this lives in [`NOTES.md`](NOTES.md) under "A lost
+Durable version of all of this lives in [`NOTES.md`](../NOTES.md) under "A lost
 Celery child fails once"; this file is the reply.
 
 ## What we changed
@@ -74,7 +74,7 @@ exporter would not have noticed either.** The reject branch sets
 `send_failed_event = False` *and* skips `mark_as_failure`. A looping task
 therefore stores no result, sends no `task_failure` signal, and emits no
 `task-failed` event. We have since built a Celery event-stream exporter
-(`services/core/celery_events.py`, see [`METRICS.md`](METRICS.md)) and it would
+(`services/core/celery_events.py`, see [`METRICS.md`](../METRICS.md)) and it would
 have been blind to exactly this. With the setting off the same loss emits one
 `task-failed`, so **`urbanlens_celery_tasks_total{state="failed"}` is now a real
 alerting signal for it** — you may want a rule on it.

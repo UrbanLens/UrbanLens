@@ -58,7 +58,6 @@ Generated from the source by ``autoapi`` - every module under
    :glob:
 
    DEMO
-   NOTES-celery-acks
    archive/*
    audits/*
    designs/*

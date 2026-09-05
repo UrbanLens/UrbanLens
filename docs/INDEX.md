@@ -141,7 +141,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | R23 | current | 2026-07-22 | The re-runnable harness that produced the 120 Overpass measurements across six endpoints | [`docs/reports/overpass_bench.py`](reports/overpass_bench.py) |
 | R24 | current | 2026-07-22 | The 120 raw Overpass rows the mirror verdicts were computed from | [`docs/reports/overpass_mirror_results.json`](reports/overpass_mirror_results.json) |
 | R25 | stale | 2026-08-27 | A generated 0-reference scan whose line numbers no longer resolve; regenerate instead of reading | [`docs/reports/unused_functions.txt`](reports/unused_functions.txt) |
-| N1 | stale | 2026-09-03 | The Celery requeue loop was a two-request DoS; fixed, and the durable version now lives in NOTES.md | [`docs/NOTES-celery-acks.md`](NOTES-celery-acks.md) |
+| N1 | stale | 2026-09-03 | The Celery requeue loop was a two-request DoS; fixed, and the durable version now lives in NOTES.md | [`docs/archive/NOTES-celery-acks.md`](archive/NOTES-celery-acks.md) |
 | N2 | current | 2026-08-27 | 82 ways a gated wiki gives itself away collapse to eleven classes and three viewer-less chokepoints | [`docs/designs/reputation-gating-tells.md`](designs/reputation-gating-tells.md) |
 | N3 | stale | 2026-08-27 | A 631-chunk audit log whose fixes landed and whose open items were refiled into docs/PROBLEMS.md | [`docs/reports/2026-08-11-codebase-audit.md`](reports/2026-08-11-codebase-audit.md) |
 | N4 | current | 2026-07-30 | Round-2 staging UAT: its two criticals (email exposure, raw-coordinate pin names) are now fixed | [`docs/reports/claude_uat.md`](reports/claude_uat.md) |
