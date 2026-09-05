@@ -2104,67 +2104,6 @@ side effect of an exception handler. If fail-closed is chosen, the same question
 
 ---
 
-## P33 — `Label.color` has no `save()`-level coercion, so a value bypassing form validation is stored unvalidated
-
-`id: P33` · `status: open` · `updated: 2026-08-13`
-
-Previously titled "Colour values interpolated into `style="…"` - fixed at every entry point; the model fields still have no validators".
-
-**Superseded note (corrected 2026-08-14).** An earlier version of this entry listed
-`markup-engine.ts:66/84/150` and `markup-toolbar.ts:297/299` as unfixed because a hex-only
-validator might blank a legitimate `rgba()`/`none` value. That was half wrong, and the correction
-is worth keeping:
-
-- `markup-engine.ts` was **already safe**. It defines its own `safeColor(v, fallback)` and
-  `safeOptionalColor` (which returns `"none"` unchanged), and runs the value through them before
-  interpolating - e.g. `const color = safeColor(s.color, "#e53e3e")` on the line above the
-  `style="color:${color}"` that the grep flagged. The flagged lines were reading
-  already-sanitised locals.
-- `markup-toolbar.ts` was **not** safe and now is. It imported no validator and interpolated
-  `item.color` and `textBackground()`'s `item.border_color` straight into `style="…"`. Those are
-  fixed with the shared `shared/color-safety.safeColor`; the `"none"` case that made this look
-  risky is handled explicitly, exactly as `markup-engine.safeOptionalColor` already did.
-
-Markup colours are *less* validated than label colours server-side, which is what made this worth
-chasing: `MarkupShape.color` is `CharField(max_length=20, default="#e53e3e")` and `border_color`
-`CharField(max_length=20, blank=True)` - **no `choices` at all**. `x" onmouseover="a` is 17
-characters.
-
-Not changed, and deliberately: the colours passed to Leaflet as *options*
-(`markup-toolbar.ts:318, 345, 348` - `fillColor:`, `color:`) are set programmatically as style
-properties rather than interpolated into markup, so an invalid value is inert there rather than
-injectable.
-
-### The server-side half - RESOLVED 2026-08-14
-
-`services/core/colors.clean_color` now validates every colour write path (32 of them, across
-`controllers/labels.py`, `external_api/views.py`, `controllers/markup.py`,
-`controllers/detail_pins.py`, `controllers/maps.py`, `controllers/custom_layers.py` and
-`controllers/saved_filters.py`). Eight further sites in `controllers/detail_pins.py` were missed on
-the first pass and fixed on 2026-08-14: the original sweep matched `color = X.get(...)` assignments
-but not dict-literal `"color": body.get(...)` entries, and its field list was built from request
-keys, so `detail_bg_color` (populated from `bg_color`) never appeared. Invalid input is coerced to
-each call site's existing default
-rather than raising, since these come from palette pickers and a non-colour is a malformed
-request; `"none"` is permitted only where it means "no border".
-
-~~Left for a future pass: the model fields themselves are still permissive (`MarkupShape.color`/
-`border_color` have no `choices`)~~ - **`MarkupShape` (`PinMarkup`) side fixed 2026-08-25**,
-investigated per a "note if already fine" instruction and found already structurally closed:
-`PinMarkup.save()` calls `self.coerce_colors()` (running `sanitize_hex_color`/
-`sanitize_optional_color` on both fields) before `super().save()`, and `PinMarkupQuerySet.bulk_create`
-- the one write path that bypasses `.save()` - separately calls it on every object before
-delegating to Django's real `bulk_create`. This is the *stronger* of the two remedies this entry
-proposed: a plain `validators=[...]` would not have closed the gap on its own, since Django only
-runs field validators inside `full_clean()`, which none of these write paths call. Covered by
-`PinMarkupColorStorageTests`/`PinMarkupBulkCreateColorTests` (`test_markup_colors.py`).
-
-**`Label.color` is still open** - it has `choices=COLOR_CHOICES` but no equivalent `save()`-level
-coercion, so a value bypassing form validation could still slip past. Not addressed here; this
-entry's title still applies to that one field.
-
----
-
 ## P34 — 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers
 
 `id: P34` · `status: open` · `updated: 2026-08-13`
@@ -2342,103 +2281,19 @@ handler may itself be well tested.
 
 ---
 
-## P38 — `Pin.change_category`, `Pin.add_category` and `Wiki.add_category` have no production callers, so their tests fake coverage
+## P41 — 68 of 249 public queryset methods have no production caller, so their logic may be duplicated inline elsewhere
 
-`id: P38` · `status: open` · `updated: 2026-08-13`
-
-Previously titled "The category-on-pin methods have no production callers".
-
-Categories became a `Label` kind (`KIND_CATEGORY`), managed generically by the organize/bulk-edit
-paths (`controllers/pin_bulk.py`, `controllers/pin_suggestions.py`). The older per-pin category
-helpers were left behind:
-
-- `Pin.change_category()` - after the 2026-08-14 removal of `MapController.change_category` and its
-  route, zero callers outside tests
-- `Pin.add_category()` - zero callers outside tests
-- `Wiki.add_category()` - zero callers outside tests
-
-Each still has tests, so the suite currently exercises code nothing reaches. That is worse than
-either extreme: the tests give the appearance of coverage, and any bug found in these methods reads
-as a production bug when it is not.
-
-**A correction that belongs with this.** During the label-uniqueness work earlier the same day, a
-`MultipleObjectsReturned` bug was found and fixed in `add_category` (the `Label.objects.get_or_create`
-lookup was missing `profile=None`, so a case-insensitive match could return both a global and a
-personal label). The fix is correct and the tests are real, but the method has no production caller
-- so that bug was **not reachable in production**, and it was reported at the time without that
-qualification.
-
-Deciding what to do needs a product call rather than a mechanical one: either delete the three
-methods with their tests, or wire them back up if per-pin category assignment is still wanted as a
-distinct concept from labels. Deleting is the more likely answer, since `KIND_CATEGORY` labels
-already do this and have a UI.
-
----
-
-## P39 — `clean_color` coerces invalid colours to the default, so API clients lose the value silently instead of a 400
-
-`id: P39` · `status: open` · `updated: 2026-08-13`
-
-Previously titled "API behaviour change: non-hex colours are no longer stored".
-
-From 2026-08-14, every colour write path runs through `services/core/colors.clean_color`, which
-accepts `#rgb`/`#rrggbb` (plus the literal `none` where a border legitimately means "no border")
-and otherwise falls back to the field's default.
-
-This is a **visible change for external API clients**. `PATCH /labels/<uuid>/`,
-`POST /labels/bulk/edit/` and the saved-filter endpoints previously stored whatever string was
-sent - `{"color": "red"}` was accepted and persisted, and one test asserted exactly that.
-
-It was never a working value:
-
-- `Label.color` declares `choices` that are all hex; `choices` is enforced by `full_clean()`, which
-  `save()` does not call, so the invalid value was stored rather than rejected.
-- Every renderer appends an alpha suffix (`color + "33"`), so `"red"` became `red33` - not a
-  colour, painting nothing. The chip rendered as though no colour had been set.
-
-So the change replaces "stored, then silently ignored by the UI" with "not stored". Clients sending
-named CSS colours will see the field come back empty rather than echoing their input.
-
-Worth deciding, and not decided here: whether these endpoints should **reject** an invalid colour
-with a 400 rather than coercing it. Coercion matches the HTML form paths (where the value comes
-from a palette picker and anything else is a malformed request), but an API arguably owes its
-callers an error instead of silent data loss. If that changes, it should change for all 31 sites at
-once, in `clean_color`'s callers rather than in the helper.
-
----
-
-## P40 — `Pin.by_category` and `Wiki.by_category` have no callers and omit `distinct()`, so any caller inherits duplicate rows
-
-`id: P40` · `status: open` · `updated: 2026-08-13`
-
-Previously titled "Two dead queryset methods".
-
-`Pin.by_category()` and `Wiki.by_category()` have no callers anywhere - Python, templates or tests.
-Both filter `labels__name=<category>` without `distinct()`, so they would return duplicates if used.
-
-Found while tracing the multi-valued-filter candidates (2026-08-14); the rest of that list resolved
-- 7 already collapse via `filter_by_criteria`, 2 cannot duplicate (`__isnull=True` tests for the
-absence of related rows), and 3 (`rated`/`rated_over`/`rated_under`, test-callers only) were given
-the `distinct()` they were missing.
-
-Filed rather than deleted because removing public queryset API is a judgement about whether it is
-scaffolding for something planned. If it is not, both should go - dead API with a latent bug is the
-worst combination, since the next caller inherits the bug.
-
----
-
-## P41 — 70 of 251 public queryset methods have no production caller, so their logic may be duplicated inline elsewhere
-
-`id: P41` · `status: open` · `updated: 2026-08-13`
+`id: P41` · `status: open` · `updated: 2026-09-05`
 
 Previously titled "Queryset API with no production caller: 70 of 251 (candidate count)".
 
-From a 2026-08-14 sweep of every public method on a `*/queryset.py` class:
+From a 2026-08-14 sweep of every public method on a `*/queryset.py` class, which found 70 of 251;
+two have since been deleted (see the archive), leaving 68 of 249:
 
 - **44** are not called from any file other than the one defining them
 - **26** are called only from tests
 
-That is 28% of the queryset API with no production consumer, which is worth a look - a custom
+That is 27% of the queryset API with no production consumer, which is worth a look - a custom
 queryset method exists to be the one place a piece of domain logic lives, and one nothing calls is
 either scaffolding, a leftover, or a piece of logic that got reimplemented inline somewhere else.
 The last of those is the interesting case, because it means the same rule now exists twice.
@@ -2449,12 +2304,14 @@ in the list and is definitely used - `filter_by_criteria` calls it, in the same 
 while tracing the duplicate-row candidates. Such methods are arguably mis-scoped (a `_`-prefixed
 helper rather than public API) but they are not dead.
 
-Two entries are confirmed dead by separate inspection: `Pin.by_category` and `Wiki.by_category`
-have no callers anywhere, in any file, including their own.
+The two the sweep confirmed dead by separate inspection, `Pin.by_category` and `Wiki.by_category`,
+were deleted on 2026-09-05 - so 68 of 249 remain, and every one of them is still only a candidate.
 
 Worth doing properly with a call-graph rather than a name grep, since the test-only 26 in
 particular may be exercised through the very `filter_by_criteria`-style aggregators that make them
-look unused.
+look unused. What the two deleted ones suggest about the rest: the thing that kept them from being
+noticed was `PinFilter` naming `by_category` in a `method=` string, which is not a call and which a
+name grep counts as one. A call-graph pass should expect the reverse error too.
 
 ---
 

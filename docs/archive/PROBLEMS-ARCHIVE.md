@@ -11234,3 +11234,89 @@ on any tracked project the `typecheck` script does not run - which is the half t
 missing, and would otherwise be recreated by the next config someone adds. The two
 `frontend/browser/` files are listed in its `_UNCOVERED` map with the reason, so the gap is a line
 someone chose rather than an absence nobody can see.
+
+## RESOLVED 2026-09-05: `Label.color` has no `save()`-level coercion, so a value bypassing form validation is stored unvalidated
+
+`id: P33` · `status: fixed` · `resolved: 2026-09-05`
+
+`Label.color` declares `choices`, which Django enforces in a form and not in the database. Two paths
+skip the form entirely: `services/import_export/import_data.py` builds labels straight from an
+uploaded file's rows, and the external API assigns from a JSON body. The value is interpolated into
+`style="..."` across the chip, merge-form and organize templates, so whatever reaches the column
+renders.
+
+Closed with the pattern `PinMarkup` already proved: `coerce_colors()` called from `save()`. Three
+things the original entry did not have:
+
+- **`LabelCustomization.color` matters more than `Label.color`.** It carries no `choices` at all,
+  and `Label.effective_color` reads the override first - so it is the one that actually renders
+  wherever a user has set one. Both are covered.
+- **`bulk_create` and `bulk_update` never call `save()`.** Both are overridden on the querysets.
+  `bulk_update` is not hypothetical: the external API's label bulk edit writes through it.
+- Import needed no change of its own; it goes through `Label.objects.create`.
+
+`clean_color(value, default=None)` is what the coercion calls, so an unrecognised value becomes NULL
+rather than a substituted colour - a label with no colour renders as one, and a label with somebody
+else's is a lie.
+
+## RESOLVED 2026-09-05: `Pin.change_category`, `Pin.add_category` and `Wiki.add_category` have no production callers, so their tests fake coverage
+
+`id: P38` · `status: fixed` · `resolved: 2026-09-05`
+
+Deleted, along with `Pin.by_category`/`Wiki.by_category` (the entry below) and their tests. Nothing
+called any of them - no template, route, controller, service or management command - and per-pin
+categories are `KIND_CATEGORY` labels now, reached through the label paths.
+
+The entry framed this as needing a product decision about whether per-pin categories survive as a
+concept. They already had not: the surface was reachable only from its own tests, and one of the
+three (`Wiki.add_category`) had lost even those since the entry was filed, so it was dead code with
+no callers *and* no coverage.
+
+Worth keeping from the original: the `profile=None`-in-the-lookup fix these carried was real and
+correct, and was never reachable from production. A fix applied to code nothing calls is indexed by
+coverage as work done.
+
+## RESOLVED 2026-09-05: `clean_color` coerces invalid colours to the default, so API clients lose the value silently instead of a 400
+
+`id: P39` · `status: fixed` · `resolved: 2026-09-05`
+
+The complaint was right and the scope was wrong. The entry read as though every external-API colour
+write coerced; two of the four families already rejected. `LabelWriteSerializer.color` is a
+`ChoiceField(choices=COLOR_CHOICES)` and `SavedFilterWriteSerializer.validate_color` checks the same
+palette, so the single-label and saved-filter endpoints have been answering 400 all along. The
+`clean_color` calls behind them were belt-and-braces on already-validated input, which is what made
+the grep look worse than the behaviour.
+
+Genuinely silent, and now fixed: **pin create** (a plain `CharField`, no validator), the **label
+bulk edit** (likewise), and the **label customization** override.
+
+`services/core/colors.require_color` refuses a value that is present and is not a colour, and keeps
+falling back for missing and blank - "unset" is not an invalid colour, and every one of these
+endpoints treats an absent key as "leave it alone". The API layer turns the refusal into the
+package's field-keyed 400.
+
+Bulk edit was moved onto the same palette as the single-label endpoint rather than merely onto
+"any hex". They write the same column on the same model, and `Label.color`'s own `choices` is the
+palette; leaving bulk edit looser would have replaced a silent drop with a silent inconsistency.
+
+The entry's own text had one error worth recording, because it is the kind that survives review:
+it said `clean_color` "accepts `#rgb`/`#rrggbb`". `HEX_COLOR_RE` is `^#[0-9a-fA-F]{6}$` - 6-digit
+only - so `#f00` was being dropped exactly as silently as `red`, and by a rule no caller had written
+down. `docs/EXTERNAL_API.md` now says so.
+
+Not done, and still true: `clean_color` overlaps `sanitize_hex_color`/`sanitize_optional_color`, so
+"one place to change it" is two and a half. `require_color` is built on `clean_color` rather than
+adding a third definition of what a colour is.
+
+## RESOLVED 2026-09-05: `Pin.by_category` and `Wiki.by_category` have no callers and omit `distinct()`, so any caller inherits duplicate rows
+
+`id: P40` · `status: fixed` · `resolved: 2026-09-05`
+
+Both deleted, with the dead category surface above.
+
+The entry hesitated over whether `PinFilter` counted as a caller - `categories = CharFilter(method="by_category")`
+names the method as a string. It does not, and the answer is worse than "no": django-filter resolves
+`method=` against the *FilterSet*, and `PinFilter` defines none of the ten methods it names, so
+wiring it to a viewset would have raised at filter time. Nothing imported it. Dead scaffolding
+pointing at dead scaffolding - which is also why the missing `distinct()` was never noticed.
+`PinFilter` is deleted too; `Wiki` never had a filterset.
