@@ -167,6 +167,11 @@ class _PinConflictData:
     values: dict[int, CustomFieldValue]
 
 
+#: What an unsaved pin has: none of the three relations, so nothing to collide
+#: with. Read-only, and never mutated by the comparison below.
+_NOTHING = _PinConflictData(article=None, boundaries={}, values={})
+
+
 def _conflict_data(pins: Sequence[Pin]) -> dict[int, _PinConflictData]:
     """Everything :func:`plan_merge_conflicts` compares, for many pins at once.
 
@@ -176,7 +181,8 @@ def _conflict_data(pins: Sequence[Pin]) -> dict[int, _PinConflictData]:
     ``(field, pin)`` - which is the assumption the comparison already made.
 
     Args:
-        pins: The pins to fetch for. Duplicates and unsaved pins are ignored.
+        pins: The pins to fetch for. Duplicates collapse; an unsaved pin gets
+            no entry, which :func:`_conflicts_between` reads as ``_NOTHING``.
 
     Returns:
         One entry per distinct saved pin id.
@@ -215,7 +221,11 @@ def _conflicts_between(pin_a: Pin, pin_b: Pin, data: dict[int, _PinConflictData]
         The conflicts between them.
     """
     conflicts: list[MergeFieldConflict] = []
-    side_a, side_b = data[pin_a.pk], data[pin_b.pk]
+    # An unsaved pin has no entry, and correctly has no conflicts: it can hold
+    # none of the three relations. Django refuses it before that anyway - a
+    # related filter on an unsaved instance raises - so this is about answering
+    # rather than crashing, not about permitting something new.
+    side_a, side_b = data.get(pin_a.pk, _NOTHING), data.get(pin_b.pk, _NOTHING)
 
     article_a, article_b = side_a.article, side_b.article
     if article_a is not None and article_b is not None:

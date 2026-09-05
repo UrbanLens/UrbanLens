@@ -52,7 +52,9 @@ class VaultHomeView(LoginRequiredMixin, View):
             videos=Count("pk", filter=Q(media_type=MediaKind.VIDEO)),
             # The same predicate `get_storage_totals` splits counted bytes from
             # exempt ones on, so this is a slice of the bar below rather than a
-            # second number that can exceed it.
+            # separately-derived number. The two are still separate reads, so a
+            # concurrent delete between them can leave the slice momentarily
+            # larger - a display number that self-corrects, not an invariant.
             video_bytes=Sum("file_size", filter=Q(media_type=MediaKind.VIDEO, quota_exempt_reason="")),
         )
         photo_count = counts["photos"] or 0

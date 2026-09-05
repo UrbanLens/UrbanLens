@@ -286,7 +286,14 @@ class WithdrawingAContributedPhotoTests(_DualOwnershipTestCase):
         self.assertEqual(get_storage_used_bytes(self.profile), 0)
 
     def test_deleting_the_wiki_leaves_the_bonus_intact(self) -> None:
-        """`Image.wiki` is SET_NULL, and nobody's storage should move because of it."""
+        """`Image.wiki` is SET_NULL, and nobody's storage should move because of it.
+
+        This passes on the code before the revoke existed, and is meant to: it
+        is not evidence for the revoke but a guard against the two shapes that
+        would have been easier to write - a `post_save` receiver, or a rule in
+        the storage aggregate - both of which take the bonus back here, where
+        the action was somebody else's.
+        """
         image = self._rewarded_photo()
 
         Wiki.objects.filter(pk=self.wiki.pk).delete()

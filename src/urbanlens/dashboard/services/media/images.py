@@ -1604,7 +1604,7 @@ def detach_image_from_wiki(image: Image, *, withdrawn_by_contributor: bool) -> N
     from urbanlens.dashboard.services.media.quota_rewards import revoke_community_quota_bonus
 
     if image.wiki_id is not None:
-        # The pin side already does this (``PinGalleryImageView.delete``).
+        # The pin side already does this (``PinImageView.delete``).
         # Leaving the row behind keeps the photo eligible to be made the
         # wiki's cover, since ``WikiCoverPhotoView`` accepts an attachment as
         # proof the photo is on the wiki, and keeps it counted by
