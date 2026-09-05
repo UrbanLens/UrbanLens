@@ -35,7 +35,6 @@ if TYPE_CHECKING:
 
     from django.db.models import Manager as DjangoManager
 
-    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.markup.model import PinMarkup
     from urbanlens.dashboard.models.profile.model import Profile
@@ -142,7 +141,7 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
     )
 
     # Attribution only - deleting the creator's profile does not cascade-delete
-    # the wiki. Used solely to gate self-service deletion (see can_be_deleted_by).
+    # the wiki.
     created_by = ForeignKey(
         "dashboard.Profile",
         on_delete=SET_NULL,
