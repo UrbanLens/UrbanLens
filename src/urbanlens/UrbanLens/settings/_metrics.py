@@ -14,6 +14,9 @@ that is already running, independently of any image build. Two consequences that
 
 from __future__ import annotations
 
+import os
+import sys
+
 from django.core.exceptions import ImproperlyConfigured
 
 #: ``UL_PROCESS_ROLE`` values whose Django stack is actually scraped.
@@ -58,3 +61,24 @@ def require_django_prometheus() -> None:
             "Either rebuild the image against the current pyproject.toml, or set UL_METRICS_ENABLED=false "
             "until you can. Metrics instrumentation is the only thing that needs the package."
         ) from exc
+
+
+def disable_multiprocess_metrics() -> None:
+    """Take ``prometheus_client`` out of multiprocess mode for this process.
+
+    Popping ``PROMETHEUS_MULTIPROC_DIR`` is not enough on its own.
+    ``prometheus_client.values`` resolves ``ValueClass`` once, at import, from
+    the variable as it stood then - so in any process that imported the library
+    while it was still set, every later registry keeps mmap-backed values and
+    joins their path against ``None``. That is not hypothetical ordering: with
+    ``UL_METRICS_ENABLED=true``, :func:`require_django_prometheus` imports
+    ``django_prometheus`` - and through it ``prometheus_client`` - from
+    ``base.py``, which the test settings module cannot run before.
+
+    Re-resolving the class through the library's own ``get_value_class`` is what
+    makes the pop take effect regardless of who imported first.
+    """
+    os.environ.pop("PROMETHEUS_MULTIPROC_DIR", None)
+    values = sys.modules.get("prometheus_client.values")
+    if values is not None:
+        values.ValueClass = values.get_value_class()

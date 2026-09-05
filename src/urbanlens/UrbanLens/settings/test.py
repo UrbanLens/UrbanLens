@@ -5,6 +5,7 @@ import tempfile
 
 from pydantic_core import Url
 
+from urbanlens.UrbanLens.settings import _metrics
 from urbanlens.UrbanLens.settings._gdal_windows import local_windows_gdal_overrides
 from urbanlens.UrbanLens.settings.app import settings as _app_settings
 from urbanlens.UrbanLens.settings.base import *  # noqa: F403
@@ -171,14 +172,13 @@ CELERY_WORKER_SEND_TASK_EVENTS = False
 # stack CI never sees.
 INSTALLED_APPS = [app for app in INSTALLED_APPS if app != "django_prometheus"]  # noqa: F405
 MIDDLEWARE = [middleware for middleware in MIDDLEWARE if not middleware.startswith("django_prometheus.")]  # noqa: F405
-# Read by prometheus_client rather than Django, and it tests for the key's
-# *presence*, not its value - so this is popped, not blanked. In multiprocess
-# mode every sample is backed by an mmap keyed on metric name and labels and
-# shared by every registry in the process, which makes a fresh CollectorRegistry
-# report increments from whichever test ran before it. Popping it here (safe:
-# prometheus_client is not imported until well after settings load) gives each
-# registry its own values, so a per-test registry actually isolates.
-os.environ.pop("PROMETHEUS_MULTIPROC_DIR", None)
+# In multiprocess mode every sample is backed by an mmap keyed on metric name
+# and labels and shared by every registry in the process, which makes a fresh
+# CollectorRegistry report increments from whichever test ran before it. This
+# leaves each registry its own values, so a per-test registry actually isolates.
+# It is not a plain env pop: prometheus_client may already have been imported by
+# the time this module runs - see the helper.
+_metrics.disable_multiprocess_metrics()
 
 # model_bakery's default related-object generation collides with the
 # create_user_profile post_save signal (see urbanlens.core.tests.baker).

@@ -401,6 +401,57 @@ class MetricsInstrumentationGateTests(SimpleTestCase):
         )
 
 
+class MultiprocessModeDisabledTests(SimpleTestCase):
+    """Leaving multiprocess mode has to survive the library being imported first.
+
+    ``prometheus_client.values`` resolves ``ValueClass`` once, at import, from
+    ``PROMETHEUS_MULTIPROC_DIR`` as it stood then. Popping the variable
+    afterwards does not unresolve it, so in a process that imported the library
+    while it was set - which ``UL_METRICS_ENABLED=true`` guarantees, via
+    ``base.py``'s ``django_prometheus`` import, before the test settings module
+    runs at all - every later registry joins its mmap path against ``None`` and
+    raises ``TypeError``.
+    """
+
+    def _restore_value_class(self) -> None:
+        """Put back whatever the class was before a test forced it."""
+        from prometheus_client import values
+
+        original = values.ValueClass
+        self.addCleanup(setattr, values, "ValueClass", original)
+
+    def test_a_latched_multiprocess_class_is_undone(self) -> None:
+        from prometheus_client import values
+
+        self._restore_value_class()
+        with mock.patch.dict(os.environ, {MULTIPROC_DIR_ENV: "/nonexistent/prometheus"}):
+            values.ValueClass = values.MultiProcessValue()
+            _metrics.disable_multiprocess_metrics()
+            self.assertEqual(values.ValueClass.__qualname__, "MutexValue")
+            self.assertNotIn(MULTIPROC_DIR_ENV, os.environ)
+
+    def test_the_variable_is_removed_rather_than_blanked(self) -> None:
+        # prometheus_client tests for the key's presence, not its value, so an
+        # empty string is still multiprocess mode.
+        self._restore_value_class()
+        with mock.patch.dict(os.environ, {MULTIPROC_DIR_ENV: "/nonexistent/prometheus"}):
+            _metrics.disable_multiprocess_metrics()
+            self.assertNotIn(MULTIPROC_DIR_ENV, os.environ)
+
+    def test_it_is_a_no_op_when_the_library_was_never_imported(self) -> None:
+        self._restore_value_class()
+        with mock.patch.dict(sys.modules, {"prometheus_client.values": None}):
+            _metrics.disable_multiprocess_metrics()
+
+    def test_the_test_settings_module_does_not_pop_the_variable_by_hand(self) -> None:
+        # A bare pop reads as sufficient and is not. It regresses silently: the
+        # suite still passes wherever the variable is unset, and fails only in
+        # the containers that have metrics on.
+        source = (REPO_ROOT / "src/urbanlens/UrbanLens/settings/test.py").read_text()
+        self.assertIn("_metrics.disable_multiprocess_metrics()", source)
+        self.assertNotIn(f'os.environ.pop("{MULTIPROC_DIR_ENV}"', source)
+
+
 class MetricsDeploymentWiringTests(SimpleTestCase):
     """The parts of this that live outside Python and cannot be unit-tested."""
 
