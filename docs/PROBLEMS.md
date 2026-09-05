@@ -1743,50 +1743,6 @@ Worth doing because the one route from this set that *was* investigated - `pin.l
 endpoint - turned out to fail with a 500 on every request (see the entry above). An untested write
 route is not merely unverified; it is where a permanently broken feature can sit unnoticed.
 
-## P30 — Backups are plain-SQL with no restore path, and the repo's only `pg_restore` example cannot read them
-
-`id: P30` · `status: open` · `updated: 2026-08-13`
-
-Previously titled "Database backups have no restore path, and their format defeats the only example".
-
-`core/controllers/backups/db.py` produces **plain-SQL** dumps: `pg_dump -U ... -f <path>`, no
-`-Fc`, written as `backup_<YYYYMMDD>_<HHMMSS>.sql`. Creation, retention, scheduling, the atomic
-temp-file rename, and (as of the 2026-08-14 audit chunk) reaping of abandoned `.tmp` files are all
-implemented and tested.
-
-Restoring one is not implemented, not documented, and not tested.
-
-- No code path in `src/` or `bin/` restores a scheduled backup.
-- The only `pg_restore` anywhere is the `infrastructure` repo's
-  `bin/clone_prod_to_staging.sh:158` (moved there from this repo's own `bin/`
-  since it was written; see `../infrastructure/docs/OPS_TOOLING.md` there), which restores
-  `/tmp/clone.dump` - a *different* dump that script creates for itself with its own flags. It has
-  nothing to do with the backup directory.
-- That mismatch is a trap rather than a mere omission. `pg_restore` **cannot read a plain-format
-  dump**; it exits with *"input file appears to be a text format dump. Please use psql."* An
-  operator under pressure, reaching for the repository's only restore example, hits that error on
-  their first attempt at recovering production data.
-
-Restoring these dumps actually requires `psql -U <user> -d <db> -f backup_....sql`, into a database
-where PostGIS is already installed (a plain dump's `CREATE EXTENSION postgis` needs superuser, and
-the dump does not create the database itself). None of that is written down anywhere.
-
-Worth deciding deliberately rather than defaulting:
-
-1. **Document the procedure** - the minimum. A `docs/BACKUPS.md` with the exact `psql` invocation,
-   the PostGIS prerequisite, and whether to restore into a fresh database or an emptied one.
-2. **Consider `-Fc`** (custom format). It compresses, allows selective/parallel restore, and makes
-   `pg_restore` - the tool the repo already demonstrates - the correct one. This changes the
-   filename suffix, so `BACKUP_FILENAME_RE`, `is_backup_temp_filename`, and any existing on-disk
-   backups need handling together.
-3. **Verify a restore at least once**, into a scratch database, ideally in CI against a seeded
-   dump. Everything above is theory until a dump from this code has actually been restored.
-
-Nothing here is a defect in the backup *writer*, which is careful. The gap is that the half of the
-system that matters on the worst day has never been exercised.
-
----
-
 ## P31 — Session and DM chat sockets have no rate limit and cap frame size only after the whole frame is parsed
 
 `id: P31` · `status: open` · `updated: 2026-08-13`
@@ -1922,7 +1878,6 @@ exactly the way it warns about: a per-route review that greps for the route's ow
 the original false positive, because a concatenated URL never contains it. The tell was that both
 had a *test* naming them and no caller - a shape that means "reached some other way" far more often
 than "dead".
-
 
 ## P36 — 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
 

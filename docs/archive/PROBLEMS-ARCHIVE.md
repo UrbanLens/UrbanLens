@@ -11779,3 +11779,45 @@ subclass and the harness is what holds it.
 **Not resolved by this**, and still recorded where they were: the instances the survey found. The
 achievement admin's per-row icon picker is the one this instrument was calibrated against and is
 still there - see P68, whose "~1,288 `ICON_CATEGORIES` entries" is 1,249 as measured on 2026-09-05.
+
+## RESOLVED 2026-09-05: the documented way to restore a backup was the one way that fails, and nobody had run it
+
+`id: P30` · `status: fixed` · `resolved: 2026-09-05`
+
+Restoring is now implemented (`bin/restore_backup.sh`), documented (`docs/BACKUPS.md`, R26) and
+tested by round trip (`bin/verify_backup_restore.sh`) - the entry's three options, all taken except
+`-Fc`, which is declined for stated reasons in the doc.
+
+**The entry's own restore instruction was backwards, and it is the sentence an operator would have
+followed.** It said to restore "into a database where PostGIS is already installed". A PostGIS-ready
+target is the one case that fails: the dump emits `CREATE SCHEMA tiger` with no `IF NOT EXISTS`, so
+with `ON_ERROR_STOP=1` it aborts at line 26 with `ERROR: schema "tiger" already exists`, exit 3, one
+table restored out of 235. The target has to be empty; `bin/restore_backup.sh` creates it from
+`template0` so that emptiness is structural rather than remembered.
+
+The `pg_restore` half was right, verbatim: `input file appears to be a text format dump. Please use
+psql.`
+
+Two failures the entry did not have, found by running it:
+
+- **psql exits 0 when statements fail.** Without `ON_ERROR_STOP=1` the collision above reports three
+  errors on stderr and still exits successfully with all 235 tables restored (the extensions are
+  `IF NOT EXISTS`; only the three `CREATE SCHEMA` statements fail). It happens to work, which is how
+  the habit of omitting the flag survives to a restore where something real fails.
+- **The database container cannot restore the app container's dumps.** `pg_dump` 17.11 in the app
+  image emits `\restrict`, a meta-command added in psql 17.6; the db image ships 17.5. With
+  `ON_ERROR_STOP` that aborts at line 5 having restored nothing, and without it exits 0 the same way.
+  The script compares the two versions and refuses.
+
+Verified, not asserted: 235 tables from an 861,888-byte dump produced by `DatabaseBackup.run()`
+itself, every table's full contents hashed (`md5(string_agg(row::text, ...))`, which covers
+geography, jsonb and bytea without naming a column) identical live-vs-restored; then a second hop
+with both ends quiescent, carrying a probe table of `geography(Point/MultiPolygon,4326)`, `jsonb`,
+`bytea`, `numeric`, `timestamptz`, non-ASCII text and an all-NULL row - identical across all 236.
+The verifier's teeth were checked by breaking it: building the target from `template_postgis` fails
+at line 26, and deleting one probe row between hops reports `FIDELITY FAILURE` naming the table.
+
+The verifier does **not** assert `migrate --check` passes, which was the obvious check and the wrong
+one: it asserts the deployment is fully migrated, a fact about the deployment rather than the
+restore. This environment has 5 pending migrations and fails it identically before and after. It
+compares migration state between source and copy instead.

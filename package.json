@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "db": "python3 src/bin/db.py start",
+    "db:restore": "bash bin/restore_backup.sh",
+    "db:restore:verify": "bash bin/verify_backup_restore.sh",
     "migrate": "python3 -m urbanlens.manage makemigrations & python3 -m urbanlens.manage migrate",
     "sass": "bun node_modules/sass/sass.js --style=compressed --no-source-map src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
     "sass:dev": "bun node_modules/sass/sass.js --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
