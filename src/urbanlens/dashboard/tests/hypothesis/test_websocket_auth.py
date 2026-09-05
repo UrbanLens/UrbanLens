@@ -28,8 +28,6 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
 
-_IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
-
 Application = get_application_model()
 AccessToken = get_access_token_model()
 
@@ -55,7 +53,6 @@ def _notification_key(user) -> tuple[ApiKey, str]:
     return api_key, raw_key
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class ApiKeyWebSocketAuthTests(TransactionTestCase):
     """A ``?key=`` query param authenticates a socket exactly like a session would."""
 

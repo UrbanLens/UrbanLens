@@ -30,7 +30,6 @@ from urbanlens.dashboard.models.spotguessr.model import SpotGuessrMode
 from urbanlens.dashboard.models.subscriptions import UserSubscription
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session
 
-_IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 _coordinate_counter = count()
 
 
@@ -56,7 +55,6 @@ def _make_profile(*, alpha: bool = True) -> Profile:
     return Profile.objects.get(user=user)
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class GameSessionConsumerTests(TransactionTestCase):
     def setUp(self) -> None:
         self.host = _make_profile()

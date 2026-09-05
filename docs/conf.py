@@ -10,9 +10,9 @@ container or CI, and a broken import would surface as a missing page rather than
 an error. ``autoapi`` parses the source instead, so `sphinx-build docs` works
 anywhere Python does.
 
-**MyST.** Everything else in ``docs/`` is Markdown. Without ``myst_parser`` the
-toctree can reference exactly two files - this one's siblings ``index.rst`` and
-nothing else - and the generated site is an API reference with no prose.
+**MyST.** Everything else in ``docs/`` is Markdown, and ``index.rst`` is the only
+``.rst`` in it. Without ``myst_parser`` the toctree can therefore reference
+nothing at all, and the generated site is an API reference with no prose.
 
 Build it with ``bin/build_docs.py``, which is also what CI runs; the ``api/``
 tree it produces is generated, not committed.
@@ -35,22 +35,14 @@ extensions = [
 
 templates_path = ["_templates"]
 
-exclude_patterns = [
-    "_build",
-    "Thumbs.db",
-    ".DS_Store",
-    # Historical reports and per-task working notes: hundreds of pages of
-    # point-in-time findings, several of which this documentation's own README
-    # describes as evidence rather than reference. Including them buries the
-    # dozen documents a reader actually wants.
-    "reports/*",
-    "prompts/*",
-    "notes/*",
-    "archive/*",
-    "audits/*",
-    "designs/*",
-    "mobile/*",
-]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+# Everything under docs/ is built, including the archive, designs, audits and
+# reports. An earlier version of this file excluded those to keep the sidebar
+# short, which broke 40 of INDEX.md's 41 outbound links in the rendered site -
+# and INDEX.md is the page CLAUDE.md sends every reader to first. They are 45
+# files against 1,076 generated API pages, so the sidebar was the only thing
+# being bought. `index.rst` keeps them out of the visible navigation with a
+# hidden glob toctree instead, which is the part that was actually wanted.
 
 #: Google-style docstrings, which `CLAUDE.md` requires throughout.
 napoleon_google_docstring = True

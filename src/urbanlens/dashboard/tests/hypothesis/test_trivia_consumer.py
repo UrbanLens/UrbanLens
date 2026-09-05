@@ -24,7 +24,6 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.trivia.session import TriviaConfig, kick_participant, start_multiplayer_session
 
-_IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 _coordinate_counter = count()
 
 
@@ -49,7 +48,6 @@ def _make_profile() -> Profile:
     return Profile.objects.get(user=user)
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class TriviaSessionConsumerTests(TransactionTestCase):
     def setUp(self) -> None:
         self.host = _make_profile()

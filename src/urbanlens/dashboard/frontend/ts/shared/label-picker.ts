@@ -139,6 +139,29 @@ export interface FilterPickerApi {
     isEmpty(): boolean;
 }
 
+/**
+ * True when a `contextmenu` emits no follow-up click to suppress.
+ *
+ * Two such sources, and only the first is a pointer: a real mouse right-click,
+ * which also cannot be racing a long-press timer since `startPress` ignores
+ * mouse pointers; and a *keyboard* context menu - the Menu key, or Shift+F10 -
+ * which reports `pointerType: ""`, `button: 0` and `detail: 0`. Read as a
+ * pointer event, that last one looks exactly like a touch long-press, so it
+ * used to arm the suppression and leave the guard set until some unrelated
+ * later click, swallowing the Enter or Space a keyboard user pressed next.
+ *
+ * `detail` is the discriminator: a touch long-press carries a real click count,
+ * a keyboard-synthesised event carries 0.
+ *
+ * Exported for its test: the two callers are inside picker closures, and the
+ * rule is about event shapes rather than about the DOM around them.
+ */
+export function emitsNoFollowUpClick(event: MouseEvent): boolean {
+    const pointerType = (event as PointerEvent).pointerType;
+    if (pointerType) return pointerType === "mouse";
+    return event.button === 2 || event.detail === 0;
+}
+
 export function createFilterPicker(options: FilterPickerOptions): FilterPickerApi {
     const els = options.els;
     const onChange = options.onChange || (() => {});
@@ -241,18 +264,6 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
         document.addEventListener("click", releasePress);
         document.addEventListener("pointerdown", releasePress);
         return true;
-    }
-
-    /**
-     * True when a `contextmenu` came from a real mouse right-click, which emits
-     * no follow-up click to suppress - and can't be racing a long-press timer
-     * either, since startPress ignores mouse pointers. Arming the suppression
-     * for it would leave the guard set until some unrelated later click,
-     * swallowing keyboard (Enter/Space) activations in the meantime.
-     */
-    function isMouseContextMenu(event: MouseEvent): boolean {
-        const pointerType = (event as PointerEvent).pointerType;
-        return pointerType ? pointerType === "mouse" : event.button === 2;
     }
 
     /**
@@ -456,7 +467,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
                 });
                 chip.addEventListener("contextmenu", (e) => {
                     e.preventDefault();
-                    if (claimPress(!isMouseContextMenu(e))) toggleLabelMode(id);
+                    if (claimPress(!emitsNoFollowUpClick(e))) toggleLabelMode(id);
                 });
                 chip.addEventListener("pointerdown", (e) => startPress(e, () => toggleLabelMode(id)));
                 chip.querySelector<HTMLElement>(".fp-label-chip-toggle")?.addEventListener("click", (e) => {
@@ -601,7 +612,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");
         if (!btn) return;
         e.preventDefault();
-        if (claimPress(!isMouseContextMenu(e))) addLabel(btn, "excl");
+        if (claimPress(!emitsNoFollowUpClick(e))) addLabel(btn, "excl");
     });
     els.list.addEventListener("pointerdown", (e) => {
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");

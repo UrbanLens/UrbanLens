@@ -8,7 +8,7 @@
  * the pill display instead of silently showing a misleading simplification.
  */
 import { describe, expect, test } from "bun:test";
-import { isSimpleGroups, matchesLabelFilter, type LabelGroup } from "./label-picker"
+import { emitsNoFollowUpClick, isSimpleGroups, matchesLabelFilter, type LabelGroup } from "./label-picker"
 import { safeColor } from "./color-safety";
 
 describe("isSimpleGroups", () => {
@@ -145,5 +145,42 @@ describe("safeColor", () => {
         expect(safeColor("")).toBe("");
         expect(safeColor(null)).toBe("");
         expect(safeColor(undefined)).toBe("");
+    });
+});
+
+describe("emitsNoFollowUpClick", () => {
+    /**
+     * The suppression this arms exists for one case only: a *touch* long-press,
+     * which fires `contextmenu` and then a click that must not be acted on
+     * twice. Arming it for anything else leaves the guard set until some
+     * unrelated later click eats it - and the click it eats is whatever the
+     * user does next, which for a keyboard user is their Enter or Space.
+     */
+    const event = (init: MouseEventInit & { pointerType?: string }): MouseEvent => {
+        const created = new MouseEvent("contextmenu", init) as MouseEvent & { pointerType?: string };
+        if (init.pointerType !== undefined) Object.defineProperty(created, "pointerType", { value: init.pointerType });
+        return created;
+    };
+
+    test("a mouse right-click needs no suppression", () => {
+        expect(emitsNoFollowUpClick(event({ button: 2, detail: 1, pointerType: "mouse" }))).toBe(true);
+    });
+
+    test("a touch long-press does - it is the case the guard exists for", () => {
+        expect(emitsNoFollowUpClick(event({ button: 0, detail: 1, pointerType: "touch" }))).toBe(false);
+        expect(emitsNoFollowUpClick(event({ button: 0, detail: 1, pointerType: "pen" }))).toBe(false);
+    });
+
+    test("a keyboard context menu needs none, and used to be read as touch", () => {
+        // Menu key / Shift+F10: no pointerType, button 0, and no click count.
+        expect(emitsNoFollowUpClick(event({ button: 0, detail: 0 }))).toBe(true);
+    });
+
+    test("without pointerType, a right-click is still a right-click", () => {
+        expect(emitsNoFollowUpClick(event({ button: 2, detail: 1 }))).toBe(true);
+    });
+
+    test("without pointerType, a long-press is still suppressed", () => {
+        expect(emitsNoFollowUpClick(event({ button: 0, detail: 1 }))).toBe(false);
     });
 });

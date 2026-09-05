@@ -2144,40 +2144,50 @@ one instance fixes nothing else.
 
 ---
 
-## P35 — Seven named routes still have no discoverable caller and remain unreviewed authorised surface
+## P35 — Four named routes have no production caller; the other five the sweep flagged are reached by hardcoded path
 
-`id: P35` · `status: open` · `updated: 2026-08-13`
+`id: P35` · `status: open` · `updated: 2026-09-05`
 
-Previously titled "Nine named routes with no discoverable caller (candidates for review, not confirmed dead)".
+Previously titled "Seven named routes still have no discoverable caller and remain unreviewed
+authorised surface", and before that "Nine named routes with no discoverable caller".
 
-From a 2026-08-14 sweep of all 753 named routes. 61 have no static reference outside `urls.py`;
-30 are reached via `reverse(f"{prefix}.{suffix}")` and 34 live in `external_api/urls.py` where the
-callers are API clients. `password_reset_complete` is Django's own. That leaves:
+From a 2026-08-14 sweep of all 753 named routes. 61 had no static reference outside `urls.py`; 30
+are reached via `reverse(f"{prefix}.{suffix}")`, 34 live in `external_api/urls.py` where the
+callers are API clients, and `password_reset_complete` is Django's own. The remainder were reviewed
+one at a time on 2026-09-05, which is what the entry asked for. Three outcomes, and the middle one
+is the interesting result:
 
-- `add_review`
-- `comment.locations`
-- `dev_toolbar.toggle_map_dark_mode`
-- `label.index`
-- `location.wiki.article.restore`
-- `location.wiki.article.revision`
-- `location.wiki.gallery.image`
-- ~~`pin.upload.takeout`~~ - RESOLVED 2026-08-14: superseded duplicate of the
-  `pin.import.preview`/`confirmed` wizard flow; handler and route removed
-- `safety.checkin.gallery.image`
+**Not a route.** `add_review` is a commented-out line (`urls.py:398`, commented since `549c22537`).
+`reverse("add_review")` has never resolved. Struck.
 
-**Do not bulk-delete these.** Each needs checking individually, because the plausible explanations
-differ: `dev_toolbar.toggle_map_dark_mode` is dev tooling that may be invoked by hand;
-`pin.upload.takeout` and the two `gallery.image` routes may be hit as literal URLs built in inline
-template JavaScript (which this audit has separately measured at 21,543 untested lines, so it is
-exactly where a hardcoded path would hide); `location.wiki.article.restore`/`revision` pair with
-`services/wiki/articles.restore_revision`, which does exist, suggesting a wired-up feature whose
-entry point is somewhere the scan could not see.
+**Called, but by a path the sweep cannot see.** Each of these has a live caller that builds the URL
+as a string rather than through `{% url %}`:
 
-A route with genuinely no caller is still worth removing - it is surface area that has to be kept
-authorised and tested - but "the grep found nothing" has produced a false positive in every
-category this sweep touched.
+- `comment.locations` - `frontend/ts/shared/mention-autocomplete.ts:133`,
+  which fetches `/dashboard/comments/locations/?q=...`
+- `location.wiki.article.revision` and `location.wiki.article.restore` -
+  `templates/dashboard/partials/articles/_article_history.html:30,37`, which append
+  `{{ row.revision.id }}/` and `.../restore/` to a URL passed in as `scope.urls.history`
 
----
+That is the finding worth carrying forward, and it cuts both ways: a route reached only by a
+hardcoded path is invisible to this kind of sweep *and* breaks silently when the route moves. The
+`{% url %}` tag exists so a rename is a build error rather than a 404 nobody notices.
+
+**Genuinely no production caller** - four, all still open:
+
+- `label.index` (`urls.py:1203`, `LabelKindIndexView`) - a whole page view. Its siblings
+  `label.create`/`label.rows`/`label.edit` are live from the Organize page; only the index itself is
+  unreachable, and only `test_query_scaling.py:96` names it.
+- `location.wiki.gallery.image` (`urls.py:1597`) - named only by
+  `test_pin_wiki_image_dual_ownership.py:148`.
+- `safety.checkin.gallery.image` (`urls.py:1796`) - no reference at all, including tests.
+- `dev_toolbar.toggle_map_dark_mode` (`urls.py:2134`) - dev tooling with no button; plausibly
+  invoked by hand, which is why it is listed rather than deleted.
+
+Each is authorised surface that has to be kept working and tested, so the choice for each is a
+button or a deletion. Not made here: `label.index` and the two `gallery.image` routes are user-facing
+behaviour, and deciding a page should not exist is the owner's call, not a sweep's.
+
 
 ## P36 — 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
 

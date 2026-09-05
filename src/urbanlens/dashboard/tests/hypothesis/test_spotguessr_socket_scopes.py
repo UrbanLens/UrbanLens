@@ -35,8 +35,6 @@ from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_solo_session
 from urbanlens.dashboard.websocket_auth import CREDENTIAL_SCOPE_KEY
 
-_IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
-
 
 def _run(coro):
     """Run *coro* via async_to_sync so database_sync_to_async's thread bridge is actually pumped."""
@@ -52,7 +50,6 @@ def _make_profile() -> Profile:
     return Profile.objects.get(user=baker.make("auth.User"))
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class GameSessionSocketScopeTests(TransactionTestCase):
     """A credential opening a game socket has to hold the games scopes."""
 

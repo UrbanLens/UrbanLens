@@ -36,8 +36,6 @@ from urbanlens.dashboard.services.visits.safety import (
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
-_IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
-
 
 def _profile(**kwargs) -> Profile:
     return baker.make("auth.User", **kwargs).profile
@@ -257,7 +255,6 @@ def _run(coro):
     return async_to_sync(_wrap)()
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
     """SafetyCheckinChatConsumer's widened session-route permission check."""
 

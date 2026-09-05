@@ -64,6 +64,16 @@ CACHES = {
 CELERY_BROKER_URL = "memory://"
 CELERY_RESULT_BACKEND = "cache+memory://"
 
+# Same reasoning again, for the channel layer. base.py points it at valkey, so
+# any consumer test that reaches a group send opens a real connection - blocked
+# by the network guard when the address is a container bridge IP, which is what
+# `docker compose exec app pytest` resolves to.
+#
+# Set here rather than per-module: eight test modules each declared their own
+# `_IN_MEMORY_CHANNEL_LAYERS` override, which is eight places to remember and
+# eight that a new consumer test can be written without.
+CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
 # No clamd daemon runs in the test environment - tests that exercise the
 # malware-rejection path (services.security.malware_scan) mock it explicitly; every
 # other upload test should hit the "clean" no-op path instead of a 503 from

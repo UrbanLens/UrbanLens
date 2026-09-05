@@ -53,6 +53,20 @@ Generated from the source by ``autoapi`` - every module under
 
    api/index
 
+.. toctree::
+   :hidden:
+   :glob:
+
+   DEMO
+   NOTES-celery-acks
+   archive/*
+   audits/*
+   designs/*
+   designs/*/*
+   mobile/*
+   notes/*
+   reports/*
+
 Indices and tables
 ==================
 

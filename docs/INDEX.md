@@ -66,7 +66,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P31 | open | 2026-08-13 | Session and DM chat sockets have no rate limit and cap frame size only after the whole frame is parsed | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P32 | open | 2026-08-13 | `check_rate_limit` returns True on a `DatabaseError`, so a database failure uncaps paid-API spend | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P34 | open | 2026-08-13 | 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P35 | open | 2026-08-13 | Seven named routes still have no discoverable caller and remain unreviewed authorised surface | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P35 | open | 2026-09-05 | Four named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-08-13 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-08-13 | 100 write handlers totalling 1,217 statements never execute under the test suite | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P41 | open | 2026-09-05 | 68 of 249 public queryset methods have no production caller, so their logic may be duplicated inline elsewhere | [`docs/PROBLEMS.md`](PROBLEMS.md) |

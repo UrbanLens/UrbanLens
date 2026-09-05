@@ -22,8 +22,6 @@ from model_bakery import baker
 
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 
-_IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
-
 
 def _run(coro):
     """Run *coro* via async_to_sync, not a bare asyncio.run().
@@ -41,7 +39,6 @@ def _run(coro):
     return async_to_sync(_wrap)()
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class SafetyCheckinChatConsumerTests(TransactionTestCase):
     """SafetyCheckinChatConsumer.connect()/receive() over the owner and contact routes."""
 

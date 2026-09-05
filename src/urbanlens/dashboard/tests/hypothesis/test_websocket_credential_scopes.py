@@ -46,8 +46,6 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
 
-_IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
-
 Application = get_application_model()
 AccessToken = get_access_token_model()
 
@@ -120,7 +118,6 @@ def _issue_oauth2_token(user, scope: str, *, token: str) -> str:
     return token
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class SafetyChatCredentialScopeTests(TransactionTestCase):
     """``ws/safety/checkin/<uuid>/chat/`` requires safety:read to join and safety:write to send."""
 
@@ -278,7 +275,6 @@ class SafetyChatCredentialScopeTests(TransactionTestCase):
         _run(_test())
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class DirectMessageCredentialScopeTests(TransactionTestCase):
     """``ws/messages/`` must honor the OAuth2-only boundary that guards the DM domain over HTTP."""
 
@@ -387,7 +383,6 @@ class DirectMessageCredentialScopeTests(TransactionTestCase):
         _run(_test())
 
 
-@override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class NotificationCredentialScopeTests(TransactionTestCase):
     """``ws/notifications/`` requires notifications:read of a credential caller."""
 
