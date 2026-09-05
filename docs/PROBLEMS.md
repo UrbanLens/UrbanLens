@@ -1034,19 +1034,35 @@ than fallbacks. The rest of this entry records them and the file-stranding work 
   expectation as deleting a photo). **Still stranding files, recorded not fixed**: replacing an
   icon or avatar with a new upload leaves the previous file, and deleting a Pin/Label/Achievement
   row leaves its icon. Those want a `post_delete`/`pre_save` receiver pair rather than per-caller
-  code. **Done 2026-09-05**, after the owner's review the entry asked for:
-  `services/media/file_cleanup.py` deletes the previous file after a successful save that
-  replaced it, and a row's files when the row goes - across `Pin.custom_icon`,
-  `Label.custom_icon`, `Achievement.custom_icon` and `Profile.avatar`.
+  code. **Partly done 2026-09-05**, after the owner's review the entry asked for.
+  `services/media/file_cleanup.py` deletes the previous file after a successful save that replaced
+  it, and a row's files when the row goes - for `Achievement.custom_icon` and `Profile.avatar`.
 
-  Two things it deliberately is not. It does not cover `Image`'s four columns: those models' own
-  delete paths already handle them and understand when two rows legitimately share a file, which
-  this would not. And it never deletes *before* a write succeeds - a rolled-back transaction must
-  not leave a row pointing at a file that is gone, which is why Django stopped deleting these in
-  1.3 in the first place.
+  **`Pin.custom_icon` and `Label.custom_icon` are deliberately excluded, and that is the finding.**
+  Both models are restorable by the undo framework, which stashes the icon as its stored *name*
+  rather than its bytes (`services/undo/handlers/pin.py`, `.../label.py`). Unlinking on delete - or
+  on replace - would leave an undo within its window restoring a row that names a file no longer
+  there: a broken icon with nothing to explain it, which is worse than the stranded file this was
+  meant to stop. They want the unlink deferred until the `UndoAction` is pruned, so the file
+  outlives the row for exactly as long as the row can come back. That is a different mechanism, not
+  a longer list, and it is the remaining work here.
 
-  Still open: **historical** orphans. This stops new ones; a one-time sweep of the icon and avatar
-  directories against surviving rows would close what is already there.
+  Three things the receivers deliberately are not, each of which the obvious version gets wrong:
+
+  - They do not cover `Image`'s columns. `services/media/images.py`'s `delete_stored_file` handles
+    `image`, `thumbnail` and `marker_thumbnail` and knows when two rows legitimately share a file.
+    **`analysis_thumbnail` is handled by neither** - a smaller, separate leak, recorded here rather
+    than fixed in passing because the shared-reference rule needs the same treatment.
+  - They are connected *per sender*. A sender-less receiver makes every model in the project report
+    listeners, which disables Django's fast-delete path repo-wide and trips
+    `test_bulk_write_signal_guard`.
+  - They never unlink before the write commits. `post_save`/`post_delete` fire *inside* the
+    transaction, so deleting there survives a rollback that puts the row back;
+    `transaction.on_commit` defers each unlink until the write is real.
+
+  Still open: **historical** orphans. This stops new ones for two of the four fields; a one-time
+  sweep against surviving rows would close what is already there. For the icon families that is a
+  disclosure item as well as a disk one, since `authorize_icon` is unconditional.
 - **Unknown path families**: now **denied** and logged at WARNING (2026-08-29), and
   `check_media_authorizers` refuses to start with an unregistered family, so a new `upload_to`
   prefix cannot inherit a fallback either way.

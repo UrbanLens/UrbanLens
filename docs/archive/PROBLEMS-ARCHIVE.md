@@ -11615,10 +11615,23 @@ is the cheaper half that turned out to be sufficient.
 **The merge rule, since nothing recorded which of two conflicting statuses was right.** The more
 restrictive wins - `Blocked`, then `Removed`, `Declined`, `Ignored`, each an explicit "no" a merge
 must not quietly undo - and `Accepted` beats `Requested`/`Pending`, because choosing a stale request
-over a real friendship would revoke it. Every mute survives, mapped onto the keeper's sides
-(swapped, since the row is reversed) so it lands on the right person. Ties keep the older row, which
-is what `between()` has been answering with since the containment fix. Every merge is logged: on a
-real database that is the only record the discarded row existed.
+over a real friendship would revoke it. Every mute survives, mapped onto the keeper's sides so it
+lands on the right person. Ties keep the older row. Every merge is logged: on a real database that
+is the only record the discarded row existed.
+
+**The winning status brings its direction with it, and the first version of this did not** - which
+would have been the one way this migration could corrupt rather than merge. `Friendship` has no
+"blocked_by" column: `from_profile` *is* the blocker, and for a request it is the asker. Adopting
+the reversed row's `Blocked` without swapping the keeper's ends records the blocked party as the
+blocker, which this codebase has already suffered once from a different cause and carries a
+read-only audit command for (`audit_inverted_friendship_blocks`). The ends, the mute columns and
+`request_message` now travel together. Caught by review, not by the tests that existed.
+
+**`block_profile` needed the savepoint too.** Only `Friendship.request` got it at first, so the
+reverse-direction race there was a 500 in which the block was not applied while its three
+destructive revocations already were - the worst of the three outcomes. `request()`'s fallback also
+re-applies the `can_request` guard, so a row that won the race in a `Blocked` state is not handed
+back as though it were the mirror request.
 
 **Two writers had to change with it, or the fix would trade a data bug for a crash.**
 `Friendship.request` now wraps its insert in a savepoint and, on `IntegrityError`, returns the row
