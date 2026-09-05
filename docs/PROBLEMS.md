@@ -2984,3 +2984,11 @@ group-writable, and this user has no passwordless sudo, so `bun add -d bun-types
 installing is possible, and `bun run typecheck` immediately afterwards to see what the newer types
 surface.
 
+**It reaches the typechecked project too, not only the two excluded files.** `bun run typecheck` was
+red on 2026-09-05 for one `expect(value, message)` in `shared/e2ee-signout.test.ts`, written the same
+day. `package.json` asks for `bun-types: "latest"`, so the form is correct against what the manifest
+requests and against the runtime that executes it; only the resolved version rejects it. The
+assertion's message moved into a comment to get the suite green, and should move back when the pin
+does. Note the shape of the trap: the whole-tree typecheck is manual, so a file can be committed
+green by pre-commit and CI and still be a type error.
+
