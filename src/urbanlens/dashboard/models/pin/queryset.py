@@ -14,7 +14,7 @@ from django.utils import timezone
 
 # App Imports
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS
+from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
@@ -132,9 +132,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
 
     def not_visited_this_year(self):
         return self.filter(last_visited__year__lt=timezone.now().year)
-
-    def by_category(self, category):
-        return self.filter(labels__name=category, labels__kind=KIND_CATEGORY)
 
     def by_priority(self, priority):
         return self.filter(priority=priority)

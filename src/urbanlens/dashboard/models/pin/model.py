@@ -841,67 +841,6 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             return 0
         return max(reviews, key=lambda review: review.created).rating
 
-    # ------------------------------------------------------------------
-    # Category helpers (personal classification for this pin)
-    # ------------------------------------------------------------------
-
-    def change_category(self, category_id: int) -> None:
-        """Replace this pin's category label with the one identified by ``category_id``.
-
-        Args:
-            category_id: Primary key of the category-kind Label to assign.
-        """
-        from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, Label
-
-        category = Label.objects.get(id=category_id, kind=KIND_CATEGORY)
-        self.labels.remove(*self.labels.filter(kind=KIND_CATEGORY))
-        self.labels.add(category)
-        # No self.save() needed: M2M .add()/.remove() persist immediately. Calling save()
-        # here would needlessly re-fire the full post_save signal chain (Redis map-cache
-        # refresh, wiki-stat sync) for a change those signals already handle via m2m_changed.
-
-    def add_category(self, category_name: str) -> Label | None:
-        """Attach a category label (creating it if needed) to this pin.
-
-        Args:
-            category_name: Name of the category-kind Label to look up or create.
-
-        Returns:
-            The attached Label, or None if the lookup/creation failed.
-        """
-        from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, Label
-
-        category_name = category_name.lower()
-        try:
-            category, _ = Label.objects.get_or_create(
-                name__iexact=category_name,
-                kind=KIND_CATEGORY,
-                # profile=None belongs in the *lookup*, not just defaults: this
-                # creates a global category, so the get must find a global one.
-                # Without it the get spans every profile's labels and returns
-                # MultipleObjectsReturned as soon as two users have a category of
-                # the same name - which the case-insensitive match below makes
-                # dramatically more likely.
-                profile=None,
-                # Looked up case-insensitively because the uniqueness constraint is
-                # (lower(name), profile, kind): an exact-match get would miss an
-                # existing "Factory" while creating "factory", and the insert would
-                # then violate the constraint. get_or_create cannot recover from that
-                # either - its retry repeats the same exact-match get.
-                defaults={"name": category_name},
-            )
-            if category:
-                # No self.save() needed - see change_category's comment above.
-                self.labels.add(category)
-                return category
-        except DatabaseError as e:
-            logger.exception("failed to add category %s to pin -> %s", category_name, e)
-        return None
-
-    # ------------------------------------------------------------------
-    # Serialisation / display
-    # ------------------------------------------------------------------
-
     def __str__(self) -> str:
         """A short, query-free label for admin lists, logs and error pages.
 

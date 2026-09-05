@@ -9,7 +9,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -53,9 +53,6 @@ class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet)
             frontier = children - all_ids
             all_ids |= frontier
         return Wiki.objects.filter(pk__in=all_ids)
-
-    def by_category(self, category):
-        return self.filter(labels__name=category, labels__kind=KIND_CATEGORY)
 
     def by_name(self, name):
         return self.filter(name__icontains=name)

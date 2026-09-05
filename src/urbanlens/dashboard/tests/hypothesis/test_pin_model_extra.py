@@ -3,7 +3,6 @@
 An LLM Believes this file covers the following (this assessment may be correct, or incorrect):
 - effective_color  (mock-based, labels M2M filtered by kind=tag)
 - rating  (DB, requires Review)
-- add_category / change_category  (DB)
 - to_json / to_detail_json  (DB)
 """
 
@@ -194,85 +193,6 @@ class PinRatingTests(TestCase):
         baker.make("dashboard.Review", profile=self.user.profile, pin=self.pin, rating=3)
         self.pin = Pin.objects.get(pk=self.pin.pk)
         self.assertIsInstance(self.pin.rating, int)
-
-
-# -- add_category / change_category --------------------------------------------
-
-
-class PinAddCategoryTests(TestCase):
-    """add_category creates the Label if needed and links it to the pin."""
-
-    def setUp(self):
-        self.user = baker.make("auth.User")
-        self.location = baker.make("dashboard.Location", latitude="41.0", longitude="-73.0")
-        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location)
-
-    def test_add_category_returns_a_label(self) -> None:
-        result = self.pin.add_category("factory")
-        self.assertIsNotNone(result)
-
-    def test_add_category_creates_label_with_category_kind(self) -> None:
-        from urbanlens.dashboard.models.labels.model import Label
-
-        self.pin.add_category("hospital")
-
-        self.assertTrue(Label.objects.filter(name__iexact="hospital", kind="category").exists())
-
-    def test_add_category_links_label_to_pin(self) -> None:
-        self.pin.add_category("school")
-        self.pin.refresh_from_db()
-
-        names = [n.lower() for n in self.pin.labels.filter(kind="category").values_list("name", flat=True)]
-
-        self.assertIn("school", names)
-
-    def test_add_category_reuses_an_existing_label_whatever_its_case(self) -> None:
-        """Replaces an older assertion that ``add_category("Prison")`` produced a
-        label literally named "prison".
-
-        It did - by creating a *second* label beside any existing "Prison", which
-        is the duplication migrations 0042/0043 exist to prevent. The lookup is
-        ``name__iexact`` now, so an existing label wins and keeps its own casing;
-        only a genuinely new one is created lowercased.
-        """
-        from urbanlens.dashboard.models.labels.model import Label
-
-        existing = Label.objects.create(name="Prison", kind="category", profile=None)
-
-        result = self.pin.add_category("Prison")
-
-        self.assertEqual(result.pk, existing.pk, "should reuse the existing label, not make a second")
-        # Scoped to global labels: the profile is seeded with its own default
-        # categories, and "Prison" is among them - counting across every profile
-        # would include that unrelated row.
-        self.assertEqual(Label.objects.filter(name__iexact="prison", kind="category", profile__isnull=True).count(), 1)
-
-    def test_add_category_creates_a_new_label_lowercased(self) -> None:
-        result = self.pin.add_category("ZzBrandNewKind")
-
-        self.assertEqual(result.name, "zzbrandnewkind")
-
-
-class PinChangeCategoryTests(TestCase):
-    """change_category replaces all existing categories with the given one."""
-
-    def setUp(self):
-        self.user = baker.make("auth.User")
-        self.location = baker.make("dashboard.Location", latitude="42.0", longitude="-72.0")
-        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location)
-        self.old_cat = baker.make("dashboard.Label", name="old", kind="category", profile=None)
-        self.new_cat = baker.make("dashboard.Label", name="new_cat", kind="category", profile=None)
-        self.pin.labels.add(self.old_cat)
-
-    def test_change_category_sets_new_category(self) -> None:
-        self.pin.change_category(self.new_cat.id)
-        self.pin.refresh_from_db()
-        self.assertIn(self.new_cat, self.pin.labels.filter(kind="category"))
-
-    def test_change_category_removes_old_category(self) -> None:
-        self.pin.change_category(self.new_cat.id)
-        self.pin.refresh_from_db()
-        self.assertNotIn(self.old_cat, self.pin.labels.filter(kind="category"))
 
 
 # -- to_json / to_detail_json --------------------------------------------------
