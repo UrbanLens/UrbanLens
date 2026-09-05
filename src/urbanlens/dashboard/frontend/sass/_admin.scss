@@ -1743,7 +1743,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
   th,
   td {
     padding: .4rem .6rem;
-    border-bottom: 1px solid var(--border-color, rgb(128 128 128 / 25%));
+    border-bottom: 1px solid var(--ul-border, rgb(128 128 128 / 25%));
     text-align: left;
     vertical-align: top;
   }
@@ -1811,7 +1811,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         max-width: 360px;
         padding: .5rem .75rem;
         border-radius: 8px;
-        border: 1px solid var(--border-color, #cbd5e1);
+        border: 1px solid var(--ul-border, #cbd5e1);
         background: var(--card-bg, #fff);
         color: inherit;
     }
@@ -1823,8 +1823,8 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     gap: .75rem;
     padding: .6rem .9rem;
     border-radius: 8px;
-    background: color-mix(in srgb, var(--accent-color, #6366f1) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--accent-color, #6366f1) 30%, transparent);
+    background: color-mix(in srgb, var(--ul-primary-color, #6366f1) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ul-primary-color, #6366f1) 30%, transparent);
 
     .exttag-bulk-count {
         font-weight: 600;
@@ -1842,12 +1842,12 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
 .exttag-section-hint {
     margin: 0 0 .6rem;
     font-size: .8rem;
-    color: var(--text-muted, #64748b);
+    color: var(--ul-grey-6, #64748b);
 }
 
 .exttag-empty {
     font-size: .85rem;
-    color: var(--text-muted, #64748b);
+    color: var(--ul-grey-6, #64748b);
 }
 
 .exttag-clusters,
@@ -1879,7 +1879,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
 .exttag-group-list {
     padding: .35rem;
     border-radius: 8px;
-    border: 1px dashed var(--border-color, #cbd5e1);
+    border: 1px dashed var(--ul-border, #cbd5e1);
 }
 
 .exttag-vocab-chip {
@@ -1887,7 +1887,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     user-select: none;
 
     &.exttag-vocab-chip--selected {
-        outline: 2px solid var(--accent-color, #6366f1);
+        outline: 2px solid var(--ul-primary-color, #6366f1);
         outline-offset: 1px;
     }
 

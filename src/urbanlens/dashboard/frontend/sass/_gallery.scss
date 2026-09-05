@@ -1322,7 +1322,7 @@
     &:hover { background: rgba(0, 0, 0, 0.08); }
 
     &--danger {
-      color: var(--ul-danger, #dc2626);
+      color: var(--ul-color-danger-text, #dc2626);
 
       &:hover { background: rgba(220, 38, 38, .08); }
     }

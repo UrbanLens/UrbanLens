@@ -171,6 +171,13 @@ jobs:
       - name: Every TypeScript file belongs to a tsconfig project
         run: python3 bin/check_typescript_coverage.py
 
+      # A var() against a token nothing defines is not a syntax error and not a
+      # visible one: written with a fallback, as these almost always are, the
+      # rule renders the fallback on every theme. It looks themed and is a
+      # hard-coded colour.
+      - name: Every var() names a custom property something defines
+        run: python3 bin/check_css_variables.py
+
       # Nothing else checks this: a model change without its migration only
       # surfaces if some test happens to touch the field, and otherwise waits
       # until the column is needed in production.

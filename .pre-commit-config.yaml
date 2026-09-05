@@ -65,6 +65,15 @@ repos:
         language: system
         files: '\.py$'
         pass_filenames: false
+      - id: css-variables
+        name: every var() names a custom property something defines
+        entry: python3 bin/check_css_variables.py
+        language: system
+        # always_run: the failure is a stylesheet reading a token *another* file
+        # was supposed to define, so a `files:` pattern would miss the edit that
+        # removed the definition.
+        always_run: true
+        pass_filenames: false
       - id: typescript-coverage
         name: every TypeScript file belongs to a tsconfig project
         entry: python3 bin/check_typescript_coverage.py

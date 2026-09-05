@@ -11428,3 +11428,34 @@ identical timeouts a coin toss over which message came out.
 `diagnose()` then hid the cause. Every read in it is guarded with `.catch(() => "")` except the
 first, so a page still navigating threw "Execution context was destroyed" out of the error path,
 over whatever the form was about to say. Guarded like its siblings.
+
+## RESOLVED 2026-09-05: ~10 SCSS files use undefined `--ul-accent`/`--ul-border`/`--text` vars, so dark mode never reaches those rules
+
+`id: P12` · `status: fixed` · `resolved: 2026-09-05`
+
+`var(--border-color, #cbd5e1)` against a token nothing defines is not a syntax error and not a
+visible one: it renders the fallback, on every theme, forever. The rule reads as themed, reviews as
+themed, and is a hard-coded colour.
+
+Most of the specific files the entry named had already been repointed by other work. What survived
+was the same defect in different files - 16 reads across `_admin.scss`, `_map.scss`,
+`_map_overlays.scss`, `_gallery.scss` and `_floorplans.scss`, plus one in a template. All of them
+now name a real token: `--border-color` → `--ul-border`, `--accent-color` and `--ul-accent` →
+`--ul-primary-color`, `--text-muted` → `--ul-grey-6`, `--color-danger` and `--ul-danger` →
+`--ul-color-danger-text`, `--ul-white` → `--ul-grey-0`. The fallbacks are kept; they are a last
+resort rather than the value that always won.
+
+The entry's real content, though, was that nothing checked this - which is why the same defect
+appeared in new files while the old ones were being fixed. `bin/check_css_variables.py` now fails on
+a read nothing defines, in pre-commit and CI.
+
+Three kinds of read are *not* defects, and a check that got them wrong would be noise rather than a
+gate. Each is covered by a test:
+
+- **Interpolated names.** `var(--ul-#{$kind})` is a family Sass assembles at build time.
+- **Runtime-set names.** `--tag-color` is written by TypeScript, `--label-color` by a template's
+  inline `style="..."`. Both are real definitions in a place a stylesheet cannot declare them - and
+  the name is as often passed *to* a helper that sets it as written at the call site, which is what
+  `--ul-undo-offset-y` and `--ul-assistant-fab-offset-y` do.
+- **Names inside comments**, including a comment recording that a broken reference was removed -
+  which is exactly what this kind of fix leaves behind (`_gallery.scss:585`).

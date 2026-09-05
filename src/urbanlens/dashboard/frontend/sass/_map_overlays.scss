@@ -29,8 +29,8 @@
 }
 
 .ul-map-overlay-handle {
-  background: var(--ul-white, #fff);
-  border: 2px solid var(--ul-accent, #2563eb);
+  background: var(--ul-grey-0, #fff);
+  border: 2px solid var(--ul-primary-color, #2563eb);
   border-radius: 50%;
   cursor: grab;
   height: 14px;
@@ -114,9 +114,9 @@
 }
 
 .map-overlay-add-error {
-  background: color-mix(in srgb, var(--ul-danger, #dc2626) 12%, transparent);
+  background: color-mix(in srgb, var(--ul-color-danger-text, #dc2626) 12%, transparent);
   border-radius: .4rem;
-  color: var(--ul-danger, #dc2626);
+  color: var(--ul-color-danger-text, #dc2626);
   font-size: .85rem;
   margin: 0 0 .6rem;
   padding: .5rem .65rem;

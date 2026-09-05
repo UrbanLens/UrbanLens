@@ -333,7 +333,7 @@ that list, each finding then handed to an adversarial verifier told to refute it
 
 ## Structural checks (CI)
 
-Fourteen checkers guard properties that are invisible from a working copy, which
+Fifteen checkers guard properties that are invisible from a working copy, which
 is exactly why they need checking — the machine that made the mistake is the one
 that cannot see it. Every one of them is `bin/check_*.py`, so the list here and
 the directory can be compared with `ls`.
@@ -354,6 +354,7 @@ the directory can be compared with `ls`.
 | `bin/check_template_comments.py` | A Django `{#` comment that is not closed on the same line, so the tokens render as text |
 | `bin/check_line_endings.py` | A tracked text file stored with CRLF |
 | `bin/check_typescript_coverage.py` | A `.ts` file in no tsconfig project, or a project `bun run typecheck` never runs |
+| `bin/check_css_variables.py` | A `var()` naming a custom property nothing defines, so the rule renders its fallback on every theme |
 
 `check_outage_not_cached.py` and `check_notification_choke_point.py` exist because a
 *defect class* recurred, not because one bug did.
