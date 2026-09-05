@@ -4,7 +4,9 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.core.validators import MaxLengthValidator
-from django.db.models import CASCADE, BooleanField, CharField, ForeignKey, TextField
+from django.db import IntegrityError, transaction
+from django.db.models import CASCADE, BooleanField, CharField, ForeignKey, TextField, UniqueConstraint
+from django.db.models.functions import Greatest, Least
 
 from urbanlens.dashboard.models.abstract import DashboardModel, TextChoices
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
@@ -46,11 +48,12 @@ class Friendship(DashboardModel):
     # One column per side, because a pair normally has exactly one row
     # (``between()`` matches either direction and ``request()`` reuses the
     # existing row) and mute is a preference of one *person*, not of the
-    # relationship. "Normally": ``unique_together`` does not actually forbid
-    # ``A->B`` and ``B->A`` both existing - see "reciprocal Friendship rows" in
-    # docs/PROBLEMS.md - so anything asking "did X mute Y" must read *either*
-    # row rather than one, which is what
-    # ``services.social.friendship.notifications_muted`` does. A single shared boolean - which is what this was, inherited
+    # relationship. "Normally" was doing real work until 2026-09-05:
+    # ``unique_together`` did not forbid ``A->B`` and ``B->A`` both existing,
+    # and ``friendship_one_row_per_pair`` now does. Anything asking "did X mute
+    # Y" still reads *either* row rather than one - which is what
+    # ``services.social.friendship.notifications_muted`` does - because a
+    # database restored from before that migration can still hold the pair. A single shared boolean - which is what this was, inherited
     # from the ``status='Muted'`` encoding it replaced - meant A muting B also
     # read as muted from B's side, so wiring it into delivery would have
     # silenced the wrong person. Read these through :meth:`is_muted_by` rather
@@ -146,11 +149,12 @@ class Friendship(DashboardModel):
             # incoming request. Both people see a request neither can act on.
             # See "re-adding a removed friend" in docs/PROBLEMS.md.
             if friendship.from_profile_id != from_profile.pk:
-                # `unique_together` is (from_profile, to_profile), which permits
-                # A->B and B->A to both exist (see "reciprocal Friendship rows"
-                # in docs/PROBLEMS.md), so swapping this row's ends could
-                # collide with a real one. Prefer a row already pointing the
-                # right way when there is one.
+                # A row pointing the right way is preferred over swapping this
+                # one's ends. Since 2026-09-05 a pair can only have one row
+                # (`friendship_one_row_per_pair`), so `forward` and `friendship`
+                # are the same row whenever both exist - the branch is kept
+                # because a database predating that constraint can still hold
+                # the pair until its migration runs.
                 forward = cls.objects.filter(from_profile=from_profile, to_profile=to_profile).first()
                 if forward is None:
                     friendship.from_profile = from_profile
@@ -184,13 +188,29 @@ class Friendship(DashboardModel):
                 ]
             )
         else:
-            friendship = cls.objects.create(
-                from_profile=from_profile,
-                to_profile=to_profile,
-                relationship_type=relationship_type,
-                status=FriendshipStatus.REQUESTED,
-                request_message=message,
-            )
+            try:
+                # The savepoint is load-bearing, not defensive. A failed insert
+                # marks the whole transaction unusable in Postgres, so without
+                # it the re-read below raises TransactionManagementError instead
+                # of answering - and so would everything else the caller went on
+                # to do.
+                with transaction.atomic():
+                    friendship = cls.objects.create(
+                        from_profile=from_profile,
+                        to_profile=to_profile,
+                        relationship_type=relationship_type,
+                        status=FriendshipStatus.REQUESTED,
+                        request_message=message,
+                    )
+            except IntegrityError:
+                # Two opposite requests at once: `between()` above saw nothing,
+                # and the other one inserted first. Before the pair constraint
+                # this produced two rows for one relationship, with the mute
+                # columns split across them; now it is a refused insert, and the
+                # right answer is the row that won - the two people wanted the
+                # same thing, and the loser's request is satisfied by it.
+                logger.info("Friendship request from %s to %s lost the race; returning the row that won", from_profile.pk, to_profile.pk)
+                friendship = cls.objects.all().between(from_profile, to_profile)
 
         return friendship
 
@@ -398,3 +418,23 @@ class Friendship(DashboardModel):
     class Meta(DashboardModel.Meta):
         db_table = "dashboard_friendships"
         unique_together = ("from_profile", "to_profile")
+        constraints = [
+            # "One row per pair" was a convention every reader relied on and
+            # nothing enforced: `unique_together` stops a duplicate in one
+            # direction and permits `A->B` *and* `B->A`. A profile import
+            # restoring both, or two simultaneous requests in opposite
+            # directions, produced exactly that - and `between()` then had two
+            # rows to choose between, with the mute columns split across them.
+            #
+            # Expressed on the *ordered pair* rather than by reordering the
+            # columns, which was the other candidate: `from_profile` means "who
+            # asked", which `Pending`/`Requested` and `request_message` depend
+            # on, so normalising the columns to id order would invert that
+            # meaning for half the table. This gets the same guarantee and
+            # leaves the direction alone.
+            UniqueConstraint(
+                Least("from_profile_id", "to_profile_id"),
+                Greatest("from_profile_id", "to_profile_id"),
+                name="friendship_one_row_per_pair",
+            ),
+        ]

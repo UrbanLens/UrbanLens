@@ -11589,3 +11589,44 @@ mention a free tier fails. Two services the sweep surfaced were deliberately lef
 
 Not addressed: `service_is_enabled`'s own `DatabaseError` branch already failed closed and is
 unchanged. The two now agree, which the old comment noted they deliberately did not.
+
+## RESOLVED 2026-09-05: `Friendship.unique_together` permits both `A->B` and `B->A`, so "one row per pair" is convention only
+
+`id: P8` · `status: fixed` · `resolved: 2026-09-05`
+
+`unique_together = ("from_profile", "to_profile")` stopped a duplicate in one direction and
+permitted the reverse, while every reader assumed it could not: the model docstring said "exactly
+one row per pair", `between()` matched either direction, and the mute columns are per-side of *one*
+row. A reciprocal pair therefore split one relationship's state across two rows.
+
+`friendship_one_row_per_pair` - a `UniqueConstraint` over
+`Least(from_profile_id, to_profile_id), Greatest(...)` - now refuses the second row whichever way it
+is written. Migration 0054 merges any that already exist; 0055 adds the constraint, separately,
+because a `RunPython` and an `AddConstraint` in one migration risk Postgres reporting pending
+trigger events.
+
+**Not normalised into id order, which was the other candidate and the one first chosen.**
+`from_profile` means "who asked" - `Pending`/`Requested` and `request_message` all depend on it - so
+reordering the columns would have inverted that for half the table, and would have needed a separate
+direction column to preserve it. Constraining the ordered pair gets the same guarantee and leaves
+the direction alone. The entry anticipated this ("with the direction moved to its own column"); it
+is the cheaper half that turned out to be sufficient.
+
+**The merge rule, since nothing recorded which of two conflicting statuses was right.** The more
+restrictive wins - `Blocked`, then `Removed`, `Declined`, `Ignored`, each an explicit "no" a merge
+must not quietly undo - and `Accepted` beats `Requested`/`Pending`, because choosing a stale request
+over a real friendship would revoke it. Every mute survives, mapped onto the keeper's sides
+(swapped, since the row is reversed) so it lands on the right person. Ties keep the older row, which
+is what `between()` has been answering with since the containment fix. Every merge is logged: on a
+real database that is the only record the discarded row existed.
+
+**Two writers had to change with it, or the fix would trade a data bug for a crash.**
+`Friendship.request` now wraps its insert in a savepoint and, on `IntegrityError`, returns the row
+that won the race - the savepoint is load-bearing, because a failed insert makes the whole
+transaction unusable in Postgres and the re-read would otherwise raise instead of answering. The
+profile importer needed nothing: it already checked both directions before creating.
+
+The containment behaviour from 2026-08-20 is kept rather than reverted to `.get()`: a database
+restored from a backup predating 0054 still holds the pair, and answering deterministically beats
+refusing to render a profile. Its tests drop the index to build that state, which is the honest way
+to test data the code no longer creates.

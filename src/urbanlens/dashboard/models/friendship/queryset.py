@@ -35,15 +35,19 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
     def between(self, from_profile: Profile | int, to_profile: Profile | int) -> Friendship | None:
         """Return the relationship joining two profiles, in either direction.
 
-        "One row per pair" is a convention (``Friendship.request`` reuses an
-        existing row), not a constraint: ``unique_together`` is on
-        ``(from_profile, to_profile)``, which permits ``A->B`` **and** ``B->A``
-        to both exist. A profile import that restores both directions
-        (``services.import_export.import_data``) or two simultaneous requests in
-        opposite directions produce exactly that, and this used to ``.get()`` -
-        so a reciprocal pair raised ``MultipleObjectsReturned`` out of the
-        profile page, the friends API, and (once mute was wired into delivery)
-        every notification between them.
+        "One row per pair" is enforced as of 2026-09-05
+        (``friendship_one_row_per_pair``, and migration 0054 merges any pair
+        that already existed). Before that it was a convention: ``unique_together``
+        is on ``(from_profile, to_profile)``, which permits ``A->B`` **and**
+        ``B->A`` to both exist, and this used to ``.get()`` - so a reciprocal
+        pair raised ``MultipleObjectsReturned`` out of the profile page, the
+        friends API, and (once mute was wired into delivery) every notification
+        between them.
+
+        The tolerance below is kept rather than reverted to ``.get()``: a
+        database restored from a backup that predates the migration still holds
+        the pair, and answering deterministically is better than refusing to
+        render a profile.
 
         The oldest row wins, deterministically: it is the one the pair's history
         actually hangs off, and picking arbitrarily would make the answer depend

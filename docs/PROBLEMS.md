@@ -457,45 +457,6 @@ the current tree - re-verified 2026-08-19. `_resolved_flag` reads the `attribute
 falls back to the top level, and has since commit `8bf86daf`; the finding described the code before
 that.
 
-## P8 — `Friendship.unique_together` permits both `A->B` and `B->A`, so "one row per pair" is convention only
-
-`id: P8` · `status: open` · `updated: 2026-08-20`
-
-Previously titled "reciprocal `Friendship` rows are permitted, and "one row per pair" is only a convention".
-
-`Friendship.Meta.unique_together` is `("from_profile", "to_profile")`, which stops a duplicate in
-*one* direction and permits `A->B` **and** `B->A` to both exist. Every reader assumes they cannot:
-the model docstring says "there is exactly one `Friendship` row per pair", `QuerySet.between()`
-matched either direction and called `.get()`, and the mute columns are per-side *of one row*.
-
-Two ways a reciprocal pair gets created today:
-
-- `services/import_export/import_data.py:875` creates rows directly while restoring a profile
-  export; an export holding both directions restores both.
-- Two simultaneous requests in opposite directions. `Friendship.request` reuses an existing row via
-  `between()`, but neither caller sees the other's row before inserting, and the unique constraint
-  does not cover the reversed key.
-
-`test_calendar_sync.CalendarInviteIdentityMaskingTests` builds one deliberately, which is how this
-surfaced: with mute wired into notification delivery, `between().get()` raised
-`MultipleObjectsReturned` on every notification between such a pair. Before that it was quieter but
-not harmless - the same raise sat behind the profile page, the friends API and
-`NotificationLog.is_friend_request_pending`.
-
-**Done 2026-08-20 (containment, not the fix):** `between()` now returns the **oldest** matching row
-deterministically and logs a warning, rather than raising - a second row is data to repair, not a
-reason to refuse to answer, and picking arbitrarily would make the answer depend on query planning.
-`notifications_muted` does not go through `between()` at all: it asks the same predicate
-`profiles_muting` does, so both mute paths read *either* row and cannot disagree.
-
-**Not done: the constraint itself.** The real fix is a normalised pair key - a
-`UniqueConstraint` on `Least(from_profile_id, to_profile_id), Greatest(...)`, or a
-`CheckConstraint` forcing `from_profile_id < to_profile_id` with the direction moved to its own
-column. Either needs a data migration that merges existing reciprocal pairs, and merging is not
-mechanical: the two rows can hold different `status` values (one `Accepted`, one `Removed`), and
-which one is right depends on history nothing records. Worth doing with a real look at production
-data rather than a guess. Until then, a reciprocal pair is a warning in the logs, not an exception.
-
 ## P9 — REData gaps remain - `?limit=` is inert, 15 routes unwired, and a `tile_template` slide is a single 256px tile
 
 `id: P9` · `status: open` · `updated: 2026-08-19`

@@ -1291,8 +1291,13 @@ class CalendarInviteIdentityMaskingTests(TestCase):
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.importer = baker.make(User, username="hidden_importer").profile
         self.invitee = baker.make(User, username="invitee").profile
+        # One row, which is now all a pair can have
+        # (`friendship_one_row_per_pair`). This built both directions, and that
+        # reciprocal pair is how P8 surfaced: with mute wired into delivery,
+        # `between().get()` raised MultipleObjectsReturned on every
+        # notification between them. Being friends is what this class is about,
+        # and one row says that.
         Friendship.objects.create(from_profile=self.importer, to_profile=self.invitee, status=FriendshipStatus.ACCEPTED)
-        Friendship.objects.create(from_profile=self.invitee, to_profile=self.importer, status=FriendshipStatus.ACCEPTED)
         self.trip = baker.make(Trip, creator=self.importer, name="Quarry run")
         self.trip.profiles.add(self.importer)
 

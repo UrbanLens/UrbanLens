@@ -26,7 +26,7 @@ each, and the house style. `P` numbers entries inside `PROBLEMS.md`; every other
 prefix numbers a whole document.
 
 Resolved problems are **not** listed here — they move to
-[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 301
+[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 302
 of them. This index is what is live. Grep the archive before concluding a defect
 is new - and an archived entry keeps its `id:` line, so a citation of `P70`
 still resolves after it is fixed, and the id is never handed out again.
@@ -40,7 +40,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P5 | open | 2026-08-25 | Dialog forms post every field and handlers save every column, so untouched values overwrite and re-attribute | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P6 | open | 2026-08-21 | Production REData still 404s `/api/v1/public-locations/`, so a fresh dev environment seeds no catalog pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P7 | open | 2026-08-19 | nginx pins its app upstream at config load and REData's `ref` is stored as permanent identity | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P8 | open | 2026-08-20 | `Friendship.unique_together` permits both `A->B` and `B->A`, so "one row per pair" is convention only | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P9 | open | 2026-08-19 | REData gaps remain - `?limit=` is inert, 15 routes unwired, and a `tile_template` slide is a single 256px tile | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P10 | open | 2026-08-19 | `main` is untested against an empty database; the multiple-leaf migration conflict that broke it is gone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P11 | open | 2026-08-15 | ~40 raw `fetch()` calls bypass `fetch-json.ts` and fail silently; Organize's Media tab is unwired dead UI | [`docs/PROBLEMS.md`](PROBLEMS.md) |

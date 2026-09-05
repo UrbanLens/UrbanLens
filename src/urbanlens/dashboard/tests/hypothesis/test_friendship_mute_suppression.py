@@ -21,6 +21,7 @@ not an opt-out from being told that somebody has not come back from a site.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
+from django.db import connection
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
@@ -247,16 +248,28 @@ class NotifyChokePointTests(TestCase):
 class ReciprocalRowsTests(TestCase):
     """Two rows can join one pair, and neither mute path may fall over on it.
 
-    ``unique_together`` is on ``(from_profile, to_profile)``, so ``A->B`` and
-    ``B->A`` can both exist - a profile import that restores both directions
-    produces exactly that, and ``test_calendar_sync`` builds one on purpose.
-    ``between()`` used to ``.get()``, which meant a reciprocal pair raised
-    ``MultipleObjectsReturned``; once mute was consulted on every notification,
-    that would have been a 500 on every message between them.
+    Not reachable any more: ``friendship_one_row_per_pair`` refuses the second
+    row as of 2026-09-05, and migration 0054 merges any that exist. This still
+    matters because a database that predates that migration can hold the pair,
+    and the code that copes with it is still live - ``between()`` returning the
+    oldest row rather than raising ``MultipleObjectsReturned``, and
+    ``notifications_muted`` reading the predicate rather than a single row.
+    Once mute was consulted on every notification, the raise would have been a
+    500 on every message between such a pair.
+
+    The setup therefore drops the constraint to build the state. The drop rolls
+    back with the test's own transaction, so it is scoped to this class and
+    cannot leak into another - and it is the honest way to test "what happens to
+    data we no longer create".
     """
 
     def setUp(self) -> None:
         super().setUp()
+        # DROP INDEX, not DROP CONSTRAINT: a UniqueConstraint over expressions
+        # is created as a unique *index* in Postgres, and there is no table
+        # constraint of that name to drop.
+        with connection.cursor() as cursor:
+            cursor.execute("DROP INDEX friendship_one_row_per_pair")
         self.recipient = _profile()
         self.sender = _profile()
         self.forward = _friendship(self.sender, self.recipient)

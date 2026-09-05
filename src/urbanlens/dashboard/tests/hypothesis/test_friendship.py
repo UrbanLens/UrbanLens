@@ -190,13 +190,17 @@ class FriendshipUniqueConstraintTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             _make_requested(self.profile_a, self.profile_b)
 
-    def test_reversed_direction_does_not_conflict(self) -> None:
-        """A→B and B→A are separate friendship rows (unique_together is directional)."""
+    def test_reversed_direction_conflicts_too(self) -> None:
+        """This asserted the opposite until 2026-09-05, and that was the defect.
+
+        `unique_together` is directional, so it permitted A→B *and* B→A - while
+        every reader assumed one row per pair and the mute columns are per-side
+        of one row. `friendship_one_row_per_pair` closes it; see
+        `test_friendship_pair_uniqueness.py` for the rest of that behaviour.
+        """
         _make_requested(self.profile_a, self.profile_b)
-        try:
+        with self.assertRaises(IntegrityError), transaction.atomic():
             _make_requested(self.profile_b, self.profile_a)
-        except IntegrityError as exc:
-            self.fail(f"Reversed pair should not raise IntegrityError: {exc}")
 
 
 class FriendshipQuerySetTests(TestCase):
