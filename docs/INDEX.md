@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P73` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R26` · `N7`
+**Next free id:** `P74` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R26` · `N7`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -26,7 +26,7 @@ each, and the house style. `P` numbers entries inside `PROBLEMS.md`; every other
 prefix numbers a whole document.
 
 Resolved problems are **not** listed here — they move to
-[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 287
+[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 288
 of them. This index is what is live. Grep the archive before concluding a defect
 is new - and an archived entry keeps its `id:` line, so a citation of `P70`
 still resolves after it is fixed, and the id is never handed out again.
@@ -100,7 +100,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P68 | open | 2026-08-31 | N+1s in the site-admin user list, the achievement icon picker and Memories > Maps still have no perf test | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P69 | open | 2026-08-31 | Unbounded lists with no pagination across most of the site, from album pickers to Immich imports | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P71 | open | 2026-09-04 | The Sphinx setup builds successfully and produces no API documentation at all | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P72 | open | 2026-09-04 | `bun run typecheck` reads 87 TypeScript files fewer than the pre-commit hook fires on | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P73 | open | 2026-09-05 | `bun-types` is pinned at 1.1.6 against Bun 1.3.14, so 81 valid assertions look like type errors | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | T1 | done | 2026-08-27 | The mobile team's 2026-07-27 ask list is spent: its P0 was already false and its P2 remainder moved on | [`docs/notes/mobile_app_requirements.md`](notes/mobile_app_requirements.md) |
 | T2 | open | 2026-08-27 | HIGH 0-ref findings are all triaged; the MEDIUM tier and Jess's caching requests are still open | [`docs/reports/code_audit_status.txt`](reports/code_audit_status.txt) |
 | PL1 | live | 2026-09-01 | The strategy plus a six-tier backlog: locations are both the product and the thing being protected | [`docs/ROADMAP.md`](ROADMAP.md) |

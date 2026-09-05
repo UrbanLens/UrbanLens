@@ -413,10 +413,11 @@ class GroupMessageSenderPrivacyTests(TestCase):
 class TripListCardPrivacyTests(TestCase):
     """Trip list cards mask member avatars/creator badge per profile_visibility.
 
-    docs/PROBLEMS.md gap: the single-trip render sites (member panel, activity/
-    comment attribution) were already masked, but the trips LIST wasn't - every
-    card shows its own member avatars and creator badge, diffuse across
-    however many trips are listed at once (see _apply_trip_list_identity_masking).
+    A list is more diffuse than the single-trip render sites (member panel,
+    activity and comment attribution): every card carries its own member avatars
+    and creator badge, across however many trips are listed at once, so masking
+    has to run over the whole page's worth of them - see
+    controllers/trip.py's _apply_trip_list_identity_masking.
     """
 
     def setUp(self) -> None:
@@ -481,10 +482,10 @@ class TripListCardPrivacyTests(TestCase):
 class PinWikiCommentAuthorPrivacyTests(TestCase):
     """Pin/wiki comment author identity is masked per profile_visibility - comment text still shows.
 
-    docs/PROBLEMS.md gap: the comment's content was already all-or-nothing
-    gated by can_view_comments_from (comment_visibility, a different field) -
-    but once a comment passed that gate, its author's own name/avatar weren't
-    separately masked per profile_visibility.
+    Two separate gates, easily mistaken for one: can_view_comments_from decides
+    whether the comment is shown at all (comment_visibility), and profile_visibility
+    decides whether its author is named. Passing the first says nothing about
+    the second.
     """
 
     def setUp(self) -> None:
@@ -546,9 +547,9 @@ class PinWikiCommentAuthorPrivacyTests(TestCase):
 class TripInviteNotificationPrivacyTests(TestCase):
     """Trip-invite notification text masks the inviter's identity when hidden.
 
-    docs/PROBLEMS.md gap: notification text is baked in as a plain-text
-    string at creation time, so a template-side fix can't reach it later -
-    it must be resolved (and masked if needed) before formatting.
+    Notification text is baked in as a plain-text string at creation time, so a
+    template-side fix cannot reach it later: the identity has to be resolved,
+    and masked if needed, before the string is formatted.
     """
 
     def test_added_to_trip_notification_masks_a_hidden_inviter(self) -> None:
@@ -651,9 +652,9 @@ class GroupAddNotificationTextPrivacyTests(TestCase):
 class DirectMessageThreadPartnerMaskingTests(TestCase):
     """_thread.html's block-confirm/empty-state/composer text masks a hidden partner.
 
-    docs/PROBLEMS.md gap: the thread header already used display_name/
-    display_avatar_url via display_identity_for, but four other spots in the
-    same template still used raw partner.username.
+    The thread header resolves the partner through display_identity_for, which
+    is easy to read as covering the template - four other spots in the same file
+    render the partner independently, and each has to mask on its own.
     """
 
     def setUp(self) -> None:

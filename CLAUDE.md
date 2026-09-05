@@ -12,10 +12,7 @@ follow or replicate. When something looks wrong, it probably is.
 
 ## Tech Stack
 
-- **Backend**: Django 6+, Channels (WebSockets), Celery
-- **Data**: PostgreSQL + PostGIS; django-gis, GeoPandas, Shapely, FastKML, geopy
-- **Frontend**: HTMX, TypeScript/TSX, SCSS, bun
-- **Auth**: Django auth, OAuth2 (Google, Discord), passkeys (WebAuthn), TOTP 2FA
+Django 6+, Channels (WebSockets), Celery, PostgreSQL + PostGIS; django-gis, GeoPandas, Shapely, FastKML, geopy, HTMX, TypeScript/TSX, SCSS, bun, Django auth, OAuth2 (Google, Discord), passkeys (WebAuthn), TOTP 2FA
 
 ## Documentation
 

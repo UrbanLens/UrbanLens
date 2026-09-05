@@ -20,10 +20,11 @@ opens it.
 **Citing an entry from code:** name the id *and* enough words to survive a
 retitle — `see P12 ("forms post every field") in docs/PROBLEMS.md`. A bare
 `see docs/PROBLEMS.md` costs the reader a full-text search of a 3,500-line file,
-and in practice they do not do it. Of 100 references in `src/`, 52 carry no
-date, quoted phrase or symbol to land on (counted 2026-09-05: lines naming
-`PROBLEMS.md`, against whether the three lines around them hold a `P#`, a date,
-or a backticked identifier). Cite **every** relevant entry, not the nearest one.
+and in practice they do not do it. Roughly half of them carry no date, quoted
+phrase or symbol to land on — 48 of 93 on 2026-09-05, counting lines in `src/`
+that name `PROBLEMS.md` against whether the three lines around them hold a `P#`,
+a date, or a backticked identifier. The ratio is the point; the totals move with
+every commit. Cite **every** relevant entry, not the nearest one.
 
 Ids and dates are stable here; line numbers are not. A date-anchored citation
 still works, but check `archive/PROBLEMS-ARCHIVE.md` too - an entry that was
@@ -985,7 +986,7 @@ TS/template seam; that is where bugs collect, because the types stop there.
 Previously titled "Full-codebase audit (2026-07-25): curated high-severity findings".
 
 A systematic full-codebase audit (every model/controller/service/template/TS/SCSS file, all
-migrations, the full test suite) ran 2026-07-25, tracked in `docs/notes/ai/codebase-audit.md` (35
+migrations, the full test suite) ran 2026-07-25, tracked in `docs/audits/codebase-audit.md` (35
 units, full findings with file:line references for every bug/inefficiency/improvement found — see
 that doc for anything not listed here, including all "improvement"-grade and maintainability
 findings). This section curates only the highest-severity/highest-impact items into this file's
@@ -1323,7 +1324,7 @@ manual dark-mode check of `/setup` before shipping.
 Previously titled "Full-codebase audit: re-verification pass (2026-07-25)".
 
 After the initial 35-unit audit (above) was worked through fix-by-fix in an earlier session, six
-independent re-verification passes re-read every finding in `docs/notes/ai/codebase-audit.md`
+independent re-verification passes re-read every finding in `docs/audits/codebase-audit.md`
 against the current code (not trusting the earlier session's own claims) and reported per-finding
 FIXED/PARTIALLY-FIXED/NOT-FIXED/REGRESSED verdicts. Most findings held up as genuinely fixed; the
 handful of regressions and higher-value gaps the re-verification surfaced were fixed directly in
@@ -1383,7 +1384,7 @@ this pass:
   `trip.py`, `models/pin/viewset.py`) to import and use the shared constant instead of a literal.
 
 **Confirmed still open** (verified genuinely unfixed, not worth blocking on for this pass - listed
-here so the next session doesn't have to re-derive them from `docs/notes/ai/codebase-audit.md`'s
+here so the next session doesn't have to re-derive them from `docs/audits/codebase-audit.md`'s
 full per-unit detail):
 
 - `services/messaging/direct_messages.py`'s TOCTOU fix above only covers the DM email/text debounce; the
@@ -2887,7 +2888,7 @@ is not fixe
 Previously titled "Test-quality audit follow-ups (2026-08-29)".
 
 Found while auditing existing unit tests for real positive/negative coverage (see
-`docs/notes/ai/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
+`docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
 convention rather than fixed inline.
 
 **`LocalhostOnlyNetwork` (`core/testing_network.py`) doesn't patch `socket.socket.connect_ex`.**
@@ -3456,20 +3457,26 @@ Two ways out, neither attempted here because both are product decisions: wire it
 up (`sphinx-apidoc`, `myst-parser` for the `.md` files, a CI job) or delete
 `docs/conf.py` and `docs/index.rst` and drop the two dependencies.
 
-## P72 — `bun run typecheck` reads 87 TypeScript files fewer than the pre-commit hook fires on
+## P73 — `bun-types` is pinned at 1.1.6 against Bun 1.3.14, so 81 valid assertions look like type errors
 
-`id: P72` · `status: open` · `updated: 2026-09-04`
+`id: P73` · `status: open` · `updated: 2026-09-05`
 
-`tsconfig.json` sets `include: ["src/urbanlens/dashboard/frontend/ts/**/*.ts"]`.
-`git ls-files '*.ts' | grep -vc '^src/urbanlens/dashboard/frontend/ts/'` returns
-87 - `frontend/browser/`, `tests/integration/` and the rest are outside the
-project and are never checked.
+`bun.lock` holds `bun-types@1.1.6`; the installed runtime is 1.3.14. Every `.ts` file in
+`frontend/ts/` is typechecked against a description of Bun from roughly two years earlier than the
+one that runs them.
 
-The manual `tsc` hook in `.pre-commit-config.yaml` matches `\.tsx?$`, so editing
-any of those 87 files triggers a typecheck that then does not look at the file
-that triggered it. Passing means nothing about the change.
+The visible cost so far is `src/urbanlens/dashboard/frontend/browser/floorplan-editor.test.ts` and
+`harness-parity.test.ts`, which cannot join a `tsconfig` project: they use `expect(value, message)`,
+supported by the runtime and by current `bun-types`, and 1.1.6's `expect` takes 0-1 arguments - 81
+`TS2554`s that are the pin's, not the code's. `bin/check_typescript_coverage.py` lists both in
+`_UNCOVERED` with that reason, so they are excluded on purpose rather than by omission.
 
-Not fixed here because `frontend/browser/` has never been typechecked, so
-widening `include` will surface a first wave of real errors that wants its own
-pass rather than being folded into a tooling cleanup.
+The unmeasured cost is everything else the two years changed: 400-odd files are checked against
+signatures that may no longer match, in both directions.
+
+Not fixed here because it cannot be from this checkout - `node_modules/` is owned by `apps` and not
+group-writable, and this user has no passwordless sudo, so `bun add -d bun-types@1.3.14` fails with
+`EACCES: Permission denied while writing packages into node_modules`. The bump wants a run where
+installing is possible, and `bun run typecheck` immediately afterwards to see what the newer types
+surface.
 

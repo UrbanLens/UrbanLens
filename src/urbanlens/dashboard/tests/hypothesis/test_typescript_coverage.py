@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import subprocess
 import sys
 
 from hypothesis import given, settings, strategies as st
@@ -129,3 +130,53 @@ class ProjectCoverageTests(SimpleTestCase):
     def test_a_config_with_no_include_covers_everything_beside_it(self) -> None:
         covered = self.checker.covered_paths("tsconfig.json", {}, ["src/app.ts", "bin/build.ts"])
         self.assertEqual(covered, {"src/app.ts", "bin/build.ts"})
+
+    def test_files_alone_covers_only_what_it_names(self) -> None:
+        """TypeScript defaults `include` to nothing once `files` is present."""
+        covered = self.checker.covered_paths("tsconfig.json", {"files": ["src/a.ts"]}, ["src/a.ts", "src/b.ts"])
+        self.assertEqual(covered, {"src/a.ts"})
+
+    def test_files_adds_to_include_rather_than_replacing_it(self) -> None:
+        covered = self.checker.covered_paths(
+            "tsconfig.json",
+            {"files": ["src/a.ts"], "include": ["deep/**/*.ts"]},
+            ["src/a.ts", "deep/c.ts", "src/b.ts"],
+        )
+        self.assertEqual(covered, {"src/a.ts", "deep/c.ts"})
+
+    def test_a_named_file_survives_an_exclude(self) -> None:
+        """`files` names what to compile; `exclude` only trims `include`."""
+        covered = self.checker.covered_paths(
+            "tsconfig.json",
+            {"files": ["build/a.ts"], "exclude": ["build"]},
+            ["build/a.ts"],
+        )
+        self.assertEqual(covered, {"build/a.ts"})
+
+    def test_files_resolves_against_the_config_own_directory(self) -> None:
+        covered = self.checker.covered_paths("sub/tsconfig.json", {"files": ["a.ts"]}, ["sub/a.ts", "a.ts"])
+        self.assertEqual(covered, {"sub/a.ts"})
+
+
+class TypecheckScriptTests(SimpleTestCase):
+    """Coverage by a project only counts if something runs the project."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.checker = _load_checker()
+
+    def test_this_repo_runs_every_tracked_project(self) -> None:
+        """The state this check was written for: a tsconfig nothing invoked."""
+        root = pathlib.Path(__file__).resolve().parents[5]
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z"], capture_output=True, text=True, check=True, cwd=root
+        ).stdout.split("\0")
+        configs = [name for name in tracked if name.endswith("tsconfig.json")]
+        self.assertTrue(configs, "no tracked tsconfig.json found; the check would pass vacuously")
+        self.assertEqual(self.checker._projects_not_typechecked(root, configs), [])
+
+    def test_a_project_the_script_does_not_name_is_reported(self) -> None:
+        root = pathlib.Path(__file__).resolve().parents[5]
+        unrun = self.checker._projects_not_typechecked(root, ["packages/widget/tsconfig.json"])
+        self.assertEqual(unrun, ["packages/widget/tsconfig.json"])

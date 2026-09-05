@@ -9,7 +9,7 @@ gave `P1` to both a problem entry and a design document, and nothing noticed.
 
 Seven invariants, all cheap and all unambiguous:
 
-1. No id appears twice.
+1. No id appears twice - in the index, in `PROBLEMS.md`, or in the archive.
 2. Every `## P# --` heading in `PROBLEMS.md` has a row, and vice versa.
 3. A `P#` row's claim matches its heading, so grepping the index finds the same
    sentence the entry opens with.
@@ -111,6 +111,13 @@ def audit(index: str, problems: str, archive: str) -> list[str]:
     failures.extend(f"  {ident} appears {count} times in the archive" for ident, count in sorted(archived_seen.items(), key=lambda kv: _sort_key(kv[0])) if count > 1)
 
     indexed = {f"{p}{n}": claim for p, n, _s, _u, claim, _path in rows}
+    # Counted before collapsing: `dict(headings)` folds a duplicated entry into
+    # one and compares only the last copy's claim against the index row, so a
+    # copy-paste sharing an id passes clean.
+    heading_counts: dict[str, int] = {}
+    for ident, _claim in headings:
+        heading_counts[ident] = heading_counts.get(ident, 0) + 1
+    failures.extend(f"  {ident} has {count} headings in PROBLEMS.md" for ident, count in sorted(heading_counts.items(), key=lambda kv: _sort_key(kv[0])) if count > 1)
     entries = dict(headings)
     problem_rows = {ident for ident in indexed if re.fullmatch(r"P\d+", ident)}
     for ident in sorted(set(entries) - problem_rows, key=_sort_key):

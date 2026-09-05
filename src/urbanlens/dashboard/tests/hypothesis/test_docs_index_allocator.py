@@ -95,6 +95,12 @@ class DocsIndexAllocatorTests(SimpleTestCase):
         failures = self.checker.audit(_index([1], 4), _problems([1]), _archive([3, 3]))
         self.assertTrue(any("P3 appears 2 times in the archive" in failure for failure in failures), failures)
 
+    def test_a_duplicated_heading_in_problems_is_flagged(self) -> None:
+        """`dict(headings)` folds a copy-paste into one; the count must not."""
+        problems = _problems([1, 2]) + f"\n## P2 — {_claim(2)}\n\nBody.\n"
+        failures = self.checker.audit(_index([1, 2], 3), problems, _archive([]))
+        self.assertTrue(any("P2 has 2 headings in PROBLEMS.md" in failure for failure in failures), failures)
+
     def test_archiving_a_middle_id_leaves_the_next_free_id_alone(self) -> None:
         """Archiving a middle id changes nothing: the highest is what allocates."""
         self.assertEqual(self.checker.audit(_index([1, 3], 4), _problems([1, 3]), _archive([2])), [])

@@ -76,9 +76,12 @@ def disable_multiprocess_metrics() -> None:
     ``base.py``, which the test settings module cannot run before.
 
     Re-resolving the class through the library's own ``get_value_class`` is what
-    makes the pop take effect regardless of who imported first.
+    makes the pop take effect regardless of who imported first - and that
+    function reads the deprecated lowercase spelling too, so leaving it set
+    would re-resolve straight back into multiprocess mode.
     """
-    os.environ.pop("PROMETHEUS_MULTIPROC_DIR", None)
+    for name in ("PROMETHEUS_MULTIPROC_DIR", "prometheus_multiproc_dir"):
+        os.environ.pop(name, None)
     values = sys.modules.get("prometheus_client.values")
     if values is not None:
         values.ValueClass = values.get_value_class()

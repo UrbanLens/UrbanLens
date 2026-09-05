@@ -65,13 +65,15 @@ _SKIP_FILES = {
 _SKIP_PREFIXES = ("src/urbanlens/frontend/static/",)
 
 
-def _tracked_files() -> list[str]:
-    out = subprocess.run(["git", "ls-files", "-z"], capture_output=True, text=True, check=True)
+def _tracked_files(root: pathlib.Path) -> list[str]:
+    out = subprocess.run(["git", "ls-files", "-z"], capture_output=True, text=True, check=True, cwd=root)
     return [name for name in out.stdout.split("\0") if name]
 
 
-def _is_ignored(path: str) -> bool:
-    return subprocess.run(["git", "check-ignore", "-q", path], check=False).returncode == 0
+def _is_ignored(path: str, root: pathlib.Path) -> bool:
+    # cwd=root, or this answers about the process's own directory rather than
+    # the repository being checked.
+    return subprocess.run(["git", "check-ignore", "-q", path], check=False, cwd=root).returncode == 0
 
 
 def _resolves(citation: str, root: pathlib.Path, citing: pathlib.Path) -> bool:
@@ -102,15 +104,21 @@ def _resolves(citation: str, root: pathlib.Path, citing: pathlib.Path) -> bool:
     return not (root.parent / relative.parts[0]).is_dir()
 
 
-def main() -> int:
-    """Report unresolvable docs citations, failing only on the ones in code."""
-    root = pathlib.Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip())
+def broken_citations(root: pathlib.Path) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """Every citation in `root` that does not resolve, split by what cites it.
 
+    Args:
+        root: Repository root to scan.
+
+    Returns:
+        ``(from code, from documents)``, each mapping a citation to the files
+        that make it. Only the first is fatal - see the module docstring.
+    """
     broken_code: dict[str, list[str]] = {}
     broken_docs: dict[str, list[str]] = {}
     checked: dict[tuple[str, str], bool] = {}
 
-    for name in _tracked_files():
+    for name in _tracked_files(root):
         if name in _SKIP_FILES or name.startswith(_SKIP_PREFIXES):
             continue
         path = root / name
@@ -121,13 +129,26 @@ def main() -> int:
         except (OSError, UnicodeDecodeError):
             continue
         for citation in set(_CITATION.findall(text)) | set(_BARE_CITATION.findall(text)):
-            key = (citation, name if citation.startswith("../") else "")
+            # Keyed on the citing *directory*, not just the citation: `_resolves`
+            # also tries the citing file's own directory, so the same string can
+            # legitimately resolve from one directory and not another. Keying on
+            # the string alone let whichever file was scanned first decide for
+            # every other - in both directions.
+            key = (citation, str(pathlib.PurePosixPath(name).parent))
             if key not in checked:
-                checked[key] = _resolves(citation, root, pathlib.Path(name)) and not (not citation.startswith("../") and _is_ignored(citation))
+                checked[key] = _resolves(citation, root, pathlib.Path(name)) and not (not citation.startswith("../") and _is_ignored(citation, root))
             if checked[key]:
                 continue
             bucket = broken_docs if path.suffix == ".md" else broken_code
             bucket.setdefault(citation, []).append(name)
+
+    return broken_code, broken_docs
+
+
+def main() -> int:
+    """Report unresolvable docs citations, failing only on the ones in code."""
+    root = pathlib.Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip())
+    broken_code, broken_docs = broken_citations(root)
 
     if broken_docs:
         print("Citations between documents that do not resolve (reported, not fatal):")

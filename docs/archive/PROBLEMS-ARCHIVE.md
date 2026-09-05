@@ -11181,8 +11181,11 @@ a root-level citation was invisible. It now also matches a bare capitalised `*.m
 rather than guessed: minified bundles under `frontend/static/` contain property accesses like `A5.md`,
 and `release-please-config.json` names the changelog it will generate rather than citing one.
 
-Not fixed, and not this entry's to fix: `CLAUDE.local.md` still describes `docs/prompts/completed.md`
-and `docs/prompts/todo.md`, which were never tracked in git. It is the user's own file.
+Not fixed, and not this entry's to fix: `CLAUDE.local.md` carries three of these in one paragraph -
+`docs/prompts/completed.md` and `docs/prompts/todo.md`, which were never tracked in git, and the root
+`TODO.md`, which is this entry's own headline subject and wants the same one-word repoint the other
+eleven got. It is the user's file, so the wording is proposed rather than applied; it is also
+gitignored, so `bin/check_docs_refs.py` - which walks `git ls-files` - cannot see it either way.
 
 ## RESOLVED 2026-09-05: `settings/test.py` pops `PROMETHEUS_MULTIPROC_DIR` too late, so 8 metrics tests fail wherever it is set
 
@@ -11208,3 +11211,26 @@ first.
 
 A test asserts the settings module has not gone back to a bare `os.environ.pop`. That regression would
 be invisible where the variable is unset, which is everywhere the suite normally runs.
+
+## RESOLVED 2026-09-05: `bun run typecheck` reads 87 TypeScript files fewer than the pre-commit hook fires on
+
+`id: P72` · `status: fixed` · `resolved: 2026-09-05`
+
+The count was right and the diagnosis was not. 87 tracked `.ts` files sat outside the root project,
+and the manual `tsc` hook fired on editing any of them - but 84 of those were already covered by
+`tests/integration/tsconfig.json`, which had its own `typecheck` script that nothing in the
+repository ever ran. They were not unchecked for want of a project; they were unchecked because no
+command invoked the project they were in.
+
+`package.json`'s `typecheck` now runs both, and `bin/build-frontend.ts` joins the root project.
+Both were already clean, which also disposes of the stated reason for deferring: the expected "first
+wave of real errors" from `frontend/browser/` is 81 `TS2554`s from `bun-types` being pinned at 1.1.6
+against Bun 1.3.14, whose `expect` predates the message argument those tests pass. That is the
+dependency's, not the code's - see [P73](../PROBLEMS.md) for the pin itself, which cannot be bumped
+from this host because `node_modules` is not writable by the working user.
+
+`bin/check_typescript_coverage.py` now fails on any tracked `.ts`/`.tsx` that no project lists, and
+on any tracked project the `typecheck` script does not run - which is the half that was actually
+missing, and would otherwise be recreated by the next config someone adds. The two
+`frontend/browser/` files are listed in its `_UNCOVERED` map with the reason, so the gap is a line
+someone chose rather than an absence nobody can see.

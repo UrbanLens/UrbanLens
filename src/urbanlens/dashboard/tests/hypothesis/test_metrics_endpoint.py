@@ -443,6 +443,17 @@ class MultiprocessModeDisabledTests(SimpleTestCase):
         with mock.patch.dict(sys.modules, {"prometheus_client.values": None}):
             _metrics.disable_multiprocess_metrics()
 
+    def test_the_deprecated_lowercase_spelling_is_popped_too(self) -> None:
+        """`get_value_class` reads both names, so popping one re-resolves back."""
+        from prometheus_client import values
+
+        self._restore_value_class()
+        with mock.patch.dict(os.environ, {MULTIPROC_DIR_ENV.lower(): "/nonexistent/prometheus"}):
+            values.ValueClass = values.MultiProcessValue()
+            _metrics.disable_multiprocess_metrics()
+            self.assertEqual(values.ValueClass.__qualname__, "MutexValue")
+            self.assertNotIn(MULTIPROC_DIR_ENV.lower(), os.environ)
+
     def test_the_test_settings_module_does_not_pop_the_variable_by_hand(self) -> None:
         # A bare pop reads as sufficient and is not. It regresses silently: the
         # suite still passes wherever the variable is unset, and fails only in
