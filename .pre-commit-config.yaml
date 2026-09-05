@@ -166,6 +166,17 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [manual]
+      - id: bem-modifiers
+        name: every BEM modifier a template applies has a rule that styles it
+        entry: python3 bin/check_bem_modifiers.py
+        language: system
+        pass_filenames: false
+        # always_run, and manual: it compiles the Sass sources (~2.5s) because
+        # the checked-in style.css is a build artifact that is routinely behind
+        # them, and the answer depends on every template and every stylesheet at
+        # once - a `files:` pattern would miss the edit that deleted the rule.
+        always_run: true
+        stages: [manual]
       - id: doc-line-refs
         name: no documentation citation points past the end of its file
         entry: python3 bin/check_doc_line_refs.py

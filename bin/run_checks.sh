@@ -34,6 +34,7 @@ HOOKS=(
     concealed-writes
     pin-not-published-to-wiki
     migration-graph
+    bem-modifiers
     doc-line-refs
     docs-refs
     docs-index

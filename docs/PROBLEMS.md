@@ -1879,71 +1879,51 @@ the original false positive, because a concatenated URL never contains it. The t
 had a *test* naming them and no caller - a shape that means "reached some other way" far more often
 than "dead".
 
-## P36 — 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
+## P36 — 50 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
 
-`id: P36` · `status: open` · `updated: 2026-08-13`
+`id: P36` · `status: open` · `updated: 2026-09-05`
 
-Previously titled "46 BEM modifiers applied in templates with no CSS rule".
+Previously titled "45 BEM modifiers applied in templates with no CSS rule", and before that "46".
 
-Measured 2026-08-14 against the compiled `style.css` (current at the time - no `.scss`
-was newer). Each base class *is* styled, so each of these was written to create a visual
-distinction that does not render. Not fixed, because what each should look like is a design
-decision. Sorted by how many templates apply it.
+`class="card card--secondary"` where `.card` is styled and `.card--secondary` is not renders as a
+plain card. Each of these was written to create a distinction that does not appear, and nothing
+errors, logs, or reviews badly - the modifier is spelled right and the base class really exists.
 
-| modifier | templates | first use |
-|---|---|---|
-| `card--secondary` | 8 | `pages/location/index.html` |
-| `badge--muted` | 5 | `pages/site_admin.html` |
-| `card--primary` | 3 | `pages/location/index.html` |
-| `ul-game-hud__group--lead` | 3 | `pages/consensus/index.html` |
-| `dm-composer-attachment-chip--share` | 2 | `partials/messages/_group_thread.html` |
-| `form-row--map` | 2 | `pages/safety/create.html` |
-| `btn--sel` | 1 | `pages/organize/index.html` |
-| `btn--trigger` | 1 | `partials/ui/_icon_picker.html` |
-| `btn-icon--primary` | 1 | `pages/site_admin_ui_components.html` |
-| `cf-value-input--reference` | 1 | `partials/custom_fields/_value_input.html` |
-| `cf-value-input--select` | 1 | `partials/custom_fields/_value_input.html` |
-| `cf-value-input--url` | 1 | `partials/custom_fields/_value_input.html` |
-| `comment-reply-btn--sm` | 1 | `partials/trips/trip_comments_panel.html` |
-| `detail-item--abandoned` | 1 | `partials/pins/pin_overview_partial.html` |
-| `detail-item--built` | 1 | `partials/pins/pin_overview_partial.html` |
-| `detail-item--coordinates` | 1 | `partials/pins/pin_overview_partial.html` |
-| `detail-item--last-active` | 1 | `partials/pins/pin_overview_partial.html` |
-| `dm-composer-attachment-chip--map` | 1 | `partials/messages/_thread.html` |
-| `dm-thread--group` | 1 | `partials/messages/_group_thread.html` |
-| `form-row--maps` | 1 | `pages/safety/detail.html` |
-| `form-row--message` | 1 | `pages/safety/create.html` |
-| `form-row--plan` | 1 | `pages/safety/create.html` |
-| `form-row--time` | 1 | `pages/safety/create.html` |
-| `form-row--title` | 1 | `pages/safety/create.html` |
-| `fp-cf-input--select` | 1 | `partials/custom_fields/_filter_input.html` |
-| `fp-cf-input--text` | 1 | `partials/custom_fields/_filter_input.html` |
-| `home-widget--stats` | 1 | `partials/home/_widget_stats.html` |
-| `inline-sub-form--pricing` | 1 | `pages/site_admin_subscriptions.html` |
-| `map-overlay-btn--cancel` | 1 | `partials/layout/_map_annotations_panels.html` |
-| `notif-item__icon-wrap--pin_shared` | 1 | `partials/notifications/notification_item.html` |
-| `notif-item__icon-wrap--safety_ci_due` | 1 | `partials/notifications/notification_item.html` |
-| `notif-item__icon-wrap--visit_suggested` | 1 | `partials/notifications/notification_item.html` |
-| `org-bulk-btn--edit` | 1 | `pages/organize/index.html` |
-| `org-bulk-btn--merge` | 1 | `pages/organize/index.html` |
-| `page-onboarding--wiki` | 1 | `pages/location/wiki.html` |
-| `sv-img--fallback` | 1 | `pages/location/street_view.html` |
-| `trip-map-marker-num--ghost` | 1 | `pages/trips/detail.html` |
-| `trip-panel-empty--all-completed` | 1 | `partials/trips/trip_activities_panel.html` |
-| `trip-panel-empty--tab` | 1 | `partials/trips/trip_activities_panel.html` |
-| `ul-game-hud__btn--focus` | 1 | `partials/games/_game_hud_controls.html` |
-| `visit-item--pending` | 1 | `partials/pins/_visit_history.html` |
-| `visit-list--pending` | 1 | `partials/pins/_visit_history.html` |
-| `visit-source--pending` | 1 | `partials/pins/_visit_history.html` |
-| `wiki-seed-list--aliases` | 1 | `partials/pins/pin_wiki_create_dialog.html` |
-| `wiki-stat-row--composite` | 1 | `partials/pins/_wiki_stat_rating_item.html` |
-| `wiki-stat-row--mine` | 1 | `partials/pins/_wiki_stat_rating_item.html` |
+**The list now lives in `bin/check_bem_modifiers.py`, not here.** It is `_KNOWN_UNSTYLED`, the
+check fails on anything outside it *and* on an entry that no longer reproduces, and it runs in
+`bun run check` and in CI's frontend job. Transcribing the list into this file is what let it drift.
 
-Worth triaging rather than doing wholesale: `ul-game-hud__group--lead` (the leading
-score on all three game pages), the three `visit-*--pending` classes (a pending visit is
-indistinguishable from a confirmed one) and the `notif-item__icon-wrap--*` set are user-visible
-states; others are cosmetic hierarchy that may simply have been abandoned. Deleting the class
-from the template is as valid a resolution as writing the rule.
+Re-measured 2026-09-05, against the 46 rows this entry used to carry:
+
+- **8 added**: `album-card--readonly`, `assistant-msg--pending`, `detail-item--address`,
+  `detail-item--official`, `detail-item--place`, `dm-conv-item--group`, `notif-item--friend-req`,
+  `page-footer--map`.
+- **1 fixed**: `badge--muted` now has a rule.
+- **3 were never this**: `sv-img--fallback` and both `trip-panel-empty--*` are JavaScript selector
+  hooks (`slide.querySelector(".sv-img--fallback")`), not visual states, and need no rule.
+
+Three things the original measurement got wrong, each of which the check now handles:
+
+- It read the compiled `style.css`. That is a build artifact, and it was five days behind the
+  `.scss` sources on the day this was re-measured. The check compiles the sources, and refuses to
+  fall back to an artifact older than them.
+- Its tokenizer split `class="..."` on whitespace, so a class written flush against a tag was
+  invisible to it: `class="page-footer{% if map_attribution %} page-footer--map{% endif %}"` yields
+  the token `page-footer{%`. Three of the eight additions are that shape.
+- It counted JS hooks as missing styles, which is the opposite error and inflates the number.
+
+Still open because what each should look like is a design decision, and deleting the modifier from
+the template is as valid a resolution as writing the rule. Two of them are not even a fixed list:
+`notif-item__icon-wrap--{{ n.notification_type }}` and `visit-source--{{ visit.source }}` generate a
+modifier per value, so a new notification type arrives unstyled by construction. The eight
+`notif-item__icon-wrap--*` rules that do exist are all under `[data-theme=dark] .notif-item--unread`,
+so no notification type is coloured in light theme or once read - which makes "three types are
+missing a rule" a smaller finding than it looks and a larger question than it looks.
+
+Worth doing first: the three `visit-*--pending` classes (a visit awaiting confirmation is
+indistinguishable from a confirmed one), `ul-game-hud__group--lead` (the leading score, on all three
+game pages), and `btn-icon--primary` - which is applied in `pages/site_admin_ui_components.html`,
+the component gallery whose entire purpose is to show what each variant looks like.
 
 ---
 

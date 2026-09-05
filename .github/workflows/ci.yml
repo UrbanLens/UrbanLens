@@ -257,6 +257,14 @@ jobs:
       - name: Build stylesheet
         run: bun run sass
 
+      # A modifier whose base class is styled and whose own rule is missing is
+      # not a syntax error and not a visible one: the element renders as the
+      # plain base, so the distinction the author wrote never appears. Here
+      # rather than in the python job because it compiles the Sass sources -
+      # the committed style.css is a build artifact and is routinely behind them.
+      - name: Every BEM modifier a template applies has a rule that styles it
+        run: python3 bin/check_bem_modifiers.py
+
   docs:
     name: Documentation build
     runs-on: ubuntu-latest
