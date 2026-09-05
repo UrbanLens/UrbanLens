@@ -32,7 +32,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
 from urbanlens.dashboard.services.locations import site_scope
 from urbanlens.dashboard.services.pins import pin_restructure
-from urbanlens.dashboard.services.pins.pin_merge import PinMergeCollisionError, UnresolvedMergeConflictError, merge_pins, plan_merge_conflicts
+from urbanlens.dashboard.services.pins.pin_merge import PinMergeCollisionError, UnresolvedMergeConflictError, merge_pins, plan_merge_conflicts, plan_merge_conflicts_bulk
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -101,10 +101,11 @@ def _nestable_rows(pin: Pin, nestable: list[Pin], *, default_merge_pks: frozense
     Returns:
         One ``{"pin", "conflicts", "default_merge"}`` dict per candidate.
     """
+    conflicts = plan_merge_conflicts_bulk([(pin, candidate) for candidate in nestable])
     return [
         {
             "pin": candidate,
-            "conflicts": plan_merge_conflicts(pin, candidate),
+            "conflicts": conflicts[(pin.pk, candidate.pk)],
             "default_merge": candidate.pk in default_merge_pks,
         }
         for candidate in nestable

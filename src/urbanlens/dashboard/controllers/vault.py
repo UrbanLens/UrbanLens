@@ -6,7 +6,7 @@ from itertools import chain
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.shortcuts import render
 from django.views import View
 
@@ -19,6 +19,11 @@ if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
 _RECENT_LIMIT = 12
+
+#: How many videos the home page lists. There is no Videos page to send anyone
+#: to, and this is the only surface that hands a user their own video's id, so
+#: it lists rather than links - capped, with a line saying so when it bites.
+_VIDEO_LIST_LIMIT = 50
 
 
 class VaultHomeView(LoginRequiredMixin, View):
@@ -44,9 +49,16 @@ class VaultHomeView(LoginRequiredMixin, View):
         counts = gallery.aggregate(
             photos=Count("pk", filter=Q(media_type=MediaKind.PHOTO)),
             documents=Count("pk", filter=Q(media_type=MediaKind.DOCUMENT)),
+            videos=Count("pk", filter=Q(media_type=MediaKind.VIDEO)),
+            # The same predicate `get_storage_totals` splits counted bytes from
+            # exempt ones on, so this is a slice of the bar below rather than a
+            # second number that can exceed it.
+            video_bytes=Sum("file_size", filter=Q(media_type=MediaKind.VIDEO, quota_exempt_reason="")),
         )
         photo_count = counts["photos"] or 0
         document_count = counts["documents"] or 0
+        video_count = counts["videos"] or 0
+        video_bytes = int(counts["video_bytes"] or 0)
         album_count = Album.objects.for_profile(profile).count()
 
         used_bytes, exempt_bytes = get_storage_totals(profile)
@@ -58,10 +70,17 @@ class VaultHomeView(LoginRequiredMixin, View):
         # querysets are each already small (only the most recent slice), so
         # merging and re-sorting in Python beats a UNION query for this size.
         recent = sorted(
-            chain(gallery.photos().order_by("-created")[:_RECENT_LIMIT], gallery.documents().order_by("-created")[:_RECENT_LIMIT]),
+            chain(
+                gallery.photos().order_by("-created")[:_RECENT_LIMIT],
+                gallery.documents().order_by("-created")[:_RECENT_LIMIT],
+                gallery.videos().order_by("-created")[:_RECENT_LIMIT],
+            ),
             key=lambda image: image.created,
             reverse=True,
         )[:_RECENT_LIMIT]
+
+        # Skipped entirely for the overwhelmingly common case of no videos.
+        videos = list(gallery.videos().order_by("-created")[:_VIDEO_LIST_LIMIT]) if video_count else []
 
         return render(
             request,
@@ -70,11 +89,18 @@ class VaultHomeView(LoginRequiredMixin, View):
                 "page_name": "vault",
                 "photo_count": photo_count,
                 "document_count": document_count,
+                "video_count": video_count,
                 "album_count": album_count,
                 # Drives the welcome/empty state - counts of zero across the board
                 # make the stat tiles and storage bar pure noise for a new user.
-                "is_empty": not (photo_count or document_count or album_count),
+                # Videos belong in it: their bytes are already on the bar, so a
+                # library holding only videos would otherwise be billed while the
+                # page told its owner they had nothing.
+                "is_empty": not (photo_count or document_count or video_count or album_count),
                 "recent_uploads": recent,
+                "videos": videos,
+                "video_list_limit": _VIDEO_LIST_LIMIT,
+                "storage_video_bytes": video_bytes,
                 "storage_used_bytes": used_bytes,
                 "storage_quota_bytes": quota_bytes,
                 "storage_exempt_bytes": exempt_bytes,

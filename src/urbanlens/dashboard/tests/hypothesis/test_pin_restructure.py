@@ -25,9 +25,17 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.query_scaling import QueryScalingMixin
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.models.article.model import Article
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.models.custom_fields.model import (
+    CustomField,
+    CustomFieldEntity,
+    CustomFieldType,
+    CustomFieldValue,
+)
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.place.model import Place, PlaceKind
@@ -951,3 +959,66 @@ class EmptyImportIsNotReportedAsSuccessTests(TestCase):
             response = self.client.post(self.url)
 
         self.assertIn("pinDetailPinsChanged", response["HX-Trigger"])
+
+
+class OrganizeDialogQueryScalingTests(QueryScalingMixin, TestCase):
+    """The organize dialog must not query per candidate pin.
+
+    Its own use case is a campus or hospital complex pinned building by
+    building, so a large candidate list is the normal case rather than the
+    extreme one - and ``nestable_root_pins`` offers up to 500 of them.
+
+    A candidate with a REFERENCE custom field is deliberately not seeded: its
+    ``display_value`` dereferences the target per conflict, which is a
+    per-conflict tail this fix does not address and which would make a pass
+    here mean less than it says.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.location = _make_location()
+        self.pin = baker.make(
+            Pin, profile=self.user.profile, location=self.location, slug="complex", name="State Hospital"
+        )
+        official_geometry(self.location, _parcel_polygon())
+        # No REData buildings: the building-import half is a constant cost and
+        # would only add noise to what is being measured here.
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
+        self.field = CustomField.objects.create(
+            profile=self.user.profile,
+            entity_type=CustomFieldEntity.PIN,
+            name="Condition",
+            field_type=CustomFieldType.TEXT,
+        )
+        # On the survivor, so every candidate collides on both and the dialog
+        # renders a real conflict picker per row rather than an empty list.
+        Article.objects.create(pin=self.pin, content="The property's own article")
+        CustomFieldValue.objects.create(field=self.field, pin=self.pin, value_text="Derelict")
+        self.url = reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug})
+        self.candidate_counter = count()
+
+    def seed_rows(self, count: int) -> None:
+        for _ in range(count):
+            # A counter of this test's own, not the module-level one: every
+            # candidate has to land inside `_parcel_polygon()` or the view has
+            # nothing to offer and answers 204, and the shared counter has
+            # already been advanced an unknown number of times by the classes
+            # above.
+            sequence = next(self.candidate_counter)
+            location = baker.make(
+                Location,
+                latitude=41.7300 + sequence * 0.0002,
+                longitude=-73.9350 + sequence * 0.0002,
+                google_place=None,
+            )
+            # Blank name on purpose: `effective_name` then falls through to
+            # `Location.display_name`, which reads the wiki, and that is one of
+            # the per-candidate queries.
+            candidate = baker.make(Pin, profile=self.user.profile, location=location, name="")
+            Article.objects.create(pin=candidate, content=f"article for {candidate.pk}")
+            CustomFieldValue.objects.create(field=self.field, pin=candidate, value_text="Fair")
+
+    def test_the_organize_dialog_does_not_query_per_candidate(self) -> None:
+        self.assert_flat(self.url)

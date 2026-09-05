@@ -457,6 +457,12 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
 
         return self.filter(media_type=MediaKind.DOCUMENT)
 
+    def videos(self) -> Self:
+        """Filter to videos only - the Vault home's video accounting."""
+        from urbanlens.dashboard.models.images.model import MediaKind
+
+        return self.filter(media_type=MediaKind.VIDEO)
+
     def needs_attention(self, profile: Profile) -> Self:
         """Filter to a profile's unfiled photos awaiting organization.
 

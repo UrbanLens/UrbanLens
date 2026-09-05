@@ -57,7 +57,12 @@ from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import repair_legacy_pin_coordinates
-from urbanlens.dashboard.services.pins.pin_merge import UnresolvedMergeConflictError, merge_pins, plan_merge_conflicts
+from urbanlens.dashboard.services.pins.pin_merge import (
+    UnresolvedMergeConflictError,
+    merge_pins,
+    plan_merge_conflicts,
+    plan_merge_conflicts_bulk,
+)
 from urbanlens.dashboard.services.pins.pin_merge_suggestions import (
     accept_pin_merge_suggestion,
     reject_pin_merge_suggestion,
@@ -225,6 +230,93 @@ class PlanMergeConflictsTests(TestCase):
         CustomFieldValue.objects.create(field=field, pin=self.pin_b, value_text="Fair")
         keys = {c.key for c in plan_merge_conflicts(self.pin_a, self.pin_b)}
         self.assertEqual(keys, {"article", f"custom_field:{field.pk}"})
+
+
+class PlanMergeConflictsBulkTests(TestCase):
+    """The batched form answers identically, in three queries however many pairs.
+
+    The dialog behind "Organize this property" plans conflicts for every
+    candidate pin standing inside the property before the owner picks anything,
+    and that list is capped at 500 - so per-pair queries there are the whole
+    cost of the page.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Condition", field_type=CustomFieldType.TEXT
+        )
+
+    def _pin(self, *, article: bool = False, boundary: bool = False, custom_field: bool = False):
+        pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        if article:
+            Article.objects.create(pin=pin, content=f"article for {pin.pk}")
+        if boundary:
+            baker.make(Boundary, pin=pin, location=pin.location, profile=self.profile, boundary_type="property")
+        if custom_field:
+            CustomFieldValue.objects.create(field=self.field, pin=pin, value_text=f"value {pin.pk}")
+        return pin
+
+    def test_one_pair_costs_three_queries(self) -> None:
+        pair = (self._pin(article=True), self._pin(article=True))
+        with self.assertNumQueries(3):
+            plan_merge_conflicts_bulk([pair])
+
+    def test_many_pairs_cost_the_same_three_queries(self) -> None:
+        """The assertion that would have caught this."""
+        survivor = self._pin(article=True, boundary=True, custom_field=True)
+        pairs = [(survivor, self._pin(article=True, boundary=True, custom_field=True)) for _ in range(6)]
+        with self.assertNumQueries(3):
+            conflicts = plan_merge_conflicts_bulk(pairs)
+        self.assertEqual(len(conflicts), 6)
+        for _, candidate in pairs:
+            self.assertEqual(
+                [c.key for c in conflicts[(survivor.pk, candidate.pk)]],
+                ["article", "boundary:property", f"custom_field:{self.field.pk}"],
+            )
+
+    def test_no_pairs_costs_no_queries(self) -> None:
+        with self.assertNumQueries(0):
+            self.assertEqual(plan_merge_conflicts_bulk([]), {})
+
+    def test_it_matches_the_single_pair_function_for_every_combination(self) -> None:
+        """Eight combinations, compared as whole lists - order and summaries included."""
+        for article in (False, True):
+            for boundary in (False, True):
+                for custom_field in (False, True):
+                    with self.subTest(article=article, boundary=boundary, custom_field=custom_field):
+                        pin_a = self._pin(article=article, boundary=boundary, custom_field=custom_field)
+                        pin_b = self._pin(article=article, boundary=boundary, custom_field=custom_field)
+                        self.assertEqual(
+                            plan_merge_conflicts_bulk([(pin_a, pin_b)])[(pin_a.pk, pin_b.pk)],
+                            plan_merge_conflicts(pin_a, pin_b),
+                        )
+
+    def test_a_mirrored_pair_keeps_its_own_summaries(self) -> None:
+        """The key is ordered, so (b, a) is not (a, b) with the sides swapped."""
+        pin_a = self._pin(custom_field=True)
+        pin_b = self._pin(custom_field=True)
+
+        conflicts = plan_merge_conflicts_bulk([(pin_a, pin_b), (pin_b, pin_a)])
+
+        forward = conflicts[(pin_a.pk, pin_b.pk)][0]
+        backward = conflicts[(pin_b.pk, pin_a.pk)][0]
+        self.assertEqual(
+            (forward.pin_a_summary, forward.pin_b_summary), (backward.pin_b_summary, backward.pin_a_summary)
+        )
+        self.assertNotEqual(forward.pin_a_summary, forward.pin_b_summary)
+
+    def test_the_single_pair_function_still_reads_current_state(self) -> None:
+        """``merge_pins`` deletes the loser's row when it sees no conflict, so a
+        cached answer here would be silent data loss rather than a stale warning."""
+        pin_a = self._pin(article=True)
+        pin_b = self._pin(article=True)
+        self.assertEqual([c.key for c in plan_merge_conflicts(pin_a, pin_b)], ["article"])
+
+        Article.objects.filter(pin=pin_b).delete()
+
+        self.assertEqual(plan_merge_conflicts(pin_a, pin_b), [])
 
 
 class MergePinsTests(TestCase):

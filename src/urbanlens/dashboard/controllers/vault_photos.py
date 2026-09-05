@@ -507,8 +507,15 @@ class PhotoActionView(LoginRequiredMixin, View):
             return _toast("That wiki could not be found.", "error")
         if image.wiki_id == wiki.pk:
             return _toast("Already on that wiki.", "info")
+        from urbanlens.dashboard.services.media.quota_rewards import refresh_community_quota_bonus
+
         attach_to_wiki(image, wiki, added_by=profile)
         Image.objects.filter(pk=image.pk).update(wiki=wiki)
+        # Judged on the FK just written, so the instance has to catch up. A
+        # photo re-contributed after being withdrawn keeps the votes that
+        # earned it, and earns the bonus back here.
+        image.wiki_id = wiki.pk
+        refresh_community_quota_bonus(image)
         return _toast(f"Sent to {wiki.name or 'the wiki'}.")
 
     def share(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:

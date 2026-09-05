@@ -5,7 +5,8 @@ benefits from:
 
 - Locally cached external media never counts against anyone's quota.
 - A user's own wiki-shared photo stops counting once enough *other* people
-  mark it relevant.
+  mark it relevant, and starts counting again only if that same user takes the
+  photo back off the wiki.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from urbanlens.dashboard.services.media.quota_rewards import (
     community_relevant_vote_count,
     is_cached_external_media,
     refresh_community_quota_bonus,
+    revoke_community_quota_bonus,
 )
 from urbanlens.dashboard.services.media.storage import get_exempt_bytes, get_storage_totals, get_storage_used_bytes
 
@@ -225,3 +227,85 @@ class CommunityQuotaBonusTests(TestCase):
         for _ in range(3):
             _mark_relevant(self._voter(), self.location, self.image)
         self.assertFalse(refresh_community_quota_bonus(self.image))
+
+
+class RevokingTheCommunityBonusTests(TestCase):
+    """Withdrawing the contribution ends the bonus it earned.
+
+    The forward rule is one-way against everyone else - see
+    ``test_the_bonus_is_never_revoked`` above, which must keep passing. This is
+    the one case it was never meant to cover.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin = baker.make_recipe("dashboard.pin")
+        self.location = self.pin.location
+        self.profile = self.pin.profile
+        self.wiki = baker.make_recipe("dashboard.wiki", location=self.location)
+        self.image = _wiki_photo(self.profile, self.wiki, self.location, size=100)
+        _set_bonus_threshold(2)
+
+    def _voter(self):
+        return baker.make_recipe("dashboard.pin").profile
+
+    def _grant(self) -> None:
+        for _ in range(2):
+            _mark_relevant(self._voter(), self.location, self.image)
+        self.assertTrue(refresh_community_quota_bonus(self.image))
+
+    def test_revoking_puts_the_bytes_back_on_the_counted_total(self) -> None:
+        self._grant()
+        self.assertEqual((get_storage_used_bytes(self.profile), get_exempt_bytes(self.profile)), (0, 100))
+
+        self.assertTrue(revoke_community_quota_bonus(self.image))
+
+        self.image.refresh_from_db()
+        self.assertEqual(self.image.quota_exempt_reason, "")
+        self.assertEqual((get_storage_used_bytes(self.profile), get_exempt_bytes(self.profile)), (100, 0))
+
+    def test_revoking_leaves_every_other_exemption_alone(self) -> None:
+        """Four of the five reasons this column holds have nothing to do with a wiki."""
+        for reason in (
+            QuotaExemption.EXTERNAL_MEDIA,
+            QuotaExemption.SHARED_COPY,
+            QuotaExemption.DEDUPLICATED,
+            QuotaExemption.WIKI_COPY,
+        ):
+            with self.subTest(reason=reason):
+                image = _wiki_photo(self.profile, self.wiki, self.location, size=100)
+                Image.objects.filter(pk=image.pk).update(quota_exempt_reason=reason)
+                image.refresh_from_db()
+
+                self.assertFalse(revoke_community_quota_bonus(image))
+
+                image.refresh_from_db()
+                self.assertEqual(image.quota_exempt_reason, reason)
+
+    def test_revoking_an_unrewarded_photo_is_a_no_op(self) -> None:
+        self.assertFalse(revoke_community_quota_bonus(self.image))
+        self.image.refresh_from_db()
+        self.assertEqual(self.image.quota_exempt_reason, "")
+
+    def test_revoking_twice_is_harmless(self) -> None:
+        self._grant()
+        self.assertTrue(revoke_community_quota_bonus(self.image))
+        self.assertFalse(revoke_community_quota_bonus(self.image))
+
+    def test_the_votes_that_earned_it_survive_the_revoke(self) -> None:
+        """Which is what makes re-contributing free rather than punitive."""
+        self._grant()
+        revoke_community_quota_bonus(self.image)
+        self.assertEqual(community_relevant_vote_count(self.image), 2)
+
+    def test_re_contributing_earns_it_back_with_no_new_votes(self) -> None:
+        self._grant()
+        revoke_community_quota_bonus(self.image)
+        Image.objects.filter(pk=self.image.pk).update(wiki=None)
+        self.image.refresh_from_db()
+
+        Image.objects.filter(pk=self.image.pk).update(wiki=self.wiki)
+        self.image.refresh_from_db()
+
+        self.assertTrue(refresh_community_quota_bonus(self.image))
+        self.assertEqual(get_storage_used_bytes(self.profile), 0)

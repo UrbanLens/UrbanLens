@@ -1077,9 +1077,37 @@ $memories-type-colors: (
 }
 
 .vault-home-storage,
-.vault-home-recent {
+.vault-home-recent,
+.vault-home-videos {
     padding: 1.1rem 1.25rem;
     margin-bottom: 1.5rem;
+}
+
+.vault-video-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.vault-video-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .6rem .8rem;
+
+    .material-symbols-outlined {
+        opacity: .75;
+    }
+
+    &__detail {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
 }
 
 .vault-home-section-title {
@@ -1132,7 +1160,10 @@ $memories-type-colors: (
         object-fit: cover;
     }
 
-    &--document {
+    // A video never has a thumbnail (nothing thumbnails one), so it wears the
+    // same icon-and-caption tile a document does.
+    &--document,
+    &--video {
         flex-direction: column;
         gap: .25rem;
         padding: .4rem;

@@ -2466,43 +2466,52 @@ Related: this is the concrete instance of the load-testing gap recorded in
 `docs/TOOLING.md` under "Evaluated, not adopted" - the integration suite found
 it by accident, which is not a substitute for looking on purpose.
 
-## P55 — A community quota bonus survives un-sharing the photo that earned it
+## P55 — Deleting a whole wiki still withdraws a contribution without ending its quota bonus
 
-`id: P55` · `status: open` · `updated: 2026-08-23`
+`id: P55` · `status: open` · `updated: 2026-09-05`
 
-Previously titled "A community quota bonus survives un-sharing the photo that earned it (2026-08-23)".
+Previously titled "A community quota bonus survives un-sharing the photo that earned it". The
+single-photo half of that is fixed; this is what is left of it.
 
-`services/media/quota_rewards.py` stamps `QuotaExemption.COMMUNITY_CONTRIBUTION`
-on an image once it is on a wiki, has an owner, is not cached external media, and
-has collected `SiteSettings.community_photo_quota_bonus_votes` relevance votes.
-Nothing anywhere clears `quota_exempt_reason` afterwards - grep finds no writer
-outside that grant and the 0033 backfill.
+`QuotaExemption.COMMUNITY_CONTRIBUTION` is now taken back when a contributor removes their own photo
+from a wiki, and kept in every other case - votes withdrawn, or the wiki removed by someone else.
+Those two are indistinguishable at the column (each ends as `wiki_id IS NULL`, with no record of who
+did it), so the intent is stated by the caller: `detach_image_from_wiki` takes a keyword-only
+`withdrawn_by_contributor` with no default, so a second unlink path added later has to answer the
+question rather than inherit an answer.
 
-So: contribute a photo to a wiki, collect the votes, then remove it from the
-wiki. The photo is private again and permanently exempt from your quota. Repeat
-for as much free storage as you care to earn.
+**The way out that is still open.** An owner who can see a child wiki can delete the whole wiki
+(`controllers/detail_pins.py`'s delete is gated on `resolve_visible_wiki`, not on ownership), and
+`Image.wiki` is `SET_NULL`, so their own contributed photos go private with the bonus intact. It is
+the same conversion of community goodwill into permanent private storage as the original entry, one
+level up, and still not self-servable in a loop: it needs genuine relevance votes from other people.
 
-**The permanence is deliberate and the reason is good**, which is why this needs
-a careful fix rather than a revert. The module's own docstring: the reward is
-one-way "so a user who is comfortably inside their quota can't be pushed over it
-retroactively by other people changing their votes". That protects against *other
-people's* later actions. It was never meant to cover the owner withdrawing the
-contribution themselves, and those two cases are distinguishable:
+Closing it is not a one-liner, which is why it is filed rather than folded into the fix:
 
-- votes fall below the threshold, or a voter leaves -> keep the bonus, exactly as
-  now
-- the image's own `wiki` link is removed by its owner -> the contribution that
-  earned the bonus no longer exists, so neither should the bonus
+- The revoke has to be selective. A wiki delete nulls the FK for *every* contributor's photos, and
+  only the deleter's own may lose their bonus - everyone else's is exactly the "somebody else's
+  action" case the one-way rule protects.
+- It has to be reversible. A wiki delete is undoable within the window
+  (`services/undo/handlers/wiki.py` relinks the images), so the restore has to re-grant. The votes
+  survive both, so a re-grant needs no new ones.
+- The same argument applies to `delete_low_engagement_wikis`, which must revoke nothing at all.
 
-Not trivially exploitable: step two needs genuine relevance votes from other
-people, so this cannot be self-served in a loop. It is a way to convert community
-goodwill into permanent private storage, not a way to mint quota from nothing.
+**Not doing the "record the bonus as an amount" redesign**, and the reason is worth keeping: it does
+not fix this. A per-wiki credit row with the same missing revoke survives an unlink identically - the
+defect is that nothing revoked, not that the exemption is a flag. It also costs: `get_storage_used_bytes`,
+`get_exempt_bytes` and `get_storage_totals` each answer in one aggregate over `Image` served by
+`idxdb_image_profile_quota`, and a credit table makes all three a second aggregate plus a join. And an
+amount frozen at grant time drifts from the file that earned it, because `file_size` is rewritten later
+(`strip_exif_from_stored_photos` does exactly that). It becomes genuinely necessary only if a credit
+should outlive the photo that earned it - a balance that survives its photo cannot be a flag on that
+photo's row - which is a product question, not an implementation one.
 
-Worth deciding alongside it: the exemption is currently a boolean-ish flag on the
-row, so a photo either costs its owner nothing or costs full price. Recording the
-bonus as an amount tied to the wiki relationship (rather than a flag on the image)
-would make withdrawal a cascade rather than a sweep, and would let the UI show a
-contributor what their contributions have earned them.
+**Two adjacent things this fix did not cover.** The reputation ledger still carries the
+`ReputationEvent` for a withdrawn contribution; `retract_event` exists, but that ledger has its own
+gate design and folding it in would make one change two features. And in the wiki context the shared
+`galleryDelete` handler still prompts "This cannot be undone - the file is removed permanently" and
+toasts "Photo deleted." for a dual-owned photo the server only unlinks - both strings are false there,
+and correcting them means changing a response shape three contexts share, so it wants a browser.
 
 ## P56 — `Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed to set it does not exist
 
@@ -2804,21 +2813,6 @@ carry an explicit "a vault album has none" rationale in the source, this one has
 it deliberate - it reads as an oversight from widening `Pin | Wiki` to `Pin | Wiki | Profile`. Needs a
 decision (wire up a profile-scoped bulk endpoint, or document the refusal) rather than a silent gap.
 
-## P62 — Video uploads are charged to quota but appear nowhere in the Vault
-
-`id: P62` · `status: open` · `updated: 2026-08-31`
-
-`MediaKind.VIDEO` exists (`models/images/model.py:136`), `_resolve_media_type` classifies and
-feature-gates videos (`services/photos/photo_upload.py:83-86`), and `tasks.py:913` processes them -
-but `ImageQuerySet` has `photos()`/`documents()` and no `videos()` (`queryset.py:271-281`), and the
-Vault has no video surface. A video uploaded through the external API
-(`external_api/views.py:1303`) counts against `get_storage_totals` and the user's quota, yet
-`VaultHomeView` counts only photos and documents and its recent-uploads strip chains only those two.
-The user is billed for storage they cannot see, browse, or delete from the Vault.
-
-Either add a Videos page (the third instance of the same copy-paste - see the note below) or, at
-minimum, surface videos in the Vault home counts and storage explanation so the number reconciles.
-
 ## P63 — Adding a third Vault media type means copying ~600 lines for ~90 lines of difference
 
 `id: P63` · `status: open` · `updated: 2026-08-31`
@@ -2893,26 +2887,6 @@ break "type to filter" without a matching client-side redesign (fetch-as-you-typ
 like Vault's `photo-virtual-grid.ts`/`bindPhotoGrid` - see the tooling entry above for why the latter
 wasn't reused as-is: it's built for JSON tile grids, not server-rendered card rows wired into the
 existing bulk-select/merge/convert machinery in `organize-tab-manager.ts`).
-
-## P67 — "Organize this property" fans out ~6-7 queries per candidate pin, uncapped to 500
-
-`id: P67` · `status: open` · `updated: 2026-08-31`
-
-Previously titled ""Organize this property" dialog fans out ~6-7 queries per candidate pin, uncapped to 500".
-
-`controllers/pin_restructure.py:83-111` (`_nestable_rows`) calls
-`services/pins/pin_merge.py:158-207`'s `plan_merge_conflicts()` once per nestable candidate with no
-batching - each call does an article lookup, two `Boundary.objects.filter`, and two
-`CustomFieldValue.objects.filter`, none prefetched, so N candidates cost roughly 6N-7N queries in one
-request (`PinRestructureApplyView.get`/`.post`, url name `pin.restructure.apply`).
-`services/pins/pin_restructure.py:222-247`'s `nestable_root_pins()` caps the list at 500, so this
-isn't hypothetical: the feature's own use case is consolidating many individually-pinned buildings on
-one property (a hospital/asylum/campus complex pinned building-by-building before child-pin nesting
-existed) into one, which is exactly a large-candidate-count scenario. This is also brand-new code -
-`_nestable_rows` shipped in the same 2026-08-30 commit (`e795f35f`) that added the "Organize this
-property" dialog - so it never got the query-scaling scrutiny an older path would have picked up.
-`test_pin_restructure.py` covers correctness only; no `QueryScalingMixin`/`assertNumQueries` test
-covers this path.
 
 ## P68 — N+1s in the site-admin user list, the achievement icon picker and Memories > Maps still have no perf test
 

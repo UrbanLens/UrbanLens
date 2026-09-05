@@ -73,17 +73,15 @@ still resolves after it is fixed, and the id is never handed out again.
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P52 | open | 2026-08-24 | `.app-nav-right` runs 40px past a 390px viewport, so every page scrolls sideways at phone width | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-08-24 | One Private Pin page load fires dozens of concurrent panel requests and can exhaust the DB connection pool | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P55 | open | 2026-08-23 | A community quota bonus survives un-sharing the photo that earned it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P55 | open | 2026-09-05 | Deleting a whole wiki still withdraws a contribution without ending its quota bonus | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-08-28 | `Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed to set it does not exist | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P57 | open | 2026-08-29 | The test-quality audit left ~15 findings unfixed, from an unpatched `connect_ex` guard to untested views | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P58 | open | 2026-08-31 | A photo's grid tile can 404/500 for seconds after upload while async processing renames its file | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P59 | open | 2026-08-31 | A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P61 | open | 2026-08-31 | Vault album bulk delete, send-to-wiki and share render hidden forever, because only a `Pin` owner gets URLs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P62 | open | 2026-08-31 | Video uploads are charged to quota but appear nowhere in the Vault | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P63 | open | 2026-08-31 | Adding a third Vault media type means copying ~600 lines for ~90 lines of difference | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P65 | open | 2026-08-31 | Perf tooling measures query count only, so a 12-second render passes every scaling test | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P66 | open | 2026-08-31 | Organize's active label tab still renders its full card list unpaginated | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P67 | open | 2026-08-31 | "Organize this property" fans out ~6-7 queries per candidate pin, uncapped to 500 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P68 | open | 2026-08-31 | N+1s in the site-admin user list, the achievement icon picker and Memories > Maps still have no perf test | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P69 | open | 2026-08-31 | Unbounded lists with no pagination across most of the site, from album pickers to Immich imports | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P73 | open | 2026-09-05 | `bun-types` is pinned at 1.1.6 against Bun 1.3.14, so 81 valid assertions look like type errors | [`docs/PROBLEMS.md`](PROBLEMS.md) |

@@ -11646,3 +11646,76 @@ The containment behaviour from 2026-08-20 is kept rather than reverted to `.get(
 restored from a backup predating 0054 still holds the pair, and answering deterministically beats
 refusing to render a profile. Its tests drop the index to build that state, which is the honest way
 to test data the code no longer creates.
+
+## RESOLVED 2026-09-05: video uploads were charged to quota and counted by nothing on the Vault home
+
+`id: P62` · `status: fixed` · `resolved: 2026-09-05`
+
+The entry's premise was half wrong in a way that changed the fix. It said a video "counts against
+`get_storage_totals` and the user's quota" and asked for videos to be surfaced "so the number
+reconciles". The number never disagreed: `get_storage_totals` aggregates every row of the profile
+with no media-type filter, so video bytes were always on the bar. What did not reconcile was the
+*breakdown* - three tiles and a recent strip accounting for two of three media kinds, explaining a
+bar bigger than all of them.
+
+The sharpest instance was one the entry did not name: `is_empty` was computed from photos,
+documents and albums, so a library holding nothing but videos rendered the "Your Vault is empty"
+welcome state - which also suppressed the storage bar - while its owner was billed for the bytes.
+
+"Appears nowhere" was also too strong: the external API's photo list is deliberately kind-agnostic
+and takes `?media_type=video`, its delete is kind-agnostic, and the data export walks every row. The
+gap was the web UI. So was the delete: `PhotoActionView` enforces ownership and deliberately does
+*not* restrict media type, and its docstring says so - nothing had ever handed a user one of their
+videos' ids. The missing piece was markup, not an endpoint.
+
+Fixed with the minimum, deliberately: `ImageQuerySet.videos()`, a fourth stat tile and a listed
+Videos section on the Vault home (with the delete the endpoint already supported), the video bytes
+named in the storage explanation, and videos in `is_empty` and the recent strip. A Videos *page*
+was not built - it would be the third ~600-line copy of the same grid, and that copy-paste is P63.
+
+Two things that shaped the markup:
+
+- **A video has no thumbnail and never will.** Thumbnails are written only in the photo branch of
+  upload processing and the hourly backfill filters to `media_type=PHOTO`, so `thumb_url` falls
+  through to the file itself - rendering a video through the photo tile downloads the whole video to
+  show a broken image. The recent strip therefore branches on *photo*, and everything else gets an
+  icon tile.
+- **The video-bytes line splits on `quota_exempt_reason=""`**, the same predicate `get_storage_totals`
+  uses, so the sentence explaining the bar cannot exceed the bar.
+
+Severity was lower than the entry implied and worth recording: `SiteSettings.default_features` is
+blank and the seeded VIP role does not include `video_uploads`, so only a site admin (whose feature
+check passes unconditionally) or an explicitly granted account can create a video at all.
+
+## RESOLVED 2026-09-05: the organize-this-property dialog planned merge conflicts once per candidate pin
+
+`id: P67` · `status: fixed` · `resolved: 2026-09-05`
+
+`_nestable_rows` called `plan_merge_conflicts(pin, candidate)` once per candidate, and each call
+issued an article lookup, two `Boundary` filters and two `CustomFieldValue` filters - two of which
+were the same statement with the same parameter, for the survivor, re-issued every iteration. With
+`nestable_root_pins` capped at 500 the worst case was a single GET issuing thousands of queries, on
+the feature whose own use case is a campus pinned building by building.
+
+The entry's "~6-7 per candidate" was slightly high for this path (the survivor's article is a reverse
+one-to-one, so Django caches it - including the miss - after the first candidate) and exactly right
+for a caller it did not name: `merge_suggestion_cards`, which `PinSuggestionQueueView` runs over the
+whole pending queryset with no page limit.
+
+`plan_merge_conflicts` is now a fetch half and a compare half, with `plan_merge_conflicts_bulk` for
+pages that render conflicts they are not about to act on. Three queries for the whole batch.
+
+**What must not be "simplified" later.** The single-pair function still reads at call time, and
+`merge_pins` still calls it. A conflict it does not see is not a warning it skips: `_merge_boundaries`,
+`_merge_custom_field_values` and `_merge_article` delete the loser's row when no resolution names it,
+and the apply loop mutates exactly those three relations between one candidate and the next. Threading
+a batched result into the merge loop would turn a rendering optimisation into silent data loss.
+`test_the_single_pair_function_still_reads_current_state` exists to make that loud.
+
+Also fixed here: candidates were fetched with `select_related("location")` only, so every candidate
+with a blank name cost another query when the template asked for `effective_name` and
+`Location.display_name` read the wiki.
+
+Measured by `OrganizeDialogQueryScalingTests`, which fails on the old shape with "24 queries for 2
+rows and 54 for 12 - it is querying per row" and names the three statements that multiplied.
+

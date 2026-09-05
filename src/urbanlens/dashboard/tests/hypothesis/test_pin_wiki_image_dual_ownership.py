@@ -19,15 +19,17 @@ import json
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.media.images import detach_image_from_pin, detach_image_from_wiki
+from urbanlens.dashboard.services.media.storage import get_storage_used_bytes
 
 
 def _make_stored_image(**kwargs) -> Image:
@@ -80,7 +82,7 @@ class DetachImageFromWikiTests(_DualOwnershipTestCase):
         image = _make_stored_image(pin=self.pin, wiki=self.wiki, location=self.location, profile=self.profile)
         stored_name = image.image.name
 
-        detach_image_from_wiki(image)
+        detach_image_from_wiki(image, withdrawn_by_contributor=True)
 
         self.assertTrue(Image.objects.filter(pk=image.pk).exists())
         image.refresh_from_db()
@@ -92,7 +94,7 @@ class DetachImageFromWikiTests(_DualOwnershipTestCase):
         image = _make_stored_image(wiki=self.wiki, location=self.location, profile=self.profile)
         stored_name = image.image.name
 
-        detach_image_from_wiki(image)
+        detach_image_from_wiki(image, withdrawn_by_contributor=True)
 
         self.assertFalse(Image.objects.filter(pk=image.pk).exists())
         self.assertFalse(default_storage.exists(stored_name))
@@ -212,3 +214,102 @@ class PinGalleryBulkDeleteTests(_DualOwnershipTestCase):
         self.assertEqual(
             Image.objects.filter(pk__in=[image.pk for image in duals], wiki=self.wiki, pin__isnull=True).count(), 2
         )
+
+
+class WithdrawingAContributedPhotoTests(_DualOwnershipTestCase):
+    """The community quota bonus ends when its contributor withdraws the photo.
+
+    The reward is one-way against *other people's* later actions - votes taken
+    back, or the wiki deleted by an editor or by the low-engagement sweep -
+    because someone comfortably inside their quota must not be pushed over it
+    by a change they did not make. The contributor removing their own photo
+    from the wiki is the case that rule was never meant to cover: the
+    contribution the bonus paid for has stopped existing.
+
+    The two cases are indistinguishable at the column - every one of them ends
+    as ``wiki_id IS NULL`` with no record of who did it - so the intent has to
+    be stated where the caller knows it, which is why these tests exercise the
+    call sites rather than a signal.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.client.force_login(self.user)
+
+    def _rewarded_photo(self, size: int = 100) -> Image:
+        return Image.objects.create(
+            image=SimpleUploadedFile("contributed.jpg", b"bytes", content_type="image/jpeg"),
+            pin=self.pin,
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.profile,
+            file_size=size,
+            quota_exempt_reason=QuotaExemption.COMMUNITY_CONTRIBUTION,
+        )
+
+    def _delete(self, image: Image):
+        return self.client.delete(
+            reverse("location.wiki.gallery.image", kwargs={"location_slug": self.location.slug, "image_id": image.pk})
+        )
+
+    def test_withdrawing_a_rewarded_photo_ends_the_bonus(self) -> None:
+        """Contribute, collect the votes, withdraw - and keep the free storage."""
+        image = self._rewarded_photo()
+        self.assertEqual(get_storage_used_bytes(self.profile), 0)
+
+        self.assertEqual(self._delete(image).status_code, 204)
+
+        image.refresh_from_db()
+        self.assertIsNone(image.wiki_id, "the photo is private again")
+        self.assertEqual(image.quota_exempt_reason, "", "it kept the bonus the withdrawn contribution earned")
+        self.assertEqual(get_storage_used_bytes(self.profile), 100)
+
+    def test_another_users_photo_is_404_and_keeps_its_bonus(self) -> None:
+        stranger = baker.make(User).profile
+        image = self._rewarded_photo()
+        Image.objects.filter(pk=image.pk).update(profile=stranger)
+
+        self.assertEqual(self._delete(image).status_code, 404)
+
+        image.refresh_from_db()
+        self.assertEqual(image.quota_exempt_reason, QuotaExemption.COMMUNITY_CONTRIBUTION)
+
+    def test_the_bonus_survives_an_unlink_the_contributor_did_not_ask_for(self) -> None:
+        """The one-way rule, and what a moderator-removal path would rely on."""
+        image = self._rewarded_photo()
+
+        detach_image_from_wiki(image, withdrawn_by_contributor=False)
+
+        image.refresh_from_db()
+        self.assertIsNone(image.wiki_id)
+        self.assertEqual(image.quota_exempt_reason, QuotaExemption.COMMUNITY_CONTRIBUTION)
+        self.assertEqual(get_storage_used_bytes(self.profile), 0)
+
+    def test_deleting_the_wiki_leaves_the_bonus_intact(self) -> None:
+        """`Image.wiki` is SET_NULL, and nobody's storage should move because of it."""
+        image = self._rewarded_photo()
+
+        Wiki.objects.filter(pk=self.wiki.pk).delete()
+
+        image.refresh_from_db()
+        self.assertIsNone(image.wiki_id)
+        self.assertEqual(image.quota_exempt_reason, QuotaExemption.COMMUNITY_CONTRIBUTION)
+        self.assertEqual(get_storage_used_bytes(self.profile), 0)
+
+    def test_only_the_community_bonus_is_taken_back(self) -> None:
+        """The column carries five different exemptions; four are nothing to do with this."""
+        for reason in (
+            QuotaExemption.EXTERNAL_MEDIA,
+            QuotaExemption.SHARED_COPY,
+            QuotaExemption.DEDUPLICATED,
+            QuotaExemption.WIKI_COPY,
+        ):
+            with self.subTest(reason=reason):
+                image = self._rewarded_photo()
+                Image.objects.filter(pk=image.pk).update(quota_exempt_reason=reason)
+                image.refresh_from_db()
+
+                self.assertEqual(self._delete(image).status_code, 204)
+
+                image.refresh_from_db()
+                self.assertEqual(image.quota_exempt_reason, reason)

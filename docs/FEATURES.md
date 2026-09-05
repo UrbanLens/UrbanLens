@@ -466,7 +466,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   personal (pin/wiki-independent) album space, and a landing page, none of which existed before.
 - **Vault home** (`/vault/`) — quick-link tiles into Photos/Documents/Albums with live counts, a
   storage usage summary (used/quota/remaining, shared with the Settings → Storage section), and a
-  recent-uploads strip mixing the most recently added photos and documents.
+  recent-uploads strip mixing the most recently added photos, videos and documents, and a
+  listed Videos section (videos have no page of their own - this is where they are reachable).
 - **Vault → Photos** (`/vault/photos/`) — the site-wide photo library: matches unfiled photos (by
   GPS + timestamp) to existing pins and proposes **visit suggestions** for confirmation; an
   organize queue surfaces photos that still need a pin, a location, or suggestion review, plus

@@ -1589,13 +1589,30 @@ def detach_image_from_pin(image: Any) -> None:
     image.delete()
 
 
-def detach_image_from_wiki(image: Any) -> None:
+def detach_image_from_wiki(image: Image, *, withdrawn_by_contributor: bool) -> None:
     """The wiki-side mirror of ``detach_image_from_pin``.
 
     Args:
         image: The ``Image`` to remove from its wiki.
+        withdrawn_by_contributor: Whether the photo's own owner asked for this.
+            Required rather than defaulted, because the community quota bonus
+            survives every other way a photo can leave a wiki and the column
+            cannot tell them apart afterwards - so a second unlink path added
+            later has to answer the question rather than inherit an answer.
     """
+    from urbanlens.dashboard.models.images.attachment import ImageAttachment
+    from urbanlens.dashboard.services.media.quota_rewards import revoke_community_quota_bonus
+
+    if image.wiki_id is not None:
+        # The pin side already does this (``PinGalleryImageView.delete``).
+        # Leaving the row behind keeps the photo eligible to be made the
+        # wiki's cover, since ``WikiCoverPhotoView`` accepts an attachment as
+        # proof the photo is on the wiki, and keeps it counted by
+        # ``reference_count``.
+        ImageAttachment.objects.filter(image=image, wiki_id=image.wiki_id).delete()
     if image.pin_id is not None:
+        if withdrawn_by_contributor:
+            revoke_community_quota_bonus(image)
         image.wiki = None
         image.save(update_fields=["wiki", "updated"])
         return

@@ -267,12 +267,20 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
             # location's wiki, so this is the only way one gets there - and it is
             # recorded as an attachment as well as an FK, because the attachment is
             # what says a person chose to contribute this.
+            from urbanlens.dashboard.services.media.quota_rewards import refresh_community_quota_bonus
             from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
 
             sending = list(images.exclude(wiki=wiki))
             for image in sending:
                 attach_to_wiki(image, wiki, added_by=profile)
-            count = images.filter(pk__in=[image.pk for image in sending]).update(wiki=wiki)
+            sent_ids = [image.pk for image in sending]
+            count = images.filter(pk__in=sent_ids).update(wiki=wiki)
+            # Re-read: the bonus is judged on the FK the bulk update just wrote,
+            # which the in-memory rows do not have. A photo whose earlier
+            # contribution was withdrawn keeps its votes, so re-contributing it
+            # earns the bonus back here rather than needing fresh ones.
+            for image in Image.objects.filter(pk__in=sent_ids):
+                refresh_community_quota_bonus(image)
             return JsonResponse({"updated": count})
 
         return JsonResponse({"error": "Unknown action."}, status=400)
@@ -532,5 +540,7 @@ class WikiImageView(LoginRequiredMixin, View):
         img, profile = self._get_image(request, image_id, location_slug)
         if img.profile != profile:
             raise Http404
-        detach_image_from_wiki(img)
+        # Owner-only, per the guard above, so this is always the contributor
+        # withdrawing their own photo.
+        detach_image_from_wiki(img, withdrawn_by_contributor=True)
         return HttpResponse(status=204)
