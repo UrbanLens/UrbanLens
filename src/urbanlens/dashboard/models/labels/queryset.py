@@ -17,6 +17,25 @@ if TYPE_CHECKING:
 class LabelQuerySet(abstract.FrontendDashboardQuerySet):
     """QuerySet for Label with visibility and ordering helpers."""
 
+    def bulk_create(self, objs, *args, **kwargs):
+        """Create labels in bulk, coercing each colour first.
+
+        ``bulk_create`` does not call ``save()``, so the model's coercion has to
+        be repeated here or a bulk path stores what a single write would reject.
+
+        Args:
+            objs: The labels to create.
+            *args: Passed through to Django's ``bulk_create``.
+            **kwargs: Passed through to Django's ``bulk_create``.
+
+        Returns:
+            The created labels, as Django's ``bulk_create`` returns them.
+        """
+        objs = list(objs)
+        for obj in objs:
+            obj.coerce_colors()
+        return super().bulk_create(objs, *args, **kwargs)
+
     def visible_to(self, profile: Profile | int) -> Self:
         """Return global labels (profile=None) plus labels owned by this profile."""
         if isinstance(profile, int):

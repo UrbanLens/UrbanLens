@@ -26,6 +26,7 @@ from django.db.models.functions import Lower
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_CHOICES, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.labels.queryset import LabelManager
+from urbanlens.dashboard.services.core.colors import clean_color
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -96,6 +97,27 @@ class Label(abstract.FrontendDashboardModel):
 
     # Per-instance memo for total_pin_count(); not a field.
     _total_pins_memo: int | None = None
+
+    def coerce_colors(self) -> None:
+        """Drop `color` to NULL unless it is a colour this application stores.
+
+        `choices` is a form-layer constraint, not a database one, so it holds
+        only for the paths that go through a form. Import does not:
+        `services/import_export/import_data.py` builds labels straight from an
+        uploaded file's rows.
+        """
+        self.color = clean_color(self.color, default=None)
+
+    def save(self, *args, **kwargs) -> None:
+        """Persist the label, coercing its colour first.
+
+        Enforced here rather than at each write because the colour is
+        interpolated into a `style="..."` attribute in several templates, so an
+        arbitrary string reaching the column is a stored injection vector - and
+        the writers are spread across forms, the external API and import.
+        """
+        self.coerce_colors()
+        super().save(*args, **kwargs)
 
     def _get_customization(self) -> LabelCustomization | None:
         """Return this user's customization, if the queryset was prefetched."""

@@ -8,6 +8,7 @@ from django.db.models import CASCADE, CharField, ForeignKey, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.customization.queryset import LabelCustomizationManager
+from urbanlens.dashboard.services.core.colors import clean_color
 
 
 class LabelCustomization(abstract.DashboardModel):
@@ -37,6 +38,20 @@ class LabelCustomization(abstract.DashboardModel):
     if TYPE_CHECKING:
         profile_id: int
         label_id: int
+
+    def coerce_colors(self) -> None:
+        """Drop `color` to NULL unless it is a colour this application stores.
+
+        Weaker than `Label.color` to begin with - this column carries no
+        `choices` - and it wins over the label's own value in
+        `Label.effective_color`, so it is the one that actually renders.
+        """
+        self.color = clean_color(self.color, default=None)
+
+    def save(self, *args, **kwargs) -> None:
+        """Persist the override, coercing its colour first."""
+        self.coerce_colors()
+        super().save(*args, **kwargs)
 
     objects = LabelCustomizationManager()
 
