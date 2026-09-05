@@ -162,12 +162,21 @@ in a couple of seconds.
   gained any real client depending on the old shape — see their entries below.
 - **Colours** are 6-digit hex, `#rrggbb`. The 3-digit form is *not* accepted: `#f00` is refused
   exactly like `red`. Anything a colour field cannot store is a 400 naming the field, never a
-  silently substituted default — an API client that is told 200 and had its value dropped can only
-  find out by reading the record back. `Label.color` and `SavedFilter.color` are narrower still:
-  both are restricted to the shared palette (`COLOR_CHOICES`), so an off-palette hex like `#0a1b2c`
-  is refused there while `Pin.color` and the label customization override accept any hex.
+  silently substituted default — an API client told 200 while its value was dropped can only find
+  out by reading the record back. `Label.color` and `SavedFilter.color` are narrower still: both are
+  restricted to the shared palette (`COLOR_CHOICES`), so an off-palette hex like `#0a1b2c` is
+  refused there, while `Pin.color` and the label customization override take any 6-digit hex.
+  Missing and blank are unaffected everywhere — they mean "leave it alone" and "clear it".
 - **Versioning**: `v1` changes additively only. A breaking change mints `/v2/` and serves a
   `Sunset` header on `v1`.
+
+  One deliberate exception, 2026-09-05: the colour rule above. Pin create and update, the label bulk
+  edit and the customization override previously accepted any string and stored the default instead
+  — so a client sending `red` got 200 and no colour. Those requests are now 400s, which is a
+  break by the letter of this rule. Taken anyway rather than minting a `/v2/`: nothing was ever
+  stored for those requests, so no client can have been relying on the result, and the alternative
+  was leaving a documented rule that four endpoints did not follow. See `P39` in
+  [`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md).
 - **WebSockets enforce scopes** exactly like HTTP: `ws/messages/` needs `messages:read` to connect
   and `messages:write` to send, `ws/notifications/` needs `notifications:read`, the safety
   check-in chat needs `safety:*`, and the game sockets need `games:*`. Since `messages:*` is

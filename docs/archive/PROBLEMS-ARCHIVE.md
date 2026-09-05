@@ -11281,14 +11281,30 @@ coverage as work done.
 `id: P39` · `status: fixed` · `resolved: 2026-09-05`
 
 The complaint was right and the scope was wrong. The entry read as though every external-API colour
-write coerced; two of the four families already rejected. `LabelWriteSerializer.color` is a
+write coerced; two of the five families already rejected. `LabelWriteSerializer.color` is a
 `ChoiceField(choices=COLOR_CHOICES)` and `SavedFilterWriteSerializer.validate_color` checks the same
 palette, so the single-label and saved-filter endpoints have been answering 400 all along. The
 `clean_color` calls behind them were belt-and-braces on already-validated input, which is what made
 the grep look worse than the behaviour.
 
-Genuinely silent, and now fixed: **pin create** (a plain `CharField`, no validator), the **label
-bulk edit** (likewise), and the **label customization** override.
+Genuinely silent, and now fixed: **pin create**, **pin update**, the **label bulk edit** and the
+**label customization** override - all four a plain `CharField` with no validator.
+
+**Pin update was missed on the first pass and found by reviewing it**, which is worth recording
+because of how it read: hardening create while leaving `PATCH` alone left the pair *less* consistent
+than before, and the same commit wrote the API-wide rule into `docs/EXTERNAL_API.md` that its own
+`PATCH` then broke. `apply_pin_edits` says outright that "`color` is cleaned by its callers instead
+because they each have their own default to fall back to" - and the only caller that passes a colour
+did not clean it.
+
+That is also why the fix did not stop at the serializers. `Pin.coerce_colors()` and
+`SavedFilter.coerce_colors()` now run in `save()`, the way `Label` and `PinMarkup` already did,
+because two writers reach those columns with no serializer in front of them at all: the floorplan
+editor's save assigns `linked.color` straight from its JSON body, and the archive importer assigns
+three pin colour columns and a saved-filter colour from an uploaded file. `Pin.color` is
+interpolated into a Leaflet `divIcon`'s `html`, so that was a stored injection into the owner's own
+map - and `safeColor` now guards both render sites too, since a value stored before any of this
+still renders.
 
 `services/core/colors.require_color` refuses a value that is present and is not a colour, and keeps
 falling back for missing and blank - "unset" is not an invalid colour, and every one of these
@@ -11319,7 +11335,8 @@ names the method as a string. It does not, and the answer is worse than "no": dj
 `method=` against the *FilterSet*, and `PinFilter` defines none of the ten methods it names, so
 wiring it to a viewset would have raised at filter time. Nothing imported it. Dead scaffolding
 pointing at dead scaffolding - which is also why the missing `distinct()` was never noticed.
-`PinFilter` is deleted too; `Wiki` never had a filterset.
+`PinFilter` is deleted too. `Wiki`'s equivalent went in `abb0f30db`, which is why only
+`Pin.by_category` still had a `method=` string pointing at it.
 
 ## RESOLVED 2026-09-05: the Sphinx setup builds successfully and produces no API documentation at all
 

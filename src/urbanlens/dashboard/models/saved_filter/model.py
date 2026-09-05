@@ -11,6 +11,7 @@ from django.db.models.constraints import UniqueConstraint
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
 from urbanlens.dashboard.models.saved_filter.queryset import SavedFilterManager
+from urbanlens.dashboard.services.core.colors import clean_color
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,23 @@ class SavedFilter(abstract.FrontendDashboardModel):
     opacity = IntegerField(default=100)
     criteria = JSONField(default=dict)
     order = IntegerField(default=0)
+
+    def coerce_colors(self) -> None:
+        """Drop `color` to its unset value unless it is a colour we can store.
+
+        The column declares `choices`, which Django enforces in a form and not
+        in the database - and the archive importer writes this straight from an
+        uploaded file. The value is tinted into an inline style on the filter's
+        button.
+        """
+        self.color = clean_color(self.color, default="")
+
+    def save(self, *args, **kwargs) -> None:
+        """Persist the filter, coercing its colour first."""
+        update_fields = kwargs.get("update_fields")
+        if update_fields is None or "color" in update_fields:
+            self.coerce_colors()
+        super().save(*args, **kwargs)
 
     objects = SavedFilterManager()
 

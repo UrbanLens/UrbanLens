@@ -12,6 +12,7 @@
  * and projected to WGS-84 only to hand coordinates to Leaflet.
  */
 
+import { safeColor } from "../shared/markup-engine";
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
 import { isTypingTarget } from "../shared/hotkeys";
@@ -141,7 +142,10 @@ const UNBOUND_FILL = { color: "#b0bec5", weight: 1, dashArray: "4 4", fillColor:
 // over the kind-based defaults, the same priority detailIcon() in
 // map-annotations.ts gives a plain detail pin.
 function markerIcon(marker: Marker, selected: boolean): L.DivIcon {
-    const color = marker.color || MARKER_COLOR[marker.kind] || "#2563eb";
+    // Validated here as well as on write: this is interpolated into a divIcon's
+    // `html`, and a stored value predating the column's own coercion would
+    // otherwise still render.
+    const color = safeColor(marker.color, MARKER_COLOR[marker.kind] || "#2563eb");
     const glyph = marker.icon || MARKER_ICON[marker.kind] || "place";
     const size = 22;
     const pad = 5;

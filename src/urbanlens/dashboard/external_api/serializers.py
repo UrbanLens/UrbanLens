@@ -66,6 +66,7 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyCheckinStatus,
 )
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+from urbanlens.dashboard.services.core.colors import HEX_COLOR_RE
 from urbanlens.dashboard.services.core.text_limits import (
     MAX_ADDITIONAL_PREFERENCES_LENGTH,
     MAX_COMMENT_TEXT_LENGTH,
@@ -134,7 +135,9 @@ class PinCreateSerializer(serializers.Serializer):
     longitude = serializers.FloatField(required=False, allow_null=True, default=None, min_value=-180, max_value=180)
     address = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True, default=None)
     icon = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True, default=None)
-    color = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True, default=None)
+    #: Same rule, and same reason for expressing it on the field, as
+    #: `PinUpdateSerializer.color`.
+    color = serializers.RegexField(HEX_COLOR_RE, max_length=20, required=False, allow_blank=True, allow_null=True, default=None)
     #: Personal notes captured in the field - same free-text field the pin
     #: detail page edits; bounded here because external input is untrusted.
     description = serializers.CharField(max_length=10000, required=False, allow_blank=True, allow_null=True, default=None)
@@ -562,12 +565,16 @@ class PinUpdateSerializer(serializers.Serializer):
     description = serializers.CharField(max_length=MAX_PIN_DESCRIPTION_LENGTH, required=False, allow_blank=True, allow_null=True)
     #: Hex color override for this pin's marker, e.g. ``"#F44336"``. Null/blank
     #: restores the inherited color (the winning label's, or the default).
-    color = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    #:
+    #: A `RegexField` rather than a `validate_color` method so the constraint
+    #: reaches the OpenAPI document, and through it the generated clients - a
+    #: rule enforced only in Python is one every client discovers by being
+    #: refused. 6-digit only: `#f00` is refused like `red`.
+    color = serializers.RegexField(HEX_COLOR_RE, max_length=20, required=False, allow_blank=True, allow_null=True)
     #: What the marker physically represents. Setting it also marks the type
     #: user-provided, which stops automatic building/parcel classification from
     #: overruling the choice later.
-    pin_type = serializers.ChoiceField(choices=PinType.choices, required=False)
-    #: How urgently the owner wants to visit (0 = unset, 1-5). See the class
+    pin_type = serializers.ChoiceField(choices=PinType.choices, required=False)  #: How urgently the owner wants to visit (0 = unset, 1-5). See the class
     #: docstring: this can publish a community wiki vote.
     priority = serializers.IntegerField(required=False, min_value=0, max_value=5)
     #: How hazardous the site is (0 = unset, 1-5). Can publish a wiki vote.

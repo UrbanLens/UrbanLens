@@ -27,6 +27,24 @@ class LabelCustomizationQuerySet(abstract.DashboardQuerySet):
             obj.coerce_colors()
         return super().bulk_create(objs, *args, **kwargs)
 
+    def bulk_update(self, objs, fields, *args, **kwargs):
+        """Update overrides in bulk, coercing each colour first.
+
+        Args:
+            objs: The overrides to update.
+            fields: The column names to write.
+            *args: Passed through to Django's ``bulk_update``.
+            **kwargs: Passed through to Django's ``bulk_update``.
+
+        Returns:
+            Whatever Django's ``bulk_update`` returns.
+        """
+        objs = list(objs)
+        if "color" in fields:
+            for obj in objs:
+                obj.coerce_colors()
+        return super().bulk_update(objs, fields, *args, **kwargs)
+
 
 class LabelCustomizationManager(abstract.DashboardManager.from_queryset(LabelCustomizationQuerySet)):
     """Manager for LabelCustomization records."""

@@ -112,32 +112,48 @@ test.describe("vault photos grid", () => {
         const grid = page.locator("#photo-grid");
         const countBefore = Number.parseInt((await grid.getAttribute("data-photo-count")) ?? "0", 10);
 
-        // The test supplies its own comparand rather than betting on the seed.
+        // The test supplies its own comparands rather than betting on the seed.
         // Asserting only that the first tile changed relies on 30-odd randomly
         // captioned photos never putting the same one first under both orders,
-        // which is a coin toss on a fresh library and a certainty of *failing*
-        // on none - and this account's library is whatever previous runs left.
-        // A name that sorts last is first under "recent" and cannot be first
-        // under "name" unless it is the only photo, which the grid's own
-        // `{% if images %}` already rules out.
-        await page.setInputFiles("#photos-file-input", {
-            name: `zzzz-sorts-last-${Date.now()}.jpg`,
-            mimeType: "image/jpeg",
-            buffer: uniqueTinyJpeg(),
-        });
-        await expect.poll(async () => Number.parseInt((await grid.getAttribute("data-photo-count")) ?? "0", 10), { timeout: 15000 }).toBe(countBefore + 1);
+        // which is a coin toss on a fresh library - and this account's is
+        // whatever previous runs left.
+        //
+        // Two uploads with no caption make the comparison exact. "name" orders
+        // by `Lower(Coalesce(caption, ''))` then `pk` *ascending*; "recent"
+        // orders by `-created` then `-pk`. So an uncaptioned pair is guaranteed
+        // to appear in opposite relative order under the two, whatever else the
+        // library holds. (The filename is not the sort key: an upload from this
+        // page sets no caption, which is also why the earlier "zzzz-" spelling
+        // of this fix was wrong.)
+        for (const label of ["first", "second"]) {
+            await page.setInputFiles("#photos-file-input", {
+                name: `sort-order-${label}-${Date.now()}.jpg`,
+                mimeType: "image/jpeg",
+                buffer: uniqueTinyJpeg(),
+            });
+            await expect.poll(async () => Number.parseInt((await grid.getAttribute("data-photo-count")) ?? "0", 10), { timeout: 15000 }).toBeGreaterThan(countBefore);
+        }
+        await expect.poll(async () => Number.parseInt((await grid.getAttribute("data-photo-count")) ?? "0", 10), { timeout: 15000 }).toBe(countBefore + 2);
 
-        await page.locator("#vault-photos-sort").selectOption("recent");
-        await expect.poll(async () => grid.locator(".photo-tile[data-id]").count(), { timeout: 10000 }).toBeGreaterThan(0);
-        const newestId = await grid.locator(".photo-tile[data-id]").first().getAttribute("data-id");
+        const idsUnder = async (sort: string): Promise<(string | undefined)[]> => {
+            await page.locator("#vault-photos-sort").selectOption(sort);
+            // The sort handler clears the grid and re-fetches from scratch.
+            await expect.poll(async () => grid.locator(".photo-tile[data-id]").count(), { timeout: 10000 }).toBeGreaterThan(0);
+            return grid.locator(".photo-tile[data-id]").evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.id));
+        };
 
-        await page.locator("#vault-photos-sort").selectOption("name");
-        // The sort handler clears the grid and re-fetches from scratch.
-        await expect.poll(async () => grid.locator(".photo-tile[data-id]").count(), { timeout: 10000 }).toBeGreaterThan(0);
+        const byRecent = await idsUnder("recent");
+        // Newest first, so the pair this test uploaded leads it, later one first.
+        const [newer, older] = byRecent;
+        expect(newer, `expected two uploads to lead the recent order, got ${byRecent.slice(0, 4).join(",")}`).toBeTruthy();
+        expect(older).toBeTruthy();
 
-        const firstByName = await grid.locator(".photo-tile[data-id]").first().getAttribute("data-id");
-        expect(newestId, "the just-uploaded photo should lead the recent order").not.toBeNull();
-        expect(firstByName, "a name sorting last cannot also lead the name order").not.toBe(newestId);
+        const byName = await idsUnder("name");
+        const newerAt = byName.indexOf(newer);
+        const olderAt = byName.indexOf(older);
+        expect(newerAt, `the newer upload is missing from the name order: ${byName.slice(0, 6).join(",")}`).toBeGreaterThanOrEqual(0);
+        expect(olderAt, `the older upload is missing from the name order: ${byName.slice(0, 6).join(",")}`).toBeGreaterThanOrEqual(0);
+        expect(olderAt, "an uncaptioned pair must invert between recent (-pk) and name (pk)").toBeLessThan(newerAt);
     });
 
     test("a photo uploaded while sorted by name doesn't duplicate or corrupt the grid", async ({ page }) => {

@@ -28,6 +28,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.addressable import collapse_identity_fields
 from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
+from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
 
@@ -41,6 +42,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.visits import PinVisit
 
 logger = logging.getLogger(__name__)
+
+#: Every column on this model holding a colour, all of them written by paths
+#: that do not share a validation gate. See `Pin.coerce_colors`.
+_COLOR_FIELDS = frozenset({"color", "detail_bg_color", "detail_border_color"})
 
 
 class PinType(TextChoices):
@@ -316,6 +321,8 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         update_fields = kwargs.get("update_fields")
         if update_fields is None or "name" in update_fields:
             self.name = sanitize_name(self.name)
+        if update_fields is None or not _COLOR_FIELDS.isdisjoint(update_fields):
+            self.coerce_colors()
         super().save(*args, **kwargs)
         self._sync_exposures_after_save(update_fields)
         if update_fields is not None and "name" not in update_fields:
@@ -332,6 +339,23 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             except DatabaseError:
                 logger.debug("Could not ensure alias for pin %s name %r", self.pk, self.name, exc_info=True)
         self._loaded_name = self.name
+
+    def coerce_colors(self) -> None:
+        """Drop `color` to NULL unless it is a colour this application stores.
+
+        Enforced on the column rather than at each writer because the value is
+        served as `effective_color` and interpolated into a Leaflet `divIcon`'s
+        `html`, and the writers do not share a gate: the floorplan editor's save
+        assigns it straight from its JSON body, and the archive importer assigns
+        it from an uploaded file. Neither passes an API serializer.
+
+        `detail_bg_color`/`detail_border_color` go through the same treatment.
+        They reach `rgba(...)` through `hexToRgb`, which yields `NaN,NaN,NaN`
+        rather than an injection - so this is about the marker rendering at all,
+        not about escaping.
+        """
+        for field in _COLOR_FIELDS:
+            setattr(self, field, clean_color(getattr(self, field), default=None))
 
     def mark_viewed(self) -> None:
         """Record that the owner just opened this pin's detail page.

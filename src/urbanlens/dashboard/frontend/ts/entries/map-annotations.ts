@@ -11,6 +11,7 @@
  * the script by the template (see templates/dashboard/pages/location/index.html
  * and wiki.html), which is what lets one compiled bundle serve both pages.
  */
+import { safeColor } from "../shared/markup-engine";
 import { getCsrfToken } from "../shared/csrf";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
@@ -1059,7 +1060,10 @@ function init(): void {
 
     function detailIcon(dp: Partial<DetailPinEntry>, highlighted?: boolean): L.DivIcon {
         const pinType = dp.pin_type || "location";
-        const color = dp.color || detailPinColors[pinType] || "#2563eb";
+        // Validated here as well as on write: this is interpolated into a
+        // divIcon's `html`, and a stored value predating the column's own
+        // coercion would otherwise still render.
+        const color = safeColor(dp.color, detailPinColors[pinType] || "#2563eb");
         const icon = dp.icon || detailPinIcons[pinType] || "place";
         const bgColor = dp.bg_color || null;
         const bgOp = bgColor ? (dp.bg_opacity != null ? dp.bg_opacity : 80) / 100 : 0;
@@ -1131,7 +1135,7 @@ function init(): void {
 
         // -- Pin items --------------------------------------------------------
         detailPins.forEach((dp) => {
-            const color = dp.color || detailPinColors[dp.pin_type] || "#2563eb";
+            const color = safeColor(dp.color, detailPinColors[dp.pin_type] || "#2563eb");
             const icon = dp.icon || detailPinIcons[dp.pin_type] || "place";
             const li = document.createElement("li");
             li.className = "detail-pin-list-item";

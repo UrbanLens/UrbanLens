@@ -2288,7 +2288,8 @@ handler may itself be well tested.
 Previously titled "Queryset API with no production caller: 70 of 251 (candidate count)".
 
 From a 2026-08-14 sweep of every public method on a `*/queryset.py` class, which found 70 of 251;
-two have since been deleted (see the archive), leaving 68 of 249:
+two have since been deleted (see the archive), leaving 68 of 249. The split below is that sweep's,
+un-adjusted - both deletions came from the first bucket, so it now reads 42 and 26:
 
 - **44** are not called from any file other than the one defining them
 - **26** are called only from tests
@@ -3213,8 +3214,9 @@ supported by the runtime and by current `bun-types`, and 1.1.6's `expect` takes 
 `TS2554`s that are the pin's, not the code's. `bin/check_typescript_coverage.py` lists both in
 `_UNCOVERED` with that reason, so they are excluded on purpose rather than by omission.
 
-The unmeasured cost is everything else the two years changed: 400-odd files are checked against
-signatures that may no longer match, in both directions.
+The unmeasured cost is everything else the two years changed: the 161 files under `frontend/ts/`
+are checked against signatures that may no longer match, in both directions. (Not the whole tree -
+`tests/integration/`'s 84 files use `@types/node` and are unaffected.)
 
 Not fixed here because it cannot be from this checkout - `node_modules/` is owned by `apps` and not
 group-writable, and this user has no passwordless sudo, so `bun add -d bun-types@1.3.14` fails with

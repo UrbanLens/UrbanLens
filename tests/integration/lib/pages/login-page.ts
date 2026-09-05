@@ -56,7 +56,12 @@ export class LoginPage {
         await Promise.any([
             this.signedInNav.waitFor({ state: "visible" }),
             this.page.waitForURL((url) => url.pathname.startsWith("/accounts/login/2fa")),
-        ]);
+        ]).catch((error: unknown) => {
+            // `AggregateError.message` is "All promises were rejected", which
+            // says less than either timeout did. Re-throw the first real one.
+            const [first] = (error as AggregateError).errors ?? [];
+            throw first instanceof Error ? first : (error as Error);
+        });
     }
 
     /**

@@ -40,8 +40,13 @@ _LABELS = "/dashboard/api/external/v1/labels/"
 _FILTERS = "/dashboard/api/external/v1/saved-filters/"
 _PINS = "/dashboard/api/external/v1/pins/"
 
-#: Rejected for two different reasons, so a fix handling only one shows up.
-NOT_COLOURS = ("red", "#f00", '" onmouseover="alert(1)')
+#: Escapes the enclosing style attribute, and fits `Pin.color`'s varchar(20) -
+#: the longer `" onmouseover="alert(1)` does not, so a length cap alone would
+#: look like a working guard.
+BREAKOUT = '" onclick=alert(1)'
+
+#: Rejected for three different reasons, so a fix handling only one shows up.
+NOT_COLOURS = ("red", "#f00", BREAKOUT)
 
 #: A colour from the shared palette, for the positive cases - the label and
 #: saved-filter endpoints accept nothing else.
@@ -108,6 +113,91 @@ class PinColorRejectionTests(ColorApiTestCase):
 
     def test_a_blank_colour_still_creates(self) -> None:
         self.assertEqual(self._post(_PINS, self._body(name="CxBlank", color="")).status_code, 201)
+
+
+class PinColorUpdateRejectionTests(ColorApiTestCase):
+    """PATCH ``pins/{slug}/`` - the sibling POST hardened, and this did not.
+
+    `Pin.color` is served as `effective_color` and interpolated into a Leaflet
+    `divIcon`'s `html`, so a string that is not a colour is a stored injection
+    into the owner's own map, not a cosmetic problem.
+    """
+
+    def _pin(self):
+        created = self._post(_PINS, {"name": "Cx patch pin", "latitude": 41.0, "longitude": -73.0})
+        self.assertEqual(created.status_code, 201, created.content)
+        return Pin.objects.get(uuid=created.json()["uuid"])
+
+    def test_a_breakout_payload_is_refused(self) -> None:
+        pin = self._pin()
+        response = self._patch(f"{_PINS}{pin.slug}/", {"color": BREAKOUT})
+        self.assertEqual(response.status_code, 400, response.content)
+        pin.refresh_from_db()
+        self.assertIsNone(pin.color)
+
+    def test_a_non_colour_is_refused(self) -> None:
+        pin = self._pin()
+        for value in NOT_COLOURS:
+            with self.subTest(color=value):
+                response = self._patch(f"{_PINS}{pin.slug}/", {"color": value})
+                self.assertEqual(response.status_code, 400, response.content)
+
+    def test_a_real_colour_still_applies(self) -> None:
+        pin = self._pin()
+        response = self._patch(f"{_PINS}{pin.slug}/", {"color": "#0a1b2c"})
+        self.assertEqual(response.status_code, 200, response.content)
+        pin.refresh_from_db()
+        self.assertEqual(pin.color, "#0a1b2c")
+
+    def test_a_blank_colour_still_clears(self) -> None:
+        pin = self._pin()
+        Pin.objects.filter(pk=pin.pk).update(color="#0a1b2c")
+        response = self._patch(f"{_PINS}{pin.slug}/", {"color": ""})
+        self.assertEqual(response.status_code, 200, response.content)
+        pin.refresh_from_db()
+        self.assertIsNone(pin.color)
+
+
+class PinModelColorCoercionTests(ColorApiTestCase):
+    """The column itself, for the write paths no serializer stands in front of.
+
+    The floorplan editor's save assigns `linked.color` straight from its JSON
+    body, and the archive importer assigns three pin colour columns from an
+    uploaded file. Neither goes near the external API's validation.
+    """
+
+    def test_save_drops_a_value_that_is_not_a_colour(self) -> None:
+        pin = self._pin_direct(color=BREAKOUT)
+        self.assertIsNone(pin.color)
+        self.assertIsNone(Pin.objects.get(pk=pin.pk).color)
+
+    def test_save_keeps_a_real_colour(self) -> None:
+        self.assertEqual(self._pin_direct(color="#0a1b2c").color, "#0a1b2c")
+
+    def test_an_update_after_creation_is_coerced_too(self) -> None:
+        pin = self._pin_direct(color="#0a1b2c")
+        pin.color = "rgb(1,2,3)"
+        pin.save()
+        pin.refresh_from_db()
+        self.assertIsNone(pin.color)
+
+    def _pin_direct(self, **kwargs):
+        from urbanlens.dashboard.models.location.model import Location
+
+        location = baker.make(Location, latitude="41.0", longitude="-73.0")
+        return Pin.objects.create(profile=self.profile, name="Cx direct", location=location, **kwargs)
+
+
+class SavedFilterModelColorCoercionTests(ColorApiTestCase):
+    """`SavedFilter.color` is tinted into an inline style the same way."""
+
+    def test_save_drops_a_value_that_is_not_a_colour(self) -> None:
+        row = SavedFilter.objects.create(profile=self.profile, name="CxRaw", criteria={}, color=BREAKOUT)
+        self.assertEqual(SavedFilter.objects.get(pk=row.pk).color, "")
+
+    def test_save_keeps_a_palette_colour(self) -> None:
+        row = SavedFilter.objects.create(profile=self.profile, name="CxRawOk", criteria={}, color=PALETTE_COLOR)
+        self.assertEqual(row.color, PALETTE_COLOR)
 
 
 class LabelColorRejectionTests(ColorApiTestCase):

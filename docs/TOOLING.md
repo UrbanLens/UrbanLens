@@ -355,7 +355,8 @@ the directory can be compared with `ls`.
 | `bin/check_line_endings.py` | A tracked text file stored with CRLF |
 | `bin/check_typescript_coverage.py` | A `.ts` file in no tsconfig project, or a project `bun run typecheck` never runs |
 
-The last two exist because a *defect class* recurred, not because one bug did.
+`check_outage_not_cached.py` and `check_notification_choke_point.py` exist because a
+*defect class* recurred, not because one bug did.
 `check_outage_not_cached.py` came from an outage being stored as "nothing here"
 and outliving the outage; `check_notification_choke_point.py` came from a mute
 preference that two UI surfaces wrote and nothing read, which was possible
@@ -442,9 +443,13 @@ than as a step in `python-quality`. `docs/_build/` and the generated `docs/api/`
 are both gitignored.
 
 ```bash
-bun run docs              # or: python3 bin/build_docs.py
-bin/build_docs.py --strict   # warnings become errors
+uv run python bin/build_docs.py            # what CI runs
+uv run python bin/build_docs.py --strict   # warnings become errors
 ```
+
+`bun run docs` is the same command, and works only where the venv is already on
+`PATH` - Sphinx is a `dev` dependency, so a bare `python3` has neither it nor
+`myst_parser`.
 
 ### `bin/run_codeql.py`
 
