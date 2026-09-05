@@ -83,10 +83,10 @@ def promote_wiki_alias_to_name(wiki: Wiki, profile: Profile, alias: WikiAlias) -
         None when *alias* was already the name and nothing changed.
 
     Raises:
-        WikiEditValidationError: Never in practice - ``name`` has no
-            strict-mode validation in ``apply_wiki_edit`` (only security levels
-            and dates do) - but propagated rather than swallowed so a future
-            rule added there is not silently ignored here.
+        WikiEditValidationError: Never in practice - ``apply_wiki_edit``
+            validates only security levels, dates and description length, and
+            ``name`` is none of them - but propagated rather than swallowed so a
+            future rule added there is not silently ignored here.
     """
     outgoing = (wiki.name or "").strip()
     if is_meaningful_name(outgoing):
@@ -105,7 +105,4 @@ def promote_wiki_alias_to_name(wiki: Wiki, profile: Profile, alias: WikiAlias) -
             # wanted, so there is nothing left to do.
             pass
 
-    # strict=True is the external API's setting and makes no difference for
-    # ``name``; passing it unconditionally keeps both callers on one code path
-    # rather than adding a flag that would only ever have one meaningful value.
-    return apply_wiki_edit(wiki, profile, {"name": alias.name}, strict=True)
+    return apply_wiki_edit(wiki, profile, {"name": alias.name})

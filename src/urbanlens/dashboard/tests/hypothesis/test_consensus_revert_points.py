@@ -49,9 +49,7 @@ class ConsensusRevertPointsTests(TestCase):
         return row.total_points if row else 0
 
     def _edit(self, profile: Profile, **changes) -> WikiEdit:
-        return apply_wiki_edit(
-            self.wiki, profile, changes or {"description": "A description of the place."}, strict=False
-        )
+        return apply_wiki_edit(self.wiki, profile, changes or {"description": "A description of the place."})
 
     def _revert(self, target: WikiEdit) -> WikiEdit | None:
         self.wiki.refresh_from_db()

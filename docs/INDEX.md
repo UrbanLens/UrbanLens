@@ -50,7 +50,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P17 | open | 2026-07-24 | `docker compose exec app pytest` trips the localhost-only network guard because Valkey is a bridge IP | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P19 | open | 2026-07-25 | Audit re-verification's residual gaps remain: dead ownership re-check, 1,100-line `_dark.scss`, stub AI gateway | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P20 | open | 2026-07-25 | The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()` resolves it wrongly for everyone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P21 | open | 2026-07-26 | `LocationWikiEditView.post` drops invalid wiki field edits and still answers `{"ok": true}` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P23 | open | 2026-07-31 | The production celery worker's env sets `UL_SITE_URL=staging.urbanlens.org`, so built URLs point at staging | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P24 | open | 2026-08-05 | A campus pin aggregates only the nearest CRIS building's media, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |

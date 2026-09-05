@@ -1,12 +1,13 @@
 """Property-based tests for ``services.wiki.wiki_edits.apply_wiki_edit``.
 
-The strict/non-strict split is the whole point of this service, so the
-properties asserted here are about that split rather than about any one input:
+Two properties, asserted over generated values rather than chosen ones:
 
-- strict mode never accepts a value it would have skipped;
-- non-strict mode never *raises* on one (preserving the internal view's
-  long-standing behavior, bug and all - see ``docs/PROBLEMS.md``);
-- both modes agree exactly whenever every submitted value is valid.
+- a value the function will not store is rejected, never dropped. Both callers
+  used to differ here - the internal view skipped the field and answered
+  ``{"ok": true}``, reporting a write it had not made;
+- a value equal to what the submitter was looking at is not an edit. These
+  forms post every field whether or not it was touched, so the diff is the only
+  thing between an untouched field and a `WikiEdit` with someone's name on it.
 """
 
 from __future__ import annotations
@@ -48,7 +49,7 @@ def _parses_as_date(value: str) -> bool:
 
 
 class ApplyWikiEditPropertyTests(TestCase):
-    """Strict and non-strict modes must differ only in how they reject."""
+    """Whatever is submitted, an unstorable value is refused rather than dropped."""
 
     def setUp(self) -> None:
         baker.make(User)  # first user auto-promoted to bootstrap site admin
@@ -61,59 +62,34 @@ class ApplyWikiEditPropertyTests(TestCase):
 
     @settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(field=st.sampled_from(WIKI_SECURITY_FIELDS), value=invalid_security)
-    def test_strict_mode_rejects_every_invalid_security_value(self, field: str, value: str) -> None:
+    def test_an_invalid_security_value_is_rejected(self, field: str, value: str) -> None:
         """An unrecognized level is always an error, never a silent skip."""
         wiki = self._fresh_wiki()
         with self.assertRaises(WikiEditValidationError):
-            apply_wiki_edit(wiki, self.profile, {field: value}, strict=True)
+            apply_wiki_edit(wiki, self.profile, {field: value})
 
-        wiki.refresh_from_db()
-        self.assertNotEqual(getattr(wiki, field), value)
-
-    @settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
-    @given(field=st.sampled_from(WIKI_SECURITY_FIELDS), value=invalid_security)
-    def test_non_strict_mode_never_raises_and_never_writes(self, field: str, value: str) -> None:
-        """The internal path keeps skipping - quietly, but without corrupting data."""
-        wiki = self._fresh_wiki()
-        edit = apply_wiki_edit(wiki, self.profile, {field: value}, strict=False)
-
-        self.assertIsNone(edit)
         wiki.refresh_from_db()
         self.assertNotEqual(getattr(wiki, field), value)
 
     @settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(value=invalid_dates)
-    def test_strict_mode_rejects_unparseable_dates(self, value: str) -> None:
+    def test_an_unparseable_date_is_rejected(self, value: str) -> None:
         wiki = self._fresh_wiki()
         with self.assertRaises(WikiEditValidationError):
-            apply_wiki_edit(wiki, self.profile, {"date_abandoned": value}, strict=True)
-
-    @settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
-    @given(value=invalid_dates)
-    def test_non_strict_mode_skips_unparseable_dates(self, value: str) -> None:
-        wiki = self._fresh_wiki()
-        self.assertIsNone(apply_wiki_edit(wiki, self.profile, {"date_abandoned": value}, strict=False))
+            apply_wiki_edit(wiki, self.profile, {"date_abandoned": value})
 
     @settings(max_examples=10, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
     @given(
         field=st.sampled_from(WIKI_SECURITY_FIELDS),
         value=st.sampled_from(VALID_SECURITY),
     )
-    def test_valid_values_are_applied_identically_in_both_modes(self, field: str, value: str) -> None:
-        """When everything is valid, strict changes nothing about the outcome."""
-        strict_wiki = self._fresh_wiki()
-        lenient_wiki = self._fresh_wiki()
+    def test_a_valid_value_is_applied(self, field: str, value: str) -> None:
+        wiki = self._fresh_wiki()
 
-        strict_edit = apply_wiki_edit(strict_wiki, self.profile, {field: value}, strict=True)
-        lenient_edit = apply_wiki_edit(lenient_wiki, self.profile, {field: value}, strict=False)
+        apply_wiki_edit(wiki, self.profile, {field: value})
 
-        strict_wiki.refresh_from_db()
-        lenient_wiki.refresh_from_db()
-        self.assertEqual(getattr(strict_wiki, field), getattr(lenient_wiki, field))
-
-        # A no-op (value already equal to the default) legitimately records
-        # nothing in either mode - what matters is that they agree.
-        self.assertEqual(strict_edit is None, lenient_edit is None)
+        wiki.refresh_from_db()
+        self.assertEqual(getattr(wiki, field), value)
 
 
 class ApplyWikiEditBehaviorTests(TestCase):
@@ -125,29 +101,61 @@ class ApplyWikiEditBehaviorTests(TestCase):
         location = baker.make("dashboard.Location")
         self.wiki = baker.make("dashboard.Wiki", location=location, name="Baseline")
 
+    def test_an_untouched_empty_date_is_not_a_change(self) -> None:
+        """The form posts every field, so a nullable one arrives as "".
+
+        Against a stored `None` that differs as a string and normalises back to
+        `None`, so it used to be recorded as a change - a `WikiEdit` saying
+        None -> None, a bumped `updated`, and reputation paid for it.
+        """
+        self.assertIsNone(self.wiki.date_abandoned)
+
+        self.assertIsNone(apply_wiki_edit(self.wiki, self.profile, {"date_abandoned": ""}))
+
+        self.assertFalse(WikiEdit.objects.filter(wiki=self.wiki).exists())
+
+    def test_an_untouched_empty_text_field_is_not_a_change(self) -> None:
+        self.wiki.description = None
+        self.wiki.save(update_fields=["description"])
+
+        self.assertIsNone(apply_wiki_edit(self.wiki, self.profile, {"description": ""}))
+
+        self.assertFalse(WikiEdit.objects.filter(wiki=self.wiki).exists())
+
+    def test_clearing_a_date_that_was_set_is_still_a_change(self) -> None:
+        """The guard must not swallow a real clear."""
+        self.wiki.date_abandoned = date(1974, 3, 1)
+        self.wiki.save(update_fields=["date_abandoned"])
+
+        edit = apply_wiki_edit(self.wiki, self.profile, {"date_abandoned": ""})
+
+        assert edit is not None
+        self.assertEqual(list(edit.changes), ["date_abandoned"])
+        self.wiki.refresh_from_db()
+        self.assertIsNone(self.wiki.date_abandoned)
+
     def test_no_recognized_change_records_nothing(self) -> None:
-        self.assertIsNone(apply_wiki_edit(self.wiki, self.profile, {"unrelated": "value"}, strict=True))
+        self.assertIsNone(apply_wiki_edit(self.wiki, self.profile, {"unrelated": "value"}))
         self.assertFalse(WikiEdit.objects.filter(wiki=self.wiki).exists())
 
     def test_setting_the_same_value_is_not_an_edit(self) -> None:
-        self.assertIsNone(apply_wiki_edit(self.wiki, self.profile, {"name": "Baseline"}, strict=True))
+        self.assertIsNone(apply_wiki_edit(self.wiki, self.profile, {"name": "Baseline"}))
 
     def test_audit_row_records_from_and_to(self) -> None:
-        edit = apply_wiki_edit(self.wiki, self.profile, {"name": "Renamed"}, strict=True)
+        edit = apply_wiki_edit(self.wiki, self.profile, {"name": "Renamed"})
         self.assertIsNotNone(edit)
         self.assertEqual(edit.changes["name"], {"from": "Baseline", "to": "Renamed"})
 
     def test_date_objects_are_accepted_directly(self) -> None:
         """DRF hands the service a real date; it must not require a string."""
-        edit = apply_wiki_edit(self.wiki, self.profile, {"date_abandoned": date(1999, 6, 15)}, strict=True)
+        edit = apply_wiki_edit(self.wiki, self.profile, {"date_abandoned": date(1999, 6, 15)})
         self.assertIsNotNone(edit)
         self.assertEqual(self.wiki.date_abandoned, date(1999, 6, 15))
 
-    def test_overlong_description_is_rejected_in_both_modes(self) -> None:
-        """A too-long description was always a hard error, not a silent skip."""
+    def test_an_overlong_description_is_rejected(self) -> None:
+        """The one rejection that was always hard, on both callers."""
         from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
 
         too_long = "x" * (MAX_WIKI_DESCRIPTION_LENGTH + 1)
-        for strict in (True, False):
-            with self.subTest(strict=strict), self.assertRaises(WikiEditValidationError):
-                apply_wiki_edit(self.wiki, self.profile, {"description": too_long}, strict=strict)
+        with self.assertRaises(WikiEditValidationError):
+            apply_wiki_edit(self.wiki, self.profile, {"description": too_long})

@@ -212,9 +212,9 @@ class WikiDetailApiView(WikiApiView):
 
     PATCH applies a community edit through the same
     ``services.wiki.wiki_edits.apply_wiki_edit`` the dashboard's "Suggest edits"
-    form uses, and records the identical ``WikiEdit`` audit row - but with
-    ``strict=True``, so an unrecognized security level or an unparseable date
-    is a 400 rather than the internal view's silent skip.
+    form uses, and records the identical ``WikiEdit`` audit row - including its
+    rejections: an unrecognized security level or an unparseable date is a 400
+    on both paths.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -251,7 +251,7 @@ class WikiDetailApiView(WikiApiView):
         target = writable_wiki(wiki)
         try:
             with transaction.atomic():
-                apply_wiki_edit(target, profile, changes, strict=True, baseline=wiki)
+                apply_wiki_edit(target, profile, changes, baseline=wiki)
         except WikiEditValidationError as exc:
             return Response({"error": exc.message, "fields": {exc.field: exc.message} if exc.field else {}}, status=400)
 

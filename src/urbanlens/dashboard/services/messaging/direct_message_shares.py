@@ -210,11 +210,12 @@ def send_message_with_share(
             client_uuid=client_uuid,
         )
 
-    # No share - a plain message, possibly with a map attached. Note that a
-    # MarkupMap attached without a pin records no LocationExposure even though
-    # it can depict pin locations; that gap predates this function and exists
-    # in the web composer too (docs/PROBLEMS.md: "markup-map attachments
-    # bypass share provenance").
+    # No share - a plain message, possibly with a map attached. An attached
+    # MarkupMap does stamp the provenance chain now (`create_direct_message` ->
+    # `share_markup_map_with_profile`), but only for places the *sender* has a
+    # pin at: detection matches the map against their own pins. A marker drawn
+    # on somewhere they have never pinned still discloses it and still records
+    # nothing - see P21.
     return create_direct_message(
         sender,
         recipient,

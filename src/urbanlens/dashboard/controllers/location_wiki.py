@@ -355,10 +355,6 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
-        # strict=False keeps this view's long-standing skip-invalid-and-continue
-        # behavior (see apply_wiki_edit's docstring, and "Messaging / external API
-        # (noted 2026-07-26)" in docs/PROBLEMS.md, the strict-vs-lenient item); the
-        # external API passes strict=True and gets a hard rejection instead.
         # apply_wiki_edit mutates and saves the row it is given, so it needs the
         # real one: resolve_visible_wiki hands back a concealed projection to a
         # gated viewer, and saving that would persist their redacted view over
@@ -367,7 +363,7 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         try:
             # baseline=wiki: the dialog was prefilled from the projection and
             # posts every field, touched or not.
-            edit = apply_wiki_edit(target, profile, body, strict=False, baseline=wiki)
+            edit = apply_wiki_edit(target, profile, body, baseline=wiki)
         except WikiEditValidationError as exc:
             return JsonResponse({"error": exc.message}, status=400)
 

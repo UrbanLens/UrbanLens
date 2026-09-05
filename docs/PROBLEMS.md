@@ -1320,157 +1320,67 @@ but re-check them then rather than assuming:
    the route and `import_pins_streaming` with it - a live URL that silently mis-places pins is
    worse than no URL.
 
-## P21 — `LocationWikiEditView.post` drops invalid wiki field edits and still answers `{"ok": true}`
+## P21 — A shared markup map stamps provenance only for places its sender has pinned
 
-`id: P21` · `status: open` · `updated: 2026-07-26`
+`id: P21` · `status: open` · `updated: 2026-09-05`
 
-Previously titled "Messaging / external API (noted 2026-07-26, during the mobile v2 messaging API build)".
+Previously titled "`LocationWikiEditView.post` drops invalid wiki field edits and still answers
+`{"ok": true}`", and before that "Messaging / external API (noted 2026-07-26)". Nine of this entry's
+eleven sub-items are resolved and were removed on 2026-09-05 rather than left to be re-read - git
+history has them. Two are live.
 
-- **WebSocket credential auth does no per-scope check.** ~~`ApiKeyAuthMiddleware`... authenticates
-  a WebSocket connection from any valid, unrevoked credential and then grants blanket access -
-  it never consults the connection's scopes.~~ **Already fixed, stale entry** (re-checked
-  2026-08-25): `consumers.py` now has a `CredentialScopeMixin` (L84-172) providing
-  `credential_allows(*scopes)`, used identically to `external_api`'s `credential_grants`/
-  `OAUTH2_ONLY_SCOPES` logic - exactly the "Fix shape" this entry prescribed. Every consumer's
-  `connect()` calls it before joining any channel-layer group and closes with 4404 on failure:
-  `UserNotificationConsumer` requires `NOTIFICATIONS_READ`, `DirectMessageConsumer` requires
-  `MESSAGES_READ`/`MESSAGES_WRITE`, `SafetyCheckinChatConsumer` requires `SAFETY_READ`/
-  `SAFETY_WRITE`, and the shared `_ParticipantSessionConsumer` (Game/Trivia/Consensus) requires
-  `GAMES_READ`/`GAMES_WRITE`. Session-authenticated connections are unaffected by design. There is
-  also a periodic re-validation loop that closes a socket if its credential is later revoked/
-  expired, beyond what this entry asked for. Covered by `test_websocket_credential_scopes.py`
-  across exactly the four cases named above.
+### A markup map only records what its sender already had a pin for
 
-- **Markup-map attachments bypass share provenance.** Attaching a `MarkupMap` to a direct
-  message (`create_direct_message(markup_map_uuid=...)`, and the `send_message_with_share`
-  path in `services/messaging/direct_message_shares.py` when no `shared_pin_id` accompanies it) records
-  **no `LocationExposure`**, even though a markup map can depict pin locations and therefore
-  can disclose them to the recipient. Sharing the *pin* correctly stamps the chain via
-  `create_pin_share` -> `resolve_and_stamp_origin_share` + `record_share_exposure`; attaching a
-  map that draws the same place does not, so the location's re-share history silently has a
-  hole in it. **Not a regression** - the web composer has always behaved this way and the new
-  API endpoint merely matches it, which is why it was documented rather than changed
-  mid-build. **Fix shape**: on attach, resolve the `MarkupMap`'s items to the pins/locations
-  they reference and record an exposure per distinct location, reusing `record_share_exposure`
-  rather than inventing a second provenance path. Decide first whether a hand-drawn annotation
-  with no linked pin should count (probably yes if it carries coordinates).
+The original claim - that attaching a `MarkupMap` to a direct message records no `LocationExposure`
+at all - stopped being true in `57a4a90af` (2026-08-27), a month after this entry was last touched.
+All three attach paths now stamp the chain: the DM (`services/messaging/direct_messages.py` ->
+`share_markup_map_with_profile`), the standalone map share, and the pin-share dialog. Group chats
+cannot attach a map at all, so there is no second hole there.
 
-- **Three pre-existing mypy errors surface whenever anything type-checks the external API's view
-  module** (found 2026-07-26 while adding the lists/labels external endpoints; none are caused by
-  that work, and all three live in files it does not touch) - **already fixed, stale entry**
-  (re-checked 2026-08-25, fresh `mypy --no-incremental src/urbanlens` reports zero errors in 861
-  files): `dashboard/models/boundary/queryset.py:85` (`buffer_point_by_meters`) now has
-  `if not isinstance(circle, Polygon): raise TypeError(...)` before using the result, the exact
-  narrowing check this entry asked for rather than a `cast`; `dashboard/forms/search.py:178`
-  (`SearchForm._clean_reference_field`) now has `if self.profile is None: raise
-  forms.ValidationError(...)` before the call that needed a non-optional `Profile`; and
-  `dashboard/controllers/trip.py` no longer contains the pattern at all - the `creator_id` usages
-  left are plain `trip.creator_id == profile.id` comparisons, refactored away rather than merely
-  guarded.
+What survives is the sub-question the original entry deferred, and it is the more interesting half.
+`detect_shared_pins` matches the map against **the sender's own pins** (`_candidate_pins` filters
+`profile=sender`). A map that marks a place the sender has never pinned produces no share and no
+exposure - so the recipient learns the location and their onward share resolves `parent_share=None`,
+ending the chain there. That is exactly the laundering pattern `share_provenance.py`'s own docstring
+says the design exists to defeat: receive a share, never pin it, redraw it, forward it. It applies to
+a cloned map too, whose new owner usually has no pin at the depicted place.
 
-- **Pin-detail's `wiki_slug` was unusable for navigating to a wiki (FIXED in this pass).**
-  `services/pins/pin_detail.py::build_pin_detail` set `payload["wiki_slug"] = wiki.slug`, which reads
-  naturally as "the slug to fetch this pin's wiki with". It isn't. Every wiki-scoped route
-  resolves through `services.wiki.wiki_access.resolve_visible_wiki`, which takes a **Location**
-  slug/uuid - and `Wiki.slug` is an independent `SlugField` on an unrelated model with its own
-  value. A client that followed `wiki_slug` to `GET /wikis/{location_slug}/` therefore got a 404
-  for a wiki it could plainly see. Fixed by adding `location_slug` (from
-  `location.ensure_slug()`) to the payload and to `PinDetailSerializer`; `wiki_slug` is retained
-  but documented as informational-only. Regression test:
-  `tests/hypothesis/test_external_api_pin_detail_location_slug.py`.
+The asymmetry with the sibling path is the argument for fixing it: `dm_location_detection` already
+mints a location-only `PinShare` (`pin=None`) plus an exposure for bare coordinates *typed* into a
+chat. Drawing a marker on that same spot and attaching the map is the more precise disclosure,
+arrives in the same message, and records nothing. `PinShare.pin` is already nullable and documented
+for location-only shares, `place_label` already falls back to the location, and the Memories >
+Sharing page already renders rows of that shape - so the model layer needs nothing.
 
-- **The internal wiki edit view silently discards invalid input (NOT fixed - deliberate).**
-  `controllers/location_wiki.py::LocationWikiEditView.post` iterates the editable fields and
-  `continue`s past (a) a security value not in `SecurityLevel.choices` and (b) a date that fails
-  `datetime.strptime(raw, "%Y-%m-%d")`. The user is told `{"ok": True}` and the field simply
-  never changes, with no error surfaced anywhere - a submitted-but-dropped edit is
-  indistinguishable from a successful one. The shared `services/wiki/wiki_edits.py::apply_wiki_edit`
-  extracted in this pass takes a `strict` flag: the external API passes `strict=True` and gets a
-  hard rejection, while the internal path keeps `strict=False` to preserve existing HTMX
-  behavior. The internal path should be migrated to strict (with proper field-level error
-  rendering in the About card) as a follow-up - it needs UI work, which is why it was left alone
-  here rather than changed blind.
+**Two decisions to make before writing it**, which is why this is filed rather than done:
 
-- **A wiki's "First pinned" date leaked past the low-pin-count privacy fuzz (FIXED).**
-  `approximate_pin_count` deliberately refuses to show a number until at least
-  `MIN_VISIBLE_PIN_COUNT` (3) distinct users have pinned a place, but the Community card showed
-  "First pinned <Mon YYYY>" *unconditionally*. With only one or two pinners, that month is
-  effectively "when this specific person pinned it" - exactly what the count fuzzing exists to
-  hide. (The template already rendered `|date:"M Y"`, so the day was never displayed; the leak
-  was the missing low-count suppression, and the fact that day-precision sat in the template
-  context at all.) Fixed by `services/wiki/community_counts.py::wiki_community_summary`, which
-  truncates `first_pinned` to the 1st of its month and returns `None` whenever `pin_count_low`
-  is true. Both `LocationWikiView` and the external API now read that one function, and
-  `wiki.html` renders the pre-truncated date rather than reaching into a Pin instance.
+- **Which item types assert a place.** A placed marker or text label asserts one spot; a circle
+  asserts its centre, but only below some radius (a 5 km circle asserts nothing). A line, arrow,
+  square or polygon has no single defensible coordinate - a centroid is not what the sender pointed
+  at - and those already contribute by matching against real pins. Minting locations for them would
+  fill the chain with noise and inflate `chain_share_count`, which counts rows.
+- **Whether the saved viewport counts.** `detect_shared_pins` already treats "zoomed in past the
+  threshold, pin in the central quarter" as a share, so the map itself asserts its centre and the
+  recipient can read it off the snapshot. Including it is what makes the record independent of the
+  sender's own bookkeeping - and it changes behaviour for every map ever sent, so it wants its own
+  decision rather than riding along.
 
-- **`MapController.resolve_place` does not honor the `external_apis_enabled` profile toggle**
-  (`src/urbanlens/dashboard/controllers/maps.py:384-408`). ~~Its sibling `autocomplete_places`...
-  does check `request.user.profile.external_apis_enabled`... but `resolve_place`... checks only
-  whether an API key/REData is configured.~~ **Fixed 2026-08-25** (`6bdf7e7e`): added the same
-  `if not request.user.profile.external_apis_enabled: return ... 403` guard immediately after the
-  missing-`place_id` check, mirroring the pattern `external_api/views.py::PlaceResolveView.get`
-  and `streetview_check` already use. Guarded by `test_resolve_place_blocked_when_external_apis_disabled`.
+A cap belongs on whatever ships: a map can hold hundreds of items, and `dm_location_detection`
+already caps mentions at five per message for the same reason.
 
-- **`test_spotguessr_geo_bonus.BonusPointsForGuessTests::test_geocode_failure_earns_nothing_without_raising`
-  fails on a polluted cache, not on the code under test**
-  (`src/urbanlens/dashboard/tests/hypothesis/test_spotguessr_geo_bonus.py:102-108`). The test
-  patches `NominatimGateway` to return `None` and expects a 0-point bonus, but gets 750 (all
-  three tiers). `services/spotguessr/geo_bonus.py::_reverse_geocode_admin_cached` memoizes the
-  reverse-geocode result in the Django cache keyed by *rounded* coordinates, and the earlier
-  tests in the same class populate that key with a matching admin dict - so the patched gateway
-  is never called and the failure branch is never exercised. Reproduces with the file run
-  alone (`pytest src/urbanlens/dashboard/tests/hypothesis/test_spotguessr_geo_bonus.py`), so it
-  is not a cross-file interaction. Pre-existing: neither `geo_bonus.py` nor its test has been
-  touched. Fix is a `cache.clear()` in that class's `setUp` (and arguably a project-wide
-  `LocMemCache` reset between tests, since any cache-backed service has this hazard). Noted
-  while building the external SpotGuessr API; left alone because the file belongs to another
-  work stream.
+### Legacy `BLOCKED` rows may still record the wrong blocker
 
-- **The inbox list serializes each conversation's last message with no reaction/share
-  prefetch** (`src/urbanlens/dashboard/services/messaging/direct_messages.py::conversations_for`,
-  `src/urbanlens/dashboard/services/messaging/group_chats.py::group_conversations_for`) - a page of
-  N conversations issued ~2N extra queries reading `message.reactions.all()`/`message.share_for(viewer)`
-  on each `last_message`. **Fixed 2026-08-25** (`20507627`): both functions already resolved
-  `last_message` via a second, id-bounded query separate from the wider per-group scan, so the fix
-  was adding `prefetch_related('reactions__profile')` (plus `'shares'` for groups) onto those
-  already-scoped queries, rather than onto the message-history-wide scan. The thread endpoints -
-  where a page is 50 messages rather than 1 - already prefetched, so this was an inbox-only cost.
+`Friendship` has no "blocked_by" column, so `from_profile` is the only record of who blocked whom,
+and `block_profile` used to reuse whichever row already joined the pair - a block placed on an
+inbound request left the *blocked* party as `from_profile`. It normalises direction now, so every
+block placed since is right, but existing rows carry no signal a migration could use: it would have
+to guess.
 
-- **`test_avatar_colors.GroupMemberSearchAvatarColorTests::test_results_get_distinct_colors`
-  returns 0 results where it expects 4**
-  (`src/urbanlens/dashboard/tests/hypothesis/test_avatar_colors.py:105-111`). The test creates
-  four ANYONE-visible profiles named `searchable-user-<n>` and expects
-  `GET messages.group.member_search?q=searchable-user` to return all four;
-  `response.context["results"]` is empty. The candidate filter in
-  `controllers/group_chats.GroupMemberSearchView` (and the `can_direct_message` gate it leans
-  on in `services/messaging/direct_messages.py`) is the place to look - the test sets
-  `user.username` directly with `save(update_fields=["username"])`, so a search that reads a
-  denormalized/`Profile`-side name would match nothing. Both of those modules carry
-  uncommitted edits from another work stream, and nothing in the social/avatar/annotation
-  change this was found under touches conversation membership or direct-message gating.
-  Noted while running `test_avatar_colors.py` as a regression check for the avatar-write
-  extraction (`services/profile/avatar.py::set_profile_avatar`); left alone as it belongs to the
-  messaging work stream.
-
-- **Blocked `Friendship` rows created before `block_profile` started normalizing direction may
-  record the wrong blocker** (`src/urbanlens/dashboard/services/social/friendship.py::block_profile`).
-  `Friendship` has no "blocked_by" column, so `from_profile` is the only record of who blocked
-  whom, and `block_profile` used to reuse whichever row already joined the pair - a block
-  placed on an inbound friend request therefore left the *blocked* party as `from_profile`.
-  It now re-points the row so `from_profile` is always the blocker, which fixes every block
-  placed from here on, but existing rows carry no signal that could be used to repair them:
-  a data migration would have to guess. Impact on a legacy row is bounded and inverted from
-  the original P0 - the true blocker gets a 404 from `unblock_profile`/`remove_friend` and
-  must re-block to normalize the row, and the blocked party can lift it.
-  **The suggested audit query is now a real tool, added 2026-08-25** (`6057e154`):
-  `manage.py audit_inverted_friendship_blocks --before YYYY-MM-DD`, a read-only management
-  command with no default `--before` (deliberately - the fix's actual deploy date to a given
-  production database is something only a human can know) that reports `BLOCKED` rows created
-  before that date, flagging ones that show a sign of having been reused from a pre-existing
-  relationship (a stored `request_message`, or an `updated` timestamp meaningfully after
-  `created`) versus rows provably created directly as a block. Never writes - there is no stored
-  signal that could prove a row is actually inverted, so an automated migration was never on the
-  table. 9 new tests.
+Impact on a legacy row is bounded and inverted from the original defect - the true blocker gets a 404
+from `unblock_profile`/`remove_friend` and must re-block to normalise the row, and the blocked party
+can lift it. `manage.py audit_inverted_friendship_blocks --before YYYY-MM-DD` reports the candidates
+read-only, with no default `--before` on purpose: the fix's deploy date for a given production
+database is something only a human knows.
 
 ## P22 — REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron
 
