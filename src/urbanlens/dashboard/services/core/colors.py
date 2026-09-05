@@ -121,6 +121,14 @@ class InvalidColorError(ValueError):
     """A submitted colour is present but is not one this application stores."""
 
 
+@overload
+def require_color(value: object, *, default: str, allow_none_keyword: bool = False) -> str: ...
+
+
+@overload
+def require_color(value: object, *, default: None = None, allow_none_keyword: bool = False) -> str | None: ...
+
+
 def require_color(value: object, *, default: str | None = None, allow_none_keyword: bool = False) -> str | None:
     """Like :func:`clean_color`, but refuse a wrong value instead of replacing it.
 
@@ -137,7 +145,10 @@ def require_color(value: object, *, default: str | None = None, allow_none_keywo
         allow_none_keyword: Permit the literal ``"none"``.
 
     Returns:
-        A validated colour string, or ``default``.
+        A validated colour string, or ``default``. The overloads carry what that
+        means for the caller: given a ``str`` default this never returns
+        ``None``, so a result assigned straight into a non-nullable column does
+        not have to be re-proven.
 
     Raises:
         InvalidColorError: When ``value`` is present and is not a colour.

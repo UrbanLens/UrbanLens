@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, overload
 from uuid import UUID
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -483,6 +483,14 @@ def _resolve_parent_labels(profile: Profile, data: dict) -> tuple[list[Label], R
     return parents, None
 
 
+@overload
+def _validated_color(data: dict, *, default: str, key: str = "color") -> str: ...
+
+
+@overload
+def _validated_color(data: dict, *, default: None = None, key: str = "color") -> str | None: ...
+
+
 def _validated_color(data: dict, *, default: str | None = None, key: str = "color") -> str | None:
     """Read a colour from a request body, 400ing rather than substituting.
 
@@ -498,7 +506,8 @@ def _validated_color(data: dict, *, default: str | None = None, key: str = "colo
         key: The body key to read.
 
     Returns:
-        A validated colour, or `default`.
+        A validated colour, or `default` - a `str` when `default` is one, so a
+        result assigned into a non-nullable column needs no further narrowing.
 
     Raises:
         ValidationError: When the key is present and is not a colour. Rendered

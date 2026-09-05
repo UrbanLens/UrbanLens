@@ -15,7 +15,6 @@ that is already running, independently of any image build. Two consequences that
 from __future__ import annotations
 
 import os
-import sys
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -82,6 +81,10 @@ def disable_multiprocess_metrics() -> None:
     """
     for name in ("PROMETHEUS_MULTIPROC_DIR", "prometheus_multiproc_dir"):
         os.environ.pop(name, None)
-    values = sys.modules.get("prometheus_client.values")
-    if values is not None:
-        values.ValueClass = values.get_value_class()
+    # Imported after the pop, and deliberately not conditional on the module
+    # already being in sys.modules: if it is, this re-resolves it; if it is not,
+    # the import itself resolves it - and by then the variables are gone, so it
+    # resolves to the single-process class either way.
+    from prometheus_client import values
+
+    values.ValueClass = values.get_value_class()

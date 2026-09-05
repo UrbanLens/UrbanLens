@@ -438,10 +438,14 @@ class MultiprocessModeDisabledTests(SimpleTestCase):
             _metrics.disable_multiprocess_metrics()
             self.assertNotIn(MULTIPROC_DIR_ENV, os.environ)
 
-    def test_it_is_a_no_op_when_the_library_was_never_imported(self) -> None:
+    def test_calling_it_when_nothing_is_set_leaves_single_process_mode(self) -> None:
+        """Idempotent: the settings module runs it once, tests run it again."""
+        from prometheus_client import values
+
         self._restore_value_class()
-        with mock.patch.dict(sys.modules, {"prometheus_client.values": None}):
-            _metrics.disable_multiprocess_metrics()
+        _metrics.disable_multiprocess_metrics()
+        _metrics.disable_multiprocess_metrics()
+        self.assertEqual(values.ValueClass.__qualname__, "MutexValue")
 
     def test_the_deprecated_lowercase_spelling_is_popped_too(self) -> None:
         """`get_value_class` reads both names, so popping one re-resolves back."""
