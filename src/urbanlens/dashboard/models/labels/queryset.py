@@ -128,9 +128,13 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
         """Rank order, then name.
 
         Not called `ordered`: Django's `QuerySet.ordered` is a bool property,
-        and shadowing it with a method made `Paginator`'s
-        `getattr(object_list, "ordered", None)` return a truthy bound method,
-        so the UnorderedObjectListWarning could never fire for these querysets.
+        and a method of the same name shadows it, so anything reading it as a
+        bool - `Paginator` does, via `getattr(object_list, "ordered", None)` -
+        sees a truthy bound method instead of the property's answer. Nothing
+        misbehaved in practice, because `Label.Meta.ordering` is set and that
+        property would have returned True anyway; the rename is to stop a
+        subclass silently redefining a documented part of the QuerySet API,
+        which is what mypy's `override` check flagged.
         """
         return self.order_by("-order", "name")
 

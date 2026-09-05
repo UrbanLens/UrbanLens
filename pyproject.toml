@@ -113,9 +113,10 @@ exclude = [
 # Advanced configuration options
 # These are bare path components, so they match at any depth.
 # `tests` and `__init__.py` used to be here. They are linted now, under the
-# narrowed rule sets in [tool.ruff.lint.per-file-ignores] below - excluding them
-# outright meant 915 of 2092 tracked .py files, 44% of the codebase, went
-# unchecked for anything at all, including import order and dead noqa.
+# narrowed rule sets in [tool.ruff.lint.per-file-ignores] below. Excluding them
+# outright hid 1,077 files - 51% of the tree - from every rule, including import
+# order and dead noqa. (Measured as the difference in `ruff check --show-files .`
+# with and without those two entries: 2,030 files vs 953.)
 extend-exclude = [
     "migrations",
     "settings",

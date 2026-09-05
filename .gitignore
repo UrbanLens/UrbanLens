@@ -33,8 +33,13 @@ sample_data/*.jpg
 src/urbanlens/logs/*
 
 # VSCode stuff per user (keep shared workspace config)
+# `settings.json` is deliberately NOT un-ignored: it carries per-developer
+# editor state. Its negation existed here for a long time but was overridden by
+# a later literal `.vscode/settings.json` (last matching pattern wins), so the
+# file has never been tracked in this repo's history. Removing the duplicate
+# without removing the negation turned a dormant line into a force-include that
+# even `.vscode/*` could not catch, so `git add -A` would have staged it.
 .vscode/*
-!.vscode/settings.json
 !.vscode/extensions.json
 !.vscode/tasks.json
 !.vscode/launch.json
