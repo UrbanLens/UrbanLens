@@ -1,7 +1,7 @@
 # UrbanLens Features
 
 A feature inventory of what UrbanLens currently supports, generated from a codebase audit
-(2026-07-11, last verified/expanded 2026-07-29). This is a snapshot, not a promise — see `TODO.md` for what's planned or partially
+(2026-07-11, last verified/expanded 2026-07-29). This is a snapshot, not a promise — see the repo-root `ROADMAP.md` for what's planned or partially
 built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 
 ## Mapping & Pins

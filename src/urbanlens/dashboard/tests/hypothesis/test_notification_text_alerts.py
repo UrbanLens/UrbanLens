@@ -1,7 +1,7 @@
 """Tests for the generic per-type WhatsApp/SMS notification alerts.
 
 Every ``NotificationPreference`` ``<type>_whatsapp``/``<type>_sms`` toggle
-must actually deliver (docs/PROBLEMS.md; decision 2026-07-23) - these cover
+must actually deliver (docs/NOTES.md, "Decisions from the 2026-07-23 session") - these cover
 the central scheduling signal, the delayed re-checking task, and the
 per-(recipient, type) debounce. The DM pipeline keeps its own tests in
 ``test_direct_messages.py``.

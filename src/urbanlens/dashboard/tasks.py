@@ -2257,8 +2257,8 @@ _MAX_CONSECUTIVE_REDATA_FAILURES = 5
 #: as "pending" (HTTP 200, no error) every time it's asked, since it's neither
 #: resolved nor confirmed unresolvable yet. Without this cap, a batch that
 #: falls into that state retries every ~120s forever even though REData is
-#: responding successfully - see docs/notes/ai/completed.md for the incident
-#: this was diagnosed from. A batch still making real progress (even one cid
+#: responding successfully. Diagnosed from a batch that sat in exactly that
+#: state. A batch still making real progress (even one cid
 #: resolved per round) never trips this, since the counter resets whenever
 #: the pending set shrinks.
 _MAX_CONSECUTIVE_NO_PROGRESS_RETRIES = 5

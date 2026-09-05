@@ -366,8 +366,7 @@ class WikipediaMediaGatewayTests(SimpleTestCase):
 
 class FetchInfoboxTests(SimpleTestCase):
     """WikipediaGateway._fetch_infobox() - regression coverage for the
-    "started from Wikipedia" seed missing the infobox" report
-    (docs/notes/ai/completed.md).
+    "started from Wikipedia" seed missing the infobox.
 
     _fetch_summary/_fetch_extended_extract are both backed by the
     TextExtracts extension, which strips infoboxes before returning "extract"

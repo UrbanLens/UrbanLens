@@ -1,4 +1,4 @@
-"""Tests for the async comment-image malware scan (docs/notes/ai/completed.md).
+"""Tests for the async comment-image malware scan.
 
 A newly-uploaded comment/reply/trip-comment photo no longer blocks the POST
 on a clamd round-trip: the comment saves immediately with `pending_scan=True`

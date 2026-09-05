@@ -16,7 +16,10 @@ would leave this permanently red, which is the same as switching it off.
 
 Paths into a sibling checkout (``../REData/docs/...``) are verified when that
 checkout is present and skipped when it is not, so this still works in CI.
-Gitignored targets (agent scratch under ``docs/notes/ai/``) are skipped.
+A gitignored target fails like a missing one. It resolves for whoever wrote
+the citation and for nobody else, which is the same outcome as a broken path
+for every other reader - and it is how seven citations of
+``docs/notes/ai/completed.md``, a file never committed, stayed green.
 
 Exits non-zero listing each unresolvable citation. Safe to run by hand from the
 repo root.
@@ -34,15 +37,32 @@ import sys
 #: open-ended so prose like "the docs/ directory" cannot match.
 _CITATION = re.compile(r"(?:\.\./)*(?:[A-Za-z0-9_.-]+/)?docs/[A-Za-z0-9_./-]+\.(?:md|rst|json|txt|py)")
 
+#: A markdown file named on its own - ``ROADMAP.md``, ``TODO.md``. The
+#: ``docs/``-prefixed form above cannot see these, which is how eleven citations
+#: of a root ``TODO.md`` survived its rename to ``ROADMAP.md`` in ``3f12e875``.
+#: Capitalised because that is the convention for the repository-level documents
+#: this is about, and lowercase would match every ``readme.md`` in prose.
+#: Resolved against ``docs/`` as well as the root, since a bare ``PROBLEMS.md``
+#: means ``docs/PROBLEMS.md`` in 22 files here and is not a defect.
+_BARE_CITATION = re.compile(r"(?<![\w./-])([A-Z][A-Za-z0-9_-]*\.md)\b")
+
 #: Files whose citations are checked. Everything else is prose about prose.
 _CODE_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".html", ".yml", ".yaml", ".toml", ".sh", ".json", ".cfg", ".ini"}
-
-_SKIP_PREFIXES = ("docs/notes/ai/",)
 
 #: This file's own docstring names the broken paths it was written for, which it
 #: would otherwise report as live citations - the same trap
 #: `bin/check_doc_line_refs.py` falls into, one level over.
-_SKIP_FILES = {"bin/check_docs_refs.py"}
+_SKIP_FILES = {
+    "bin/check_docs_refs.py",
+    # Declares the changelog it will generate ("changelog-path"), which is a
+    # path this repository does not have yet rather than a citation of one.
+    "release-please-config.json",
+}
+
+#: Build output that happens to be tracked. Minified bundles contain runs like
+#: ``A5.md`` that are property accesses, not citations, and nothing in a
+#: generated file is a pointer a reader would follow anyway.
+_SKIP_PREFIXES = ("src/urbanlens/frontend/static/",)
 
 
 def _tracked_files() -> list[str]:
@@ -69,6 +89,8 @@ def _resolves(citation: str, root: pathlib.Path, citing: pathlib.Path) -> bool:
     """
     if (root / citation).exists():
         return True
+    if "/" not in citation and (root / "docs" / citation).exists():
+        return True
     resolved = ((root / citing).parent / citation).resolve()
     if resolved.exists():
         return True
@@ -89,7 +111,7 @@ def main() -> int:
     checked: dict[tuple[str, str], bool] = {}
 
     for name in _tracked_files():
-        if name in _SKIP_FILES:
+        if name in _SKIP_FILES or name.startswith(_SKIP_PREFIXES):
             continue
         path = root / name
         if path.suffix not in _CODE_SUFFIXES and path.suffix != ".md":
@@ -98,12 +120,10 @@ def main() -> int:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        for citation in set(_CITATION.findall(text)):
-            if citation.startswith(_SKIP_PREFIXES):
-                continue
+        for citation in set(_CITATION.findall(text)) | set(_BARE_CITATION.findall(text)):
             key = (citation, name if citation.startswith("../") else "")
             if key not in checked:
-                checked[key] = _resolves(citation, root, pathlib.Path(name)) or (not citation.startswith("../") and _is_ignored(citation))
+                checked[key] = _resolves(citation, root, pathlib.Path(name)) and not (not citation.startswith("../") and _is_ignored(citation))
             if checked[key]:
                 continue
             bucket = broken_docs if path.suffix == ".md" else broken_code

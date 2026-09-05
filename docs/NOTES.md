@@ -371,7 +371,7 @@ subtree, not just the exact pin in the URL - otherwise deleting an aggregated ch
 - API client code stays a `Gateway` subclass under `dashboard/services/apis/...` with a
   `service_key`; the plugin class is just the manifest wiring it into rate limiting, panels, and
   the admin inventory. Not every service has been converted to a plugin yet — unconverted ones
-  still register defaults directly in `rate_limiter.SERVICE_REGISTRY` (see `TODO.md` UL-294).
+  still register defaults directly in `rate_limiter.SERVICE_REGISTRY` (see the repo-root `ROADMAP.md`, UL-294).
 - Name candidates from `NameProvider`s are quality-gated: address-derived fragments (street names,
   city names) and generically meaningless names are rejected before being persisted as aliases.
 
@@ -466,7 +466,7 @@ nothing needs it.
 
 Every external API call should go through a `Gateway` subclass so it's covered by
 `ApiRateLimit`/`ApiCallLog` (calls/min, calls/day, USA-only geo-filter where relevant, enabled
-toggle). This is required groundwork for the still-unbuilt cost-reporting feature (`TODO.md`
+toggle). This is required groundwork for the still-unbuilt cost-reporting feature (the repo-root `ROADMAP.md`,
 UL-52/UL-53) — new integrations should track a running cost estimate per call even before that
 reporting UI exists.
 

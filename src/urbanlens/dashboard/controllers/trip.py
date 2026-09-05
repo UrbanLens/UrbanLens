@@ -132,12 +132,13 @@ def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "d
 def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) -> None:
     """Mask each listed trip's member/creator identities the viewer may not see.
 
-    docs/PROBLEMS.md gap: ``services/identity_visibility.py`` masked the
-    single-trip render sites (member panel, activity/comment attribution) but
-    not the trips list, which is more diffuse - every card shows its own
-    member avatars and creator badge, across however many trips are listed at
-    once. Mutates each ``TripMembership.profile``/``Trip.creator`` object in
-    place (see ``identity_visibility.mask_profile_references``) so
+    A trips list is more diffuse than the single-trip render sites
+    ``services/profile/identity_visibility.py`` covers (member panel, activity
+    and comment attribution): every card carries its own member avatars and
+    creator badge, across however many trips are listed at once, so the masking
+    has to run over the whole page's worth of them. Mutates each
+    ``TripMembership.profile``/``Trip.creator`` object in place (see
+    ``identity_visibility.mask_profile_references``) so
     ``trip_list_partial.html`` can render ``display_name``/``display_avatar_url``
     instead of the raw username/avatar.
 
@@ -407,8 +408,7 @@ class TripOverviewView(LoginRequiredMixin, View):
         recently_updated_trips = list(Trip.objects.recently_updated(profile, limit=self.RECENT_TRIPS_LIMIT))
         recently_viewed_trips = list(Trip.objects.recently_viewed(profile, limit=self.RECENT_TRIPS_LIMIT))
         # Matches TripListView/CalendarImportView - every list of other members'
-        # trips must mask identities the viewer isn't allowed to see (see
-        # _apply_trip_list_identity_masking's docstring for the gap this closes).
+        # trips must mask identities the viewer isn't allowed to see.
         #
         # Only the two rendered lists need it. `all_trips` never reaches the
         # template: it is consumed here into `stats` and `trips_calendar_data`,

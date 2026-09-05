@@ -208,8 +208,7 @@ class SeedWikiArticleFromWikipediaTests(TestCase):
         self.assertEqual(article.content, "Someone already wrote this.")
 
     def test_matched_article_with_infobox_includes_the_facts_before_the_body(self) -> None:
-        """Regression coverage for the "started from Wikipedia" seed missing
-        the infobox (docs/notes/ai/completed.md)."""
+        """Regression coverage for the "started from Wikipedia" seed missing the infobox."""
         location = _location()
         baker.make(Wiki, location=location)
         data = {**_ARTICLE_DATA, "infobox": [["Established", "1900"], ["Country", "US"]]}

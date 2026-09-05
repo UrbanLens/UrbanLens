@@ -582,8 +582,8 @@
   align-items: center;
   gap: .3rem;
   // Always a light blue on a permanently-dark backdrop (see .gallery-lightbox's
-  // background), independent of site theme - not the (broken - see completed.md)
-  // var(--color-accent) reference this used to be, just its own fallback value
+  // background), independent of site theme - not the broken var(--color-accent)
+  // reference this used to be, just its own fallback value
   // made literal, since that's what always actually rendered.
   color: #60a5fa;
   text-decoration: none;

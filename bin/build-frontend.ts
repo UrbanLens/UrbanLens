@@ -9,8 +9,7 @@
  * aborts the whole script the moment any of those directories has zero
  * matching files. Since this build runs on every container start
  * (src/bin/init.py's `bun run build`/`bun run deploy`), that failure mode
- * takes the whole app down, not just the JS bundle - see docs/PROBLEMS.md
- * and completed.md for the bug report and reproduction.
+ * takes the whole app down, not just the JS bundle.
  *
  * Enumerating entry files in code instead of a shell glob sidesteps this
  * entirely: an empty directory is just "nothing to build here", not a fatal

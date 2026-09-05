@@ -20,9 +20,10 @@ opens it.
 **Citing an entry from code:** name the id *and* enough words to survive a
 retitle — `see P12 ("forms post every field") in docs/PROBLEMS.md`. A bare
 `see docs/PROBLEMS.md` costs the reader a full-text search of a 3,500-line file,
-and in practice they do not do it. Of 76 references in `src/`, 47 carry no date,
-quoted phrase or symbol to land on. Cite **every** relevant entry, not the
-nearest one.
+and in practice they do not do it. Of 100 references in `src/`, 52 carry no
+date, quoted phrase or symbol to land on (counted 2026-09-05: lines naming
+`PROBLEMS.md`, against whether the three lines around them hold a `P#`, a date,
+or a backticked identifier). Cite **every** relevant entry, not the nearest one.
 
 Ids and dates are stable here; line numbers are not. A date-anchored citation
 still works, but check `archive/PROBLEMS-ARCHIVE.md` too - an entry that was
@@ -2456,63 +2457,6 @@ look unused.
 
 ---
 
-## P42 — `_apply_trip_list_identity_masking`'s docstring cites a `docs/PROBLEMS.md` gap entry that does not exist
-
-`id: P42` · `status: open` · `updated: 2026-08-14`
-
-Previously titled "`trip.py`'s masking docstring cites an entry that is not here".
-
-`controllers/trip.py:135` (`_mask_trip_identities`, or its equivalent) opens:
-
-> `docs/PROBLEMS.md` gap: ``services/identity_visibility.py`` masked the single-trip render sites
-> (member panel, activity/comment attribution) but not the trips list...
-
-**There is no such entry.** The masking gaps recorded here cover the data export, global search, and
-reply/reaction notifications (all 2026-08-07); the only trips-list entry is about *query
-amplification*, which is unrelated. Searching for "trips list" or trip identity masking finds
-nothing matching.
-
-Two readings, and the difference matters to whoever picks this up: either the gap was closed by the
-very function carrying the comment and its entry was removed without updating the reference, or it
-was never filed and the docstring is the only record. The comment's phrasing ("masked ... but not
-the trips list") reads as *describing a gap that still existed when written*, which favours the
-second.
-
-Recorded rather than resolved - deciding which requires the history behind that function, and the
-answer changes whether this is a stale pointer or an unfiled gap.
-
-## P43 — Tracked source cites `docs/notes/ai/completed.md`, which is gitignored, so those references cannot be resolved
-
-`id: P43` · `status: open` · `updated: 2026-08-14`
-
-Previously titled "audit of all 26 code references to this file".
-
-Every source file citing `docs/PROBLEMS.md` was checked (audit chunks 370-405).
-
-| outcome | files |
-|---|---|
-| resolve to an entry | 16 |
-| **dangling** | **8** |
-| unresolved (subject may be filed under another description) | 2 |
-
-**Seven of the eight dangling references cite the same thing**: a decision dated 2026-07-23, or
-`completed.md` by name. Both live in `docs/notes/ai/`, which is **gitignored** (`.gitignore:49`) and
-was never committed. So this is one absent document referenced from eight places - not eight
-independent omissions - and the fix is either to promote those decisions into a tracked file or to
-stop citing an untracked one from tracked code.
-
-The two unresolved are `services/spotguessr/__init__.py` and `services/trivia/__init__.py`,
-describing an import-order failure that celery workers trigger and `manage.py check` does not. The
-nearest entry (`PinViewSet.basename` / `get_default_basename`, root cause not found) shares the shape
-but not obviously the subject.
-
-**What makes a reference findable**, from the 16 that worked: the comment contains a *distinctive
-searchable string* - a symbol (`MapController.resolve_place`), a flag (`strict=True`), a date, a
-quoted entry title, or a concrete symptom (`{"ok": true}` and the field never changes). What fails is
-describing the problem in general words ("the report", "option (a)", "the trips list"). The single
-best example in the codebase is `services/messaging/direct_message_shares.py`, which quotes its
-entry's title verbatim.
-
 ## P44 — `isMouseContextMenu` misreads a keyboard context menu as touch, so the next Enter activation may be swallowed
 
 `id: P44` · `status: open` · `updated: 2026-08-16`
@@ -2540,63 +2484,6 @@ discriminator (`event.detail === 0` for keyboard-invoked menus) is a behaviour I
 rather than observing. Worth ten minutes with DevTools on the Organize page label picker: press the
 Menu key on a label chip, then try to activate any chip with Enter, and see whether the first
 Enter is swallowed.
-
-## P45 — Five documents cite a root `TODO.md` deleted in `3f12e875`, and `docs/prompts/` was never tracked at all
-
-`id: P45` · `status: open` · `updated: 2026-08-16`
-
-Previously titled "The planning and handoff documents referenced across the docs do not exist".
-
-Three different paths are cited for "what is planned" and "what previous agents did", and none of
-them is in the tree:
-
-| Path | Cited by | Status |
-| --- | --- | --- |
-| `TODO.md` (repo root) | `docs/FEATURES.md:4`, `docs/NOTES.md:344,402`, `docs/ROADMAP.md:4,13,124`, `CLAUDE.local.md` | Existed - 416 lines - deleted in `3f12e875` ("Release v0.5.0b0") |
-| `docs/prompts/completed.md`, `docs/prompts/todo.md` | `CLAUDE.local.md` | Never tracked in git |
-| `docs/notes/ai/completed.md`, `docs/notes/ai/todo.md` | `docs/ROADMAP.md`, `docs/designs/place-consolidation.md` | **Gitignored, not missing** - see the earlier `completed.md` entry |
-
-This is not cosmetic. `CLAUDE.md` and `CLAUDE.local.md` both instruct contributors (including agents)
-to consult these before assuming something is unbuilt or unplanned.
-
-**Corrected 2026-08-17 (chunk 607): the ticket ids are *not* unresolvable, and this entry originally
-said they were.** The root `ROADMAP.md` - a separate document from `docs/ROADMAP.md`, and one I had
-not opened when filing this - carries 251 `UL-` references, including UL-294, UL-70, UL-360 and
-UL-277, each against a one-line description of the planned work. So a reader chasing "see `TODO.md`
-UL-294" can find what UL-294 *is*; what they cannot find is the file the citation names, or whatever
-additional context it held. That is a smaller problem than the one first written here, and the
-difference matters to whoever decides what to do about it. `docs/ROADMAP.md`
-says it was itself "generated 2026-07-18 from a full review of `TODO.md`" and tells readers to keep
-that file updated alongside it. Anyone following those instructions finds nothing and cannot tell
-whether the answer is "not planned" or "the document is missing".
-
-`TODO.md`'s content is recoverable:
-
-```bash
-git show 3f12e875~1:TODO.md > TODO.md
-```
-
-Whether it *should* come back is the owner's call - it was removed in a release commit, which may
-have been deliberate. But the current state is the worst of both: the file is gone and five separate
-documents still treat it as live. Either restore it or update those references; the same choice
-applies to the two agent-note directories, where the fix may simply be deleting instructions that
-point at paths which never existed.
-
-**Corrected 2026-08-17.** The `docs/notes/ai/` row above overstated the case, and an earlier entry
-in this same file had already established why: `.gitignore:49` ignores that directory, so those
-files are local-only agent notes rather than lost ones. That entry also states the structural
-problem better than this one did - *tracked documentation referencing gitignored content* - which
-applies to `docs/ROADMAP.md` and `docs/designs/place-consolidation.md` citing them, and is a
-different defect from a file being deleted.
-
-What remains specific to this entry, and is not covered there: root `TODO.md` **was** tracked, in
-git, and was removed in the `3f12e875` release commit while five documents went on citing it as
-live - including `docs/NOTES.md` quoting ticket ids inside it. `docs/prompts/` is a third path,
-cited by `CLAUDE.local.md`, that matches neither pattern.
-
-Not actioned here because recreating 416 lines of someone else's planning document, or editing
-four documents' cross-references, is a decision about the project's own record rather than a defect
-in its code.
 
 ## P46 — A group message can still be sent under a key version a removed member holds
 
@@ -3545,39 +3432,6 @@ at this app's beta scale (~2 users):
   redirect branch); and `controllers/pin_lists.py:155-176` (`_items_map_data` plots every matching pin
   on the overview map with no cap, unlike the near-identical `SavedFilterPreviewView`'s explicit
   `_PREVIEW_MAP_PIN_LIMIT = 500`).
-
-## P70 — `settings/test.py` pops `PROMETHEUS_MULTIPROC_DIR` too late, so 8 metrics tests fail wherever it is set
-
-`id: P70` · `status: open` · `updated: 2026-09-04`
-
-`CeleryEventMetricsTests` (8 tests in `tests/hypothesis/test_metrics_endpoint.py`)
-fail with `TypeError: expected str, bytes or os.PathLike object, not NoneType`
-raised from `posixpath` inside `CollectorRegistry()`.
-
-The test helper's own comment states the contract: "A per-test registry only
-isolates because `settings/test.py` pops `PROMETHEUS_MULTIPROC_DIR`". That pop
-is real - `settings/test.py:128` - but it happens too late.
-`prometheus_client/values.py:95` reads `os.environ.get("PROMETHEUS_MULTIPROC_DIR")`
-when `ValueClass` is first resolved, and latches multiprocess mode on. If
-anything imports `prometheus_client` before Django settings are loaded, the
-library is already in multiprocess mode by the time the pop runs, and every
-later registry tries to join a path against `None`.
-
-The failure is therefore conditional on the environment, which is why it is not
-seen everywhere: it needs `PROMETHEUS_MULTIPROC_DIR` to be *set* in the
-process environment. It is set in the app container
-(`/var/run/urbanlens/prometheus`), so `docker exec ... pytest` - the documented
-way to run tests on a host without GDAL - hits it every time, while
-`bin/run_tests.sh` does not set it and so does not.
-
-Verified pre-existing, not a regression: the same 8 tests fail identically on the
-unmodified file from `HEAD` (`git show HEAD:...test_metrics_endpoint.py`, copied
-into the container and run alone: `8 failed, 70 passed`).
-
-Not fixed here because it is unrelated to the tooling cleanup that found it. The
-likely fix is popping the variable before `prometheus_client` can be imported -
-`src/urbanlens/conftest.py` or the settings package `__init__` - rather than in
-`settings/test.py`, which runs too late to win the race.
 
 ## P71 — The Sphinx setup builds successfully and produces no API documentation at all
 

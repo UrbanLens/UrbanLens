@@ -11102,3 +11102,109 @@ errors, not the 13 the 2026-08-31 "11 pre-existing mypy errors" entry (above) ac
 
 All 15 errors this run found are now fixed - a full-tree `mypy src/urbanlens` run reports
 **zero errors** for the first time this project has run one.
+
+## RESOLVED 2026-09-05: `_apply_trip_list_identity_masking`'s docstring cites a `docs/PROBLEMS.md` gap entry that does not exist
+
+`id: P42` · `status: fixed` · `resolved: 2026-09-05`
+
+`controllers/trip.py`'s masking helper opened with "docs/PROBLEMS.md gap: `services/identity_visibility.py`
+masked the single-trip render sites ... but not the trips list", and no such entry existed. The entry
+offered two readings - a stale pointer to a closed gap, or the only record of an unfiled one - and said
+the difference mattered to whoever picked it up.
+
+It was the first. The gap is closed: the helper runs at every trip-list render path (`trip.py`'s
+`TripListView`, the overview's two lists, and `controllers/calendar_sync.py`), and
+`test_identity_visibility.py` asserts against it by name. The docstring was pointing at the description
+of a problem its own function had already solved.
+
+Rewritten to say what the function does and why a list needs its own pass - every card carries its own
+member avatars and creator badge, so masking has to run over the whole page's worth of trips rather than
+the single-trip sites. The module path in it was stale too: `services/identity_visibility.py` is
+`services/profile/identity_visibility.py`. A second comment chaining onto the same phantom entry ("see
+`_apply_trip_list_identity_masking`'s docstring for the gap this closes") lost that clause.
+
+Worth keeping from the original entry: a code comment that points into the problem log ages badly in
+both directions. This one outlived the entry it named; `docs/README.md`'s house style asks for why the
+approach is used now, not where it came from.
+
+## RESOLVED 2026-09-05: tracked source cites `docs/notes/ai/completed.md`, which is gitignored, so those references cannot be resolved
+
+`id: P43` · `status: fixed` · `resolved: 2026-09-05`
+
+Eight tracked files cited a decision dated 2026-07-23 or `completed.md` by name, both of which lived in
+`docs/notes/ai/` - gitignored, never committed, and absent from this checkout entirely. One absent
+document referenced from eight places, not eight independent omissions.
+
+Closed in two passes. An earlier one promoted the 2026-07-23 decisions into `docs/NOTES.md`
+("Decisions from the 2026-07-23 session", reconstructed from the citing comments' own summaries) and
+repointed five production call sites at it. This one finished the rest:
+
+- The seven remaining `completed.md` citations are gone (`tasks.py`, three hypothesis test docstrings,
+  `_gallery.scss`, `location/index.html`, `bin/build-frontend.ts`). Each already stated its own reason
+  inline, so the citation was adding a dead pointer to a live explanation; `location/index.html`'s got
+  the reason written out rather than deferred.
+- Three test docstrings citing `docs/PROBLEMS.md` for a decision that lives in `docs/NOTES.md`
+  (`test_identity_visibility.py`, `test_notification_text_alerts.py`, `test_password_validators.py`)
+  now name the section.
+
+The gate could not have caught any of it. `bin/check_docs_refs.py` skipped the `docs/notes/ai/` prefix
+outright, and treated *any* gitignored target as resolved - so a citation that resolves for its author
+and for nobody else counted as fine. Both are gone: a gitignored target now fails exactly like a missing
+one, which is what it is for every reader but one.
+
+Still true, and the most transferable part of the original entry: what makes a citation findable is a
+distinctive searchable string - a symbol, a flag, a date, a quoted title, a concrete symptom. What fails
+is general words ("the report", "option (a)", "the trips list").
+
+## RESOLVED 2026-09-05: documents citing a root `TODO.md` that was renamed, not deleted
+
+`id: P45` · `status: fixed` · `resolved: 2026-09-05`
+
+Filed as "five documents cite a root `TODO.md` deleted in `3f12e875`", with the fix left open because
+restoring 416 lines of someone else's planning document was the owner's call.
+
+**The premise was wrong, and that dissolves the decision.** `git show --stat --find-renames 3f12e875`
+records `TODO.md => ROADMAP.md`: it was renamed in that release commit, not deleted. The repo-root
+`ROADMAP.md` is the same document, still carrying the `UL-` ids (268 of them) that the citations were
+reaching for - including UL-363, "Cleanup TODO file (This file)", which is the renamed file describing
+itself. Nothing was lost, so nothing needed restoring; the citations just needed to follow.
+
+Eleven citations repointed at the repo-root `ROADMAP.md`, spelled that way because `docs/ROADMAP.md` is
+a different document: `docs/FEATURES.md`, `docs/NOTES.md` (two), and `docs/ROADMAP.md` (eight). Two
+citations of `docs/notes/ai/todo.md` - gitignored, never committed - dropped from `docs/ROADMAP.md` and
+`docs/designs/place-consolidation.md`, since neither claim depended on them.
+
+`bin/check_docs_refs.py` could not see any of this: its pattern only matched `docs/`-prefixed paths, so
+a root-level citation was invisible. It now also matches a bare capitalised `*.md`, resolved against
+`docs/` as well as the root - the `docs/` fallback matters, because a bare `PROBLEMS.md` means
+`docs/PROBLEMS.md` in 22 files here and is not a defect. Two exclusions came with it, both measured
+rather than guessed: minified bundles under `frontend/static/` contain property accesses like `A5.md`,
+and `release-please-config.json` names the changelog it will generate rather than citing one.
+
+Not fixed, and not this entry's to fix: `CLAUDE.local.md` still describes `docs/prompts/completed.md`
+and `docs/prompts/todo.md`, which were never tracked in git. It is the user's own file.
+
+## RESOLVED 2026-09-05: `settings/test.py` pops `PROMETHEUS_MULTIPROC_DIR` too late, so 8 metrics tests fail wherever it is set
+
+`id: P70` · `status: fixed` · `resolved: 2026-09-05`
+
+`CeleryEventMetricsTests` failed with `TypeError: expected str, bytes or os.PathLike object, not
+NoneType` from inside `CollectorRegistry()`, in the app container but not in the test runner.
+
+The entry had the mechanism right and the cause wrong. It guessed at a race - "if anything imports
+`prometheus_client` before Django settings are loaded". The importer is not anything: it is the settings
+package itself. `UL_METRICS_ENABLED=true` makes `base.py` call `_metrics.require_django_prometheus()`,
+which imports `django_prometheus` and through it `prometheus_client`, while `PROMETHEUS_MULTIPROC_DIR`
+is still set - and `test.py` cannot run before `base.py`, so its pop was never going to win. That is
+also why the two containers disagreed: the app container has metrics on and the test runner does not.
+Setting `UL_METRICS_ENABLED=true` in the test runner reproduces it there, which is how the fix was
+verified (8 failed, 70 passed → 82 passed).
+
+Moving the pop earlier would not have been enough either. `prometheus_client.values` resolves
+`ValueClass` once, at import, so by the time any settings module runs the class is already latched and
+popping the variable does not unresolve it. `_metrics.disable_multiprocess_metrics()` pops the variable
+*and* re-resolves the class through the library's own `get_value_class()`, which works whoever imported
+first.
+
+A test asserts the settings module has not gone back to a bare `os.environ.pop`. That regression would
+be invisible where the variable is unset, which is everywhere the suite normally runs.

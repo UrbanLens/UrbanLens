@@ -267,7 +267,7 @@ class TripCommentVisibilityGateTests(TestCase):
 class LiveMessagePayloadMaskingTests(TestCase):
     """WebSocket message payloads resolve the sender's identity per recipient.
 
-    docs/PROBLEMS.md (PR #111 deferred item, decision 2026-07-23): the
+    docs/NOTES.md, "Decisions from the 2026-07-23 session" (PR #111 deferred item): the
     broadcast payload used to be built once and delivered identically to every
     member, so a live incoming message revealed a raw sender name that a page
     refresh would mask. Payloads are now built per recipient.

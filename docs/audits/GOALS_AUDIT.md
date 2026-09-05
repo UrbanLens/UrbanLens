@@ -14,14 +14,14 @@ anything.
 1. **DMs are not E2EE-only.** `docs/FEATURES.md` documents group chats as supporting "text
    (plaintext or E2EE)," and `docs/DATA_ENCRYPTION.md` describes `DirectMessage.body` as a
    real, first-class "Plaintext DM fallback (mutually exclusive with `ciphertext`)" — not a
-   deprecated/legacy path. Goals.md says E2EE should be as close to unconditionally enforced as
+   deprecated/legacy path. `docs/GOALS.md` says E2EE should be as close to unconditionally enforced as
    possible with no way to turn it off. Needs a decision: kill the plaintext fallback, or was
    goals.md overstating the intent?
 
 2. **Shared pin photos aren't independent copies.** `docs/PROBLEMS.md` records a real incident:
    "Deleting your own photo silently broke it for everyone you shared it with" — the recipient's
    `Image` row points at the same storage key as the sender's, not a duplicate. The pin *record*
-   is copied on accept; the attached photo file is not. Goals.md's "recipient never gets access
+   is copied on accept; the attached photo file is not. `docs/GOALS.md`'s "recipient never gets access
    to the sender's actual pin" is violated at the media layer specifically.
    NOTE From Jess: This is a problem. The photo should be copied to the recipient, not directly accessible. Provenance should still be trackable.
 
@@ -35,14 +35,14 @@ anything.
 
 4. **Backups are not encrypted at rest.** `docs/DATA_ENCRYPTION.md` states the backup volume is
    currently "Unencrypted at the file level, same host," with encrypting backups still an open
-   follow-up item. Goals.md states this as a requirement, not a nice-to-have.
+   follow-up item. `docs/GOALS.md` states this as a requirement, not a nice-to-have.
 
 5. **Log rotation/purge is an open TODO, not shipped.** `docs/ROADMAP.md` §3.4 tracks this as
    unresolved (UL-136).
 
 6. **Pre-commit's double-run is documented as intentional, not a bug.** `CLAUDE.md` describes
    the current double pre-commit run as deliberate ("first silent, so fixes are applied before
-   real failures are output"). Goals.md calls this friction to fix. Worth confirming with Jess
+   real failures are output"). `docs/GOALS.md` calls this friction to fix. Worth confirming with Jess
    whether the documented rationale is actually satisfactory, or whether the workflow should
    still change regardless of why it currently works this way.
    NOTE From Jess: The double run is a fine compromise temporarily, but that doesn't make it ideal. It just makes it workable for right now.

@@ -26,9 +26,10 @@ each, and the house style. `P` numbers entries inside `PROBLEMS.md`; every other
 prefix numbers a whole document.
 
 Resolved problems are **not** listed here — they move to
-[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 283
+[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 287
 of them. This index is what is live. Grep the archive before concluding a defect
-is new.
+is new - and an archived entry keeps its `id:` line, so a citation of `P70`
+still resolves after it is fixed, and the id is never handed out again.
 
 | id | status | updated | claim | path |
 |---|---|---|---|---|
@@ -73,10 +74,7 @@ is new.
 | P39 | open | 2026-08-13 | `clean_color` coerces invalid colours to the default, so API clients lose the value silently instead of a 400 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P40 | open | 2026-08-13 | `Pin.by_category` and `Wiki.by_category` have no callers and omit `distinct()`, so any caller inherits duplicate rows | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P41 | open | 2026-08-13 | 70 of 251 public queryset methods have no production caller, so their logic may be duplicated inline elsewhere | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P42 | open | 2026-08-14 | `_apply_trip_list_identity_masking`'s docstring cites a `docs/PROBLEMS.md` gap entry that does not exist | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P43 | open | 2026-08-14 | Tracked source cites `docs/notes/ai/completed.md`, which is gitignored, so those references cannot be resolved | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P44 | open | 2026-08-16 | `isMouseContextMenu` misreads a keyboard context menu as touch, so the next Enter activation may be swallowed | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P45 | open | 2026-08-16 | Five documents cite a root `TODO.md` deleted in `3f12e875`, and `docs/prompts/` was never tracked at all | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P46 | open | 2026-08-16 | A group message can still be sent under a key version a removed member holds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P47 | open | 2026-08-16 | A deleted message's preview survives in the recipient's notification list | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P48 | open | 2026-08-17 | Logging out leaves every decrypted E2EE key cached in IndexedDB, and nothing clears it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -101,7 +99,6 @@ is new.
 | P67 | open | 2026-08-31 | "Organize this property" fans out ~6-7 queries per candidate pin, uncapped to 500 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P68 | open | 2026-08-31 | N+1s in the site-admin user list, the achievement icon picker and Memories > Maps still have no perf test | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P69 | open | 2026-08-31 | Unbounded lists with no pagination across most of the site, from album pickers to Immich imports | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P70 | open | 2026-09-04 | `settings/test.py` pops `PROMETHEUS_MULTIPROC_DIR` too late, so 8 metrics tests fail wherever it is set | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P71 | open | 2026-09-04 | The Sphinx setup builds successfully and produces no API documentation at all | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P72 | open | 2026-09-04 | `bun run typecheck` reads 87 TypeScript files fewer than the pre-commit hook fires on | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | T1 | done | 2026-08-27 | The mobile team's 2026-07-27 ask list is spent: its P0 was already false and its P2 remainder moved on | [`docs/notes/mobile_app_requirements.md`](notes/mobile_app_requirements.md) |

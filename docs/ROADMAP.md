@@ -1,16 +1,17 @@
 # UrbanLens Development Roadmap & Agent Working Plan
 
 A strategic planning document for agents (and humans) doing implementation, bug-hunting, and
-feature work on UrbanLens. Generated 2026-07-18 from a full review of `TODO.md`,
-`docs/FEATURES.md`, `docs/NOTES.md`, `docs/reports/api-expansion-candidates.md`, `docs/notes/ai/todo.md`,
-recent git history, and the codebase structure.
+feature work on UrbanLens. Generated 2026-07-18 from a full review of the repo-root
+`TODO.md` (renamed to `ROADMAP.md` in `3f12e875`), `docs/FEATURES.md`, `docs/NOTES.md`,
+`docs/reports/api-expansion-candidates.md`, an untracked agent scratch file that no longer
+exists, recent git history, and the codebase structure.
 
 **How to use this document:** You are probably a capable agent who can plan your own task. What
 you are at risk of losing is *the larger picture*: how the feature you're touching interacts with
 five others, which invariants are load-bearing, and which maintainability/performance choices will
 bite six months out. Read Parts 1–3 before writing code. Use Parts 4–5 to pick and scope work.
 Use Part 6 as your definition-of-done checklist. When you complete, verify, or invalidate anything
-here, update this document (and `TODO.md` / `docs/FEATURES.md` / `docs/PROBLEMS.md` as
+here, update this document (and the repo-root `ROADMAP.md` / `docs/FEATURES.md` / `docs/PROBLEMS.md` as
 appropriate) — this is a living document.
 
 ---
@@ -121,7 +122,7 @@ null `generated_polygon`, never touching the user-drawn `polygon` field). §4.1 
 When a TODO item is ambiguous, these tiebreakers reflect the owner's demonstrated intent:
 
 - **Privacy > growth.** Features that encourage "pin hoarding" or mass redistribution
-  (map subscription UL-222/223, share-with-partner) are flagged as *maybe never* in TODO.md.
+  (map subscription UL-222/223, share-with-partner) are flagged as *maybe never* in the repo-root `ROADMAP.md`.
   Don't build them without explicit direction; do build the safeguards around them (UL-299:
   cap *pin shares per time period*, not members-per-trip).
 - **HTMX > JavaScript.** New interactivity is server-rendered fragments unless HTMX genuinely
@@ -282,7 +283,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
   (see `markup-engine.test.ts`, `pin-cache.test.ts` precedents).
 - **Template partial reorganization** (UL-292) and duplicate template detection (UL-288).
 - **The queryset/manager epic is DONE** (every concrete model has a queryset or a documented
-  exception — see `docs/notes/ai/todo.md` final notes). Maintain it: new models ship with
+  exception). Maintain it: new models ship with
   `queryset.py`; new repeated `.filter(...)` shapes get named queryset methods.
 - **Legacy service → plugin conversion** (UL-294): weather, geocoding, search providers,
   routexl, wayback, overpass, datagov, digital commonwealth, apple maps, google earth,
@@ -358,7 +359,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
 
 ## Part 4 — Prioritized Work Areas
 
-Ordering within each tier is roughly by (user impact × risk × leverage). IDs reference `TODO.md`.
+Ordering within each tier is roughly by (user impact × risk × leverage). IDs reference the repo-root `ROADMAP.md`.
 
 ### 4.1 Tier 1: Correctness & privacy bugs (do these first)
 
@@ -371,7 +372,7 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
    the inconsistency obvious once looked for. Fixed with a profile id/uuid suffix on each key
    plus a one-time `removeItem` of the stale unscoped entry so already-leaked history doesn't
    linger. Verified with `test_search_history_cache_scoping.py`.
-2. **Map cache at 8k+ pins** (UL-355) — DOWNGRADED 2026-07-18 per Jess's own note in `TODO.md`:
+2. **Map cache at 8k+ pins** (UL-355) — DOWNGRADED 2026-07-18 per Jess's own note in the repo-root `ROADMAP.md`:
    the observed `QuotaExceededError` may have been a stale-cache symptom, not a true 8.5k-pin
    quota problem (clearing the cache fixed it for the reporting user). Don't build an
    eviction/IndexedDB migration off this alone — reproduce with a fresh cache at genuine scale
@@ -622,7 +623,7 @@ Do not start these without a written design (add it to `docs/`):
 
 ### 4.5 Tier 5: UI polish backlog
 
-The long tail of dialog/layout/dark-mode items in `TODO.md` (UL-146/147, UL-182, UL-184,
+The long tail of dialog/layout/dark-mode items in the repo-root `ROADMAP.md` (UL-146/147, UL-182, UL-184,
 UL-190, UL-210, UL-230/231/233, UL-238, UL-300, UL-352, UL-384, and the trip-details list under
 "UI - Trip Details Page"). Guidance: batch by page, reuse shared components (the standardized
 badge picker, shared visit dialog, shared map toolbar — UL-210's dialog reinventing pickers is
@@ -640,7 +641,7 @@ of them may already be complete, and "fixing" them will lead to unwanted ui chan
   `email_normalization.py`, `text_limits.py`, `units.py` are natural targets).
 - Docstring/mypy sweeps; the generics fixes (UL-126/127).
 - Template partial reorg (UL-292); vestigial-asset cleanup task (UL-205, UL-370).
-- `TODO.md` hygiene (UL-363): when you complete or invalidate an item, strike it with an
+- Repo-root `ROADMAP.md` hygiene (UL-363): when you complete or invalidate an item, strike it with an
   evidence note (the 2026-07-18 strike-sweep set the precedent format).
 - Comment-history cleanup sweep (UL-400) — "used to be X, now Y" narration instead of
   current-behavior description; `tasks.py`, `controllers/pin.py`,
@@ -723,9 +724,9 @@ non-map pages that mutate pins; drag-select on Leaflet needs explicit toggle dis
 **Testing**: pytest + `UL_TEST_DB_NAME`; no `@given` with `self.client`; no log-string
 assertions; TDD for reported bugs; mock external services.
 
-**Process**: out-of-scope discoveries → `docs/PROBLEMS.md` with repro detail; completed
-prompts → `docs/notes/ai/completed.md`; feature inventory changes → `docs/FEATURES.md`;
-non-obvious behavior → `docs/NOTES.md`; TODO strikes with evidence.
+**Process**: out-of-scope discoveries → `docs/PROBLEMS.md` with repro detail, allocating the
+id in `docs/INDEX.md`; feature inventory changes → `docs/FEATURES.md`; non-obvious behavior
+→ `docs/NOTES.md`; TODO strikes with evidence.
 
 ---
 
@@ -744,7 +745,7 @@ non-obvious behavior → `docs/NOTES.md`; TODO strikes with evidence.
          log strings; pytest with unique `UL_TEST_DB_NAME`.
    - [ ] Async where non-instant; progress indicator + toast; HTMX-first UI.
    - [ ] Docstrings on new classes/methods; docs updated (`FEATURES.md`/`NOTES.md`/this file);
-         `TODO.md` item struck with evidence if completed.
+         Repo-root `ROADMAP.md` item struck with evidence if completed.
    - [ ] New external calls: gateway + plugin + rate limit + cost estimate + cache.
    - [ ] New share/contact/visibility paths: provenance recorded, blocks enforced,
          no response-shape oracles.

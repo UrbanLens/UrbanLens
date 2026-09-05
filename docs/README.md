@@ -40,6 +40,28 @@ grep -E '\| open ' docs/INDEX.md         # everything still open
    comment. The index is the allocator, so a duplicate ID becomes a merge
    conflict instead of a silent collision.
 
+## Closing a problem
+
+A resolved `P#` **moves** to `archive/PROBLEMS-ARCHIVE.md`; it is not left in
+`PROBLEMS.md` marked fixed. The live file is what still needs attention, and an
+entry that says "fixed" at the top still costs every reader the time to work out
+that it does.
+
+1. Rewrite the entry as the record of what was actually wrong. Where the
+   original guessed and the fix proved it wrong, say so — that correction is
+   usually the most useful sentence in the entry, and the next person to guess
+   the same way is the one it is for.
+2. Move it under a `## RESOLVED <date>: <title>` heading in the archive, keeping
+   its metadata line as `` `id: P#` · `status: fixed` · `resolved: <date>` ``.
+   The id line is load-bearing twice over: a citation of `P70` still resolves
+   after the entry is fixed, and `bin/check_docs_index.py` counts archived ids
+   toward the next free one, so finishing the highest-numbered problem cannot
+   hand its id to the next writer.
+3. Delete its row from `INDEX.md`. Do **not** lower the next-free-id header —
+   ids are never reused.
+4. Repoint anything in `src/` that cited it. `bin/check_docs_refs.py` catches a
+   path that stops resolving; nothing catches a `P#` that has moved.
+
 ## House style
 
 These are why this directory was rebuilt; the previous version broke all of them.
