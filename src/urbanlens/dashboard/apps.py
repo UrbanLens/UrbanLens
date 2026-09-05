@@ -53,6 +53,13 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.models.wiki_edit.signals
         from urbanlens.dashboard.plugins import plugin_registry
 
+        # Deletes an icon or avatar that a replace or a row deletion left behind.
+        # Django has not removed FileField files since 1.3, so both stranded one
+        # per action - and a stranded file is the "orphan" the media gate has to
+        # refuse to serve, because it cannot be told from a live file whose
+        # owner the viewer may not learn about.
+        import urbanlens.dashboard.services.media.file_cleanup
+
         post_save.connect(create_default_tags, sender=Profile, dispatch_uid="label_create_default_tags")
 
         # Memoise the SiteSettings singleton for the length of a request only - see that

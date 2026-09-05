@@ -44,7 +44,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P10 | open | 2026-08-19 | `main` is untested against an empty database; the multiple-leaf migration conflict that broke it is gone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P11 | open | 2026-08-15 | ~40 raw `fetch()` calls bypass `fetch-json.ts` and fail silently; Organize's Media tab is unwired dead UI | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P14 | open | 2026-07-23 | Custom pin and label icons are readable by any authenticated user, and replaced icons strand files | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P14 | open | 2026-09-05 | Custom pin and label icons are readable by any authenticated user; narrowing that needs a pin-visibility query nothing has | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P16 | open | 2026-07-22 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P17 | open | 2026-07-24 | `docker compose exec app pytest` trips the localhost-only network guard because Valkey is a bridge IP | [`docs/PROBLEMS.md`](PROBLEMS.md) |

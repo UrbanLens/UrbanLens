@@ -314,6 +314,35 @@ cache-busting `_r=` because the browser has already negatively cached the
 first URL) before settling on the icon. A tile that misses all three still
 fills in on the next page load.
 
+## Files nothing points at any more
+
+Django stopped deleting `FileField` files on delete in 1.3, deliberately: a
+rolled-back transaction would otherwise leave a row pointing at a file that is
+gone. Nothing replaced it, so two ordinary actions stranded one every time -
+replacing an icon or avatar with a new upload, and deleting the row that named
+it.
+
+`services/media/file_cleanup.py` is the rule now, as `pre_save`/`post_save` and
+`post_delete` receivers over `Pin.custom_icon`, `Label.custom_icon`,
+`Achievement.custom_icon` and `Profile.avatar`. Receivers rather than per-caller
+deletes because the write paths include forms, the external API, import and the
+admin, and one rule in one place is the shape that cannot be forgotten.
+
+Two boundaries worth knowing before extending it:
+
+- **`Image`'s four columns are not managed here.** Those models' own delete
+  paths handle them and understand when two rows legitimately share a file;
+  this module would delete one another row still points at.
+- **Deletion never precedes a successful write.** The old name is read in
+  `pre_save` and discarded in `post_save`. The cost is the opposite failure - a
+  transaction that commits the row and then rolls back leaves the file gone -
+  and that is the direction in which the data survives.
+
+Historical orphans predating this are not swept. They are refused rather than
+served (`services/media/access.py` denies a file whose owning row is missing),
+so they cost disk rather than disclosure; a one-time sweep against surviving
+rows would close them.
+
 ## Adding a parser
 
 The whole extension point is two lines:

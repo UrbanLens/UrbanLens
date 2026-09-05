@@ -960,9 +960,9 @@ reporter considers too slow to refresh.
 
 ---
 
-## P14 — Custom pin and label icons are readable by any authenticated user, and replaced icons strand files
+## P14 — Custom pin and label icons are readable by any authenticated user; narrowing that needs a pin-visibility query nothing has
 
-`id: P14` · `status: open` · `updated: 2026-07-23`
+`id: P14` · `status: open` · `updated: 2026-09-05`
 
 Previously titled "Authenticated media gate - residual per-family risk (2026-07-23)".
 
@@ -1002,8 +1002,17 @@ than fallbacks. The rest of this entry records them and the file-stranding work 
   authenticated-only. Strict owner-only enforcement risks breaking any surface that renders
   another user's shared/labeled pin (shared pin views, trip member maps, global labels with
   `profile=None`). Residual risk is low (small decorative icons, not photos), but a determined
-  enumerator could fetch other users' custom icons. Fix would be: owner OR global label OR an
-  existing share/visibility relationship.
+  enumerator could fetch other users' custom icons.
+
+  **Attempted 2026-09-05 and stopped at a missing primitive**, which is the useful thing to
+  record. The intended rule is "owner OR global label OR an existing share/visibility
+  relationship", and its middle and last clauses need a *pin* visibility queryset that does not
+  exist. `Image.objects.visible_to` exists; `Label.objects.visible_to` is global-or-owned, which
+  is too narrow, because another member's personal label legitimately renders on a pin you can
+  see. There is no `Pin.objects.visible_to`, so "which icons does this viewer render" cannot be
+  asked - and inventing that rule inside a media gate is how one ends up either leaking or
+  blanking icons on legitimate pages. The next step is that queryset - own pins, shared pins,
+  trip member maps, wiki-linked - built and tested on its own, with this gate as one caller.
 - **Orphan files** (a file on disk under `pin_images/` or `comment_images/` whose owning
   Image/Comment/TripComment row no longer exists, e.g. row deleted without file cleanup):
   now **denied** (2026-08-29). The stranding paths below still matter for disk usage; they are
@@ -1025,9 +1034,19 @@ than fallbacks. The rest of this entry records them and the file-stranding work 
   expectation as deleting a photo). **Still stranding files, recorded not fixed**: replacing an
   icon or avatar with a new upload leaves the previous file, and deleting a Pin/Label/Achievement
   row leaves its icon. Those want a `post_delete`/`pre_save` receiver pair rather than per-caller
-  code - the right shape, but a signal touching five models deserves an owner's review rather
-  than an audit chunk, and the residual is small decorative icons under an already
-  authenticated-only branch.
+  code. **Done 2026-09-05**, after the owner's review the entry asked for:
+  `services/media/file_cleanup.py` deletes the previous file after a successful save that
+  replaced it, and a row's files when the row goes - across `Pin.custom_icon`,
+  `Label.custom_icon`, `Achievement.custom_icon` and `Profile.avatar`.
+
+  Two things it deliberately is not. It does not cover `Image`'s four columns: those models' own
+  delete paths already handle them and understand when two rows legitimately share a file, which
+  this would not. And it never deletes *before* a write succeeds - a rolled-back transaction must
+  not leave a row pointing at a file that is gone, which is why Django stopped deleting these in
+  1.3 in the first place.
+
+  Still open: **historical** orphans. This stops new ones; a one-time sweep of the icon and avatar
+  directories against surviving rows would close what is already there.
 - **Unknown path families**: now **denied** and logged at WARNING (2026-08-29), and
   `check_media_authorizers` refuses to start with an unregistered family, so a new `upload_to`
   prefix cannot inherit a fallback either way.
