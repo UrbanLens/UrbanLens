@@ -323,25 +323,37 @@ replacing an icon or avatar with a new upload, and deleting the row that named
 it.
 
 `services/media/file_cleanup.py` is the rule now, as `pre_save`/`post_save` and
-`post_delete` receivers over `Pin.custom_icon`, `Label.custom_icon`,
-`Achievement.custom_icon` and `Profile.avatar`. Receivers rather than per-caller
-deletes because the write paths include forms, the external API, import and the
-admin, and one rule in one place is the shape that cannot be forgotten.
+`post_delete` receivers over `Achievement.custom_icon` and `Profile.avatar`.
+Receivers rather than per-caller deletes because one rule in one place is the
+shape that cannot be forgotten - and connected *per sender*, because a
+sender-less receiver makes every model in the project report listeners, which
+disables Django's fast-delete path repo-wide.
 
-Two boundaries worth knowing before extending it:
+Three boundaries, each of which the obvious version gets wrong:
 
-- **`Image`'s four columns are not managed here.** Those models' own delete
-  paths handle them and understand when two rows legitimately share a file;
-  this module would delete one another row still points at.
-- **Deletion never precedes a successful write.** The old name is read in
-  `pre_save` and discarded in `post_save`. The cost is the opposite failure - a
-  transaction that commits the row and then rolls back leaves the file gone -
-  and that is the direction in which the data survives.
+- **`Pin.custom_icon` and `Label.custom_icon` are deliberately excluded.** The
+  undo framework stashes them as a stored *name* rather than as bytes
+  (`services/undo/handlers/`), so unlinking on delete or replace would leave an
+  undo within its window restoring a row that names a file no longer there - a
+  broken icon with nothing to explain it. Those want the unlink deferred to when
+  the `UndoAction` is pruned, which is a different mechanism rather than a
+  longer list.
+- **`Image`'s columns are not managed here.** `services/media/images.py`'s
+  `delete_stored_file` handles `image`, `thumbnail` and `marker_thumbnail`, and
+  knows when two rows legitimately share a file; this module does not.
+  (`analysis_thumbnail` is handled by neither - see P14.)
+- **Every unlink waits for the commit.** `post_save`/`post_delete` fire *inside*
+  the transaction, so deleting there would survive a rollback that put the row
+  back. `transaction.on_commit` runs it only once the write lands.
 
-Historical orphans predating this are not swept. They are refused rather than
-served (`services/media/access.py` denies a file whose owning row is missing),
-so they cost disk rather than disclosure; a one-time sweep against surviving
-rows would close them.
+Historical orphans predating this are not swept, and for these families that is
+a disclosure item as well as a disk one. `authorize_icon` is unconditional for
+`pin_custom_icons/`, `label_icons/` and `achievement_icons/`, so an orphaned
+icon is still fetchable by any authenticated user. `authorize_avatar` is
+unconditional too, but deliberately - an avatar renders beside its owner's name
+site-wide, and uploading one is an act of publishing it to the other members, so
+there the orphan is only a disk cost. A one-time sweep against surviving rows
+closes the disk half; narrowing `authorize_icon` is P14's other half.
 
 ## Adding a parser
 

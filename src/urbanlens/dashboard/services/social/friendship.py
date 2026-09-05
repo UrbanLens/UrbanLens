@@ -22,6 +22,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any
 
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -555,11 +556,36 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
         friendship.muted_by_to_profile = muted_by_target
         friendship.save(update_fields=["from_profile", "to_profile", "status", "muted_by_from_profile", "muted_by_to_profile", "updated"])
         return friendship
-    return Friendship.objects.create(
-        from_profile=actor,
-        to_profile=target,
-        status=FriendshipStatus.BLOCKED,
-    )
+    try:
+        # A savepoint, for the same reason `Friendship.request` has one: since
+        # `friendship_one_row_per_pair`, a row inserted for the reverse
+        # direction between the `between()` above and this line makes the insert
+        # fail - and a failed insert makes the whole transaction unusable, so
+        # without this the re-read below could not run either. That would be a
+        # 500 in which the block is not applied while its revocations already
+        # are, which is the worst of the three outcomes.
+        with transaction.atomic():
+            return Friendship.objects.create(
+                from_profile=actor,
+                to_profile=target,
+                status=FriendshipStatus.BLOCKED,
+            )
+    except IntegrityError:
+        logger.info("Block by %s of %s raced another write; driving the existing row to BLOCKED", actor.pk, target.pk)
+        friendship = Friendship.objects.all().between(actor, target)
+        if friendship is None:
+            raise
+        # Same normalisation as the found-row branch above: `from_profile` is
+        # the only record of who blocked whom, so the actor has to end up there.
+        muted_by_actor = friendship.is_muted_by(actor)
+        muted_by_target = friendship.is_muted_by(target)
+        friendship.from_profile = actor
+        friendship.to_profile = target
+        friendship.status = FriendshipStatus.BLOCKED
+        friendship.muted_by_from_profile = muted_by_actor
+        friendship.muted_by_to_profile = muted_by_target
+        friendship.save(update_fields=["from_profile", "to_profile", "status", "muted_by_from_profile", "muted_by_to_profile", "updated"])
+        return friendship
 
 
 def _revoke_safety_partner_access(actor: Profile, target: Profile) -> None:

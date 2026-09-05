@@ -154,7 +154,14 @@ class _Row:
     """A stand-in for one `Friendship` row, with only what the merge touches."""
 
     def __init__(
-        self, pk: int, sender: int, receiver: int, status: str, muted_from: bool = False, muted_to: bool = False
+        self,
+        pk: int,
+        sender: int,
+        receiver: int,
+        status: str,
+        muted_from: bool = False,
+        muted_to: bool = False,
+        message: str | None = None,
     ) -> None:
         self.pk = pk
         self.from_profile_id = sender
@@ -162,6 +169,7 @@ class _Row:
         self.status = status
         self.muted_by_from_profile = muted_from
         self.muted_by_to_profile = muted_to
+        self.request_message = message
         self.deleted = False
 
     def save(self, update_fields=None) -> None:  # noqa: ARG002
@@ -172,24 +180,45 @@ class _Row:
 
 
 def _run_merge(rows: list[_Row]) -> None:
-    """Run the migration's merge over `rows`, in the order given."""
+    """Run the migration's merge over `rows`, in the order given.
+
+    `_duplicated_pairs` is stubbed rather than reimplemented: it is one
+    `GROUP BY ... HAVING COUNT(*) > 1`, and the behaviour under test is the
+    merge, not the query that finds candidates.
+    """
+
+    class _QuerySet:
+        @staticmethod
+        def order_by(*_args):
+            return _QuerySet
+
+        @staticmethod
+        def iterator():
+            return iter(rows)
 
     class _Manager:
         @staticmethod
-        def order_by(*_args):
-            class _QuerySet:
-                @staticmethod
-                def iterator():
-                    return iter(rows)
+        def filter(*_args, **_kwargs):
+            return _QuerySet
 
-            return _QuerySet()
+    pairs: list[tuple[int, int]] = []
+    counts: dict[tuple[int, int], int] = {}
+    for row in rows:
+        key = (min(row.from_profile_id, row.to_profile_id), max(row.from_profile_id, row.to_profile_id))
+        counts[key] = counts.get(key, 0) + 1
+    pairs = [key for key, count in counts.items() if count > 1]
 
     class _Apps:
         @staticmethod
         def get_model(*_args):
             return type("FriendshipStub", (), {"objects": _Manager})
 
-    _MERGE.merge_reciprocal_rows(_Apps, None)
+    original = _MERGE._duplicated_pairs
+    _MERGE._duplicated_pairs = lambda _model: pairs
+    try:
+        _MERGE.merge_reciprocal_rows(_Apps, None)
+    finally:
+        _MERGE._duplicated_pairs = original
 
 
 class ReciprocalMergeBehaviourTests(TestCase):
@@ -249,3 +278,44 @@ class ReciprocalMergeBehaviourTests(TestCase):
         _run_merge([first, second])
         self.assertFalse(first.deleted)
         self.assertFalse(second.deleted)
+
+    def test_an_adopted_block_brings_its_direction_with_it(self) -> None:
+        """The one way this migration could corrupt rather than merge.
+
+        `Friendship` has no "blocked_by" column - `from_profile` *is* the
+        blocker - so taking the reversed row's BLOCKED status without its ends
+        records the blocked party as the blocker. This codebase has had that
+        defect once already, from another cause, and carries a read-only audit
+        command for it.
+        """
+        older = _Row(1, 10, 20, FriendshipStatus.ACCEPTED)
+        # Profile 20 blocked profile 10.
+        newer = _Row(2, 20, 10, FriendshipStatus.BLOCKED)
+        _run_merge([older, newer])
+        self.assertEqual(older.status, FriendshipStatus.BLOCKED)
+        self.assertEqual(older.from_profile_id, 20, "the blocker must stay the blocker")
+        self.assertEqual(older.to_profile_id, 10)
+
+    def test_an_adopted_request_brings_its_asker_and_message(self) -> None:
+        older = _Row(1, 10, 20, FriendshipStatus.PENDING, message="from ten")
+        newer = _Row(2, 20, 10, FriendshipStatus.ACCEPTED, message="from twenty")
+        _run_merge([older, newer])
+        self.assertEqual(older.status, FriendshipStatus.ACCEPTED)
+        self.assertEqual(older.from_profile_id, 20)
+        self.assertEqual(older.request_message, "from twenty")
+
+    def test_a_swap_carries_the_keeper_own_mutes_with_it(self) -> None:
+        """Flipping the ends must not hand one person's mute to the other."""
+        # Profile 10 muted; then profile 20 blocked.
+        older = _Row(1, 10, 20, FriendshipStatus.ACCEPTED, muted_from=True)
+        newer = _Row(2, 20, 10, FriendshipStatus.BLOCKED)
+        _run_merge([older, newer])
+        self.assertEqual(older.from_profile_id, 20)
+        self.assertFalse(older.muted_by_from_profile, "profile 20 never muted anyone")
+        self.assertTrue(older.muted_by_to_profile, "profile 10's mute follows it to the `to` side")
+
+    def test_no_swap_when_the_keeper_status_already_wins(self) -> None:
+        older = _Row(1, 10, 20, FriendshipStatus.BLOCKED)
+        newer = _Row(2, 20, 10, FriendshipStatus.ACCEPTED)
+        _run_merge([older, newer])
+        self.assertEqual(older.from_profile_id, 10, "the keeper's own block direction must be left alone")

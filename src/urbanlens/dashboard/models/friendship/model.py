@@ -211,6 +211,13 @@ class Friendship(DashboardModel):
                 # same thing, and the loser's request is satisfied by it.
                 logger.info("Friendship request from %s to %s lost the race; returning the row that won", from_profile.pk, to_profile.pk)
                 friendship = cls.objects.all().between(from_profile, to_profile)
+                # The same guard the found-row branch applies. The winner is
+                # usually the mirror request, but it can be a BLOCKED or IGNORED
+                # row written in the same window - and returning that would have
+                # the caller report a request it never made.
+                if friendship is not None and not FriendshipStatus.can_request(friendship.status) and friendship.status != FriendshipStatus.REQUESTED:
+                    logger.warning("Cannot request another friendship: the row that won is %s", friendship.status)
+                    return None
 
         return friendship
 

@@ -58,9 +58,10 @@ class DashboardConfig(AppConfig):
         # per action - and a stranded file is the "orphan" the media gate has to
         # refuse to serve, because it cannot be told from a live file whose
         # owner the viewer may not learn about.
-        import urbanlens.dashboard.services.media.file_cleanup
+        from urbanlens.dashboard.services.media.file_cleanup import connect as connect_file_cleanup
 
         post_save.connect(create_default_tags, sender=Profile, dispatch_uid="label_create_default_tags")
+        connect_file_cleanup()
 
         # Memoise the SiteSettings singleton for the length of a request only - see that
         # module's docstring for why this is scoped to requests instead of cached globally.
