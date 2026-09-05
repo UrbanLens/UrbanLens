@@ -11560,3 +11560,32 @@ cleared these. It now says what calls it and why.
 
 Not addressed, and unchanged: same-origin storage is still the trust boundary. This shortens the
 window, it does not move the boundary.
+
+## RESOLVED 2026-09-05: `check_rate_limit` returns True on a `DatabaseError`, so a database failure uncaps paid-API spend
+
+`id: P32` · `status: fixed` · `resolved: 2026-09-05`
+
+The limiter reads its configuration from the database, and when that read raised it answered
+"allowed". This is the only cap on outbound spend at paid third-party providers, so a
+`DatabaseError` turned a degraded database into an unbounded bill - during the exact window in which
+nobody is watching the spend.
+
+Decided 2026-09-05: **fail closed, except for services recorded as free.** It now refuses, so a
+database problem costs a feature rather than money, and a free service is still let through so the
+same failure does not also take out geocoding, weather and the archives.
+
+The interesting part is how "free" is decided, because the obvious way is wrong. `cost_per_call` is
+`None` for both "free" and "not yet priced" - its own docstring says so - so it cannot answer this.
+`ServiceDefaults.billable` is a separate flag defaulting to **True**, and that default carries the
+weight: a newly added or unlisted service is capped until someone reads the provider's terms and
+says otherwise.
+
+Five services are exempt, and every one of them is exempt because *its own registry entry already
+said so* before this change - `openweathermap`, `overpass`, `digital_commonwealth`,
+`wayback_machine`, `hibp`. A test asserts that rule holds: a `billable=False` whose notes do not
+mention a free tier fails. Two services the sweep surfaced were deliberately left billable:
+`google_earth` ("free for non-commercial use" is a licence term, not a price) and `virustotal`
+(whose free tier is a quota that this limiter is itself enforcing).
+
+Not addressed: `service_is_enabled`'s own `DatabaseError` branch already failed closed and is
+unchanged. The two now agree, which the old comment noted they deliberately did not.

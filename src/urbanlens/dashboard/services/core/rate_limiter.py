@@ -67,6 +67,19 @@ class ServiceDefaults:
     #: ApiCallLog.cost_estimate's own docstring for the same caveat.
     cost_per_call: Decimal | None = None
 
+    #: Whether a call here can cost money. Defaults to True, and the default is
+    #: the point: `cost_per_call = None` means "not yet priced", *not* "free"
+    #: (see above), so it cannot be used to decide this. A new service is
+    #: treated as billable until someone reads the provider's terms and says
+    #: otherwise here, citing them in ``notes``.
+    #:
+    #: Read when the limiter cannot reach its own configuration:
+    #: :func:`check_rate_limit` refuses the call in that state, because an
+    #: uncapped window on a paid API costs money that a degraded database does
+    #: not. A service marked free is let through instead, so a database problem
+    #: does not also take out geocoding, weather and the archives.
+    billable: bool = True
+
 
 SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     "google_geocoding": ServiceDefaults(
@@ -193,6 +206,8 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=20,
         calls_per_day=500,
         notes="Free tier: 1,000 calls/day.",
+        # Free per this entry's own notes; see `ServiceDefaults.billable`.
+        billable=False,
     ),
     "overpass": ServiceDefaults(
         display_name="Overpass API (OpenStreetMap)",
@@ -203,6 +218,8 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=240,
         calls_per_day=24_000,
         notes="Free API. Load is distributed across several public Overpass instances, and any instance that errors/times out is dropped until the next day. Each logical lookup may spend more than one call when it fails over.",
+        # Free per this entry's own notes; see `ServiceDefaults.billable`.
+        billable=False,
     ),
     "digital_commonwealth": ServiceDefaults(
         display_name="Digital Commonwealth",
@@ -210,6 +227,8 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=200,
         usa_only=True,
         notes="Massachusetts-based digital archive. Free API.",
+        # Free per this entry's own notes; see `ServiceDefaults.billable`.
+        billable=False,
     ),
     "apple_maps": ServiceDefaults(
         display_name="Apple Maps Server API",
@@ -228,12 +247,16 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=10,
         calls_per_day=500,
         notes="Free, no key required. Be polite - the Archive is a public resource.",
+        # Free per this entry's own notes; see `ServiceDefaults.billable`.
+        billable=False,
     ),
     "hibp": ServiceDefaults(
         display_name="Have I Been Pwned (Pwned Passwords)",
         calls_per_minute=60,
         calls_per_day=5000,
         notes="Free k-anonymity range API. Used when users set or change passwords.",
+        # Free per this entry's own notes; see `ServiceDefaults.billable`.
+        billable=False,
     ),
     "virustotal": ServiceDefaults(
         display_name="VirusTotal",
@@ -455,12 +478,29 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
         try:
             config = get_limit_config(service)
         except DatabaseError:
-            # Allow the call rather than break a feature when the database is the thing
-            # that failed. Deliberately *not* a bare except: this limiter caps spend on
-            # paid third-party APIs, so a bug here silently uncapping it - a broken plugin
-            # rate-limit declaration, say - must surface rather than read as "allowed".
-            logger.exception("Failed to read rate limit config for %s - allowing call", service)
-            return True
+            # Fail closed on anything that can cost money. This limiter is the
+            # only cap on spend at paid third-party APIs, so answering "allowed"
+            # when it cannot read its own configuration turns a database problem
+            # into an unbounded bill - and the database being down is exactly
+            # when nobody is watching the spend.
+            #
+            # A service the registry records as free is let through, so the same
+            # failure does not also take out geocoding, weather and the
+            # archives. `billable` defaults to True, so an unlisted or newly
+            # added service is capped rather than exempted.
+            #
+            # Deliberately *not* a bare except: a bug here - a broken plugin
+            # rate-limit declaration, say - must surface rather than be absorbed
+            # by this branch.
+            defaults = SERVICE_REGISTRY.get(service)
+            billable = defaults is None or defaults.billable
+            logger.exception(
+                "Failed to read rate limit config for %s - %s the call (billable=%s)",
+                service,
+                "refusing" if billable else "allowing",
+                billable,
+            )
+            return not billable
 
     try:
         if config.calls_per_minute is not None:

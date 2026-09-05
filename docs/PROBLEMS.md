@@ -1922,41 +1922,6 @@ truncation above is the only bound and it happens too late to matter.
 
 ---
 
-## P32 — `check_rate_limit` returns True on a `DatabaseError`, so a database failure uncaps paid-API spend
-
-`id: P32` · `status: open` · `updated: 2026-08-13`
-
-Previously titled "The API rate limiter fails open, which uncaps spend rather than availability".
-
-`services/core/rate_limiter.check_rate_limit` returns `True` (allowed) when it cannot determine
-whether a call is within budget. As of the 2026-08-14 audit chunk the handlers are narrowed to
-`DatabaseError`, so a *bug* surfaces instead of silently reading as "allowed" - but the deliberate
-fail-open on an actual database failure remains, and it is worth an explicit decision rather than
-inheriting it.
-
-This limiter is not a security control. It caps calls to **paid third-party APIs** (Google
-Maps/Places, OpenAI, and the rest of `SERVICE_REGISTRY`), and the project already tracks a cost
-estimate per call. So the failure mode of fail-open is money, not access: whatever quota or budget
-the limits encode stops being enforced for as long as the failure lasts.
-
-Two things make this less alarming than it first looks, and are worth knowing before anyone
-"fixes" it:
-
-- `record_api_call` calls `check_rate_limit` *inside* a `transaction.atomic()` block that has
-  already run `ApiRateLimit.objects.select_for_update().get(service=service)`. A real database
-  outage therefore raises at that line, before `check_rate_limit` is ever reached - so the
-  fail-open path is much harder to hit from the main gateway flow than reading the function alone
-  suggests.
-- The path logs with `logger.exception`, so it is noisy rather than silent.
-
-The decision to make: on a database failure, should a paid API call proceed unmetered, or should
-it fail? Fail-closed protects the budget and degrades the feature; fail-open does the reverse.
-Either is defensible - but it should be chosen, and the choice recorded here, rather than being a
-side effect of an exception handler. If fail-closed is chosen, the same question applies to
-`service_is_enabled`, which sits next to it in the same conditional.
-
----
-
 ## P34 — 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers
 
 `id: P34` · `status: open` · `updated: 2026-08-13`
