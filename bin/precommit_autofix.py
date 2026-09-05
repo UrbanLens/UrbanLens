@@ -275,6 +275,44 @@ def _read(path: Path) -> bytes | None:
 # --------------------------------------------------------------------------
 
 
+def staged_format_drift(ruff: list[str], paths: list[str]) -> str:
+    """Skipped files whose *staged* content is not formatted.
+
+    A file that was staged and then edited again is skipped by the fixer, because
+    rewriting it could cost the unstaged edit. That is the right call, but it
+    used to mean the staged content went in unformatted with nothing said - and
+    pre-commit hides a passing hook's stdout, so even the "not touched" line was
+    invisible. This checks the blob that is actually being committed, without
+    going near the working tree.
+
+    Returns:
+        A message naming the drifted files, or "" when they are all clean.
+    """
+    drifted = []
+    for name in paths:
+        blob = _run("git", "show", f":{name}")
+        if blob.returncode != 0:
+            continue  # not in the index (a deletion, say); nothing to check
+        result = subprocess.run(
+            [*ruff, "format", "--check", "--force-exclude", "--stdin-filename", name, "-"],
+            input=blob.stdout,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=TIMEOUT_SECONDS,
+        )
+        if result.returncode == 1:
+            drifted.append(name)
+    if not drifted:
+        return ""
+    return (
+        "These files have unstaged changes, so they were left alone - but what you are\n"
+        "committing is not formatted:\n  " + "\n  ".join(sorted(drifted)) + "\n"
+        "Stage the rest of the file (`git add <path>`) and commit again, or run\n"
+        "`bun run format` and re-stage."
+    )
+
+
 def unfixable_only(ruff: list[str], paths: list[str]) -> str:
     """`ruff check` output limited to violations ruff has no fix for."""
     result = _run(*ruff, "check", "--force-exclude", "--output-format", "json", "--quiet", *paths)
@@ -465,6 +503,9 @@ def main(argv: list[str]) -> int:
         remaining = unfixable_only(ruff, skipped_python)
         if remaining:
             problems.append(remaining)
+        drift = staged_format_drift(ruff, skipped_python)
+        if drift:
+            problems.append(drift)
 
     if problems:
         print("\n" + "\n".join(problems))
