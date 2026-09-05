@@ -11532,3 +11532,31 @@ the open question is an engine that does not, where a long-press might also repo
 the suppression would stop arming - the old failure, in the other direction. That is recorded in the
 function's own docstring rather than left in this entry, because it is a caveat about the code and
 not a defect to schedule.
+
+## RESOLVED 2026-09-05: logging out leaves every decrypted E2EE key cached in IndexedDB, and nothing clears it
+
+`id: P48` · `status: fixed` · `resolved: 2026-09-05`
+
+Filed as a product question rather than a defect, and answered on 2026-09-05: **an explicit sign-out
+discards the keys.** Someone signing out on a shared or borrowed machine expects their decrypted
+message keys to go with them, and the cost of the other answer - re-entering a password or recovery
+key when signing back in on your own laptop - is the smaller one.
+
+`wireSignOutForm` clears the profile's cached identity, conversation and group keys before the
+sign-out form posts. Two things about how, both deliberate:
+
+**Sign-out is never blocked by it.** A browser with IndexedDB unavailable, a wedged transaction, or
+a slow delete all fall through to submitting the form, and a 1.5s ceiling bounds the wait. Being
+unable to leave is a worse failure than a key outliving the session, and it is the failure this kind
+of clean-up-first wiring usually introduces - so it is what the tests lean on hardest.
+
+**Wired from the bundle, not from the template.** `entries-classic/e2ee.ts` already loads on every
+signed-in page and finds the form itself. The alternative was another inline `<script>` in
+`header.html`, and inline template JavaScript is outside every automated check here (P34).
+
+The entry's other half is done too: `clearProfileKeys`'s docstring claimed "logout-everywhere / key
+reset" as its purpose, and no logout-everywhere feature exists - which read as though logout already
+cleared these. It now says what calls it and why.
+
+Not addressed, and unchanged: same-origin storage is still the trust boundary. This shortens the
+window, it does not move the boundary.

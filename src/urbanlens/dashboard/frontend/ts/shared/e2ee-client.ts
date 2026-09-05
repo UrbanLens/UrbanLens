@@ -446,6 +446,46 @@ function reportPolicyErrors(input: HTMLInputElement, errors: string[]): void {
  *
  * @param form - The signup <form> with password1/password2 fields.
  */
+/**
+ * Discard this profile's cached keys when the sign-out form is submitted.
+ *
+ * The decrypted identity key and every unsealed conversation and group key live
+ * in IndexedDB so day-to-day use never prompts. Until 2026-09-05 nothing
+ * removed them, so signing out on a shared or borrowed machine left every
+ * message readable by the next person to sign in as anyone - same-origin
+ * storage is the trust boundary, and the rows are keyed by profile slug, which
+ * stops an *accidental* read and not a deliberate one.
+ *
+ * The cost is deliberate and one-sided: signing back in on your own machine now
+ * needs a password or recovery key again. See P48 in `docs/PROBLEMS.md`.
+ *
+ * Sign-out is never blocked by this. A storage error, a browser with IndexedDB
+ * disabled, or a slow delete all fall through to submitting the form - being
+ * unable to leave is a worse failure than keys outliving the session.
+ *
+ * @param form The sign-out form.
+ */
+export function wireSignOutForm(form: HTMLFormElement): void {
+    form.addEventListener("submit", (event) => {
+        const selfSlug = cfg().selfSlug;
+        // `ulKeysCleared` guards the re-entry: `form.submit()` does not fire
+        // this handler, but a caller submitting it programmatically would.
+        if (!selfSlug || form.dataset.ulKeysCleared === "1") return;
+        event.preventDefault();
+        const submit = (): void => {
+            form.dataset.ulKeysCleared = "1";
+            form.submit();
+        };
+        // A 1.5s ceiling, so a wedged IndexedDB cannot strand someone on the
+        // page. Whichever settles first wins; the delete keeps running either
+        // way, and the next sign-in clears what is left.
+        void Promise.race([
+            clearProfileKeys(selfSlug).catch(() => undefined),
+            new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]).then(submit, submit);
+    });
+}
+
 export function wireSignupForm(form: HTMLFormElement): void {
     form.addEventListener("submit", (event) => {
         if (form.dataset.e2eeReady === "1") {

@@ -26,7 +26,7 @@ each, and the house style. `P` numbers entries inside `PROBLEMS.md`; every other
 prefix numbers a whole document.
 
 Resolved problems are **not** listed here — they move to
-[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 299
+[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 300
 of them. This index is what is live. Grep the archive before concluding a defect
 is new - and an archived entry keeps its `id:` line, so a citation of `P70`
 still resolves after it is fixed, and the id is never handed out again.
@@ -70,7 +70,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P41 | open | 2026-09-05 | 68 of 249 public queryset methods have no production caller, so their logic may be duplicated inline elsewhere | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P46 | open | 2026-08-16 | A group message can still be sent under a key version a removed member holds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P47 | open | 2026-08-16 | A deleted message's preview survives in the recipient's notification list | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P48 | open | 2026-08-17 | Logging out leaves every decrypted E2EE key cached in IndexedDB, and nothing clears it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P49 | open | 2026-08-17 | `npm run git-squash` is a force-deploy with none of `deploy.sh`'s dirty-tree guards | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-05 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |

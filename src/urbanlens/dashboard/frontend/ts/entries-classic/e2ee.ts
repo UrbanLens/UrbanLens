@@ -34,6 +34,7 @@ import {
     unlockWithRecovery,
     wireLoginForm,
     wireResetConfirmForm,
+    wireSignOutForm,
     wireSignupForm,
 } from "../shared/e2ee-client";
 
@@ -42,6 +43,7 @@ const api = {
     wireLoginForm,
     wireSignupForm,
     wireResetConfirmForm,
+    wireSignOutForm,
     enroll,
     enrollOauthIfNeeded,
     enrollPasskeyUnlock,
@@ -69,6 +71,14 @@ const api = {
 };
 
 window.UrbanLensE2EE = api;
+
+// Wired here rather than from the header template: this bundle already loads on
+// every signed-in page (themes/base.html), and inline template JavaScript is
+// outside every automated check in this repository (see P34). The form is the
+// one in partials/layout/header.html; a page without it is a page with nothing
+// to clear.
+const signOutForm = document.querySelector<HTMLFormElement>("form.nav-dropdown-logout-form");
+if (signOutForm) wireSignOutForm(signOutForm);
 
 declare global {
     interface Window {
