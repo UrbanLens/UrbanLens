@@ -2376,7 +2376,7 @@ at zero.
 
 ## P50 — `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order
 
-`id: P50` · `status: open` · `updated: 2026-08-18`
+`id: P50` · `status: open` · `updated: 2026-09-05`
 
 Previously titled "Two tests fail only under a randomized full-suite run (2026-08-18)".
 
@@ -2397,6 +2397,20 @@ which this run did not record because `-q` suppressed the header.
 Worth fixing properly rather than pinning the seed: an order-dependent test is a test that will
 fail on someone else's machine for no visible reason. When picking it up, run the full suite with
 `-p randomly --randomly-seed=<n>` and bisect with `pytest --randomly-seed=<n> -x`.
+
+**Probed 2026-09-05, did not reproduce - which is not the same as fixed.** A shuffled run of both
+named files together with the neighbours most likely to leak into them (`test_field_encryption_rotation`,
+`test_two_factor`, `test_e2ee`) passed: 155 tests, 3 subtests, no failures. Two things that probe
+does not settle. The original was seen in a *full-suite* shuffle, and the interfering test may
+simply not be in this subset. And one plausible cause was closed in between: the safety-chat half
+was a `TransactionTestCase` carrying its own `@override_settings(CHANNEL_LAYERS=...)`, and that
+decorator is gone as of 2026-09-05 - `settings/test.py` sets the in-memory layer globally now (see
+the archived P17 note), so there is no longer a per-class override to interact with anything.
+
+Also worth knowing before the next attempt: **`pytest-randomly` is not installed in the test-runner
+container** (see P4), so `bin/run_tests.sh --shuffle` cannot reproduce this at all - it fails with
+`ImportError: Error importing plugin "randomly"`. The probe above had to run in the `app` container,
+whose venv is complete.
 
 ## P51 — Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark`
 

@@ -166,7 +166,19 @@ export async function getGroupKey(selfSlug: string, groupUuid: string, version: 
     }
 }
 
-/** Wipe every cached key for a profile (logout-everywhere / key reset). */
+/**
+ * Wipe every cached key for a profile.
+ *
+ * Called by the key-reset flow, and by nothing else. It is deliberately *not*
+ * called on logout: whether an explicit sign-out should discard decrypted keys
+ * is a product question - a shared machine says yes, one's own laptop says no,
+ * and re-entering a recovery key is the cost of the second answer. See P48 in
+ * `docs/PROBLEMS.md` ("Logging out leaves every decrypted E2EE key cached").
+ *
+ * This used to say "logout-everywhere / key reset". There is no
+ * logout-everywhere feature anywhere in this codebase, which made the sentence
+ * read as though logout already cleared these.
+ */
 export async function clearProfileKeys(selfSlug: string): Promise<void> {
     // Deleted by exact key, not by prefix: "identity:jess" is a prefix of
     // "identity:jess2", so resetting one account would evict a second account

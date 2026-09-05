@@ -73,7 +73,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P47 | open | 2026-08-16 | A deleted message's preview survives in the recipient's notification list | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P48 | open | 2026-08-17 | Logging out leaves every decrypted E2EE key cached in IndexedDB, and nothing clears it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P49 | open | 2026-08-17 | `npm run git-squash` is a force-deploy with none of `deploy.sh`'s dirty-tree guards | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P50 | open | 2026-08-18 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P50 | open | 2026-09-05 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P52 | open | 2026-08-24 | `.app-nav-right` runs 40px past a 390px viewport, so every page scrolls sideways at phone width | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-08-24 | One Private Pin page load fires dozens of concurrent panel requests and can exhaust the DB connection pool | [`docs/PROBLEMS.md`](PROBLEMS.md) |
