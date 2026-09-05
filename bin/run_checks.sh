@@ -36,6 +36,7 @@ HOOKS=(
     migration-graph
     doc-line-refs
     docs-refs
+    docs-index
     ruff-format-check
 )
 

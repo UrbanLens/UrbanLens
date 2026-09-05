@@ -159,6 +159,12 @@ jobs:
       - name: Code cites only docs/ paths that exist
         run: python3 bin/check_docs_refs.py
 
+      # The index is the allocator (docs/README.md), and CLAUDE.md sends every
+      # session to it first. The first generated index gave P1 to both a problem
+      # entry and a design document, and nothing noticed.
+      - name: docs/INDEX.md agrees with the entries it indexes
+        run: python3 bin/check_docs_index.py
+
       # Nothing else checks this: a model change without its migration only
       # surfaces if some test happens to touch the field, and otherwise waits
       # until the column is needed in production.

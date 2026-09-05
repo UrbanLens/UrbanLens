@@ -154,6 +154,13 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [manual]
+      - id: docs-index
+        name: docs/INDEX.md and the entries it indexes agree
+        entry: python3 bin/check_docs_index.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
       - id: ruff-format-check
         name: the whole tree matches the formatter
         entry: python3 bin/precommit_autofix.py --check
