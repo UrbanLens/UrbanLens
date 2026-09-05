@@ -37,7 +37,11 @@
 		.brand-name {
 			font-size: 1.15rem;
 			font-weight: 700;
-			color: var(--ul-grey-1);
+			// Not --ul-grey-1. The sidebar's rgba(0,0,0,.3) sits *over* the card,
+			// so it composites to #b2b2b2 on light and #151515 on dark - and
+			// --ul-grey-1 inverts with it (#dfdfdf / #373737), landing at
+			// 1.59:1 and 1.53:1. It was unreadable in both themes, not just dark.
+			color: var(--ul-grey-9);
 			line-height: 1.2;
 			word-break: break-word;
 		}
@@ -46,7 +50,9 @@
 			font-size: 0.68rem;
 			text-transform: uppercase;
 			letter-spacing: 0.1em;
-			color: var(--ul-grey-5);
+			// One step lighter than the name, still 3.9:1 / 10.8:1 on the
+			// composited sidebar. --ul-grey-5 was 1.89:1 in light.
+			color: var(--ul-grey-7);
 		}
 	}
 
@@ -89,11 +95,13 @@
 		gap: 0.75rem;
 		padding: 0.55rem 0.6rem;
 		border-radius: 8px;
-		color: var(--ul-grey-6);
+		color: var(--ul-grey-7);
 		transition: color 0.15s, background 0.15s;
 
 		&--active {
-			color: var(--ul-grey-1);
+			// The active step must be the *most* legible line here, so it goes
+			// the other way from --ul-grey-1, which was the least.
+			color: var(--ul-grey-9);
 			background: rgba(255, 255, 255, 0.07);
 
 			.step-icon {
@@ -104,7 +112,7 @@
 		}
 
 		&--done {
-			color: var(--ul-grey-5);
+			color: var(--ul-grey-6);
 
 			.step-icon {
 				border-color: var(--ul-grey-7);

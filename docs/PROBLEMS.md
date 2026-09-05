@@ -1170,28 +1170,6 @@ profile). Until fixed, verify backend changes on these dev machines via direct D
 tests (no Django test client, no `realtime.broadcast`) plus a manual browser walkthrough against
 the running `docker compose up` stack, rather than the full `pytest` suite.
 
-## P18 — The setup wizard's always-dark sidebar uses inverting `--ul-grey-N` text tokens, unreadable in dark mode
-
-`id: P18` · `status: open` · `updated: 2026-07-25`
-
-Previously titled "Setup wizard sidebar reuses inverting `--ul-grey-N` tokens on an always-dark panel (found 2026-07-25)".
-
-`_setup.scss`'s `.setup-wizard__sidebar` sets `background: rgba(0,0,0,0.3)` on top of whatever
-the parent `@include surface()` background is - like the map filter panel and a few other
-"always dark" chrome panels called out in `_tokens.scss`'s comments, it reads as a fixed dark
-strip in both themes rather than genuinely inverting. But unlike those other always-dark panels,
-its child text (`.brand-name`, `.setup-stepper__item`, etc.) uses the regular inverting
-`var(--ul-grey-1)` / `var(--ul-grey-5)` / `var(--ul-grey-6)` / `var(--ul-grey-7)` tokens. In light
-mode `--ul-grey-1` is a near-white (`#dfdfdf`), which reads fine against the dark sidebar overlay.
-In dark mode `--ul-grey-1` flips to a near-black grey (`$color-grey-8`, `#373737`), which is
-low-to-no contrast against that same dark sidebar background - the sidebar text likely becomes
-close to unreadable in dark mode. Not fixed here because it's a structural mismatch (the
-component assumes a static-dark treatment but was styled with tokens meant to invert), not a
-missing/undefined custom property - fixing it means either converting the sidebar's own text
-tokens to a fixed light-on-dark scheme (like `_tokens.scss`'s `$ui-fp-*`/`$ui-link-on-dark`
-pattern for the map filter panel) or making the sidebar itself genuinely theme-aware. Worth a
-manual dark-mode check of `/setup` before shipping.
-
 ## P19 — Audit re-verification's residual gaps remain: dead ownership re-check, 1,100-line `_dark.scss`, stub AI gateway
 
 `id: P19` · `status: open` · `updated: 2026-07-25`

@@ -11459,3 +11459,37 @@ gate. Each is covered by a test:
   `--ul-undo-offset-y` and `--ul-assistant-fab-offset-y` do.
 - **Names inside comments**, including a comment recording that a broken reference was removed -
   which is exactly what this kind of fix leaves behind (`_gallery.scss:585`).
+
+## RESOLVED 2026-09-05: the setup wizard's always-dark sidebar uses inverting `--ul-grey-N` text tokens, unreadable in dark mode
+
+`id: P18` · `status: fixed` · `resolved: 2026-09-05`
+
+The entry called the sidebar "always dark" and concluded the text was unreadable in dark mode. It is
+neither of those things exactly, and the real answer is worse.
+
+`.setup-wizard__sidebar` is `background: rgba(0, 0, 0, .3)` *over the card*, so it does not stay
+dark - it tracks the theme, compositing to about `#b2b2b2` on a light surface and `#151515` on a
+dark one. Its text used `--ul-grey-1`, which inverts the same way (`#dfdfdf` light, `#373737` dark).
+The two move together, so the contrast never opens up:
+
+| | light | dark |
+|---|---|---|
+| sidebar background | `#b2b2b2` | `#151515` |
+| `.brand-name` (`--ul-grey-1`) | **1.59:1** | **1.53:1** |
+| `.brand-label` (`--ul-grey-5`) | **1.89:1** | 6.25:1 |
+| `.setup-stepper__item--active` (`--ul-grey-1`) | **1.59:1** | **1.53:1** |
+
+So the brand name and the *active* step - the two lines the wizard most needs read - were at about
+1.5:1 in **both** themes, and the light one was no better than the dark. The entry's "reads fine
+against the dark sidebar overlay in light mode" was the part that was wrong, and it is the reason
+this looked like a dark-mode-only problem for six weeks.
+
+Fixed by moving the text several steps further from the surface instead of one step from it:
+`--ul-grey-9` for the brand name and the active step (7.77:1 / 17.05:1), `--ul-grey-7` for the brand
+label and the idle steps (3.86:1 / 10.80:1), `--ul-grey-6` for done steps. Contrast computed from
+the token table in `_tokens.scss` against the composited background, both themes - which is a fact
+about two known colours rather than something needing a browser.
+
+The entry's other suggestion - converting the sidebar to a fixed light-on-dark scheme like
+`_tokens.scss`'s `$ui-fp-*` - would have worked too, and was not chosen: the sidebar is not actually
+static-dark, so making it so would be a visual change rather than a fix.

@@ -26,7 +26,7 @@ each, and the house style. `P` numbers entries inside `PROBLEMS.md`; every other
 prefix numbers a whole document.
 
 Resolved problems are **not** listed here — they move to
-[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 297
+[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 298
 of them. This index is what is live. Grep the archive before concluding a defect
 is new - and an archived entry keeps its `id:` line, so a citation of `P70`
 still resolves after it is fixed, and the id is never handed out again.
@@ -49,7 +49,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P16 | open | 2026-07-22 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P17 | open | 2026-07-24 | `docker compose exec app pytest` trips the localhost-only network guard because Valkey is a bridge IP | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P18 | open | 2026-07-25 | The setup wizard's always-dark sidebar uses inverting `--ul-grey-N` text tokens, unreadable in dark mode | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P19 | open | 2026-07-25 | Audit re-verification's residual gaps remain: dead ownership re-check, 1,100-line `_dark.scss`, stub AI gateway | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P20 | open | 2026-07-25 | The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()` resolves it wrongly for everyone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P21 | open | 2026-07-26 | `LocationWikiEditView.post` drops invalid wiki field edits and still answers `{"ok": true}` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
