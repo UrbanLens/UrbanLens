@@ -91,12 +91,24 @@ class TestRunner(DiscoverRunner):
         conf.settings.SECURE_SSL_REDIRECT = False
 
         # Patch the AI gateway so no test ever makes a real external API call.
-        # send_prompt is the single chokepoint shared by all LLMGateway subclasses.
-        self._ai_patcher = patch(
-            "urbanlens.dashboard.services.ai.gateway.LLMGateway.send_prompt",
-            return_value=None,
-        )
-        self._ai_patcher.start()
+        #
+        # There are TWO chokepoints, not one. send_prompt is the <ANSWER>-protocol
+        # path every older LLMGateway feature uses; send_with_tools is the
+        # provider-native tool-calling path the assistant's loop uses
+        # (services/ai/assistant.py), and it was added after this patch was
+        # written, so for a while the comment here said "the single chokepoint"
+        # while the assistant's entire turn ran unpatched under `manage.py test` -
+        # which is what CI runs. Both are patched now; a new chokepoint on
+        # LLMGateway needs adding here too.
+        #
+        # settings/test.py separately pins every provider credential to a
+        # placeholder, so this is defense in depth rather than the only guard.
+        self._ai_patchers = [
+            patch("urbanlens.dashboard.services.ai.gateway.LLMGateway.send_prompt", return_value=None),
+            patch("urbanlens.dashboard.services.ai.gateway.LLMGateway.send_with_tools", return_value=None),
+        ]
+        for patcher in self._ai_patchers:
+            patcher.start()
 
         if os.getenv("UL_ALLOW_TEST_INTERNET", "False").lower() not in {"true", "1", "yes"}:
             self._network_guard = LocalhostOnlyNetwork().start()
@@ -111,8 +123,7 @@ class TestRunner(DiscoverRunner):
         network_guard = getattr(self, "_network_guard", None)
         if network_guard:
             network_guard.stop()
-        patcher = getattr(self, "_ai_patcher", None)
-        if patcher:
+        for patcher in getattr(self, "_ai_patchers", []):
             patcher.stop()
         super().teardown_test_environment(**kwargs)
 

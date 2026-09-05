@@ -102,38 +102,6 @@ _configure_hypothesis()
 
 
 @pytest.fixture(scope="session", autouse=True)
-def isolated_media_root() -> Iterator[None]:
-    """Give the suite its own throwaway ``MEDIA_ROOT``, deleted when it ends.
-
-    ``base.py`` points ``MEDIA_ROOT`` at ``src/urbanlens/media`` - the same
-    directory a local dev server writes real uploads into. Nothing overrode it
-    for tests, so every fixture that saved a file wrote there and left it
-    behind: ``TestCase`` rolls the database back between tests, but it does not
-    roll back the filesystem. On this checkout that had accumulated ~14,500
-    files (55 MB) of test debris mixed in with dev data, and it was not
-    harmless - a polluted media root makes
-    ``test_pin_privacy_from_a_wiki.PrivatePhotoBytesTests`` fail intermittently.
-
-    Same reasoning as ``CACHES`` and ``CELERY_BROKER_URL`` in
-    ``settings/test.py``: shared external state that tests must not inherit or
-    hand on. A fresh directory per session also means one run cannot be
-    influenced by a previous one's files, which is what makes the flake above
-    reproducible-or-not depending on how many times you had run the suite.
-
-    Session-scoped rather than per-test: some tests write a file in
-    ``setUpTestData``/class setup and read it back later, and a per-test root
-    would pull the file out from under them.
-    """
-    from django.test import override_settings
-
-    with (
-        tempfile.TemporaryDirectory(prefix="urbanlens-test-media-") as media_root,
-        override_settings(MEDIA_ROOT=media_root),
-    ):
-        yield
-
-
-@pytest.fixture(scope="session", autouse=True)
 def block_external_network() -> Iterator[None]:
     """Deny accidental internet access in tests while allowing localhost."""
     if os.getenv("UL_ALLOW_TEST_INTERNET", "False").lower() in {"true", "1", "yes"}:
