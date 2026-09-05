@@ -11719,3 +11719,57 @@ with a blank name cost another query when the template asked for `effective_name
 Measured by `OrganizeDialogQueryScalingTests`, which fails on the old shape with "24 queries for 2
 rows and 54 for 12 - it is querying per row" and names the three statements that multiplied.
 
+## RESOLVED 2026-09-05: nothing measured render time, so a 12-second page passed every scaling test
+
+`id: P65` · `status: fixed` · `resolved: 2026-09-05`
+
+The Organize Labels page had already been cut from ~146 queries to 3 by
+`Label.prime_total_pin_counts` and was still reported slow. Profiling it at 500 labels found ~12s of
+wall time against ~0.2s of database time: the six tabs switch client-side, and the view rendered all
+six on every load. `QueryScalingMixin` and `django_perf_rec` both measure the database and nothing
+else, so the page passed every performance test the project had while taking twelve seconds.
+
+**The fix this entry prescribed does not work, and that is the useful part of the record.** It asked
+for "the same shape - seed N vs 4N rows, assert wall time doesn't grow past a tolerance". A growth
+*ratio* cannot see this defect class. Render time on a list page is supposed to be linear in rows, so
+a page whose rows are sixty times too expensive still grows about fourfold when the rows grow
+fourfold. Measured over 25 trials at load 11.4 on 8 cores, the pathological workload's 3-to-12-row
+ratio came out 2.8-3.2 - the same as every well-behaved workload's, under any tolerance worth
+setting.
+
+What separates the classes is the marginal cost of one row expressed in a machine-independent unit:
+`(T(large) - T(small)) / rows`, divided by the page's own **zero-row** render. The subtraction
+cancels the fixed overhead exactly - client, middleware, auth, base template, connection setup - and
+the division cancels machine speed and steady load, because both terms scale with them. What is left
+reads as a sentence: one more row costs X% of what the whole empty page costs. Budget set at 10%,
+measured over 100 trials at the same load: a trivial row, a 120-element row and an O(n²) loop with a
+small constant never exceeded 4.4%, while a row rendering a full icon picker never came in under
+65%.
+
+Two further results worth not re-deriving:
+
+- **Best-of-K, not the mean.** Contention only ever adds time, so the minimum is the estimate that
+  converges. A benign row measured 0.3-2.8% of baseline best-of-5 and -5.6-6.3% by mean; the mean
+  crosses zero where the minimum does not.
+- **A superlinearity assertion was designed and rejected on measurement**, not omitted. The slope
+  ratio reached 3.24 on a *linear* workload and 3.37 on an O(n²) one whose constant was too small to
+  matter, against 1.11-1.45 on the genuinely broken one. At these sizes the second derivative is
+  noise.
+
+Database time is included rather than subtracted. It is technically available, and should not be
+used: Django rounds each statement's duration to the millisecond, so a page of 25 sub-millisecond
+queries carries more quantization error than the signal it would correct; reading those numbers at
+all needs `force_debug_cursor`, which perturbs what it measures; and the baseline already cancels
+everything constant. Instead the failure message reports the query count beside the timing, because
+"queries flat, render growing" is the sentence that would have ended the Organize investigation on
+the first run.
+
+Shipped as `core/tests/render_scaling.py`, over a `SeedScalingMixin` in `core/tests/scaling.py` that
+both mixins now share - so the guard that a seed actually changed what the endpoint renders exists
+once rather than twice. `test_render_time_scaling_harness.py` points it at two views in a test-only
+urlconf whose per-row cost is known, and includes the argument in executable form: the expensive page
+is perfectly flat under `QueryScalingMixin` and refused by this one.
+
+**Not resolved by this**, and still recorded where they were: the instances the survey found. The
+achievement admin's per-row icon picker is the one this instrument was calibrated against and is
+still there - see P68, whose "~1,288 `ICON_CATEGORIES` entries" is 1,249 as measured on 2026-09-05.

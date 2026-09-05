@@ -21,6 +21,12 @@ away.
 render, so their body stops growing while the query count still can. Those pass
 ``expect_growth=False`` with a reason, which is a deliberate, visible decision
 rather than a silent one.
+
+This answers *how many* queries an endpoint costs per row.
+:class:`~urbanlens.core.tests.render_scaling.RenderTimeScalingMixin` answers how
+*expensive* a row is to render, and only the pair distinguishes a slow database
+from a slow template - a page can be perfectly flat here and still take twelve
+seconds.
 """
 
 from __future__ import annotations
@@ -32,26 +38,24 @@ from typing import TYPE_CHECKING, Any
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from urbanlens.core.tests.scaling import FIRST_BATCH, MIN_GROWTH_BYTES, SECOND_BATCH, SeedScalingMixin
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-#: Rows seeded before the first and second measurement. The second is large
-#: enough that one query per row is unmistakable against normal variation.
-FIRST_BATCH = 2
-SECOND_BATCH = 10
+#: Re-exported so a caller importing them from here keeps resolving.
+__all__ = [
+    "FIRST_BATCH",
+    "MIN_GROWTH_BYTES",
+    "SECOND_BATCH",
+    "QueryScalingMixin",
+    "normalize_sql",
+    "queries_that_grew",
+]
 
 #: Queries may legitimately differ by a couple between runs (a count query that
 #: only appears once there is a second page, say). Anything above this is slope.
 DEFAULT_TOLERANCE = 2
-
-#: How many more bytes the response must return before the seed counts as having
-#: exercised the endpoint. A response is not perfectly stable between identical
-#: requests - recorded activity, streak counters and timestamps move it a little -
-#: so "grew at all" is too weak a test. Measured on ``trips.overview``: four
-#: repeats with nothing seeded spanned **11 bytes**, while ten real trips added
-#: **12,033**. Three orders of magnitude apart, so the floor only has to sit
-#: clear of the noise.
-MIN_GROWTH_BYTES = 200
 
 _DIGITS = re.compile(r"\d+")
 _QUOTED = re.compile(r"'[^']*'")
@@ -86,27 +90,11 @@ def queries_that_grew(before: Iterable[dict[str, Any]], after: Iterable[dict[str
     return sorted(grown, key=lambda row: row[1] - row[0], reverse=True)
 
 
-class QueryScalingMixin:
+class QueryScalingMixin(SeedScalingMixin):
     """Mixin for Django ``TestCase``s asserting an endpoint's query count is flat.
 
     Subclasses implement :meth:`seed_rows`; everything else is provided.
     """
-
-    #: Overridable per test class - a slow seed may want smaller batches.
-    first_batch: int = FIRST_BATCH
-    second_batch: int = SECOND_BATCH
-
-    def seed_rows(self, count: int) -> None:
-        """Create *count* more of whatever the endpoint under test lists.
-
-        The rows created here must be the rows the endpoint renders. Seeding
-        something else produces a constant-size response and a meaningless pass,
-        which is what ``expect_growth`` guards against.
-
-        Args:
-            count: How many rows to add.
-        """
-        raise NotImplementedError("scaling tests must seed the rows their endpoint lists")
 
     def measure(self, url: str, **extra: Any) -> tuple[list[dict[str, Any]], int]:
         """Fetch *url*, returning its captured queries and response body length.
@@ -119,8 +107,8 @@ class QueryScalingMixin:
             The captured queries and the response body's length in bytes.
         """
         with CaptureQueriesContext(connection) as captured:
-            response = self.client.get(url, **extra)  # type: ignore[attr-defined]
-        self.assertEqual(response.status_code, 200, f"{url} returned {response.status_code}")  # type: ignore[attr-defined]
+            response = self.client.get(url, **extra)
+        self.assertEqual(response.status_code, 200, f"{url} returned {response.status_code}")
         return list(captured.captured_queries), len(response.content)
 
     def assert_flat(
@@ -158,15 +146,9 @@ class QueryScalingMixin:
         large_queries, large_body = self.measure(url, **extra)
 
         total = self.first_batch + self.second_batch
-        if expect_growth:
-            self.assertGreaterEqual(  # type: ignore[attr-defined]
-                large_body - small_body,
-                MIN_GROWTH_BYTES,
-                f"{url} returned {small_body} bytes for {self.first_batch} rows and {large_body} for {total} - "
-                f"a change of {large_body - small_body}, under the {MIN_GROWTH_BYTES}-byte noise floor. "
-                "The seed does not exercise this endpoint, so a flat query count would prove nothing. "
-                "Seed the rows this endpoint actually lists, or pass expect_growth=False with a reason.",
-            )
+        self.assert_seed_exercised_endpoint(
+            url, small_body, large_body, expect_growth=expect_growth, growth_waiver=growth_waiver
+        )
 
         if large_queries and len(large_queries) > len(small_queries) + tolerance:
             report = "\n".join(

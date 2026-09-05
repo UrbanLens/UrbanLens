@@ -2835,37 +2835,6 @@ concatenation, and defines an `_esc()` helper found nowhere else under `template
 `shared/photo-pin-confirm.ts` and the uploader to a shared `initVaultUploader` would bring the whole
 Vault client surface under typecheck and test.
 
-## P65 — Perf tooling measures query count only, so a 12-second render passes every scaling test
-
-`id: P65` · `status: open` · `updated: 2026-08-31`
-
-Previously titled "perf test tooling has no wall-clock/render-time check - only query count".
-
-Root cause behind every finding below, and worth fixing once rather than per-finding. The Organize
-Labels page was reported "still slow" despite `Label.prime_total_pin_counts` already having cut its
-query count from ~146 to 3 (`models/labels/model.py`, shipped in `release/v0.7.0`). Profiling it at
-500 labels found the real cost: ~12s of wall time against ~0.2s of database time. The page's six tabs
-(Tags/Categories/Statuses/People/Media/Display Order) switch purely client-side (a JS click handler
-toggling a `hidden` attribute), but the Django view rendered **all six** tabs' full card lists on
-every load regardless of which was visible - fixed in `controllers/organize.py`
-(`_rows_if_active`)/`templates/dashboard/pages/organize/index.html`, see the "perf: defer Organize
-page's hidden label tabs to first reveal" commit.
-
-That bug was invisible to this codebase's entire existing performance-test suite -
-`QueryScalingMixin` (`core/tests/query_scaling.py`) and `django_perf_rec` query-fingerprint records
-both measure database query count/shape, never Python or template CPU time - so a page can pass every
-existing scaling test at 500 rows while still taking 12 seconds to render. A site-wide static survey
-(10 parallel agents, one per feature area, read-only) done immediately after found the same defect
-class repeated across the app; seven confirmed instances are recorded in the entries below this one.
-Two are already fixed alongside the Organize page (wiki.html/location/index.html's subnav tabs, using
-`hx-trigger="load"` unconditionally instead of `"revealed"` - see `test_pin_detail_fanout_budget.py`,
-which had already ratcheted this exact defect on the pin page as a known, undecided issue).
-
-Worth building a `RenderTimeScalingMixin` sibling to `QueryScalingMixin` - same shape (seed N vs 4N
-rows, assert wall time doesn't grow past a tolerance), but timing `time.perf_counter()` around the
-request instead of counting queries - so this class of bug fails a test instead of shipping. None of
-the entries below have one; each was found by hand.
-
 ## P66 — Organize's active label tab still renders its full card list unpaginated
 
 `id: P66` · `status: open` · `updated: 2026-08-31`
@@ -2902,7 +2871,8 @@ Found by the same survey as the entries above, each independently confirmed agai
   trips at the page's own `PAGE_SIZE=25`, on a whole-site user directory that only grows.
 - **Achievement admin editor** (`controllers/achievements.py:134-239`,
   `templates/dashboard/partials/admin/_achievement_rows.html:74-83,185-189`) nests a full
-  `_icon_picker.html` (two `{% for %}` loops over all ~1,288 `ICON_CATEGORIES` entries,
+  `_icon_picker.html` (two `{% for %}` loops over all 1,249 `ICON_CATEGORIES` entries in 28
+  categories, measured 2026-09-05,
   `models/labels/meta.py:37`) inside a `hidden` div *per achievement row*, re-rendered in full on
   every create/edit/delete/backfill via `hx-swap="outerHTML"`. ~30-60 achievements (a realistic
   near-term catalogue size) means tens of thousands of rendered icon buttons per admin page load -
