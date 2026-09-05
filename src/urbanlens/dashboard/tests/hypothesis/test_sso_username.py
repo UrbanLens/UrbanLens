@@ -6,9 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.auth.username import USERNAME_RE
 from urbanlens.dashboard.services.social_auth.pipeline import (

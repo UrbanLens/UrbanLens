@@ -15,11 +15,11 @@ from unittest import mock
 
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 import nacl.public
 import nacl.secret
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.e2ee.key_bundle import MessagingKeyBundle
 from urbanlens.dashboard.models.safety.model import (

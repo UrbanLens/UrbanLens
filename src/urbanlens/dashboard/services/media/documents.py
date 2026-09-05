@@ -59,9 +59,8 @@ DOCUMENT_EXTENSIONS = CONVERTIBLE_DOCUMENT_EXTENSIONS | {".pdf"}
 def soffice_path() -> str | None:
     """The absolute path to the LibreOffice headless binary, or None.
 
-    Resolved rather than left to the subprocess so the sandbox tier never hands
-    a bare name to `exec`, where a writable PATH entry earlier than the real one
-    would decide which binary runs on untrusted bytes.
+    Resolved once here rather than left to `exec`'s own PATH walk - see the
+    note on `ffmpeg_path` in `videos.py` for what that does and does not buy.
     """
     return shutil.which("soffice")
 

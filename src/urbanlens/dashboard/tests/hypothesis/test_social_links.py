@@ -10,7 +10,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.profile.social_links import (
     PLATFORM_FA_ICON,

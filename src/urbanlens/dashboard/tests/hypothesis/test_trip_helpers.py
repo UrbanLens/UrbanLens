@@ -19,9 +19,9 @@ from unittest.mock import MagicMock, patch
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.trip import (
     _build_activity_forecasts,

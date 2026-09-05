@@ -18,9 +18,9 @@ from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.labels.meta import KIND_TAG

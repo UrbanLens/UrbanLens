@@ -7,9 +7,9 @@ DB-backed tests use django.test.TestCase with baker.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import (

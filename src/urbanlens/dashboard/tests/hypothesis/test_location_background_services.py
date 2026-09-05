@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from unittest import mock
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.locations.base import best_polygon_from_geometry, default_bbox
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain

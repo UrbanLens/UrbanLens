@@ -22,9 +22,9 @@ import tempfile
 
 from django.test import Client, override_settings
 from django.urls import reverse
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.account import AccountKdf
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage

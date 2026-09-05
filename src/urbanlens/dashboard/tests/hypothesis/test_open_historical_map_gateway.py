@@ -11,9 +11,9 @@ from __future__ import annotations
 from typing import Any
 from unittest import mock
 
-from hypothesis import given, settings, strategies as st
 import pytest
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.open_historical_map import (
     OhmCoverage,

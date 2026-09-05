@@ -21,9 +21,9 @@ from __future__ import annotations
 from fractions import Fraction
 import io
 
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from PIL import Image as PILImage
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.media.metadata_strip import strip_metadata
 

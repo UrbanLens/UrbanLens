@@ -19,7 +19,6 @@ on a single submission.
 from __future__ import annotations
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.facts.confidence import (
     CONFIRM_THRESHOLD,

@@ -11,7 +11,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
 

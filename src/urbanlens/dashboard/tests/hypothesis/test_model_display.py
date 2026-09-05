@@ -14,9 +14,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timezone
 
 from django.db import IntegrityError, transaction
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup

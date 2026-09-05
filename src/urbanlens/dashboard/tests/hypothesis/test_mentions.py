@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, patch
 import uuid
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.notifications.mentions import (
     extract_location_uuids,

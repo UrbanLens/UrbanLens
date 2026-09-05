@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import itertools
 
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
 

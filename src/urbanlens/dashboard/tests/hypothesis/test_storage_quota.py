@@ -13,9 +13,9 @@ Covers:
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, grant_subscription

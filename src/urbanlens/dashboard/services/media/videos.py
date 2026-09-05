@@ -36,9 +36,13 @@ _FFPROBE_TIMEOUT_SECONDS = 30
 def ffmpeg_path() -> str | None:
     """The absolute path to the ffmpeg binary, or None.
 
-    Resolved rather than left to the subprocess so the sandbox tier never hands
-    a bare name to `exec`, where a writable PATH entry earlier than the real one
-    would decide which binary runs on untrusted bytes.
+    Resolved once here rather than left to `exec`'s own PATH walk, so the
+    sandbox tier passes an absolute path and the binary it will run is
+    inspectable before it runs. This narrows the window, it does not close it:
+    `shutil.which` reads the same PATH, so a hostile PATH still selects a
+    hostile binary. The actual guarantee is that the container controls PATH;
+    this makes the choice explicit rather than implicit, which is what S607 asks
+    for.
     """
     return shutil.which("ffmpeg")
 
@@ -63,6 +67,10 @@ def probe_video(path: str) -> dict[str, Any] | None:
     Returns:
         The parsed ffprobe JSON (``format``/``streams`` keys), or None if
         ffprobe is unavailable or the file can't be probed.
+
+    Gated on ffprobe alone. It previously required ffmpeg as well, which was
+    incidental - this function never invokes ffmpeg - and contradicted the
+    sentence above.
     """
     ffprobe = ffprobe_path()
     if ffprobe is None:

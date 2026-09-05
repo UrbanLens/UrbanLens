@@ -45,7 +45,7 @@ is new.
 | P11 | open | 2026-08-15 | ~40 raw `fetch()` calls bypass `fetch-json.ts` and fail silently; Organize's Media tab is unwired dead UI | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P12 | open | 2026-07-25 | ~10 SCSS files use undefined `--ul-accent`/`--ul-border`/`--text` vars, so dark mode never reaches those rules | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P14 | open | 2026-07-23 | Authenticated media gate - residual per-family risk (2026-07-23) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P14 | open | 2026-07-23 | Custom pin and label icons are readable by any authenticated user, and replaced icons strand files | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P16 | open | 2026-07-22 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P17 | open | 2026-07-24 | `docker compose exec app pytest` trips the localhost-only network guard because Valkey is a bridge IP | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -88,7 +88,7 @@ is new.
 | P54 | open | 2026-08-23 | `docker-compose.hot-reload.yml` crash-loops when the checkout is not the container's uid | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P55 | open | 2026-08-23 | A community quota bonus survives un-sharing the photo that earned it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-08-28 | `Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed to set it does not exist | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P57 | open | 2026-08-29 | Test-quality audit follow-ups (2026-08-29) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P57 | open | 2026-08-29 | The test-quality audit left ~15 findings unfixed, from an unpatched `connect_ex` guard to untested views | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P58 | open | 2026-08-31 | A photo's grid tile can 404/500 for seconds after upload while async processing renames its file | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P59 | open | 2026-08-31 | A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P60 | open | 2026-08-31 | `vault-photos.spec.ts`'s sort test can tie on a persistent dev DB because it relies on random captions | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -113,7 +113,7 @@ is new.
 | PL5 | live | 2026-08-27 | One row per (target, field, write) resolves a per-viewer view in one DISTINCT ON query, with no replay | [`docs/designs/versioned-content.md`](designs/versioned-content.md) |
 | PL6 | live | 2026-08-29 | Every test file is being reviewed for negative coverage; 73 of 832 done, resume at manifest line 94 | [`docs/notes/test-quality-audit.md`](notes/test-quality-audit.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
-| D2 | superseded | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
+| D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |
 | D4 | accepted | 2026-08-27 | Place, with parent_relation and per-domain symmetric access, is the single answer to 'is this the same place?' | [`docs/designs/place-consolidation.md`](designs/place-consolidation.md) |
 | D5 | accepted | 2026-08-27 | Thirteen decisions answer the mobile team's asks: what shipped, what was declined, what is deferred | [`docs/notes/mobile_app_notes.md`](notes/mobile_app_notes.md) |
@@ -131,7 +131,7 @@ is new.
 | X12 | holds | 2026-08-27 | 100 write handlers, 1,217 statements of data-mutating view code, never execute under any test | [`docs/reports/2026-08-14-view-coverage.md`](reports/2026-08-14-view-coverage.md) |
 | X13 | holds | 2026-07-30 | The self-hosted Overpass instance beats every mirror; three pool members were dead or Swiss-only | [`docs/reports/overpass-mirror-test.md`](reports/overpass-mirror-test.md) |
 | I1 | unvalidated | 2026-08-27 | Splitting into a near-zero-knowledge server and a data-holding agent was planned in full, then deferred | [`docs/designs/rejected-and-deferred/split-architecture.md`](designs/rejected-and-deferred/split-architecture.md) |
-| I2 | actionable | 2026-08-27 | Ten free/open API integrations remain unbuilt, but three of its candidates already shipped as plugins | [`docs/reports/api-expansion-candidates.md`](reports/api-expansion-candidates.md) |
+| I2 | actionable | 2026-08-27 | Ten free/open APIs surveyed as integration candidates; several have since shipped as plugins, so re-check before using it | [`docs/reports/api-expansion-candidates.md`](reports/api-expansion-candidates.md) |
 | I3 | absorbed | 2026-07-30 | SpotGuessr's backend was sound and its frontend was the debt; all five recommendations shipped | [`docs/reports/spotguessr-audit.md`](reports/spotguessr-audit.md) |
 | R1 | current | 2026-09-02 | The assistant reaches a provider only through three credential-narrowed tiers behind a default-deny egress proxy | [`docs/AI_PIPELINE.md`](AI_PIPELINE.md) |
 | R2 | current | 2026-08-27 | Schemathesis holds the external API to its own published OpenAPI doc; detail routes still only prove 404 handling | [`docs/CONTRACT_TESTS.md`](CONTRACT_TESTS.md) |
@@ -145,7 +145,7 @@ is new.
 | R10 | current | 2026-09-03 | /metrics is off by default and unrouted when off, and undercounts silently unless multiprocess mode is on | [`docs/METRICS.md`](METRICS.md) |
 | R11 | current | 2026-09-03 | Twenty-nine non-obvious behaviours that read as bugs until explained; eleven source files cite it by name | [`docs/NOTES.md`](NOTES.md) |
 | R12 | current | 2026-08-27 | Nothing is visible until both the container gate and the owner's settings gate say yes; three items still open | [`docs/PRIVACY_MODEL.md`](PRIVACY_MODEL.md) |
-| R13 | current | 2026-09-04 | Every diagnostic here exists because a specific defect got through without it; nine checkers now run in CI | [`docs/TOOLING.md`](TOOLING.md) |
+| R13 | current | 2026-09-04 | Every diagnostic here exists because a specific defect got through without it; twelve checkers now run in CI | [`docs/TOOLING.md`](TOOLING.md) |
 | R14 | current | 2026-09-01 | Where a fallback exists, asserting the shape of the answer passes forever - assert provenance instead | [`docs/audits/TEST_COVERAGE_GAPS.md`](audits/TEST_COVERAGE_GAPS.md) |
 | R15 | current | 2026-09-01 | SpotGuessr's rules: pinned-by-everyone eligibility, Glicko-2 for players and locations, wiki-only photos | [`docs/designs/drafts/spotguessr.md`](designs/drafts/spotguessr.md) |
 | R16 | current | 2026-08-27 | Trivia reuses SpotGuessr eligibility and Glicko-2, funnelling all three question sources through one classifier | [`docs/designs/drafts/trivia.md`](designs/drafts/trivia.md) |

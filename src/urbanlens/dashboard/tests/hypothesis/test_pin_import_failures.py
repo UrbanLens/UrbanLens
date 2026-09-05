@@ -27,9 +27,9 @@ from unittest import mock
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.location.model import Location

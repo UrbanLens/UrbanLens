@@ -10,7 +10,6 @@ attribute by the map and label renderers.
 from __future__ import annotations
 
 from hypothesis import given, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.core.colors import NO_COLOR, clean_color
 

@@ -11,9 +11,9 @@ import os
 import tempfile
 
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.article.model import Article

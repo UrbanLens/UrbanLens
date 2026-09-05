@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.services.auth.email_normalization import (

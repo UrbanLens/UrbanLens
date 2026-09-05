@@ -20,7 +20,6 @@ from unittest import mock
 import zipfile
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_export.archive_extractor import (
     ExtractionBudget,

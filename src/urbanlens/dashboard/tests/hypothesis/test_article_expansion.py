@@ -10,9 +10,9 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.link_extraction.model import LinkExtraction, LinkExtractionStatus

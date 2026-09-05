@@ -1,0 +1,5 @@
+# See the note in dashboard/tests/.ruff.toml - test code is formatted at 120
+# columns, and this has to be a config file so `ruff format` agrees with the
+# pre-commit hook and with CI.
+extend = "../../../../pyproject.toml"
+line-length = 120

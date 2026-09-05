@@ -18,6 +18,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 import pytest
+from urbanlens_ai.schema import InferenceResponse, TextBlock, ToolUseBlock, Usage
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
@@ -33,7 +34,6 @@ from urbanlens.dashboard.services.ai.assistant import (
     run_assistant_turn,
 )
 from urbanlens.dashboard.services.core.celery import TaskProgress
-from urbanlens_ai.schema import InferenceResponse, TextBlock, ToolUseBlock, Usage
 
 
 def _plain_profile():

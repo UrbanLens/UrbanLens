@@ -32,13 +32,10 @@ held only to violations ruff cannot fix at all, because failing a commit over
 something the script was not allowed to fix is exactly the friction this is
 meant to remove.
 
-Two formatting widths
----------------------
-Application code is formatted at the project's ``line-length`` (250). Test code
-is formatted at ``TEST_LINE_LENGTH``, because at 250 the formatter's dominant
-effect on a test file is to collapse a deliberately wrapped assertion message or
-a chained queryset onto one unreadable line. Both widths live here so that
-``--check`` and the commit path can never disagree about which applies where.
+Formatting width is ruff's business, not this script's: test directories carry
+their own ``.ruff.toml`` setting ``line-length = 120``, which ruff finds by
+walking up from each file. Keeping a second copy of that rule here is how
+``ruff format --check src`` in CI came to disagree with the commit path.
 
 It never applies ruff's unsafe fixes, and never fails a commit because of an
 error in itself. In particular it does not delete code: unused imports (F401)
@@ -69,9 +66,6 @@ TIMEOUT_SECONDS = 120
 LOCK_RETRIES = 4
 LOCK_RETRY_SECONDS = 0.25
 
-#: Width for test code. See "Two formatting widths" above. Application code uses
-#: whatever `line-length` pyproject.toml sets, so it is not repeated here.
-TEST_LINE_LENGTH = 120
 
 # Mirrors the `files:` pattern in .pre-commit-config.yaml, as a second guard in
 # case this script is ever invoked by hand.
@@ -188,9 +182,56 @@ def stashed_paths() -> tuple[bool, set[str]]:
             uncertain = True
             continue
         for line in body.splitlines():
-            if line.startswith(("+++ b/", "--- a/")):
-                paths.add(line[6:].strip())
+            # `diff --git` heads every file in the patch, including binary ones,
+            # which carry no ---/+++ pair at all. Parsing only those would miss
+            # a stashed binary and let the fixer stage over it.
+            if line.startswith("diff --git "):
+                name = _diff_header_path(line)
+                if name is None:
+                    uncertain = True  # unparsable: assume it could be anything
+                else:
+                    paths.add(name)
     return uncertain, paths
+
+
+def _diff_header_path(line: str) -> str | None:
+    r"""The b-side path from a `diff --git a/X b/X` line, or None if unreadable.
+
+    Git C-quotes any path with a non-ASCII or special character
+    (`diff --git "a/caf\303\251.py" "b/caf\303\251.py"`), so splitting on
+    whitespace and stripping `b/` silently produces a name that matches nothing
+    - and a file the fixer then treats as safe to rewrite and stage, which is
+    exactly the case the skip list exists to prevent.
+    """
+    rest = line[len("diff --git ") :]
+    if rest.startswith('"'):
+        # Quoted: the two paths are separate quoted strings.
+        try:
+            closing = rest.index('" "', 1)
+        except ValueError:
+            return None
+        quoted = rest[closing + 3 :].rstrip()
+        if not quoted.endswith('"'):
+            return None
+        try:
+            decoded = quoted[:-1].encode("latin-1", "strict").decode("unicode_escape").encode("latin-1").decode("utf-8")
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            return None
+        return decoded[2:] if decoded.startswith("b/") else None
+    # Unquoted, both sides name the same path: `a/P b/P`. Splitting on " b/"
+    # picks the wrong point for a path that itself contains " b/" (git does not
+    # quote a plain space), so derive the length instead and verify the result
+    # reconstructs the line. A rename header (a/X b/Y) fails that check and
+    # returns None, which the caller treats as "cannot be sure" - the safe way
+    # to be wrong.
+    rest = rest.rstrip()
+    if not rest.startswith("a/"):
+        return None
+    width = (len(rest) - 5) // 2
+    if width <= 0:
+        return None
+    name = rest[2 : 2 + width]
+    return name if rest == f"a/{name} b/{name}" else None
 
 
 # --------------------------------------------------------------------------
@@ -227,39 +268,6 @@ def _read(path: Path) -> bytes | None:
         return path.read_bytes()
     except OSError:
         return None
-
-
-# --------------------------------------------------------------------------
-# formatting
-# --------------------------------------------------------------------------
-
-
-def is_test_path(path: Path) -> bool:
-    """True when `path` is test code rather than application code.
-
-    Mirrors the test scope of `[tool.ruff.lint.per-file-ignores]` in
-    pyproject.toml, as path predicates rather than a glob so the two can be
-    compared by eye.
-    """
-    return "tests" in path.parts or path.name.startswith("test_") or path.name == "conftest.py"
-
-
-def format_batches(targets: list[Path]) -> list[list[str]]:
-    """`ruff format` argument lists, one per width that applies.
-
-    Returns:
-        A list of argument lists; each is a `--line-length` flag pair (omitted
-        for application code, which takes the project default) followed by the
-        paths it applies to. Empty groups are dropped.
-    """
-    tests = [str(path) for path in targets if path.suffix == ".py" and is_test_path(path)]
-    app = [str(path) for path in targets if path.suffix == ".py" and not is_test_path(path)]
-    batches = []
-    if app:
-        batches.append(app)
-    if tests:
-        batches.append(["--line-length", str(TEST_LINE_LENGTH), *tests])
-    return batches
 
 
 # --------------------------------------------------------------------------
@@ -316,15 +324,26 @@ def sweep_mode(ruff: list[str] | None, *, write: bool) -> int:
         return 1
     targets = [Path(name) for name in listing.stdout.split("\0") if name]
 
-    touched = []
-    for args in format_batches(targets):
-        extra = [] if write else ["--check"]
-        result = _run(*ruff, "format", *extra, "--force-exclude", *args, timeout=300)
-        touched.extend(line.split(": ", 1)[1] for line in result.stdout.splitlines() if line.startswith(("Would reformat: ", "Reformatted ")))
+    extra = [] if write else ["--check"]
+    result = _run(*ruff, "format", *extra, "--force-exclude", *[str(t) for t in targets], timeout=300)
+
+    # ruff format exits 0 when clean, 1 from --check when files would change, and
+    # 2 when it could not run at all (bad config, unreadable file). Treating
+    # anything non-zero as "drift" would be wrong; treating 2 as success would
+    # make this gate pass precisely when it is broken, which is worse.
+    if result.returncode not in (0, 1):
+        print(f"autofix {label}: ruff format could not run (exit {result.returncode})")
+        print(result.stderr.strip() or result.stdout.strip())
+        return 1
 
     if write:
-        print(f"autofix --format: reformatted {len(touched)} file(s)" if touched else "autofix --format: already formatted")
+        # In write mode ruff prints only a summary; there is no per-file line to
+        # count, so echo what it said rather than inventing a number.
+        summary = next((ln for ln in result.stdout.splitlines() if "reformatted" in ln or "unchanged" in ln), "")
+        print(f"autofix --format: {summary or 'nothing to do'}")
         return 0
+
+    touched = [line.split(": ", 1)[1] for line in result.stdout.splitlines() if line.startswith("Would reformat: ")]
     if touched:
         print("\n".join(f"Would reformat: {name}" for name in touched))
         print(f"\n{len(touched)} file(s) would be reformatted. Fix with: bun run format")
@@ -355,6 +374,21 @@ def _stage(paths: list[str]) -> str | None:
     return error
 
 
+def _already_staged() -> set[str] | None:
+    """Paths with staged changes, or None if that cannot be determined.
+
+    During a real commit every path pre-commit passes is staged, so this changes
+    nothing there. It matters for `pre-commit run --all-files` (which is what
+    `bun run pre-commit` and `bun run test:full` invoke): without it the hook
+    would `git add` every file it touched anywhere in the tree, quietly staging
+    work the developer had not chosen to commit.
+    """
+    result = _run("git", "diff", "--cached", "--name-only", "-z", timeout=60)
+    if result.returncode != 0:
+        return None
+    return {name for name in result.stdout.split("\0") if name}
+
+
 def main(argv: list[str]) -> int:
     if "--check" in argv or "--format" in argv:
         return sweep_mode(_ruff_command(), write="--format" in argv)
@@ -376,7 +410,11 @@ def main(argv: list[str]) -> int:
 
     ruff = _ruff_command()
     if ruff is None:
-        print("autofix: ruff not found (is the venv installed?); formatting skipped this run")
+        # Failing loudly rather than passing: `language: system` means this hook
+        # uses whatever is installed, so a missing ruff silently removes the
+        # lint and format gate from every commit until someone notices.
+        print("autofix: ruff not found. Run `uv sync`, or commit with --no-verify if you know why it is missing.")
+        return 1
 
     before = {path: _read(path) for path in targets}
 
@@ -387,13 +425,18 @@ def main(argv: list[str]) -> int:
         # migrations/ file in the repo.
         # Safe fixes only -- --unsafe-fixes can change what the code does.
         _run(*ruff, "check", "--fix", "--exit-zero", "--force-exclude", "--quiet", *python_targets)
-        for args in format_batches(targets):
-            _run(*ruff, "format", "--force-exclude", "--quiet", *args)
+        _run(*ruff, "format", "--force-exclude", "--quiet", *python_targets)
 
     for path in targets:
         fix_whitespace(path)
 
     changed = [str(p) for p in targets if _read(p) != before[p]]
+    staged_already = _already_staged()
+    if staged_already is not None:
+        unstaged_targets = [name for name in changed if name not in staged_already]
+        if unstaged_targets:
+            print(f"autofix: fixed but left unstaged (they had nothing staged): {', '.join(sorted(unstaged_targets))}")
+        changed = [name for name in changed if name in staged_already]
     if changed:
         staged = _stage(changed)
         if staged is not None:
@@ -405,9 +448,6 @@ def main(argv: list[str]) -> int:
         print(
             f"autofix: not touched, because they have unstaged changes and fixing them could cost you that work: {', '.join(sorted(skipped))}",
         )
-
-    if ruff is None:
-        return 0
 
     problems = []
     # Files that were fixed: every safe fix has been applied, so hold them to

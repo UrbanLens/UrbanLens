@@ -17,9 +17,9 @@ import datetime
 from django.core import mail
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType

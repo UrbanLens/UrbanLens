@@ -22,7 +22,6 @@ can crash.
 from __future__ import annotations
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.facts.confidence import _cluster_categorical, _WeightedEvidence
 

@@ -22,9 +22,9 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest import mock
 
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAlias
 from urbanlens.dashboard.models.wiki.model import Wiki

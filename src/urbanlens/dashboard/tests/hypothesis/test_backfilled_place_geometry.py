@@ -37,9 +37,9 @@ from unittest.mock import patch
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.services.places.provisioning import geometry_stale

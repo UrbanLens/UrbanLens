@@ -28,9 +28,9 @@ from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import WikiAlias

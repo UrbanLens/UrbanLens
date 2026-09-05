@@ -9,9 +9,9 @@ import os
 import tempfile
 
 from django.urls import reverse
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.search import SearchForm
 from urbanlens.dashboard.models.custom_fields.model import (

@@ -18,9 +18,9 @@ import datetime
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship

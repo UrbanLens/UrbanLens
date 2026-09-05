@@ -9,7 +9,6 @@ from datetime import UTC, date, datetime, timezone
 import decimal
 
 from hypothesis import strategies as st
-
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.pin.model import PinType

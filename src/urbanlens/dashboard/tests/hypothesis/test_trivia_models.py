@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource

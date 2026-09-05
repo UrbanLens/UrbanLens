@@ -12,9 +12,9 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope, ApiKeyUsageLog
 from urbanlens.dashboard.services.auth.api_keys import (

@@ -17,9 +17,9 @@ from unittest.mock import patch
 
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.settings_form import PrivacySettingsForm
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage

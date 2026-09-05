@@ -6,9 +6,9 @@ from datetime import timedelta
 
 from django.db import IntegrityError
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, ExtractedTag, PlaceExternalTag
 from urbanlens.dashboard.models.place.model import Place

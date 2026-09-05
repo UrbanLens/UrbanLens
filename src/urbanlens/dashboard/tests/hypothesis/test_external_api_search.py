@@ -35,10 +35,10 @@ import os
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import HealthCheck, given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 from oauth2_provider.models import get_access_token_model
 
+from hypothesis import HealthCheck, given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.external_api.serializers_search import parse_result_types

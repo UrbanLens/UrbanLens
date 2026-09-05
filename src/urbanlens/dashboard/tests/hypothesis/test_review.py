@@ -11,9 +11,9 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from hypothesis import HealthCheck, given, settings
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile

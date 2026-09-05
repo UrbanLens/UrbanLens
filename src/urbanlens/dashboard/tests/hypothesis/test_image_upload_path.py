@@ -21,9 +21,9 @@ import tempfile
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
-from hypothesis import given, strategies as st
 from PIL import Image as PILImage
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image, pin_image_upload_path
 

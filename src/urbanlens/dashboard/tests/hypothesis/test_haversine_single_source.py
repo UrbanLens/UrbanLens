@@ -20,8 +20,8 @@ antimeridian, where the formula is naturally correct (it works on the
 from __future__ import annotations
 
 from django.contrib.gis.geos import Point
-from hypothesis import given, settings, strategies as st
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.markup.model import _haversine_meters as markup_meters
 from urbanlens.dashboard.models.profile.model import _haversine_km as profile_km

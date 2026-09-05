@@ -10,7 +10,6 @@ underlying formulas directly rather than through the DB-touching
 from __future__ import annotations
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.facts.model import FactStatus
 from urbanlens.dashboard.services.facts.confidence import (

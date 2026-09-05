@@ -26,9 +26,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.models import User
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.external_api.permissions import (
     OAUTH2_ONLY_SCOPES,

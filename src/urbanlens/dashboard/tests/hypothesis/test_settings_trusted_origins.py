@@ -18,8 +18,8 @@ and junk entries are skipped rather than turned into malformed origins.
 from __future__ import annotations
 
 from django.conf import settings as django_settings
-from hypothesis import given, strategies as st
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens.settings.base import _derive_trusted_origins, _origin_from_url
 

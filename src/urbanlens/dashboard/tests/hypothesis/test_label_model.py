@@ -12,9 +12,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from django.contrib.auth.models import User
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.model import (

@@ -15,9 +15,9 @@ from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.utils import timezone
-from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.external_api.views import LOCATION_SEARCH_SOURCES, parse_search_sources
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope

@@ -17,9 +17,9 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import assume, given, strategies as st
 from model_bakery import baker
 
+from hypothesis import assume, given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
 from urbanlens.dashboard.models.site_settings.model import SiteSettings

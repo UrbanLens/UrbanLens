@@ -22,9 +22,9 @@ from unittest.mock import MagicMock, patch
 
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.achievements.model import UserAchievement

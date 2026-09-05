@@ -14,8 +14,8 @@ outside it. Two mechanisms hold that up, and this module tests both:
 from __future__ import annotations
 
 from django.db.models import FileField, ImageField
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.checks import check_media_authorizers
 from urbanlens.dashboard.models.images.model import Image, pin_image_thumbnail_path, pin_image_upload_path

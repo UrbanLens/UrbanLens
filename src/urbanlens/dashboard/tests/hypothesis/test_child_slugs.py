@@ -8,9 +8,9 @@ truncation are pure functions (SimpleTestCase); minting on save is a TestCase.
 from __future__ import annotations
 
 from django.utils.text import slugify
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
 from urbanlens.dashboard.models.location.model import Location

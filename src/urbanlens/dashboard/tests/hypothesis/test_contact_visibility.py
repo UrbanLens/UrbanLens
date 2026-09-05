@@ -10,9 +10,9 @@ Covers:
 from __future__ import annotations
 
 from django.urls import reverse
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.settings_form import ContactMethodsForm, PrivacySettingsForm
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission

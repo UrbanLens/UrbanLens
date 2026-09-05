@@ -8,7 +8,6 @@ unreachable).
 from __future__ import annotations
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.consensus.points import (
     MANUAL_EDIT_EXTRA_POINTS,

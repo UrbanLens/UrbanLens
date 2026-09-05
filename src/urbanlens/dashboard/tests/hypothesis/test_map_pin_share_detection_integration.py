@@ -22,9 +22,9 @@ from django.contrib.auth.models import User
 from django.contrib.gis.geos import Point
 from django.test import override_settings
 from django.urls import reverse
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location

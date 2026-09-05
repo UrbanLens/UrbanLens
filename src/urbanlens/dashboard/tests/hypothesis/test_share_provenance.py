@@ -31,9 +31,9 @@ from unittest import mock
 from django.contrib.auth.models import User
 from django.db import DatabaseError, transaction
 from django.urls import reverse
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_sharing import _create_pin_from_share
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus

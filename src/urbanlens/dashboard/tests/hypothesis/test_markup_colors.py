@@ -13,9 +13,9 @@ Model tests require the database; the helper tests do not.
 from __future__ import annotations
 
 from django.test import SimpleTestCase
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup
 from urbanlens.dashboard.services.core.colors import sanitize_hex_color, sanitize_optional_color

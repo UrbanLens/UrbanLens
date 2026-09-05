@@ -9,7 +9,6 @@ import os
 from unittest.mock import patch
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
 from urbanlens.UrbanLens.environments.dev import Development

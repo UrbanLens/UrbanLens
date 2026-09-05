@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from unittest import mock
 
+from urbanlens_ai.schema import InferenceResponse, TextBlock, ToolUseBlock, Usage
+
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.ai.anthropic import AnthropicGateway
 from urbanlens.dashboard.services.ai.inference_client import InferenceError, ToolSpec
-from urbanlens_ai.schema import InferenceResponse, TextBlock, ToolUseBlock, Usage
 
 _TOOLS = [
     ToolSpec(

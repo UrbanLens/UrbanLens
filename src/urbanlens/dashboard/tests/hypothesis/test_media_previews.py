@@ -15,8 +15,8 @@ from unittest.mock import patch
 
 from django.test import override_settings
 from django.urls import reverse
-from hypothesis import HealthCheck, given, settings, strategies as st
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.media.previews import (
     gallery_thumb_url,

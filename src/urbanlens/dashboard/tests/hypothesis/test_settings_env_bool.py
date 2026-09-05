@@ -14,8 +14,8 @@ from __future__ import annotations
 from unittest import mock
 
 from django.test import SimpleTestCase
-from hypothesis import given, strategies as st
 
+from hypothesis import given, strategies as st
 from urbanlens.UrbanLens.settings._env import env_bool
 
 _TRUTHY = ["1", "true", "True", "TRUE", "t", "yes", "Yes", "y", "on", "ON", " true "]

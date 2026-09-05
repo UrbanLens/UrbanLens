@@ -15,7 +15,6 @@ from typing import ClassVar
 from unittest.mock import patch
 
 from hypothesis import given, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.plugins import UrbanLensPlugin, plugin_registry
 from urbanlens.dashboard.plugins.hooks import HookRegistry

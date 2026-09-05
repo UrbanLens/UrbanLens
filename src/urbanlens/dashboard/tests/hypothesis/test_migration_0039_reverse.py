@@ -16,8 +16,8 @@ import importlib
 from string import printable
 
 from django.apps import apps
-from hypothesis import given, strategies as st
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.fields import EncryptedTextField
 

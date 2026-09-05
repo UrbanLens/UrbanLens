@@ -7,9 +7,9 @@ from unittest.mock import MagicMock, patch
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.urls import reverse
-from hypothesis import given, settings, strategies as st
 import pytest
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.auth.passphrases import generate_passphrases
 from urbanlens.dashboard.validators.password import ComplexityValidator, HaveIBeenPwnedValidator

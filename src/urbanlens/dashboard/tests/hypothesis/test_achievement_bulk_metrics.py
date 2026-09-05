@@ -18,9 +18,9 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from django.utils import timezone
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.achievements.meta import ActivityKind, streak_metric_key
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType

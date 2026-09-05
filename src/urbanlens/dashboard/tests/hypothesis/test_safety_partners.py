@@ -15,9 +15,9 @@ from django.contrib.auth.models import AnonymousUser
 from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer

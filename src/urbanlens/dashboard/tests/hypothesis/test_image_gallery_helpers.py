@@ -15,8 +15,8 @@ import io
 from unittest.mock import MagicMock, patch
 
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.media.images import (
     _dms_to_decimal,

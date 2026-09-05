@@ -6,7 +6,6 @@ No database access - all tests exercise pure Python logic.
 from __future__ import annotations
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
 from urbanlens.dashboard.services.ai.message import AssistantMessage, MessageQueue, SystemMessage, UserMessage

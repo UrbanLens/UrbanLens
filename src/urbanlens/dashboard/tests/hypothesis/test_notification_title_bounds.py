@@ -28,9 +28,9 @@ from __future__ import annotations
 import datetime
 
 from django.utils import timezone
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.achievements.model import Achievement
 from urbanlens.dashboard.models.notifications.model import NotificationLog

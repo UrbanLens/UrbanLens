@@ -38,11 +38,11 @@ from django.core.cache import cache
 from django.http import Http404
 from django.test import override_settings
 from django.urls import path, reverse
-from hypothesis import given, strategies as st
 from model_bakery import baker
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.external_api.errors import INVALID_REQUEST_MESSAGE, NOT_FOUND_BODY, uniform_exception_handler
 from urbanlens.dashboard.external_api.mixins import DualAuthJsonView

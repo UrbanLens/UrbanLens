@@ -35,9 +35,9 @@ from typing import Any
 from uuid import uuid4
 
 from django.contrib.auth.models import User
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.external_api.serializers import PinUpdateSerializer

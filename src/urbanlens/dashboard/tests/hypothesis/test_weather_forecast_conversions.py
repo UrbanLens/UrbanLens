@@ -13,7 +13,6 @@ from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import Mock
 
 from hypothesis import given, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.weather.forecast import (
     owm_item_to_slot,

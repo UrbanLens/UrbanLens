@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 import pytest
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription

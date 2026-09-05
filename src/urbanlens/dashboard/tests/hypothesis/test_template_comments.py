@@ -17,7 +17,6 @@ import pathlib
 import sys
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 _CHECKER_PATH = pathlib.Path(__file__).resolve().parents[5] / "bin" / "check_template_comments.py"

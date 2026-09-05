@@ -11,7 +11,6 @@ Covers:
 from __future__ import annotations
 
 from hypothesis import given, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name

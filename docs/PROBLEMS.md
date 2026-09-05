@@ -19,10 +19,14 @@ opens it.
 
 **Citing an entry from code:** name the id *and* enough words to survive a
 retitle — `see P12 ("forms post every field") in docs/PROBLEMS.md`. A bare
-`see docs/PROBLEMS.md` costs the reader a full-text search of a 3,000-line file,
-and in practice they do not do it. There are 33 such bare references in `src/`.
-Cite **every** relevant entry, not the nearest one. Ids and dates are stable
-here; line numbers are not.
+`see docs/PROBLEMS.md` costs the reader a full-text search of a 3,500-line file,
+and in practice they do not do it. Of 76 references in `src/`, 47 carry no date,
+quoted phrase or symbol to land on. Cite **every** relevant entry, not the
+nearest one.
+
+Ids and dates are stable here; line numbers are not. A date-anchored citation
+still works, but check `archive/PROBLEMS-ARCHIVE.md` too - an entry that was
+open when it was cited may since have been resolved and moved there.
 
 ## P1 — VirusTotal scanning is hash-lookup-only, so a file VirusTotal has never seen falls back to ClamAV forever
 
@@ -1118,9 +1122,11 @@ reporter considers too slow to refresh.
 
 ---
 
-## P14 — Authenticated media gate - residual per-family risk (2026-07-23)
+## P14 — Custom pin and label icons are readable by any authenticated user, and replaced icons strand files
 
 `id: P14` · `status: open` · `updated: 2026-07-23`
+
+Previously titled "Authenticated media gate - residual per-family risk (2026-07-23)".
 
 `/media/...` is now served through `dashboard.controllers.media.MediaGateView` (nginx `location
 /media/` proxies to Django; authorized responses hand back to the `internal`-only
@@ -2987,9 +2993,11 @@ do and don't send CORP.
 `cross-origin-embedder-policy` is the fourth thing this template flagged and
 is not fixe
 
-## P57 — Test-quality audit follow-ups (2026-08-29)
+## P57 — The test-quality audit left ~15 findings unfixed, from an unpatched `connect_ex` guard to untested views
 
 `id: P57` · `status: open` · `updated: 2026-08-29`
+
+Previously titled "Test-quality audit follow-ups (2026-08-29)".
 
 Found while auditing existing unit tests for real positive/negative coverage (see
 `docs/notes/ai/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per

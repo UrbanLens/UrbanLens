@@ -17,7 +17,6 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 _SCRIPT = Path(__file__).resolve().parents[5] / "bin" / "run_codeql.py"

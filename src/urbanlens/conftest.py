@@ -90,9 +90,7 @@ def _configure_hypothesis() -> None:
             probe.unlink()
             database = DirectoryBasedExampleDatabase(str(directory))
         except OSError:
-            logger.warning(
-                "Hypothesis example directory %s is not writable; running without a stored example database", directory
-            )
+            logger.warning("Hypothesis example directory %s is not writable; running without a stored example database", directory)
             database = InMemoryExampleDatabase()
 
     hypothesis_settings.register_profile("urbanlens", database=database)

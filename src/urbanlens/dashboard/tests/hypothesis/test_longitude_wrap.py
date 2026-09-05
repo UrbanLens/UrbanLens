@@ -17,9 +17,9 @@ would be far worse than the bug.
 
 from __future__ import annotations
 
-from hypothesis import given, settings, strategies as st
 import pytest
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.geo.longitude import circular_mean_longitude, longitude_delta, normalize_longitude
 

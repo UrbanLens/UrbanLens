@@ -13,9 +13,9 @@ from unittest import mock
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.test import override_settings
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin

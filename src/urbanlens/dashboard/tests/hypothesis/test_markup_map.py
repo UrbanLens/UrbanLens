@@ -19,9 +19,9 @@ import json
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateformat import format as format_date
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 from urbanlens.dashboard.services.map.map_snapshot import (

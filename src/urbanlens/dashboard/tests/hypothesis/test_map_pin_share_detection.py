@@ -11,8 +11,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from django.contrib.gis.geos import Point
-from hypothesis import given, settings, strategies as st
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.sharing.map_pin_share_detection import (
     arrow_points_toward as _arrow_points_toward,

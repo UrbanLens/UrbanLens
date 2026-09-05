@@ -13,9 +13,9 @@ from http import HTTPStatus
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.custom_fields.model import (

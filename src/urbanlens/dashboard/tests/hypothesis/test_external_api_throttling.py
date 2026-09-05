@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.test import SimpleTestCase
-from hypothesis import given, strategies as st
 
+from hypothesis import given, strategies as st
 from urbanlens.dashboard.external_api.throttling import (
     TIER_READ,
     TIER_WRITE,

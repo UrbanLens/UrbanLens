@@ -14,7 +14,6 @@ from typing import Any
 from unittest.mock import MagicMock, PropertyMock, patch
 
 from hypothesis import given, settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.tests.hypothesis.strategies import (

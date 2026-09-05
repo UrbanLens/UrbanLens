@@ -13,7 +13,6 @@ declaration, and Google MyMaps always nests Placemarks inside a Folder):
 from __future__ import annotations
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 

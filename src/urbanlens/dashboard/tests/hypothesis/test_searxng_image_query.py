@@ -12,7 +12,6 @@ a general image engine reads as required, disambiguating clauses. These cover:
 from __future__ import annotations
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.plugins.builtin.searxng_images import (
     SUBJECT_TERMS,

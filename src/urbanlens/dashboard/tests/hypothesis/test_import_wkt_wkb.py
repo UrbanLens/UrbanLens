@@ -11,11 +11,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hypothesis import given, settings as hyp_settings, strategies as st
 import shapely.geometry
 import shapely.wkb
 import shapely.wkt
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
 

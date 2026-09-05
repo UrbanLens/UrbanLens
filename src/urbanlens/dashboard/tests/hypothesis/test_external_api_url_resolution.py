@@ -32,8 +32,8 @@ from typing import TYPE_CHECKING, Final
 from django.http import HttpRequest, HttpResponse
 from django.urls import NoReverseMatch, Resolver404, path, resolve, reverse
 from django.urls.resolvers import RegexPattern, URLResolver
-from hypothesis import given, settings as hyp_settings, strategies as st
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.external_api import urls as external_api_urls
 from urbanlens.dashboard.external_api.urls import order_by_specificity

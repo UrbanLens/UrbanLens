@@ -19,9 +19,9 @@ from __future__ import annotations
 from datetime import timedelta
 
 from django.contrib.auth.models import User
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.location.model import Location

@@ -8,7 +8,6 @@ these tests are about what it must *not* swallow.
 from __future__ import annotations
 
 from hypothesis import given, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.global_search.operators import OPERATORS, lookup, scan, suggestions
 

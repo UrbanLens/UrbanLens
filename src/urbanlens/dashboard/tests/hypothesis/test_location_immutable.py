@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 

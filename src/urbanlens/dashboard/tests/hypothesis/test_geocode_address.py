@@ -16,9 +16,9 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 
 _db_settings = settings(

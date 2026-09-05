@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 from django.utils import timezone
-from hypothesis import given, settings, strategies as st
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.global_search.parser import parse_query
 

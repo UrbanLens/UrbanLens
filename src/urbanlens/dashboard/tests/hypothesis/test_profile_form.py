@@ -9,9 +9,9 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 
 from django import forms as django_forms
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.profile_form import (
     DiscordHandleForm,

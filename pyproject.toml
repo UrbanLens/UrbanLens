@@ -209,6 +209,12 @@ ignore = [
     "N806",    # variable should be lowercase
 ]
 
+# Reported, never auto-fixed. RUF100's fix deletes the whole trailing comment,
+# so `# noqa: S301 - round-tripping our own value` loses the explanation as well
+# as the directive. A stale suppression is worth knowing about; silently
+# discarding the sentence that says why it was there is not.
+unfixable = ["RUF100"]
+
 [tool.ruff.lint.per-file-ignores]
 # Test code is linted, but only for mechanical hygiene - import order, quote
 # style, dead noqa, modernisation. A test is allowed to pass a wrong type on
@@ -381,6 +387,15 @@ exclude = [
     "docs/",
     "downloads/",
     "\\.github/",
+    # Dead legacy scaffolding: nothing references it, and it cannot import -
+    # `Settings.get_logger` at module scope reads `src/bin/conf/settings.yaml`,
+    # a directory that does not exist. `check_untyped_defs` reports two real
+    # defects in its `main()` (an Enum subclassed after it had members, and
+    # `Settings(...)` called with an argument it does not take), neither of
+    # which can be verified by running the file. Recorded as P73 rather than
+    # fixed blind. `src/bin/db.py` next to it IS live (`bun run db`) and stays
+    # checked.
+    "src/bin/app\\.py",
 ]
 # Off, i.e. mypy's own default: `def f(x: int = None)` should not type-check.
 # Measured at zero new errors, so this only guards future code.

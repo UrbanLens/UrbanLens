@@ -20,9 +20,9 @@ import decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin

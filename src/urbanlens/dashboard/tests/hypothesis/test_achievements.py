@@ -7,10 +7,10 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.urls import reverse
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 import pytest
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.achievements.meta import ActivityKind, streak_metric_key

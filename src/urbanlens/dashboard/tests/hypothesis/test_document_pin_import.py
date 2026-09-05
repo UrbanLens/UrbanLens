@@ -12,9 +12,9 @@ import os
 import tempfile
 from unittest import mock
 
-from hypothesis import given, settings as hyp_settings, strategies as st
 import pytest
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature

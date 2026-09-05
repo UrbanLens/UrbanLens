@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.location.model import Location

@@ -11,9 +11,9 @@ from __future__ import annotations
 import datetime
 
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource

@@ -10,7 +10,6 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 
 from hypothesis import given, settings as hyp_settings, strategies as st
-
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.admin.backups import backup_files, collect_backup_stats, scheduled_backup_due

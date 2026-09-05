@@ -15,8 +15,9 @@ from typing import TYPE_CHECKING
 import unittest
 
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
+
+from hypothesis import HealthCheck, given, settings, strategies as st
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile

@@ -16,9 +16,9 @@ from unittest.mock import patch
 
 from celery.exceptions import SoftTimeLimitExceeded
 from django.db.models import Q
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit

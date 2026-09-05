@@ -9,8 +9,8 @@ would catch a regression there.
 from __future__ import annotations
 
 from django.test import SimpleTestCase
-from hypothesis import HealthCheck, given, settings, strategies as st
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.dashboard.services.device_scan.mac_address import InvalidMacAddressError, normalize_mac_address
 
 _HEX_OCTET = st.integers(min_value=0, max_value=255).map(lambda n: f"{n:02x}")

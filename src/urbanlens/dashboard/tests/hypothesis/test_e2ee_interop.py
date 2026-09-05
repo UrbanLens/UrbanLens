@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import base64
 
-from hypothesis import HealthCheck, given, settings, strategies as st
 import nacl.encoding
 import nacl.hash
 import nacl.public
@@ -28,6 +27,7 @@ import nacl.pwhash
 import nacl.secret
 import nacl.utils
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 # Mirrors KDF_OPSLIMIT / KDF_MEMLIMIT in frontend/ts/shared/e2ee-crypto.ts and

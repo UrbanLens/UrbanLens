@@ -16,9 +16,9 @@ import io
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
 from django.utils import timezone
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.images import JPEG_BYTES
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.visits import _sync_visit_photos, _visit_dialog_context

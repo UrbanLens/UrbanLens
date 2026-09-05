@@ -20,9 +20,9 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location

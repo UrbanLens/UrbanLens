@@ -13,11 +13,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from django.test import override_settings
-from hypothesis import given, strategies as st
 from model_bakery import baker
 from pydantic import BaseModel
 import pytest
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.services.ai.tools.registry import (

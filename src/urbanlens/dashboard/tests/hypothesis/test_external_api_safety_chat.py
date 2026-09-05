@@ -29,9 +29,9 @@ from django.contrib.auth.models import User
 from django.test import SimpleTestCase
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.external_api.serializers_safety_chat import SafetyCheckinMessageCreateSerializer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope

@@ -23,9 +23,9 @@ from types import SimpleNamespace
 from unittest import mock
 
 from django.test import override_settings
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.labels.redata_labels_gateway import RedataLabelsGateway
 from urbanlens.dashboard.services.apis.locations.redata_routing_gateway import RedataRoutingGateway

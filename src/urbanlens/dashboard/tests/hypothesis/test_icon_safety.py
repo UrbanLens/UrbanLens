@@ -16,9 +16,9 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.core.icons import MAX_ICON_LENGTH, clean_icon
 from urbanlens.dashboard.services.pins.pin_edit import apply_pin_edits

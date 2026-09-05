@@ -13,9 +13,9 @@ from types import SimpleNamespace
 from django.contrib.auth.models import User
 from django.test import Client, RequestFactory
 from django.urls import reverse
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.safety import SafetySettingsView, _contact_display_label
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus

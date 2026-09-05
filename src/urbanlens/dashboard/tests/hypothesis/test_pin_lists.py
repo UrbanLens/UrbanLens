@@ -29,9 +29,9 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers import pin_lists

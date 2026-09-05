@@ -20,10 +20,10 @@ from django.contrib.auth.models import User
 from django.db import connection
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, strategies as st
 from model_bakery import baker
 import pytest
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.calendar_sync.model import (
     CalendarSyncDirection,

@@ -14,9 +14,9 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.urls import reverse
-from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.link_extraction.model import LinkExtraction, LinkExtractionStatus

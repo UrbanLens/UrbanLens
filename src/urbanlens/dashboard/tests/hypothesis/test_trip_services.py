@@ -21,9 +21,9 @@ import itertools
 
 from django.contrib.auth.models import User
 from django.test import SimpleTestCase
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice

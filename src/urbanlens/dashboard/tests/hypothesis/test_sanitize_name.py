@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import unicodedata
 
-from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.locations.naming import sanitize_name
 

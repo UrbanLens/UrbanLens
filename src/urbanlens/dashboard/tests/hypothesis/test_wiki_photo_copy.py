@@ -15,9 +15,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.middleware.csrf import get_token
 from django.test import Client, RequestFactory
 from django.urls import reverse
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.location.model import Location

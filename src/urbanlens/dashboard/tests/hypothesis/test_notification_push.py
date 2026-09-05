@@ -15,9 +15,9 @@ from __future__ import annotations
 import re
 from unittest.mock import patch
 
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.notifications import signals as push_signals
 from urbanlens.dashboard.models.notifications.model import NotificationLog

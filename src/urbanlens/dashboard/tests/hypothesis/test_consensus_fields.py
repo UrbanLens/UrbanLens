@@ -9,8 +9,8 @@ the DB-backed session tests instead).
 from __future__ import annotations
 
 from django.contrib.gis.geos import Point
-from hypothesis import given, settings, strategies as st
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind
 from urbanlens.dashboard.services.consensus.fields import AGREEMENT_DISTANCE_METERS, all_kinds, get_strategy

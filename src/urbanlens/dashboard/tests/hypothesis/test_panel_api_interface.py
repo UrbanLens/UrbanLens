@@ -25,9 +25,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.models import User
-from hypothesis import given, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.subscriptions import SiteFeature

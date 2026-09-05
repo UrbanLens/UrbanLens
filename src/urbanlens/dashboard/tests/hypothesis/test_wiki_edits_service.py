@@ -14,9 +14,9 @@ from __future__ import annotations
 from datetime import date
 
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.profile.model import Profile

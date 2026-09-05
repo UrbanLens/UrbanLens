@@ -8,9 +8,9 @@ Covers:
 
 from __future__ import annotations
 
-from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.settings_form import StyleSettingsForm
 from urbanlens.dashboard.models.profile.meta import DistanceUnit

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from unittest import mock
 
-from hypothesis import given, settings as hyp_settings, strategies as st
 from kombu.exceptions import KombuError
 
+from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.core.celery import (
     PROGRESS_STATE,

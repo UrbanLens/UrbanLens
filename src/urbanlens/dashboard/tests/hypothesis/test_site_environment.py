@@ -6,9 +6,9 @@ import os
 from unittest.mock import patch
 
 from django.contrib.auth.models import AnonymousUser, User
-from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.site_settings import EnvironmentOverrideChoice, SiteSettings
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
