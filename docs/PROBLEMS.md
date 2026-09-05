@@ -820,15 +820,18 @@ raw `Response` semantics (201-vs-200, `redirected`).
   selectable with checkboxes, a filter bar and Edit buttons, but no `OrgTabManager` is built for
   it, `ORG_FILTER_NAMESPACES`/`TAB_FILTER_NS` omit it, and the consolidated dialog opener has no
   `media-label-edit-dialog-body` case, so Edit swaps a form into a dialog nothing opens.
-  Separately, `_organize_label_card.html:77` references `peopleMergeSingle`, which is defined
-  nowhere in the codebase.
+  ~~Separately, `_organize_label_card.html:77` references `peopleMergeSingle`, which is defined
+  nowhere in the codebase.~~ Fixed: the merge button is an `hx-get` at `merge_url` now, so the
+  dangling handler name is gone rather than merely still undefined.
 - ~~`shared/organize-filter-engine.ts:188` - `countVisibleCards` tests `card.style.display`, but
   tree view sets `display` on the `.tag-tree-item` *wrapper*, so cross-tab match counts and the
   "N categories also match" footer count every card as visible. It duplicates `getOrgVisibleCards`
   (:99), which gets it right.~~ Fixed 2026-08-22: `countVisibleCards` now delegates to
   `getOrgVisibleCards` instead of re-deriving the check.
-- `shared/map-image-overlays.ts:209` - corner drag never handles `pointercancel`; an interrupted
-  touch gesture leaves `map.dragging` disabled permanently.
+- ~~`shared/map-image-overlays.ts:209` - corner drag never handles `pointercancel`; an interrupted
+  touch gesture leaves `map.dragging` disabled permanently.~~ Fixed: the release handler is bound to
+  `pointercancel` and `lostpointercapture` as well as `pointerup`, and is idempotent because a cancel
+  is sometimes followed by a capture-loss event for the same gesture.
 - ~~`entries/spotguessr.ts:1491` - `submitGuess` has no in-flight guard, so a double-click posts
   twice and double-counts the session score~~ Fixed 2026-08-22: disables the submit button for the
   duration of the request, re-enabling only on failure. **Still open**: `:840 reportRoundTimeout`
@@ -2213,34 +2216,43 @@ Options:
 Worth deciding rather than leaving implicit, because the app currently promises "Message deleted" in
 one surface while quoting the message in another.
 
-## P49 — `npm run git-squash` is a force-deploy with none of `deploy.sh`'s dirty-tree guards
+## P49 — Doc citations drift silently, and a pin-suggestion race can still duplicate a row
 
-`id: P49` · `status: open` · `updated: 2026-08-17`
+`id: P49` · `status: open` · `updated: 2026-09-05`
 
-Previously titled "`npm run git-squash` is a force-deploy with none of `deploy.sh`'s guards (minor)".
+Previously titled "`npm run git-squash` is a force-deploy with none of `deploy.sh`'s dirty-tree
+guards", and before that "... none of `deploy.sh`'s guards (minor)". That half is fixed; what is
+left is the two sub-items below.
 
-Noted 2026-08-17 while confirming that `gunicorn.conf.py` is actually loaded. `package.json` defines:
+### `npm run git-squash` (noted 2026-08-17) - fixed 2026-09-05 by deleting it
+
+`package.json` defined:
 
 ```
 "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start"
 ```
 
-Two things about it, neither urgent:
+The original entry called this "neither urgent" and left it, on the grounds that the behaviour might
+be exactly what its author wanted at a terminal and `bin/deploy.sh` was the safe path. Both halves of
+that turned out to be wrong.
 
-1. **It hard-resets to `origin/main` with no dirty-tree check.** `bin/deploy.sh` refuses to deploy
-   when the working tree has uncommitted changes, and says so; this one discards them silently. Same
-   repository, same operation, and the safety exists in one place only - the pattern already recorded
-   for `deploy.sh` versus `clone_prod_to_staging.sh`.
-2. **The `&&` chain aborts if gunicorn is not running.** `pkill` exits non-zero when nothing matched,
-   so on a host where the server is already stopped the script fetches nothing, resets nothing and
-   starts nothing. That direction fails safe, but silently, and the name gives no hint that it stops.
+`bin/deploy.sh` is not in this repository. It moved to the sibling `infrastructure` repo in
+`ff332e484`, along with the rest of the host-side ops tooling, so the comparison the entry drew was
+against something that had already left - and the script it compared was the last of that tooling
+still here.
 
-Also worth noting the name: it neither squashes nor touches git history - it is a force-redeploy. A
-reader reaching for it expecting a history operation gets a hard reset and a server restart.
+And `pkill gunicorn` matches by process name across the entire host, not within a project. Run on
+this development box it matches five gunicorn masters, every one of them belonging to a *different*
+application; on a host running the compose stack it reaches the ones inside the containers, because
+container processes are visible in the host's PID namespace. The remaining `&&` chain then hard-resets
+whatever checkout it happens to be run from - a tree where, per `CLAUDE.local.md`, more than one agent
+session works at once. The failure the entry did note (a non-zero `pkill` aborting the chain when
+nothing matched) is what had been hiding the rest: on a host with no gunicorn at all it stopped
+harmlessly at the first command, which is not the same as being safe.
 
-Not changed: it is a convenience script in `package.json`, its behaviour may be exactly what its
-author wants at a terminal, and `bin/deploy.sh` already exists as the safe path. Recorded so the
-difference between the two is a choice rather than a surprise.
+Deleted rather than guarded. Nothing referenced it, `infrastructure/bin/deploy.sh` does the same job
+with a lock, a branch check, a dirty-tree refusal and a health wait, and re-adding a host-side deploy
+script here would undo the move that `ff332e484` made deliberately.
 
 ### Pin suggestion `hit_count` is a read-modify-write (noted 2026-08-17) - lost-increment half fixed 2026-08-25
 
@@ -2264,15 +2276,16 @@ damage is a duplicate low-stakes suggestion row rather than lost money or a disc
 period.
 
 
-### Fourteen documentation citations still point at the wrong line (noted 2026-08-17)
+### Documentation citations still point at the wrong line (noted 2026-08-17)
 
 `bin/check_doc_line_refs.py --report-drift` lists them. They survived the 2026-08-17 sweep because
 they can't be repaired mechanically, and they split into two kinds:
 
 - **The line moved, but the anchor isn't a definition.** `settings/base.py:343` for
-  `hard_delete_expired_direct_messages` (now line 374) is cited via its entry in the beat-schedule
-  dict, and `tasks.py:1629` for `RUN_LOCK_CACHE_KEY` via an import. Renumbering these is safe but
-  needs a human to confirm which usage was meant.
+  `hard_delete_expired_direct_messages` is cited via its entry in the beat-schedule dict, and
+  `tasks.py:1629` for `RUN_LOCK_CACHE_KEY` via an import. Renumbering these is safe but needs a
+  human to confirm which usage was meant - and the number moves faster than the repair does: this
+  entry recorded 374 as the answer for the first one, which is now 552.
 - **The symbol no longer exists at all.** `controllers/trip.py` line 135 cites `_mask_trip_identities`
   and `services/ai/anthropic.py` line 117 cites `send_prompt`/`send_prompt_list`; neither name appears
   anywhere in the tree now. (Written without the usual `file.py:line` punctuation on purpose: these
@@ -2283,6 +2296,21 @@ they can't be repaired mechanically, and they split into two kinds:
 The eight that *were* mechanically provable (anchored on a `def`/`class` the tool could locate
 uniquely) are fixed, and `check_doc_line_refs.py` now runs in CI to keep past-end-of-file citations
 at zero.
+
+The "fourteen" in this entry's original title was never a count of what needs repairing, and the
+number the report prints is not one either. Re-measured 2026-09-05 at 569 suspected drifts, of which
+**29 are in `PROBLEMS.md`** - the live file someone acts on. The rest are in `archive/`, `audits/`,
+`reports/` and `designs/`, which record what was true on a date; renumbering one of those would make
+it cite code that did not exist when it was written, so the right number of repairs there is zero.
+The same argument applies one sentence wide, to a citation inside `~~struck~~` text, and the drift
+report now skips those (the past-end-of-file check still covers them - being unfollowable is a
+different problem from being out of date).
+
+Two shapes of false positive were in the count and are gone: the report used to pair a citation with
+whatever backticked names shared its *line*, which on wrapped markdown is usually not its subject,
+and it could not see an anchor written `plan_merge_conflicts()` or `MediaKind.VIDEO` at all. Reading
+the whole wrapped block instead surfaced real drift the old version missed - including this entry's
+own worked example.
 
 ## P50 — `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order
 
