@@ -1,4 +1,7 @@
+import atexit
 import os
+import shutil
+import tempfile
 
 from urbanlens.UrbanLens.settings._gdal_windows import local_windows_gdal_overrides
 from urbanlens.UrbanLens.settings.app import settings as _app_settings
@@ -70,6 +73,50 @@ _app_settings.clamav_enabled = False
 # live network calls. Tests that exercise the VirusTotal path patch this back
 # explicitly - see services.security.virustotal_scan.
 _app_settings.virustotal_api_key = None
+
+# Same reasoning, for every LLM provider credential. This is the structural
+# guarantee that a test cannot spend real provider tokens, and it is deliberately
+# unconditional and set HERE rather than in a pytest fixture:
+# `.github/workflows/ci.yml` runs `manage.py test`, not pytest, so nothing in
+# conftest.py is loaded there - and `docs/AI_PIPELINE.md` explicitly sanctions a
+# local non-Docker checkout keeping real keys in `.env` for LocalInferenceClient,
+# which is exactly the machine this has to protect.
+#
+# Pinned to a placeholder rather than None on purpose: `providers.build_adapter`
+# raises ProviderError on a falsy key *before* any adapter is constructed, so
+# None would make every provider path fail with "no key configured" instead of
+# exercising the adapter the test means to exercise. A test that wants a real
+# provider call mocked patches the adapter or the inference client, as the suite
+# already does throughout.
+_app_settings.anthropic_api_key = "test-placeholder-not-a-key"
+_app_settings.openai_api_key = "test-placeholder-not-a-key"
+_app_settings.cloudflare_ai_api_key = "test-placeholder-not-a-key"
+_app_settings.huggingface_ai_api_key = None
+# A policy-valid Cloudflare host carrying no account id. Real endpoints embed the
+# account id in the path, and `Dockerfile`'s `COPY . /app` bakes the test tree
+# into every image - so a real one reaching a test artifact would ship with it.
+_app_settings.cloudflare_worker_ai_endpoint = "https://api.cloudflare.com/client/v4/accounts/TESTACCOUNT/ai/run"
+# Never let the suite address a real ai-inference service; get_inference_client()
+# falls back to LocalInferenceClient, which the suite mocks at the adapter.
+_app_settings.ai_inference_url = None
+
+# A throwaway MEDIA_ROOT, removed when the process exits.
+#
+# base.py points MEDIA_ROOT at src/urbanlens/media - the directory a local dev
+# server writes real uploads into - and every fixture that saves a file wrote
+# there, because TestCase rolls the database back between tests but not the
+# filesystem. That debris is not inert: it made
+# test_pin_privacy_from_a_wiki.PrivatePhotoBytesTests fail in proportion to how
+# much had built up (measured 3 failures in 4 runs against a polluted tree,
+# 0 in 12 once isolated).
+#
+# Set here rather than only in a pytest fixture because CI runs
+# `manage.py test` (.github/workflows/ci.yml), which never loads conftest.py.
+# Settings are imported once per test process, so this is one directory per
+# process - including each xdist worker - and atexit removes it either way.
+_test_media_root = tempfile.mkdtemp(prefix="urbanlens-test-media-")
+atexit.register(lambda: shutil.rmtree(_test_media_root, ignore_errors=True))
+MEDIA_ROOT = _test_media_root
 
 # The suite calls the parsers directly - that is how they are unit tested - so
 # the sandbox boundary is not enforced here. The tests that verify the boundary
