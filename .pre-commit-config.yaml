@@ -8,7 +8,12 @@ default_install_hook_types: [pre-commit]
 # - not check-yaml, not mixed-line-ending. That is how it was silently committed
 # with CRLF endings. Note `exclude` below still drops .github/ and .devcontainer/
 # (anything starting with `.` or `_`), so the workflow files remain unchecked.
-files: '^(.+\.(py|ts|js|tsx|jsx|yaml|yml|toml|html|txt))$'
+#
+# `json` for the same reason, found the same way: check-json was registered
+# below and this list did not admit a single file it could read, so it had never
+# run. Its first live run failed on a file that had been malformed the whole
+# time. `sh` because bin/ is 14 shell scripts that nothing was reading either.
+files: '^(.+\.(py|ts|js|tsx|jsx|json|sh|yaml|yml|toml|html|txt))$'
 exclude: '(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)'
 
 # AUTO-FIX
@@ -40,6 +45,9 @@ repos:
     -   id: check-added-large-files
     -   id: check-ast
     -   id: check-json
+        # pyright's config format is JSONC - the `//` comments in this one are
+        # deliberate and pyright reads them. check-json only parses strict JSON.
+        exclude: '^pyrightconfig\.json$'
     -   id: check-case-conflict
     -   id: check-merge-conflict
     -   id: check-toml
