@@ -176,62 +176,55 @@ def stashed_paths() -> tuple[bool, set[str]]:
                 continue
         elif not (now - PATCH_WINDOW_SECONDS <= stamp <= now + 60):
             continue
-        try:
-            body = patch.read_text(errors="replace")
-        except OSError:
+        found = _patch_paths(patch)
+        if not found:
+            # A patch that exists but yields nothing is not "nothing was
+            # stashed" - it is a parse this code cannot vouch for, and the
+            # difference decides whether a file gets rewritten.
             uncertain = True
-            continue
-        for line in body.splitlines():
-            # `diff --git` heads every file in the patch, including binary ones,
-            # which carry no ---/+++ pair at all. Parsing only those would miss
-            # a stashed binary and let the fixer stage over it.
-            if line.startswith("diff --git "):
-                name = _diff_header_path(line)
-                if name is None:
-                    uncertain = True  # unparsable: assume it could be anything
-                else:
-                    paths.add(name)
+        else:
+            paths.update(found)
     return uncertain, paths
 
 
-def _diff_header_path(line: str) -> str | None:
-    r"""The b-side path from a `diff --git a/X b/X` line, or None if unreadable.
+def _patch_paths(patch: Path) -> set[str]:
+    """Every path a stash patch touches, or an empty set if git cannot read it.
 
-    Git C-quotes any path with a non-ASCII or special character
-    (`diff --git "a/caf\303\251.py" "b/caf\303\251.py"`), so splitting on
-    whitespace and stripping `b/` silently produces a name that matches nothing
-    - and a file the fixer then treats as safe to rewrite and stage, which is
-    exactly the case the skip list exists to prevent.
+    `git apply --numstat -z` rather than reading the diff headers: git unquotes
+    paths itself, so a non-ASCII or space-bearing name comes back intact, and it
+    reports binary hunks, which carry no `---`/`+++` pair to parse. Getting this
+    wrong is not cosmetic - a path missed here is a partially staged file the
+    fixer will rewrite and stage, which is the one sequence that turns
+    pre-commit's rollback into lost work.
     """
-    rest = line[len("diff --git ") :]
-    if rest.startswith('"'):
-        # Quoted: the two paths are separate quoted strings.
-        try:
-            closing = rest.index('" "', 1)
-        except ValueError:
-            return None
-        quoted = rest[closing + 3 :].rstrip()
-        if not quoted.endswith('"'):
-            return None
-        try:
-            decoded = quoted[:-1].encode("latin-1", "strict").decode("unicode_escape").encode("latin-1").decode("utf-8")
-        except (UnicodeDecodeError, UnicodeEncodeError):
-            return None
-        return decoded[2:] if decoded.startswith("b/") else None
-    # Unquoted, both sides name the same path: `a/P b/P`. Splitting on " b/"
-    # picks the wrong point for a path that itself contains " b/" (git does not
-    # quote a plain space), so derive the length instead and verify the result
-    # reconstructs the line. A rename header (a/X b/Y) fails that check and
-    # returns None, which the caller treats as "cannot be sure" - the safe way
-    # to be wrong.
-    rest = rest.rstrip()
-    if not rest.startswith("a/"):
-        return None
-    width = (len(rest) - 5) // 2
-    if width <= 0:
-        return None
-    name = rest[2 : 2 + width]
-    return name if rest == f"a/{name} b/{name}" else None
+    result = subprocess.run(
+        ["git", "apply", "--numstat", "-z", str(patch)],
+        capture_output=True,
+        check=False,
+        timeout=TIMEOUT_SECONDS,
+    )
+    if result.returncode != 0:
+        return set()
+    fields = [f.decode("utf-8", "replace") for f in result.stdout.split(b"\0")]
+    names: set[str] = set()
+    index = 0
+    while index < len(fields):
+        record = fields[index]
+        index += 1
+        if not record:
+            continue
+        parts = record.split("\t", 2)
+        if len(parts) < 3:
+            continue
+        if parts[2]:
+            names.add(parts[2])
+            continue
+        # A rename emits an empty path field followed by the old and new names.
+        for offset in (0, 1):
+            if index + offset < len(fields) and fields[index + offset]:
+                names.add(fields[index + offset])
+        index += 2
+    return names
 
 
 # --------------------------------------------------------------------------
@@ -439,7 +432,10 @@ def main(argv: list[str]) -> int:
     targets: list[Path] = []
     for name in argv:
         path = Path(name)
-        if not path.is_file() or path.suffix not in TEXT_SUFFIXES:
+        # is_symlink before is_file: is_file() follows the link, so a staged
+        # symlink would have the fixers rewrite its target - possibly a file
+        # outside this repository.
+        if path.is_symlink() or not path.is_file() or path.suffix not in TEXT_SUFFIXES:
             continue
         if uncertain or name in stashed:
             skipped.append(name)
