@@ -78,10 +78,14 @@ repos:
 # whole-repo invariants, so per-commit granularity bought nothing: a violation
 # is equally true before and after any single edit.
 #
-# Nothing is lost by moving them here. `.github/workflows/ci.yml` runs every one
-# of them as its own step on every push and PR, which is the backstop that
-# actually matters - a pre-commit hook is defeated by `--no-verify` or by a
-# checkout where nobody ran `pre-commit install`.
+# `.github/workflows/ci.yml` runs every one of them as its own step, which is the
+# backstop that actually matters - a pre-commit hook is defeated by `--no-verify`
+# or by a checkout where nobody ran `pre-commit install`.
+#
+# Note what that backstop does NOT cover: ci.yml triggers only on `push` to
+# `main` and on `pull_request` targeting `main`. On a long-lived release branch
+# nothing runs these automatically until the PR to main is opened, so run
+# `bun run check` yourself before pushing work you want gated.
 #
 # Run them yourself with:  bun run check   (or: pre-commit run --hook-stage manual --all-files)
 -   repo: local
