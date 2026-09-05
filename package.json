@@ -13,7 +13,7 @@
     "deploy": "bun run bin/build-frontend.ts --minify",
     "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent -c gunicorn.conf.py",
     "up": "git pull && sudo docker compose build && sudo docker compose up",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tests/integration/tsconfig.json",
     "lint": "ruff check --fix src/urbanlens",
     "check:templates": "python3 bin/check_template_comments.py",
     "pre-commit": "pre-commit run --all-files",

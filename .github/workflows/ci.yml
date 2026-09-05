@@ -165,6 +165,12 @@ jobs:
       - name: docs/INDEX.md agrees with the entries it indexes
         run: python3 bin/check_docs_index.py
 
+      # `bun run typecheck` checks projects, not files, so a file outside every
+      # `include` is never read and the command still exits 0 - while the
+      # pre-commit tsc hook fires on editing it regardless.
+      - name: Every TypeScript file belongs to a tsconfig project
+        run: python3 bin/check_typescript_coverage.py
+
       # Nothing else checks this: a model change without its migration only
       # surfaces if some test happens to touch the field, and otherwise waits
       # until the column is needed in production.
