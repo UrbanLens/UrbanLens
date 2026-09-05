@@ -89,16 +89,21 @@ class QueryCountCannotSeeItTests(_AchievementSeedMixin, QueryScalingMixin, TestC
 class PreSeededBaselineTests(_AchievementSeedMixin, RenderTimeScalingMixin, TestCase):
     """Seeding in `setUp` silently disarms this measurement, and cannot be caught.
 
-    The baseline is the denominator, so rows already on the page inflate it: the
-    icon-grid page costs 4.8 baselines per row when measured from empty, and
-    reads as roughly a twentieth of that with a dozen rows already rendered.
+    The baseline is the denominator, so rows already on the page inflate it. The
+    icon-grid page measures 4.1-5.8 baselines per row from empty and 0.070-0.083
+    with a dozen rows already rendered - a collapse of roughly sixty-fold, and
+    the difference between failing by 40x and passing.
 
-    This is pinned rather than fixed because it is not detectable from the
-    outside. A baseline taken at `n0` rows yields `k` and `C + k*n0`, and nothing
-    separates `C` from `n0` - so the rule is a rule about how to write the
-    subclass, and this test is what keeps it honest. If the denominator is ever
-    reworked so pre-seeding no longer matters, this test fails and should be
-    replaced by one asserting the page is refused.
+    It is pinned rather than fixed because it is not detectable from the outside:
+    a baseline taken at `n0` rows yields `k` and `C + k*n0`, and nothing separates
+    `C` from `n0`. So the rule is a rule about how to write the subclass, and this
+    is what keeps it honest.
+
+    The budget here is explicit rather than the default 10%, deliberately. The
+    pre-seeded reading sits only 17-30% under that default, which is close enough
+    to it that host load could tip this test red and send someone hunting a
+    regression that is really this documented limitation flickering. What the test
+    is for is the collapse, not the last few percent of it.
     """
 
     def setUp(self) -> None:
@@ -106,7 +111,7 @@ class PreSeededBaselineTests(_AchievementSeedMixin, RenderTimeScalingMixin, Test
         self.seed_rows(12)
 
     def test_pre_seeded_rows_hide_a_page_that_would_otherwise_fail(self) -> None:
-        self.assert_row_cost_bounded("/expensive/")
+        self.assert_row_cost_bounded("/expensive/", max_row_cost=0.5)
 
 
 @override_settings(ROOT_URLCONF=_URLCONF)

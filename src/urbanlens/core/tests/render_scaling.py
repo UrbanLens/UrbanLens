@@ -42,12 +42,13 @@ Three design decisions worth not re-deriving:
 
 **The one way to hold this wrong: seed the rows in ``setUp``.** The baseline is
 the denominator, and rows already on the page at that point inflate it without
-bound - measured, a page costing 4.8 baselines per row when empty reads as 0.05
-with a dozen rows already rendered, which is inside any budget worth setting. It
-cannot be detected from the outside, and the arithmetic says why: with a baseline
-taken at ``n0`` rows the measurements give ``k`` and ``C + k*n0``, and no
-combination of them separates ``C`` from ``n0``. So every row the endpoint lists
-has to be created in :meth:`seed_rows` and nowhere else.
+bound. Measured against the same page twice: unseeded it costs 4.1-5.8 baselines
+per row, and with a dozen rows already rendered it reads 0.070-0.083 - inside the
+budget, by a margin narrow enough that the reading is not even stable. It cannot
+be detected from the outside, and the arithmetic says why: with a baseline taken
+at ``n0`` rows the measurements give ``k`` and ``C + k*n0``, and no combination of
+them separates ``C`` from ``n0``. So every row the endpoint lists has to be
+created in :meth:`seed_rows` and nowhere else.
 """
 
 from __future__ import annotations
@@ -172,6 +173,12 @@ class RenderTimeScalingMixin(SeedScalingMixin):
             AssertionError: A row costs more than *max_row_cost* of the page, or
                 the seed did not exercise the endpoint.
         """
+        # Before the measurement, not after it: this one costs a baseline
+        # render, two seeds and four more requests, and the sibling mixin
+        # refuses the same mistake immediately.
+        if not expect_growth and not growth_waiver:
+            raise AssertionError("expect_growth=False needs growth_waiver= explaining why the response cannot grow")
+
         baseline = self.time_request(url, **extra)
 
         self.seed_rows(self.first_batch)

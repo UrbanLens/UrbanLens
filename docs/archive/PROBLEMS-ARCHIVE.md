@@ -11770,6 +11770,12 @@ once rather than twice. `test_render_time_scaling_harness.py` points it at two v
 urlconf whose per-row cost is known, and includes the argument in executable form: the expensive page
 is perfectly flat under `QueryScalingMixin` and refused by this one.
 
+One limitation is pinned by a test rather than fixed, because it cannot be fixed: seeding rows in
+`setUp` inflates the denominator and silently disarms the measurement. The same page measures 4.1-5.8
+baselines per row from empty and 0.070-0.083 with a dozen rows already on it. A baseline taken at
+`n0` rows yields `k` and `C + k*n0`, and nothing separates the two, so it is a rule about writing the
+subclass and the harness is what holds it.
+
 **Not resolved by this**, and still recorded where they were: the instances the survey found. The
 achievement admin's per-row icon picker is the one this instrument was calibrated against and is
 still there - see P68, whose "~1,288 `ICON_CATEGORIES` entries" is 1,249 as measured on 2026-09-05.
