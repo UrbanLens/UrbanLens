@@ -3291,29 +3291,6 @@ at this app's beta scale (~2 users):
   on the overview map with no cap, unlike the near-identical `SavedFilterPreviewView`'s explicit
   `_PREVIEW_MAP_PIN_LIMIT = 500`).
 
-## P71 — The Sphinx setup builds successfully and produces no API documentation at all
-
-`id: P71` · `status: open` · `updated: 2026-09-04`
-
-`docs/conf.py` and `docs/index.rst` exist and `sphinx-build -b html docs <out>`
-reports "build succeeded", but the output contains exactly `index.html`,
-`genindex.html` and `search.html`. No module pages: `index.rst` has no
-`automodule` directives and nothing runs `sphinx-apidoc`, so no docstring in
-`src/` is ever read. There is no `.readthedocs.yaml`, and nothing in
-`.github/workflows/`, `bin/` or `package.json` builds the docs.
-
-`sphinx` and `sphinx-rtd-theme` are dev dependencies paying for this.
-
-Why it matters beyond the wasted config: the Google-docstring completeness
-standard is justified in `CLAUDE.md` by "Sphinx consumes them", and that
-pipeline does not exist. The standard is still worth keeping - a complete
-docstring is worth writing for the next reader regardless - but it should not
-rest on a claim that is checkably false.
-
-Two ways out, neither attempted here because both are product decisions: wire it
-up (`sphinx-apidoc`, `myst-parser` for the `.md` files, a CI job) or delete
-`docs/conf.py` and `docs/index.rst` and drop the two dependencies.
-
 ## P73 — `bun-types` is pinned at 1.1.6 against Bun 1.3.14, so 81 valid assertions look like type errors
 
 `id: P73` · `status: open` · `updated: 2026-09-05`

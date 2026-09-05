@@ -11320,3 +11320,39 @@ names the method as a string. It does not, and the answer is worse than "no": dj
 wiring it to a viewset would have raised at filter time. Nothing imported it. Dead scaffolding
 pointing at dead scaffolding - which is also why the missing `distinct()` was never noticed.
 `PinFilter` is deleted too; `Wiki` never had a filterset.
+
+## RESOLVED 2026-09-05: the Sphinx setup builds successfully and produces no API documentation at all
+
+`id: P71` · `status: fixed` · `resolved: 2026-09-05`
+
+`sphinx-build` reported "build succeeded" and emitted three pages. `index.rst` had no `automodule`
+directive, nothing ran `sphinx-apidoc`, and no docstring in `src/` was ever read - while `CLAUDE.md`
+justified its Google-docstring standard with "Sphinx consumes them".
+
+Wired up rather than deleted. It now builds **1,326 pages, 1,076 of them API reference**, and a
+spot check of `services/core/colors` finds the function signatures and the docstring prose on the
+page.
+
+Three choices worth knowing, because each was the difference between working and only-working-here:
+
+- **`sphinx-autoapi`, not `sphinx.ext.autodoc`.** autodoc imports every module it documents, which
+  for this codebase means `django.setup()`, a settings module and a system GDAL/GEOS install - so
+  the docs would build in the app container and in CI and nowhere else, and a failed import would
+  show up as a missing page rather than an error. AutoAPI parses the source, so `bin/build_docs.py`
+  works in a plain checkout and the CI job needs no system libraries.
+- **`myst-parser`.** Everything else in `docs/` is Markdown; without it the toctree can reference
+  `index.rst` and nothing else, and the site is an API reference with no prose.
+- **`bin/build_docs.py`, not a bare `sphinx-build`.** Exit status was never the problem: the
+  configuration this entry describes exited 0. The script asserts a floor on generated API pages,
+  which is the claim anyone actually cares about.
+
+Cost, so nobody is surprised by it: the build is slow - double-digit minutes even with `-j auto`,
+since AutoAPI generates and then reads a page per module. It is its own CI job for that reason.
+`docs/_build/` and the generated `docs/api/` are gitignored.
+
+Not clean under `--strict`: five `Cannot resolve import` warnings, all AutoAPI failing to follow a
+`TYPE_CHECKING`-guarded import. Harmless, and left visible rather than suppressed.
+
+**One thing this cannot fix from here.** `CLAUDE.md` still says "(nothing currently does - see P71)"
+after the docstring standard. That file is hook-blocked, so the correction has to be Jess's: the
+parenthetical should now read something like "(`bun run docs`)".

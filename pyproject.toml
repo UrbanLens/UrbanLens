@@ -327,6 +327,7 @@ dev = [
     "model-bakery>=1.23.5,<1.25.0",
     "mutmut~=3.7.0",
     "mypy~=2.1.0",
+    "myst-parser~=5.1.0",
     "pre-commit~=4.6.0",
     # Server-side interop tests for the direct-message E2EE blob formats -
     # verifies the documented Argon2id/secretbox/sealed-box layouts round-trip
@@ -349,6 +350,7 @@ dev = [
     "schemathesis~=4.25.1",
     "setuptools>=82.0.1,<83.1.0",
     "sphinx~=9.1.0",
+    "sphinx-autoapi~=3.8.1",
     "sphinx-rtd-theme~=3.1.0",
     "tqdm>=4.68.3,<4.70.0",
     "types-requests~=2.33.0.20260518",

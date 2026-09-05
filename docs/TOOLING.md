@@ -333,21 +333,27 @@ that list, each finding then handed to an adversarial verifier told to refute it
 
 ## Structural checks (CI)
 
-Nine checkers guard properties that are invisible from a working copy, which is
-exactly why they need checking — the machine that made the mistake is the one
-that cannot see it.
+Fourteen checkers guard properties that are invisible from a working copy, which
+is exactly why they need checking — the machine that made the mistake is the one
+that cannot see it. Every one of them is `bin/check_*.py`, so the list here and
+the directory can be compared with `ls`.
 
 | Check | Catches |
 | --- | --- |
 | `bin/check_imports_tracked.py` | An import resolving to a file git is not tracking |
 | `bin/check_migration_graph.py` | A migration depending on one a fresh checkout won't have |
 | `bin/check_doc_line_refs.py` | A documentation citation pointing past end-of-file |
+| `bin/check_docs_refs.py` | Code citing a `docs/` path that does not exist, or one only its author can read |
+| `bin/check_docs_index.py` | `docs/INDEX.md` drifting from the entries it allocates ids for |
 | `bin/check_outage_not_cached.py` | A `fetch` that caches a swallowed failure as though it were an answer |
 | `bin/check_notification_choke_point.py` | A notification written around the mute preference |
 | `bin/check_versioned_writes.py` | A model half-adopting field versioning, so bulk writes go unrecorded |
 | `bin/check_signal_reachable.py` | A `post_save` subscription waiting on a field only a queryset `update()` sets |
 | `bin/check_concealed_writes.py` | A wiki resolved for reading being saved, persisting one viewer's redacted view |
+| `bin/check_pin_not_published_to_wiki.py` | A private pin's fields reaching a community wiki |
 | `bin/check_template_comments.py` | A Django `{#` comment that is not closed on the same line, so the tokens render as text |
+| `bin/check_line_endings.py` | A tracked text file stored with CRLF |
+| `bin/check_typescript_coverage.py` | A `.ts` file in no tsconfig project, or a project `bun run typecheck` never runs |
 
 The last two exist because a *defect class* recurred, not because one bug did.
 `check_outage_not_cached.py` came from an outage being stored as "nothing here"
@@ -395,6 +401,15 @@ declared without the mixin, the mixin without a `VersionedQuerySet` (instance
 saves recorded, every bulk write silently not — the worse half), a missing
 `revision_model`, and a field name a rename left behind.
 
+`check_typescript_coverage.py` checks two halves of one claim, because either
+alone is worthless. A file in no project is never read by `tsc`, and the
+pre-commit `tsc` hook still fires when you edit it — so it passes while telling
+you nothing. A project nothing *runs* is the same failure one level up:
+`tests/integration/` had its own `tsconfig.json`, covering 84 files, and no
+command in the repository invoked it. Files that cannot join a project are
+listed in the script's `_UNCOVERED` map with the reason, so the exception is a
+line someone chose rather than an absence nobody can see.
+
 `check_doc_line_refs.py --report-drift` additionally lists citations whose line
 exists but no longer holds what the prose claims. That half is *not* enforced:
 several name symbols that no longer exist, where the repair is rewriting the
@@ -402,6 +417,34 @@ sentence rather than the number, and a CI job should not be making that call.
 
 Note its one blind spot: it cannot tell a specimen from a claim, so prose that
 *quotes* a broken citation as an example will be flagged.
+
+### `bin/build_docs.py`
+
+Builds the Sphinx site, and fails if it produced no API reference.
+
+Exit status is not the check. `sphinx-build` reports "build succeeded" for a
+configuration that reads no source at all, which is what this repository shipped
+until 2026-09-05: `docs/conf.py` and `docs/index.rst` existed, no `automodule`
+directive was ever written, nothing ran `sphinx-apidoc`, and the output was three
+pages. Meanwhile `CLAUDE.md` justified its Google-docstring standard with the
+claim that Sphinx consumes them. The script asserts a floor on the number of
+generated API pages instead.
+
+`autoapi` rather than `autodoc`, so the build parses the source instead of
+importing it: `autodoc` would need `django.setup()`, a settings module and a
+system GDAL/GEOS install, which would confine the docs to the app container and
+CI. `myst_parser` is what lets the toctree reference the Markdown that the rest
+of this directory is written in.
+
+It is slow — double-digit minutes even with `-j auto`, since `autoapi` generates
+and then reads a page per module. That is why CI runs it as its own job rather
+than as a step in `python-quality`. `docs/_build/` and the generated `docs/api/`
+are both gitignored.
+
+```bash
+bun run docs              # or: python3 bin/build_docs.py
+bin/build_docs.py --strict   # warnings become errors
+```
 
 ### `bin/run_codeql.py`
 

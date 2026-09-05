@@ -158,6 +158,15 @@ wheels = [
 ]
 
 [[package]]
+name = "astroid"
+version = "4.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/19/e2dcf379dacfc70abd22a937a84d49ce6151223a989842541155978b353e/astroid-4.3.1.tar.gz", hash = "sha256:bb359253d8ced6635a3881c17ebcbbc0e0b65ca23b555a9bd03c92a3cbf4caa7", size = 439530, upload-time = "2026-08-17T08:21:56.514Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/57/1df16329b79612616ee1725d6e0f03c21fac5e2ca185fed8148bfd468eec/astroid-4.3.1-py3-none-any.whl", hash = "sha256:de41129d6de1e86cfedb698b8064c83a881853f98d6ea34de9e711f6bb420dfe", size = 286720, upload-time = "2026-08-17T08:21:55.045Z" },
+]
+
+[[package]]
 name = "asttokens"
 version = "3.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2242,6 +2251,23 @@ wheels = [
 ]
 
 [[package]]
+name = "myst-parser"
+version = "5.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "docutils" },
+    { name = "jinja2" },
+    { name = "markdown-it-py" },
+    { name = "mdit-py-plugins" },
+    { name = "pyyaml" },
+    { name = "sphinx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/21/dc/603751677fff302f34396e206b610f556a59d7fe58b9a2145f54e96b48e8/myst_parser-5.1.0.tar.gz", hash = "sha256:ab69322dc6719dcc7f296479dbb70181b66df6ed315064f92dbc85c0e1bf2f02", size = 101182, upload-time = "2026-05-13T09:38:19.361Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/09/dc/f3dfb7488b770f3f67e6545085bf2abea5172e88f57b8ad25ef860ca704c/myst_parser-5.1.0-py3-none-any.whl", hash = "sha256:9c91c52b3cdb4d94a6506e4fab4e2f296c7623a0da0dcbe6de1565c3dad67a8a", size = 85817, upload-time = "2026-05-13T09:38:17.904Z" },
+]
+
+[[package]]
 name = "nh3"
 version = "0.3.6"
 source = { registry = "https://pypi.org/simple" }
@@ -4034,6 +4060,21 @@ wheels = [
 ]
 
 [[package]]
+name = "sphinx-autoapi"
+version = "3.8.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "astroid" },
+    { name = "jinja2" },
+    { name = "pyyaml" },
+    { name = "sphinx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/09/5e/7b42f3f774aa116741b8031b740c854612ed7dd7d616695e934a2b7fb94f/sphinx_autoapi-3.8.1.tar.gz", hash = "sha256:04643fc50485039294ace8b660d0d1b821a1686824a975725a5106e8cf1fb30b", size = 58898, upload-time = "2026-08-23T17:04:25.612Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/4e/e49564ab6f38341921ae855451aed2ba9915f61c43780200d5aebb57ae4d/sphinx_autoapi-3.8.1-py3-none-any.whl", hash = "sha256:9a3bd3ee1ba82d537f1620a3922292d43ee8b9ff9c69bc198965ac4bcd5a6775", size = 35975, upload-time = "2026-08-23T17:04:24.168Z" },
+]
+
+[[package]]
 name = "sphinx-rtd-theme"
 version = "3.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4606,6 +4647,7 @@ dev = [
     { name = "model-bakery" },
     { name = "mutmut" },
     { name = "mypy" },
+    { name = "myst-parser" },
     { name = "pre-commit" },
     { name = "pynacl" },
     { name = "pytest" },
@@ -4616,6 +4658,7 @@ dev = [
     { name = "schemathesis" },
     { name = "setuptools" },
     { name = "sphinx" },
+    { name = "sphinx-autoapi" },
     { name = "sphinx-rtd-theme" },
     { name = "tqdm" },
     { name = "types-requests" },
@@ -4716,6 +4759,7 @@ dev = [
     { name = "model-bakery", specifier = ">=1.23.5,<1.25.0" },
     { name = "mutmut", specifier = "~=3.7.0" },
     { name = "mypy", specifier = "~=2.1.0" },
+    { name = "myst-parser", specifier = "~=5.1.0" },
     { name = "pre-commit", specifier = "~=4.6.0" },
     { name = "pynacl", specifier = "~=1.6.2" },
     { name = "pytest", specifier = ">=9.1.1" },
@@ -4726,6 +4770,7 @@ dev = [
     { name = "schemathesis", specifier = "~=4.25.1" },
     { name = "setuptools", specifier = ">=82.0.1,<83.1.0" },
     { name = "sphinx", specifier = "~=9.1.0" },
+    { name = "sphinx-autoapi", specifier = "~=3.8.1" },
     { name = "sphinx-rtd-theme", specifier = "~=3.1.0" },
     { name = "tqdm", specifier = ">=4.68.3,<4.70.0" },
     { name = "types-requests", specifier = "~=2.33.0.20260518" },

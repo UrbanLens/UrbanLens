@@ -250,6 +250,36 @@ jobs:
       - name: Build stylesheet
         run: bun run sass
 
+  docs:
+    name: Documentation build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Install Python dependencies
+        run: uv sync --frozen
+
+      # Its own job, not a step in python-quality: autoapi parses every module
+      # under src/ and the build runs into double-digit minutes even with -j
+      # auto, so serialising it behind the test suite would add that to every
+      # run's critical path. No system libraries needed - autoapi reads the
+      # source rather than importing it, which is the whole reason it is used
+      # here (see docs/conf.py).
+      #
+      # `bin/build_docs.py` rather than a bare sphinx-build: sphinx-build exits
+      # 0 for a configuration that reads nothing, which is exactly the state
+      # this repository was in until 2026-09-05. The script asserts the build
+      # produced API pages.
+      - name: Build the documentation
+        run: uv run python bin/build_docs.py
+
   docker:
     name: Docker image build
     runs-on: ubuntu-latest

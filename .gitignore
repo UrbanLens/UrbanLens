@@ -78,3 +78,8 @@ docs/audits/codeql-findings.md
 # Agent scratch files have landed at the repo root untracked more than once.
 /_tmp*
 /*.tmp.js
+
+# Sphinx output, and the API tree autoapi generates from src/ on each build.
+# Both are products of `bun run docs`; neither is edited by hand.
+docs/_build/
+docs/api/
