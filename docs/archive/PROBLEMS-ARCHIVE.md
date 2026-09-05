@@ -7053,7 +7053,7 @@ away from documents that do exist.
 
 **12 references left alone deliberately**, because fixing them would mean guessing:
 
-- `../REData/docs/api-reference.md` (7) - the same filename is referenced elsewhere in this codebase as
+- `docs/api-reference.md` (7) - the same filename is referenced elsewhere in this codebase as
   `../REData/docs/api-reference.md`, a sibling repository. Most of these sit in REData gateway
   files and are probably that, but `plugins/builtin/photon.py` is not a REData integration and
   more likely means Photon's own published API docs. Rewriting them would be inventing intent.
@@ -7064,7 +7064,7 @@ away from documents that do exist.
 
 ### A fourth narrow-pattern error, caught before it did damage
 
-The first scan reported **38** files with a dead `../REData/docs/api-reference.md` reference. The regex
+The first scan reported **38** files with a dead `docs/api-reference.md` reference. The regex
 `docs/[A-Za-z0-9_./-]+\.md` had matched the *tail* of `../REData/docs/api-reference.md` - a
 path into a sibling repo, entirely valid. Re-running it anchored (`(?<![\w./-])`) cut the real
 figure to 7. Had the first result been acted on, 31 correct cross-repo references would have

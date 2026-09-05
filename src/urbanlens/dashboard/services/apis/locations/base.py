@@ -193,12 +193,13 @@ class BoundaryProvider(Service, ABC):
         ...
 
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> Mapping[str, Polygon | MultiPolygon | None]:
-        # Mapping, not dict, because dict is invariant in its value type: a
-        # provider that only ever yields Polygons could not otherwise declare
-        # that narrower return. MultiPolygon is in the union because REData
-        # returns one for a parcel made of disjoint pieces; every caller reads
-        # the result with .get() and narrows from there.
         """Return this provider's boundaries keyed by boundary type.
+
+        `Mapping` rather than `dict`, because `dict` is invariant in its value
+        type: a provider that only ever yields Polygons could not otherwise
+        declare that narrower return. `MultiPolygon` is in the union because
+        REData returns one for a parcel made of disjoint pieces; every caller
+        reads the result with `.get()` and narrows from there.
 
         The default implementation wraps :meth:`get_boundary` under
         ``boundary_kind``. Providers that can classify features per type

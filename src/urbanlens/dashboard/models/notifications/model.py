@@ -92,10 +92,11 @@ class NotificationLog(abstract.FrontendDashboardModel):
         ``notify()`` path never calls.
         """
         if self.title:
-            # get_field() is typed Field | ForeignObjectRel; only the former
-            # carries max_length, and a reverse relation named "title" cannot
-            # exist here. Narrowing rather than assuming keeps the truncation -
-            # which is the security-relevant half of this method - explicit.
+            # get_field() is typed Field | ForeignObjectRel, and only the
+            # former carries max_length; a reverse relation named "title"
+            # cannot exist here. Narrowed rather than assumed so the truncation
+            # cannot silently stop happening. (The security-relevant half of
+            # this method is the url check below, not this one.)
             title_field = self._meta.get_field("title")
             if isinstance(title_field, Field) and title_field.max_length:
                 self.title = self.title[: title_field.max_length]
