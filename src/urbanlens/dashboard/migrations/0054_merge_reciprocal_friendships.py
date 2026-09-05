@@ -31,7 +31,10 @@ safe under every combination rather than to guess at history:
   that defect once, from a different cause, and carries a read-only audit
   command for it (`audit_inverted_friendship_blocks`). The mute columns and
   `request_message` travel with the ends.
-* Ties keep the **older** row, ordered by `created` then `pk`.
+* Ties keep the **lowest-pk** row - the one `FriendshipQuerySet.between` has been
+  answering with since the containment fix, so the merge preserves the identity the
+  application has already been using. (`created` would have been the intuitive key and is the
+  wrong one: it is restorable from an import, so the two orders can disagree.)
 
 Every merge is logged with both ids and both statuses, because on a real
 database this is the only record that the discarded row existed.
@@ -108,7 +111,12 @@ def merge_reciprocal_rows(apps, schema_editor) -> None:
     pair_set = set(pairs)
     involved = {profile for pair in pairs for profile in pair}
     candidates = friendship.objects.filter(from_profile_id__in=involved, to_profile_id__in=involved)
-    for row in candidates.order_by("created", "pk").iterator():
+    # By `pk`, matching `FriendshipQuerySet.between`, which has been answering
+    # with the lowest-pk row since the containment fix. Ordering by `created`
+    # instead would let the migration keep a row the application has *not*
+    # been treating as authoritative - `created` is restorable from an import,
+    # so the two orders can disagree.
+    for row in candidates.order_by("pk").iterator():
         key = (min(row.from_profile_id, row.to_profile_id), max(row.from_profile_id, row.to_profile_id))
         # `involved` can pull in a row joining two profiles that each appear in
         # *different* duplicated pairs but are not a duplicated pair themselves.

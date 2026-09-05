@@ -24,6 +24,7 @@ of statuses, because nothing recorded which of two conflicting ones was right.
 from __future__ import annotations
 
 import importlib
+import inspect
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -230,12 +231,18 @@ class ReciprocalMergeBehaviourTests(TestCase):
     that predates it.
     """
 
-    def test_the_older_row_is_the_one_kept(self) -> None:
+    def test_the_keeper_is_the_row_between_would_have_answered_with(self) -> None:
+        """Lowest pk, which is what `between()` has been returning."""
         older = _Row(1, 10, 20, FriendshipStatus.ACCEPTED)
         newer = _Row(2, 20, 10, FriendshipStatus.ACCEPTED)
         _run_merge([older, newer])
         self.assertFalse(older.deleted)
         self.assertTrue(newer.deleted)
+
+        # `Friendship.objects.between` resolves the same way, so the migration
+        # keeps the identity the application has been using rather than one it
+        # has never answered with.
+        self.assertIn("pk", inspect.getsource(FriendshipQuerySet.between))
 
     def test_the_restrictive_status_survives_from_the_discarded_row(self) -> None:
         older = _Row(1, 10, 20, FriendshipStatus.ACCEPTED)

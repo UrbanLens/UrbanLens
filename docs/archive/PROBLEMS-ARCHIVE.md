@@ -11616,8 +11616,11 @@ is the cheaper half that turned out to be sufficient.
 restrictive wins - `Blocked`, then `Removed`, `Declined`, `Ignored`, each an explicit "no" a merge
 must not quietly undo - and `Accepted` beats `Requested`/`Pending`, because choosing a stale request
 over a real friendship would revoke it. Every mute survives, mapped onto the keeper's sides so it
-lands on the right person. Ties keep the older row. Every merge is logged: on a real database that
-is the only record the discarded row existed.
+lands on the right person. Ties keep the **lowest-pk** row, which is what `between()` has been
+answering with - so the merge preserves the identity the application has already been using.
+(`created` was the first choice and is the wrong one: it is restorable from an import, so the two
+orders can disagree.) Every merge is logged: on a real database that is the only record the
+discarded row existed.
 
 **The winning status brings its direction with it, and the first version of this did not** - which
 would have been the one way this migration could corrupt rather than merge. `Friendship` has no
