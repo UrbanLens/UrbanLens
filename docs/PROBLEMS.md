@@ -155,41 +155,6 @@ Left as-is rather than removed: a separate, not-yet-actioned note already flags 
 was surfacing inappropriate suggestions, e.g. a building's own parent parcel) - resolving that
 should also decide this route's fate rather than deleting it unilaterally here.
 
-## P4 — `urbanlens_development_main_test_runner`'s venv is missing five dev deps, silently dropping coverage
-
-`id: P4` · `status: open` · `updated: 2026-08-31`
-
-Previously titled "`urbanlens_development_main_test_runner`'s baked image is missing `django-perf-rec`".
-
-Found while running the full suite before merging PR #143 (`bin/run_tests.sh`, no `--fast`, per
-repo convention for a PR merge). Collection aborts the entire run with `ModuleNotFoundError: No
-module named 'django_perf_rec'` importing `test_query_records.py:31` - not a code regression: the
-package is correctly declared in `pyproject.toml` (`django-perf-rec~=4.31.0`) and `uv.lock`, and
-`uv run python -c "import django_perf_rec"` succeeds on this host's own `.venv`. The test-runner
-container's image (`/app/.venv`) simply predates that dependency being added and hasn't been
-rebuilt since - the same class of drift as [[app-container-not-live-synced]] but for the
-*container's own venv*, not `/app/src`. `bin/run_tests.sh`'s tree-hash sync only covers `src/`, not
-`.venv`, so it can't catch this.
-
-Worked around for this merge by running with `--ignore=src/urbanlens/dashboard/tests/hypothesis/
-test_query_records.py` rather than rebuilding the shared container mid-session (another agent was
-concurrently using the same branch/host - see [[verify-attribution-before-reverting-shared-diffs]] -
-so an image rebuild felt too disruptive to force unilaterally). Whoever next has a quiet window
-should rebuild `urbanlens_development_main_test_runner` (`docker compose --profile test up -d
---build test-runner`) so `test_query_records.py` runs again; until then that one file's coverage is
-silently absent from every `bin/run_tests.sh` run, not just this one.
-
-**Still open 2026-09-03, and it is five packages, not one.** `bin/run_tests.sh` now checks the
-container's venv against `pyproject.toml`'s dev group on every run and warns rather than letting a
-test blame the branch. Pointed at this container it reports:
-
-    diff-cover  django-perf-rec  pytest-randomly  pytest-xdist  schemathesis
-
-`pytest-randomly` and `pytest-xdist` back this script's own `--shuffle` and `--parallel` flags, so
-those two have been advertised and broken in this container for as long as they have existed -
-worth knowing before trusting either. The rebuild is still the fix, and is still an operator action
-on a shared container rather than something a session should force.
-
 ## P5 — Dialog forms post every field and handlers save every column, so untouched values overwrite and re-attribute
 
 `id: P5` · `status: open` · `updated: 2026-08-25`
@@ -689,47 +654,6 @@ things about *how*, since the obvious implementation would have been wrong:
 An earlier draft of this entry said `yelp` is billable, as a reason to curate. It is not:
 `billable=True` appears 11 times in REData and none are in this registry. The real cost is upstream
 queries and quota, not money.
-
-## P10 — `main` is untested against an empty database; the multiple-leaf migration conflict that broke it is gone
-
-`id: P10` · `status: open` · `updated: 2026-08-19`
-
-Previously titled "`main` cannot start from an empty database - conflicting migrations".
-
-Found by the new dev-environment tooling on its first clean run: `bin/dev_env.py create --branch
-main` builds the stack, and the app container dies during init with
-
-```
-CommandError: Conflicting migrations detected; multiple leaf nodes in the migration graph:
-(0002_v0_4_0b0, 0006_v0_4_0_indexes in dashboard).
-```
-
-This is a property of the branch, not of the tooling - the environment was correctly isolated
-(`ul_<slug>_*` containers, own database) and every other step passed. Any deploy of `main` against a
-fresh database fails the same way; existing databases are unaffected, because `migrate` only walks
-the graph when it has work to do, which is why nothing has noticed.
-
-The fix is a merge migration (`makemigrations --merge`) on `main`, or removing whichever leaf is
-redundant. Worth checking before the next release branches off it.
-
-`bin/check_migration_graph.py` **does** catch it - pointed at main's tree it reports exactly this,
-naming both leaves. The check simply postdates `main`: that file does not exist on that branch, and
-pre-commit only runs what the checked-out branch carries. So this is not a gap in the check; it is a
-branch that has not received it yet, and merging forward is enough to stop it recurring.
-
-(An earlier draft of this entry claimed the checker lacked a leaf check. That was wrong - verified by
-running it against the cloned main checkout.)
-
-**The named conflict is gone as of 2026-09-03.** `0002_v0_4_0b0` no longer exists on `origin/main`
-at all - the migrations were renumbered, and `0002` is now
-`0002_boundary_emailsendlog_externalvisitparticipant_and_more`. Walking the `dependencies` of all 31
-migration files on `origin/main` finds a **single** leaf, `0031_v0_7_0_indexes`, and "multiple leaf
-nodes" is precisely what that error reports - so it cannot fire.
-
-That is narrower than this entry's headline, which is left open deliberately: it says `main` cannot
-*start from an empty database*, and one leaf only rules out this particular cause. Confirming the
-whole claim means what found it - `bin/dev_env.py create --branch main` - since a data migration
-that fails on empty tables would look nothing like this and is not visible from the graph.
 
 ## P11 — ~40 raw `fetch()` calls bypass `fetch-json.ts` and fail silently; Organize's Media tab is unwired dead UI
 

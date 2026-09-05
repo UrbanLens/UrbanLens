@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P74` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R27` · `N7`
+**Next free id:** `P75` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R27` · `N7`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -26,7 +26,7 @@ each, and the house style. `P` numbers entries inside `PROBLEMS.md`; every other
 prefix numbers a whole document.
 
 Resolved problems are **not** listed here — they move to
-[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 303
+[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 305
 of them. This index is what is live. Grep the archive before concluding a defect
 is new - and an archived entry keeps its `id:` line, so a citation of `P70`
 still resolves after it is fixed, and the id is never handed out again.
@@ -36,12 +36,10 @@ still resolves after it is fixed, and the id is never handed out again.
 | P1 | open | 2026-09-01 | VirusTotal scanning is hash-lookup-only, so a file VirusTotal has never seen falls back to ClamAV forever | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P2 | open | 2026-08-31 | `parse_for_preview` parses archives and KML in the request, blocking `UL_UNTRUSTED_PARSE_POLICY=deny` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P3 | open | 2026-08-31 | The pin-detail hero no longer links to `PinRelinkView.get`, orphaning the `pin.link` wiki picker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P4 | open | 2026-08-31 | `urbanlens_development_main_test_runner`'s venv is missing five dev deps, silently dropping coverage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P5 | open | 2026-08-25 | Dialog forms post every field and handlers save every column, so untouched values overwrite and re-attribute | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P6 | open | 2026-08-21 | Production REData still 404s `/api/v1/public-locations/`, so a fresh dev environment seeds no catalog pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P7 | open | 2026-08-19 | nginx pins its app upstream at config load and REData's `ref` is stored as permanent identity | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P9 | open | 2026-08-19 | REData gaps remain - `?limit=` is inert, 15 routes unwired, and a `tile_template` slide is a single 256px tile | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P10 | open | 2026-08-19 | `main` is untested against an empty database; the multiple-leaf migration conflict that broke it is gone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P11 | open | 2026-08-15 | ~40 raw `fetch()` calls bypass `fetch-json.ts` and fail silently; Organize's Media tab is unwired dead UI | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P14 | open | 2026-09-05 | Custom pin and label icons are readable by any authenticated user; narrowing that needs a pin-visibility query nothing has | [`docs/PROBLEMS.md`](PROBLEMS.md) |

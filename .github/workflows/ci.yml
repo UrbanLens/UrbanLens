@@ -207,9 +207,24 @@ jobs:
       #- name: Django deployment checks
       #  run: python src/urbanlens/manage.py check --deploy --fail-level WARNING
 
-      - name: Django tests with coverage
+      # `manage.py test` here, from the repository root, discovered nothing:
+      # `Found 0 test(s)` / `NO TESTS RAN`, and Django's runner returns
+      # failures+errors, which is 0, so the step was green for its entire
+      # existence. The 29% the coverage report showed alongside it was
+      # import-time coverage from django.setup(), which made the artifact look
+      # like a suite had run. Discovery starts at `.` and neither the repo root
+      # nor `src/` is a package, so it walked into nothing; pointed at `src/` it
+      # finds 14,273 tests.
+      #
+      # pytest is what this repo actually runs (CLAUDE.local.md: `manage.py test`
+      # never sets the TESTING flag, so a test rendering a full page template
+      # hits a staticfiles-manifest 500), `testpaths` in pyproject.toml already
+      # points it at src/urbanlens, and pytest exits 5 when it collects nothing -
+      # so a silent zero cannot happen again. --fail-under=1 is not that guard
+      # and never was.
+      - name: Tests with coverage
         run: |
-          coverage run --source=src src/urbanlens/manage.py test
+          coverage run --source=src -m pytest
           coverage xml
           coverage report --fail-under=1
 

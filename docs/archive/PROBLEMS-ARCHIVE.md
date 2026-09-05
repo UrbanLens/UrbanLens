@@ -11821,3 +11821,105 @@ The verifier does **not** assert `migrate --check` passes, which was the obvious
 one: it asserts the deployment is fully migrated, a fact about the deployment rather than the
 restore. This environment has 5 pending migrations and fails it identically before and after. It
 compares migration state between source and copy instead.
+
+## RESOLVED 2026-09-05: the test container's venv drifted from pyproject and the fix kept not happening
+
+`id: P4` · `status: fixed` · `resolved: 2026-09-05`
+
+`bin/run_tests.sh` already detected this - it compared the container's venv against pyproject's dev
+group and printed a warning naming the missing packages. The warning was correct and did not work.
+Its recommended fix was `docker compose --profile test up -d --build test-runner`, an operator
+action on a container other sessions may be mid-run in, so it kept being deferred: `django-perf-rec`
+was still missing three days after it was first reported, and the list had grown from one package
+to seven.
+
+It now installs them instead of describing them. `uv` ships inside the container's own venv, so
+`uv pip install` of the exact specs from pyproject's dev group needs no host tooling and brings the
+container to its own stated dependencies rather than to whatever is newest. `--no-venv-fix` keeps
+the old warn-only behaviour.
+
+Measured before and after on `urbanlens_development_main_test_runner`, which was missing seven:
+`codespell`, `diff-cover`, `django-perf-rec`, `myst-parser`, `pytest-randomly`, `pytest-xdist`,
+`schemathesis`, `sphinx-autoapi`, `vulture`. After one run, all present at the declared versions
+(`django-perf-rec 4.31.0`, `pytest-xdist 3.8.0`, `pytest-randomly 4.1.0`, `diff-cover 10.5.1`,
+`schemathesis 4.25.2`), and a second run reports nothing missing.
+
+Two of those were worse than absent coverage. `pytest-xdist` and `pytest-randomly` back this
+script's own `--parallel` and `--shuffle` flags, so both were advertised in its usage text and
+broken in this container for as long as they had existed.
+
+This does not make the image correct - a fresh container still starts stale, and rebuilding it is
+still the durable fix. It makes the staleness stop costing a run.
+
+## RESOLVED 2026-09-05: main does start from an empty database, and CI now runs the migrations that prove it
+
+`id: P10` · `status: fixed` · `resolved: 2026-09-05`
+
+Ran it. `origin/main` at `fc696acd0`, its `src/` copied into the app container and pointed at a
+database created `TEMPLATE template0` (so genuinely empty - no PostGIS, nothing):
+
+    manage.py migrate --no-input   ->  exit 0
+
+80 migrations applied starting at `contenttypes.0001_initial`, all 31 of dashboard's among them,
+230 tables, and `postgis` and `pg_trgm` created by the migrations themselves. That covers the 12
+migrations on `main` carrying `RunPython`/`RunSQL`, which is where the entry expected a failure the
+migration graph could not show - `0003_v0_4_0_data` alone has 23.
+
+So the headline was wrong, not merely narrower than its evidence. The multiple-leaf conflict that
+produced it is gone, and nothing replaced it.
+
+The half that was true is "untested", and it had a bigger cause than this entry: **CI ran zero
+tests** (P74). pytest builds its test database by running every migration from zero and nothing
+here sets `MIGRATION_MODULES` or `--no-migrations`, so migrating from empty was always going to be
+covered the moment CI ran the suite at all - and it never did. Fixing that fixes this: every CI run
+on `main` now migrates from an empty database before it runs a single test.
+
+Two limits worth stating rather than leaving implied. The run used this checkout's container venv
+against `main`'s source, so it proves `main`'s *migrations* apply, not that `main`'s pinned
+dependencies resolve. And CI triggers only on `main` and pull requests into it, so a release branch
+still gets this backstop only when it merges.
+
+Cleanup: the scratch database and the `origin/main` worktree were removed.
+
+## RESOLVED 2026-09-05: CI's only Python test step discovered zero tests and reported 29% coverage doing it
+
+`id: P74` · `status: fixed` · `resolved: 2026-09-05`
+
+`.github/workflows/ci.yml` ran
+
+```
+coverage run --source=src src/urbanlens/manage.py test
+coverage xml
+coverage report --fail-under=1
+```
+
+from the repository root. Reproduced verbatim 2026-09-05 against this tree:
+
+```
+Found 0 test(s).
+Ran 0 tests in 0.000s
+NO TESTS RAN
+```
+
+`DiscoverRunner` returns `len(failures) + len(errors)`, which is 0 when nothing
+ran, so the step exited green. Unittest discovery starts at `.`, and neither the
+repository root nor `src/` is a package, so it walked into nothing; pointed at
+`src/` the same runner finds 14,273 tests. It was the only Python test
+invocation in any workflow in the repository.
+
+The coverage step is what made this hard to see. `coverage report --fail-under=1`
+against that run printed **29%** and exited 0, and `coverage.xml` was uploaded as
+an artifact - all of it import-time coverage from `django.setup()`, none of it a
+test. A step named "Django tests with coverage", green, with a coverage artifact
+attached, is indistinguishable from one that worked.
+
+Fixed by running the suite the way this repo actually runs it:
+`coverage run --source=src -m pytest`. `testpaths` in `pyproject.toml` already
+points pytest at `src/urbanlens` (14,392 collected), `manage.py test` is
+forbidden here anyway because it never sets the `TESTING` flag, and **pytest
+exits 5 when it collects nothing** - so the silent zero cannot recur. That exit
+code, not `--fail-under=1`, is the guard; the threshold never was one.
+
+Note what this does *not* establish: that the suite passes. It had not run in
+CI, so its green-ness there is unmeasured, and the first run after this change
+is the measurement.
