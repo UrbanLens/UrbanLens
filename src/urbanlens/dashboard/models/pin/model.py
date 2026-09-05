@@ -47,6 +47,11 @@ logger = logging.getLogger(__name__)
 #: that do not share a validation gate. See `Pin.coerce_colors`.
 _COLOR_FIELDS = frozenset({"color", "detail_bg_color", "detail_border_color"})
 
+#: The subset of those that also accept the literal ``"none"`` - a CSS keyword
+#: meaning "no fill"/"no border", which the detail-pin endpoints treat as a
+#: value rather than as an unset.
+_KEYWORD_COLOR_FIELDS = frozenset({"detail_bg_color", "detail_border_color"})
+
 
 class PinType(TextChoices):
     """What a pin/wiki marker physically represents.
@@ -354,8 +359,13 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         rather than an injection - so this is about the marker rendering at all,
         not about escaping.
         """
-        for field in _COLOR_FIELDS:
-            setattr(self, field, clean_color(getattr(self, field), default=None))
+        self.color = clean_color(self.color, default=None)
+        for field in _KEYWORD_COLOR_FIELDS:
+            # `allow_none_keyword`: the detail-pin controller accepts the literal
+            # "none" for these two, meaning "no fill / no border" rather than
+            # "unset", and the Wiki twin of that endpoint keeps it. Coercing it
+            # away here would make the two halves of one feature disagree.
+            setattr(self, field, clean_color(getattr(self, field), default=None, allow_none_keyword=True))
 
     def mark_viewed(self) -> None:
         """Record that the owner just opened this pin's detail page.

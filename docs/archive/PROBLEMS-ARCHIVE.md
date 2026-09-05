@@ -11281,7 +11281,7 @@ coverage as work done.
 `id: P39` · `status: fixed` · `resolved: 2026-09-05`
 
 The complaint was right and the scope was wrong. The entry read as though every external-API colour
-write coerced; two of the five families already rejected. `LabelWriteSerializer.color` is a
+write coerced. Six endpoints write a colour, and two of them already rejected. `LabelWriteSerializer.color` is a
 `ChoiceField(choices=COLOR_CHOICES)` and `SavedFilterWriteSerializer.validate_color` checks the same
 palette, so the single-label and saved-filter endpoints have been answering 400 all along. The
 `clean_color` calls behind them were belt-and-braces on already-validated input, which is what made
@@ -11303,8 +11303,15 @@ because two writers reach those columns with no serializer in front of them at a
 editor's save assigns `linked.color` straight from its JSON body, and the archive importer assigns
 three pin colour columns and a saved-filter colour from an uploaded file. `Pin.color` is
 interpolated into a Leaflet `divIcon`'s `html`, so that was a stored injection into the owner's own
-map - and `safeColor` now guards both render sites too, since a value stored before any of this
-still renders.
+map.
+
+The render sites are guarded too, since a row written before any of this still renders - and there
+were more of them than the first pass claimed. `safeColor` covers the two compiled ones
+(`entries/map-annotations.ts`, `entries/floorplan-editor.ts`); the map page's own inline script has
+two more (`pages/map/index.html`'s marker builder and its merge mini-card), which cannot import and
+now validate through a local `_safePinColor` mirroring `shared/color-safety.ts`. Inline template
+JavaScript is outside every automated check (see P34), which is why saying "both render sites" was
+wrong rather than merely imprecise.
 
 `services/core/colors.require_color` refuses a value that is present and is not a colour, and keeps
 falling back for missing and blank - "unset" is not an invalid colour, and every one of these
@@ -11380,8 +11387,8 @@ parenthetical should now read something like "(`bun run docs`)".
 
 The overlay bind-mounts the checkout over `/app/src`, which makes the frontend build's output
 directories the host user's. `build_frontend` opens by creating them, so unless the host uid happens
-to equal the container's, `mkdir` raises `PermissionError`, the initializer turns it into
-`UnrecoverableError`, and the container crash-loops before serving anything.
+to equal the container's, `mkdir` raises `PermissionError` straight out of the initializer - nothing
+converts it - and the container crash-loops before serving anything.
 
 `UL_SKIP_FRONTEND_BUILD` returns from `build_frontend` before it touches the filesystem, and the
 overlay sets it - beside the `UL_LOG_DIR` redirect that is there for the same uid reason, in the
@@ -11406,10 +11413,20 @@ a different one - betting that "with 30+ randomly captioned seed photos, name or
 coincidentally match recent-upload order". A bet, on an account whose library is whatever previous
 runs left.
 
-It now supplies its own comparand: a photo named `zzzz-sorts-last-<stamp>.jpg`, which leads the
-recent order because it was just uploaded and cannot lead the name order unless it is the only
-photo - which the grid's own `{% if images %}` already rules out. Deterministic against a fresh or
-an accumulated database, and independent of what the seed happened to be called.
+It now compares the first page under each sort and asserts they are not the same list, with the
+stronger check that any photos on both pages appear in a different relative order. That needs no
+uploads at all, so it also leaves nothing behind on the shared account.
+
+Two earlier attempts at this fix were wrong, and both are worth recording because each looked
+right:
+
+1. Uploading a photo named `zzzz-sorts-last-<stamp>.jpg` and asserting it led "recent" but not
+   "name". The filename is not the sort key - `name` orders by `Lower(Coalesce(caption, ''))`, and
+   an upload from that page sets no caption at all.
+2. Uploading an *uncaptioned pair* and asserting they invert between the two orders, which is true
+   of the query and unobservable in the DOM: the grid pages at 24 and loads more only on scroll,
+   while `name` puts the oldest uncaptioned rows first - so a fresh upload is at the far end of that
+   order, off the first page. It would have failed against a working deployment.
 
 ## RESOLVED 2026-09-05: the integration suite's login setup fails after a successful sign-in, and `diagnose()` hides why
 
@@ -11493,3 +11510,25 @@ about two known colours rather than something needing a browser.
 The entry's other suggestion - converting the sidebar to a fixed light-on-dark scheme like
 `_tokens.scss`'s `$ui-fp-*` - would have worked too, and was not chosen: the sidebar is not actually
 static-dark, so making it so would be a visual change rather than a fix.
+
+## RESOLVED 2026-09-05: `isMouseContextMenu` misreads a keyboard context menu as touch, so the next Enter activation may be swallowed
+
+`id: P44` · `status: fixed` · `resolved: 2026-09-05`
+
+`label-picker.ts` armed its click-suppression for any `contextmenu` that was not a mouse
+right-click. A keyboard context menu - the Menu key, or Shift+F10 - reports `pointerType: ""`,
+`button: 0` and `detail: 0`, which read as a pointer event is indistinguishable from a touch
+long-press. So the guard stayed set until some unrelated later click consumed it, and for a keyboard
+user that click is the Enter or Space they pressed next.
+
+`detail` is the discriminator: a long-press carries a real click count, a synthesised event carries
+0. The predicate is now `emitsNoFollowUpClick` - it never meant "mouse" - hoisted to module scope
+and covered by five cases in `label-picker.test.ts`.
+
+**What the entry asked for and did not get: a browser.** The entry deferred this fix because the
+`detail: 0` premise could not be verified in one, and it still has not been. The premise holds in
+every engine that sets `pointerType` on `contextmenu`, where the new branch is not reached at all;
+the open question is an engine that does not, where a long-press might also report `detail: 0` and
+the suppression would stop arming - the old failure, in the other direction. That is recorded in the
+function's own docstring rather than left in this entry, because it is a caveat about the code and
+not a defect to schedule.

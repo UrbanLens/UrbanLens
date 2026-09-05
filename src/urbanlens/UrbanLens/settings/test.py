@@ -72,6 +72,15 @@ CELERY_RESULT_BACKEND = "cache+memory://"
 # Set here rather than per-module: eight test modules each declared their own
 # `_IN_MEMORY_CHANNEL_LAYERS` override, which is eight places to remember and
 # eight that a new consumer test can be written without.
+#
+# One consequence of the move, since it is a real difference: the per-class
+# overrides handed each class a fresh layer, and this is one instance for the
+# whole process. Nothing in the suite has depended on that isolation (all 101
+# tests in the nine modules pass either way), but a consumer test that leaves a
+# group subscribed can now be seen by a later one. Flush in teardown if that
+# ever bites, rather than reinstating an override for its side effect. It also
+# makes base.py's TESTING-only channels_redis prefix dead configuration - no
+# test reaches that backend now.
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 # No clamd daemon runs in the test environment - tests that exercise the

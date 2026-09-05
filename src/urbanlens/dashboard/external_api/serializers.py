@@ -574,7 +574,8 @@ class PinUpdateSerializer(serializers.Serializer):
     #: What the marker physically represents. Setting it also marks the type
     #: user-provided, which stops automatic building/parcel classification from
     #: overruling the choice later.
-    pin_type = serializers.ChoiceField(choices=PinType.choices, required=False)  #: How urgently the owner wants to visit (0 = unset, 1-5). See the class
+    pin_type = serializers.ChoiceField(choices=PinType.choices, required=False)
+    #: How urgently the owner wants to visit (0 = unset, 1-5). See the class
     #: docstring: this can publish a community wiki vote.
     priority = serializers.IntegerField(required=False, min_value=0, max_value=5)
     #: How hazardous the site is (0 = unset, 1-5). Can publish a wiki vote.

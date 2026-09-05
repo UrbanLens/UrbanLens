@@ -1997,7 +1997,7 @@ one instance fixes nothing else.
 
 ---
 
-## P35 — Four named routes have no production caller; the other five the sweep flagged are reached by hardcoded path
+## P35 — Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path
 
 `id: P35` · `status: open` · `updated: 2026-09-05`
 
@@ -2021,25 +2021,33 @@ as a string rather than through `{% url %}`:
 - `location.wiki.article.revision` and `location.wiki.article.restore` -
   `templates/dashboard/partials/articles/_article_history.html:30,37`, which append
   `{{ row.revision.id }}/` and `.../restore/` to a URL passed in as `scope.urls.history`
+- `location.wiki.gallery.image` and `safety.checkin.gallery.image` -
+  `templates/dashboard/partials/pins/_photo_gallery.html:192` builds `REPOSITION_BASE` from
+  `{% url "location.wiki.gallery" %}` / `{% url "safety.checkin.gallery" %}`, and lines 429 and 519
+  fetch `REPOSITION_BASE + imgId + '/'`. The `{% url %}` names the *collection* route; the detail
+  route is reached by concatenation, which is why a search for its own name finds nothing
 
 That is the finding worth carrying forward, and it cuts both ways: a route reached only by a
 hardcoded path is invisible to this kind of sweep *and* breaks silently when the route moves. The
 `{% url %}` tag exists so a rename is a build error rather than a 404 nobody notices.
 
-**Genuinely no production caller** - four, all still open:
+**Genuinely no production caller** - two, both still open:
 
 - `label.index` (`urls.py:1203`, `LabelKindIndexView`) - a whole page view. Its siblings
   `label.create`/`label.rows`/`label.edit` are live from the Organize page; only the index itself is
   unreachable, and only `test_query_scaling.py:96` names it.
-- `location.wiki.gallery.image` (`urls.py:1597`) - named only by
-  `test_pin_wiki_image_dual_ownership.py:148`.
-- `safety.checkin.gallery.image` (`urls.py:1796`) - no reference at all, including tests.
 - `dev_toolbar.toggle_map_dark_mode` (`urls.py:2134`) - dev tooling with no button; plausibly
   invoked by hand, which is why it is listed rather than deleted.
 
-Each is authorised surface that has to be kept working and tested, so the choice for each is a
-button or a deletion. Not made here: `label.index` and the two `gallery.image` routes are user-facing
-behaviour, and deciding a page should not exist is the owner's call, not a sweep's.
+Both are authorised surface that has to be kept working and tested, so the choice for each is a
+button or a deletion. Not made here: `label.index` is user-facing behaviour, and deciding a page
+should not exist is the owner's call, not a sweep's.
+
+**This entry got the two `gallery.image` routes wrong on 2026-09-05 before getting them right**, in
+exactly the way it warns about: a per-route review that greps for the route's own name reproduces
+the original false positive, because a concatenated URL never contains it. The tell was that both
+had a *test* naming them and no caller - a shape that means "reached some other way" far more often
+than "dead".
 
 
 ## P36 — 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
@@ -2178,34 +2186,6 @@ noticed was `PinFilter` naming `by_category` in a `method=` string, which is not
 name grep counts as one. A call-graph pass should expect the reverse error too.
 
 ---
-
-## P44 — `isMouseContextMenu` misreads a keyboard context menu as touch, so the next Enter activation may be swallowed
-
-`id: P44` · `status: open` · `updated: 2026-08-16`
-
-Previously titled "Keyboard-invoked context menu may swallow the next activation (unverified)".
-
-`label-picker.ts`'s `isMouseContextMenu` decides whether to arm click-suppression after a
-`contextmenu` event:
-
-```ts
-const pointerType = (event as PointerEvent).pointerType;
-return pointerType ? pointerType === "mouse" : event.button === 2;
-```
-
-`contextmenu` is a `MouseEvent`, so `pointerType` is generally absent and the `button === 2`
-fallback decides. That correctly distinguishes a mouse right-click (button 2, no suppression) from
-a touch long-press (button 0, suppression armed). But a context menu invoked from the **keyboard**
-- the Menu key, or Shift+F10 - also reports `button === 0`, so it would arm the suppression with no
-follow-up click ever coming. The guard then stays set until some unrelated later click, which is
-exactly the failure the function's own docstring describes: "swallowing keyboard (Enter/Space)
-activations in the meantime".
-
-Not fixed here because it cannot be confirmed without a real browser, and the plausible
-discriminator (`event.detail === 0` for keyboard-invoked menus) is a behaviour I would be asserting
-rather than observing. Worth ten minutes with DevTools on the Organize page label picker: press the
-Menu key on a label chip, then try to activate any chip with Enter, and see whether the first
-Enter is swallowed.
 
 ## P46 — A group message can still be sent under a key version a removed member holds
 
@@ -3091,9 +3071,10 @@ supported by the runtime and by current `bun-types`, and 1.1.6's `expect` takes 
 `TS2554`s that are the pin's, not the code's. `bin/check_typescript_coverage.py` lists both in
 `_UNCOVERED` with that reason, so they are excluded on purpose rather than by omission.
 
-The unmeasured cost is everything else the two years changed: the 161 files under `frontend/ts/`
-are checked against signatures that may no longer match, in both directions. (Not the whole tree -
-`tests/integration/`'s 84 files use `@types/node` and are unaffected.)
+The unmeasured cost is everything else the two years changed: the 161 files in the `bun-types`
+project - 160 under `frontend/ts/` plus `bin/build-frontend.ts` - are checked against signatures
+that may no longer match, in both directions. (Not the whole tree - `tests/integration/`'s 84 files
+use `@types/node` and are unaffected.)
 
 Not fixed here because it cannot be from this checkout - `node_modules/` is owned by `apps` and not
 group-writable, and this user has no passwordless sudo, so `bun add -d bun-types@1.3.14` fails with

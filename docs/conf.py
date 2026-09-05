@@ -38,10 +38,10 @@ templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # Everything under docs/ is built, including the archive, designs, audits and
 # reports. An earlier version of this file excluded those to keep the sidebar
-# short, which broke 40 of INDEX.md's 41 outbound links in the rendered site -
-# and INDEX.md is the page CLAUDE.md sends every reader to first. They are 45
-# files against 1,076 generated API pages, so the sidebar was the only thing
-# being bought. `index.rst` keeps them out of the visible navigation with a
+# short, which broke every one of INDEX.md's 40 links into them - INDEX.md being
+# the page CLAUDE.md sends every reader to first, and 57 document links in
+# total. They are 45 files against 1,076 generated API pages, so the sidebar was
+# the only thing being bought. `index.rst` keeps them out of the visible navigation with a
 # hidden glob toctree instead, which is the part that was actually wanted.
 
 #: Google-style docstrings, which `CLAUDE.md` requires throughout.

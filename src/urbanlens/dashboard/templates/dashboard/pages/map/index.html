@@ -1520,10 +1520,21 @@
         return `rgba(${r},${g},${b},${alpha})`;
     }
 
+    // Mirrors shared/color-safety.ts's safeColor, which this file cannot import.
+    // The colour is interpolated into style="..." strings handed to innerHTML, so
+    // a stored value that is not a colour is an attribute breakout - and rows
+    // predating the column's own coercion are still served. Validated rather
+    // than escaped: escaping stops the breakout and still permits url(...) and
+    // friends inside the style value.
+    const _UL_HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+    function _safePinColor(value) {
+        return value && _UL_HEX_COLOR.test(String(value)) ? String(value) : null;
+    }
+
     function _resolvePinColor(pin) {
-        const bad = v => !v || v === 'None' || v === 'null';
         // Server sends icon-only color in pin.color; do not fall back to other tags.
-        return bad(pin.color) ? null : pin.color;
+        return _safePinColor(pin.color);
     }
 
     function _buildMarker(pin) {
@@ -3309,7 +3320,8 @@
 
     function _pinMiniCardHtml(uuid, isTarget) {
         const pin = _anyPinData(uuid) || {};
-        const style = pin.color ? `color:${pin.color}` : '';
+        const safe = _safePinColor(pin.color);
+        const style = safe ? `color:${safe}` : '';
         const swapBtn = isTarget ? '' : `<button type="button" class="cat-merge-swap-btn" data-swap-uuid="${uuid}" title="Make this the top-level pin"><i class="material-symbols-outlined">swap_vert</i></button>`;
         const removeBtn = `<button type="button" class="cat-merge-remove-btn" data-remove-uuid="${uuid}" title="Remove from this merge (also deselects it on the map)"><i class="material-symbols-outlined">close</i></button>`;
         return `<div class="cat-merge-mini-card${isTarget ? ' cat-merge-mini-card--target' : ''}" data-merge-uuid="${uuid}">`

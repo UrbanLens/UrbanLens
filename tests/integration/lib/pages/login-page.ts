@@ -10,6 +10,7 @@
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
+import { env } from "../env.js";
 import { publicRoutes } from "../routes.js";
 
 export class LoginPage {
@@ -51,11 +52,17 @@ export class LoginPage {
         //
         // `Promise.any`, not `race`: a 2FA challenge is also a successful
         // sign-in, and `signIn` reports it far better than a timeout does.
-        // `race` settles on the first *rejection* too, so the two identical
-        // timeouts would make it a coin toss which message came out.
+        // `race` settles on the first *rejection* too, so whichever budget ran
+        // out first would decide which message came out.
+        //
+        // Both are given the *navigation* budget explicitly. A `locator.waitFor`
+        // takes `actionTimeout` by default, which is half of it here - so
+        // without this a slow-but-successful sign-in would fail on the nav
+        // branch at 15s while the URL branch was still waiting.
+        const budget = env.navigationTimeoutMs;
         await Promise.any([
-            this.signedInNav.waitFor({ state: "visible" }),
-            this.page.waitForURL((url) => url.pathname.startsWith("/accounts/login/2fa")),
+            this.signedInNav.waitFor({ state: "visible", timeout: budget }),
+            this.page.waitForURL((url) => url.pathname.startsWith("/accounts/login/2fa"), { timeout: budget }),
         ]).catch((error: unknown) => {
             // `AggregateError.message` is "All promises were rejected", which
             // says less than either timeout did. Re-throw the first real one.

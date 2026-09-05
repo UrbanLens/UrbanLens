@@ -110,31 +110,24 @@ test.describe("vault photos grid", () => {
         await page.goto(appRoutes.vaultPhotos);
 
         const grid = page.locator("#photo-grid");
-        const countBefore = Number.parseInt((await grid.getAttribute("data-photo-count")) ?? "0", 10);
+        await expect(grid).toBeVisible();
 
-        // The test supplies its own comparands rather than betting on the seed.
-        // Asserting only that the first tile changed relies on 30-odd randomly
-        // captioned photos never putting the same one first under both orders,
-        // which is a coin toss on a fresh library - and this account's is
-        // whatever previous runs left.
+        // Read the first page under each sort and compare. Two earlier attempts
+        // at this test got it wrong in instructive ways, so what it must *not*
+        // depend on is worth stating:
         //
-        // Two uploads with no caption make the comparison exact. "name" orders
-        // by `Lower(Coalesce(caption, ''))` then `pk` *ascending*; "recent"
-        // orders by `-created` then `-pk`. So an uncaptioned pair is guaranteed
-        // to appear in opposite relative order under the two, whatever else the
-        // library holds. (The filename is not the sort key: an upload from this
-        // page sets no caption, which is also why the earlier "zzzz-" spelling
-        // of this fix was wrong.)
-        for (const label of ["first", "second"]) {
-            await page.setInputFiles("#photos-file-input", {
-                name: `sort-order-${label}-${Date.now()}.jpg`,
-                mimeType: "image/jpeg",
-                buffer: uniqueTinyJpeg(),
-            });
-            await expect.poll(async () => Number.parseInt((await grid.getAttribute("data-photo-count")) ?? "0", 10), { timeout: 15000 }).toBeGreaterThan(countBefore);
-        }
-        await expect.poll(async () => Number.parseInt((await grid.getAttribute("data-photo-count")) ?? "0", 10), { timeout: 15000 }).toBe(countBefore + 2);
-
+        // - Not on the seed's captions. The original asserted the first tile
+        //   changed, which is a bet that no photo happens to lead both orders.
+        // - Not on a filename. "name" orders by `Lower(Coalesce(caption, ''))`,
+        //   and an upload from this page sets no caption at all.
+        // - Not on where an uploaded photo lands. The grid pages at 24 and
+        //   loads more only on scroll, while "name" puts the *oldest*
+        //   uncaptioned rows first (ties break on ascending pk) - so a fresh
+        //   upload is at the far end of that order, off the first page.
+        //
+        // What is left is the property the test is named for: the two orders
+        // are near-reverses of each other, so the first page cannot be the same
+        // list. That needs no uploads, and leaves nothing behind on the account.
         const idsUnder = async (sort: string): Promise<(string | undefined)[]> => {
             await page.locator("#vault-photos-sort").selectOption(sort);
             // The sort handler clears the grid and re-fetches from scratch.
@@ -143,17 +136,19 @@ test.describe("vault photos grid", () => {
         };
 
         const byRecent = await idsUnder("recent");
-        // Newest first, so the pair this test uploaded leads it, later one first.
-        const [newer, older] = byRecent;
-        expect(newer, `expected two uploads to lead the recent order, got ${byRecent.slice(0, 4).join(",")}`).toBeTruthy();
-        expect(older).toBeTruthy();
+        expect(byRecent.length, "a library of one photo cannot show a sort changing anything").toBeGreaterThan(1);
 
         const byName = await idsUnder("name");
-        const newerAt = byName.indexOf(newer);
-        const olderAt = byName.indexOf(older);
-        expect(newerAt, `the newer upload is missing from the name order: ${byName.slice(0, 6).join(",")}`).toBeGreaterThanOrEqual(0);
-        expect(olderAt, `the older upload is missing from the name order: ${byName.slice(0, 6).join(",")}`).toBeGreaterThanOrEqual(0);
-        expect(olderAt, "an uncaptioned pair must invert between recent (-pk) and name (pk)").toBeLessThan(newerAt);
+        expect(byName, "changing the sort re-fetched the same page in the same order").not.toEqual(byRecent);
+
+        // Where the two pages overlap, the shared photos must appear in a
+        // different relative order - a stronger statement than "the lists
+        // differ", which a changed page *size* would also satisfy.
+        const shared = byRecent.filter((id) => byName.includes(id));
+        if (shared.length > 1) {
+            const reordered = [...shared].sort((a, b) => byName.indexOf(a) - byName.indexOf(b));
+            expect(reordered, `the ${shared.length} shared photos kept their relative order across sorts`).not.toEqual(shared);
+        }
     });
 
     test("a photo uploaded while sorted by name doesn't duplicate or corrupt the grid", async ({ page }) => {

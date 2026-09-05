@@ -92,8 +92,26 @@ class PinIconColorEscapejsTests(_MapXssTestCase):
         self.assertNotIn(_QUOTE_BREAKOUT_PAYLOAD, body)
 
     def test_malicious_pin_color_is_escaped(self) -> None:
+        """The template's own escaping, with the column's coercion stepped around.
+
+        `Pin.save()` coerces `color` to NULL for anything that is not a colour,
+        so a payload written through `baker.make` never reaches the database and
+        this test would pass against a template with no escaping at all. What is
+        under test here is the escaping, which still has to hold: rows written
+        before that coercion existed are still served.
+
+        `queryset.update()` is how the payload gets past it - the same bypass the
+        coercion's own docstring names as the reason the render sites are guarded
+        too.
+        """
         location = baker.make(Location, latitude=40.0, longitude=-75.0)
-        baker.make(Pin, profile=self.profile, location=location, icon=None, color=_QUOTE_BREAKOUT_PAYLOAD_SHORT)
+        pin = baker.make(Pin, profile=self.profile, location=location, icon=None, color=None)
+        Pin.objects.filter(pk=pin.pk).update(color=_QUOTE_BREAKOUT_PAYLOAD_SHORT)
+        self.assertEqual(
+            Pin.objects.values_list("color", flat=True).get(pk=pin.pk),
+            _QUOTE_BREAKOUT_PAYLOAD_SHORT,
+            "the payload must actually be stored, or this asserts nothing about escaping",
+        )
 
         resp = self.client.get(reverse("map.init"))
 

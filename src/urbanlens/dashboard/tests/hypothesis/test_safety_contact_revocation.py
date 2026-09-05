@@ -25,7 +25,6 @@ import json
 from unittest.mock import patch
 
 from channels.db import database_sync_to_async
-from django.test import override_settings
 from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline

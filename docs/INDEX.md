@@ -26,7 +26,7 @@ each, and the house style. `P` numbers entries inside `PROBLEMS.md`; every other
 prefix numbers a whole document.
 
 Resolved problems are **not** listed here — they move to
-[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 298
+[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 299
 of them. This index is what is live. Grep the archive before concluding a defect
 is new - and an archived entry keeps its `id:` line, so a citation of `P70`
 still resolves after it is fixed, and the id is never handed out again.
@@ -64,11 +64,10 @@ still resolves after it is fixed, and the id is never handed out again.
 | P31 | open | 2026-08-13 | Session and DM chat sockets have no rate limit and cap frame size only after the whole frame is parsed | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P32 | open | 2026-08-13 | `check_rate_limit` returns True on a `DatabaseError`, so a database failure uncaps paid-API spend | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P34 | open | 2026-08-13 | 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P35 | open | 2026-09-05 | Four named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-08-13 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-08-13 | 100 write handlers totalling 1,217 statements never execute under the test suite | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P41 | open | 2026-09-05 | 68 of 249 public queryset methods have no production caller, so their logic may be duplicated inline elsewhere | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P44 | open | 2026-08-16 | `isMouseContextMenu` misreads a keyboard context menu as touch, so the next Enter activation may be swallowed | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P46 | open | 2026-08-16 | A group message can still be sent under a key version a removed member holds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P47 | open | 2026-08-16 | A deleted message's preview survives in the recipient's notification list | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P48 | open | 2026-08-17 | Logging out leaves every decrypted E2EE key cached in IndexedDB, and nothing clears it | [`docs/PROBLEMS.md`](PROBLEMS.md) |

@@ -153,6 +153,14 @@ export interface FilterPickerApi {
  * `detail` is the discriminator: a touch long-press carries a real click count,
  * a keyboard-synthesised event carries 0.
  *
+ * Not measured, and worth measuring before relying on it further: the `detail`
+ * branch is only reached where `contextmenu` arrives as a plain MouseEvent with
+ * no `pointerType`, and those are the same engines where a long-press might
+ * also report `detail: 0`. If one does, the suppression stops arming there and
+ * a long-press double-fires - the failure this replaced, in the other
+ * direction. Every engine tested reports `pointerType`, so the branch is a
+ * fallback rather than the normal path.
+ *
  * Exported for its test: the two callers are inside picker closures, and the
  * rule is about event shapes rather than about the DOM around them.
  */
