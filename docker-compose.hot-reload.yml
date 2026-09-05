@@ -38,6 +38,12 @@ services:
       UL_ENVIRONMENT: development
       # Outside the bind-mounted tree, so the container's own uid owns it.
       UL_LOG_DIR: /var/log/urbanlens
+      # Same reason, the other direction: the frontend build writes *into* the
+      # bind-mounted tree, whose directories belong to the host user, so it
+      # raises PermissionError and crash-loops the container unless the host uid
+      # happens to match the container's. The sass-watch sidecar below rebuilds
+      # on change, which is what a hot-reload environment wanted anyway.
+      UL_SKIP_FRONTEND_BUILD: "1"
       # Unbuffered, so a traceback reaches `docker compose logs` immediately
       # rather than sitting in a pipe buffer while you wonder what happened.
       PYTHONUNBUFFERED: "1"

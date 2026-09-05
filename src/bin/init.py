@@ -50,6 +50,10 @@ class DjangoProjectInitializer:
         self.db_user = os.environ.get("UL_DB_USER", "postgres")
         self.db_pass = os.environ.get("UL_DB_PASS", "postgres")
         self.environment = environment or os.environ.get("UL_ENVIRONMENT", "production")
+        # Hot reload bind-mounts the checkout, so the build's output directories
+        # belong to the host user rather than to this container's uid - see
+        # `build_frontend`, and docker-compose.hot-reload.yml, which sets this.
+        self.skip_frontend_build = os.environ.get("UL_SKIP_FRONTEND_BUILD", "").lower() in {"1", "true", "yes"}
 
     @property
     def db_host(self) -> str:
@@ -318,6 +322,16 @@ class DjangoProjectInitializer:
             UnrecoverableError: if the frontend fails to build
 
         """
+        if self.skip_frontend_build:
+            # `UL_SKIP_FRONTEND_BUILD`. Under docker-compose.hot-reload.yml the
+            # checkout is bind-mounted, so these directories are the host's and
+            # the mkdir below raises PermissionError unless the host uid happens
+            # to match the container's - which crash-loops the container before
+            # it serves anything. The overlay runs a `sass-watch` sidecar that
+            # rebuilds on change anyway, so this build was redundant there.
+            logger.info("Skipping the frontend build: UL_SKIP_FRONTEND_BUILD is set.")
+            return
+
         # First, ensure that all directories for build files exist.
         # This is necessary because the build process will not create them, and will fail if they do not exist.
         apps = ["dashboard", "core"]

@@ -2650,42 +2650,6 @@ Related: this is the concrete instance of the load-testing gap recorded in
 `docs/TOOLING.md` under "Evaluated, not adopted" - the integration suite found
 it by accident, which is not a substitute for looking on purpose.
 
-## P54 — `docker-compose.hot-reload.yml` crash-loops when the checkout is not the container's uid
-
-`id: P54` · `status: open` · `updated: 2026-08-23`
-
-Previously titled "docker-compose.hot-reload.yml crash-loops when the checkout is not the container's uid (2026-08-23)".
-
-Bringing an agent dev environment up with the hot-reload overlay puts `app` into
-a restart loop and the site answers 502:
-
-```
-File "/app/src/bin/init.py", line 335, in build_frontend
-    frontend_dir.mkdir(parents=True, exist_ok=True)
-PermissionError: [Errno 13] Permission denied:
-    '/app/src/urbanlens/dashboard/frontend/static/dashboard/css'
-```
-
-`docker cp` preserves source ownership and a bind mount exposes it directly, so
-the container's `appuser` cannot write anywhere inside the mounted tree. The
-overlay already knows this - it redirects `UL_LOG_DIR` out of the tree for
-exactly this reason, and its header explains why - but `init.py`'s
-`build_frontend()` also writes into the mounted tree on every start, and that
-was not accounted for. It only shows up where the checkout belongs to a
-different uid than the image's `appuser`, which is every environment
-`dev_env.py` creates.
-
-The overlay delegates SCSS to a `sass-watch` sidecar already, so the app
-container's own frontend build is redundant under hot reload. Teaching `init.py`
-to skip it (an env var the overlay sets) looks like the fix, rather than
-loosening permissions on the checkout.
-
-Until then, updating a `dev_env.py` environment means the documented
-`docker cp` + `chown` route rather than hot reload - and note that
-`STATIC_ROOT` is a *separate* collected tree (`src/urbanlens/frontend/static`,
-not `dashboard/frontend/static`) served by whitenoise even with `DEBUG=True`,
-so a copied-in JS bundle is not served until `collectstatic` runs.
-
 ## P55 — A community quota bonus survives un-sharing the photo that earned it
 
 `id: P55` · `status: open` · `updated: 2026-08-23`
@@ -3002,26 +2966,6 @@ somewhere between the DB and what's served. Didn't chase further (out of scope f
 keeps failing on this specific test: check for an orphaned/stuck row in this account's photo library,
 or a thumbnail-generation task that errored silently.
 
-## P60 — `vault-photos.spec.ts`'s sort test can tie on a persistent dev DB because it relies on random captions
-
-`id: P60` · `status: open` · `updated: 2026-08-31`
-
-Previously titled "`vault-photos.spec.ts`'s "changing sort re-fetches the grid in the new order" test flakes on a persistent dev DB".
-
-Found running the Vault Photos/albums Playwright specs against the `ae97b86` ephemeral dev
-environment after a Batch 3 (Vault albums) fix pass - pre-existing (Batch 2), unrelated to that
-batch's changes. The test asserts the grid's first tile differs between "recent uploads" and "name"
-sort, on the assumption that 30+ randomly captioned seed photos won't coincidentally sort the same
-way both times. Against this environment's `e2e-primary` account (71 accumulated photos from
-repeated suite runs against the same persistent database, not a fresh seed), the same photo landed
-first under both orderings and the test failed on both the initial attempt and the retry. Matches
-the same class of problem noted in this file previously for accumulated E2E test data breaking
-scroll/prune assertions - reseeding a clean, modest photo set for `e2e-primary` before this spec
-runs would fix it; a sturdier version of the test would also pick two captions guaranteed not to
-tie (e.g. by explicitly seeding one photo with a caption that sorts alphabetically first and a
-different, more recent one) rather than relying on randomness against an unbounded, growing dataset.
-mypy policy.
-
 ## P61 — Vault album bulk delete, send-to-wiki and share render hidden forever, because only a `Pin` owner gets URLs
 
 `id: P61` · `status: open` · `updated: 2026-08-31`
@@ -3080,42 +3024,6 @@ owns Leaflet lifecycle across dialog opens, does its own bbox fetch, builds popu
 concatenation, and defines an `_esc()` helper found nowhere else under `templates/`. Extracting it to
 `shared/photo-pin-confirm.ts` and the uploader to a shared `initVaultUploader` would bring the whole
 Vault client surface under typecheck and test.
-
-## P64 — The integration suite's login setup fails after a successful sign-in, and `diagnose()` hides why
-
-`id: P64` · `status: open` · `updated: 2026-08-31`
-
-Previously titled "the integration suite's login setup fails after a *successful* sign-in".
-
-Cost most of an hour during the Vault review, and the error message actively misleads. `auth.setup.ts`
-reported `Sign-in as "e2e-primary" did not happen`, but the attached diagnosis contradicts itself:
-
-```
-The page is at https://ae97b86.dev.urbanlens.org/dashboard/map/?lat=41.361607&lng=-74.056177&zoom=13
-and no longer shows the sign-in form.
-page.waitForURL: Timeout 30000ms exceeded.
-  navigated to "https://ae97b86.dev.urbanlens.org/dashboard/map/"
-  "networkidle" event fired
-```
-
-The sign-in worked - the browser is on the map, authenticated. What timed out is
-`submitCredentials`' `waitForURL((url) => !url.pathname.startsWith("/accounts/login"))`
-(`lib/pages/login-page.ts:47`), raced inside a `Promise.all` against the click. The post-login map
-page then rewrites its own URL client-side to append `?lat=&lng=&zoom=` (a `history` replace, not a
-navigation), so under load the predicate can be evaluated either side of a state the wait never
-observes. The first attempt failed differently again - `locator.allInnerTexts: Execution context was
-destroyed, most likely because of a navigation` from `diagnose()` at `:99`, i.e. the *error reporter*
-itself throwing while the page navigated under it, hiding the real cause.
-
-Two separate things to fix: make the wait robust (assert on an authenticated marker in the DOM, or
-`waitForURL` outside the `Promise.all` with the click awaited first), and make `diagnose()` tolerate a
-navigating page so the reported reason is the real one.
-
-Worth noting for anyone debugging this: it reproduces only when the host is loaded, and this box is
-shared - load averages of 100-290 with no single hot process (heavy `kworker/kblockd` I/O wait) were
-routine during this session, turning 3-second tests into 8-minute ones. Check `/proc/loadavg` before
-concluding a browser failure is a code regression; a direct `curl` of the same page returning in ~1s
-while Playwright times out at 30s is the tell.
 
 ## P65 — Perf tooling measures query count only, so a 12-second render passes every scaling test
 

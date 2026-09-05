@@ -110,16 +110,34 @@ test.describe("vault photos grid", () => {
         await page.goto(appRoutes.vaultPhotos);
 
         const grid = page.locator("#photo-grid");
-        const firstTileIdBefore = await grid.locator(".photo-tile[data-id]").first().getAttribute("data-id");
+        const countBefore = Number.parseInt((await grid.getAttribute("data-photo-count")) ?? "0", 10);
+
+        // The test supplies its own comparand rather than betting on the seed.
+        // Asserting only that the first tile changed relies on 30-odd randomly
+        // captioned photos never putting the same one first under both orders,
+        // which is a coin toss on a fresh library and a certainty of *failing*
+        // on none - and this account's library is whatever previous runs left.
+        // A name that sorts last is first under "recent" and cannot be first
+        // under "name" unless it is the only photo, which the grid's own
+        // `{% if images %}` already rules out.
+        await page.setInputFiles("#photos-file-input", {
+            name: `zzzz-sorts-last-${Date.now()}.jpg`,
+            mimeType: "image/jpeg",
+            buffer: uniqueTinyJpeg(),
+        });
+        await expect.poll(async () => Number.parseInt((await grid.getAttribute("data-photo-count")) ?? "0", 10), { timeout: 15000 }).toBe(countBefore + 1);
+
+        await page.locator("#vault-photos-sort").selectOption("recent");
+        await expect.poll(async () => grid.locator(".photo-tile[data-id]").count(), { timeout: 10000 }).toBeGreaterThan(0);
+        const newestId = await grid.locator(".photo-tile[data-id]").first().getAttribute("data-id");
 
         await page.locator("#vault-photos-sort").selectOption("name");
         // The sort handler clears the grid and re-fetches from scratch.
         await expect.poll(async () => grid.locator(".photo-tile[data-id]").count(), { timeout: 10000 }).toBeGreaterThan(0);
 
-        const firstTileIdAfter = await grid.locator(".photo-tile[data-id]").first().getAttribute("data-id");
-        // With 30+ randomly captioned seed photos, name order should not
-        // coincidentally match recent-upload order.
-        expect(firstTileIdAfter).not.toBe(firstTileIdBefore);
+        const firstByName = await grid.locator(".photo-tile[data-id]").first().getAttribute("data-id");
+        expect(newestId, "the just-uploaded photo should lead the recent order").not.toBeNull();
+        expect(firstByName, "a name sorting last cannot also lead the name order").not.toBe(newestId);
     });
 
     test("a photo uploaded while sorted by name doesn't duplicate or corrupt the grid", async ({ page }) => {

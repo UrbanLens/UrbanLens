@@ -11356,3 +11356,58 @@ Not clean under `--strict`: five `Cannot resolve import` warnings, all AutoAPI f
 **One thing this cannot fix from here.** `CLAUDE.md` still says "(nothing currently does - see P71)"
 after the docstring standard. That file is hook-blocked, so the correction has to be Jess's: the
 parenthetical should now read something like "(`bun run docs`)".
+
+## RESOLVED 2026-09-05: `docker-compose.hot-reload.yml` crash-loops when the checkout is not the container's uid
+
+`id: P54` · `status: fixed` · `resolved: 2026-09-05`
+
+The overlay bind-mounts the checkout over `/app/src`, which makes the frontend build's output
+directories the host user's. `build_frontend` opens by creating them, so unless the host uid happens
+to equal the container's, `mkdir` raises `PermissionError`, the initializer turns it into
+`UnrecoverableError`, and the container crash-loops before serving anything.
+
+`UL_SKIP_FRONTEND_BUILD` returns from `build_frontend` before it touches the filesystem, and the
+overlay sets it - beside the `UL_LOG_DIR` redirect that is there for the same uid reason, in the
+other direction.
+
+Nothing is lost by skipping it there: the overlay already runs a `sass-watch` sidecar, and
+`UL_ENVIRONMENT: development` leaves `DEBUG` on, where staticfiles serves from the app directories
+rather than from a collected root - so the `collectstatic` this also skips has nothing to do.
+
+Its test found a second defect, and that one was general: `bin/lib/container_sync.sh` copies `src/`,
+`bin/` and a named list of root deployment files into the test container, and the overlay was not on
+the list. A test asserting on it therefore read whatever the image was last built with and failed
+against a file the working tree had already fixed - the exact "prints tree matches and the run still
+looks verified" failure the sync script's own header warns about. Added.
+
+## RESOLVED 2026-09-05: `vault-photos.spec.ts`'s sort test can tie on a persistent dev DB because it relies on random captions
+
+`id: P60` · `status: fixed` · `resolved: 2026-09-05`
+
+The test captured the first tile under "recent", switched to "name", and asserted the first tile was
+a different one - betting that "with 30+ randomly captioned seed photos, name order should not
+coincidentally match recent-upload order". A bet, on an account whose library is whatever previous
+runs left.
+
+It now supplies its own comparand: a photo named `zzzz-sorts-last-<stamp>.jpg`, which leads the
+recent order because it was just uploaded and cannot lead the name order unless it is the only
+photo - which the grid's own `{% if images %}` already rules out. Deterministic against a fresh or
+an accumulated database, and independent of what the seed happened to be called.
+
+## RESOLVED 2026-09-05: the integration suite's login setup fails after a successful sign-in, and `diagnose()` hides why
+
+`id: P64` · `status: fixed` · `resolved: 2026-09-05`
+
+Two independent defects in one page object, which is why the symptom was so confusing.
+
+`submitCredentials` raced `waitForURL` against the click inside a `Promise.all`. A URL predicate has
+to hold at a moment Playwright observes, and the page after sign-in rewrites its own URL client-side
+- so "the path is no longer `/accounts/login`" can be missed even when sign-in worked. It now clicks,
+dismisses the recovery dialog, then waits for `nav.app-nav`, which renders only for an authenticated
+user and is the same marker `AppShell` uses. `Promise.any` against the 2FA URL keeps that case
+reporting its own far better message; `race` would settle on the first *rejection* too, making two
+identical timeouts a coin toss over which message came out.
+
+`diagnose()` then hid the cause. Every read in it is guarded with `.catch(() => "")` except the
+first, so a page still navigating threw "Execution context was destroyed" out of the error path,
+over whatever the form was about to say. Guarded like its siblings.

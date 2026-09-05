@@ -86,7 +86,7 @@ sync_tree_into() {
     # Dotfiles are listed individually because `docker cp` on a directory does
     # not glob them, and .gitignore/.env*-sample are read by those same tests.
     local f
-    for f in docker-compose.yml docker-entrypoint.sh gunicorn.conf.py \
+    for f in docker-compose.yml docker-compose.hot-reload.yml docker-entrypoint.sh gunicorn.conf.py \
         pyproject.toml uv.lock .gitignore .env-sample .env.ai-sample; do
         [ -e "$f" ] && docker cp "$f" "$container":/app/"$f"
     done

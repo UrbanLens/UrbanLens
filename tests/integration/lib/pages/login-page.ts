@@ -17,12 +17,16 @@ export class LoginPage {
     readonly password: Locator;
     readonly submit: Locator;
     readonly errors: Locator;
+    readonly signedInNav: Locator;
 
     constructor(private readonly page: Page) {
         this.username = page.locator("#id_username");
         this.password = page.locator("#id_password");
         this.submit = page.locator("#password-login-form button[type=submit]");
         this.errors = page.locator(".auth-errors, .errorlist");
+        // Rendered only for an authenticated user; see `AppShell`, which uses
+        // the same locator as its "this page rendered as signed in" marker.
+        this.signedInNav = page.locator("nav.app-nav");
     }
 
     async goto(): Promise<void> {
@@ -35,18 +39,23 @@ export class LoginPage {
         await this.username.fill(username);
         await this.password.fill(password);
         // The form's submit handler may derive the credential in the browser
-        // first (see `UrbanLensE2EE.wireLoginForm`), so this waits for whatever
-        // navigation eventually happens rather than for the click alone.
+        // first (see `UrbanLensE2EE.wireLoginForm`), so the outcome is awaited
+        // after the click rather than raced against it.
+        await this.submit.click();
+        await this.dismissRecoveryKeyDialog();
+        // Waited on by what rendered, not by the URL. A URL predicate has to
+        // hold at a moment Playwright happens to observe, and the page that
+        // follows sign-in rewrites its own URL client-side - so "the path is no
+        // longer /accounts/login" can be missed even when sign-in worked, which
+        // is how this failed *after* signing in successfully.
         //
-        // `domcontentloaded` rather than the default full `load`: the page that
-        // follows sign-in pulls jQuery, toastr and HTMX from public CDNs, and
-        // waiting for those makes a slow third-party host look like a failed
-        // sign-in. Whether those loaded is a question `specs/services` asks
-        // deliberately.
-        await Promise.all([
-            this.page.waitForURL((url) => !url.pathname.startsWith("/accounts/login"), { waitUntil: "domcontentloaded" }),
-            this.submit.click(),
-            this.dismissRecoveryKeyDialog(),
+        // `Promise.any`, not `race`: a 2FA challenge is also a successful
+        // sign-in, and `signIn` reports it far better than a timeout does.
+        // `race` settles on the first *rejection* too, so the two identical
+        // timeouts would make it a coin toss which message came out.
+        await Promise.any([
+            this.signedInNav.waitFor({ state: "visible" }),
+            this.page.waitForURL((url) => url.pathname.startsWith("/accounts/login/2fa")),
         ]);
     }
 
@@ -96,7 +105,10 @@ export class LoginPage {
 
     /** Whatever the page can say about why it is still here. */
     private async diagnose(): Promise<string> {
-        const reported = (await this.errors.allInnerTexts()).join(" | ").trim();
+        // Guarded like every later read in this method: the page may still be
+        // navigating when the error path runs, and an unguarded read throws
+        // "Execution context was destroyed" over whatever it was about to say.
+        const reported = (await this.errors.allInnerTexts().catch(() => [] as string[])).join(" | ").trim();
         if (reported) {
             return `The form reported: ${reported}`;
         }

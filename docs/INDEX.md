@@ -26,7 +26,7 @@ each, and the house style. `P` numbers entries inside `PROBLEMS.md`; every other
 prefix numbers a whole document.
 
 Resolved problems are **not** listed here — they move to
-[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 293
+[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 296
 of them. This index is what is live. Grep the archive before concluding a defect
 is new - and an archived entry keeps its `id:` line, so a citation of `P70`
 still resolves after it is fixed, and the id is never handed out again.
@@ -79,17 +79,14 @@ still resolves after it is fixed, and the id is never handed out again.
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P52 | open | 2026-08-24 | `.app-nav-right` runs 40px past a 390px viewport, so every page scrolls sideways at phone width | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-08-24 | One Private Pin page load fires dozens of concurrent panel requests and can exhaust the DB connection pool | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P54 | open | 2026-08-23 | `docker-compose.hot-reload.yml` crash-loops when the checkout is not the container's uid | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P55 | open | 2026-08-23 | A community quota bonus survives un-sharing the photo that earned it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-08-28 | `Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed to set it does not exist | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P57 | open | 2026-08-29 | The test-quality audit left ~15 findings unfixed, from an unpatched `connect_ex` guard to untested views | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P58 | open | 2026-08-31 | A photo's grid tile can 404/500 for seconds after upload while async processing renames its file | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P59 | open | 2026-08-31 | A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P60 | open | 2026-08-31 | `vault-photos.spec.ts`'s sort test can tie on a persistent dev DB because it relies on random captions | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P61 | open | 2026-08-31 | Vault album bulk delete, send-to-wiki and share render hidden forever, because only a `Pin` owner gets URLs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P62 | open | 2026-08-31 | Video uploads are charged to quota but appear nowhere in the Vault | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P63 | open | 2026-08-31 | Adding a third Vault media type means copying ~600 lines for ~90 lines of difference | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P64 | open | 2026-08-31 | The integration suite's login setup fails after a successful sign-in, and `diagnose()` hides why | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P65 | open | 2026-08-31 | Perf tooling measures query count only, so a 12-second render passes every scaling test | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P66 | open | 2026-08-31 | Organize's active label tab still renders its full card list unpaginated | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P67 | open | 2026-08-31 | "Organize this property" fans out ~6-7 queries per candidate pin, uncapped to 500 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
