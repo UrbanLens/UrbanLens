@@ -27,7 +27,6 @@
     "codeql:install": "python3 bin/run_codeql.py --install",
     "uninstall": "echo \"docker compose down && docker volume ls -q | grep '^urbanlens_' | xargs -r docker volume rm\"",
     "clean:js": "rm -rf src/urbanlens/dashboard/frontend/static/dashboard/js",
-    "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start",
     "check": "bash bin/run_checks.sh",
     "coverage": "python3 -m coverage report",
     "format:check": "python3 bin/precommit_autofix.py --check",
