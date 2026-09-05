@@ -160,6 +160,12 @@ in a couple of seconds.
   and `safety/checkins/{slug}/maps/` used to be among them (a bare top-level array, and a bespoke
   `{entries,total,omitted_sources}` shape) but were normalized onto the standard envelope before v1
   gained any real client depending on the old shape — see their entries below.
+- **Colours** are 6-digit hex, `#rrggbb`. The 3-digit form is *not* accepted: `#f00` is refused
+  exactly like `red`. Anything a colour field cannot store is a 400 naming the field, never a
+  silently substituted default — an API client that is told 200 and had its value dropped can only
+  find out by reading the record back. `Label.color` and `SavedFilter.color` are narrower still:
+  both are restricted to the shared palette (`COLOR_CHOICES`), so an off-palette hex like `#0a1b2c`
+  is refused there while `Pin.color` and the label customization override accept any hex.
 - **Versioning**: `v1` changes additively only. A breaking change mints `/v2/` and serves a
   `Sunset` header on `v1`.
 - **WebSockets enforce scopes** exactly like HTTP: `ws/messages/` needs `messages:read` to connect

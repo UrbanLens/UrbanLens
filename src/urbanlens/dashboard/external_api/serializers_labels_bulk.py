@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, KIND_CATEGORY, KIND_STATUS, KIND_TAG
 
 #: Kinds a bulk convert may target. People/media labels are a structurally
 #: separate hierarchy (see ``_parent_candidates`` in ``controllers/labels.py``)
@@ -66,7 +66,10 @@ class LabelBulkEditSerializer(serializers.Serializer):
 
     uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=500)
     icon = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=50)
-    color = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    #: The same palette LabelWriteSerializer enforces on the single-label
+    #: endpoints. Bulk edit writes the same column on the same model, and used
+    #: to take any string and drop what it did not recognise.
+    color = serializers.ChoiceField(choices=COLOR_CHOICES, required=False, allow_null=True, allow_blank=True)
     description = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     order = serializers.IntegerField(required=False)
     #: Delta-add only, matching the internal view - there is no bulk parent/

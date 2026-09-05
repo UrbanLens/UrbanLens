@@ -304,6 +304,10 @@ class SyncPinSerializer(serializers.Serializer):
     own_icon = serializers.CharField(read_only=True, allow_null=True)
     own_custom_icon_url = serializers.CharField(read_only=True, allow_null=True)
     own_color = serializers.CharField(read_only=True, allow_null=True)
+    #: Reached this payload through the map payload it wraps, which gained it
+    #: with the pin-popup cover photo. Declared here so the OpenAPI contract -
+    #: and the Dart client generated from it - carries a field that is served.
+    cover_photo_url = serializers.CharField(read_only=True, allow_null=True)
     child_count = serializers.IntegerField(read_only=True)
     pin_type = serializers.CharField(read_only=True)
     parent_uuid = serializers.UUIDField(read_only=True, allow_null=True)

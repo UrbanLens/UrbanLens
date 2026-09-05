@@ -21,6 +21,7 @@ from django.urls import reverse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -179,7 +180,7 @@ from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit
-from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.colors import InvalidColorError, require_color
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
@@ -482,6 +483,33 @@ def _resolve_parent_labels(profile: Profile, data: dict) -> tuple[list[Label], R
     return parents, None
 
 
+def _validated_color(data: dict, *, default: str | None = None, key: str = "color") -> str | None:
+    """Read a colour from a request body, 400ing rather than substituting.
+
+    `clean_color` replaces a value it does not recognise with the default, which
+    is right for a form post (the user sees the swatch that resulted) and wrong
+    here: the client is told the write succeeded and only finds out by reading
+    the record back. Missing and blank keep falling back - "unset" is not an
+    invalid colour.
+
+    Args:
+        data: The parsed request body.
+        default: What a missing or blank value falls back to.
+        key: The body key to read.
+
+    Returns:
+        A validated colour, or `default`.
+
+    Raises:
+        ValidationError: When the key is present and is not a colour. Rendered
+            by `ErrorEnvelopeMixin` as the package's field-keyed 400.
+    """
+    try:
+        return require_color(data.get(key), default=default)
+    except InvalidColorError as exc:
+        raise ValidationError({key: [str(exc)]}) from exc
+
+
 class ExternalApiView(ErrorEnvelopeMixin, APIView):
     """Base for every external endpoint: credential auth, scope gate, per-credential throttle.
 
@@ -703,7 +731,7 @@ class PinsView(ExternalApiView):
                 longitude=data.get("longitude"),
                 address=data.get("address"),
                 icon=data.get("icon"),
-                color=clean_color(data.get("color")),
+                color=_validated_color(data),
                 description=data.get("description"),
                 pin_type=data.get("pin_type"),
                 client_uuid=data.get("uuid"),
@@ -2123,7 +2151,7 @@ class SavedFiltersView(PaginatedListMixin, ExternalApiView):
             profile=profile,
             name=data["name"],
             icon=data.get("icon") or "bookmark",
-            color=clean_color(data.get("color"), default=""),
+            color=_validated_color(data, default=""),
             opacity=data.get("opacity", 100),
             criteria=criteria,
             order=data.get("order", 0),
@@ -2184,7 +2212,7 @@ class SavedFilterDetailView(ExternalApiView):
         if "icon" in data:
             saved_filter.icon = data["icon"] or "bookmark"
         if "color" in data:
-            saved_filter.color = clean_color(data["color"], default="")
+            saved_filter.color = _validated_color(data, default="")
         if "opacity" in data:
             saved_filter.opacity = data["opacity"]
         if "criteria" in data:
@@ -2294,7 +2322,7 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
             name=data["name"],
             description=data.get("description") or None,
             kind=data["kind"],
-            color=clean_color(data.get("color"), default=DEFAULT_LABEL_COLOR),
+            color=_validated_color(data, default=DEFAULT_LABEL_COLOR),
             icon=data.get("icon") or None,
             order=data.get("order", 0),
             allow_auto_tag=data.get("allow_auto_tag", True),
@@ -2366,7 +2394,7 @@ class LabelDetailView(ExternalApiView):
             label.description = data.get("description") or None
             changed_fields.append("description")
         if "color" in data:
-            label.color = clean_color(data.get("color"))
+            label.color = _validated_color(data)
             changed_fields.append("color")
         if "icon" in data:
             label.icon = data.get("icon") or None
@@ -2452,7 +2480,7 @@ class LabelCustomizationView(ExternalApiView):
             label,
             name=data.get("name"),
             icon=data.get("icon"),
-            color=clean_color(data.get("color")),
+            color=_validated_color(data),
         )
         return Response(LabelSerializer(_reload_label(label, profile)).data)
 

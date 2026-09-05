@@ -115,3 +115,36 @@ def clean_color(value: object, *, default: str | None = None, allow_none_keyword
     if allow_none_keyword and text.lower() == NO_COLOR:
         return NO_COLOR
     return text if is_hex_color(text) else default
+
+
+class InvalidColorError(ValueError):
+    """A submitted colour is present but is not one this application stores."""
+
+
+def require_color(value: object, *, default: str | None = None, allow_none_keyword: bool = False) -> str | None:
+    """Like :func:`clean_color`, but refuse a wrong value instead of replacing it.
+
+    Missing and blank still fall back to ``default``: "unset" is not an invalid
+    colour, and every caller here treats an absent key as "leave it alone". Only
+    a value that is present, non-blank, and not a colour raises - which is the
+    case where coercing loses information the caller supplied, tells them the
+    write succeeded, and leaves them to discover the difference by reading the
+    record back.
+
+    Args:
+        value: The raw submitted value, typically straight off a JSON body.
+        default: What a missing or blank value falls back to.
+        allow_none_keyword: Permit the literal ``"none"``.
+
+    Returns:
+        A validated colour string, or ``default``.
+
+    Raises:
+        InvalidColorError: When ``value`` is present and is not a colour.
+    """
+    if value is None or not str(value).strip():
+        return default
+    cleaned = clean_color(value, default=None, allow_none_keyword=allow_none_keyword)
+    if cleaned is None:
+        raise InvalidColorError(f"{str(value)[:64]!r} is not a colour. Use 6-digit hex, e.g. #1a2b3c.")
+    return cleaned

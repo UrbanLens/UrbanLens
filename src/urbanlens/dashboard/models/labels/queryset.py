@@ -36,6 +36,29 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
             obj.coerce_colors()
         return super().bulk_create(objs, *args, **kwargs)
 
+    def bulk_update(self, objs, fields, *args, **kwargs):
+        """Update labels in bulk, coercing each colour first.
+
+        The third path past ``save()``, and the one the external API's bulk edit
+        uses. That endpoint validates its input and 400s on a bad colour, so
+        this is the backstop for every other caller.
+
+        Args:
+            objs: The labels to update.
+            fields: The column names to write.
+            *args: Passed through to Django's ``bulk_update``.
+            **kwargs: Passed through to Django's ``bulk_update``.
+
+        Returns:
+            Whatever Django's ``bulk_update`` returns - the number of rows
+            matched, on the versions that report it.
+        """
+        objs = list(objs)
+        if "color" in fields:
+            for obj in objs:
+                obj.coerce_colors()
+        return super().bulk_update(objs, fields, *args, **kwargs)
+
     def visible_to(self, profile: Profile | int) -> Self:
         """Return global labels (profile=None) plus labels owned by this profile."""
         if isinstance(profile, int):
