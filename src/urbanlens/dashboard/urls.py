@@ -1175,6 +1175,7 @@ urlpatterns = [
     path("settings/security/totp/disable/", two_factor.TOTPDisableView.as_view(), name="settings.security.totp.disable"),
     path("settings/security/backup-codes/generate/", two_factor.BackupCodesGenerateView.as_view(), name="settings.security.backup_codes.generate"),
     path("settings/security/api-keys/", api_keys.ApiKeyCreateView.as_view(), name="settings.security.api_keys.create"),
+    path("settings/security/api-keys/section/", api_keys.ApiKeySectionView.as_view(), name="settings.security.api_keys.section"),
     path("settings/security/api-keys/<int:api_key_id>/revoke/", api_keys.ApiKeyRevokeView.as_view(), name="settings.security.api_keys.revoke"),
     path("settings/billing/", billing.BillingSettingsSectionView.as_view(), name="settings.billing"),
     path("settings/billing/checkout/", billing.BillingCheckoutView.as_view(), name="settings.billing.checkout"),

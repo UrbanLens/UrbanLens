@@ -9,13 +9,21 @@ user's keys.
 
 from __future__ import annotations
 
+import re
+
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey
-from urbanlens.dashboard.services.auth.api_keys import authenticate_api_key, generate_api_key, record_api_key_usage
+from urbanlens.dashboard.services.auth.api_keys import (
+    API_KEYS_PAGE_SIZE,
+    authenticate_api_key,
+    generate_api_key,
+    record_api_key_usage,
+    revoke_api_key,
+)
 
 
 class ApiKeyCreateViewTests(TestCase):
@@ -137,3 +145,101 @@ class ApiKeysSettingsPageContentTests(TestCase):
         generate_api_key(self.user, "Unused App")
         response = self.client.get(reverse("settings.view"))
         self.assertNotContains(response, "Recent activity")
+
+
+class ApiKeyListPaginationTests(TestCase):
+    """P69: the key list grows forever, because revoking never removes a row.
+
+    Revoked keys are shown on purpose - ``revoke_all_api_keys``' docstring says
+    so, and an owner needs to see that a key went away - which is exactly why
+    the list cannot be trimmed and has to page instead.
+    """
+
+    def setUp(self) -> None:
+        baker.make(User)
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+
+    def _keys(self, count: int, *, revoked: bool = False) -> list[ApiKey]:
+        made = []
+        for index in range(count):
+            api_key, _raw = generate_api_key(self.user, f"key-{index:03d}")
+            if revoked:
+                revoke_api_key(self.user, api_key.pk)
+            made.append(api_key)
+        return made
+
+    def _listed(self, response) -> list[str]:
+        """The key names this response actually rendered, newest first.
+
+        By name rather than by counting list items: the API-key list reuses the
+        passkey list's classes, so a count would also pick up the Security
+        section's passkeys on a full settings page.
+        """
+        return re.findall(r"<strong>(key-\d{3}|the-one-that-still-works)</strong>", response.content.decode())
+
+    def test_the_settings_page_renders_only_one_page_of_keys(self) -> None:
+        self._keys(API_KEYS_PAGE_SIZE + 4)
+
+        response = self.client.get(reverse("settings.view"))
+
+        self.assertEqual(self._listed(response), [f"key-{index:03d}" for index in range(API_KEYS_PAGE_SIZE + 3, 3, -1)])
+
+    def test_the_rest_are_reachable_on_the_next_page(self) -> None:
+        self._keys(API_KEYS_PAGE_SIZE + 4)
+
+        response = self.client.get(reverse("settings.security.api_keys.section"), {"api_keys_page": 2})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._listed(response), [f"key-{index:03d}" for index in range(3, -1, -1)])
+
+    def test_pagination_links_target_the_section_and_its_own_parameter(self) -> None:
+        # The partial is rendered by the whole settings page as well as by its
+        # own view, so a link built from request.path would point at
+        # /dashboard/settings/. `page` is avoided because the settings page
+        # carries other paginated sections.
+        self._keys(API_KEYS_PAGE_SIZE + 4)
+
+        response = self.client.get(reverse("settings.view"))
+
+        self.assertContains(response, f"{reverse('settings.security.api_keys.section')}?api_keys_page=2")
+
+    def test_active_keys_come_before_revoked_ones(self) -> None:
+        # Created oldest-first, so newest-first ordering alone would push the
+        # only working key onto page two behind a page of dead ones - which is
+        # the one key its owner came to the page to manage.
+        still_working, _raw = generate_api_key(self.user, "the-one-that-still-works")
+        self._keys(API_KEYS_PAGE_SIZE, revoked=True)
+
+        response = self.client.get(reverse("settings.view"))
+
+        self.assertEqual(self._listed(response)[0], still_working.name)
+
+    def test_revoked_keys_sink_but_stay_newest_first_among_themselves(self) -> None:
+        # Ordering on revoked_at itself would sort the dead keys by when they
+        # were revoked, oldest first - the least interesting one at the top.
+        self._keys(2)
+        revoked_first, _one = generate_api_key(self.user, "key-100")
+        revoked_second, _two = generate_api_key(self.user, "key-101")
+        revoke_api_key(self.user, revoked_second.pk)
+        revoke_api_key(self.user, revoked_first.pk)
+
+        response = self.client.get(reverse("settings.security.api_keys.section"))
+
+        self.assertEqual(self._listed(response), ["key-001", "key-000", "key-101", "key-100"])
+
+    def test_another_users_keys_are_never_listed(self) -> None:
+        stranger = baker.make(User)
+        generate_api_key(stranger, "not yours")
+        self._keys(2)
+
+        response = self.client.get(reverse("settings.security.api_keys.section"))
+
+        self.assertNotContains(response, "not yours")
+
+    def test_the_section_view_requires_login(self) -> None:
+        self.client.logout()
+
+        response = self.client.get(reverse("settings.security.api_keys.section"))
+
+        self.assertEqual(response.status_code, 302)

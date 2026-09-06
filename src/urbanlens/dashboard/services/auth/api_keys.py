@@ -12,6 +12,7 @@ import secrets
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.hashers import check_password, make_password
+from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyUsageLog
@@ -31,6 +32,12 @@ _SECRET_ENTROPY_BYTES = 32
 #: is a "does this look right to me" sanity check for the key's owner, not a
 #: compliance-grade audit log, so an unbounded table isn't worth the upkeep.
 USAGE_LOG_LIMIT = 20
+
+#: API keys listed per page in Settings > Advanced > API Keys.
+API_KEYS_PAGE_SIZE = 10
+
+#: Its own page parameter, since the settings page hosts several paginated sections.
+API_KEYS_PAGE_PARAM = "api_keys_page"
 
 
 def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
@@ -201,14 +208,25 @@ def api_keys_settings_context(user: User, request: HttpRequest, **extra: object)
         **extra: Additional context to merge in.
 
     Returns:
-        Context dict with ``api_keys`` (newest first, revoked included, each
-        with its ``usage_log`` prefetched), ``new_api_key``,
+        Context dict with ``api_keys`` (one page of them, working keys first
+        and newest first within each group, each with its ``usage_log``
+        prefetched), ``api_keys_page_obj``, ``new_api_key``,
         ``external_api_whoami_url``, and ``external_api_pins_url``.
     """
     from django.urls import reverse
 
+    from urbanlens.dashboard.services.core.pagination import get_page
+
+    # Revoked keys stay listed on purpose (see `revoke_all_api_keys`), so this
+    # list only ever grows and has to page rather than be trimmed. Working keys
+    # sort first because they are the ones with an action attached: an account
+    # that had revoked a page's worth of keys would otherwise have to page
+    # forward to reach the key it actually uses.
+    keys = ApiKey.objects.for_user(user).alias(still_working=Q(revoked_at__isnull=True)).order_by("-still_working", "-created").prefetch_related("usage_log")
+    page = get_page(request, keys, API_KEYS_PAGE_SIZE, param=API_KEYS_PAGE_PARAM)
     return {
-        "api_keys": list(ApiKey.objects.for_user(user).order_by("-created").prefetch_related("usage_log")),
+        "api_keys": list(page.object_list),
+        "api_keys_page_obj": page,
         "new_api_key": request.session.pop("new_api_key", None),
         "external_api_whoami_url": request.build_absolute_uri(reverse("external_api:whoami")),
         "external_api_pins_url": request.build_absolute_uri(reverse("external_api:pins")),

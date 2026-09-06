@@ -75,6 +75,8 @@
         </li>
         {% endfor %}
     </ul>
+    {% url 'settings.security.api_keys.section' as api_keys_url %}
+    {% include "dashboard/partials/ui/_pagination_controls.html" with page_obj=api_keys_page_obj page_url=api_keys_url page_param="api_keys_page" page_target="#api-keys-settings-section-body" page_swap="outerHTML" page_noun="API keys" %}
     {% endif %}
 
     <form method="post" action="{% url 'settings.security.api_keys.create' %}"

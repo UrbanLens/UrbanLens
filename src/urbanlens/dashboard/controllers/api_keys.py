@@ -36,6 +36,21 @@ def _api_keys_section_response(request: HttpRequest, user: User, **extra: object
     return render(request, _API_KEYS_SECTION_PARTIAL, context)
 
 
+class ApiKeySectionView(LoginRequiredMixin, View):
+    """GET: the API Keys section on its own, for a pagination click.
+
+    The full settings page still renders this section inline - the list is a
+    handful of small queries, not something worth a second round trip - so this
+    exists for the pagination bar, which needs a stable URL of its own rather
+    than ``request.path``.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        if not isinstance(request.user, User):
+            return redirect("login")
+        return _api_keys_section_response(request, request.user)
+
+
 class ApiKeyCreateView(LoginRequiredMixin, View):
     """POST: generate a new API key and reveal its plaintext exactly once."""
 
