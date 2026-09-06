@@ -2407,7 +2407,7 @@ and the imagery hosts the Maps JS API picks at runtime (`khms0.googleapis.com` 4
 "the known set rather than a proven-complete one". A report-only COEP deployment is what would
 settle both.
 
-## P57 — The test-quality audit's follow-ups: 5 of ~15 fixed, the rest untested views and unproven locks
+## P57 — The test-quality audit's follow-ups: 11 of ~15 fixed; two unproven locks and two decisions remain
 
 `id: P57` · `status: open` · `updated: 2026-09-06`
 
@@ -2417,7 +2417,7 @@ Found while auditing existing unit tests for real positive/negative coverage (se
 `docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
 convention rather than fixed inline.
 
-**Ten are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
+**Eleven are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
 `make_cache_key` collision, the hard-delete overlap lock, the `SubscriptionRole.clean()` gap, and
 `PinAliasView.post` (same-day, 2026-08-29). Each is struck through below with what the fix found.
 
@@ -2441,8 +2441,8 @@ Three of the "untested surface" entries are covered as of 2026-09-06 too - `Wiki
   subject *is* that method, leaving the rest of the guard - and the socket guard and the placeholder
   credentials - standing. `test_ai_gateway_guarded` still passes, which is what proves it.
 
-What remains is mostly *missing coverage* rather than known defects: two untested surfaces, two
-locks with no real-concurrency proof, and two that need a decision from whoever owns the area.
+What remains: two locks with no real-concurrency proof, and two items that need a decision from
+whoever owns the area. Every "untested surface" this entry listed is now covered.
 
 Worth noting about this entry's own hit rate: it filed the AI trip tools as tidy-up ("duplicated
 business logic ... can silently drift"), and they were a live permission bypass. Two of the three
@@ -2551,12 +2551,28 @@ tool now calls it.
 The general lesson for the next consolidation: a duplicate is not automatically the weaker copy.
 Diff both before deleting either.
 
-**Wiki-owned albums are untested across the entire album test suite.** `test_albums.py`,
-`test_album_cover_move_dedupe.py`, `test_album_view_ux.py`, and `test_album_add_race.py` all only
-ever construct Pin-owned albums - the community/wiki half of the Album model (`parent_wiki`,
-`owner_kwargs`, the concealment-aware `_owner_conceal`/`conceal_rows` path) has zero coverage.
-Building that out correctly needs the wiki-access/concealment rules understood well enough to avoid
-a shallow test - flagged for a dedicated pass rather than folded into this audit.
+~~**Wiki-owned albums are untested across the entire album test suite.**~~ **Covered 2026-09-06**
+in `test_wiki_albums.py`: the ownership half (`parent_wiki` exclusive with the other two owners,
+per-owner slug uniqueness, `for_wiki` scoping) and the concealment half.
+
+This entry was right that it needed the rules understood first - two things decide whether the test
+means anything:
+
+- **`concealment_active` is hardcoded False today.** A concealment test that does not force it
+  passes against any implementation, including one with the narrowing deleted. Every concealed
+  assertion patches it True (the idiom `test_concealed_render.py` uses) and has a gate-off
+  counterpart, so the difference is demonstrably caused by the flag rather than by nothing being
+  listed at all.
+- **The actor field is `profile_id`.** `Album` is in `concealment._ACTOR_FIELDS` keyed on it; a test
+  written against a `created_by` that does not exist on this model would have passed while
+  exercising nothing.
+
+The one worth having is the by-slug case: `visible_rows`' docstring records nine call sites once
+scoped to the wiki instead of the viewer - "an existence oracle ... and, on the mutating routes,
+lets it act on one" - so the test POSTs a *rename* of another contributor's album and asserts both
+the 404 and that the name is unchanged. A first version used GET, got 405 from the method check
+before any lookup ran, and had an anti-vacuity assertion loose enough (`in (200, 405)`) to accept
+that 405. Both halves were inert; only the hard `== 404` exposed it.
 
 ~~**`purge_old_backups`'s count-based retention has no dedicated test anywhere in the suite.**~~
 **Covered 2026-09-06**, asserting by identity as this entry asked - which of the files survive, not
