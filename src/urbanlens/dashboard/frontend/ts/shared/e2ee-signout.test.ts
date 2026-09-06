@@ -101,10 +101,7 @@ describe("signing out", () => {
         submit(form);
         await settle();
 
-        // A storage failure must not strand someone on the page. The message
-        // belongs in `expect`'s second argument, which the bun-types pinned
-        // here does not know about - see P73.
-        expect(submitted()).toBe(1);
+        expect(submitted(), "a storage failure must not strand someone on the page").toBe(1);
     });
 
     test("leaves another profile's keys alone", async () => {

@@ -56,7 +56,31 @@ const BUILT = existsSync(BUNDLE);
  * reach it is for the server to answer the way a real one would when another
  * tab has saved first.
  */
-const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "", lastHadUuid: true, lastName: "", lastValidFrom: "" as string | null, lastRotation: -1 };
+interface SaveSpy {
+    conflict: boolean;
+    fail: boolean;
+    attempts: number;
+    lastPool: number;
+    lastPoolUuid: string;
+    lastHadUuid: boolean;
+    lastName: string;
+    lastValidFrom: string | null;
+    lastRotation: number;
+}
+
+const saves: SaveSpy = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "", lastHadUuid: true, lastName: "", lastValidFrom: "" as string | null, lastRotation: -1 };
+
+/**
+ * Clear what the save handler last recorded, before a test that asserts on it.
+ *
+ * Assigning the fields inline narrows them for the rest of the test - the
+ * handler that writes them back runs in the browser, which TypeScript cannot
+ * see - so `saves.lastValidFrom = null` made every later comparison against a
+ * date an error. Resetting through a function keeps the declared types.
+ */
+function resetSaveSpy(fields: Partial<SaveSpy>): void {
+    Object.assign(saves, fields);
+}
 
 /**
  * Answer a save the way the server does: with the document it was given, every
@@ -490,7 +514,9 @@ beforeAll(async () => {
             if (path === "/json-lostphoto") {
                 const plan = squarePlan() as Record<string, unknown>;
                 const floors = plan.floors as Array<{ walls: Array<Record<string, unknown>> }>;
-                for (const wall of floors[0].walls) wall.references = ["ref-gone"];
+                const [groundFloor] = floors;
+                if (!groundFloor) throw new Error("squarePlan() has no floors, so this fixture cannot cite a wall");
+                for (const wall of groundFloor.walls) wall.references = ["ref-gone"];
                 plan.reference_pool = [{ uuid: "ref-gone", kind: "photo", title: "South elevation", url: "https://example.test/south.jpg", image_uuid: null }];
                 return servePlan(plan);
             }
@@ -1971,9 +1997,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // only ever reached the server when something *else* had already marked the
         // document dirty. Typing a name and leaving lost it - and beforeunload
         // stayed quiet on the way out, because state.dirty was never set.
-        saves.attempts = 0;
-        saves.lastName = "";
-        saves.lastValidFrom = null;
+        resetSaveSpy({ attempts: 0, lastName: "", lastValidFrom: null });
         await openEditor();
 
         // Plan name and date live behind "Add more details".
