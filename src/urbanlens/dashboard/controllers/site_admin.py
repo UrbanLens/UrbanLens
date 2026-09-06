@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import time
+from typing import TYPE_CHECKING
 from urllib.parse import urlencode
 
 import django
@@ -39,6 +40,9 @@ from urbanlens.dashboard.services.admin.site_admin import SITE_ADMIN_GROUP_NAME,
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 _APP_STARTED_MONOTONIC = time.monotonic()
@@ -1211,6 +1215,57 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
             )
         return super().handle_no_permission()
 
+    @staticmethod
+    def _profile_for(member: User) -> Profile:
+        """This member's profile, creating one for legacy accounts that predate it."""
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        profile = getattr(member, "profile", None)
+        if profile is None:
+            # Legacy/incomplete accounts without a Profile row yet - every
+            # user should still appear in the directory.
+            profile, _ = Profile.objects.get_or_create(user=member)
+        return profile
+
+    @staticmethod
+    def _search_filter(search: str, viewer: Profile) -> Q:
+        """Match a search term only against the fields this admin may actually see.
+
+        Masking what a row renders does not keep the class docstring's promise
+        while the same fields still decide which rows come back: a search for a
+        hidden address returns exactly one row reading "Hidden", and a wrong
+        guess renders the empty state, so one request per guess confirms or
+        denies any address (P80). The username and first name are the same
+        oracle against ``profile_visibility``, since a masked row renders
+        "Invisible User" rather than disappearing.
+
+        Restricting *matching* rather than membership is the part that keeps the
+        page usable: a hidden account still appears when the admin browses the
+        directory, and an account whose identity is visible but whose contact
+        details are not stays findable by username.
+
+        Rows are narrowed in SQL rather than resolved one at a time, so the two
+        clauses come from a bounded set of ids plus an ``ANYONE`` test the
+        database can answer for every other row. Accounts with no profile row
+        satisfy neither, which matches how they render: ``get_or_create`` gives
+        them the default visibility, which is not ``ANYONE``.
+
+        Args:
+            search: The raw search term.
+            viewer: The admin's own profile.
+
+        Returns:
+            A ``Q`` over ``User`` combining each field with its own gate.
+        """
+        from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        related = list(Profile.objects.filter(pk__in=Profile.related_profile_ids(viewer)))
+        identity_gate = Q(profile__profile_visibility=VisibilityChoice.ANYONE) | Q(profile__pk__in=Profile.visible_profile_pks(viewer, related))
+        contact_gate = Q(profile__contact_visibility=VisibilityChoice.ANYONE) | Q(profile__pk__in=Profile.visible_contact_info_pks(viewer, related))
+
+        return ((Q(username__icontains=search) | Q(first_name__icontains=search)) & identity_gate) | (Q(email__icontains=search) & contact_gate)
+
     def get(self, request: HttpRequest):
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.models.subscriptions import active_subscription_roles
@@ -1221,24 +1276,27 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
             return HttpResponseForbidden()
 
         search = request.GET.get("q", "").strip()
+        viewer_profile, _ = Profile.objects.get_or_create(user=request.user)
+
         users_qs = User.objects.select_related("profile").prefetch_related("groups").order_by("username")
         if search:
-            users_qs = users_qs.filter(Q(username__icontains=search) | Q(email__icontains=search) | Q(first_name__icontains=search))
+            users_qs = users_qs.filter(self._search_filter(search, viewer_profile))
 
         page = get_page(request, users_qs, self.PAGE_SIZE)
 
-        viewer_profile, _ = Profile.objects.get_or_create(user=request.user)
+        members = list(page.object_list)
+        profiles = [self._profile_for(member) for member in members]
+        # Resolved for the whole page at once. Per row these cost about fifteen
+        # queries between them - three friendship variants, a trip-membership
+        # lookup and a pin/place lookup each - which is most of what the page
+        # spent at 25 rows (P68).
+        identity_visible = Profile.visible_profile_pks(viewer_profile, profiles)
+        contact_visible = Profile.visible_contact_info_pks(viewer_profile, profiles)
 
         rows = []
-        for member in page.object_list:
-            profile = getattr(member, "profile", None)
-            if profile is None:
-                # Legacy/incomplete accounts without a Profile row yet - every
-                # user should still appear in the directory.
-                profile, _ = Profile.objects.get_or_create(user=member)
-
-            email_visible = profile.can_view_contact_info(viewer_profile)
-            profile_visible = profile.can_view_profile(viewer_profile)
+        for member, profile in zip(members, profiles, strict=True):
+            email_visible = profile.pk in contact_visible
+            profile_visible = profile.pk in identity_visible
             # Resolved once and passed in: get_quota_bytes looks these up
             # itself when it isn't given them, and this row needs them for its
             # own `roles` key - so the page was paying for the same query twice
