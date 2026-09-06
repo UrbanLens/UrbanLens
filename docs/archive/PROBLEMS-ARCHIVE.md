@@ -12116,6 +12116,100 @@ would otherwise have become two places to remember instead of one.
 extends itself when the tuple grows and fails when a chokepoint is added without it. Its teeth were
 checked by turning the fixture off: it fails naming the unpatched method.
 
+## RESOLVED 2026-09-06: four chat sockets bounded nothing, and every write they made was reachable over unthrottled HTTP
+
+`id: P31` · `status: fixed` · `resolved: 2026-09-06`
+
+Previously titled "Safety chat's sockets are bounded; the other four, and the unthrottled HTTP paths
+that bypass them, are not", and before that "Session and DM chat sockets have no rate limit and cap
+frame size only after the whole frame is parsed", and before that "Session chat WebSockets have no
+rate limit or frame-size cap".
+
+`dashboard/consumers.py` accepted inbound frames on four sockets (`DirectMessageConsumer`,
+`SafetyCheckinChatConsumer`, and the three games via `_ParticipantSessionConsumer`). Authorization
+was thorough - participation verified before any group is joined, API-key scope checked, credentials
+re-validated on a timer. Nothing bounded *volume*, and each accepted frame is a DB insert plus a
+channel-layer broadcast to every member of the group.
+
+**Four things the original entry asserted were wrong, and each cost an implementer a wrong turn:**
+
+- **"a multi-megabyte frame is fully processed" cannot happen.** Daphne defaults both
+  `websocket_max_message_size` and `websocket_max_frame_size` to 1 MiB, and autobahn refuses at
+  frame-header time, before any payload is buffered. The real overshoot was 1 MiB against a body
+  limit - still 250x for safety chat, but a severity call made on "unbounded" was made on a false
+  premise.
+- **The flag spelling it gave exits daphne at startup.** It is `--websocket-max-message-size`, with
+  hyphens; daphne's neighbouring websocket options use underscores, which is what makes the wrong
+  guess so natural. A container that takes an unrecognised flag dies with no other symptom.
+- **Safety chat's body limit is 4,000, not the 1,000 it named.** That number is
+  `MAX_SESSION_CHAT_MESSAGE_LENGTH`, which belongs to game session chat only. A frame cap derived
+  from 1,000 would have refused legitimate safety messages, on the one feature whose own service
+  docstring says failing silently is worse than most.
+- **"the limit can be implemented once per family" understated what a family is.** Every write these
+  sockets perform is also reachable over HTTP with no throttle at all, and DRF's throttle classes do
+  not cover a plain `View`. That is the half that took the longest to fix and is the reason this
+  entry stayed open through two shipped batches.
+
+**Fixed in three batches.**
+
+*The transport and size bounds.* `services/core/frame_limits.py` and `consumers.InboundVolumeMixin`
+bound frame size before the parse and frame volume in two tiers - a per-connection in-process counter
+that cannot fail open, and a shared cache counter keyed by sender that bounds one account across many
+sockets. The daphne size flags are derived once in `bin/websocket_frame_flags.sh` and appended by
+`docker-entrypoint.sh`, so the transport and application bounds cannot drift.
+
+*Three things about that were wrong on the first attempt, and the shape of each is worth keeping.*
+The byte cap was written into `docker-compose.yml` as `${UL_WEBSOCKET_MAX_MESSAGE_BYTES:-...}` - but
+that name is a *derived Django setting*, not an environment variable, and compose substitutes `${...}`
+from the shell before any container exists. The guard meant to catch that was registered as a Django
+system check, which `manage.py` runs and daphne does not; it is a plain function called from
+`asgi.py` now, the one module daphne imports in its own process. And the helper was then resolved
+against `dirname "$0"`, which is the repo root on a developer's machine and `/` inside the image -
+**the flags silently were not applied and `app-ws` came up healthy anyway**, because a missing cap
+only reverts daphne to its own 1 MiB default. Only starting the real container showed it. See the
+`guards-that-cannot-run-in-their-own-process` memory.
+
+*The remaining sockets.* `DirectMessageConsumer` had no `isinstance(data, dict)` guard at all: a
+frame of `[]` is valid JSON and was an `AttributeError` on `.get` one line later, so the cheapest
+possible frame closed somebody's messaging connection. Its `typing` frame is now budgeted despite
+writing no row - it is the only frame there that fans out into the *recipient's* group, which makes
+an unmetered one the cheapest amplifier on the socket.
+
+*The clients, which had to land with the sockets rather than after.* `trivia.ts`, `spotguessr.ts` and
+`consensus.ts` each `switch (data.type)` with no `case "error"`, and each cleared the composer as
+soon as `send()` returned true - which reports transmission, not acceptance. Both consumers already
+emitted error frames (scope refusals, failed writes) that were being dropped on the floor, so adding
+a throttle in front of that would have converted an existing bug into routine silent data loss.
+`shared/chat-composer.ts` keeps what was sent until the broadcast confirms it and hands it back on a
+refusal, oldest-first: under a rate limit the refusal that comes back is about the earliest
+unacknowledged send while newer ones may already have succeeded.
+
+*The HTTP paths, which are why this was not closed sooner.* The budget now lives in
+`create_direct_message`, `create_group_message`, `create_chat_message` and `SessionChat.send`, with
+the identity built there rather than by each caller - a caller that constructs its own key is a
+caller that can get it wrong, and "the socket and the view spell the same sender differently" is a
+bypass that looks like a working limit from either side. `MessageRateLimitedError` is a `ValueError`,
+so the consumers report it without new knowledge; the views answer 429 rather than the 400 its
+siblings earn.
+
+`UL_WEBSOCKET_MESSAGES_PER_MINUTE` became `UL_MESSAGES_PER_MINUTE` in that move. The old name would
+have told an operator it governed only sockets, which stopped being true.
+
+**Two findings from the tests worth keeping.**
+
+Moving the refusal into the service regressed the throttling of the refusal itself: the consumers'
+generic `ValueError` handler answers every refused frame individually, so a flood was answered with a
+flood. `test_one_error_frame_per_window_not_one_per_refused_frame` caught it, which is the second time
+that test has paid for itself.
+
+And **draining a socket is not a synchronisation point** for these consumers. Neither the
+direct-message nor the game socket answers an accepted frame on the connection that sent it - one
+broadcasts through Celery, the other to the group - so `receive_nothing` returns immediately and the
+assertion counts rows the consumer has not written yet. A flood test written that way reads "1" and
+looks like a working throttle. Two tests were rewritten for that, and two more for passing against
+unfixed code: one sized an oversized frame above the *body* limit, where the service's own validator
+answers first, and one assumed a shared budget resets with a new connection.
+
 ## RESOLVED 2026-09-06: the icon picker cost 594 KB per widget, and the site-admin directory ~15 queries per user
 
 `id: P68` · `status: fixed` · `resolved: 2026-09-06`
