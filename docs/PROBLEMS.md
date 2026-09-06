@@ -2842,36 +2842,3 @@ which is also the file P53 and P68 both had to edit around - twice now a fix has
 in `ts/shared/` and then a second time by hand into that template, because the template cannot
 import. Whether the answer is moving it into `frontend/ts/entries/` or something narrower is a
 design question, not a mechanical one.
-
-## P73 — `bun-types` is pinned at 1.1.6 against Bun 1.3.14, so 81 valid assertions look like type errors
-
-`id: P73` · `status: open` · `updated: 2026-09-05`
-
-`bun.lock` holds `bun-types@1.1.6`; the installed runtime is 1.3.14. Every `.ts` file in
-`frontend/ts/` is typechecked against a description of Bun from roughly two years earlier than the
-one that runs them.
-
-The visible cost so far is `src/urbanlens/dashboard/frontend/browser/floorplan-editor.test.ts` and
-`harness-parity.test.ts`, which cannot join a `tsconfig` project: they use `expect(value, message)`,
-supported by the runtime and by current `bun-types`, and 1.1.6's `expect` takes 0-1 arguments - 81
-`TS2554`s that are the pin's, not the code's. `bin/check_typescript_coverage.py` lists both in
-`_UNCOVERED` with that reason, so they are excluded on purpose rather than by omission.
-
-The unmeasured cost is everything else the two years changed: the 161 files in the `bun-types`
-project - 160 under `frontend/ts/` plus `bin/build-frontend.ts` - are checked against signatures
-that may no longer match, in both directions. (Not the whole tree - `tests/integration/`'s 84 files
-use `@types/node` and are unaffected.)
-
-Not fixed here because it cannot be from this checkout - `node_modules/` is owned by `apps` and not
-group-writable, and this user has no passwordless sudo, so `bun add -d bun-types@1.3.14` fails with
-`EACCES: Permission denied while writing packages into node_modules`. The bump wants a run where
-installing is possible, and `bun run typecheck` immediately afterwards to see what the newer types
-surface.
-
-**It reaches the typechecked project too, not only the two excluded files.** `bun run typecheck` was
-red on 2026-09-05 for one `expect(value, message)` in `shared/e2ee-signout.test.ts`, written the same
-day. `package.json` asks for `bun-types: "latest"`, so the form is correct against what the manifest
-requests and against the runtime that executes it; only the resolved version rejects it. The
-assertion's message moved into a comment to get the suite green, and should move back when the pin
-does. Note the shape of the trap: the whole-tree typecheck is manual, so a file can be committed
-green by pre-commit and CI and still be a type error.

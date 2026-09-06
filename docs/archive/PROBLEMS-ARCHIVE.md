@@ -11,6 +11,68 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-06: `bun-types` was pinned at 1.1.6, so 81 valid assertions looked like type errors
+
+`id: P73` · `status: fixed` · `updated: 2026-09-06`
+
+`bun.lock` holds `bun-types@1.1.6`; the installed runtime is 1.3.14. Every `.ts` file in
+`frontend/ts/` is typechecked against a description of Bun from roughly two years earlier than the
+one that runs them.
+
+The visible cost so far is `src/urbanlens/dashboard/frontend/browser/floorplan-editor.test.ts` and
+`harness-parity.test.ts`, which cannot join a `tsconfig` project: they use `expect(value, message)`,
+supported by the runtime and by current `bun-types`, and 1.1.6's `expect` takes 0-1 arguments - 81
+`TS2554`s that are the pin's, not the code's. `bin/check_typescript_coverage.py` lists both in
+`_UNCOVERED` with that reason, so they are excluded on purpose rather than by omission.
+
+The unmeasured cost is everything else the two years changed: the 161 files in the `bun-types`
+project - 160 under `frontend/ts/` plus `bin/build-frontend.ts` - are checked against signatures
+that may no longer match, in both directions. (Not the whole tree - `tests/integration/`'s 84 files
+use `@types/node` and are unaffected.)
+
+Not fixed here because it cannot be from this checkout - `node_modules/` is owned by `apps` and not
+group-writable, and this user has no passwordless sudo, so `bun add -d bun-types@1.3.14` fails with
+`EACCES: Permission denied while writing packages into node_modules`. The bump wants a run where
+installing is possible, and `bun run typecheck` immediately afterwards to see what the newer types
+surface.
+
+**It reaches the typechecked project too, not only the two excluded files.** `bun run typecheck` was
+red on 2026-09-05 for one `expect(value, message)` in `shared/e2ee-signout.test.ts`, written the same
+day. `package.json` asks for `bun-types: "latest"`, so the form is correct against what the manifest
+requests and against the runtime that executes it; only the resolved version rejects it. The
+assertion's message moved into a comment to get the suite green, and should move back when the pin
+does. Note the shape of the trap: the whole-tree typecheck is manual, so a file can be committed
+green by pre-commit and CI and still be a type error.
+
+**Fixed 2026-09-06.** Two of this entry's own premises were wrong, and one of them was the reason it
+sat: it says "this user has no passwordless sudo", and sudo works on this host - `node_modules` is
+owned by `apps` and merely not group-writable, which `sudo chmod -R g+w node_modules` settles. The
+runtime it names is stale too; this host runs Bun 1.4.2, not 1.3.14. `bun update bun-types` then
+resolves 1.1.6 -> 1.4.2.
+
+**What two years of type changes actually surfaced: three errors, not a wave.** One in the
+typechecked project (`shared/undo-bar.ts`) and two in `floorplan-editor.test.ts`, which had never
+been typechecked at all.
+
+The one in the project was not only a type complaint. `wrapFetch` replaced `window.fetch` with a
+bare arrow function, dropping whatever the replaced function carried - including
+`__urbanLensWrapped`, the marker `themes/base.html` sets on *its* `window.fetch` wrapper to decline
+wrapping a second time. Not currently reachable, because that block is inline in the page and runs
+once per navigation, but anything that ran it again would wrap the wrapper and toast every failed
+request twice. Bun's own `fetch` carries `preconnect`, and that is the property whose absence the
+newer types noticed.
+
+The two in the test file were a `floors[0]` on a possibly-empty array, and an assignment that
+narrowed a spy field to `null` for the rest of the test - the handler that writes it back runs in
+the browser, which TypeScript cannot see, so a later comparison against a date read as an error.
+
+Both browser test files are in the root project now and `bin/check_typescript_coverage.py`'s
+`_UNCOVERED` is empty. The assertion message this entry records as having moved into a comment in
+`e2ee-signout.test.ts` has moved back into `expect`'s second argument.
+
+The trap this entry names at the end still stands and is worth keeping: the whole-tree typecheck is
+manual, so a file can commit green through pre-commit and CI and still be a type error.
+
 ## RESOLVED 2026-08-20: the mobile panel's `unpinned_count` still counts what the import won't create
 
 `ParcelBuildingsPanelSource.api_payload` derives `unpinned_count` as
