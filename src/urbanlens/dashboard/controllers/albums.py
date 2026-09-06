@@ -525,13 +525,35 @@ def _picker_album_payload(owner: Pin | Wiki | Profile, viewer: Profile, *, exclu
 
 
 def _attach_owner_action_urls(ctx: dict, owner: Pin | Wiki | Profile) -> None:
-    """URLs the album UI needs for delete / send-to-wiki / share, when they exist."""
+    """URLs the album UI needs for delete / send-to-wiki / share, when they exist.
+
+    Three separate questions, and P61 is what came of answering them with one
+    URL: a vault album got no bulk endpoint at all, so its Delete button
+    rendered hidden forever alongside the two that genuinely do not apply.
+
+    - Delete works for a pin and for the vault, at their own endpoints.
+    - Send to wiki is pin-only: the endpoint derives the wiki from
+      ``pin.location``, and a vault album has no location. The vault's own
+      per-photo version asks the user which wiki, from a picker the bulk bar
+      has nowhere to put.
+    - Share opens the *pin* share dialog, so it is pin-only for the same
+      reason. Single-photo share from the lightbox is how a vault photo gets
+      shared, and is unaffected.
+
+    A wiki-owned album gets none of the three, which is unchanged.
+    """
     if isinstance(owner, Pin):
         slug = _owner_slug(owner)
         ctx["gallery_bulk_url"] = reverse("pin.gallery.bulk", args=[slug])
+        ctx["gallery_wiki_url"] = ctx["gallery_bulk_url"]
         ctx["pin_share_dialog_url"] = reverse("pin.share.dialog", args=[slug])
+    elif isinstance(owner, Profile):
+        ctx["gallery_bulk_url"] = reverse("vault.photos.bulk")
+        ctx["gallery_wiki_url"] = ""
+        ctx["pin_share_dialog_url"] = ""
     else:
         ctx["gallery_bulk_url"] = ""
+        ctx["gallery_wiki_url"] = ""
         ctx["pin_share_dialog_url"] = ""
     ctx["label_image_url_template"] = reverse("label.image", args=["00000000-0000-0000-0000-000000000000"])
 

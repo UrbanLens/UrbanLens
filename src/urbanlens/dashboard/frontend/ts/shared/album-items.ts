@@ -364,6 +364,9 @@ function syncAlbumToolbar(): void {
     const ids = Array.from(selected);
     const inAlbum = Boolean(panel?.dataset.albumSlug);
     const bulkUrl = panel?.dataset.galleryBulkUrl || "";
+    // Separate from the delete URL: a vault album has a bulk delete but no
+    // send-to-wiki, because there is no location to infer the wiki from.
+    const wikiUrl = panel?.dataset.galleryWikiUrl || "";
     // Bound outside the action map so its narrowing survives into the closure.
     const soleId = count === 1 ? ids[0] : undefined;
     window.ulBulkToolbar?.sync("albums", count, {
@@ -381,7 +384,7 @@ function syncAlbumToolbar(): void {
                 : null,
         remove: inAlbum && count ? () => bulkRemove(ids) : null,
         set_cover: inAlbum && soleId !== undefined ? () => setAlbumCoverFromToolbar(soleId) : null,
-        wiki: bulkUrl && count ? () => bulkWiki(ids, bulkUrl) : null,
+        wiki: wikiUrl && count ? () => bulkWiki(ids, wikiUrl) : null,
         delete: bulkUrl && count ? () => bulkDelete(ids, bulkUrl) : null,
         deselect: () => clearSelect(),
     });

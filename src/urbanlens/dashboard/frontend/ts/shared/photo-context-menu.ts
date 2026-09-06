@@ -91,6 +91,9 @@ function actionsFor(el: HTMLElement): MenuAction[] {
     const panel = albumPanel();
     const inAlbum = Boolean(tile.albumSlug || el.closest(".album-item"));
     const bulkUrl = panel?.dataset.galleryBulkUrl || document.getElementById("photo-gallery")?.dataset.galleryBulkUrl || "";
+    // Send-to-wiki is not always available where delete is: a vault photo has
+    // no location to infer the wiki from, and is sent from its own lightbox.
+    const wikiUrl = panel?.dataset.galleryWikiUrl || document.getElementById("photo-gallery")?.dataset.galleryWikiUrl || "";
     const shareUrl =
         panel?.dataset.pinShareDialogUrl ||
         document.querySelector<HTMLElement>("[data-pin-share-dialog-url]")?.dataset.pinShareDialogUrl ||
@@ -130,12 +133,12 @@ function actionsFor(el: HTMLElement): MenuAction[] {
             });
         }
     }
-    if (bulkUrl && tile.mine && !tile.onWiki) {
+    if (wikiUrl && tile.mine && !tile.onWiki) {
         actions.push({
             icon: "public",
             label: "Send to wiki",
             onClick: () => {
-                void postJson(bulkUrl, { action: "send_to_wiki", image_ids: [tile.id] })
+                void postJson(wikiUrl, { action: "send_to_wiki", image_ids: [tile.id] })
                     .then(() => toast.success("Sent to the wiki."))
                     .catch((err: Error) => toast.error(err.message || "Could not send to the wiki."));
             },
