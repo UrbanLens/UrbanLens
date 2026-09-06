@@ -137,7 +137,13 @@ export function resetAssistantOverlayForTests(): void {
     document.removeEventListener("keydown", onKeydown);
     document.removeEventListener("click", onClick);
     window.removeEventListener("resize", placeFab);
-    document.body.removeEventListener("ulAssistantAction", onAssistantAction);
+    document.body?.removeEventListener("ulAssistantAction", onAssistantAction);
+}
+
+/** Run `bind` now if `<body>` is parsed, else as soon as it is. */
+function whenBodyExists(bind: () => void): void {
+    if (document.body) bind();
+    else document.addEventListener("DOMContentLoaded", bind, { once: true });
 }
 
 export function installGlobalAssistantOverlay(): void {
@@ -146,6 +152,12 @@ export function installGlobalAssistantOverlay(): void {
     document.addEventListener("keydown", onKeydown);
     document.addEventListener("click", onClick);
     window.addEventListener("resize", placeFab);
-    document.body.addEventListener("ulAssistantAction", onAssistantAction);
-    placeFab();
+    // This ships in the classic `core.js` bundle, which `themes/base.html` loads
+    // from `<head>` - `document.body` is null there, and `placeFab` has nothing
+    // to measure against yet. The same wait is written out in autosave-guard.ts,
+    // collapsible-sections.ts and undo-map-refresh.ts.
+    whenBodyExists(() => {
+        document.body.addEventListener("ulAssistantAction", onAssistantAction);
+        placeFab();
+    });
 }
