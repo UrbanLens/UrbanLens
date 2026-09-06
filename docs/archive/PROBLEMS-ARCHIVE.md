@@ -11916,9 +11916,11 @@ NO TESTS RAN
 ```
 
 `DiscoverRunner` returns `len(failures) + len(errors)`, which is 0 when nothing
-ran, so the step exited green. Unittest discovery starts at `.`, and neither the
-repository root nor `src/` is a package, so it walked into nothing; pointed at
-`src/` the same runner finds 14,273 tests. It was the only Python test
+ran, so the step exited green. Unittest discovery starts at `.` and recurses only
+into importable packages; `src/` has no `__init__.py`, so the whole application
+was unreachable from the repository root. (It did walk into `docs/`, which *is* a
+package, and found no `test*.py` there.) Pointed at `src/` the same runner finds
+14,273 tests. It was the only Python test
 invocation in any workflow in the repository.
 
 The coverage step is what made this hard to see. `coverage report --fail-under=1`
@@ -12082,3 +12084,30 @@ flag, so any test rendering a full page template hits a staticfiles-manifest 500
 measured; the storage was the real mechanism, and it is now fixed for every runner. And CI is
 unaffected either way: `coverage run --source=src -m pytest` gives `argv[0]` ending in
 `pytest/__main__.py`, so it always took the correct branch.
+
+## RESOLVED 2026-09-06: the AI-gateway patch guarded only the runner nobody uses
+
+`id: P78` · `status: fixed` · `resolved: 2026-09-06`
+
+`TestRunner.setup_test_environment` patched `LLMGateway.send_prompt` and `send_with_tools` so no
+test could reach a real provider. Django calls that hook; **pytest never does** - pytest-django
+ignores `TEST_RUNNER` entirely - so the guard covered `manage.py test` and nothing else, which is
+the runner this repo tells you not to use. Every ordinary `bin/run_tests.sh` run had no gateway
+patch at all.
+
+It went unnoticed because it was never the only defense: `settings/test.py` pins every provider
+credential to a placeholder, and `LocalhostOnlyNetwork` blocks the socket, so a slip failed rather
+than succeeded. The comment beside the patching called it "defense in depth", which was true - it
+was just depth the actual path did not have.
+
+It stopped being untidy and started mattering on 2026-09-05, when CI moved from `manage.py test` to
+pytest (P74). That moved CI from the path with the guard onto the path without it.
+
+The chokepoint list now lives in `core/tests/ai_guard.py` and both runners use it - the runner via a
+context manager in its hook, pytest via a session-scoped autouse fixture in `conftest.py`. The
+duplication the old comment warned about ("a new chokepoint on LLMGateway needs adding here too")
+would otherwise have become two places to remember instead of one.
+
+`test_ai_gateway_guarded.py` asserts every entry in `AI_CHOKEPOINTS` is a `Mock` at run time, so it
+extends itself when the tuple grows and fails when a chokepoint is added without it. Its teeth were
+checked by turning the fixture off: it fails naming the unpatched method.

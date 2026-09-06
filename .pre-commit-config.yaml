@@ -12,7 +12,10 @@ default_install_hook_types: [pre-commit]
 # `json` for the same reason, found the same way: check-json was registered
 # below and this list did not admit a single file it could read, so it had never
 # run. Its first live run failed on a file that had been malformed the whole
-# time. `sh` because bin/ is 14 shell scripts that nothing was reading either.
+# time. `sh` for the 13 shell scripts under bin/, which reach the case-conflict,
+# merge-conflict, private-key and LF hooks - but *not* the autofix hook, whose
+# own TEXT_SUFFIXES set (bin/precommit_autofix.py:72) does not list `.sh`, so
+# trailing whitespace in a shell script is still nobody's business.
 files: '^(.+\.(py|ts|js|tsx|jsx|json|sh|yaml|yml|toml|html|txt))$'
 exclude: '(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)'
 

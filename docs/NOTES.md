@@ -527,11 +527,23 @@ time migrations get re-squashed.
   been chosen. `pytest` avoids it because `TESTING` also checks for `pytest` in `sys.argv`, which is
   true before settings are read.
 
-  CI is unaffected and is *not* misconfigured: `.github/workflows/ci.yml` sets
-  `DJANGO_SETTINGS_MODULE=urbanlens.UrbanLens.settings.test`, and that module sets `TESTING = True`
-  at import - before `STORAGES` is decided. So `manage.py test` under `settings.test` is fine, and
-  only the default settings module hits this. (Established 2026-08-17 while checking whether CI's
-  Django step was silently broken; it is not.)
+  **The paragraph that used to sit here was wrong, and its conclusion was the opposite of the
+  truth.** It said `settings/test.py` sets `TESTING = True` "at import - before `STORAGES` is
+  decided", and therefore that `manage.py test` under `settings.test` is fine. `settings/test.py`
+  begins `from ...base import *`, which runs base.py's `STORAGES` computation, and only *then* sets
+  `TESTING = True` - after, not before. Measured 2026-09-05 under that settings module:
+  `TESTING: True`, `STORAGE: CompressedManifestStaticFilesStorage`.
+
+  The same ordering bit pytest-xdist, whose workers execnet starts with `argv[0] == "-c"` - so the
+  argv check that saves a normal pytest run does not save a worker, and a full suite with `-n 6`
+  produced 287 manifest errors (P77). `settings/test.py` now sets the storage explicitly rather than
+  inheriting a guess, which makes the old claim true for the first time: every runner pointed at
+  that module gets `StaticFilesStorage`.
+
+  CI is unaffected by *this*, but the sentence it used to carry - "(Established 2026-08-17 while
+  checking whether CI's Django step was silently broken; it is not.)" - was also wrong. It was: the
+  step ran `manage.py test` from the repository root and discovered zero tests for its entire
+  existence (P74).
 - `@given` (Hypothesis) and Django's `self.client` don't mix cleanly in this repo's `TestCase` —
   prefer calling the view/service function directly under `@given`, or drop Hypothesis for that
   particular test. TODO NOTE From Jess: We should probably fix TestCase so it does work cleanly.

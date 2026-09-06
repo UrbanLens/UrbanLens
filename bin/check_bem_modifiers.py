@@ -24,9 +24,9 @@ not, each of which hid real findings from the hand count:
   fallback")` is a selector, not a visual state, and needs no rule. Referenced
   from TypeScript or a template's own `<script>`, a modifier is exempt.
 * **A stale compiled stylesheet.** The hand count measured `style.css`, which is
-  a build artifact and was five days behind the `.scss` sources when this was
-  written. This compiles the sources, and refuses to fall back to a stale
-  artifact silently.
+  a gitignored build artifact and was five days behind the `.scss` sources when
+  this was written. This compiles the sources, and refuses to fall back to a
+  stale artifact silently.
 
 `_KNOWN_UNSTYLED` is the accepted set. Anything outside it fails, and an entry
 that no longer reproduces fails too - so the list shrinks as they are fixed and
@@ -47,7 +47,8 @@ import tempfile
 #: Where the stylesheets live, relative to the repo root.
 _SASS_DIR = "src/urbanlens/dashboard/frontend/sass"
 
-#: The stylesheet entry point, and the build artifact compiled from it.
+#: The stylesheet entry point, and the gitignored build artifact compiled from
+#: it - which may be absent entirely in a fresh checkout.
 _SASS_ENTRY = f"{_SASS_DIR}/style.scss"
 _COMPILED_CSS = "src/urbanlens/dashboard/frontend/static/dashboard/style.css"
 
