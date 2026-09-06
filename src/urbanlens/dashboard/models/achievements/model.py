@@ -121,6 +121,56 @@ class Achievement(abstract.PublicDashboardModel):
             Index(fields=["is_active"], name="idxdb_achv_active"),
         ]
 
+    #: The fields that decide *who qualifies*. A change to any of them has to
+    #: reach the users it newly covers; a change to anything else (name, colour,
+    #: icon, order, secrecy) does not. `models.achievements.signals` reads the
+    #: loaded values below to tell the two apart.
+    QUALIFYING_FIELDS = ("metric", "threshold", "is_active")
+
+    @classmethod
+    def from_db(cls, db, field_names, values) -> Achievement:
+        """Track the persisted qualifying fields so a save can tell what changed.
+
+        Args:
+            db: Database alias the row was loaded from.
+            field_names: Names of the loaded fields.
+            values: Loaded field values.
+
+        Returns:
+            The loaded Achievement instance.
+        """
+        instance = super().from_db(db, field_names, values)
+        for field in cls.QUALIFYING_FIELDS:
+            if field in field_names:
+                setattr(instance, f"_loaded_{field}", getattr(instance, field))
+        return instance
+
+    def save(self, *args, **kwargs) -> None:
+        """Save, then re-baseline the qualifying markers to what was just persisted.
+
+        ``post_save`` fires inside ``super().save()``, so the signal still sees
+        the pre-save values and can tell what changed; re-baselining afterwards
+        is what stops a *second* save of the same in-memory instance looking
+        like another change. Same shape as ``Pin.save``'s ``_loaded_name``.
+
+        Args:
+            *args: Passed through to ``Model.save``.
+            **kwargs: Passed through to ``Model.save``.
+        """
+        super().save(*args, **kwargs)
+        for field in self.QUALIFYING_FIELDS:
+            setattr(self, f"_loaded_{field}", getattr(self, field))
+
+    def qualifying_change(self) -> bool:
+        """Whether this instance's qualifying fields differ from the loaded row.
+
+        Returns:
+            True when the award now covers a different set of profiles than the
+            persisted version did - including a fresh instance, which has no
+            loaded values to compare against and so is treated as a change.
+        """
+        return any(getattr(self, f"_loaded_{field}", None) != getattr(self, field) for field in self.QUALIFYING_FIELDS)
+
     def __str__(self) -> str:
         return f"{self.name} ({self.metric} >= {self.threshold})"
 
