@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P84` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R27` · `N7`
+**Next free id:** `P84` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R27` · `N8`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -139,3 +139,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | N4 | current | 2026-07-30 | Round-2 staging UAT: its two criticals (email exposure, raw-coordinate pin names) are now fixed | [`docs/reports/claude_uat.md`](reports/claude_uat.md) |
 | N5 | current | 2026-07-30 | Round-3 UAT found messaging and settings working; both 'ongoing' criticals have since been fixed | [`docs/reports/claude_uat_r3.md`](reports/claude_uat_r3.md) |
 | N6 | current | 2026-07-22 | Round-1 staging UAT: 4 criticals, from a misconfigured staging API key to email on public profiles | [`docs/reports/ua_testing.md`](reports/ua_testing.md) |
+| N7 | current | 2026-09-06 | Two Django template traps that each shipped a 500: a filter argument has no failure tolerance, and `.image.url` raises | [`docs/notes/template-render-traps.md`](notes/template-render-traps.md) |
