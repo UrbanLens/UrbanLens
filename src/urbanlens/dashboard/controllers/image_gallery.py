@@ -237,7 +237,7 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
         images = Image.objects.filter(pk__in=image_ids, pin=pin, profile=profile)
 
         if action == "delete":
-            return _delete_owned_images(images)
+            return _delete_owned_images(images, unlink_from_pin_when_on_wiki=True)
 
         if action == "send_to_wiki":
             wiki = _wiki_for_location(pin.location)
@@ -266,19 +266,29 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
         return JsonResponse({"error": "Unknown action."}, status=400)
 
 
-def _delete_owned_images(images: QuerySet[Image]) -> JsonResponse:
-    """Delete a batch of photos, unlinking rather than destroying wiki ones.
+def _delete_owned_images(images: QuerySet[Image], *, unlink_from_pin_when_on_wiki: bool) -> JsonResponse:
+    """Delete a batch of photos, and say how many were unlinked instead.
 
-    Shared by the pin and vault bulk endpoints, which differ only in how they
-    scope the batch. Storage files go first because Django has no bulk API for
-    them; the DB rows go in one delete rather than one per row.
+    The batch mechanics are shared: storage files go first, because Django has
+    no bulk API for them, and the DB rows go in one delete rather than one per
+    row.
 
-    A row also linked to a wiki is unlinked from its owner rather than
-    destroyed - the contribution belongs to the wiki too, and taking it off the
-    wiki is a separate, deliberate act.
+    What is **not** shared is what a wiki-linked row means, which is why this
+    is a parameter rather than a rule. Deleting from a *pin* gallery unlinks
+    such a row from the pin instead of destroying it - the contribution belongs
+    to the wiki too, and taking it off the wiki is a separate act. Deleting
+    from the *Vault* is a different question with a different answer: the vault
+    is the account's own library, its per-photo delete
+    (``PhotoActionView.delete_photo``) destroys unconditionally, and the same
+    button one photo at a time must not mean something else in bulk. Reusing
+    the pin's rule there set ``pin=None`` on a photo the request never
+    mentioned, detaching it from a gallery the user was not looking at.
 
     Args:
         images: The queryset to delete, already scoped to the requester.
+        unlink_from_pin_when_on_wiki: Whether a row that is also on a wiki
+            should be detached from its pin rather than destroyed. True for a
+            pin gallery, false for the Vault.
 
     Returns:
         ``{"deleted": n, "unlinked": m}`` - row counts, not file counts. A row
@@ -290,8 +300,8 @@ def _delete_owned_images(images: QuerySet[Image]) -> JsonResponse:
     # Same reference rule as delete_stored_file: a shared photo's file backs
     # several rows, and the whole batch is going, so rows inside it must not
     # count as references.
-    to_destroy = [image for image in batch if image.wiki_id is None]
-    to_unlink_ids = [image.pk for image in batch if image.wiki_id is not None]
+    to_unlink_ids = [image.pk for image in batch if unlink_from_pin_when_on_wiki and image.wiki_id is not None]
+    to_destroy = [image for image in batch if image.pk not in set(to_unlink_ids)]
     for image in to_destroy:
         delete_stored_file(image, also_deleting=batch_pks)
     Image.objects.filter(pk__in=[image.pk for image in to_destroy]).delete()
@@ -343,7 +353,7 @@ class VaultGalleryBulkView(LoginRequiredMixin, View):
         # Scoped by profile, which is what makes an id from someone else's
         # library a no-op rather than an error - the toolbar only ever offers
         # this on the viewer's own tiles.
-        return _delete_owned_images(Image.objects.filter(pk__in=image_ids, profile=profile))
+        return _delete_owned_images(Image.objects.filter(pk__in=image_ids, profile=profile), unlink_from_pin_when_on_wiki=False)
 
 
 class PinCoverPhotoView(LoginRequiredMixin, View):

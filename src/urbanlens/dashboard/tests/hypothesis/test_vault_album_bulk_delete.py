@@ -61,16 +61,36 @@ class VaultGalleryBulkViewTests(TestCase):
         self.assertEqual(response.json()["deleted"], 0)
         self.assertTrue(Image.objects.filter(pk=theirs.pk).exists())
 
-    def test_a_photo_that_is_also_on_a_wiki_is_unlinked_not_destroyed(self) -> None:
-        # Same rule the pin endpoint follows: a contributed photo belongs to the
-        # wiki too, so deleting it from the vault must not take it off the wiki.
+    def test_it_deletes_the_way_the_per_photo_vault_delete_does(self) -> None:
+        # The pin endpoint unlinks a wiki-linked row from its pin instead of
+        # destroying it. Borrowing that here was wrong twice over: the vault's
+        # own per-photo delete (`PhotoActionView.delete_photo`) destroys
+        # unconditionally, and the same button one photo at a time must not mean
+        # something else in bulk.
         wiki = baker.make("dashboard.Wiki", location=baker.make("dashboard.Location"))
         contributed = baker.make(Image, profile=self.profile, wiki=wiki)
 
         response = self._post({"action": "delete", "image_ids": [contributed.pk]})
 
-        self.assertEqual(response.json(), {"deleted": 0, "unlinked": 1})
-        self.assertTrue(Image.objects.filter(pk=contributed.pk).exists())
+        self.assertEqual(response.json(), {"deleted": 1, "unlinked": 0})
+        self.assertFalse(Image.objects.filter(pk=contributed.pk).exists())
+
+    def test_it_never_detaches_a_photo_from_a_pin_the_request_did_not_mention(self) -> None:
+        # A vault album may hold a photo that is also filed to one of the
+        # profile's pins - `owner_kwargs_to_image_scope`'s docstring says so
+        # deliberately. Reusing the pin endpoint's unlink rule here set
+        # `pin=None` on that photo, quietly emptying a gallery the user was not
+        # looking at, while leaving the vault tile exactly where it was.
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        wiki = baker.make("dashboard.Wiki", location=baker.make("dashboard.Location"))
+        filed_everywhere = baker.make(Image, profile=self.profile, pin=pin, wiki=wiki)
+        untouched = baker.make(Image, profile=self.profile, pin=pin)
+
+        self._post({"action": "delete", "image_ids": [filed_everywhere.pk]})
+
+        self.assertFalse(Image.objects.filter(pk=filed_everywhere.pk).exists(), "it was deleted, not detached")
+        untouched.refresh_from_db()
+        self.assertEqual(untouched.pin_id, pin.pk, "and nothing else on that pin moved")
 
     def test_send_to_wiki_is_refused_with_a_reason(self) -> None:
         image = baker.make(Image, profile=self.profile)
