@@ -2624,7 +2624,7 @@ existing bulk-select/merge/convert machinery in `organize-tab-manager.ts`).
 
 ## P69 — Unbounded lists with no pagination across most of the site, from album pickers to Immich imports
 
-`id: P69` · `status: open` · `updated: 2026-08-31`
+`id: P69` · `status: open` · `updated: 2026-09-06`
 
 Previously titled "unbounded lists with no pagination, found across most of the site".
 
@@ -2672,10 +2672,18 @@ at this app's beta scale (~2 users):
   against the pinned server version before deleting this sentence. The other two modes (`VISITS`,
   `ALL`) *are* bounded server-side, by date and page size respectively - so the docstring in
   `services/photos/photo_import.py` is right about them and wrong only about geography.
-- **Wiki edit history & article revision history** (`controllers/location_wiki.py:387-421`,
-  `controllers/article.py:149-177`) - no slice anywhere in either chain; a long-lived, actively-edited
-  community wiki or personal article could reach hundreds to low-thousands of rows. Now deferred to
-  tab-reveal (see the fix above) but still unbounded once that tab is actually opened.
+- ~~**Wiki edit history & article revision history**~~ **fixed 2026-09-06.** Neither had a slice
+  anywhere in its chain. Both page at 25 now. Three things the survey did not record. The article
+  history is a *numbered* list, so a plain slice is wrong in three ways at once: it renumbers every
+  page from 1, marks the top of each page "current" - which also withholds its Restore button, from
+  a revision the user is entitled to restore - and reports the oldest row on each page as an edit
+  that wrote the article from empty; rows carry `is_current` and an absolute number now, and the
+  boundary delta is measured against one extra row fetched from the next page. `_render_history` is
+  shared with the wiki's revert and expunge actions, which POST to their own URLs, so a pagination
+  link built from `request.path` would swap a revert into the list; both actions also send the page
+  they were fired from, so acting on a row does not drop the user back to page one. And concealment
+  has to narrow *before* the slice, or a page is short by however many of its rows concealment then
+  removes.
 - ~~**Pin-to-wiki share dialog's photo picker**~~ **fixed 2026-09-06** (`637a47bd1`).
   `seedable_photos()` caps at 60 - matching the two comparators below - ordered newest-first, because
   a LIMIT over an unordered queryset may return a different slice per call. Two things the survey did
@@ -2686,16 +2694,31 @@ at this app's beta scale (~2 users):
   shareable. Contrast with the wiki's own Media gallery (`_WIKI_PHOTOS_PREVIEW_LIMIT = 60`) and the
   visit dialog's photo picker (capped `[:60]` in `controllers/visits.py:77`), both of which had
   already learned this lesson.
-- **Vault "pin albums" panel** (`controllers/vault_photos.py:206-249`,
-  `services/photos/albums.py:242-289`) loads every album and every album item across *all* of a
-  profile's pins with no limit, once the (correctly lazy, `<details hx-trigger="toggle once">`)
-  section is opened.
-- **Settings page's Security and API-Keys tabs** (`controllers/settings.py:128-374`,
-  `services/auth/api_keys.py:148-178`) are the two tabs on this page that were never converted to the
-  lazy-HTMX-subsection pattern its own Connections/Billing/Undo/Notifications/Custom-Fields tabs
-  already use - `security_settings_context()`/`api_keys_settings_context()` run unconditionally on
-  every settings page load regardless of which of the 8 tabs is open. The API-key list itself also has
-  no cap and revoked keys are never excluded, so it only grows.
+- ~~**Vault "pin albums" panel**~~ **fixed 2026-09-06.** It loaded every album and every album
+  item across all of a profile's pins once the (correctly lazy) section was opened. Paginated at 24.
+  `albums_listing` could not be handed a narrowed set of albums, so `describe_albums` is split out of
+  it. Two things the survey did not record: the membership rows are the expensive half, since they
+  are what counts photos and picks covers, and a page-sized *card* count is what the unfixed version
+  already produced - so the regression test asserts on the membership query's own `IN` list. And the
+  panel was going through `albums_listing`'s owner filter, which builds one `OR` term per owner: it
+  passed every pin the profile has, so an account with a lot of pins - the account this panel is
+  about - generated a `WHERE` clause with a term each. One join on `parent_pin__profile` replaces it.
+- **Settings page's Security and API-Keys tabs.** ~~The API-key list has no cap and revoked keys
+  are never excluded, so it only grows~~ **- fixed 2026-09-06**, paginated at 10 with working keys
+  first (an account that had revoked a page's worth of keys would otherwise have to page forward to
+  reach the key it uses), under its own `api_keys_page` parameter.
+
+  ~~These are also the two tabs never converted to the lazy-HTMX-subsection pattern the page's own
+  Connections/Billing/Undo/Notifications/Custom-Fields tabs use~~ **- and converting them is the
+  wrong change, measured 2026-09-06.** `security_settings_context()`/`api_keys_settings_context()`
+  are 5 of the settings page's 22 queries and under 3ms of its 71ms; the "pattern" is
+  `hx-trigger="load"`, which fires on every page load anyway, so it would trade three milliseconds
+  for two extra HTTP round trips and two more concurrent connections - the shape P53 was about. It
+  would also break the one-time plaintext-key reveal, which
+  `test_non_htmx_create_reveals_the_key_once_on_the_redirected_settings_page` pins to the full page
+  render. The same measurement found what actually makes this page heavy, which is not queries at
+  all: 170KB of its 297KB is inline `<script>`, uncacheable and re-sent on every load - 52KB of map
+  preview, 29KB of theme preview, 22KB of dev toolbar. Recorded as P83.
 - **Memories > Sharing** (`controllers/memories.py:798-890`) queries and renders both the full "sent"
   and full "received" share histories on every load, though only one is visible at a time via a
   client-side (non-HTMX) toggle.
@@ -2728,6 +2751,46 @@ at this app's beta scale (~2 users):
   redirect branch); and `controllers/pin_lists.py:155-176` (`_items_map_data` plots every matching pin
   on the overview map with no cap, unlike the near-identical `SavedFilterPreviewView`'s explicit
   `_PREVIEW_MAP_PIN_LIMIT = 500`).
+
+## P83 — Over half of every page's HTML is inline `<script>`, re-sent uncached on every load
+
+`id: P83` · `status: open` · `updated: 2026-09-06`
+
+Found 2026-09-06 while measuring whether the Settings page's Security tab was worth deferring
+(P69). It is not - those queries are 5 of 22 and under 3ms of 71ms - but the same measurement
+found where that page's weight actually is, and it is not the database.
+
+Measured against the dev stack, logged in, `DEBUG=False`, counting only `<script>` tags with no
+`src`:
+
+| page | HTML | inline script | share |
+|---|---|---|---|
+| `/dashboard/map/` | 550,852 | 400,066 | 72% |
+| `/dashboard/map/pin/<slug>/` | 343,443 | 190,886 | 55% |
+| `/dashboard/settings/` | 309,647 | 169,194 | 54% |
+
+Nine of the seventeen blocks are the same on all three - 111KB from `themes/base.html` and the
+layout partials, on every page in the app. 22KB of that is the dev toolbar, which
+`show_dev_toolbar` gates to dev, so production pays roughly 89KB. The rest is per page, and the
+map page's share is one block of **265,146 bytes** out of a 305KB `pages/map/index.html`.
+
+Why it matters: a `<script src>` is fetched once and cached for the life of its hash; an inline
+block is re-sent on every navigation, is not shared between pages that duplicate it, cannot be
+minified by the bundler, and is invisible to `bun run typecheck` - which is how the P81 defect
+(`core.js` dead site-wide for four days) survived: the code that broke was in a bundle, but
+nothing that consumed it was type-checked together.
+
+This is the accumulated other half of P11. That entry counts raw `fetch()` calls that bypass
+`fetch-json.ts`; this one is why they are hard to migrate - they are not in TypeScript files, so
+there is nothing to import into. `dashboard/CLAUDE.md` already says "Use Typescript only when HTMX
+cannot accomplish the interaction" and "Every existing JS interaction is a candidate for HTMX
+refactoring"; this measures how far the code is from that.
+
+Not started, and not a one-batch job. The obvious first cut is the map page's single 265KB block,
+which is also the file P53 and P68 both had to edit around - twice now a fix has been written once
+in `ts/shared/` and then a second time by hand into that template, because the template cannot
+import. Whether the answer is moving it into `frontend/ts/entries/` or something narrower is a
+design question, not a mechanical one.
 
 ## P73 — `bun-types` is pinned at 1.1.6 against Bun 1.3.14, so 81 valid assertions look like type errors
 
