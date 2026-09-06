@@ -68,7 +68,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P53 | open | 2026-09-06 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P55 | open | 2026-09-06 | A withdrawn contribution keeps its reputation event, and the wiki gallery's delete strings are false there | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-09-05 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P57 | open | 2026-09-06 | The test-quality audit's follow-ups: 11 of ~15 fixed; two unproven locks and two decisions remain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P57 | open | 2026-09-06 | The test-quality audit's follow-ups: 13 done; three untested surfaces, two unproven locks and two decisions remain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P58 | open | 2026-09-06 | A renamed photo's old URL still 404s for the uploader who just uploaded it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P59 | open | 2026-09-06 | A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P63 | open | 2026-08-31 | Adding a third Vault media type means copying ~600 lines for ~90 lines of difference | [`docs/PROBLEMS.md`](PROBLEMS.md) |

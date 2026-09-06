@@ -2407,7 +2407,7 @@ and the imagery hosts the Maps JS API picks at runtime (`khms0.googleapis.com` 4
 "the known set rather than a proven-complete one". A report-only COEP deployment is what would
 settle both.
 
-## P57 — The test-quality audit's follow-ups: 11 of ~15 fixed; two unproven locks and two decisions remain
+## P57 — The test-quality audit's follow-ups: 13 done; three untested surfaces, two unproven locks and two decisions remain
 
 `id: P57` · `status: open` · `updated: 2026-09-06`
 
@@ -2417,7 +2417,7 @@ Found while auditing existing unit tests for real positive/negative coverage (se
 `docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
 convention rather than fixed inline.
 
-**Eleven are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
+**Thirteen are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
 `make_cache_key` collision, the hard-delete overlap lock, the `SubscriptionRole.clean()` gap, and
 `PinAliasView.post` (same-day, 2026-08-29). Each is struck through below with what the fix found.
 
@@ -2441,8 +2441,13 @@ Three of the "untested surface" entries are covered as of 2026-09-06 too - `Wiki
   subject *is* that method, leaving the rest of the guard - and the socket guard and the placeholder
   credentials - standing. `test_ai_gateway_guarded` still passes, which is what proves it.
 
-What remains: two locks with no real-concurrency proof, and two items that need a decision from
-whoever owns the area. Every "untested surface" this entry listed is now covered.
+What remains: **three untested surfaces** (`CalendarImportView`, the carousel's "no imagery
+available" branch, and the multi-level pin/wiki nesting prefix), two stale-documentation items, two
+locks with no real-concurrency proof, and two that need a decision from whoever owns the area.
+
+*(An earlier version of this line claimed every untested surface was covered. That was written
+after reading only the first half of this entry and is wrong - the five above are all listed
+below it. Corrected 2026-09-06.)*
 
 Worth noting about this entry's own hit rate: it filed the AI trip tools as tidy-up ("duplicated
 business logic ... can silently drift"), and they were a live permission bypass. Two of the three
@@ -2703,15 +2708,20 @@ suite - only its underlying service functions are unit-tested. The view's own re
 ids) and error-branch responses are unverified end-to-end, unlike its sibling
 `CalendarImportPreviewView` which does have a `CalendarImportPreviewViewTests` class.
 
-**Map-overlay caption length check is untested even though it's drivable.**
-`test_caption_and_setting_length_limits.py`'s class docstring says the map-overlay caption path
-can't be tested because it "fetches a remote image first, which the test network guard refuses" -
-true for the `media_url`/`image_url` branches of `controllers/map_overlays.py::_image_from_request`,
-but its direct-file-upload branch (`request.FILES.get("image")` +
-`request.POST.get("name")` as caption, routed through `services/photos/photo_upload.py::upload_photo`)
-takes no network call and is a plain multipart POST just like the safety-checkin path this file
-already drives. The length check itself is present and correct, so this is a test-coverage gap and
-a stale docstring claim, not a product bug.
+~~**Map-overlay caption length check is untested even though it's drivable.**~~ **Covered
+2026-09-06**, and this entry was right on both counts: the check is correct, and the docstring
+saying it could not be driven was wrong. That claim is gone, with a note in the module docstring
+recording what it got wrong - it is true of `_image_from_request`'s `media_url`/`image_url`
+branches and not of its direct-upload branch, which reaches `upload_photo` with no network call at
+all.
+
+The shape of the refusal is the part worth knowing, and a first draft of the test got it wrong in
+the opposite direction to the docstring: an over-width caption answers **200**, not 400.
+`map_overlays.fail()` returns 400 only to the JSON caller (the lightbox's "use as floorplan
+overlay"); the HTMX dialog gets 200 with the message swapped into the list partial. Asserting on
+the status alone would have filed a bug against working code, so the test asserts that neither the
+`Image` nor the `MapImageOverlay` is created, and a second one drives the JSON caller to pin the
+400 half.
 
 **Missing coverage for the carousel "no imagery available" branch.**
 `test_carousel_single_slide_arrows.py` is the only test file touching
@@ -2726,12 +2736,16 @@ parent's own name/slug, not the top-level acronym, unless that immediate parent 
 alias. This may be intentional (shallow, not chained, prefixing) but it's unverified either way and
 worth a deliberate look if 3+ level nesting is a real use case.
 
-**`TripCommentDeleteView` has zero test coverage.** `services/trips/trip_comments.delete_comment`
-is the third call site of the shared `_discard_comment_image` cleanup helper (alongside
-`PinCommentDeleteView` and `WikiCommentDeleteView`), and has its own `can_delete_comment`
-permission gate (author or trip creator), but no test file anywhere in the suite exercises
-`TripCommentDeleteView` or `delete_comment` at all - not the basic delete, the permission gate, or
-image cleanup. Would need a full TripComment/Trip fixture setup, not a surgical addition.
+~~**`TripCommentDeleteView` has zero test coverage.**~~ **Covered 2026-09-06** in
+`test_trip_comment_delete.py`. No defect: the view was already correct, and is now guarded - the
+author's own delete, the trip creator's override, a joined member who is neither, a non-member, and
+the attached `MarkupMap` going with it.
+
+Two cases worth having beyond "the author can delete their own". `TripComment.author` is `SET_NULL`
+(the asymmetry P25 records), so a comment outlives its writer's account and
+`can_delete_comment`'s set becomes `{None, creator}` - a bug letting `None` match would hand every
+orphaned comment to any member. And `get_comment(trip, comment_id)` must scope by trip, not just by
+id, which is the same existence-oracle shape `concealment.visible_rows` warns about.
 
 ## P58 — A renamed photo's old URL still 404s for the uploader who just uploaded it
 
