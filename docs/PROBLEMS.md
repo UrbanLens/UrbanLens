@@ -655,7 +655,7 @@ An earlier draft of this entry said `yelp` is billable, as a reason to curate. I
 `billable=True` appears 11 times in REData and none are in this registry. The real cost is upstream
 queries and quota, not money.
 
-## P11 — 99 raw `fetch()` calls bypass `fetch-json.ts`; the three game clients are migrated, the rest are not
+## P11 — 85 raw `fetch()` calls bypass `fetch-json.ts`; all six hand-rolled wrappers are gone, the tail is not
 
 `id: P11` · `status: open` · `updated: 2026-09-06`
 
@@ -688,19 +688,30 @@ later report claimed it looked at the wrong nesting level; `_resolved_flag`
 second, and has since commit `8bf86daf`.
 
 **Highest-value single change:** raw `fetch()` call sites bypass `shared/fetch-json.ts`
-(`fetchJson`/`sendJson`), several with no `response.ok` check at all. Six hand-rolled wrappers exist
-beside it: `postForm`/`getJson` (triplicated across the three games), `postForHtml`
-(organize-tab-manager), `postJson` (album-items), `savePosition` (album-map). Migrating them is
-mechanical, adds timeouts (several uploads can currently hang forever), and converts the dominant
-silent-failure mode into the required toast-on-error behaviour. Two deliberate exceptions to keep:
+(`fetchJson`/`sendJson`), several with no `response.ok` check at all. ~~Six hand-rolled wrappers
+exist beside it~~ **- all six are gone as of 2026-09-06.** `postForm`/`getJson` (triplicated across
+the three games) became `shared/session-request.ts`; `postJson` (album-items) and `savePosition`
+(album-map) were straight substitutions, since `fetchJson` already reads an `error` key out of a
+refusal and falls back to `HTTP <status>`, which is what both did by hand.
+
+`postForHtml` (organize-tab-manager) was **not** a straight substitution, and that is why it
+survived two earlier passes: it wants the response *body*, because Organize's bulk
+delete/edit/merge answer with the re-rendered row list, and `fetch-json.ts` had no text-returning
+sibling. `fetchText`/`sendForText` are that sibling. Worth knowing before migrating the next such
+call site: the old wrapper threw `new Error(await response.text())`, so a Django debug page went
+into the toast verbatim - `errorMessage()` discards markup, which is a behaviour change in the
+right direction but a behaviour change. Two deliberate exceptions to keep:
 `webauthn-client.ts` (self-contained for the minimal auth layout, already ok-checked) and the two
 E2EE calls that need raw `Response` semantics (201-vs-200, `redirected`).
 
 **Two corrections, both found 2026-09-06 while doing the first slice.**
 
-- **"~40" was low. It is 99**, counted across `frontend/ts/` excluding tests and `fetch-json.ts`
-  itself. Two files hold 43 of them: `entries/map-annotations.ts` (22) and `shared/e2ee-client.ts`
-  (21), and the second is mostly the raw-`Response` exception this entry already names.
+- **"~40" was low. It was 99**, counted across `frontend/ts/` excluding tests and `fetch-json.ts`
+  itself (`grep -rn '\bfetch(' --include=*.ts`, minus `globalThis.fetch`/`window.fetch`). **85 as of
+  2026-09-06.** Two files still hold 43 of them: `entries/map-annotations.ts` (22) and
+  `shared/e2ee-client.ts` (21), and the second is mostly the raw-`Response` exception this entry
+  already names. The rest are single-digit tails across ~20 files - `markup-toolbar.ts` (6),
+  `location-search-engine.ts` (4), `entries/floorplan-editor.ts` (4).
 - **"a non-2xx dies in a `void`-ed promise with no toast" is not quite right, and the reason
   matters.** `themes/base.html:204-231` wraps `window.fetch` globally and toasts
   `Request failed (HTTP 503).` for every non-ok response - so there *is* a net, it is just a
