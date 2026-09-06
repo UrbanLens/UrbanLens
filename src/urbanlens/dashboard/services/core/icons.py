@@ -7,7 +7,8 @@ depending on which picker wrote it, and the renderers branch on that shape:
 
 * a Material Icons name (``[a-z0-9_]+``), rendered as glyph text;
 * a URL for an uploaded custom icon, rendered into ``<img src="...">``;
-* an emoji, rendered as text.
+* an emoji, rendered as text - either one the icon picker's own catalogue
+  offers, or one the heuristic below recognises.
 
 The ``<img src>`` branch is the one that matters. The client half is already
 covered (``_ulEscAttr`` in the map page, plus the ``^(https?://|/)`` test in
@@ -22,6 +23,7 @@ malformed request rather than a user mistake worth reporting.
 
 from __future__ import annotations
 
+from functools import lru_cache
 import re
 from typing import overload
 import unicodedata
@@ -41,6 +43,29 @@ MAX_ICON_LENGTH = 255
 #: An emoji icon is a handful of code points (a base glyph plus modifiers,
 #: variation selectors, or a ZWJ sequence), never a sentence.
 MAX_EMOJI_CODEPOINTS = 12
+
+
+@lru_cache(maxsize=1)
+def _catalogue_icons() -> frozenset[str]:
+    """Every icon the picker offers, as the authority on what is storable.
+
+    ``_is_emoji_token`` is a heuristic about what an emoji looks like, and 29 of
+    the catalogue's own 1,249 entries do not look like one: the 14 keycaps
+    (``0`` through ``9``, ``#``, ``*``), whose base code point is ASCII;
+    ``!!`` and ``!?``, which are punctuation; and 13 letter-category glyphs
+    (Greek, Cyrillic, Hebrew, CJK, kana). Offering a value in a picker and then
+    discarding it on write with no error is the worst shape this can take, so
+    membership is checked before the heuristic runs (P68).
+
+    Loosening the heuristic instead would have admitted the bare ASCII those
+    entries are built on; a set cannot.
+
+    Returns:
+        The catalogue's icon values.
+    """
+    from urbanlens.dashboard.models.labels.meta import ICON_CATEGORIES
+
+    return frozenset(icon for _label, pairs in ICON_CATEGORIES.values() for icon, _ in pairs)
 
 
 def _is_emoji_token(text: str) -> bool:
@@ -95,6 +120,8 @@ def clean_icon(value: object, *, default: str | None = None, max_length: int = M
     text = str(value).strip()
     if not text or len(text) > max_length:
         return default
+    if text in _catalogue_icons():
+        return text
     if MATERIAL_ICON_RE.match(text):
         return text
     if ICON_URL_RE.match(text):

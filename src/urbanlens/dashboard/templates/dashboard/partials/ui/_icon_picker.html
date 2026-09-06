@@ -51,16 +51,19 @@
         </div>
         {% endif %}
 
-        <div class="icon-picker-tabs">
+        {% comment %}The category tabs arrive with the catalogue they filter - 28 of them
+        per picker was the second-largest thing this partial rendered (P68). "All" stays
+        because it is per-picker state: it is the tab that starts active.{% endcomment %}
+        <div class="icon-picker-tabs" id="icon-tabs-{{ picker_id }}">
             <button type="button" class="icon-tab active" data-cat=""
                     onclick="IconPicker.setTab('{{ picker_id }}', '', this)">All</button>
-            {% for cat_id, cat_data in icon_categories.items %}
-            <button type="button" class="icon-tab" data-cat="{{ cat_id }}"
-                    onclick="IconPicker.setTab('{{ picker_id }}', '{{ cat_id }}', this)">{{ cat_data.0 }}</button>
-            {% endfor %}
         </div>
 
-        <div class="icon-picker-grid" id="icon-grid-{{ picker_id }}">
+        {% comment %}The catalogue itself is fetched on first open, not rendered here:
+        it is 594 KB and identical in every picker, and a page carrying several of them
+        paid for each one (P68). IconPicker.toggle fills this in and marks the current
+        value selected.{% endcomment %}
+        <div class="icon-picker-grid" id="icon-grid-{{ picker_id }}" data-grid-url="{% icon_picker_grid_url %}">
             <button type="button"
                     class="icon-picker-item icon-picker-none {% if not current_icon and not current_custom_icon_url %}selected{% endif %}"
                     data-icon="" data-cat="" data-label="none no icon clear"
@@ -69,19 +72,6 @@
                 <i class="material-icons icon-picker-mi" style="color:#bbb;">block</i>
                 <span class="icon-picker-item-label">None</span>
             </button>
-            {% for cat_id, cat_data in icon_categories.items %}
-            {% for icon, label in cat_data.1 %}
-            <button type="button"
-                    class="icon-picker-item {% if current_icon == icon %}selected{% endif %}"
-                    data-icon="{{ icon }}" data-cat="{{ cat_id }}" data-label="{{ label|lower }}"
-                    data-keywords="{{ icon|icon_keywords }}"
-                    title="{{ label }}"
-                    onclick="IconPicker.pick('{{ picker_id }}', this.dataset.icon, this)">
-                <span class="icon-picker-glyph">{{ icon }}</span>
-                <span class="icon-picker-item-label">{{ label }}</span>
-            </button>
-            {% endfor %}
-            {% endfor %}
         </div>
     </div>
 </div>

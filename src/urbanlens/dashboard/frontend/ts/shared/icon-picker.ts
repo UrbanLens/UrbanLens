@@ -9,6 +9,112 @@
  */
 const MATERIAL_ICON_NAME = /^[a-z_]+$/;
 
+/**
+ * The catalogue is fetched once per page rather than rendered into every
+ * picker: one grid is 594 KB of markup, and pages carrying a dozen of them paid
+ * for each (P68). The response is picker-agnostic - each button reads its
+ * picker id from the enclosing `.icon-picker-dropdown` - so this one promise
+ * serves every picker on the page, and the browser caches it across pages under
+ * a content-hashed URL.
+ */
+interface IconCatalogue {
+    tabs: string;
+    items: string;
+}
+
+let gridRequest: Promise<IconCatalogue> | null = null;
+
+/** Split the one response into its two fragments, once, rather than per picker. */
+function parseCatalogue(html: string): IconCatalogue {
+    const holder = document.createElement("template");
+    holder.innerHTML = html;
+    return {
+        tabs: holder.content.querySelector("[data-icon-picker-tabs]")?.innerHTML ?? "",
+        items: holder.content.querySelector("[data-icon-picker-items]")?.innerHTML ?? "",
+    };
+}
+
+function loadCatalogue(url: string): Promise<IconCatalogue> {
+    if (!gridRequest) {
+        gridRequest = fetch(url, { credentials: "same-origin" })
+            .then((response) => {
+                if (!response.ok) throw new Error(`icon grid: HTTP ${response.status}`);
+                return response.text();
+            })
+            .then(parseCatalogue)
+            .catch((error) => {
+                // Dropped so the next open retries. A cached rejection is how a
+                // one-shot loader leaves a picker reading "Loading icons..."
+                // until a full page reload.
+                gridRequest = null;
+                throw error;
+            });
+    }
+    return gridRequest;
+}
+
+/** Drops the cached catalogue request, so a test starts from an unfetched page. */
+export function resetIconGridForTests(): void {
+    gridRequest = null;
+}
+
+/** Marks the item matching this picker's current value, which the server used to render. */
+function markSelectedIcon(id: string, grid: HTMLElement): void {
+    const input = document.getElementById(`icon-value-${id}`) as HTMLInputElement | null;
+    const current = input?.value ?? "";
+    if (!current) return;
+    grid.querySelectorAll<HTMLElement>(".icon-picker-item").forEach((item) => {
+        item.classList.toggle("selected", item.dataset.icon === current);
+    });
+}
+
+function statusNode(grid: HTMLElement): HTMLElement {
+    let node = grid.querySelector<HTMLElement>(".icon-picker-status");
+    if (!node) {
+        node = document.createElement("div");
+        node.className = "icon-picker-status";
+        grid.appendChild(node);
+    }
+    return node;
+}
+
+/** Fills a picker's tabs and grid from the shared catalogue, at most once per picker. */
+export async function fillIconGrid(id: string): Promise<void> {
+    const grid = document.getElementById(`icon-grid-${id}`);
+    if (!grid || grid.dataset.iconsLoaded === "1") return;
+    const url = grid.dataset.gridUrl;
+    if (!url) return;
+
+    const status = statusNode(grid);
+    status.textContent = "Loading icons...";
+    try {
+        const catalogue = await loadCatalogue(url);
+        // Re-checked: two opens can await the same promise, and the second must
+        // not append a second copy of the catalogue.
+        if (grid.dataset.iconsLoaded === "1") return;
+        grid.insertAdjacentHTML("beforeend", catalogue.items);
+        document.getElementById(`icon-tabs-${id}`)?.insertAdjacentHTML("beforeend", catalogue.tabs);
+        grid.dataset.iconsLoaded = "1";
+        status.remove();
+        markSelectedIcon(id, grid);
+    } catch {
+        status.textContent = "Icons could not be loaded. Close and reopen to try again.";
+    }
+}
+
+/** Re-applies whatever filter is showing, for items that arrived after it was set. */
+function reapplyFilter(id: string): void {
+    const panel = document.getElementById(`icon-panel-${id}`);
+    const search = panel?.querySelector<HTMLInputElement>(".icon-picker-search-input");
+    const query = search?.value.trim() ?? "";
+    if (query) {
+        IconPicker.search(id, query);
+        return;
+    }
+    const activeTab = panel?.querySelector<HTMLElement>(".icon-tab.active");
+    IconPicker.setTabSilent(id, activeTab?.dataset.cat ?? "");
+}
+
 export const IconPicker = {
     toggle(id: string): void {
         const panel = document.getElementById(`icon-panel-${id}`);
@@ -23,6 +129,10 @@ export const IconPicker = {
                 search.focus();
             }
             IconPicker.setTabSilent(id, "");
+            // Revealed first, filled second: the panel's chrome (search, tabs)
+            // is already there, so the fetch shows as a loading row inside an
+            // open panel rather than as a click that appears to do nothing.
+            void fillIconGrid(id).then(() => reapplyFilter(id));
         }
     },
 

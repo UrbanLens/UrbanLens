@@ -38,6 +38,53 @@ class CleanIconTests(SimpleTestCase):
         for emoji in ("🏚", "🏚️", "👩‍🚒"):
             self.assertEqual(clean_icon(emoji), emoji)
 
+    def test_every_icon_the_picker_offers_is_storable(self) -> None:
+        """The contract that was missing: what the picker offers, the field accepts.
+
+        ``_is_emoji_token`` is a heuristic about what an emoji looks like, and 29
+        of the catalogue's own 1,249 entries do not look like one - the 14
+        keycaps, whose base code point is ASCII; ``!!`` and ``!?``, which are
+        punctuation; and 13 letter-category glyphs (Greek, Cyrillic, Hebrew, CJK,
+        kana). Every write path routing through ``clean_icon`` silently stored
+        nothing when a user picked one of those from the picker that offered
+        them (P68), which is the worst shape a validation bug can take: no error,
+        no rejection, just a choice that does not stick.
+
+        Asserted over the catalogue itself rather than a list of the 29, so a
+        new entry that trips the heuristic fails here on the day it is added.
+        """
+        from urbanlens.dashboard.models.labels.meta import ICON_CATEGORIES
+
+        offered = [icon for _label, pairs in ICON_CATEGORIES.values() for icon, _ in pairs]
+        refused = [icon for icon in offered if clean_icon(icon) != icon]
+
+        self.assertEqual(
+            refused,
+            [],
+            f"{len(refused)} of {len(offered)} catalogue icons would be discarded on write: {[ascii(icon) for icon in refused[:10]]}",
+        )
+
+    def test_the_catalogue_allowance_is_membership_not_a_looser_rule(self) -> None:
+        """The bare ASCII a keycap is built on must stay refused.
+
+        ``#`` and ``*`` are the base code points of two catalogue entries, and
+        ``!!`` is what ``\u203c\ufe0f`` reduces to. Loosening the emoji
+        heuristic to admit those entries would admit these too; testing set
+        membership instead does not.
+
+        ``"0"`` and ``"a"`` are deliberately absent: ``MATERIAL_ICON_RE`` is
+        ``^[a-z0-9_]+$``, so both were already accepted as icon *names* long
+        before this, and asserting otherwise here would be testing a rule this
+        module does not have.
+        """
+        for value in ("#", "*", "!!", "!?", "The Greek letter pi", "\u03b1\u03b2\u03b3 and some prose"):
+            self.assertIsNone(clean_icon(value))
+
+    def test_a_catalogue_icon_still_obeys_its_column_width(self) -> None:
+        """``Label.icon`` is 50 wide and ``SavedFilter.icon`` 64; an allowance that
+        skipped the length check would turn an accepted value into a DataError."""
+        self.assertIsNone(clean_icon("0\ufe0f\u20e3", max_length=1))
+
     def test_blank_and_missing_fall_back_to_the_default(self) -> None:
         self.assertIsNone(clean_icon(None))
         self.assertIsNone(clean_icon(""))

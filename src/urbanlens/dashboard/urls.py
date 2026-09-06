@@ -83,6 +83,7 @@ from urbanlens.dashboard.controllers import (
     trip,
     trivia,
     two_factor,
+    ui,
     undo,
     userprofile,
     vault,
@@ -2074,6 +2075,9 @@ urlpatterns = [
     path("site-admin/", site_admin.SiteAdminHomeView.as_view(), name="site_admin_home"),
     path("site-admin/status/", site_admin.SiteAdminHomeStatusPartialView.as_view(), name="site_admin_home_status"),
     path("site-admin/users/", site_admin.SiteAdminUsersView.as_view(), name="site_admin_users"),
+    # Shared UI fragment, versioned by content hash and cached immutably; see
+    # services/core/icon_grid.py for why it is not rendered into each picker.
+    path("ui/icon-picker-grid/", ui.IconPickerGridView.as_view(), name="ui.icon_picker_grid"),
     path("site-admin/settings/", site_admin.SiteAdminView.as_view(), name="site_admin"),
     path("site-admin/stats/", site_admin.SiteAdminStatsView.as_view(), name="site_admin_stats"),
     path("site-admin/stats/kpi/", site_admin.SiteAdminStatsKpiPartialView.as_view(), name="site_admin_stats_kpi"),

@@ -404,6 +404,24 @@ def icon_keywords(value: str | None) -> str:
     return ICON_KEYWORDS.get(str(value), "")
 
 
+@register.simple_tag
+def icon_picker_grid_url() -> str:
+    """Return the versioned URL of the shared icon-picker grid.
+
+    The ``?v=`` is a content hash of the catalogue, so the URL changes exactly
+    when the icons do - which is what lets the response be cached immutably
+    without a deploy serving the previous catalogue. See
+    ``services.core.icon_grid``.
+
+    Usage: data-grid-url="{% icon_picker_grid_url %}"
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.services.core.icon_grid import icon_grid_version
+
+    return f"{reverse('ui.icon_picker_grid')}?v={icon_grid_version()}"
+
+
 @register.filter
 def contact_picker_options(connections: Iterable[Profile]) -> list[dict[str, Any]]:
     """Return friend connections as JSON-serializable dicts for the contact picker's autocomplete/avatar data.
