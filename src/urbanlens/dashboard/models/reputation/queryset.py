@@ -14,8 +14,6 @@ from django.db.models import Model, Sum
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    import datetime
-
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent  # noqa: F401 - mypy resolves these in the class-base subscripts below; ruff does not
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -73,10 +71,6 @@ class ReputationEventQuerySet(abstract.DashboardQuerySet["ReputationEvent"]):
     def total_value(self) -> Decimal:
         """Sum the value of the counting rows in this queryset."""
         return self.counting().aggregate(total=Sum("value"))["total"] or Decimal(0)
-
-    def occurred_since(self, moment: datetime.datetime) -> Self:
-        """Restrict to rows at or after *moment*."""
-        return self.filter(occurred_at__gte=moment)
 
 
 class ReputationEventManager(abstract.DashboardManager.from_queryset(ReputationEventQuerySet)):

@@ -24,8 +24,7 @@ class ProfileQuerySet(abstract.PublicDashboardQuerySet):
         from urbanlens.dashboard.models.profile.model import ACCOUNT_DELETION_GRACE_PERIOD, ACCOUNT_DELETION_REMINDER_LEAD
 
         now = timezone.now()
-        return self.filter(
-            deletion_requested_at__isnull=False,
+        return self.pending_deletion().filter(
             deletion_requested_at__lte=now - (ACCOUNT_DELETION_GRACE_PERIOD - ACCOUNT_DELETION_REMINDER_LEAD),
             deletion_reminder_sent_at__isnull=True,
         )
@@ -35,10 +34,7 @@ class ProfileQuerySet(abstract.PublicDashboardQuerySet):
         from urbanlens.dashboard.models.profile.model import ACCOUNT_DELETION_GRACE_PERIOD
 
         now = timezone.now()
-        return self.filter(
-            deletion_requested_at__isnull=False,
-            deletion_requested_at__lte=now - ACCOUNT_DELETION_GRACE_PERIOD,
-        )
+        return self.pending_deletion().filter(deletion_requested_at__lte=now - ACCOUNT_DELETION_GRACE_PERIOD)
 
 
 class ProfileManager(abstract.PublicDashboardManager.from_queryset(ProfileQuerySet)):

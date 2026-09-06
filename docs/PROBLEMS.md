@@ -1897,40 +1897,72 @@ handler may itself be well tested.
 
 ---
 
-## P41 — 68 of 249 public queryset methods have no production caller, so their logic may be duplicated inline elsewhere
+## P41 — The queryset API's unused half, by call graph: 26 methods deleted, 27 test-only ones left
 
-`id: P41` · `status: open` · `updated: 2026-09-05`
+`id: P41` · `status: open` · `updated: 2026-09-06`
 
-Previously titled "Queryset API with no production caller: 70 of 251 (candidate count)".
+Previously titled "68 of 249 public queryset methods have no production caller, so their logic may
+be duplicated inline elsewhere", and before that "Queryset API with no production caller: 70 of 251
+(candidate count)".
 
-From a 2026-08-14 sweep of every public method on a `*/queryset.py` class, which found 70 of 251;
-two have since been deleted (see the archive), leaving 68 of 249. The split below is that sweep's,
-un-adjusted - both deletions came from the first bucket, so it now reads 42 and 26:
+The 2026-08-14 name-grep sweep found 70 of 251 and this entry asked for a call graph instead. Done
+2026-09-06, by AST over every `.py` in `src/`, `bin/` and `tests/` plus every template and every
+string constant. It disagrees with the grep in both directions, which is the point of the exercise:
 
-- **44** are not called from any file other than the one defining them
-- **26** are called only from tests
+| | |
+|---|---|
+| public methods on a `*QuerySet`/`*Manager` class under `models/` | **424 definitions, 278 distinct names** |
+| called from production | 210 |
+| called only from tests | 27 |
+| used only inside its own file | 11 |
+| name appears only in a string or a template | 9 |
+| **no reference anywhere in the repo** | **21 names, 28 definitions** |
 
-That is 27% of the queryset API with no production consumer, which is worth a look - a custom
-queryset method exists to be the one place a piece of domain logic lives, and one nothing calls is
-either scaffolding, a leftover, or a piece of logic that got reimplemented inline somewhere else.
-The last of those is the interesting case, because it means the same rule now exists twice.
+The first sweep counted 251 methods by scanning `queryset.py` only. Widening it to every module
+under `models/` adds `ImageAttachmentQuerySet` and its siblings - and one of the additions,
+`for_image`, turned out to be a *second* dead copy of a name already dead in `facts/queryset.py`.
+Four more names were dead in two or three places each: `by_latitude`, `by_longitude`,
+`by_created_year` and `by_updated_year` are defined on `PinQuerySet`, `LocationQuerySet` and (for
+the year pair) `WikiQuerySet`, and none of the eleven definitions had a caller. So 21 dead names are
+28 dead definitions, and a name-keyed count understates the cleanup by a third.
 
-**Known false-positive class, do not treat the 44 as dead.** The scan deliberately ignores calls
-within the defining file, so a method used only by its siblings is flagged. `apply_label_groups` is
-in the list and is definitely used - `filter_by_criteria` calls it, in the same file, as verified
-while tracing the duplicate-row candidates. Such methods are arguably mis-scoped (a `_`-prefixed
-helper rather than public API) but they are not dead.
+**26 definitions deleted.** Every one was a single `filter()` or `exclude()` wrapper. The eleven
+`by_*` ones carried no type hints and no docstrings.
 
-The two the sweep confirmed dead by separate inspection, `Pin.by_category` and `Wiki.by_category`,
-were deleted on 2026-09-05 - so 68 of 249 remain, and every one of them is still only a candidate.
+**Two were kept, because they are the case this entry was really about** - a method whose logic
+somebody rewrote by hand somewhere else, so the rule now exists twice:
 
-Worth doing properly with a call-graph rather than a name grep, since the test-only 26 in
-particular may be exercised through the very `filter_by_criteria`-style aggregators that make them
-look unused. What the two deleted ones suggest about the rest: the thing that kept them from being
-noticed was `PinFilter` naming `by_category` in a `method=` string, which is not a call and which a
-name grep counts as one. A call-graph pass should expect the reverse error too.
+- `ProfileQuerySet.pending_deletion` is `filter(deletion_requested_at__isnull=False)`, and its two
+  siblings in the same class - `due_for_deletion_reminder` and `due_for_hard_delete` - each opened
+  by writing that predicate out again. Both chain the method now.
+- `ArticleQuerySet.with_content` is `exclude(content="")`, written out by hand in
+  `services/global_search/providers.py`. That call site uses the method now.
 
----
+**Three near-misses, deleted anyway, and the distinction is worth keeping.**
+`PlaceQuerySet.part_of_children`/`member_of_children` look like they were reimplemented at
+`services/places/splits.py:113` and `models/place/queryset.py:207`, but both of those filter on a
+*specific* parent (`parent_id=place.pk`, `aggregate.children`), while the methods mean "any place
+whose parent edge is PART_OF". Routing either call site through the method would have added a
+redundant `parent__isnull=False` to make a worse fit look like reuse. `LocationQuerySet.in_domain_of`
+is the same shape against a migration, which must not call a queryset method at all.
+
+**Still open, in rough order of how much judgement each needs:**
+
+- **27 called only from tests.** The largest remaining group and the one this entry's earlier
+  warning is about: several are the `filter_by_criteria`-style aggregators' building blocks, and a
+  test that exercises the aggregator does reach them - just not by name. `by_name`, `by_priority`,
+  `by_tag`, `rated`, `rated_over`, `rated_under` and `overlapping` on `PinQuerySet` are the bulk.
+- **9 whose name appears only in a string or a template.** Four were spot-checked and all four are
+  false positives of the string check rather than real reuse: `cloned_from` is also a model *field*
+  name, `search_visible_to` appears in a docstring, and `rate_limited` collides with an unrelated
+  constant in two gateways. They are probably deletable; each needs its own look.
+- **11 used only inside their own file.** Not dead - `apply_label_groups` is the example this entry
+  already carried - but arguably mis-scoped as public API rather than `_`-prefixed helpers.
+
+**What the call graph does not see**, checked rather than assumed: this tree has no `getattr(qs, ...)`
+dynamic dispatch and no django-filter `method="..."` naming a queryset method (the only `method=`
+strings in `src/` are `"get"` and `"post"`), so the trap that hid `Pin.by_category` from the original
+sweep is not present any more.
 
 ## P47 — A deleted message's preview survives in the recipient's notification list
 
@@ -2914,8 +2946,11 @@ class DashboardManager(django_models.Manager.from_queryset(DashboardQuerySet)): 
 mypy cannot follow a base class that is a function call. It says so - `Unsupported dynamic base
 class "django_models.Manager.from_queryset"  [misc]` - and `[tool.mypy]`'s
 `disable_error_code = ['misc', 'annotation-unchecked']` turns that message off. The class therefore
-resolves to `Any`, and so does every one of the 145 managers built the same way, and so does every
-model's `objects`.
+resolves to `Any`, and so does every one of the 146 managers built the same way. That is almost the
+whole surface: of the 137 `objects = ...` declarations under `models/`, 134 name one of those
+managers directly and two more name a per-app `Manager` that is itself `from_queryset`-derived. The
+one exception is `abstract/versioned.py`'s `objects = Manager()`, a real `django.db.models.Manager`
+declared on the abstract base precisely so the resolver's `.objects` is typed.
 
 **What that costs, measured rather than reasoned.** With the tree's own settings, none of these is
 an error:

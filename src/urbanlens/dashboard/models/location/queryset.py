@@ -19,7 +19,6 @@ from urbanlens.dashboard.models.place.queryset import point_for_coordinates
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.place.model import Place
 
 logger = logging.getLogger(__name__)
 
@@ -61,29 +60,11 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
     For per-user filtering (by profile, visit status, priority) use PinQuerySet.
     """
 
-    def by_latitude(self, latitude):
-        return self.filter(latitude=latitude)
-
-    def by_longitude(self, longitude):
-        return self.filter(longitude=longitude)
-
     def by_cid(self, cid: int):
         return self.filter(google_place__cid=cid)
 
     def by_official_name(self, name):
         return self.filter(official_name__icontains=name)
-
-    def by_created_year(self, year):
-        return self.filter(created__year=year)
-
-    def by_updated_year(self, year):
-        return self.filter(updated__year=year)
-
-    def in_domain_of(self, place: Place | None) -> Self:
-        """Locations resolving onto any place in ``place``'s access domain."""
-        if place is None:
-            return self.none()
-        return self.filter(place__domain_root_id=place.domain_root_id)
 
     def within_bounding_box(self, latitude: float, longitude: float) -> Self:
         """Locations sharing the access domain of whatever is at this coordinate.

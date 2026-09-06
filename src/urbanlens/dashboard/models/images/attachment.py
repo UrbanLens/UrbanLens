@@ -26,23 +26,9 @@ from django.db.models import CASCADE, SET_NULL, CheckConstraint, ForeignKey, Ind
 
 from urbanlens.dashboard.models import abstract
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.images.model import Image
-
 
 class ImageAttachmentQuerySet(abstract.DashboardQuerySet):
     """Custom queryset for ImageAttachment models."""
-
-    def for_image(self, image: Image | int) -> ImageAttachmentQuerySet:
-        """Every attachment of one photo.
-
-        Args:
-            image: The photo, or its pk.
-
-        Returns:
-            Its attachment rows.
-        """
-        return self.filter(image=image)
 
 
 class ImageAttachmentManager(abstract.DashboardManager.from_queryset(ImageAttachmentQuerySet)):

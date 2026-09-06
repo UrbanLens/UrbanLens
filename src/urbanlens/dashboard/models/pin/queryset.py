@@ -10,7 +10,6 @@ from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
 from django.db import IntegrityError
 from django.db.models import Count, Exists, F, OuterRef, Q
-from django.utils import timezone
 
 # App Imports
 from urbanlens.dashboard.models import abstract
@@ -130,18 +129,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         """
         return self.root_pins().visited().filter(visit_history__isnull=True).exclude(unlogged_visit_dismissed=True).distinct()
 
-    def not_visited_this_year(self):
-        return self.filter(last_visited__year__lt=timezone.now().year)
-
     def by_priority(self, priority):
         return self.filter(priority=priority)
-
-    def by_latitude(self, latitude):
-        # A Pin's coordinates live on its Location.
-        return self.filter(location__latitude=latitude)
-
-    def by_longitude(self, longitude):
-        return self.filter(location__longitude=longitude)
 
     def by_name(self, name):
         return self.filter(name__icontains=name)
@@ -161,12 +150,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
 
     def by_profile(self, profile):
         return self.filter(profile=profile)
-
-    def by_created_year(self, year):
-        return self.filter(created__year=year)
-
-    def by_updated_year(self, year):
-        return self.filter(updated__year=year)
 
     def modified_since(self, since) -> Self:
         """Return pins created or edited at or after ``since``.

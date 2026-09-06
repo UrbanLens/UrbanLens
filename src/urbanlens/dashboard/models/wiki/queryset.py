@@ -56,12 +56,6 @@ class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet[
     def by_name(self, name):
         return self.filter(name__icontains=name)
 
-    def by_created_year(self, year):
-        return self.filter(created__year=year)
-
-    def by_updated_year(self, year):
-        return self.filter(updated__year=year)
-
     def filter_by_criteria(self, criteria):
         query = Q()
         if criteria.get("date_added"):
