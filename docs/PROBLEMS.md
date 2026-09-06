@@ -2736,16 +2736,31 @@ at this app's beta scale (~2 users):
   `services/apis/immich/gateway.py:170-184`) fetches *every geolocated asset in the user's entire
   Immich library* (no radius param sent to Immich at all) and filters to "nearby" in Python after the
   full fetch - a self-hosted library built over years could hold 10k-100k+ assets fetched over the
-  network on every picker open. Immich's own `/search/metadata` endpoint accepts lat/lng+radius and
-  isn't used here, unlike this file's other two modes (`VISITS`, `ALL`), which are bounded.
+  network on every picker open. ~~Immich's own `/search/metadata` endpoint accepts lat/lng+radius and
+  isn't used here~~ **- it does not, and anyone following that sentence will spend the batch trying
+  to send a parameter Immich rejects.** Checked 2026-09-06 against the upstream OpenAPI spec and
+  against what this repo's own gateway sends: `MetadataSearchDto` has no geographic field beyond the
+  geocoded `city`/`country`/`state` strings, and `/map/markers` takes only date and archive/favourite
+  filters. Immich exposes no coordinate-radius filter on any endpoint, so the fix has to be a local
+  cap (and a cache, since `_immich_picker_dialog.html` puts `hx-trigger="change"` on the radius
+  `<select>`, meaning each of the six radius options re-downloads the whole library). Re-confirm
+  against the pinned server version before deleting this sentence. The other two modes (`VISITS`,
+  `ALL`) *are* bounded server-side, by date and page size respectively - so the docstring in
+  `services/photos/photo_import.py` is right about them and wrong only about geography.
 - **Wiki edit history & article revision history** (`controllers/location_wiki.py:387-421`,
   `controllers/article.py:149-177`) - no slice anywhere in either chain; a long-lived, actively-edited
   community wiki or personal article could reach hundreds to low-thousands of rows. Now deferred to
   tab-reveal (see the fix above) but still unbounded once that tab is actually opened.
-- **Pin-to-wiki share dialog's photo picker** (`services/wiki/wiki_share.py:199-201`,
-  `seedable_photos()`) lists every photo on the pin with no cap - contrast with the wiki's own Media
-  gallery (`_WIKI_PHOTOS_PREVIEW_LIMIT = 60`) and the visit dialog's photo picker (capped `[:60]` in
-  `controllers/visits.py:77`), both of which already learned this lesson.
+- ~~**Pin-to-wiki share dialog's photo picker**~~ **fixed 2026-09-06** (`637a47bd1`).
+  `seedable_photos()` caps at 60 - matching the two comparators below - ordered newest-first, because
+  a LIMIT over an unordered queryset may return a different slice per call. Two things the survey did
+  not record: the picker rendered `image.image.url`, the *original* rather than the thumbnail, so its
+  per-row cost was far higher than the capped pickers it was measured against (`thumb_url` now); and
+  the cap is safe to add without a "load more" only because `WikiShareService` re-scopes the
+  submitted ids through `pin.images` on the POST, so the cap bounds what is *offered*, not what is
+  shareable. Contrast with the wiki's own Media gallery (`_WIKI_PHOTOS_PREVIEW_LIMIT = 60`) and the
+  visit dialog's photo picker (capped `[:60]` in `controllers/visits.py:77`), both of which had
+  already learned this lesson.
 - **Vault "pin albums" panel** (`controllers/vault_photos.py:206-249`,
   `services/photos/albums.py:242-289`) loads every album and every album item across *all* of a
   profile's pins with no limit, once the (correctly lazy, `<details hx-trigger="toggle once">`)
