@@ -1540,6 +1540,57 @@ real browser to verify; the roadmap entry carries the design.
 **Page overflows footer** - CSS-level, needs a browser to reproduce; nothing checkable
 statically.
 
+## P86 — Deleting a contribution outright leaves its reputation points standing, and `post_delete` cannot tell whose deletion it was
+
+`id: P86` · `status: open` · `updated: 2026-09-06`
+
+Found 2026-09-06 while fixing P55's withdrawal half, and reproduced before being filed.
+
+`ReputationEvent.target_id` is a plain `IntegerField`, not a foreign key, and
+`models/reputation/signals.py` subscribes to **`post_save` only** - there is no `post_delete`
+handler anywhere in the ledger. So deleting the row a contribution is about leaves its scored event
+behind, still counting: a profile keeps points for a photo, comment, pin or wiki edit that no longer
+exists.
+
+`score_event`'s existing `retract_event(event, reason="target_deleted")` does not cover this. It
+fires only when `resolve_target` comes back empty *during scoring* - i.e. when the target was
+deleted inside the window before the deferred scoring task ran. That is a race, not a lifecycle
+hook; a target deleted a day later is never revisited.
+
+Reproduced with a scored `photo_upload` event whose `Image` is then deleted: the row survives, is
+not retracted, and `total_value()` still counts it. That test is not in the suite - it would be a
+red test for a known-open entry - but it is four lines against the fixture in
+`test_reputation_withdrawal.py`.
+
+**Why this is filed rather than fixed with the withdrawal half.** The obvious fix is a `post_delete`
+subscription mirroring the `post_save` ones - the `_SUBSCRIPTIONS` tuple already maps model to rule
+key, so it would be one loop and no new source of truth. It is wrong as stated, because
+**`post_delete` does not know who deleted the row**, and this ledger's one-way rule turns on exactly
+that: a contributor ending their own contribution loses the standing, and somebody else ending it -
+a moderator removing a photo, a sweep, a cascade from a parent - must not. That is why
+`detach_image_from_wiki` takes a keyword-only `withdrawn_by_contributor` with no default, and why
+`revoke_community_bonuses_on_wiki_delete` is scoped to `deleted_by`, rather than either of them
+inferring intent from the row.
+
+So the question to answer first, and it is a product one:
+
+1. **Should a contribution deleted by somebody else stop counting?** For the *quota bonus* the
+   answer is settled and is no - see P55 - because losing storage over a moderation action would
+   penalise the contributor. Points are arguably different: the argument for retracting is that the
+   ledger should count contributions that exist, and the argument against is that it hands any
+   moderator a lever on someone's standing.
+2. If the answer is "only the contributor's own deletions", every delete path that can be a
+   withdrawal needs to pass that intent in, the way the two quota paths already do - which is the
+   work, and it is spread across the delete paths rather than concentrated in a signal.
+3. If the answer is "any deletion retracts", it is the one loop over `_SUBSCRIPTIONS`, plus deciding
+   what a cascade means (deleting a wiki cascades its comments; those contributors did nothing).
+
+**What is already fixed**, so this entry is not read as covering it: the *withdrawal* case -
+`detach_image_from_wiki(..., withdrawn_by_contributor=True)` - retracts as of 2026-09-06 via
+`services.reputation.scoring.retract_events_for_target`, and is covered by
+`test_reputation_withdrawal.py`, including that somebody else's removal does **not** retract and
+that `lifetime_earned` is unaffected.
+
 ## P29 — 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx
 
 `id: P29` · `status: open` · `updated: 2026-08-13`
@@ -2256,9 +2307,23 @@ what it actually handed back (`regranted_image_ids`, written into the stashed en
 `restore_undo_action` persists) and `WikiUndoHandler.redo_delete` takes back exactly that; by then
 a re-granted exemption and one that was never revoked are indistinguishable in the column.
 
-**Still open, one.** The reputation ledger keeps the `ReputationEvent` for a withdrawn contribution.
-`retract_event` exists, but that ledger has its own gate design and folding it in would make one
-change two features.
+~~**Still open, one.** The reputation ledger keeps the `ReputationEvent` for a withdrawn
+contribution.~~ **Fixed 2026-09-06.** `retract_events_for_target` (in `services.reputation.scoring`,
+beside the `retract_event` it builds on) is called from `detach_image_from_wiki` when
+`withdrawn_by_contributor` - the same intent flag, at the same point, as the quota revoke beside it,
+so the two halves of one withdrawal cannot drift apart. Both branches are covered: the photo is kept
+when it is still on a pin and deleted when it is not, and the contribution has ended either way.
+
+The two tests that constrain the fix matter more than the one that detects the bug: **somebody
+else's removal must not retract** (`withdrawn_by_contributor=False`), which is the one-way rule this
+entry states, and **`lifetime_earned` must not fall**, since `recompute_total` is explicit that
+reverting contributions cannot take away access a user already had.
+
+**And it is not the only way an event outlives its subject.** `target_id` is a plain `IntegerField`
+and the ledger subscribes to `post_save` only, so *deleting* a contribution outright leaves its
+points standing too - reproduced, and filed as P86 rather than fixed here, because `post_delete`
+cannot tell a contributor's own deletion from a moderator's and this entry's one-way rule turns on
+exactly that distinction.
 
 **Still open, two.** In the wiki context the shared `galleryDelete` handler still prompts "This
 cannot be undone - the file is removed permanently" and toasts "Photo deleted." for a dual-owned

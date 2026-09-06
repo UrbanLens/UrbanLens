@@ -1639,12 +1639,21 @@ def detach_image_from_wiki(image: Image, *, withdrawn_by_contributor: bool) -> N
         image: The ``Image`` to remove from its wiki.
         withdrawn_by_contributor: Whether the photo's own owner asked for this.
             Required rather than defaulted, because the community quota bonus
-            survives every other way a photo can leave a wiki and the column
-            cannot tell them apart afterwards - so a second unlink path added
-            later has to answer the question rather than inherit an answer.
+            *and* the reputation the photo earned both survive every other way a
+            photo can leave a wiki, and neither the exemption column nor the
+            ledger row can tell them apart afterwards - so a second unlink path
+            added later has to answer the question rather than inherit an answer.
     """
     from urbanlens.dashboard.models.images.attachment import ImageAttachment
     from urbanlens.dashboard.services.media.quota_rewards import revoke_community_quota_bonus
+    from urbanlens.dashboard.services.reputation.scoring import retract_events_for_target
+
+    if withdrawn_by_contributor:
+        # The ledger half of the same withdrawal the quota bonus covers below.
+        # Done before either branch because both are withdrawals - the photo is
+        # kept when it is still on a pin and deleted when it is not, and the
+        # contribution has ended either way.
+        retract_events_for_target(image, reason="contribution_withdrawn")
 
     if image.wiki_id is not None:
         # The pin side already does this (``PinImageView.delete``).

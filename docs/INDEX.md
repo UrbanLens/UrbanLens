@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P86` · `T3` · `PL7` · `D9` · `X14` · `I5` · `R27` · `N9`
+**Next free id:** `P87` · `T3` · `PL7` · `D9` · `X14` · `I5` · `R27` · `N9`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -54,6 +54,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P25 | open | 2026-08-07 | `Comment.profile` CASCADEs but `TripComment.author` SET_NULLs, so account deletion erases only some comments | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P26 | open | 2026-09-06 | A group message can still be sent under a stale key version, and refusing one risks an availability outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P27 | open | 2026-08-08 | Saved-filter regions use leaflet-draw's transactional remove tool, so deleted polygons resurrect on the next draw | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P86 | open | 2026-09-06 | Deleting a contribution outright leaves its reputation points standing, and `post_delete` cannot tell whose deletion it was | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P29 | open | 2026-08-13 | 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P34 | open | 2026-08-13 | 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |

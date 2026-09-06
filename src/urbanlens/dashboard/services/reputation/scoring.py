@@ -260,6 +260,32 @@ def retract_event(event: ReputationEvent, *, reason: str) -> bool:
     return True
 
 
+def retract_events_for_target(target: Any, *, reason: str) -> int:
+    """Stop every row recorded about ``target`` counting.
+
+    For an ending that the *contributor* chose - only their caller knows that,
+    which is why the intent is passed in rather than inferred, the same rule
+    ``services.media.quota_rewards`` follows for the community quota bonus.
+    Retraction is reversible (:func:`restore_event`), so an undo can hand the
+    standing back.
+
+    Args:
+        target: The contributed object being withdrawn.
+        reason: Short machine-readable label, stored for the audit trail.
+
+    Returns:
+        How many rows this call retracted.
+    """
+    from urbanlens.dashboard.models.reputation.model import ReputationEvent
+    from urbanlens.dashboard.services.reputation.rules import target_kind_for
+
+    kind = target_kind_for(target)
+    if kind is None or target.pk is None:
+        return 0
+    rows = ReputationEvent.objects.filter(target_kind=kind, target_id=target.pk, retracted=False)
+    return sum(1 for event in rows if retract_event(event, reason=reason))
+
+
 def restore_event(event: ReputationEvent) -> bool:
     """Undo a retraction - the revert-of-a-revert case.
 
