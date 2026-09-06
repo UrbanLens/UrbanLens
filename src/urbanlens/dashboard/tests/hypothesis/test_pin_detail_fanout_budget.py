@@ -11,13 +11,21 @@ from whichever panel arrives when the pool is full.
 limits rather than implying otherwise. Exhaustion needs concurrency against a
 real pool, which does not exist in a suite that issues one request at a time -
 see `docs/audits/TEST_COVERAGE_GAPS.md`, where the pool itself is listed as
-integration-only. What a unit test *can* hold is the number, which is the thing
-that causes it, and which creeps up one innocuous panel at a time.
+integration-only. What a unit test *can* hold is the shape of the page.
 
-So this is a ratchet rather than an assertion of correctness. The current count
-is already too high; the budget stops it growing while the real fix - loading
-panels in waves, or behind one request - is decided. Lower the ceiling when that
-happens. Raising it should take an argument.
+Two things are held here, and the second is now the load-bearing one.
+
+The **count** is a ratchet: it stops the number of load-triggered elements
+growing. It was the only guard while the fix was undecided, and it is no longer
+the whole story, because the count is no longer the concurrency - the enrichment
+panels queue against shared `hx-sync` lanes now, so twelve of them in one lane
+are one request at a time rather than twelve at once.
+
+The **lanes** are the invariant that replaced it. Every enrichment panel on that
+page must name a lane; a new one added without `hx-sync` re-opens the problem
+while leaving the count assertion green, which is exactly the regression a
+ceiling test cannot see. Measured in a browser against the dev stack: the page
+went from 58 simultaneous requests to 27, reaching the same settled state.
 """
 
 from __future__ import annotations
@@ -57,6 +65,19 @@ MAX_LOAD_TRIGGERED_REQUESTS = 48
 #: (`load[!window.ulSectionCollapsed(...)]`) or sit alongside other triggers, so
 #: the match is on the word rather than the whole attribute.
 _LOAD_TRIGGER = re.compile(r'hx-trigger="[^"]*\bload\b[^"]*"')
+
+#: An element whose job is to enrich the page rather than to render it: an
+#: external-data panel, a collapsible section, or one of the media-gallery's
+#: per-provider loaders. These are the ones that must queue. The page's own
+#: content - the overview, the gallery frame, the boundary - is deliberately
+#: not laned, because delaying it delays the page itself.
+_ENRICHMENT_MARKERS = ("data-ext-panel-204", "data-collapse-section", "media-provider-loader")
+
+#: A queue lane, as `hx-sync` spells it.
+_LANE = re.compile(r'hx-sync="#pin-(?:panel|media)-lane-[^"]*:queue all"')
+
+#: Opening tags, so a marker on one element is not credited to its neighbour.
+_OPEN_TAG = re.compile(r"<div [^>]*>", re.DOTALL)
 
 
 class PinDetailFanoutBudgetTests(TestCase):
@@ -102,4 +123,47 @@ class PinDetailFanoutBudgetTests(TestCase):
             5,
             "the load-trigger pattern matched almost nothing, so the budget assertion is not measuring anything. "
             'Has the page stopped using hx-trigger="load", or has the attribute quoting changed?',
+        )
+
+    def test_every_enrichment_panel_queues_against_a_lane(self) -> None:
+        """The invariant the count assertion cannot see.
+
+        A panel added without `hx-sync` fires alongside every other one and puts
+        the page back where it was, while the ceiling above stays green because
+        the ceiling counts elements rather than simultaneous requests. This is
+        what actually holds the concurrency down.
+
+        Matched per opening tag rather than over the whole document, so a lane on
+        one panel is never credited to the panel below it.
+        """
+        html = self._rendered()
+
+        unlaned = [
+            tag[:160]
+            for tag in _OPEN_TAG.findall(html)
+            if any(marker in tag for marker in _ENRICHMENT_MARKERS)
+            and _LOAD_TRIGGER.search(tag)
+            and not _LANE.search(tag)
+        ]
+
+        self.assertEqual(
+            unlaned,
+            [],
+            f"{len(unlaned)} enrichment panel(s) on the Private Pin page fetch on load without queueing against a "
+            'lane, so they fire alongside every other panel. Add hx-sync="#pin-panel-lane-N:queue all" (or '
+            "#pin-media-lane-N for a gallery provider), picking the lane with the fewest panels already on it. "
+            f"First offender: {unlaned[0] if unlaned else ''}",
+        )
+
+    def test_the_lane_check_actually_finds_panels(self) -> None:
+        """Guards the guard: a marker list that matched nothing would pass forever."""
+        html = self._rendered()
+
+        laned = [tag for tag in _OPEN_TAG.findall(html) if _LANE.search(tag)]
+
+        self.assertGreater(
+            len(laned),
+            10,
+            "almost no laned panels were found, so the lane assertion is not measuring anything. Have the "
+            "hx-sync attributes been removed, or the lane naming changed?",
         )

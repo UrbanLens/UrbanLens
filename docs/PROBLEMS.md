@@ -2144,65 +2144,65 @@ truncating or scrolling a navigation menu is worse than the overflow.
 `specs/ui/responsive-overflow.spec.ts` covers 320-414 only, deliberately: adding 768 would ship a
 red test for a decision nobody has made. Extend `PHONE_WIDTHS` when this is resolved.
 
-## P53 — One Private Pin page load fires dozens of concurrent panel requests and can exhaust the DB connection pool
+## P53 — The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer
 
-`id: P53` · `status: open` · `updated: 2026-08-24`
+`id: P53` · `status: open` · `updated: 2026-09-06`
 
-Previously titled "one Private Pin page load can exhaust the database connection pool".
+Previously titled "One Private Pin page load fires dozens of concurrent panel requests and can
+exhaust the DB connection pool", and before that "one Private Pin page load can exhaust the database
+connection pool".
 
-Found by `tests/integration/` on 2026-08-24, and only visible because the
-console/network guard watches every request a page makes rather than just the
-document.
+Found by `tests/integration/` on 2026-08-24, and only visible because the console/network guard
+watches every request a page makes rather than just the document. Opening
+`/dashboard/map/pin/<slug>/` fired every enrichment panel at once, and each one is a Django request
+taking its own database connection (`CONN_MAX_AGE` is 0). On the dev stack, whose Postgres runs the
+default `max_connections = 100`, 14 requests in one hour failed with `FATAL: sorry, too many clients
+already`, spread evenly across seven different panel endpoints - the signature of pool exhaustion
+rather than of any one panel being broken.
 
-Opening `/dashboard/map/pin/<slug>/` fires roughly **thirty concurrent HTMX
-requests** - one per enrichment panel, plus the media and overview fragments -
-and each one is a Django request that takes its own database connection
-(`CONN_MAX_AGE` is 0, so connections are per-request). On the dev stack, whose
-Postgres runs the default `max_connections = 100`, that tipped over: 14 requests
-in one hour failed with
+**Re-measured 2026-09-06 in Chromium against the running `development_main` stack, and it was worse
+than "roughly thirty": 95 requests in total, 61 of them within the first two seconds, peaking at
+**58 simultaneous**.** Two readers is enough to want 116 connections against a pool of 100.
 
-    django.db.utils.OperationalError: connection to server at "urbanlens_db",
-    port 5432 failed: FATAL: sorry, too many clients already
+**Bounded 2026-09-06 with `hx-sync` lanes**, which is htmx's own answer and needs no JavaScript:
+requests naming the same element with `queue all` run one after another. The 27 enrichment panels on
+that page - the external-data panels, the collapsible sections, and the media gallery's 13
+per-provider loaders - are spread across four panel lanes and three media lanes. Measured after: the
+same page peaks at **27**, and reaches an identical settled state (same gallery contents, same
+visible panels, no console errors).
 
-The failures are spread evenly across seven different panel endpoints, one each
-- `azure-maps`, `location-data-overview`, `markup-maps`, `media/cris_building`,
-`panel/epa_echo_detail`, `panel/property_records`, `panel/redata_permits` - which
-is the signature of pool exhaustion rather than of any one panel being broken.
-Whichever panel arrives when the pool is full is the one that 500s.
+**Two things that were tried first and cannot work, recorded so the next person does not spend the
+same afternoon on them.**
 
-**How much of this is the test environment.** Some: the suite runs several
-browser workers, so more than one pin page was loading at once, and a single
-container's Postgres is smaller than a real deployment's. But the shape does not
-depend on that - a page that opens thirty connections at once needs only three
-simultaneous readers to want ninety, and the panels are the *point* of that page,
-so this is what a normal user does rather than a stress case. It is also
-user-visible when it happens: `themes/base.html`'s global `htmx:responseError`
-handler raises an error toast per failed panel.
+- **`revealed` / `intersect` deferral is impossible here.** Every one of these panels renders with
+  the `hidden` attribute and only unhides once its content arrives, so it never intersects the
+  viewport and would never fire at all. Measured: of 46 load-triggered elements on a real page, 40
+  were hidden and 0 were in the viewport. The five tab panels that *were* converted to `revealed`
+  earlier are a different shape - they are laid out, just off-tab.
+- **A `delay:` stagger bounds the rate, not the concurrency.** Starting four panels every 400ms
+  still leaves fifty in flight if each takes five seconds, which on a cold cache they can.
 
-Not fixed here, because every fix is a decision rather than a repair: cap the
-client-side fan-out so panels load in waves, give the panel views a shared
-connection or move them behind one request, raise `max_connections`, or put
-pgbouncer in front. The first is the only one that helps a deployment of any
-size.
+**Still open, and this is now the interesting half: the tail.** Serialising makes the last panel
+arrive later. Measured on a cold cache: the unlaned page had settled by 30 seconds and the laned one
+needed 45. The end state is identical, so nothing is lost - but a first visit to a location nobody
+has opened before now takes noticeably longer to fill in, and that trade was made here without
+anyone deciding it was the right one. Three ways to shorten it, none free:
 
-**What has been done, short of fixing it.**
-`test_pin_detail_fanout_budget.py` renders the page and asserts the number of
-elements that fetch on load stays under a ceiling. It does *not* reproduce the
-exhaustion - that needs concurrency against a real pool, which a suite issuing
-one request at a time does not have - but it holds the number, which is the
-cause, and which creeps up one innocuous panel at a time. The ceiling is set
-**at** the current count, so it is a ratchet rather than an endorsement: raising
-it should take an argument, and it should come down when the real fix lands.
+1. **More lanes.** Six panel lanes instead of four cuts the tail by about a third and raises the
+   peak by two. Cheap, and a straight dial between the two costs.
+2. **Fewer panels.** Twelve of the 27 are plugin panels that 204 on most locations - a page that
+   asked one endpoint "which of these have anything?" could skip the rest entirely.
+3. **Make the panels cheaper.** The tail is a cold-cache figure; a warm one collapses it. Which
+   suggests the external-data cache, not the fan-out, is what a returning user actually feels.
 
-Two measurements worth recording. The rendered count is **53**, not the ~30 seen
-above; the difference is real rather than an error in either, because some
-triggers carry a filter (`load[!window.ulSectionCollapsed(...)]`) and stay quiet
-for a collapsed section. 53 is the ceiling a user with everything expanded
-reaches, which is the number a budget should bound.
+**What holds it.** `test_pin_detail_fanout_budget.py` still ratchets the count, but the count is no
+longer the concurrency and the lane assertion is what matters now: every enrichment panel must name
+a lane, because one added without `hx-sync` re-opens the problem while leaving the count green.
+Verified to gate - 27 unlaned before the change, 0 after.
 
-Related: this is the concrete instance of the load-testing gap recorded in
-`docs/TOOLING.md` under "Evaluated, not adopted" - the integration suite found
-it by accident, which is not a substitute for looking on purpose.
+The remaining ~27 concurrent requests are the page's own content (overview, gallery, boundary,
+markup and detail-pin JSON), the site chrome (notifications, undo stack, safety banner), and the
+five off-tab panels. Laning those would delay the page itself, which is a different trade.
 
 ## P55 — Deleting a whole wiki still withdraws a contribution without ending its quota bonus
 

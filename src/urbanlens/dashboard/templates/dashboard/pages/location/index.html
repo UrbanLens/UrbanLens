@@ -141,6 +141,35 @@
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
+    {% comment %}Request lanes for this page's enrichment panels.
+
+    Every panel here fetches on load, and there are enough of them that opening
+    this page once measured 58 simultaneous requests against a Postgres whose
+    default max_connections is 100 - each Django request takes its own connection
+    (CONN_MAX_AGE is 0), so two readers is enough to start answering 500s from
+    whichever panel arrives when the pool is full (P53).
+
+    hx-sync's "queue all" against a shared element is htmx's own answer: requests
+    naming the same lane run one after another instead of together. Four panel
+    lanes and three media lanes bound the burst at seven rather than fifty-eight,
+    and the worst a lane can do is make its panels arrive later.
+
+    Deferring on visibility instead - revealed, or intersect - cannot work here:
+    every one of these panels renders with the `hidden` attribute and only
+    unhides once its content arrives, so it never intersects anything and would
+    never fire at all.
+
+    The lanes are empty spans rather than an existing element because hx-sync
+    queues against whatever the selector resolves to, and an element that also
+    makes requests of its own would join its own queue.{% endcomment %}
+    <span id="pin-panel-lane-0" hidden></span>
+    <span id="pin-panel-lane-1" hidden></span>
+    <span id="pin-panel-lane-2" hidden></span>
+    <span id="pin-panel-lane-3" hidden></span>
+    <span id="pin-media-lane-0" hidden></span>
+    <span id="pin-media-lane-1" hidden></span>
+    <span id="pin-media-lane-2" hidden></span>
+
     {# The one-time "organize this property?" suggestion: child pins for the     #}
     {# buildings here, plus nesting any top-level pins that stand inside it.   #}
     {# 204s (and removes itself) whenever there's nothing to suggest, the      #}
@@ -191,7 +220,8 @@
     {# left behind when a sibling in this row is collapsed (see .pin-media-row -- #}
     {# in _pin-detail.scss and the [data-collapse-scope] handling in base.html). #}
     <div class="pin-media-row">
-        <div id="satellite-view-section" class="satellite-view card card--primary" data-ext-panel-204 hidden
+        <div id="satellite-view-section"
+            hx-sync="#pin-panel-lane-0:queue all" class="satellite-view card card--primary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.satellite_view' pin.slug %}"
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','satellite'))], ul:unhide"
             hx-swap="outerHTML"
@@ -206,7 +236,8 @@
             </div>
         </div>
 
-        <div id="street-view-section" class="street-view card card--primary" data-ext-panel-204 hidden
+        <div id="street-view-section"
+            hx-sync="#pin-panel-lane-1:queue all" class="street-view card card--primary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.street_view' pin.slug %}"
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','street-view'))], ul:unhide"
             hx-swap="outerHTML"
@@ -317,6 +348,7 @@
         {# Per-provider loaders - hidden, append their results into #media-gallery-grid #}
         {# above as each responds (see the media-gallery IIFE further down this file). #}
         <div class="media-provider-loader" id="media-loader-photos"
+            hx-sync="#pin-media-lane-0:queue all"
             hx-get="{% url 'pin.media' pin.slug 'photos' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -324,6 +356,7 @@
             hx-timeout="25000"
             hidden></div>
         <div class="media-provider-loader" id="media-loader-smithsonian"
+            hx-sync="#pin-media-lane-1:queue all"
             hx-get="{% url 'pin.media' pin.slug 'smithsonian' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -331,6 +364,7 @@
             hx-timeout="25000"
             hidden></div>
         <div class="media-provider-loader" id="media-loader-wikimedia"
+            hx-sync="#pin-media-lane-2:queue all"
             hx-get="{% url 'pin.media' pin.slug 'wikimedia' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -340,6 +374,7 @@
         {# Images from the pin's own matched Wikipedia article page, distinct from the #}
         {# Wikimedia Commons text search above - see WikipediaMediaGateway. #}
         <div class="media-provider-loader" id="media-loader-wikipedia_media"
+            hx-sync="#pin-media-lane-0:queue all"
             hx-get="{% url 'pin.media' pin.slug 'wikipedia_media' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -347,6 +382,7 @@
             hx-timeout="25000"
             hidden></div>
         <div class="media-provider-loader" id="media-loader-loc"
+            hx-sync="#pin-media-lane-1:queue all"
             hx-get="{% url 'pin.media' pin.slug 'loc' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -354,6 +390,7 @@
             hx-timeout="25000"
             hidden></div>
         <div class="media-provider-loader" id="media-loader-internet_archive"
+            hx-sync="#pin-media-lane-2:queue all"
             hx-get="{% url 'pin.media' pin.slug 'internet_archive' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -361,6 +398,7 @@
             hx-timeout="25000"
             hidden></div>
         <div class="media-provider-loader" id="media-loader-digital_commonwealth"
+            hx-sync="#pin-media-lane-0:queue all"
             hx-get="{% url 'pin.media' pin.slug 'digital_commonwealth' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -368,6 +406,7 @@
             hx-timeout="25000"
             hidden></div>
         <div class="media-provider-loader" id="media-loader-yelp"
+            hx-sync="#pin-media-lane-1:queue all"
             hx-get="{% url 'pin.media' pin.slug 'yelp' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -375,6 +414,7 @@
             hx-timeout="25000"
             hidden></div>
         <div class="media-provider-loader" id="media-loader-google_images"
+            hx-sync="#pin-media-lane-2:queue all"
             hx-get="{% url 'pin.media' pin.slug 'google_images' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -383,6 +423,7 @@
             hidden></div>
         {# Broad web-image search via SearXNG's image engines - see plugins.builtin.searxng_images. #}
         <div class="media-provider-loader" id="media-loader-searxng_images"
+            hx-sync="#pin-media-lane-0:queue all"
             hx-get="{% url 'pin.media' pin.slug 'searxng_images' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -390,6 +431,7 @@
             hx-timeout="25000"
             hidden></div>
         <div class="media-provider-loader" id="media-loader-google_maps"
+            hx-sync="#pin-media-lane-1:queue all"
             hx-get="{% url 'pin.media' pin.slug 'google_maps' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -398,6 +440,7 @@
             hidden></div>
         {# LoopNet listing photos and CRIS attachment photos/documents, via REData - see plugins.builtin.loopnet/cris_buildings. #}
         <div class="media-provider-loader" id="media-loader-loopnet"
+            hx-sync="#pin-media-lane-2:queue all"
             hx-get="{% url 'pin.media' pin.slug 'loopnet' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -405,6 +448,7 @@
             hx-timeout="25000"
             hidden></div>
         <div class="media-provider-loader" id="media-loader-cris_building"
+            hx-sync="#pin-media-lane-0:queue all"
             hx-get="{% url 'pin.media' pin.slug 'cris_building' %}"
             hx-trigger="load"
             hx-target="#media-gallery-grid"
@@ -471,6 +515,7 @@
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','aliases'))], ul:unhide, pinAliasesChanged from:body"
             hx-swap="outerHTML"
             id="pin-aliases-panel"
+            hx-sync="#pin-panel-lane-0:queue all"
             class="aliases-panel card card--secondary"
             data-collapse-scope="pin" data-collapse-section="aliases">
             <div class="card-header">
@@ -502,6 +547,7 @@
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','ownership'))], ul:unhide"
             hx-swap="outerHTML"
             id="pin-ownership-panel"
+            hx-sync="#pin-panel-lane-1:queue all"
             class="ownership-panel card card--secondary"
             data-collapse-scope="pin" data-collapse-section="ownership">
             <div class="card-header">
@@ -517,6 +563,7 @@
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','markup-maps'))], ul:unhide, refreshMarkupMaps from:body"
             hx-swap="outerHTML"
             id="pin-markup-maps-panel"
+            hx-sync="#pin-panel-lane-2:queue all"
             data-ext-panel-204 hidden
             class="pin-markup-maps-panel card card--secondary"
             data-collapse-scope="pin" data-collapse-section="markup-maps">
@@ -534,7 +581,8 @@
     {# htmx:afterOnLoad handler near the bottom of this file). ---------------- #}
     <div class="pin-aux-grid">
         {% if pin.meaningful_name and can_use_web_search %}
-        <div id="web-search-section" class="web-search card card--secondary" data-ext-panel-204 hidden
+        <div id="web-search-section"
+            hx-sync="#pin-panel-lane-3:queue all" class="web-search card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.web_search' pin.slug %}"
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','web-search'))], ul:unhide"
             hx-swap="outerHTML"
@@ -552,7 +600,8 @@
 
         {% include "dashboard/partials/pins/_pin_location_data_tabs.html" with pin=pin location_data_tabs=location_data_tabs %}
 
-        <div id="azure-maps-section" class="card card--secondary" data-ext-panel-204 hidden
+        <div id="azure-maps-section"
+            hx-sync="#pin-panel-lane-0:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.azure_maps' pin.slug %}"
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','azure_maps'))], ul:unhide"
             hx-swap="outerHTML"
@@ -566,7 +615,8 @@
         </div>
 
         {# Every building on the parcel - see plugins.builtin.parcel_buildings. #}
-        <div id="parcel-buildings-section" class="card card--secondary" data-ext-panel-204 hidden
+        <div id="parcel-buildings-section"
+            hx-sync="#pin-panel-lane-1:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.parcel_buildings' pin.slug %}"
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','parcel_buildings'))], ul:unhide, pinDetailPinsChanged from:body"
             hx-swap="outerHTML"
@@ -580,7 +630,8 @@
         </div>
 
         {% for panel in simple_info_panels %}
-        <div id="{{ panel.section_id }}" class="card card--secondary" data-ext-panel-204 hidden
+        <div id="{{ panel.section_id }}"
+            hx-sync="#pin-panel-lane-{% cycle '0' '1' '2' '3' %}:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.panel' pin.slug panel.key %}"
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','{{ panel.key }}'))], ul:unhide"
             hx-swap="outerHTML"
@@ -598,7 +649,8 @@
         {% include "dashboard/partials/pins/_pin_plugin_tabs.html" with tabs=panel_tabs default_tab_key=default_panel_tab_key section_id="pin-plugin-tabs-section" body_id="pin-plugin-tab-body" heading="Regional Data" heading_icon="layers" collapse_section="plugin_tabs" collapse_label="Regional Data" %}
         {% endif %}
 
-        <div id="yelp-section" class="card card--secondary" data-ext-panel-204 hidden
+        <div id="yelp-section"
+            hx-sync="#pin-panel-lane-3:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.yelp' pin.slug %}"
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','yelp'))], ul:unhide"
             hx-swap="outerHTML"
@@ -610,7 +662,8 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="nps-section" class="card card--secondary" data-ext-panel-204 hidden
+        <div id="nps-section"
+            hx-sync="#pin-panel-lane-0:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.nps' pin.slug %}"
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','nps'))], ul:unhide"
             hx-swap="outerHTML"
@@ -622,7 +675,8 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="loopnet-section" class="card card--secondary" data-ext-panel-204 hidden
+        <div id="loopnet-section"
+            hx-sync="#pin-panel-lane-1:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.loopnet' pin.slug %}"
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','loopnet'))], ul:unhide"
             hx-swap="outerHTML"
@@ -634,7 +688,8 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="usgs-topo-section" data-ext-panel-204 hidden
+        <div id="usgs-topo-section"
+            hx-sync="#pin-panel-lane-2:queue all" data-ext-panel-204 hidden
             hx-get="{% url 'pin.usgs_topo' pin.slug %}"
             hx-trigger="load"
             hx-swap="outerHTML"
@@ -712,7 +767,8 @@
     <div data-article-subtab="wikipedia" hidden>
         {# data-ext-panel-204-hide-tab: no Wikipedia article means nothing to show #}
         {# on this sub-tab at all - hide the tab button itself, not just this card. #}
-        <div id="wikipedia-section" class="card card--secondary" data-ext-panel-204 hidden
+        <div id="wikipedia-section"
+            hx-sync="#pin-panel-lane-3:queue all" class="card card--secondary" data-ext-panel-204 hidden
             data-ext-panel-204-hide-tab="article-subtab-btn-wikipedia"
             hx-get="{% url 'pin.wikipedia' pin.slug %}"
             hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','wikipedia'))], ul:unhide"
