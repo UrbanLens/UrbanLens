@@ -85,7 +85,16 @@ Usage:
 (function () {
     var hero = document.getElementById('{{ id|default:"" }}');
     if (!hero) return;
-    var key = 'ul_cover_hero_' + (hero.dataset.coverHeroKey || '{{ hero_cover_key|default:"page" }}') + '_' + '{{ pin.slug|default:wiki.location.slug|default:"" }}';
+    {% comment %}
+    firstof, not `pin.slug|default:wiki.location.slug`: a filter *argument* is
+    resolved with no failure tolerance, so naming a variable the current page
+    does not have raises VariableDoesNotExist straight out of the render. The
+    Private Pin page is the only include site that passes hero_image_url, and it
+    has no `wiki` - so it returned a 500 for every pin that had a cover photo.
+    firstof resolves each name with ignore_failures, and keeps the `wiki` branch
+    working for whichever page wires a cover image up next.
+    {% endcomment %}
+    var key = 'ul_cover_hero_' + (hero.dataset.coverHeroKey || '{{ hero_cover_key|default:"page" }}') + '_' + '{% firstof pin.slug wiki.location.slug "" %}';
     var toggle = hero.querySelector('[data-cover-adjust-toggle]');
     var controls = hero.querySelector('[data-cover-adjust-controls]');
     var zoom = hero.querySelector('[data-cover-zoom]');
