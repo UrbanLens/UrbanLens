@@ -45,7 +45,7 @@ display name, from `display_identity_for` - used by the quoted-reply header).
     <div class="dm-bubble__images">
       {% for image in images %}
       <button type="button" class="dm-bubble__image-link" onclick="window.dmOpenLightbox(this)">
-        <img src="{{ image.image.url }}" alt="" class="dm-bubble__image">
+        <img src="{{ image.display_url }}" alt="" class="dm-bubble__image">
       </button>
       {% endfor %}
     </div>

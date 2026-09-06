@@ -57,7 +57,7 @@
     {% if show_wiki_cover_photo %}
     {# -- Cover photo hero banner --------------------------------------------- #}
     {{ wiki_cover_candidates|json_script:"wiki-cover-candidates" }}
-    <div class="cover-hero" id="wiki-cover-hero" style="background-image:url('{{ wiki.cover_photo.image.url }}')">
+    <div class="cover-hero" id="wiki-cover-hero" style="background-image:url('{{ wiki.cover_photo.display_url }}')">
         {% if wiki_cover_candidates %}
         <button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav('wiki', -1)" title="Previous photo">
             <i class="material-symbols-outlined">chevron_left</i>

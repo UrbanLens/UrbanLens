@@ -18,7 +18,7 @@
 
 {% block hero %}
 {% url 'map.view' as map_view_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with id="pin-detail-hero" body_template="dashboard/partials/pins/_pin_detail_hero_body.html" back_url=map_view_url back_label="Map" modifier="top" hero_image_url=pin.cover_photo.image.url hero_cover_key="pin" %}
+{% include "dashboard/partials/ui/_page_hero.html" with id="pin-detail-hero" body_template="dashboard/partials/pins/_pin_detail_hero_body.html" back_url=map_view_url back_label="Map" modifier="top" hero_image_url=pin.cover_photo.display_url hero_cover_key="pin" %}
 {% endblock %}
 
 {% block subnav %}

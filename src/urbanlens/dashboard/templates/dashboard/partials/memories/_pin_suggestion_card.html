@@ -40,7 +40,7 @@ Context:
         <div class="pin-suggestion-photos">
             {% for image in photos|slice:":3" %}
             <label class="photo-pick">
-                <img src="{{ image.image.url }}" alt="" loading="lazy">
+                <img src="{{ image.display_url }}" alt="" loading="lazy">
                 <input type="checkbox" name="image_ids" value="{{ image.pk }}">
                 <span class="photo-pick-badge"><i class="material-symbols-outlined">check_circle</i></span>
             </label>
