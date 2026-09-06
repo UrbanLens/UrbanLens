@@ -2876,3 +2876,45 @@ which is also the file P53 and P68 both had to edit around - twice now a fix has
 in `ts/shared/` and then a second time by hand into that template, because the template cannot
 import. Whether the answer is moving it into `frontend/ts/entries/` or something narrower is a
 design question, not a mechanical one.
+
+## P84 — `F401` is off tree-wide, so 1,124 unused imports have accumulated invisibly
+
+`id: P84` · `status: open` · `updated: 2026-09-06`
+
+`pyproject.toml`'s ruff config disables `F401` for the whole tree, with the reason written next to
+it: *"unused imports. Enabling this will remove TYPE_CHECKING imports incorrectly."* That has not
+been true of ruff for some time - it understands `if TYPE_CHECKING:` blocks and annotation-only
+use - and the rule has been off long enough to accumulate:
+
+```
+uv run ruff check --config 'lint.ignore=[]' --select F401 src/urbanlens   # 1,124, of which 305 auto-fixable
+```
+
+63 of those were in `controllers/` and are gone as of 2026-09-06. The rest are not, and the reason
+this is filed rather than swept is that **the sweep is not safe to run blind**, in two distinct ways
+both of which this session hit:
+
+1. **An "unused" import can be another module's import path.** `controllers/trip.py` imported
+   `compute_activity_index_map as _compute_activity_index_map` and `expand_trip_dates as
+   _expand_trip_dates` and called neither; `tests/hypothesis/test_trip_helpers.py` imported both
+   *from the controller*. Removing them breaks that file at collection, and ruff cannot see it.
+   Fixed by pointing the test at `services/trips/trip_activities.py`, which is where they are
+   defined - but the shape recurs, and it is invisible to a name grep that does not read a
+   parenthesised multi-line `import` as one statement. A first pass at this check missed exactly
+   that case and reported the removal as clean.
+2. **An import can exist for its module's side effects.** This tree registers undo handlers and
+   media authorizers by decorator. Neither is actually at risk - `services/undo/handlers/__init__.py`
+   imports every handler explicitly, and the authorizers are decorated in the module that owns the
+   registry - but that is a fact about this tree that had to be checked, not a property of the rule.
+
+What a safe sweep looks like, having done one subtree: apply `--fix` to one package at a time, then
+for every removed name check whether any other file imports it *from that module* (multi-line
+imports included) or patches it as `<module>.<name>`, then import every module in the package and
+assert the registries still populate. All three checks are cheap; only the second is obvious.
+
+Turning the rule *on* is the separate half, and it is a policy call rather than a cleanup: with
+1,124 outstanding it cannot be enabled tree-wide without either fixing all of them first or adding a
+per-file-ignore list that is itself the drift this entry describes. The `__init__.py` re-export
+surface already has its own narrowed rule set in `[tool.ruff.lint.per-file-ignores]`, which is where
+a scoped re-enable would go.
+

@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P84` · `T3` · `PL7` · `D8` · `X14` · `I4` · `R27` · `N9`
+**Next free id:** `P85` · `T3` · `PL7` · `D8` · `X14` · `I4` · `R27` · `N9`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -84,6 +84,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL6 | live | 2026-08-29 | Every test file is being reviewed for negative coverage; 73 of 832 done, resume at manifest line 94 | [`docs/notes/test-quality-audit.md`](notes/test-quality-audit.md) |
 | P82 | open | 2026-09-06 | At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P83 | open | 2026-09-06 | Over half of every page's HTML is inline `<script>`, re-sent uncached on every load | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P84 | open | 2026-09-06 | `F401` is off tree-wide, so 1,124 unused imports have accumulated invisibly | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |
