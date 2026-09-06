@@ -9,7 +9,7 @@ and the two large secondary surfaces - the map and the "add existing photos"
 picker - are opt-in panels rather than always-rendered page content.
 
 Expects (from controllers.albums._album_detail_context):
-  album, grid_images, available_images, photo_count, cover, date_start, date_end
+  album, grid_images, available_image_count, eligible_url, photo_count, cover, date_start, date_end
   map_photos, placed_count
   back_url, list_url, add_url, remove_url, reorder_url, edit_url, upload_url,
   items_url, reposition_base
@@ -69,7 +69,7 @@ Expects (from controllers.albums._album_detail_context):
           <i class="material-symbols-outlined">more_vert</i>
         </summary>
         <div class="album-menu-list">
-          {% if available_images %}
+          {% if available_image_count %}
           <button type="button" class="album-menu-item" data-album-picker-open>
             <i class="material-symbols-outlined">library_add</i> Add from this {{ context_type|default:"place" }}
           </button>
@@ -141,13 +141,13 @@ Expects (from controllers.albums._album_detail_context):
     <i class="material-symbols-outlined">add_photo_alternate</i>
     <p>This album is empty.</p>
     <p class="settings-help">Drop photos anywhere on this page, use <strong>Add photos</strong> to upload,
-      {% if available_images %}or pick from the ones already here.{% else %}or upload some to this {{ context_type|default:"place" }} first.{% endif %}
+      {% if available_image_count %}or pick from the ones already here.{% else %}or upload some to this {{ context_type|default:"place" }} first.{% endif %}
     </p>
     <div class="album-empty-actions">
       <button type="button" class="btn btn--primary" data-album-upload-btn>
         <i class="material-symbols-outlined">upload</i> Upload photos
       </button>
-      {% if available_images %}
+      {% if available_image_count %}
       <button type="button" class="btn btn--ghost" data-album-picker-open>
         <i class="material-symbols-outlined">library_add</i> Pick existing
       </button>
@@ -161,7 +161,7 @@ Expects (from controllers.albums._album_detail_context):
   below the album, which previously doubled the page's length and made it
   ambiguous which grid was the album.
   {% endcomment %}
-  {% if available_images %}
+  {% if available_image_count %}
   <dialog id="album-picker-dialog" class="ul-dialog album-picker-dialog" aria-label="Add photos to album">
     <form method="dialog" class="album-picker-head">
       <h4>Add photos to &ldquo;{{ album.name }}&rdquo;</h4>
@@ -170,17 +170,15 @@ Expects (from controllers.albums._album_detail_context):
       </button>
     </form>
     <p class="settings-help album-picker-hint">Click a photo to add it. It stays in the {{ context_type|default:"place" }}'s photos too.</p>
-    <ul class="gallery-grid album-add-grid">
-      {% for img in available_images %}
-      <li class="gallery-item album-add-item" data-id="{{ img.pk }}">
-        <button type="button" class="album-item-add" title="Add to this album"
-                aria-label="Add to this album" data-image-id="{{ img.pk }}">
-          <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}" class="gallery-thumb" loading="lazy" decoding="async">
-          <span class="album-add-tick"><i class="material-symbols-outlined">add</i></span>
-        </button>
-      </li>
-      {% endfor %}
-    </ul>
+    {% comment %}Filled when the dialog opens, a page at a time, from
+    eligible_url. Rendering it here put every photo the profile has ever
+    uploaded into a closed dialog on every album page view - bounded for a pin
+    or wiki album, unbounded for a Vault one (P69). Paginated rather than
+    capped, so a photo from years ago is still reachable, which is half of what
+    this picker is for.{% endcomment %}
+    <ul class="gallery-grid album-add-grid" data-album-eligible-url="{{ eligible_url }}"></ul>
+    <div class="album-picker-status" data-album-picker-status hidden></div>
+    <button type="button" class="btn btn--ghost album-picker-more" data-album-picker-more hidden>Show more photos</button>
   </dialog>
   {% endif %}
 

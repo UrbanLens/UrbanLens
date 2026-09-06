@@ -900,6 +900,11 @@ urlpatterns = [
                                 name="pin.albums.items",
                             ),
                             path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/eligible/",
+                                albums.AlbumEligibleImagesView.as_view(),
+                                name="pin.albums.eligible",
+                            ),
+                            path(
                                 "<slug:pin_slug>/albums/<slug:album_slug>/move/",
                                 albums.AlbumMoveView.as_view(),
                                 name="pin.albums.move",
@@ -1578,6 +1583,11 @@ urlpatterns = [
                     name="location.wiki.albums.items",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/albums/<slug:album_slug>/eligible/",
+                    albums.AlbumEligibleImagesView.as_view(),
+                    name="location.wiki.albums.eligible",
+                ),
+                path(
                     "<slug:location_slug>/wiki/albums/<slug:album_slug>/",
                     albums.AlbumDetailView.as_view(),
                     name="location.wiki.albums.detail",
@@ -2060,6 +2070,7 @@ urlpatterns = [
                 path("photos/albums/<slug:album_slug>/reorder/", albums.AlbumReorderView.as_view(), name="vault.photos.albums.reorder", kwargs={"vault": True}),
                 path("photos/albums/<slug:album_slug>/upload/", albums.AlbumUploadView.as_view(), name="vault.photos.albums.upload", kwargs={"vault": True}),
                 path("photos/albums/<slug:album_slug>/items/", albums.AlbumItemsView.as_view(), name="vault.photos.albums.items", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/eligible/", albums.AlbumEligibleImagesView.as_view(), name="vault.photos.albums.eligible", kwargs={"vault": True}),
                 path("photos/albums/<slug:album_slug>/", albums.AlbumDetailView.as_view(), name="vault.photos.albums.detail", kwargs={"vault": True}),
                 path("documents/", vault_documents.VaultDocumentsView.as_view(), name="vault.documents"),
                 path("documents/items/", vault_documents.DocumentItemsView.as_view(), name="vault.documents.items"),

@@ -2635,11 +2635,28 @@ even though the code paths are unrelated. Roughly ranked by how large the realis
 heavy the per-row template is - top few are worth prioritizing, the rest are real but currently minor
 at this app's beta scale (~2 users):
 
-- **Album detail's "add existing photo" picker** (`controllers/albums.py:342`,
-  `eligible_images_for()`) lists *every photo the profile has ever uploaded* across every pin/wiki/
-  vault upload, in a `<dialog>` that stays closed until a client click - same "hidden-but-fully-
-  rendered" shape as the tab entries above. A photographer with months/years of uploads could reach
-  thousands of `<img>` tags rendered into one hidden dialog on every album page view.
+- ~~**Album detail's "add existing photo" picker**~~ **fixed 2026-09-06.** It listed every photo
+  eligible for the album inside a `<dialog>` that stays closed until a click - the same
+  "hidden-but-fully-rendered" shape as the tab entries above. Bounded for a pin or wiki album, which
+  can only hold that place's photos; unbounded for a Vault album, which is scoped to the whole
+  profile. The picker now fetches its photos a page at a time from `AlbumEligibleImagesView` when the
+  dialog opens, a sibling of the `AlbumItemsView` the virtualized grid already used.
+
+  **Paginated rather than capped, and that was the decision.** A cap was the smaller change and the
+  wrong one: this picker's purpose can be "find the photo from last year", which is exactly what a
+  newest-first slice removes - unlike the wiki-share picker below, where seeding from recent photos
+  is the whole point. Two things the survey did not record. The page still needs the *count*, because
+  it gates whether the "Add from this place" affordance appears at all and which of two empty-state
+  sentences the album shows - a version that dropped it would ship a picker with no way to open it,
+  which looks fine on any album that happens to be full. And the tiles are built with DOM calls
+  rather than interpolated markup, so no seventh copy of an HTML-escaping helper joins the fourteen
+  P34 counts.
+
+  Verified in a browser: zero picker tiles in the page before the dialog is opened, one request on
+  open, tiles rendered with their images, and no console errors. The direct `/albums/<slug>/` URL is
+  the HTMX partial endpoint and loads no scripts - the panel has to be reached through the Private
+  Pin page (`?album=<slug>`) for any of its JavaScript to exist, which is worth knowing before
+  concluding a picker is broken.
 - **Immich "nearby" photo import** (`controllers/immich.py:186-241`,
   `services/apis/immich/gateway.py:170-184`) fetches *every geolocated asset in the user's entire
   Immich library* (no radius param sent to Immich at all) and filters to "nearby" in Python after the

@@ -348,7 +348,14 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
     cover = cover_from_ids(album, visible_ids)
     row = _album_row(owner, album, page, cover=cover, photo_count=total, date_start=date_start, date_end=date_end)
     row["grid_images"] = page
-    row["available_images"] = list(eligible_images_for(owner, viewer).exclude(pk__in=visible_ids).only("id", "uuid", "image", "thumbnail", "caption", "source_url"))
+    # A count, not the photos. The picker fetches its own pages from
+    # AlbumEligibleImagesView when it opens; rendering them here put every photo
+    # the profile has ever uploaded into a closed dialog on every page view
+    # (P69). The count is still needed: it decides whether the "Add from this
+    # place" affordance appears at all, and which of two empty-state sentences
+    # the album shows.
+    row["available_image_count"] = eligible_images_for(owner, viewer).exclude(pk__in=visible_ids).count()
+    row["eligible_url"] = reverse(f"{_url_prefix(owner)}.eligible", args=[*_owner_url_args(owner), album.slug])
     row["back_url"] = reverse(_url_prefix(owner), args=_owner_url_args(owner))
     row["list_url"] = row["back_url"]
     # The gallery's own per-image endpoint owns repositioning; the album map
@@ -1038,6 +1045,59 @@ class AlbumItemsView(LoginRequiredMixin, View):
         return JsonResponse(
             {
                 "items": [_photo_tile(image, request, profile) for image in images],
+                "total": total,
+                "offset": offset,
+                "limit": limit,
+            }
+        )
+
+
+class AlbumEligibleImagesView(LoginRequiredMixin, View):
+    """Paginated JSON of the photos this album could still take, for its picker.
+
+    GET /map/pin/<pin_slug>/albums/<album_slug>/eligible/
+    GET /location/<location_slug>/wiki/albums/<album_slug>/eligible/
+    GET /vault/photos/albums/<album_slug>/eligible/
+
+    The picker used to be rendered into the page in full, inside a `<dialog>`
+    that stays closed until a click. For a pin or wiki album that is bounded by
+    one place's photos; for a Vault album it is every photo the profile has ever
+    uploaded, so a photographer with years of uploads had thousands of tiles
+    rendered on every album page view, for a dialog they usually never open
+    (P69).
+
+    Paginated rather than capped, so an older photo stays reachable. A cap would
+    have been the smaller change and the wrong one: this picker's whole purpose
+    can be "find the photo from last year", which is exactly what a newest-first
+    slice removes.
+
+    Excludes what the album already holds, which is what the inline version did
+    with ``.exclude(pk__in=visible_ids)``.
+    """
+
+    def get(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
+        """Return one page of photos that may still be added to this album.
+
+        Args:
+            request: HttpRequest with ``offset``/``limit`` query params.
+            album_slug: Slug of the album being added to.
+            pin_slug: Slug of the parent pin (personal route).
+            location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
+
+        Returns:
+            JSON ``{items, total, offset, limit}``.
+        """
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        offset, limit = _page_args(request)
+        already = list(album.items.values_list("image_id", flat=True))
+        eligible = eligible_images_for(owner, profile).exclude(pk__in=already)
+        total = eligible.count()
+        page = list(eligible[offset : offset + limit].only("id", "uuid", "image", "thumbnail", "caption", "source_url"))
+        return JsonResponse(
+            {
+                "items": [_photo_tile(image, request, profile) for image in page],
                 "total": total,
                 "offset": offset,
                 "limit": limit,

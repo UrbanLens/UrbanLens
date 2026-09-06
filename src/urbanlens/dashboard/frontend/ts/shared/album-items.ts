@@ -12,6 +12,7 @@ import Sortable from "sortablejs";
 import { destroyAlbumMap, highlightAlbumPhoto, initAlbumMap } from "./album-map";
 import { bindAlbumPicker, openAlbumPicker } from "./album-picker";
 import { getCsrfToken } from "./csrf";
+import { fetchJson } from "./fetch-json";
 import { toast } from "./dialogs";
 import { bindPhotoContextMenu } from "./photo-context-menu";
 import { lightboxListFromGrid, parsePhotoIds, renderPhotoTile, tileFromJson, tileHasImage, writePhotoIds } from "./photo-tile";
@@ -691,6 +692,13 @@ document.addEventListener("click", (event) => {
     if (target.closest("[data-album-picker-open]")) {
         closeMenus();
         (document.getElementById("album-picker-dialog") as HTMLDialogElement | null)?.showModal();
+        void loadEligiblePage(false);
+        return;
+    }
+
+    if (target.closest("[data-album-picker-more]")) {
+        event.preventDefault();
+        void loadEligiblePage(true);
         return;
     }
 
@@ -740,6 +748,106 @@ document.addEventListener("click", (event) => {
             .catch((err: Error) => toast.error(`Could not add: ${err.message}`));
     }
 });
+
+// -- "Add from this place" picker -------------------------------------------
+//
+// Its photos arrive a page at a time when the dialog opens, rather than being
+// rendered into a closed dialog on every album page view: for a Vault album
+// that list is every photo the profile has ever uploaded (P69). Paginated
+// rather than capped, because "find the photo from last year" is half of what
+// this picker is for and a newest-first slice removes exactly that.
+
+/** How many eligible photos to fetch per request. */
+const ELIGIBLE_PAGE_SIZE = 60;
+
+function pickerGrid(): HTMLElement | null {
+    return document.querySelector<HTMLElement>(".album-add-grid[data-album-eligible-url]");
+}
+
+/** One picker tile, built rather than interpolated - a caption needs no escaping this way. */
+function renderEligibleTile(tile: { id: number; thumbUrl: string; caption: string }): HTMLLIElement {
+    const li = document.createElement("li");
+    li.className = "gallery-item album-add-item";
+    li.dataset.id = String(tile.id);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "album-item-add";
+    button.title = "Add to this album";
+    button.setAttribute("aria-label", "Add to this album");
+    button.dataset.imageId = String(tile.id);
+
+    const img = document.createElement("img");
+    img.src = tile.thumbUrl;
+    img.alt = tile.caption || "Photo";
+    img.className = "gallery-thumb";
+    img.loading = "lazy";
+    img.decoding = "async";
+
+    const tick = document.createElement("span");
+    tick.className = "album-add-tick";
+    tick.innerHTML = '<i class="material-symbols-outlined">add</i>';
+
+    button.append(img, tick);
+    li.append(button);
+    return li;
+}
+
+/**
+ * Fetch the next page of addable photos into the picker.
+ *
+ * @param more - True for a "show more" click; false for the first open, which
+ *   is a no-op once the grid already holds something (reopening the dialog must
+ *   not re-fetch page one on top of what is there).
+ */
+async function loadEligiblePage(more: boolean): Promise<void> {
+    const grid = pickerGrid();
+    if (!grid) return;
+    const url = grid.dataset.albumEligibleUrl;
+    if (!url) return;
+    if (!more && grid.childElementCount > 0) return;
+    if (grid.dataset.loading === "1") return;
+
+    const status = document.querySelector<HTMLElement>("[data-album-picker-status]");
+    const moreBtn = document.querySelector<HTMLElement>("[data-album-picker-more]");
+    const offset = more ? grid.childElementCount : 0;
+    grid.dataset.loading = "1";
+    if (status) {
+        status.textContent = "Loading photos...";
+        status.hidden = false;
+    }
+    if (moreBtn) moreBtn.hidden = true;
+
+    try {
+        const data = (await fetchJson<{ items: Record<string, unknown>[]; total: number }>(url + `?offset=${offset}&limit=${ELIGIBLE_PAGE_SIZE}`, {
+            reportsItsOwnErrors: true,
+        })) ?? { items: [], total: 0 };
+        for (const raw of data.items) {
+            const tile = tileFromJson(raw);
+            if (tile) grid.append(renderEligibleTile(tile));
+        }
+        if (status) {
+            // Cleared as well as hidden: a hidden node still holding "Loading
+            // photos..." is a stale sentence waiting for something to unhide it.
+            status.textContent = "";
+            status.hidden = true;
+        }
+        if (moreBtn) moreBtn.hidden = grid.childElementCount >= data.total;
+        if (!grid.childElementCount && status) {
+            status.textContent = "No photos left to add.";
+            status.hidden = false;
+        }
+    } catch (error) {
+        if (status) {
+            status.textContent = error instanceof Error ? error.message : "Could not load photos.";
+            status.hidden = false;
+        }
+        // Shown again so a failed page can be retried without closing the dialog.
+        if (moreBtn) moreBtn.hidden = false;
+    } finally {
+        delete grid.dataset.loading;
+    }
+}
 
 /** Close every open album overflow menu (they are <details> elements). */
 function closeMenus(): void {
