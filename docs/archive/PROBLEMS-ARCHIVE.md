@@ -12111,3 +12111,24 @@ would otherwise have become two places to remember instead of one.
 `test_ai_gateway_guarded.py` asserts every entry in `AI_CHOKEPOINTS` is a `Mock` at run time, so it
 extends itself when the tuple grows and fails when a chokepoint is added without it. Its teeth were
 checked by turning the fixture off: it fails naming the unpatched method.
+
+## RESOLVED 2026-09-06: an unguarded is_authenticated in a base.html tag 500s any page rendered without a request
+
+`id: P79` · `status: fixed` · `resolved: 2026-09-06`
+
+`assistant_enabled_flag` (added 2026-09-02, `1fa2434b4`) opened with a bare `user.is_authenticated`.
+It is called from `themes/base.html:4`, so it runs for **every page**, and the argument is
+`request.user`.
+
+Render a page template without a `request` in the context - `render_to_string`, which is what a
+template-level test does - and Django resolves `request.user` to `string_if_invalid`, which is `""`.
+`"".is_authenticated` is an `AttributeError`, and it comes out of the template layer as a 500 on the
+whole page rather than as a missing value.
+
+Found in a full-suite run as three failures in `test_wiki_location_conflict_notice.py`, but the test
+was only the messenger: any code path rendering a page template without a request hit it, and it had
+been that way for four days. It is the one unguarded `is_authenticated` in `dashboard_tags.py`.
+
+Fixed with `getattr(user, "is_authenticated", False)`. Rendering a page without a request is a
+legitimate thing to do, and answering False is the honest result - the assistant surface needs a
+signed-in viewer, and there isn't one.
