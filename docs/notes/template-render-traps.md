@@ -43,10 +43,21 @@ reads across eleven files went to `image.url` anyway, so **one** photo row whose
 never landed — a failed external download keeps its `source_url` and nothing else — was
 a 500 for the whole panel rather than one missing thumbnail.
 
+Ten of the eleven, to be exact: `_widget_recent_photos.html` reads through a queryset
+that already calls `.with_file()`, so that one could not actually have raised. Its read
+was replaced anyway — the guarantee lived in a controller two files away, and nothing
+said so at the read.
+
 `bin/check_image_file_reads.py` now guards it, and accepts either shape: a fall-back
-property (`display_url`/`thumb_url`), or a `{% if x.image %}` anywhere above the read.
-The second is what the comment attachments already do and they are correct — those are
-`Comment`'s own `ImageField`, not an `Image`, and have no `display_url` to reach for.
+property (`display_url`/`thumb_url`), or a `{% if x.image %}` (or `.image.name`) on a
+block **enclosing** the read. The second is what the comment attachments already do and
+they are correct — those are `Comment`'s own `ImageField`, not an `Image`, and have no
+`display_url` to reach for.
+
+Enclosing, not merely earlier: the first version matched "anywhere above", which let an
+earlier `{% for photo in captions %}{% if photo.image %}` vouch for a later
+`{% for photo in something_else %}` that had no guard at all. A lint that can be
+satisfied by an unrelated block is worse than none, because it reads as coverage.
 
 ## Proposed wording for `templates/CLAUDE.md`
 
