@@ -169,9 +169,11 @@ verify_venv() {
     # reads as a broken import in the branch rather than as a stale container.
     # django-perf-rec cost a whole pre-merge run that way on 2026-08-31.
     #
-    # Checked by distribution name against pyproject's dev group, which is what
-    # `uv sync` installs. Cheap: one interpreter start, no imports of the
-    # packages themselves.
+    # Checked by distribution name against everything `uv sync` installs -
+    # `project.dependencies` as well as the dev group. Reading only the dev
+    # group missed django-storages, added to the main list on 2026-09-05, and
+    # every object-storage test failed at collection for a fortnight instead.
+    # Cheap: one interpreter start, no imports of the packages themselves.
     local missing
     # -i, or the heredoc never reaches the interpreter and this reports nothing.
     missing=$(docker exec -i "$CONTAINER" /app/.venv/bin/python - <<'PY' 2>/dev/null
@@ -180,9 +182,12 @@ import tomllib
 from importlib.metadata import PackageNotFoundError, version
 
 with open("/app/pyproject.toml", "rb") as handle:
-    groups = tomllib.load(handle).get("dependency-groups", {})
+    config = tomllib.load(handle)
 
-for spec in groups.get("dev", []):
+specs = list(config.get("project", {}).get("dependencies", []))
+specs += config.get("dependency-groups", {}).get("dev", [])
+
+for spec in specs:
     name = re.split(r"[<>=!~\[; ]", spec, maxsplit=1)[0].strip()
     if not name:
         continue
@@ -194,7 +199,7 @@ PY
 )
     [ -n "$missing" ] || return 0
 
-    echo "==> the container's venv predates these dev dependencies:" >&2
+    echo "==> the container's venv predates these dependencies:" >&2
     echo "$missing" | sed 's|^|      |' >&2
 
     if [ "$VENV_FIX" -eq 0 ]; then
@@ -212,7 +217,7 @@ PY
     # exactly what pyproject's dev group declares, constraints included, so this
     # brings the container to its own stated dependencies rather than to
     # whatever is newest. uv ships inside the venv, so no host tooling is needed.
-    echo "==> installing them from pyproject's dev group (--no-venv-fix to skip)" >&2
+    echo "==> installing them from pyproject (--no-venv-fix to skip)" >&2
     local specs
     specs=$(docker exec -i "$CONTAINER" /app/.venv/bin/python - "$missing" <<'SPECS' 2>/dev/null
 import re
@@ -221,9 +226,13 @@ import tomllib
 
 wanted = set(sys.argv[1].split())
 with open("/app/pyproject.toml", "rb") as handle:
-    for spec in tomllib.load(handle).get("dependency-groups", {}).get("dev", []):
-        if re.split(r"[<>=!~\[; ]", spec, maxsplit=1)[0].strip() in wanted:
-            print(spec)
+    config = tomllib.load(handle)
+
+specs = list(config.get("project", {}).get("dependencies", []))
+specs += config.get("dependency-groups", {}).get("dev", [])
+for spec in specs:
+    if re.split(r"[<>=!~\[; ]", spec, maxsplit=1)[0].strip() in wanted:
+        print(spec)
 SPECS
 )
     if [ -z "$specs" ]; then
