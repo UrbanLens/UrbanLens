@@ -426,7 +426,7 @@ class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         return profile.pk
 
 
-class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
+class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
     """Real-time direct-message channel for a logged-in user.
 
     Mounted at ``ws/messages/``. Authentication comes from the session cookie
@@ -512,6 +512,17 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             except Exception:
                 logger.exception("Direct message socket failed to mark profile %s offline", self.profile_id)
 
+    def volume_identity(self) -> str:
+        """Budget per sender.
+
+        Keyed on the profile rather than the connection, which is the point of
+        the shared tier: this socket is per-profile, and one account opening
+        fifty tabs would otherwise get fifty budgets. Nothing here comes from
+        the frame - a sender who could name their own key could spend somebody
+        else's.
+        """
+        return f"dm:{self.profile_id}"
+
     async def receive(self, text_data=None, bytes_data=None):
         """Persist an incoming message; the service broadcasts it to both parties.
 
@@ -530,24 +541,34 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """
         from urbanlens.dashboard.models.account.model import ApiKeyScope
 
-        if text_data is None:
+        data = await self.accept_frame(text_data, bytes_data)
+        if data is None:
             return
+
         # Every frame this socket accepts mutates something on the sender's
         # behalf - sending a message, broadcasting a typing indicator, marking a
         # thread read - so messages:write gates the whole method rather than only
         # the message branch. A messages:read credential is a listen-only grant.
+        #
+        # Checked after the volume gate, matching SafetyCheckinChatConsumer. The
+        # refusal below is one send per frame and is not itself throttled, so a
+        # listen-only credential flooding this socket would answer its own flood
+        # if nothing counted the frames first.
         if not self.credential_allows(ApiKeyScope.MESSAGES_WRITE):
             await self.send(text_data=json.dumps({"type": "error", "detail": _INSUFFICIENT_SCOPE_DETAIL}))
-            return
-        try:
-            data = json.loads(text_data)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Direct message socket received an unparseable frame from profile %s", self.profile_id)
             return
 
         if data.get("type") == "typing":
             recipient_slug = str(data.get("recipient") or "").strip()
             if recipient_slug:
+                # Budgeted despite writing no row. It is the only frame here
+                # that fans out into the *recipient's* group, which makes an
+                # unmetered one the cheapest amplifier on the socket: no
+                # validation, no insert, one channel-layer send per frame to
+                # somebody else's open tabs.
+                if not await self.charge_write():
+                    return
+
                 from urbanlens.dashboard.services.messaging.direct_messages import broadcast_typing_indicator
 
                 await database_sync_to_async(broadcast_typing_indicator)(self.profile_id, recipient_slug)
@@ -574,6 +595,11 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             # message fans out to every active member (see services.messaging.group_chats).
             if not (body or ciphertext):
                 return
+            # Charged after the emptiness guard, so a client emitting blank
+            # frames cannot throttle its own user out of a conversation they
+            # never typed in.
+            if not await self.charge_write():
+                return
             try:
                 await self._create_group_message(group_uuid, body, ciphertext, nonce, key_version)
             except (ValueError, PermissionError) as exc:
@@ -589,6 +615,8 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         reply_to_id = data.get("reply_to")
         reply_to_id = int(reply_to_id) if isinstance(reply_to_id, int) else None
         if not recipient_slug or not (body or ciphertext or image_ids or markup_map_uuid):
+            return
+        if not await self.charge_write():
             return
 
         try:
@@ -1172,7 +1200,7 @@ class SafetyCheckinChatConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncW
         }
 
 
-class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
+class _ParticipantSessionConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
     """Shared real-time sync for one participant-based game session.
 
     Both ``GameSessionConsumer`` (SpotGuessr) and ``TriviaSessionConsumer``
@@ -1226,6 +1254,15 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     async def _send_chat_message(self, body: str) -> None:
         """Save and broadcast one chat message from this connection's profile."""
         raise NotImplementedError
+
+    def volume_identity(self) -> str:
+        """Budget per participant per session.
+
+        Scoped to the session rather than to the profile: someone playing two
+        games at once is doing something legitimate, and a shared per-profile
+        budget would have one game's chat throttle the other's.
+        """
+        return f"{self.game_label.lower()}:{self.session_id}:{self.profile_id}"
 
     @database_sync_to_async
     def _connection_profile_id(self, user) -> int:
@@ -1330,16 +1367,8 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """
         from urbanlens.dashboard.models.account.model import ApiKeyScope
 
-        if text_data is None:
-            return
-        try:
-            data = json.loads(text_data)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("%s socket received an unparseable frame on session %s", self.game_label, self.session_id)
-            return
-        if not isinstance(data, dict):
-            # Valid JSON, but not a frame: ``"5"`` and ``[]`` parse fine and would
-            # raise AttributeError on ``.get`` below, killing the connection.
+        data = await self.accept_frame(text_data, bytes_data)
+        if data is None:
             return
 
         # The client's keep-alive - see ``ts/shared/live-socket.ts``, which every
@@ -1363,6 +1392,10 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             return
         body = str(data.get("body") or "").strip()
         if not body:
+            return
+        # After the emptiness guard: a blank frame writes nothing and fans out
+        # nothing, so charging it would let a client bug throttle its own user.
+        if not await self.charge_write():
             return
 
         try:

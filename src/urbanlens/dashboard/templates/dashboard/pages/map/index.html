@@ -4896,6 +4896,20 @@
         });
     }
 
+    // Re-applies whatever filter is showing, for items that arrived after it was
+    // set. Mirrors reapplyFilter in frontend/ts/shared/icon-picker.ts.
+    function _reapplyIconFilter(id) {
+        var panel = document.getElementById('icon-panel-' + id);
+        var search = panel ? panel.querySelector('.icon-picker-search-input') : null;
+        var query = search ? search.value.trim() : '';
+        if (query) {
+            IconPicker.search(id, query);
+            return;
+        }
+        var activeTab = panel ? panel.querySelector('.icon-tab.active') : null;
+        IconPicker.setTabSilent(id, activeTab ? (activeTab.dataset.cat || '') : '');
+    }
+
     var IconPicker = {
         toggle: function(id) {
             var panel = document.getElementById('icon-panel-' + id);
@@ -4909,7 +4923,10 @@
                 IconPicker.setTabSilent(id, '');
                 // Revealed first, filled second, so the fetch shows as a loading
                 // row inside an open panel rather than as a click that does nothing.
-                _fillIconGrid(id).then(function() { IconPicker.setTabSilent(id, ''); });
+                // The chrome is live while the icons are still arriving, so
+                // whatever the user typed or clicked meanwhile is re-applied to
+                // them rather than reset - _reapplyIconFilter, not setTabSilent.
+                _fillIconGrid(id).then(function() { _reapplyIconFilter(id); });
             }
         },
         setTabSilent: function(id, cat) {

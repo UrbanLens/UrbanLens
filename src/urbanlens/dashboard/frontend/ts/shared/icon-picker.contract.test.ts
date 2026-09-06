@@ -32,6 +32,7 @@ import { IconPicker } from "./icon-picker";
 const TEMPLATE_DIR = join(import.meta.dir, "../../../templates/dashboard/partials/ui");
 const template = readFileSync(join(TEMPLATE_DIR, "_icon_picker.html"), "utf8");
 const gridTemplate = readFileSync(join(TEMPLATE_DIR, "_icon_picker_grid_items.html"), "utf8");
+const mapPage = readFileSync(join(import.meta.dir, "../../../templates/dashboard/pages/map/index.html"), "utf8");
 
 function buildPicker(label: string): HTMLElement {
     document.body.innerHTML = `
@@ -106,5 +107,48 @@ describe("icon picker search contract with _icon_picker.html", () => {
         IconPicker.search("x", "   ");
 
         expect(item.style.display).toBe("");
+    });
+});
+
+/**
+ * The map page defines its own IconPicker - its `pick()` and `_handleUpload()`
+ * carry add-pin behaviour the shared module has no business knowing - so it
+ * cannot import this one, and the lazy-fetch logic exists twice.
+ *
+ * Nothing else watches that copy. It is inline JS inside an HTML template, so
+ * `tsc` cannot see it and no unit test can import it, and the first hand-written
+ * version dropped `reapplyFilter` - a search typed while the catalogue was
+ * loading was silently discarded the moment it arrived. The shared module has a
+ * test for exactly that case; the copy had nothing.
+ *
+ * These assert the four behaviours that make the fetch safe, by name. A
+ * structural check is weaker than running the code, and is what is available:
+ * the alternative was no check at all, which is what let the two diverge.
+ */
+describe("the map page's inline copy of the lazy grid fetch", () => {
+    test("it re-applies the current filter rather than resetting it", () => {
+        // The divergence that actually happened: `setTabSilent(id, '')` in the
+        // fetch's completion handler throws away a search typed while it ran.
+        expect(mapPage).toContain("_reapplyIconFilter");
+        expect(mapPage).toContain("_fillIconGrid(id).then(function() { _reapplyIconFilter(id); });");
+    });
+
+    test("a failed fetch clears the cached request so the next open retries", () => {
+        expect(mapPage).toContain("_iconGridRequest = null;");
+    });
+
+    test("a second open does not append a second copy of the catalogue", () => {
+        expect(mapPage).toContain("if (grid.dataset.iconsLoaded === '1') return;");
+    });
+
+    test("it marks the current value selected once the grid arrives", () => {
+        // The server used to render `selected` into the matching button; one
+        // shared response cannot, so both copies have to reapply it.
+        expect(mapPage).toContain("item.classList.toggle('selected', item.dataset.icon === current);");
+    });
+
+    test("it reads both fragments of the shared response", () => {
+        expect(mapPage).toContain("data-icon-picker-tabs");
+        expect(mapPage).toContain("data-icon-picker-items");
     });
 });
