@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import DateField, Min
+from django.db.models import DateField, Min, Prefetch
 from django.db.models.functions import Cast, Coalesce
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -22,13 +22,15 @@ from urbanlens.dashboard.controllers.visits import (
     _sync_visit_photos,
     _visit_dialog_context,
 )
+from urbanlens.dashboard.models.comments.model import Comment
+from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import Route
-from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.core.units import km_to_display, unit_label
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map, parse_map_data
@@ -910,7 +912,25 @@ class MemoriesMapsView(LoginRequiredMixin, View):
             Rendered Maps page listing every markup map the user created.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        maps = MarkupMap.objects.for_profile(profile).select_related("shared_by__user").prefetch_related("items").order_by("-updated")
+        # Every reverse relation `MarkupMap.attachments` walks, prefetched with
+        # the same select_related the property applies per row - otherwise each
+        # card costs up to ~11 queries on an unsliced queryset, and the page's
+        # own advertised workflow (draw a route on a check-in, a comment, a
+        # visit) is what makes a profile have many of them (P68).
+        maps = (
+            MarkupMap.objects.for_profile(profile)
+            .select_related("shared_by__user")
+            .prefetch_related(
+                "items",
+                "safety_checkins",
+                "attached_safety_checkins",
+                Prefetch("comments", queryset=Comment.objects.select_related("pin__location__wiki", "wiki__location")),
+                Prefetch("trip_comments", queryset=TripComment.objects.select_related("trip")),
+                Prefetch("visits", queryset=PinVisit.objects.select_related("pin__location__wiki")),
+                Prefetch("direct_messages", queryset=DirectMessage.objects.select_related("sender__user", "recipient__user")),
+            )
+            .order_by("-updated")
+        )
         return render(
             request,
             "dashboard/pages/memories/maps.html",

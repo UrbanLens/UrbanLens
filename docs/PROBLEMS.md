@@ -2623,39 +2623,46 @@ like Vault's `photo-virtual-grid.ts`/`bindPhotoGrid` - see the tooling entry abo
 wasn't reused as-is: it's built for JSON tile grids, not server-rendered card rows wired into the
 existing bulk-select/merge/convert machinery in `organize-tab-manager.ts`).
 
-## P68 — N+1s in the site-admin user list, the achievement icon picker and Memories > Maps still have no perf test
+## P68 — The achievement icon picker still renders 1,249 icons per row, and the site-admin directory costs ~15 queries per user
 
-`id: P68` · `status: open` · `updated: 2026-08-31`
+`id: P68` · `status: open` · `updated: 2026-09-06`
 
-Previously titled "N+1s elsewhere with no perf-test coverage".
+Previously titled "N+1s in the site-admin user list, the achievement icon picker and Memories > Maps
+still have no perf test".
 
-Found by the same survey as the entries above, each independently confirmed against its source:
+Re-measured 2026-09-06 with `QueryScalingMixin`, which is what the original survey said was missing.
+Two of the four were already fixed, one is fixed now, and the two that remain are both bigger than
+this entry described.
 
-- **`SiteAdminUsersView`** (`controllers/site_admin.py:1214-1265`) calls `get_quota_bytes()`,
-  `get_storage_used_bytes()`, and `active_subscription_roles()` *twice* per row (the second is a
-  redundant call for the `roles` context key) - up to 5 uncached queries per user, ~125 extra round
-  trips at the page's own `PAGE_SIZE=25`, on a whole-site user directory that only grows.
-- **Achievement admin editor** (`controllers/achievements.py:134-239`,
-  `templates/dashboard/partials/admin/_achievement_rows.html:74-83,185-189`) nests a full
-  `_icon_picker.html` (two `{% for %}` loops over all 1,249 `ICON_CATEGORIES` entries in 28
-  categories, measured 2026-09-05,
-  `models/labels/meta.py:37`) inside a `hidden` div *per achievement row*, re-rendered in full on
-  every create/edit/delete/backfill via `hx-swap="outerHTML"`. ~30-60 achievements (a realistic
-  near-term catalogue size) means tens of thousands of rendered icon buttons per admin page load -
-  the same "hidden UI fully rendered anyway" shape as the tab-deferral entries above, just one row
-  wide instead of one tab wide.
-- **SpotGuessr and Trivia home pages** (`services/spotguessr/social.py:38-46`,
-  `services/trivia/social.py:27-35`, both called from their respective `HomeView.get`) do 2 unbatched
-  queries per friend (`friend.spotguessr_preference`/`.trivia_preference`, then a
-  `PlayerModeRating`/`PlayerTriviaRating` lookup) with no `select_related`/`prefetch_related` - 2N+1
-  queries for N friends on every visit to either game's home page.
-- **Memories > Maps** (`controllers/memories.py:903-945`) prefetches `shared_by__user` and `items`
-  but not `safety_checkins`/`comments`/`visits`/`direct_messages`; `MarkupMap.attachment`/
-  `.attachments` (`models/markup/model.py:164-225`) then cost up to ~11 queries per map card, on an
-  unsliced queryset - a profile that draws a route on every check-in/comment/visit (the page's own
-  advertised workflow) could plausibly reach several hundred queries here.
+**Fixed, and pinned flat** - Memories > Maps (`test_query_scaling_memories_maps.py`). Adding the six
+missing prefetches changed nothing on its own: `MarkupMap.attachment`/`.attachments` called
+`.first()` and `.select_related(...)` on each manager, and both build a new queryset, so they query
+straight past a prefetch. The properties read `_prefetched_objects_cache` first now. Measured at 2
+and 8 cards: 58/112 queries, then 44/56 once the properties honoured the prefetch, then 42/48 with
+`pin__location`, then flat with `pin__location__wiki` - `Location.display_name` reads its own wiki,
+and its docstring already said to select it in bulk.
 
-None of the four appear in any `QueryScalingMixin` subclass or `django_perf_rec` record.
+**Already fixed before this entry was written** - both games' friend lists. `spotguessr/social.py`
+and `trivia/social.py` each batch the opt-out check and the rating lookup into one query, and say so
+in their docstrings. The "2N+1 queries for N friends" claim above has not been true for either.
+
+**Partly fixed, and worse than recorded** - `SiteAdminUsersView`. `active_subscription_roles` really
+was resolved twice per row (once for the `roles` context key, once inside `get_quota_bytes`), and
+passing the resolved roles in took the page from **190 queries to 150 at 8 rows**. But the entry's
+"up to 5 uncached queries per user" is not what the page costs: it is about **15 per row**, and the
+dominant term is not the quota or the roles. It is `can_view_contact_info`/`can_view_profile`,
+resolved per listed profile - three `dashboard_friendships` variants, a `dashboard_trip_memberships`
+lookup, and a pin/place lookup, each once per user. Batching that is a change to how visibility is
+computed rather than a prefetch, which is why it is still open and has no test: one asserting
+flatness would ship red.
+
+**Untouched** - the achievement admin editor, and it is the largest of the set. `_icon_picker.html`
+nests two `{% for %}` loops over all 1,249 `ICON_CATEGORIES` entries inside a `hidden` div *per
+achievement row*, re-rendered in full on every create/edit/delete/backfill via
+`hx-swap="outerHTML"`. At a realistic 30-60 achievements that is tens of thousands of rendered icon
+buttons per admin page load. `core/tests/render_scaling.py` exists for exactly this shape now (see
+the archived P65) - a row whose render cost dwarfs the page's own - and this is the workload it was
+calibrated against.
 
 ## P69 — Unbounded lists with no pagination across most of the site, from album pickers to Immich imports
 

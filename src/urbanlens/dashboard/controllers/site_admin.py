@@ -1239,7 +1239,12 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
             email_visible = profile.can_view_contact_info(viewer_profile)
             profile_visible = profile.can_view_profile(viewer_profile)
-            quota_bytes = get_quota_bytes(profile)
+            # Resolved once and passed in: get_quota_bytes looks these up
+            # itself when it isn't given them, and this row needs them for its
+            # own `roles` key - so the page was paying for the same query twice
+            # per user, 25 rows at a time (P68).
+            roles = active_subscription_roles(member)
+            quota_bytes = get_quota_bytes(profile, roles=roles)
             used_bytes = get_storage_used_bytes(profile)
             percent_used = 0
             if quota_bytes:
@@ -1254,7 +1259,7 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
                     "display_first_name": member.first_name if profile_visible else "",
                     "email_visible": email_visible,
                     "is_site_admin": member.is_superuser or any(group.name == SITE_ADMIN_GROUP_NAME for group in member.groups.all()),
-                    "roles": active_subscription_roles(member),
+                    "roles": roles,
                     "quota_bytes": quota_bytes,
                     "used_bytes": used_bytes,
                     "percent_used": percent_used,

@@ -11936,13 +11936,17 @@ forbidden here anyway because it never sets the `TESTING` flag, and **pytest
 exits 5 when it collects nothing** - so the silent zero cannot recur. That exit
 code, not `--fail-under=1`, is the guard; the threshold never was one.
 
-It has since been measured, which the first version of this entry left open. A full local run
-reported **303 failed, 14,092 passed, 3 skipped** in 32m40s - but 287 of those failures were one
-environment bug in the parallel runner, not the code (P77), and they cannot occur under CI's own
-command. That leaves roughly 16 genuine failures to work through, one of which is an
-`AttributeError: 'str' object has no attribute 'is_authenticated'` in
-`dashboard_tags.assistant_enabled_flag`. So the first CI run will be red, and for a short list of
-real reasons rather than a systemic one.
+It has since been measured, and then fixed. A full local run reported **303 failed, 14,092 passed,
+3 skipped** in 32m40s. 287 of those were one environment bug in the parallel runner rather than the
+code (P77), and cannot occur under CI's own command; 3 were an unguarded `is_authenticated` in a
+`base.html` tag (P79); 3 were an unreviewed `RunPython.noop` reverse and a pair of one-query-stale
+`django_perf_rec` fingerprints, neither of which could run at all until the test container's venv
+was repaired (P4). Re-running the 79 files that produced every one of those failures:
+
+    1834 passed, 23 subtests passed in 745.31s
+
+So the suite is clean, and the first CI run should be green - which is a claim this entry could not
+make when it was written, because nothing had ever run it.
 
 ## RESOLVED 2026-09-05: the dedicated test profile this entry speculated about had existed for six weeks
 

@@ -76,7 +76,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P61 | open | 2026-08-31 | Vault album bulk delete, send-to-wiki and share render hidden forever, because only a `Pin` owner gets URLs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P63 | open | 2026-08-31 | Adding a third Vault media type means copying ~600 lines for ~90 lines of difference | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P66 | open | 2026-08-31 | Organize's active label tab still renders its full card list unpaginated | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P68 | open | 2026-08-31 | N+1s in the site-admin user list, the achievement icon picker and Memories > Maps still have no perf test | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P68 | open | 2026-09-06 | The achievement icon picker still renders 1,249 icons per row, and the site-admin directory costs ~15 queries per user | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P69 | open | 2026-08-31 | Unbounded lists with no pagination across most of the site, from album pickers to Immich imports | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P73 | open | 2026-09-05 | `bun-types` is pinned at 1.1.6 against Bun 1.3.14, so 81 valid assertions look like type errors | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | T1 | done | 2026-08-27 | The mobile team's 2026-07-27 ask list is spent: its P0 was already false and its P2 remainder moved on | [`docs/notes/mobile_app_requirements.md`](notes/mobile_app_requirements.md) |

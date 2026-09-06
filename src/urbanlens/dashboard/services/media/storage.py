@@ -24,9 +24,10 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import active_subscription_roles
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Sequence
 
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ _ORIGINAL_ASSUMED_DIMENSION = 4032
 _ASSUMED_ASPECT = 0.75
 
 
-def get_quota_bytes(profile: Profile) -> int | None:
+def get_quota_bytes(profile: Profile, *, roles: Sequence[SubscriptionRole] | None = None) -> int | None:
     """Resolve the storage quota for a profile, in bytes.
 
     The site-wide default applies to everyone; active subscription roles with
@@ -78,13 +79,18 @@ def get_quota_bytes(profile: Profile) -> int | None:
 
     Args:
         profile: The profile whose quota to resolve.
+        roles: The profile's active subscription roles, when the caller has
+            already resolved them. A page rendering a row per user needs the
+            same roles for its own display, and looking them up here as well
+            costs a second query per row - see ``SiteAdminUsersView``. Omit it
+            and they are fetched.
 
     Returns:
         The quota in bytes, or None when the user's storage is unlimited.
     """
     settings = SiteSettings.get_current()
     quotas_gb = [settings.storage_quota_gb]
-    for role in active_subscription_roles(profile.user):
+    for role in active_subscription_roles(profile.user) if roles is None else roles:
         if role.storage_quota_gb is not None:
             quotas_gb.append(role.storage_quota_gb)
     if any(quota == 0 for quota in quotas_gb):
