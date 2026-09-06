@@ -73,6 +73,54 @@ Both browser test files are in the root project now and `bin/check_typescript_co
 The trap this entry names at the end still stands and is worth keeping: the whole-tree typecheck is
 manual, so a file can commit green through pre-commit and CI and still be a type error.
 
+## RESOLVED 2026-09-06: Vault album bulk delete, send-to-wiki and share rendered hidden forever
+
+`id: P61` · `status: fixed` · `updated: 2026-09-06`
+
+Previously titled "Vault album bulk actions (delete, send-to-wiki, share) are silently unavailable".
+
+`controllers/albums.py:513-519` sets `gallery_bulk_url`/`pin_share_dialog_url` only when the album
+owner is a `Pin`; a `Profile` (vault) owner falls into the `else` and gets empty strings. Downstream,
+`album-items.ts:378-379` only wires the bulk wiki/delete callbacks `if (bulkUrl)`, and
+`_bulk_toolbar.html` hides any button without one - so the Delete and Send-to-wiki buttons declared
+in `_album_bulk_actions` (`albums.py:543-545`) render `hidden` forever inside a vault album, as do
+the equivalent right-click entries (`photo-context-menu.ts:144,146,159`).
+
+Net effect: inside a vault album you can multi-select and add/move/remove/set-cover, but there is no
+delete of any kind - you have to leave the album and use the per-tile trash button one photo at a
+time. Single-photo share still works from the lightbox, so only *bulk* share is lost.
+
+Unlike the other vault-album omissions (`move_url`, `reposition_base`, external media), which each
+carry an explicit "a vault album has none" rationale in the source, this one has no comment marking
+it deliberate - it reads as an oversight from widening `Pin | Wiki` to `Pin | Wiki | Profile`. Needs a
+decision (wire up a profile-scoped bulk endpoint, or document the refusal) rather than a silent gap.
+
+**Fixed 2026-09-06**, and the decision this asks for splits by action rather than resolving one way.
+
+- **Delete** transfers, and was the real gap. A vault photo already had a per-photo delete
+  (`PhotoActionView.delete`); only the bulk form was missing. `VaultGalleryBulkView`
+  (`vault.photos.bulk`) is that, scoped by profile, and the pin endpoint's delete body moved into a
+  shared `_delete_owned_images` unchanged - including the rule the vault needs just as much, that a
+  photo also linked to a wiki is unlinked rather than destroyed.
+- **Send to wiki** cannot. The pin endpoint derives the wiki from `pin.location`, and a vault album
+  has no location; the vault's own per-photo version asks *which* wiki, from a picker the bulk bar
+  has nowhere to put. The endpoint refuses with that sentence rather than a generic 400.
+- **Bulk share** cannot, for the same reason: it opens the *pin* share dialog. Single-photo share
+  from the lightbox is unaffected, which this entry already noted.
+
+The change that made the split possible is small and worth naming: send-to-wiki is keyed off its own
+URL now instead of off the delete one. One URL gating three unrelated capabilities is what produced
+the original symptom - a vault album could not be handed a bulk endpoint without also being offered
+an action that endpoint refuses.
+
+Verified in a browser: in a vault album, Delete shows and Send-to-wiki stays hidden, and deleting a
+selected photo removes its tile. Two things about doing that verification are worth knowing.
+`/dashboard/vault/photos/albums/` is an HTMX partial endpoint that loads no scripts - the panel has
+to be reached through `/dashboard/vault/photos/?album=<slug>`, the same trap the album-picker entry
+records. And the first attempt's POST came back 403 on CSRF origin checking, which turned out to be
+a real defect of its own in `docker-compose.yml`'s `UL_SITE_URL` default, fixed separately.
+
+
 ## RESOLVED 2026-08-20: the mobile panel's `unpinned_count` still counts what the import won't create
 
 `ParcelBuildingsPanelSource.api_payload` derives `unpinned_count` as

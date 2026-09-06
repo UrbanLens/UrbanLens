@@ -2592,28 +2592,6 @@ somewhere between the DB and what's served. Didn't chase further (out of scope f
 keeps failing on this specific test: check for an orphaned/stuck row in this account's photo library,
 or a thumbnail-generation task that errored silently.
 
-## P61 — Vault album bulk delete, send-to-wiki and share render hidden forever, because only a `Pin` owner gets URLs
-
-`id: P61` · `status: open` · `updated: 2026-08-31`
-
-Previously titled "Vault album bulk actions (delete, send-to-wiki, share) are silently unavailable".
-
-`controllers/albums.py:513-519` sets `gallery_bulk_url`/`pin_share_dialog_url` only when the album
-owner is a `Pin`; a `Profile` (vault) owner falls into the `else` and gets empty strings. Downstream,
-`album-items.ts:378-379` only wires the bulk wiki/delete callbacks `if (bulkUrl)`, and
-`_bulk_toolbar.html` hides any button without one - so the Delete and Send-to-wiki buttons declared
-in `_album_bulk_actions` (`albums.py:543-545`) render `hidden` forever inside a vault album, as do
-the equivalent right-click entries (`photo-context-menu.ts:144,146,159`).
-
-Net effect: inside a vault album you can multi-select and add/move/remove/set-cover, but there is no
-delete of any kind - you have to leave the album and use the per-tile trash button one photo at a
-time. Single-photo share still works from the lightbox, so only *bulk* share is lost.
-
-Unlike the other vault-album omissions (`move_url`, `reposition_base`, external media), which each
-carry an explicit "a vault album has none" rationale in the source, this one has no comment marking
-it deliberate - it reads as an oversight from widening `Pin | Wiki` to `Pin | Wiki | Profile`. Needs a
-decision (wire up a profile-scoped bulk endpoint, or document the refusal) rather than a silent gap.
-
 ## P63 — Adding a third Vault media type means copying ~600 lines for ~90 lines of difference
 
 `id: P63` · `status: open` · `updated: 2026-08-31`
