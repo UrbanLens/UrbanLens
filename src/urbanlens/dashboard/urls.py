@@ -2144,5 +2144,4 @@ urlpatterns = [
         name="dev_toolbar.reset_onboarding",
     ),
     path("", include("social_django.urls", namespace="social")),
-    re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),
 ]

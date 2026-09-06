@@ -27,15 +27,20 @@ bin/restore_backup.sh --list                                    # what is availa
 bin/restore_backup.sh backup_20260905_060200.sql my_scratch_db  # restore into a new database
 ```
 
-The script creates the target itself and refuses to touch the live database. If you are doing it
-by hand, the equivalent is:
+The script creates the target itself and refuses to touch the live database. By hand, from inside
+the **app** container - not the database container, and as a **superuser**:
 
 ```bash
-psql -U postgres -c "CREATE DATABASE restored TEMPLATE template0 ENCODING 'UTF8';"
-psql -U postgres -d restored -v ON_ERROR_STOP=1 --single-transaction -f backup_20260905_060200.sql
+export PGPASSWORD="$UL_DB_PASS"
+psql -U "$UL_DB_USER" -h "$UL_DB_HOST" -p "$UL_DB_PORT" -d postgres \
+     -c "CREATE DATABASE restored TEMPLATE template0 ENCODING 'UTF8';"
+psql -U "$UL_DB_USER" -h "$UL_DB_HOST" -p "$UL_DB_PORT" -d restored \
+     -v ON_ERROR_STOP=1 --single-transaction -f /app/src/backups/backup_20260905_060200.sql
 ```
 
-Run it from the **app** container, not the database container, and as a **superuser**.
+`-h` and `-p` are not optional, and that is not pedantry: the app container runs no PostgreSQL of
+its own, so a bare `psql -U postgres` dies on `/var/run/postgresql/.s.PGSQL.5432: No such file or
+directory` before doing anything. An earlier revision of this document omitted them.
 
 ## The four ways this goes wrong
 
@@ -90,28 +95,50 @@ $ echo $?
 ```
 
 Zero tables restored. Without `ON_ERROR_STOP` the same command exits **0** having restored all 235
-tables, reporting only that one line and a matching `\unrestrict` at the end. Restore from the
-container whose psql wrote the file; `bin/restore_backup.sh` compares the two versions and refuses
-rather than letting this happen.
+tables, reporting only that one line and a matching `\unrestrict` at the end.
+
+That second outcome is worse than the confusing failure it looks like. `\restrict` is the fix for
+CVE-2025-8714, added in PostgreSQL 17.6 (2025-08-14): it stops psql executing meta-commands that
+appear in the dump, so a superuser on the machine the dump came from cannot run arbitrary commands
+on the machine restoring it. A client that does not understand `\restrict` reports an error and
+carries on **without that protection**. Restore from the container whose psql wrote the file.
+
+`bin/restore_backup.sh` compares the dump's `pg_dump` version against the running `psql` and refuses
+when the client is older - but be clear about which case that covers. It is *a container configured
+with `UL_DB_*` whose psql has fallen behind the dump*. It is **not** "you pointed the script at the
+database container": that container has neither a `UL_DB_*` environment nor a backups directory, so
+the script fails well before the version check. The guard is real; it is not what stops you reaching
+for the wrong container.
 
 ## What the round trip actually proved
 
 `bin/verify_backup_restore.sh`, run 2026-09-05:
 
-- 235 tables, 861,888-byte dump, restored into a `template0` database with `ON_ERROR_STOP=1
-  --single-transaction`: exit 0, empty stderr.
-- Every table's full contents hashed (`md5(string_agg(row::text, ...))`, which covers geography,
-  jsonb and bytea without naming a column) - **identical across all 235 tables**, live vs restored.
+- 235 public tables, 861,888-byte dump, restored into a `template0` database with
+  `ON_ERROR_STOP=1 --single-transaction`: exit 0, empty stderr.
+- Every table's full contents hashed (`md5(string_agg(x::text, ...))` over a whole-row reference,
+  which covers geography, jsonb and bytea without naming a column) - **identical across all 271
+  tables**, live vs restored. 271, not 235, because the comparison covers every schema the dump
+  carries: PostGIS puts 36 more tables in `tiger` and `topology`.
 - A second hop with both ends quiescent, carrying a probe table of the types most likely to be
   mangled - `geography(Point,4326)`, `geography(MultiPolygon,4326)`, `jsonb`, `bytea`, `numeric`,
   `timestamptz`, non-ASCII text with embedded quotes and backslashes, and an all-NULL row -
-  **identical across all 236 tables**. A seeded point came back as `POINT(-73.7562 42.6526)` at
+  **identical across all 272 tables**. A seeded point came back as `POINT(-73.7562 42.6526)` at
   SRID 4326.
 - Django reads the restored copy in the same migration state it reads live.
 
-The script's teeth were checked by breaking it deliberately: building the target from
-`template_postgis` makes it fail at line 26, and deleting one probe row between the hops produces
-`FIDELITY FAILURE` with the differing table named.
+The script's teeth were checked by breaking it three ways: building the target from
+`template_postgis` fails at line 26; deleting a probe row between the hops reports `FIDELITY
+FAILURE` naming the table; and wiping every non-key column of the probe - same row count, same
+primary keys - does too.
+
+**That third check is here because the first version of this document claimed all of the above
+while proving almost none of it.** The hash was written `string_agg(x.r::text ...) FROM t x(r)`,
+and `x(r)` is a table alias *with a column alias list*: it renames the first column, so `x.r` was
+that column, not the row. Every hash was of primary keys. The geography/jsonb/bytea probe reduced
+to md5 of its two serial ids, and a restore that lost every other column of every table compared
+clean. The row-deletion teeth check passed because removing a row does change a first-column
+aggregate - it exercised one of the few failures the broken hash still caught.
 
 Note that it does **not** assert `migrate --check` passes. That asserts the deployment is fully
 migrated, which is a fact about the deployment rather than about the restore - this environment has
@@ -138,11 +165,35 @@ Deliberately not scripted. `bin/restore_backup.sh` refuses to write to the datab
 Celery workers), and a script that stops production services is a worse thing to have lying around
 than a documented sequence:
 
-1. Stop `app`, `app-ws`, `celery-beat`, and every `celery-worker*`.
+1. Stop every service configured with `UL_DB_*`. Enumerated from `docker-compose.yml` rather than
+   remembered, because the obvious list is wrong: it is `app`, `app-ws`, `celery-beat`,
+   `celery-worker`, `celery-worker-panels`, **`celery-metrics`**, **`media-worker`**,
+   **`media-worker-batch`** and **`ai-worker`** - nine, four of which do not match `celery-worker*`.
+   Re-derive it rather than copying this line, since a service added later will not be in it:
+
+   ```bash
+   python3 -c "import yaml;d=yaml.safe_load(open('docker-compose.yml'));print(' '.join(n for n,c in d['services'].items() if any(str(k).startswith('UL_DB_') for k in (c.get('environment') or {}))))"
+   ```
+
 2. Restore into a scratch name with `bin/restore_backup.sh` and confirm the table count.
-3. `ALTER DATABASE <live> RENAME TO <live>_before_restore;` then
-   `ALTER DATABASE <scratch> RENAME TO <live>;` - keeping the displaced database is what makes the
-   step reversible.
+3. Swap the names, **connected to neither of them**:
+
+   ```bash
+   psql -d template1 -c 'ALTER DATABASE "<live>" RENAME TO "<live>_before_restore";' \
+                     -c 'ALTER DATABASE "<scratch>" RENAME TO "<live>";'
+   ```
+
+   Two constraints make this the only shape that works, and both bite silently if ignored.
+   PostgreSQL answers `ERROR: current database cannot be renamed` for the database the session is
+   connected to - and in this deployment the live database is named `postgres`, which is exactly
+   where a bare `psql` lands, so the naive form fails on its *first* statement. Run it from the
+   scratch database instead and the first statement succeeds and the second fails, which leaves
+   nothing under the live name at all. Hence `template1`, or any third database.
+
+   It also needs zero other sessions on either database (`ERROR: database "x" is being accessed by
+   other users`), which is what step 1 is for. Both statements in one `psql` invocation so the
+   window between them is as small as it can be. Keeping the displaced database rather than dropping
+   it is what makes the step reversible.
 4. Start the services and check the site before dropping anything.
 
 Renaming rather than dropping-and-restoring means the failure mode is "we are back where we

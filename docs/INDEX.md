@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P75` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R27` · `N7`
+**Next free id:** `P78` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R27` · `N7`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -26,7 +26,7 @@ each, and the house style. `P` numbers entries inside `PROBLEMS.md`; every other
 prefix numbers a whole document.
 
 Resolved problems are **not** listed here — they move to
-[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 305
+[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 311
 of them. This index is what is live. Grep the archive before concluding a defect
 is new - and an archived entry keeps its `id:` line, so a citation of `P70`
 still resolves after it is fixed, and the id is never handed out again.
@@ -45,7 +45,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P14 | open | 2026-09-05 | Custom pin and label icons are readable by any authenticated user; narrowing that needs a pin-visibility query nothing has | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P16 | open | 2026-07-22 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P17 | open | 2026-07-24 | `docker compose exec app pytest` trips the localhost-only network guard because Valkey is a bridge IP | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P19 | open | 2026-07-25 | Audit re-verification's residual gaps remain: dead ownership re-check, 1,100-line `_dark.scss`, stub AI gateway | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P20 | open | 2026-07-25 | The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()` resolves it wrongly for everyone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -71,7 +70,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P52 | open | 2026-08-24 | `.app-nav-right` runs 40px past a 390px viewport, so every page scrolls sideways at phone width | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-08-24 | One Private Pin page load fires dozens of concurrent panel requests and can exhaust the DB connection pool | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P55 | open | 2026-09-05 | Deleting a whole wiki still withdraws a contribution without ending its quota bonus | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P56 | open | 2026-08-28 | `Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed to set it does not exist | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P56 | open | 2026-09-05 | `Cross-Origin-Embedder-Policy` is unset, and `require-corp` is the wrong variant for a paste-any-URL image feature | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P57 | open | 2026-08-29 | The test-quality audit left ~15 findings unfixed, from an unpatched `connect_ex` guard to untested views | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P58 | open | 2026-08-31 | A photo's grid tile can 404/500 for seconds after upload while async processing renames its file | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P59 | open | 2026-08-31 | A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing | [`docs/PROBLEMS.md`](PROBLEMS.md) |

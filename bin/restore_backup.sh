@@ -26,7 +26,10 @@
 #     -> "invalid command \restrict" at line 5. pg_dump 17.11 in the app image
 #        emits `\restrict`, which the db image's psql 17.5 does not know. With
 #        ON_ERROR_STOP that aborts having restored nothing; without it, exit 0
-#        again. Restore from the app container, whose psql wrote the file.
+#        again - and `\restrict` is the CVE-2025-8714 fix (PostgreSQL 17.6), so
+#        that second outcome restores the data with the protection against a
+#        malicious dump running meta-commands silently switched off. Restore from
+#        the app container, whose psql wrote the file.
 #
 # So this script creates the target itself from `template0` (emptiness by
 # construction rather than by hope), checks the client can read what the server
@@ -87,6 +90,9 @@ done
 BACKUP="${POSITIONAL[0]}"
 TARGET="${POSITIONAL[1]}"
 
+# The empty string matches neither pattern below, so it needs its own check -
+# without it, `bin/restore_backup.sh "" ""` passed every guard and said so.
+[ -n "$TARGET" ] || die "target database name is empty"
 case "$TARGET" in
     [!a-zA-Z_]*|*[!a-zA-Z0-9_]*) die "target database name must be [A-Za-z_][A-Za-z0-9_]*, got '$TARGET'" ;;
 esac
@@ -99,6 +105,9 @@ if [ -f "$BACKUP" ]; then
     REMOTE="/tmp/$(basename "$BACKUP")"
     echo "==> copying $BACKUP into $CONTAINER:$REMOTE"
     docker cp "$BACKUP" "$CONTAINER:$REMOTE" >/dev/null
+    # A dump is the whole database in plaintext; leaving copies of it in a
+    # container's /tmp is how one ends up somewhere nobody is looking after it.
+    trap 'docker exec -u root "$CONTAINER" rm -f "$REMOTE" 2>/dev/null || true' EXIT
 else
     REMOTE="$BACKUP_DIR/$(basename "$BACKUP")"
     in_app "$CONTAINER" test -f "$REMOTE" \
@@ -108,13 +117,24 @@ fi
 DB_USER=$(in_app "$CONTAINER" printenv UL_DB_USER)
 DB_HOST=$(in_app "$CONTAINER" printenv UL_DB_HOST)
 DB_PORT=$(in_app "$CONTAINER" printenv UL_DB_PORT)
-DB_PASS=$(in_app "$CONTAINER" printenv UL_DB_PASS)
 LIVE_DB=$(in_app "$CONTAINER" printenv UL_DB_NAME)
 
+[ -n "$LIVE_DB" ] \
+    || die "'$CONTAINER' has no UL_DB_NAME, so the guard against restoring over the live database cannot be evaluated. Refusing rather than guessing."
 [ "$TARGET" != "$LIVE_DB" ] \
     || die "'$TARGET' is the live database this deployment serves. Restore into a scratch database and cut over deliberately - see docs/BACKUPS.md."
 
-psql_t() { in_app -e PGPASSWORD="$DB_PASS" "$CONTAINER" psql -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$@"; }
+# The password is read inside the container from its own environment rather than
+# passed in with `docker exec -e PGPASSWORD=...`, which puts it in the host's
+# process table where any user can read it out of `ps`. `_` fills $0 so the
+# arguments land in $@.
+# `shift`, not "${@:4}": the container's /bin/sh is dash, which does not have
+# bash's array slicing and answers "Bad substitution".
+psql_t() {
+    # shellcheck disable=SC2016  # the single quotes are the point: $UL_DB_PASS expands in the container, not here
+    in_app "$CONTAINER" sh -c 'export PGPASSWORD="$UL_DB_PASS"; u=$1; h=$2; p=$3; shift 3; exec psql -U "$u" -h "$h" -p "$p" "$@"' \
+        _ "$DB_USER" "$DB_HOST" "$DB_PORT" "$@"
+}
 
 # `CREATE EXTENSION postgis` in the dump needs a superuser, and finding that out
 # 20 seconds into a restore during an incident is worse than finding it out now.
@@ -122,13 +142,25 @@ SUPER=$(psql_t -d postgres -tAc "select rolsuper from pg_roles where rolname = c
 [ "$SUPER" = "t" ] \
     || die "role '$DB_USER' is not a superuser, and the dump's CREATE EXTENSION statements require one. Restore as a superuser role."
 
-# The \restrict trap: a psql older than the pg_dump that wrote the file cannot
-# read it, and says so in a way that is easy to miss (see the header).
+# The \restrict trap. Asked as a capability question, not a version one: the
+# August 2025 minors backported `\restrict` to pg_dump across every live branch
+# (17.6, 16.10, 15.14, 14.19, 13.22), so "is the client newer than the dump" is
+# only equivalent to "does the client understand \restrict" inside one major.
+# A 16.10 dump sorts below psql 17.5 and would wave straight through to a client
+# that aborts on line 5. The dump says whether it needs the feature, and psql
+# says whether it has it, so ask both.
+#
+# psql exits 0 on an unknown meta-command - which is the whole reason this
+# failure is quiet - so the probe reads its output, not its status.
 DUMP_PG=$(in_app "$CONTAINER" sed -n 's/^-- Dumped by pg_dump version \([0-9][0-9.]*\).*/\1/p' "$REMOTE" | head -1)
 [ -n "$DUMP_PG" ] || die "'$REMOTE' has no pg_dump version header - is it really a plain-SQL dump from this app?"
 PSQL_PG=$(in_app "$CONTAINER" psql --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
-if [ "$(printf '%s\n%s\n' "$DUMP_PG" "$PSQL_PG" | sort -V | head -1)" != "$DUMP_PG" ]; then
-    die "psql $PSQL_PG is older than the pg_dump $DUMP_PG that wrote this file; it will fail on \\restrict having restored nothing. Restore from a container whose psql is at least $DUMP_PG."
+if in_app "$CONTAINER" grep -qE '^\\restrict ' "$REMOTE"; then
+    PROBE=$(psql_t -d postgres -X -c '\restrict ul_probe' -c '\unrestrict ul_probe' 2>&1 || true)
+    case "$PROBE" in
+        *"invalid command"*)
+            die "this dump uses \\restrict (pg_dump $DUMP_PG) and psql $PSQL_PG does not understand it. With ON_ERROR_STOP it aborts at line 5 having restored nothing; without it, it restores everything and exits 0 with the CVE-2025-8714 protection silently off. Restore from a container whose psql supports \\restrict." ;;
+    esac
 fi
 
 EXISTS=$(psql_t -d postgres -tAc "select 1 from pg_database where datname = '$TARGET';")
@@ -162,5 +194,11 @@ fi
 TABLES=$(psql_t -d "$TARGET" -tAc "select count(*) from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE';")
 echo "==> restored $TABLES tables into '$TARGET'"
 echo
-echo "A table count is not proof the contents survived. To check that:"
-echo "  bin/verify_backup_restore.sh"
+echo "A table count is not proof the contents survived, and this script does not check that."
+echo "Django will at least say whether it recognises the schema:"
+echo "  docker exec -w /app/src/urbanlens -e UL_DB_NAME=$TARGET $CONTAINER \\"
+echo "      /app/.venv/bin/python manage.py showmigrations --plan | tail -5"
+echo
+echo "bin/verify_backup_restore.sh proves the dump-and-restore *pipeline* is lossless, by"
+echo "round-tripping the live database through its own scratch copies. It does not look at"
+echo "'$TARGET', and takes no argument that would let it."

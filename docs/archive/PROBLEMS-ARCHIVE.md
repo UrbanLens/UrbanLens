@@ -11805,17 +11805,31 @@ Two failures the entry did not have, found by running it:
   `IF NOT EXISTS`; only the three `CREATE SCHEMA` statements fail). It happens to work, which is how
   the habit of omitting the flag survives to a restore where something real fails.
 - **The database container cannot restore the app container's dumps.** `pg_dump` 17.11 in the app
-  image emits `\restrict`, a meta-command added in psql 17.6; the db image ships 17.5. With
+  image emits `\restrict`; the db image ships psql 17.5, which does not know it. With
   `ON_ERROR_STOP` that aborts at line 5 having restored nothing, and without it exits 0 the same way.
-  The script compares the two versions and refuses.
+  The exit-0 case is the worse one: `\restrict` is the fix for CVE-2025-8714 (PostgreSQL 17.6,
+  2025-08-14), which stops a dump from executing psql meta-commands on the restoring machine, so an
+  older client restores the data with that protection silently absent. The script compares the two
+  versions and refuses.
 
-Verified, not asserted: 235 tables from an 861,888-byte dump produced by `DatabaseBackup.run()`
-itself, every table's full contents hashed (`md5(string_agg(row::text, ...))`, which covers
-geography, jsonb and bytea without naming a column) identical live-vs-restored; then a second hop
-with both ends quiescent, carrying a probe table of `geography(Point/MultiPolygon,4326)`, `jsonb`,
-`bytea`, `numeric`, `timestamptz`, non-ASCII text and an all-NULL row - identical across all 236.
-The verifier's teeth were checked by breaking it: building the target from `template_postgis` fails
-at line 26, and deleting one probe row between hops reports `FIDELITY FAILURE` naming the table.
+Verified, not asserted: 235 public tables from an 861,888-byte dump produced by
+`DatabaseBackup.run()` itself, every table's full contents hashed (`md5(string_agg(x::text, ...))`
+over a whole-row reference, which covers geography, jsonb and bytea without naming a column)
+identical live-vs-restored across all 271 tables - 271 because the comparison spans every schema the
+dump carries, and PostGIS puts 36 more in `tiger` and `topology`. Then a second hop with both ends
+quiescent, carrying a probe table of `geography(Point/MultiPolygon,4326)`, `jsonb`, `bytea`,
+`numeric`, `timestamptz`, non-ASCII text and an all-NULL row - identical across all 272. Teeth
+checked three ways: a `template_postgis` target fails at line 26, deleting a probe row between hops
+reports `FIDELITY FAILURE` naming the table, and so does wiping every non-key column of it.
+
+**The first version of this verifier proved almost none of that, and said it had.** The hash read
+`string_agg(x.r::text ...) FROM t x(r)`, where `x(r)` is a table alias *with a column alias list* -
+it renames the first column, so `x.r` was that column rather than the row, and every hash was of
+primary keys. A restore that lost every other column of every table compared clean, and the
+geography/jsonb/bytea probe reduced to md5 of its two serial ids. The row-deletion teeth check
+passed anyway, because removing a row does change a first-column aggregate: it happened to exercise
+one of the few failures the broken hash still caught. Found by adversarial review, reproduced, and
+fixed the same day.
 
 The verifier does **not** assert `migrate --check` passes, which was the obvious check and the wrong
 one: it asserts the deployment is fully migrated, a fact about the deployment rather than the
@@ -11920,6 +11934,151 @@ forbidden here anyway because it never sets the `TESTING` flag, and **pytest
 exits 5 when it collects nothing** - so the silent zero cannot recur. That exit
 code, not `--fail-under=1`, is the guard; the threshold never was one.
 
-Note what this does *not* establish: that the suite passes. It had not run in
-CI, so its green-ness there is unmeasured, and the first run after this change
-is the measurement.
+It has since been measured, which the first version of this entry left open. A full local run
+reported **303 failed, 14,092 passed, 3 skipped** in 32m40s - but 287 of those failures were one
+environment bug in the parallel runner, not the code (P77), and they cannot occur under CI's own
+command. That leaves roughly 16 genuine failures to work through, one of which is an
+`AttributeError: 'str' object has no attribute 'is_authenticated'` in
+`dashboard_tags.assistant_enabled_flag`. So the first CI run will be red, and for a short list of
+real reasons rather than a systemic one.
+
+## RESOLVED 2026-09-05: the dedicated test profile this entry speculated about had existed for six weeks
+
+`id: P17` · `status: fixed` · `resolved: 2026-09-05`
+
+The entry closed by guessing at the fix - "worth checking whether ... CI may run tests a different
+way that sidesteps it entirely - e.g. a dedicated test compose profile" - and that profile landed in
+`abb0f30db` on 2026-07-30, six days later. Nobody came back to the entry.
+
+`docker-compose.yml` defines `profiles: ["test"]` with `UL_DB_HOST: localhost` and
+`UL_VALKEY_URL: redis://localhost:6379/0`, and `test_db`/`test_valkey` run with
+`network_mode: service:test-runner` so they share its network namespace - meaning `localhost` really
+does reach them, and `LocalhostOnlyNetwork` is satisfied by construction rather than by exception.
+`bin/run_tests.sh` (2026-08-27) targets that container by default.
+
+Measured rather than assumed: a full-suite run in `urbanlens_development_main_test_runner` on
+2026-09-05 was 25% through with 47 failures in roughly 3,600 tests. The failure this entry describes
+is "almost every test that touches a logged-in request", so whatever those 47 are, they are not this.
+
+What remains true is the narrow statement in the title: `docker compose exec app pytest` still trips
+the guard, because the `app` container is wired to the shared dev stack by bridge IP and always will
+be. That is not a defect to fix - it is the reason the test profile exists.
+
+**`CLAUDE.local.md` still tells you to do it the broken way.** It documents `docker exec ... app
+... pytest` as the way to run tests here, and calls the guard "a known limitation of this setup,
+not a bug to paper over". The correct instruction is `bin/run_tests.sh`. That file is
+hook-protected, so the wording is left for its owner to apply.
+
+## RESOLVED 2026-09-05: every unrouted URL under /dashboard/ answered 200, so a broken link was invisible
+
+`id: P75` · `status: fixed` · `resolved: 2026-09-05`
+
+`dashboard/urls.py` ended with its own catch-all:
+
+```python
+re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404")
+```
+
+`TemplateView` takes no status, so it rendered the 404 *page* with a **200**. And because that
+pattern lived inside the `dashboard/` include, it matched before the root URLconf's catch-all -
+which calls `_render_404_page` and does set `status=404`. Measured against the running app:
+
+```
+/dashboard/this-route-does-not-exist/    HTTP 200
+/dashboard/rest/no-such-viewset/         HTTP 200
+/nope-not-a-page/                        HTTP 404
+/rest/nope/                              HTTP 404
+```
+
+Every other prefix on the site was correct. The one that holds essentially the whole application
+was the one answering 200 to a URL that does not exist.
+
+Three costs, none of them visible from the page, which renders identically either way:
+
+- **`response.ok` is true.** A `fetch()` against a removed or renamed endpoint takes the success
+  branch and then parses a 99KB HTML error page as JSON. P11 counts ~40 raw `fetch()` call sites,
+  several with no `ok` check at all; this made the ones that *do* check no better off.
+- **Alerting on 4xx cannot see a broken internal link**, because there is no 4xx.
+- **A crawler indexes every mistyped path as a real page** - a soft 404.
+
+Fixed by deleting the line. `handler404` and the root catch-all already render that same template
+with the right status, and the entry that added the dashboard one was duplicating them. Verified
+after: the four paths above now answer 404, 404, 404, 404, the styled page still renders (99,634
+bytes, not Django's plain-text fallback), and `/dashboard/map/` and `/dashboard/` are unchanged at
+302 and 200.
+
+**A test already asserted the right answer.** `tests/integration/specs/security/disclosure.spec.ts:32`
+navigates to `/dashboard/this-path-does-not-exist-91b2c/` and expects `404`, beside a sibling that
+checks the same thing at the site root and passes. That spec has only ever run when someone
+triggered it by hand - `integration.yml` is `workflow_dispatch` only, deliberately, because it
+drives a deployed instance - so an assertion encoding the correct behaviour sat next to code that
+could not satisfy it, and nothing said so.
+
+There were three implementations of "render the 404 page", which is how one of them stayed wrong.
+`_render_404_page` (root catch-all and `handler404`) is the live one; the `TemplateView` above is
+the one that was missing its status; and `IndexController.page_not_found` was a third copy, correct
+but with no caller anywhere in the tree. That one is deleted too.
+
+Found while auditing P35's hardcoded-URL claim: a check that resolved every hardcoded
+`/dashboard/...` path in the templates and TypeScript reported all 21 resolving, which was true and
+meaningless - the catch-all resolves everything. A check that cannot fail is worth noticing.
+## RESOLVED 2026-09-05: CI's frontend job installed with npm, so it checked different dependencies than everyone else
+
+`id: P76` · `status: fixed` · `resolved: 2026-09-05`
+
+`ci.yml`'s frontend job set up Bun - pinned to the same exact patch as the Dockerfile, with a
+comment explaining why the patch matters - and then ran `npm install`.
+
+npm cannot read `bun.lock`, and `package-lock.json` is gitignored (`.gitignore:23`), so on a fresh
+checkout there was no lockfile npm could use. Every range in `package.json` was resolved from the
+registry at job time. So the job that runs `bun run typecheck`, `bun run test:ts` and `bun run
+build` ran all three against a dependency set that matched neither the Docker image (`bun install
+--frozen-lockfile`, Dockerfile:119) nor any developer, and that could change without a commit.
+
+The sharpest instance is the one pin this repo has an open entry about. `bun.lock` holds
+`bun-types@1.1.6` while `package.json` asks for `"latest"` (P73), so `expect(value, message)` - which
+1.1.6's `expect` rejects and current `bun-types` accepts - fails `bun run typecheck` locally and
+would have **passed** in CI. The check meant to catch that class of error was the one place it could
+not be caught.
+
+Fixed by running `bun install --frozen-lockfile`, matching the Dockerfile. Verified: the dry-run
+resolves cleanly against the committed `bun.lock` (so the lockfile is in sync, and the flag turns a
+future drift into a CI failure rather than a silent re-resolution), and `bun run typecheck` passes
+under those frozen versions.
+
+`integration.yml` has the same shape and already knows it - a comment there says to switch to
+`npm ci` "once a package-lock.json is committed". That suite is Playwright and genuinely npm-based,
+so it is left alone; this entry is about the job that runs Bun for everything except its install.
+
+## RESOLVED 2026-09-05: every xdist worker used manifest static storage, so `--parallel` invented 287 failures
+
+`id: P77` · `status: fixed` · `resolved: 2026-09-05`
+
+`base.py` infers `TESTING` by looking for `"pytest"` in `sys.argv`, and freezes
+`STORAGES["staticfiles"]` from that guess at import. `settings/test.py` then sets `TESTING = True`,
+which is too late - the storage decision is already made.
+
+That is invisible for a normal run, where `argv[0]` really does end in `pytest`. A **pytest-xdist
+worker** is started by execnet with `argv[0] == "-c"`, so the guess comes out False, the worker gets
+`CompressedManifestStaticFilesStorage`, and every test rendering a page whose `{% static %}` target
+is not in the manifest dies with `ValueError: Missing staticfiles manifest entry`.
+
+Measured 2026-09-05. A full suite run with `-n 6`:
+
+    303 failed, 14092 passed, 3 skipped, 2261 subtests passed in 1960.36s
+
+**287 of the 303 were that one error.** The same files pass serially, and pass under `-n 2` once
+fixed. So `bin/run_tests.sh --parallel` - an advertised flag - could not be trusted for anything
+that renders a template, and a 2% "failure rate" was almost entirely an artifact of asking for
+speed. Note how that lands: the flag makes the suite faster *and* red, so the natural reading is
+"parallel exposes flakiness", which is the opposite of the truth.
+
+Fixed in `settings/test.py` by setting the storage there rather than improving the guess: a settings
+module named `test` does not need to infer whether it is under test. Verified by asserting the
+backend from inside a worker (fails before, passes after) and by re-running two of the 287 victims.
+
+Two things this also settles. `CLAUDE.local.md` says `manage.py test` "never sets the `TESTING`
+flag, so any test rendering a full page template hits a staticfiles-manifest 500" - the flag is set,
+measured; the storage was the real mechanism, and it is now fixed for every runner. And CI is
+unaffected either way: `coverage run --source=src -m pytest` gives `argv[0]` ending in
+`pytest/__main__.py`, so it always took the correct branch.

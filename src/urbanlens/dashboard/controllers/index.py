@@ -43,11 +43,6 @@ class IndexController(ListController):
         context["page_name"] = "home"
         return context
 
-    @staticmethod
-    def page_not_found(request, _exception=None):
-        """Project-wide 404 handler - renders the standard error page."""
-        return render(request, "dashboard/pages/errors/404.html", status=404)
-
 
 class HomeOverviewView(LoginRequiredMixin, View):
     """The logged-in homepage: a customizable dashboard overview.

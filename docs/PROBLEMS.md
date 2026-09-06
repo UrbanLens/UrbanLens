@@ -1057,42 +1057,6 @@ bullet, which specifies the weighting rule in detail).
 
 ---
 
-## P17 — `docker compose exec app pytest` trips the localhost-only network guard because Valkey is a bridge IP
-
-`id: P17` · `status: open` · `updated: 2026-07-24`
-
-Previously titled "`docker compose exec app pytest` can't reach Valkey in the `s1`/`s2`/`s3` dev environments (found 2026-07-24)".
-
-Running the hypothesis suite via `docker compose exec app python -m pytest ...` inside any of
-the `~/dev/s1|s2|s3/UrbanLens` environments on chiron fails almost every test that touches a
-logged-in request or Celery/Channels broadcast (`realtime.broadcast`, channel-layer setup, etc.)
-with:
-
-```
-RuntimeError: External network access is disabled during tests. Attempted to connect to
-'172.23.0.3'; mock this integration or use localhost.
-```
-
-Root cause: `src/urbanlens/core/testing_network.py`'s `LocalhostOnlyNetwork` guard only permits
-connections to literal `localhost`/`localhost.localdomain` during tests (by design - see its
-docstring). But in these dev environments, `UL_VALKEY_URL` resolves to the `urbanlens_valkey`
-docker-compose service, i.e. a docker-network IP (`172.23.0.3` in this instance), not
-`localhost` - so anything touching Valkey during a test run trips the guard immediately.
-
-Confirmed this is **environment infrastructure, not application code**: a completely unrelated,
-untouched test file (`test_games_controller.py`) fails identically. Meanwhile, pure-DB-layer
-tests with no client/channel-layer involvement (e.g. `test_spotguessr_eligibility.py`) pass
-cleanly in the same run - so the guard itself and the DB-layer test infra are fine; it's
-specifically the Valkey reachability-vs-guard mismatch.
-
-Not investigated further (out of scope for the SpotGuessr UX work this was found during): worth
-checking whether `docker-compose.yml`'s `app` service should bind-mount/forward Valkey to
-`localhost` for these dev boxes specifically (other deployments may already do this correctly,
-or CI may run tests a different way that sidesteps it entirely - e.g. a dedicated test compose
-profile). Until fixed, verify backend changes on these dev machines via direct DB-layer/service
-tests (no Django test client, no `realtime.broadcast`) plus a manual browser walkthrough against
-the running `docker compose up` stack, rather than the full `pytest` suite.
-
 ## P19 — Audit re-verification's residual gaps remain: dead ownership re-check, 1,100-line `_dark.scss`, stub AI gateway
 
 `id: P19` · `status: open` · `updated: 2026-07-25`
@@ -1833,16 +1797,21 @@ Three things the original measurement got wrong, each of which the check now han
   fall back to an artifact older than them.
 - Its tokenizer split `class="..."` on whitespace, so a class written flush against a tag was
   invisible to it: `class="page-footer{% if map_attribution %} page-footer--map{% endif %}"` yields
-  the token `page-footer{%`. Three of the eight additions are that shape.
+  the token `page-footer{%`. **Five** of the eight additions are that shape - `detail-item--address`,
+  `detail-item--official`, `detail-item--place`, `dm-conv-item--group` and `page-footer--map` - which
+  is more than half of the drift, and more than the three this entry first said (that count was taken
+  from the literal `{% if %}`-adjacent pattern rather than by re-running the tokenizer).
 - It counted JS hooks as missing styles, which is the opposite error and inflates the number.
 
 Still open because what each should look like is a design decision, and deleting the modifier from
 the template is as valid a resolution as writing the rule. Two of them are not even a fixed list:
 `notif-item__icon-wrap--{{ n.notification_type }}` and `visit-source--{{ visit.source }}` generate a
-modifier per value, so a new notification type arrives unstyled by construction. The eight
-`notif-item__icon-wrap--*` rules that do exist are all under `[data-theme=dark] .notif-item--unread`,
-so no notification type is coloured in light theme or once read - which makes "three types are
-missing a rule" a smaller finding than it looks and a larger question than it looks.
+modifier per value, so a new notification type arrives unstyled by construction. Every
+`notif-item__icon-wrap--*` rule is scoped under `.notif-item--unread`, so no notification type is
+coloured once read - which makes "three types are missing a rule" a larger question than it looks.
+(An earlier revision of this entry also said those rules were all under `[data-theme=dark]`. That was
+wrong, read off a truncated grep: of 42 selector lines in the compiled CSS, 24 are dark-scoped and 18
+are theme-independent, from `_nav.scss:751`. Light theme does colour them.)
 
 Worth doing first: the three `visit-*--pending` classes (a visit awaiting confirmation is
 indistinguishable from a confirmed one), `ul-game-hud__group--lead` (the leading score, on all three
@@ -1966,6 +1935,16 @@ message keeps its preview text.
 
 Neither is touched by `delete_message_for_everyone` / `delete_group_message`, so after the sender
 unsends, the thread shows "Message deleted" while the notification row still quotes what was said.
+
+**Two things narrow this, both checked 2026-09-05 and neither stated above.** An encrypted message
+never had a plaintext preview to leak: both services branch on `is_encrypted` first and store
+`"🔒 Encrypted message"` (`direct_messages.py:392`, `group_chats.py:453`), so this is a plaintext-DM
+defect, not an E2EE one. And a DM notification is raised only when there is no *other* unread
+message from the same sender (`already_unread`, `direct_messages.py:388`), so a conversation holds at
+most one stale preview per sender rather than one per deleted message.
+
+That does not make it a non-issue - one quoted sentence is the whole of what "unsend" is supposed to
+undo - but it does mean the fix is smaller and less urgent than "every deleted message leaks".
 
 There is no way to clean it up precisely today: `NotificationLog` has no reference to the message it
 was raised for, and its `url` points at the *thread* (the conversation, or the group), not the
@@ -2114,10 +2093,12 @@ was a `TransactionTestCase` carrying its own `@override_settings(CHANNEL_LAYERS=
 decorator is gone as of 2026-09-05 - `settings/test.py` sets the in-memory layer globally now (see
 the archived P17 note), so there is no longer a per-class override to interact with anything.
 
-Also worth knowing before the next attempt: **`pytest-randomly` is not installed in the test-runner
-container** (see P4), so `bin/run_tests.sh --shuffle` cannot reproduce this at all - it fails with
-`ImportError: Error importing plugin "randomly"`. The probe above had to run in the `app` container,
-whose venv is complete.
+~~Also worth knowing before the next attempt: **`pytest-randomly` is not installed in the
+test-runner container** (see P4), so `bin/run_tests.sh --shuffle` cannot reproduce this at all.~~
+Fixed 2026-09-05: `bin/run_tests.sh` now installs the dev-group packages its own container is
+missing rather than warning about them, and `pytest-randomly 4.1.0` is present. `--shuffle` works,
+so the next attempt is a full shuffled run - `bin/run_tests.sh --shuffle` without `-q`, so the
+header records the seed this entry says the original run lost.
 
 ## P51 — Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark`
 
@@ -2282,19 +2263,46 @@ gate design and folding it in would make one change two features. And in the wik
 toasts "Photo deleted." for a dual-owned photo the server only unlinks - both strings are false there,
 and correcting them means changing a response shape three contexts share, so it wants a browser.
 
-## P56 — `Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed to set it does not exist
+## P56 — `Cross-Origin-Embedder-Policy` is unset, and `require-corp` is the wrong variant for a paste-any-URL image feature
 
-`id: P56` · `status: open` · `updated: 2026-08-28`
+`id: P56` · `status: open` · `updated: 2026-09-05`
 
-Previously titled "Nuclei scan follow-ups (2026-08-28)".
+Previously titled "`Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed
+to set it does not exist", and before that "Nuclei scan follow-ups (2026-08-28)".
 
-**`Cross-Origin-Embedder-Policy` is not set.** `require-corp` would block every third-party image
-and script that doesn't send its own CORP/CORS header - the Street View iframe, the OSM/ArcGIS/
-OpenTopoMap tile hosts, Gravatar, any operator-pasted map-overlay image: needs a report-only-shape. Revisit once there's a real inventory of which third-party hosts
-do and don't send CORP.
+The inventory this entry was waiting on, measured 2026-09-05 by requesting a representative asset
+from every host `_CSP_DIRECTIVES` admits and reading the response headers:
 
-`cross-origin-embedder-policy` is the fourth thing this template flagged and
-is not fixe
+| host | used for | under `require-corp` |
+|---|---|---|
+| `code.jquery.com`, `cdnjs.cloudflare.com`, `unpkg.com`, `cdn.jsdelivr.net` | scripts | `CORP: cross-origin` |
+| `maps.googleapis.com` (the JS API itself) | script | `CORP: cross-origin` |
+| `fonts.googleapis.com`, `fonts.gstatic.com` | styles, fonts | `CORP: cross-origin` |
+| `www.google.com` (favicons), `maps.gstatic.com` | images | `CORP: cross-origin` |
+| `tile.openstreetmap.org`, `basemaps.cartocdn.com`, `tile.opentopomap.org`, `server.arcgisonline.com`, `services.arcgisonline.com` | map tiles | no CORP, `ACAO: *` - needs `crossOrigin` on the Leaflet layer |
+| `www.gravatar.com` | avatar preview | no CORP, `ACAO: *` - needs `crossorigin` on the `<img>` |
+| `en.wikipedia.org`, `nominatim.openstreetmap.org` | `fetch()` | no CORP, `ACAO: *` - already fine, `fetch` is CORS-mode by default |
+
+So every scripted resource already passes, and the nine that do not are all `ACAO: *` and reachable
+with an attribute change. **That is not the blocker, and the entry was wrong about what was.**
+
+**The blocker is `img-src: https:`.** Map image overlays are a paste-any-URL feature
+(`_map_overlays_list.html`, `map-image-overlays.ts`), which is why that directive is deliberately
+wide open - see the comment on it. Under `require-corp` every overlay whose host sends neither CORP
+nor CORS stops rendering, and that host set is unbounded by design. No inventory can close this,
+because the inventory is "whatever a user pasted".
+
+That points at `Cross-Origin-Embedder-Policy: credentialless` rather than `require-corp`:
+credentialless sends no-cors subresource requests without credentials instead of demanding CORP, so
+a pasted image still loads. Evaluating it - and its browser support, which is narrower - is the next
+step, not another inventory.
+
+**Two things could not be measured** and need a valid Google Maps API key: the Street View embed
+iframe (`https://www.google.com/maps/embed/v1/streetview`, which answered 403 to a keyless probe),
+and the imagery hosts the Maps JS API picks at runtime (`khms0.googleapis.com` 404,
+`streetviewpixels-pa.googleapis.com` 403). The `img-src` comment already flags that this set is
+"the known set rather than a proven-complete one". A report-only COEP deployment is what would
+settle both.
 
 ## P57 — The test-quality audit left ~15 findings unfixed, from an unpatched `connect_ex` guard to untested views
 

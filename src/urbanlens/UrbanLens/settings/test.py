@@ -12,6 +12,24 @@ from urbanlens.UrbanLens.settings.base import *  # noqa: F403
 
 TESTING = True
 
+# `TESTING = True` above arrives too late for anything base.py already decided
+# from its own guess, and `STORAGES` is one of those. base.py infers TESTING by
+# looking for "pytest" in `sys.argv`, which holds for a normal run and **not**
+# for a pytest-xdist worker: execnet starts those with `argv[0] == "-c"`, so the
+# guess comes out False, `STORAGES["staticfiles"]` freezes to the manifest
+# backend, and then this line sets TESTING True over the top of a decision
+# already made.
+#
+# The symptom is that every test rendering a page whose `{% static %}` target is
+# not in the manifest raises `ValueError: Missing staticfiles manifest entry`.
+# Measured 2026-09-05: a full suite run with `-n 6` reported 303 failures, of
+# which **287** were that, and the same suite run serially does not have them.
+# `bin/run_tests.sh --parallel` was therefore unusable for anything that renders.
+#
+# Set here rather than by improving the guess, because a settings module named
+# `test` does not need to infer whether it is under test.
+STORAGES = {**STORAGES, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}}  # noqa: F405
+
 # django-perf-rec writes each covered view's query *fingerprint* to a .perf.yml
 # beside its test, so an N+1 arrives as a reviewable diff rather than as a
 # number nobody can interpret.

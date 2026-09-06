@@ -7,9 +7,10 @@ correctly - the modifier is spelled right and the base class it modifies really
 does exist. The distinction the author wrote it for simply never appears.
 
 Fifty of these were live when this check was written (see P36). The count had
-been recorded as 45, taken by hand a month earlier, and had drifted in both
-directions - one fixed, eight added - which is the argument for measuring it
-here instead of transcribing it into a document.
+been recorded as 45 against a table of 46 rows, measured by hand three weeks
+earlier, and had drifted in both directions - one fixed, eight added, three that
+were never this - which is the argument for measuring it here instead of
+transcribing it into a document.
 
 Three things this gets right that a whitespace tokenizer over `class="..."` does
 not, each of which hid real findings from the hand count:
@@ -98,6 +99,8 @@ _DJ_VAR = re.compile(r"\{\{.*?\}\}", re.DOTALL)
 _CLASS_NAME = re.compile(r"[A-Za-z_][\w-]*\Z")
 _SELECTOR_CLASS = re.compile(r"\.(-?[_A-Za-z][\w-]*)")
 _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
+#: Where a selector list can end: the next `{` closes one, and `}`/`;` start one.
+_DELIMITER = re.compile(r"[{};]")
 
 #: Modifiers applied by a template that no rule styles, accepted for now. Each is
 #: a visual state that does not render; see P36 for the triage. Sorted, so a
@@ -214,30 +217,31 @@ def _which(name: str) -> bool:
 def styled_classes(css: str) -> set[str]:
     """Collect every class name a rule in *css* selects.
 
-    Sass' expanded output puts each selector on its own line (or lines, for a
-    comma-separated list) ending in `{`, which is what makes this reliable
-    without a full CSS parser.
+    Whatever is between the previous `{`, `}` or `;` and the next `{` is a
+    selector list, or an at-rule prelude if it starts with `@`. That holds
+    regardless of formatting, which matters: the first version of this read
+    lines and required each selector to end in `{`, so it worked on
+    `--style=expanded` and found **zero** rules in `--style=compressed` - the
+    style `bun run sass` actually writes. Every modifier would then have failed
+    the "is the base styled" test, the check would have reported its entire
+    accepted list as fixed, and following that instruction would have deleted
+    the baseline and left it passing vacuously.
 
     Args:
-        css: Compiled, expanded CSS.
+        css: Compiled CSS, in any output style.
 
     Returns:
         Every class name appearing in a selector.
     """
+    text = _BLOCK_COMMENT.sub(" ", css)
     styled: set[str] = set()
-    pending: list[str] = []
-    for raw in _BLOCK_COMMENT.sub(" ", css).splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        pending.append(line)
-        if line.endswith("{"):
-            selector = " ".join(pending)[:-1]
-            pending = []
-            if not selector.lstrip().startswith("@"):
+    start = 0
+    for delimiter in _DELIMITER.finditer(text):
+        if delimiter.group() == "{":
+            selector = text[start : delimiter.start()].strip()
+            if selector and not selector.startswith("@"):
                 styled.update(_SELECTOR_CLASS.findall(selector))
-        elif line.endswith(("}", ";")):
-            pending = []
+        start = delimiter.end()
     return styled
 
 
