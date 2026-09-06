@@ -116,11 +116,14 @@ _app_settings.virustotal_api_key = None
 
 # Same reasoning, for every LLM provider credential. This is the structural
 # guarantee that a test cannot spend real provider tokens, and it is deliberately
-# unconditional and set HERE rather than in a pytest fixture:
-# `.github/workflows/ci.yml` runs `manage.py test`, not pytest, so nothing in
-# conftest.py is loaded there - and `docs/AI_PIPELINE.md` explicitly sanctions a
+# unconditional and set HERE rather than in a pytest fixture: a settings module
+# is loaded by every runner, and `docs/AI_PIPELINE.md` explicitly sanctions a
 # local non-Docker checkout keeping real keys in `.env` for LocalInferenceClient,
-# which is exactly the machine this has to protect.
+# which is exactly the machine this has to protect. (The original reason given
+# was that CI ran `manage.py test`, which never loads conftest.py. CI runs pytest
+# as of 2026-09-05, and the conclusion is unchanged - `manage.py test` is still a
+# supported way to run this suite, and the point of putting it here is not to
+# depend on knowing which runner is in use.)
 #
 # Pinned to a placeholder rather than None on purpose: `providers.build_adapter`
 # raises ProviderError on a falsy key *before* any adapter is constructed, so
@@ -154,10 +157,12 @@ _app_settings.ai_inference_url = None
 # much had built up (measured 3 failures in 4 runs against a polluted tree,
 # 0 in 12 once isolated).
 #
-# Set here rather than only in a pytest fixture because CI runs
-# `manage.py test` (.github/workflows/ci.yml), which never loads conftest.py.
-# Settings are imported once per test process, so this is one directory per
-# process - including each xdist worker - and atexit removes it either way.
+# Set here rather than only in a pytest fixture so it does not depend on which
+# runner is in use: `manage.py test` never loads conftest.py, and a settings
+# module is loaded by both. (This used to say "because CI runs `manage.py test`";
+# CI runs pytest as of 2026-09-05, which changes nothing about where this
+# belongs.) Settings are imported once per test process, so this is one directory
+# per process - including each xdist worker - and atexit removes it either way.
 _test_media_root = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 atexit.register(lambda: shutil.rmtree(_test_media_root, ignore_errors=True))
 MEDIA_ROOT = _test_media_root
