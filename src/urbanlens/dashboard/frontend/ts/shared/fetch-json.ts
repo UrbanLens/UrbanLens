@@ -94,13 +94,21 @@ async function errorMessage(response: Response): Promise<string> {
 }
 
 /**
- * Make the request, apply the timeout, and throw on a non-2xx.
+ * Make the request under the timeout, throw on a non-2xx, and read the body.
  *
  * The half that is the same whether the caller wants JSON or markup back -
  * which is most of it, since the value of this module is the ``!response.ok``
  * check and the message extraction rather than the parsing.
+ *
+ * ``read`` runs inside the same ``try`` as the fetch on purpose. Headers can
+ * land promptly and the body still stall - a large payload behind a slow proxy,
+ * a connection that dies mid-stream - and a real ``Response`` rejects its body
+ * read when the signal aborts. Clearing the timer as soon as the status was
+ * known left that read with nothing to abort it, so the promise hung forever:
+ * no toast, no rejection, nothing in the console. Exactly the shape the album
+ * upload's ten-minute ceiling exists for.
  */
-async function request(url: string, options: FetchJsonOptions): Promise<Response> {
+async function requestBody<T>(url: string, options: FetchJsonOptions, read: (response: Response) => Promise<T>): Promise<T> {
     const { timeoutMs = 120000, reportsItsOwnErrors = false, ...init } = options;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -109,19 +117,17 @@ async function request(url: string, options: FetchJsonOptions): Promise<Response
         // `__ulReported` is what base.html's wrapper reads; `fetch` ignores it.
         const response = await fetch(url, { ...init, __ulReported: reportsItsOwnErrors, signal: controller.signal } as RequestInit);
         if (!response.ok) throw new HttpError(response.status, await errorMessage(response));
-        return response;
+        return await read(response);
     } finally {
         clearTimeout(timer);
     }
 }
 
 export async function fetchJson<T = unknown>(url: string, options: FetchJsonOptions = {}): Promise<T | null> {
-    const response = await request(url, options);
     // 204 has no body, and calling .json() on it throws. Callers that expect
     // nothing back (a recorded position, a DRF delete) would otherwise see a
     // successful request as a failure.
-    if (response.status === 204) return null;
-    return (await response.json()) as T;
+    return requestBody<T | null>(url, options, async (response) => (response.status === 204 ? null : ((await response.json()) as T)));
 }
 
 /**
@@ -136,7 +142,7 @@ export async function fetchJson<T = unknown>(url: string, options: FetchJsonOpti
  * legitimately renders nothing is not an error.
  */
 export async function fetchText(url: string, options: FetchJsonOptions = {}): Promise<string> {
-    return (await request(url, options)).text();
+    return requestBody(url, options, (response) => response.text());
 }
 
 /** The JSON body and CSRF header Django requires for an unsafe method. */

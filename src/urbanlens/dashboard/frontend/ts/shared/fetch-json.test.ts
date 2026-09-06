@@ -309,3 +309,45 @@ describe("an endpoint that answers with markup", () => {
         expect((calls[0]!.init as { __ulReported?: boolean }).__ulReported).toBe(true);
     });
 });
+
+describe("a body that stalls after the headers arrive", () => {
+    // A real Response rejects its body read when the signal aborts. Clearing
+    // the timer as soon as the status was known left that read with nothing to
+    // abort it, so the promise hung forever: no toast, no rejection, nothing in
+    // the console. The only other timeout test stalls inside `fetch` itself,
+    // which is a different phase and stayed covered throughout.
+    function stallingBody(): void {
+        globalThis.fetch = ((_url: string, init: RequestInit) => {
+            const body = <T>() =>
+                new Promise<T>((_resolve, reject) => {
+                    init.signal?.addEventListener("abort", () => reject(new Error("the body read was aborted")));
+                });
+            return Promise.resolve({ ok: true, status: 200, text: body<string>, json: body<unknown> } as unknown as Response);
+        }) as unknown as typeof fetch;
+    }
+
+    test("fetchJson is still abandoned after the timeout", async () => {
+        stallingBody();
+        await expect(fetchJson("/x/", { timeoutMs: 20 })).rejects.toThrow("the body read was aborted");
+    });
+
+    test("fetchText is still abandoned after the timeout", async () => {
+        stallingBody();
+        await expect(fetchText("/rows/", { timeoutMs: 20 })).rejects.toThrow("the body read was aborted");
+    });
+
+    test("so is the message extraction on a refusal", async () => {
+        // errorMessage() reads the body too, on a path where the caller is
+        // already being told something went wrong.
+        globalThis.fetch = ((_url: string, init: RequestInit) => {
+            return Promise.resolve({
+                ok: false,
+                status: 500,
+                text: () => new Promise<string>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(new Error("the body read was aborted")))),
+            } as unknown as Response);
+        }) as unknown as typeof fetch;
+        // errorMessage swallows its own failures and falls back to the status,
+        // so the abort surfaces as the generic message rather than a hang.
+        await expect(fetchJson("/x/", { timeoutMs: 20 })).rejects.toThrow("HTTP 500");
+    });
+});
