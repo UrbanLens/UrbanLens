@@ -99,10 +99,6 @@ def create_trip(
     if length_error:
         raise TripValidationError(length_error)
 
-    max_upcoming = SiteSettings.get_current().max_upcoming_trips_per_user
-    if max_upcoming > 0 and Trip.objects.upcoming(creator).count() >= max_upcoming:
-        raise TripQuotaError(f"You already have the maximum of {max_upcoming} upcoming trips.")
-
     create_kwargs: dict[str, Any] = {
         "name": clean_name,
         "description": clean_description,
@@ -119,7 +115,19 @@ def create_trip(
         # Nested atomic so a lost idempotency race fails inside its own
         # savepoint rather than poisoning any enclosing transaction - the same
         # shape `services.messaging.direct_messages.create_direct_message` uses.
+        #
+        # The quota check sits inside it, behind a lock on the creator's own
+        # profile row, because check-then-create is not safe unserialised: two
+        # concurrent creates both read the same upcoming count and both pass a
+        # limit only one of them should have. `services.ai.tools.trips` had this
+        # lock and this function did not, which is the drift that put it here.
         with transaction.atomic():
+            Profile.objects.select_for_update().filter(pk=creator.pk).first()
+
+            max_upcoming = SiteSettings.get_current().max_upcoming_trips_per_user
+            if max_upcoming > 0 and Trip.objects.upcoming(creator).count() >= max_upcoming:
+                raise TripQuotaError(f"You already have the maximum of {max_upcoming} upcoming trips.")
+
             trip = Trip.objects.create(**create_kwargs)
     except IntegrityError:
         # Two offline retries carrying the same client uuid arrived close

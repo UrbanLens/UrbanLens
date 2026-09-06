@@ -65,27 +65,17 @@ class CreateTripArgs(BaseModel):
 
 
 def _create_trip(context: ToolContext, args: CreateTripArgs) -> dict[str, Any]:
-    from django.db import transaction
+    # The shared service every other caller uses. It owns the name generation,
+    # the membership join, the description length limit, and the
+    # max_upcoming_trips_per_user quota under a lock on the creator's profile
+    # row - the lock this tool used to hold on its own.
+    from urbanlens.dashboard.services.trips.trip_crud import create_trip
+    from urbanlens.dashboard.services.trips.trip_errors import TripError
 
-    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
-    from urbanlens.dashboard.models.site_settings import SiteSettings
-    from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-    from urbanlens.dashboard.services.trips.trip_names import random_trip_name
-
-    # Lock the profile row for the duration of the check-then-create so two
-    # concurrent requests from the same user can't both pass the upcoming-trip
-    # count check and jointly exceed the site's max_upcoming_trips_per_user.
-    with transaction.atomic():
-        ProfileModel.objects.select_for_update().get(pk=context.profile.pk)
-
-        max_upcoming = SiteSettings.get_current().max_upcoming_trips_per_user
-        if max_upcoming > 0 and Trip.objects.upcoming(context.profile).count() >= max_upcoming:
-            return {"error": f"The user already has the maximum of {max_upcoming} upcoming trips."}
-
-        name = args.name.strip() or random_trip_name()
-        description = args.description.strip() or None
-        trip = Trip.objects.create(name=name, description=description, creator=context.profile)
-        TripMembership.objects.get_or_create(trip=trip, profile=context.profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
+    try:
+        trip, _created = create_trip(context.profile, name=args.name, description=args.description)
+    except TripError as exc:
+        return {"error": str(exc)}
     return {"created": {"name": trip.name, "slug": trip.slug}}
 
 
@@ -114,16 +104,18 @@ class AddTripActivityArgs(BaseModel):
 
 
 def _add_trip_activity(context: ToolContext, args: AddTripActivityArgs) -> dict[str, Any]:
-    from django.db import transaction
-
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.models.site_settings import SiteSettings
-    from urbanlens.dashboard.models.trips.model import Trip, TripActivity
-    from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares
+    from urbanlens.dashboard.models.trips.model import Trip
+    from urbanlens.dashboard.services.trips.trip_activities import create_activity
+    from urbanlens.dashboard.services.trips.trip_errors import TripError
 
     trip = Trip.objects.filter(slug=args.trip_slug, profiles=context.profile).first()
     if trip is None:
         return {"error": "No such trip (it must be one of the user's own trips)."}
+    # Membership only narrows *which* trip; whether this profile may add to it is
+    # `create_activity`'s call, via allow_add_activities and joined-ness. The
+    # filter above matches through TripMembership with no status filter, so it
+    # includes invited-not-joined members too.
     pin = Pin.objects.filter(slug=args.pin_slug, profile=context.profile, parent_pin__isnull=True).select_related("location").first()
     if pin is None:
         return {"error": "No such pin (it must be one of the user's own pins)."}
@@ -141,32 +133,15 @@ def _add_trip_activity(context: ToolContext, args: AddTripActivityArgs) -> dict[
             # 9am local: an arbitrary-but-sane default hour for a date-only plan.
             scheduled_at = datetime.combine(day, time(hour=9), tzinfo=get_current_timezone())
 
-    # Lock the trip row for the duration of the check-then-create so two concurrent
-    # requests (e.g. two members adding activities to the same trip at once, or the
-    # user double-submitting) can't both pass the max_trip_activities count check
-    # and jointly exceed it - same shape/reason as _create_trip's profile-row lock
-    # above. Locked on the trip (not the profile) since the count this guards is
-    # per-trip and other members can add activities to it too.
-    with transaction.atomic():
-        Trip.objects.select_for_update().get(pk=trip.pk)
-
-        max_activities = SiteSettings.get_current().max_trip_activities
-        if max_activities > 0 and trip.activities.count() >= max_activities:
-            return {"error": f"That trip already has the maximum of {max_activities} activities."}
-
-        activity = TripActivity.objects.create(
-            trip=trip,
-            pin=pin,
-            location=pin.location,
-            added_by=context.profile,
-            title=None,
-            scheduled_at=scheduled_at,
-            order=trip.activities.count(),
-            status=TripActivity.STATUS_PROPOSED,
-        )
-    # Same rule as the trip view: putting a place on an itinerary reveals it
-    # to every member and must count in the sharer's reshare chain.
-    record_trip_activity_shares(activity)
+    # The shared service every other caller uses. It owns the permission check
+    # (allow_add_activities, and joined-ness), the max_trip_activities quota
+    # under a trip-row lock, the append position, and the reshare-chain record -
+    # all of which this tool used to re-implement, and two of which it had never
+    # implemented at all.
+    try:
+        activity = create_activity(trip, context.profile, place={"pin_slug": args.pin_slug}, scheduled_at=scheduled_at)
+    except TripError as exc:
+        return {"error": str(exc)}
     return {"added": {"trip": trip.name, "pin": pin.effective_name, "activity_id": activity.id}}
 
 

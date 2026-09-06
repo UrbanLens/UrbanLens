@@ -180,3 +180,102 @@ class AddTripActivityTests(TestCase):
         )
         self.assertTrue(result.data["added"]["trip"].startswith("<USER_DATA>"))
         self.assertTrue(result.data["added"]["pin"].startswith("<USER_DATA>"))
+
+
+class AddTripActivityPermissionTests(TestCase):
+    """The AI tool must enforce the same permissions the trip views do.
+
+    `_add_trip_activity` gated on `Trip.objects.filter(slug=..., profiles=profile)`
+    - bare membership - while `services.trips.trip_activities.add_activity`, the
+    path every other caller uses, gates on
+    `require_perform(actor, trip, trip.allow_add_activities, ...)`. That is two
+    separate rules the AI path did not apply:
+
+    - `allow_add_activities`, which a trip's creator sets to "Organizers" or
+      "No one" precisely to stop ordinary members adding to the itinerary;
+    - and joined-ness, since `Trip.profiles` goes through `TripMembership` with
+      no status filter, so it includes members who were *invited* and have not
+      accepted. `has_joined` exists to say those may not contribute at all.
+    """
+
+    def setUp(self) -> None:
+        self.creator = _plain_profile()
+        self.member = _plain_profile()
+        self.trip = baker.make(Trip, name="Locked Down", creator=self.creator)
+        TripMembership.objects.create(trip=self.trip, profile=self.creator, status=TripMembership.STATUS_JOINED)
+        self.membership = TripMembership.objects.create(
+            trip=self.trip, profile=self.member, status=TripMembership.STATUS_JOINED
+        )
+        self.pin = baker.make(Pin, profile=self.member, location=baker.make(Location))
+
+    def _add(self, profile) -> object:
+        return execute(
+            "add_trip_activity",
+            {"trip_slug": self.trip.slug, "pin_slug": self.pin.slug},
+            _context(profile),
+        )
+
+    def test_a_member_cannot_add_to_an_organizers_only_trip(self) -> None:
+        self.trip.allow_add_activities = Trip.PERM_ORGANIZERS
+        self.trip.save(update_fields=["allow_add_activities"])
+
+        self._add(self.member)
+
+        self.assertFalse(
+            TripActivity.objects.filter(trip=self.trip).exists(),
+            "a plain member added an activity to an organizers-only trip",
+        )
+
+    def test_a_member_cannot_add_to_a_creator_only_trip(self) -> None:
+        self.trip.allow_add_activities = Trip.PERM_NONE
+        self.trip.save(update_fields=["allow_add_activities"])
+
+        self._add(self.member)
+
+        self.assertFalse(TripActivity.objects.filter(trip=self.trip).exists())
+
+    def test_an_organizer_can_add_to_an_organizers_only_trip(self) -> None:
+        """Anti-vacuity: the gate must permit what it is supposed to permit."""
+        self.trip.allow_add_activities = Trip.PERM_ORGANIZERS
+        self.trip.save(update_fields=["allow_add_activities"])
+        self.membership.is_organizer = True
+        self.membership.save(update_fields=["is_organizer"])
+
+        self._add(self.member)
+
+        self.assertTrue(TripActivity.objects.filter(trip=self.trip).exists())
+
+    def test_the_creator_can_always_add(self) -> None:
+        """Anti-vacuity: `can_perform` short-circuits for the creator at every level."""
+        self.trip.allow_add_activities = Trip.PERM_NONE
+        self.trip.save(update_fields=["allow_add_activities"])
+        creator_pin = baker.make(Pin, profile=self.creator, location=baker.make(Location))
+
+        execute(
+            "add_trip_activity",
+            {"trip_slug": self.trip.slug, "pin_slug": creator_pin.slug},
+            _context(self.creator),
+        )
+
+        self.assertTrue(TripActivity.objects.filter(trip=self.trip).exists())
+
+    def test_an_invited_but_not_joined_member_cannot_add(self) -> None:
+        """`Trip.profiles` includes invited members; `has_joined` says they may not act."""
+        self.membership.status = TripMembership.STATUS_INVITED
+        self.membership.save(update_fields=["status"])
+
+        self._add(self.member)
+
+        self.assertFalse(
+            TripActivity.objects.filter(trip=self.trip).exists(),
+            "a member who never accepted the invitation added an activity",
+        )
+
+    def test_a_joined_member_can_add_to_an_everyone_trip(self) -> None:
+        """Anti-vacuity: the ordinary case must keep working."""
+        self.trip.allow_add_activities = Trip.PERM_EVERYONE
+        self.trip.save(update_fields=["allow_add_activities"])
+
+        self._add(self.member)
+
+        self.assertTrue(TripActivity.objects.filter(trip=self.trip).exists())

@@ -2401,7 +2401,7 @@ Found while auditing existing unit tests for real positive/negative coverage (se
 `docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
 convention rather than fixed inline.
 
-**Eight are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
+**Nine are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
 `make_cache_key` collision, the hard-delete overlap lock, the `SubscriptionRole.clean()` gap, and
 `PinAliasView.post` (same-day, 2026-08-29). Each is struck through below with what the fix found.
 
@@ -2427,6 +2427,11 @@ Three of the "untested surface" entries are covered as of 2026-09-06 too - `Wiki
 
 What remains is mostly *missing coverage* rather than known defects: two untested surfaces, two
 locks with no real-concurrency proof, and three that need a decision from whoever owns the area.
+
+Worth noting about this entry's own hit rate: it filed the AI trip tools as tidy-up ("duplicated
+business logic ... can silently drift"), and they were a live permission bypass. Two of the three
+"untested surface" items turned out the same way. An entry that says only "this is untested" is not
+a statement that the code is correct.
 
 ~~**`LocalhostOnlyNetwork` (`core/testing_network.py`) doesn't patch `socket.socket.connect_ex`.**~~
 **Fixed 2026-09-06, and it was two holes rather than one.** `connect_ex` is a separate C-level
@@ -2481,13 +2486,38 @@ populated component has nothing following it - e.g. a route-only address renders
 intentional, but the trailing comma looks like a real address-formatting defect worth a look by
 whoever owns Location/address display.
 
-**`services/ai/assistant.py`'s `_tool_create_trip` / `_tool_add_trip_activity` reimplement the
-`SiteSettings` quota checks** (`max_upcoming_trips_per_user`, `max_trip_activities`) and their
-`select_for_update` locking inline, rather than calling the existing
-`services.trips.trip_crud` / `services.trips.trip_activities` helpers the regular trip views use
-(which enforce the identical caps). Duplicated business logic with no shared implementation - the
-two enforcement paths can silently drift out of sync over time. Worth consolidating onto the
-shared service functions.
+~~**`services/ai/assistant.py`'s `_tool_create_trip` / `_tool_add_trip_activity` reimplement the
+`SiteSettings` quota checks and their `select_for_update` locking inline.**~~ **Fixed 2026-09-06,
+and "can silently drift out of sync over time" understates it - both had already drifted, in
+opposite directions.** (The code had also moved: it is `services/ai/tools/trips.py` now, not
+`assistant.py`.)
+
+**`_add_trip_activity` was a permission bypass.** It gated on
+`Trip.objects.filter(slug=..., profiles=profile)` - bare membership - where the shared
+`trip_activities.create_activity` gates on
+`require_perform(actor, trip, trip.allow_add_activities, ...)`. Two separate rules the AI path never
+applied:
+
+- **`allow_add_activities`.** A creator sets it to "Organizers" or "No one (creator only)" precisely
+  to stop ordinary members editing the itinerary. Through the assistant, a plain joined member could
+  add anyway.
+- **Joined-ness.** `Trip.profiles` is a `ManyToManyField` through `TripMembership` with no status
+  filter, so it matches members who were *invited and never accepted* - the case `has_joined`'s own
+  docstring says "cannot contribute ... until they accept the invitation".
+
+Both reproduced before the fix: three failing tests, alongside three anti-vacuity ones (an organizer
+*can* add to an organizers-only trip, the creator can always add, a joined member can add to an
+"everyone" trip) that passed throughout.
+
+**`_create_trip` had drifted the other way: it held a lock the shared service did not.** Its
+check-then-create ran under `select_for_update` on the creator's profile row; `trip_crud.create_trip`
+counted upcoming trips with no lock at all, so two concurrent creates through any *other* path could
+both pass a limit only one should have. Consolidating naively onto the shared function would have
+deleted that guard. The lock moved into `create_trip` instead, where every caller gets it, and the
+tool now calls it.
+
+The general lesson for the next consolidation: a duplicate is not automatically the weaker copy.
+Diff both before deleting either.
 
 **Wiki-owned albums are untested across the entire album test suite.** `test_albums.py`,
 `test_album_cover_move_dedupe.py`, `test_album_view_ux.py`, and `test_album_add_race.py` all only
