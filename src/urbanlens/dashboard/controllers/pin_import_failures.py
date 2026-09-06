@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from django.http import HttpRequest
 
+from urbanlens.dashboard.services.core.pagination import get_page
+
 logger = logging.getLogger(__name__)
 
 _QUEUE_PARTIAL = "dashboard/partials/memories/_pin_import_failures_queue.html"
@@ -116,13 +118,27 @@ class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
 
     GET /memories/locations/import-failures/queue/
 
-    Unpaginated, like ``pin_merge_suggestions`` - these are expected to be
-    rare (one per cid Google genuinely couldn't place), not a routine volume
-    like photo-scan suggestions.
+    Paginated at the same 12 as ``PinSuggestionQueueView``. It was unpaginated
+    on the stated grounds that these are "rare (one per cid Google genuinely
+    couldn't place)" - which ``PinImportFailureGuessView``'s docstring, in this
+    same file, contradicts: "a single import can leave hundreds of failures."
+    The second is the one borne out by how imports actually work, and each card
+    fetches its own geocoder guess on reveal, so an unpaginated queue of
+    hundreds is also hundreds of pending lookups (P69).
+
+    Its page parameter is its own. This partial also renders inside the full
+    ``memories.locations`` page beside the suggestions queue, and a shared
+    ``?page=`` would page both sections with one click.
     """
 
+    #: Matches the sibling queues on the same page.
+    PAGE_SIZE = 12
+
+    #: Its own, so two paginated sections on one page do not move together.
+    PAGE_PARAM = "failures_page"
+
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the current queue of pending import failures for this profile.
+        """Render the current page of pending import failures for this profile.
 
         Args:
             request: The incoming GET request.
@@ -131,7 +147,12 @@ class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
             The rendered queue partial.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        return render(request, _QUEUE_PARTIAL, {"pin_import_failures": list(pending_pin_import_failures(profile))})
+        page = get_page(request, pending_pin_import_failures(profile), self.PAGE_SIZE, param=self.PAGE_PARAM)
+        return render(
+            request,
+            _QUEUE_PARTIAL,
+            {"pin_import_failures": list(page.object_list), "failures_page_obj": page},
+        )
 
 
 class PinImportFailureGuessView(LoginRequiredMixin, View):

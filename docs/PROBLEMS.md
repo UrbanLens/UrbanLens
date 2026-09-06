@@ -2685,11 +2685,18 @@ at this app's beta scale (~2 users):
 - **Memories > Journal** (`services/memories/journal.py:57-203`) merges four unsliced sources (visits,
   reviews, comments, article edits) with no date-range or windowing at all - no "load more" of any
   kind, unlike this file's sibling paginated views.
-- **Pin import-failure queue** (`controllers/pin_import_failures.py:39-134`) has no pagination, and
-  directly contradicts itself: the queue view's docstring says failures are "rare," while
-  `PinImportFailureGuessView`'s docstring in the *same file* says "a single import can leave hundreds
-  of failures." The sibling `PinSuggestionQueueView`/`PinMergeSuggestionQueuePartialView` are both
-  paginated at 12; this one apparently was not, on the wrong assumption.
+- ~~**Pin import-failure queue**~~ **fixed 2026-09-06.** It had no pagination and contradicted
+  itself: the queue view's docstring said failures are "rare," while `PinImportFailureGuessView`'s
+  docstring in the *same file* says "a single import can leave hundreds of failures." The second is
+  the one borne out by how imports work. Paginated at 12, matching the sibling
+  `PinSuggestionQueueView`. Two things the survey did not record. Each card fetches its own geocoder
+  guess on reveal, so an unpaginated queue of hundreds was also hundreds of pending lookups - the
+  cost was never only the cards. And this partial renders inside the full Memories > Locations page
+  *beside* the suggestion queue, which pages on `page`, so it needed a parameter of its own
+  (`failures_page`) or one next-page click would have moved both lists; `get_page` takes a `param`
+  now. An existing test asserted the unpaginated behaviour by name and was rewritten rather than
+  deleted - its ownership half is stronger walking every page, since a slice applied before the
+  ownership filter would leak on a page a single-page assertion never looks at.
 - **Undo history, Safety check-ins overview, "view all friends" page, DM conversation list,
   achievement catalogue, Organize's Lists/Filters tabs, and the pin-list overview map** all follow the
   identical pattern with lower realistic ceilings or lighter per-row templates today:

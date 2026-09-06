@@ -20,7 +20,7 @@ from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.controllers.media_auth import mark_private_media
-from urbanlens.dashboard.controllers.pin_import_failures import pending_pin_import_failures
+from urbanlens.dashboard.controllers.pin_import_failures import PinImportFailureQueuePartialView, pending_pin_import_failures
 from urbanlens.dashboard.controllers.pin_merge_suggestions import merge_suggestion_cards, pending_merge_suggestions
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
@@ -106,7 +106,16 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
         suggestions_qs = _pending_suggestions(profile)
         page_obj = get_page(request, suggestions_qs, _PAGE_SIZE)
         merge_cards = merge_suggestion_cards(pending_merge_suggestions(profile))
-        import_failures = list(pending_pin_import_failures(profile))
+        # Paginated with its own parameter, so a next-page click on either
+        # section of this page does not move the other - see
+        # PinImportFailureQueuePartialView.
+        failures_page = get_page(
+            request,
+            pending_pin_import_failures(profile),
+            PinImportFailureQueuePartialView.PAGE_SIZE,
+            param=PinImportFailureQueuePartialView.PAGE_PARAM,
+        )
+        import_failures = list(failures_page.object_list)
         return render(
             request,
             "dashboard/pages/memories/locations.html",
@@ -127,7 +136,8 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
                 # controllers.pin_import_failures. Small in number like merge
                 # suggestions, so no pagination/map of its own either.
                 "pin_import_failures": import_failures,
-                "pin_import_failures_count": len(import_failures),
+                "failures_page_obj": failures_page,
+                "pin_import_failures_count": failures_page.paginator.count,
                 # The map (and its attribution) only renders when there are
                 # suggestions to plot - see locations.html's {% if pin_suggestions_count %}.
                 # pin-select-map.js disables Leaflet's own on-map attribution
