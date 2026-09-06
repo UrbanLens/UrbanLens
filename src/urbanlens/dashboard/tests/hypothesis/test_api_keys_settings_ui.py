@@ -228,6 +228,38 @@ class ApiKeyListPaginationTests(TestCase):
 
         self.assertEqual(self._listed(response), ["key-001", "key-000", "key-101", "key-100"])
 
+    def test_revoking_from_a_later_page_stays_on_that_page(self) -> None:
+        # Without the page carried through the POST, the section swaps page one
+        # back in and the user's place is silently discarded.
+        keys = self._keys(API_KEYS_PAGE_SIZE + 4)
+
+        response = self.client.post(
+            reverse("settings.security.api_keys.revoke", args=[keys[0].pk]),
+            {"api_keys_page": "2"},
+            HTTP_HX_REQUEST="true",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Page 2 of 2")
+
+    def test_the_non_htmx_revoke_redirect_carries_the_page_too(self) -> None:
+        keys = self._keys(API_KEYS_PAGE_SIZE + 4)
+
+        response = self.client.post(
+            reverse("settings.security.api_keys.revoke", args=[keys[0].pk]), {"api_keys_page": "2"}
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("api_keys_page=2", response["Location"])
+
+    def test_a_revoke_with_no_page_still_redirects_cleanly(self) -> None:
+        keys = self._keys(2)
+
+        response = self.client.post(reverse("settings.security.api_keys.revoke", args=[keys[0].pk]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn("api_keys_page=", response["Location"])
+
     def test_another_users_keys_are_never_listed(self) -> None:
         stranger = baker.make(User)
         generate_api_key(stranger, "not yours")
