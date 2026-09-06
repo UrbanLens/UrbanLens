@@ -37,7 +37,7 @@ from urbanlens.dashboard.services.core.units import km_to_display, unit_label
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
 from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
-from urbanlens.dashboard.services.memories.journal import get_journal_entries
+from urbanlens.dashboard.services.memories.journal import JournalFeed
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.visits.visit_invites import resolve_suggest_participant_ids, sync_external_participants
 from urbanlens.dashboard.services.visits.visits import add_visited_status, create_visit_suggestion, remove_visited_status, sync_last_visited, visit_logging_allowed
@@ -784,6 +784,9 @@ class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
 #: Places (or maps) per page in each of the Sharing page's four lists.
 _SHARE_GROUPS_PER_PAGE = 20
 
+#: Journal entries per page.
+_JOURNAL_PAGE_SIZE = 25
+
 
 def _place_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tuple[list[list[PinShare]], Page]:
     """One page of pin shares, grouped by the place each is about.
@@ -1127,13 +1130,18 @@ class MemoriesJournalView(LoginRequiredMixin, View):
             and comments, newest first.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        # JournalFeed rather than a list: the page wants one day's worth of a
+        # merged feed plus its total, and building every entry from four
+        # unbounded querysets to get either is what this page used to do.
+        page_obj = get_page(request, JournalFeed(profile), _JOURNAL_PAGE_SIZE)
         return render(
             request,
             "dashboard/pages/memories/journal.html",
             {
                 "profile": profile,
                 "page_name": "memories",
-                "journal_entries": get_journal_entries(profile),
+                "journal_entries": page_obj.object_list,
+                "page_obj": page_obj,
                 **_unlogged_band_context(profile),
             },
         )

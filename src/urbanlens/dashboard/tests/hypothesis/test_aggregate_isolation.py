@@ -58,7 +58,10 @@ class JournalSourceIsolationTests(TestCase):
         incrementally, so a failure partway through a source must not discard the
         entries that source had already produced, nor the other sources' entries."""
 
-        def half_boom(profile):
+        # Sources take (profile, limit) since the journal started paging;
+        # a stub with the old signature would raise TypeError inside the same
+        # `except` this test is about, and look like the failure it is staging.
+        def half_boom(profile, limit=None):
             yield JournalEntry(
                 kind="comment",
                 occurred_at=timezone.now(),
@@ -78,7 +81,7 @@ class JournalSourceIsolationTests(TestCase):
         self.assertIn("review", {entry.kind for entry in entries}, "other sources must still contribute")
 
     def test_every_source_failing_yields_an_empty_journal_rather_than_an_error(self) -> None:
-        def boom(profile):
+        def boom(profile, limit=None):
             raise RuntimeError("boom")
             yield  # pragma: no cover - generator marker
 

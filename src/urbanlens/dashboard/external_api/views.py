@@ -191,7 +191,7 @@ from urbanlens.dashboard.services.media.images import delete_stored_file
 from urbanlens.dashboard.services.media.media_labels import MediaLabelError, set_media_labels
 from urbanlens.dashboard.services.media.media_relevance import toggle_media_vote
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
-from urbanlens.dashboard.services.memories.journal import get_journal_entries
+from urbanlens.dashboard.services.memories.journal import JournalFeed
 from urbanlens.dashboard.services.memories.photos import create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.notifications.notification_center import (
     DEFAULT_NOTIFICATION_PAGE_SIZE,
@@ -1821,14 +1821,16 @@ class MemoriesJournalView(PaginatedListMixin, ExternalApiView):
         """
         grants = filter_sources_by_grants(request.auth, self.JOURNAL_SOURCE_SCOPES)
 
-        # get_journal_entries materializes every selected source in full - that
-        # is the existing internal behavior (the Memories page renders the whole
-        # feed), so pagination is applied to the resulting list rather than
-        # pushed into the service, which would mean paginating four
-        # heterogeneous querysets and merging them.
-        entries = get_journal_entries(request.user.profile, sources=grants.granted)
+        # JournalFeed is a sequence, not a list: the paginator asks it only for
+        # its length and one slice, and it answers both without building the
+        # rest. Previously every selected source was materialized in full for
+        # every page - four unbounded querysets merged in Python to serve
+        # twenty rows.
+        #
+        # The envelope's `count` stays exact because the feed counts its
+        # sources rather than measuring the entries it built.
         paginator = self.pagination_class()
-        page = paginator.paginate_queryset(entries, request, view=self)
+        page = paginator.paginate_queryset(JournalFeed(request.user.profile, sources=grants.granted), request, view=self)
         response = paginator.get_paginated_response(JournalEntrySerializer(page, many=True).data)
         # Named so a client can tell "nothing happened yet" from "your
         # credential cannot see this kind of entry" and prompt for
