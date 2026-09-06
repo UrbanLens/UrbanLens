@@ -111,6 +111,15 @@ def _list_items_queryset(pin_list: PinList) -> QuerySet[PinListItem]:
     Returned as a queryset (not materialized), so a caller that only needs
     one page of rows (``PinListItemsPageView``) can paginate it at the
     database level instead of always pulling every item on the list.
+
+    Ordered on more than ``order`` because ``order`` is not unique within a
+    list: ``add_pins_to_list`` numbers new items from the *current row count*
+    rather than from ``max(order) + 1``, so removing an item and adding another
+    hands the new one a number an existing item already has. That was harmless
+    while every caller materialized this once and sliced in Python; a caller
+    taking two different slices in SQL gets no promise that tied rows keep the
+    same relative order across two executions, and a tie straddling a slice
+    boundary can then put a row in both or neither.
     """
     return (
         pin_list.items.select_related("pin", "pin__location", "pin__location__wiki")
@@ -118,7 +127,7 @@ def _list_items_queryset(pin_list: PinList) -> QuerySet[PinListItem]:
             Prefetch("pin__labels", queryset=Label.objects.exclude(kind=KIND_USER).order_by("-order", "name")),
             "pin__reviews",
         )
-        .order_by("order")
+        .order_by("order", "created", "pk")
     )
 
 

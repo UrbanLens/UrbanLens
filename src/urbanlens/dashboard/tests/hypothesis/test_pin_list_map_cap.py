@@ -21,10 +21,11 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.controllers.pin_lists import _MAP_PIN_LIMIT, _paginated_items_context
+from urbanlens.dashboard.controllers.pin_lists import _MAP_PIN_LIMIT, _list_items_queryset, _paginated_items_context
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
+from urbanlens.dashboard.services.pins.pin_list_membership import add_pins_to_list
 
 # Location carries a unique (latitude, longitude) constraint.
 _COORDS = itertools.count()
@@ -104,3 +105,49 @@ class PinListOverviewMapCapTests(TestCase):
             all(f"LIMIT {_MAP_PIN_LIMIT}" in sql or "LIMIT 50" in sql for sql in item_reads),
             [sql[-120:] for sql in item_reads],
         )
+
+
+class PinListItemOrderingTests(TestCase):
+    """The list's ordering has to be total, now that two slices of it are taken.
+
+    `add_pins_to_list` numbers new items from the current row count, not from
+    `max(order) + 1`, so a duplicate `order` is reachable through ordinary use.
+    While `_paginated_items_context` materialized the list once and sliced in
+    Python that was harmless; taking the page and the map as two separate
+    queries makes it a source of disagreement.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.pin_list = baker.make(PinList, profile=self.profile, name="Tied list")
+
+    def _pin(self) -> Pin:
+        offset = next(_COORDS)
+        location = baker.make(Location, latitude=f"{40 + offset * 0.001:.6f}", longitude=f"{-74 + offset * 0.001:.6f}")
+        return baker.make(Pin, profile=self.profile, location=location)
+
+    def test_a_duplicate_order_is_reachable_by_removing_then_adding(self) -> None:
+        pins = [self._pin() for _ in range(5)]
+        add_pins_to_list(self.pin_list, pins)
+        PinListItem.objects.filter(pin_list=self.pin_list, pin=pins[2]).delete()
+
+        add_pins_to_list(self.pin_list, [self._pin()])
+
+        orders = list(PinListItem.objects.filter(pin_list=self.pin_list).values_list("order", flat=True))
+        self.assertNotEqual(len(orders), len(set(orders)), "the premise: order is not unique within a list")
+
+    def test_two_slices_of_the_same_list_agree_despite_the_tie(self) -> None:
+        pins = [self._pin() for _ in range(5)]
+        add_pins_to_list(self.pin_list, pins)
+        PinListItem.objects.filter(pin_list=self.pin_list, pin=pins[2]).delete()
+        add_pins_to_list(self.pin_list, [self._pin()])
+
+        queryset = _list_items_queryset(self.pin_list)
+
+        # A slice taken in SQL and the same slice taken in Python can only be
+        # guaranteed to match under a total order.
+        self.assertEqual([item.pk for item in queryset[:3]], [item.pk for item in list(queryset)[:3]])
+        self.assertEqual([item.pk for item in queryset], [item.pk for item in queryset])
