@@ -3,8 +3,8 @@
  */
 
 import { openAlbumPicker } from "./album-picker";
-import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { sendJson } from "./fetch-json";
 import { lightboxItemFromTile, tileFromElement } from "./photo-tile";
 
 const MENU_CLASS = "photo-context-menu";
@@ -27,16 +27,14 @@ function albumPanel(): HTMLElement | null {
     return document.getElementById("albums-panel");
 }
 
-function postJson(url: string, payload: unknown): Promise<Record<string, unknown>> {
-    return fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify(payload),
-    }).then(async (response) => {
-        const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-        if (!response.ok) throw new Error(String(data.error || response.statusText));
-        return data;
-    });
+/**
+ * POST JSON, throwing the server's own sentence on a refusal.
+ *
+ * Every caller catches and toasts that message itself, so this opts out of
+ * base.html's generic net rather than letting one refusal be announced twice.
+ */
+async function postJson(url: string, payload: unknown): Promise<Record<string, unknown>> {
+    return ((await sendJson<Record<string, unknown>>(url, "POST", payload, { reportsItsOwnErrors: true })) ?? {}) as Record<string, unknown>;
 }
 
 function openLightboxFor(el: HTMLElement): void {

@@ -655,7 +655,7 @@ An earlier draft of this entry said `yelp` is billable, as a reason to curate. I
 `billable=True` appears 11 times in REData and none are in this registry. The real cost is upstream
 queries and quota, not money.
 
-## P11 — 85 raw `fetch()` calls bypass `fetch-json.ts`; all six hand-rolled wrappers are gone, the tail is not
+## P11 — 84 raw `fetch()` calls bypass `fetch-json.ts`, and "all the wrappers are gone" was a count, not a search
 
 `id: P11` · `status: open` · `updated: 2026-09-06`
 
@@ -689,7 +689,16 @@ second, and has since commit `8bf86daf`.
 
 **Highest-value single change:** raw `fetch()` call sites bypass `shared/fetch-json.ts`
 (`fetchJson`/`sendJson`), several with no `response.ok` check at all. ~~Six hand-rolled wrappers
-exist beside it~~ **- all six are gone as of 2026-09-06.** `postForm`/`getJson` (triplicated across
+exist beside it~~ **- those six are gone as of 2026-09-06, and there was a seventh.**
+`shared/photo-context-menu.ts` had its own `postJson` (raw `fetch`, hand-built CSRF header,
+hand-rolled `response.ok` check) and was never in the list, because the list was a count carried
+forward from the original audit rather than a fresh search. It is the same substitution
+`album-items.ts` got - `sendJson(..., { reportsItsOwnErrors: true })`, since all four call sites
+already catch and toast the server's own sentence - and the CSRF header is byte-identical either
+way (`shared/csrf.ts`'s `getCsrfToken()` is `window.csrftoken ?? ""`, which is exactly what
+`writeInit` inlines). Migrated 2026-09-06. **Before claiming the wrapper set is empty again, search
+for the shape rather than checking the names off** - a local function that calls `fetch` and then
+`.json()`. `postForm`/`getJson` (triplicated across
 the three games) became `shared/session-request.ts`; `postJson` (album-items) and `savePosition`
 (album-map) were straight substitutions, since `fetchJson` already reads an `error` key out of a
 refusal and falls back to `HTTP <status>`, which is what both did by hand.
@@ -737,8 +746,17 @@ friends fetch returns 200 and renders, and with the same route stubbed to 503 th
 toast carrying the server's own sentence, with no page errors. One `fetch` remains in those three
 files - Consensus's multipart photo upload, which is already ok-checked and is not form-encoded.
 
-The remaining wrappers (`postForHtml`, `postJson`, `savePosition`) and the two big files are
-untouched.
+`postForHtml` (organize-tab-manager) and `postJson` (album-items) still exist by name, and that is
+fine: both are now three-line delegates to `sendForText`/`sendJson` that exist to carry the
+`reportsItsOwnErrors` flag and a docstring saying why. `savePosition` in `entries/map-annotations.ts`
+was never a wrapper at all - it is a local closure over one URL that returns the raw `Response`
+because the caller branches on a 409. The two big files are untouched.
+
+**The `fetch(` count is measured with a grep that also matches prose.** `shared/csrf.ts` is seven
+lines with no request in it and appears in the per-file tally because its docstring says
+"`fetch()` calls". The number is a bound, not an inventory; the two files that dominate it
+(`entries/map-annotations.ts` at 22, `shared/e2ee-client.ts` at 21, most of the latter being the
+raw-`Response` exception this entry already names) are what a next slice should read directly.
 
 **Correctness, user-visible:**
 
