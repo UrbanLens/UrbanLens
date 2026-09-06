@@ -56,7 +56,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P27 | open | 2026-08-08 | Saved-filter regions use leaflet-draw's transactional remove tool, so deleted polygons resurrect on the next draw | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P28 | open | 2026-08-12 | The upload quota check is fail-open under a cache lock, so a bulk import's fan-out can still exceed the quota | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P29 | open | 2026-08-13 | 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P31 | open | 2026-08-13 | Session and DM chat sockets have no rate limit and cap frame size only after the whole frame is parsed | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P31 | open | 2026-09-06 | Safety chat's sockets are bounded; the other four, and the unthrottled HTTP paths that bypass them, are not | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P34 | open | 2026-08-13 | 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-09-05 | 50 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |

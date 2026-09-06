@@ -1650,11 +1650,13 @@ Worth doing because the one route from this set that *was* investigated - `pin.l
 endpoint - turned out to fail with a 500 on every request (see the entry above). An untested write
 route is not merely unverified; it is where a permanently broken feature can sit unnoticed.
 
-## P31 — Session and DM chat sockets have no rate limit and cap frame size only after the whole frame is parsed
+## P31 — Safety chat's sockets are bounded; the other four, and the unthrottled HTTP paths that bypass them, are not
 
-`id: P31` · `status: open` · `updated: 2026-08-13`
+`id: P31` · `status: open` · `updated: 2026-09-06`
 
-Previously titled "Session chat WebSockets have no rate limit or frame-size cap".
+Previously titled "Session and DM chat sockets have no rate limit and cap frame size only after
+the whole frame is parsed", and before that "Session chat WebSockets have no rate limit or
+frame-size cap".
 
 `dashboard/consumers.py` accepts inbound frames on four sockets (`DirectMessageConsumer`,
 `SafetyCheckinChatConsumer`, and the three game sessions via `_ParticipantSessionConsumer`). The
@@ -1691,6 +1693,54 @@ games - so the limit can be implemented once per family rather than five times.
 A frame-size cap is separately worth setting at the server: Daphne accepts
 `--websocket_max_message_size`, which `docker-compose.yml` does not currently pass, so the
 truncation above is the only bound and it happens too late to matter.
+
+**Four things above are wrong, found 2026-09-06 while building the fix.** Each cost an
+implementer a wrong turn, so they are corrected here rather than quietly fixed in passing:
+
+- **"a multi-megabyte frame is fully processed" cannot happen.** Daphne defaults both
+  `websocket_max_message_size` and `websocket_max_frame_size` to 1 MiB, and autobahn refuses at
+  frame-header time, before any payload is buffered. The real overshoot was 1 MiB against a body
+  limit, which is still 250x for safety chat - but a severity call made on "unbounded" was made on
+  a false premise.
+- **The flag spelling above exits daphne at startup.** It is `--websocket-max-message-size`, with
+  hyphens; daphne's neighbouring websocket options use underscores, which is what makes the wrong
+  guess so natural. A container that takes an unrecognised flag dies with no other symptom.
+- **Safety chat's body limit is 4,000, not the 1,000 named above.** That number is
+  `MAX_SESSION_CHAT_MESSAGE_LENGTH`, which belongs to game session chat only; safety chat carries
+  `MAX_CHAT_MESSAGE_LENGTH = 4000`. A frame cap derived from 1,000 refuses legitimate safety
+  messages, on the one feature whose own service docstring says failing silently is worse than
+  most.
+- **"the limit can be implemented once per family" understates what a family is.** Every write
+  these sockets perform is also reachable over HTTP with no throttle at all -
+  `ConversationSendView`, `SafetyCheckinMessageView` and the group-chat controller are plain
+  Django views calling the identical create functions, and DRF's throttle classes do not cover a
+  plain `View`. A socket-layer limit is bypassed by a POST loop. See below.
+
+**Partly fixed 2026-09-06** (`d90e4dbcb`). `services/core/frame_limits.py` and
+`consumers.InboundVolumeMixin` bound frame size before the parse and frame volume in two tiers -
+a per-connection in-process counter that cannot fail open, and a shared cache counter keyed by
+sender that bounds one account across many sockets. `SafetyCheckinChatConsumer` is the only
+socket converted; the mixin's shape was worth proving against one real consumer first. The daphne
+size flags are passed, derived from `UL_WEBSOCKET_MAX_FRAME_CHARS` so the transport and
+application bounds cannot drift, with `dashboard.E009` refusing a deployment where they have.
+
+**What is left, in the order it should be done:**
+
+1. **The HTTP paths, which are the reason this is not closed.** A limit on the socket that its own
+   feature can be driven around is theatre. The write budget wants to move to (or be duplicated
+   at) the service layer - `create_chat_message`, `create_direct_message`, `create_group_message` -
+   so both doors are counted, with the HTTP views rendering the refusal.
+2. **`DirectMessageConsumer` and `_ParticipantSessionConsumer`** (the latter carries all three
+   games). Two things have to land with them rather than after: the DM socket has no
+   `isinstance(data, dict)` guard, so a frame of `[]` kills the connection; and the `typing` frame
+   is exempt from any write budget today while being the only frame that fans out into the
+   *recipient's* group, which makes it the cheapest amplifier on that socket.
+3. **The three game clients render no error frame at all.** `trivia.ts`, `spotguessr.ts` and
+   `consensus.ts` each `switch (data.type)` with no `case "error"`, and each clears the composer
+   as soon as `send()` returns true - which reports transmission, not acceptance. Converting those
+   sockets before wiring that handler turns a throttle into silent data loss, and it is a
+   pre-existing gap: the scope-refusal and failed-send frames those consumers already emit are
+   being dropped on the floor today.
 
 ---
 
