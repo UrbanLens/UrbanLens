@@ -351,6 +351,23 @@ class JournalFeedTests(TestCase):
         self.assertEqual(list(feed[::2]), everything[::2])
         self.assertEqual(list(feed[0:0]), [])
 
+    def test_a_negative_step_with_positive_bounds_matches_too(self) -> None:
+        # Both bounds are non-negative here, so a check that only looks at
+        # their signs takes the "limit to stop" path - and `entries[:2]`
+        # cannot contain the entries at 5, 4 and 3.
+        feed = JournalFeed(self.profile)
+        everything = get_journal_entries(self.profile)
+
+        self.assertEqual(list(feed[5:2:-1]), everything[5:2:-1])
+        self.assertEqual(list(feed[7:3:-2]), everything[7:3:-2])
+        self.assertEqual(list(feed[::-1]), everything[::-1])
+
+    def test_an_index_past_the_end_raises_like_a_list(self) -> None:
+        feed = JournalFeed(self.profile)
+
+        with self.assertRaises(IndexError):
+            feed[len(feed)]
+
     def test_it_counts_without_building_the_entries(self) -> None:
         # The point of the count is not to pay for the rows: a `len()` that
         # walked the sources would make the page's total as expensive as the

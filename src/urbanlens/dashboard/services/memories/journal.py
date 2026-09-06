@@ -332,7 +332,10 @@ class JournalFeed(Sequence[JournalEntry]):
         one that is merely slow.
         """
         if isinstance(index, slice):
-            counts_from_the_end = (index.start is not None and index.start < 0) or (index.stop is not None and index.stop < 0)
+            # A negative step counts too, and its bounds can both be positive:
+            # `feed[5:2:-1]` is the three entries at 5, 4 and 3, which a prefix
+            # of two cannot contain.
+            counts_from_the_end = (index.start is not None and index.start < 0) or (index.stop is not None and index.stop < 0) or (index.step is not None and index.step < 0)
             if index.stop is None or counts_from_the_end:
                 return get_journal_entries(self.profile, self.sources)[index]
             return get_journal_entries(self.profile, self.sources, limit=index.stop)[index]
