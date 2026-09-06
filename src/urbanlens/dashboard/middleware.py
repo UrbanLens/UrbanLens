@@ -85,10 +85,11 @@ class SecurityHeadersMiddleware:
     """Attach the response headers ``SecurityMiddleware`` has no setting for.
 
     Django has no built-in setting for ``Permissions-Policy``,
-    ``Cross-Origin-Resource-Policy`` or ``X-Permitted-Cross-Domain-Policies`` -
-    unlike ``X-Content-Type-Options``/``Referrer-Policy``/``Cross-Origin-Opener-Policy``,
-    which ``SecurityMiddleware`` already covers. Values come from
-    ``settings.PERMISSIONS_POLICY``/``CROSS_ORIGIN_RESOURCE_POLICY``/``X_PERMITTED_CROSS_DOMAIN_POLICIES``.
+    ``Cross-Origin-Resource-Policy``, ``X-Permitted-Cross-Domain-Policies`` or
+    ``Cross-Origin-Embedder-Policy`` - unlike
+    ``X-Content-Type-Options``/``Referrer-Policy``/``Cross-Origin-Opener-Policy``,
+    which ``SecurityMiddleware`` already covers. Values come from the matching
+    settings, and a setting left empty sends no header.
     """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
@@ -107,6 +108,12 @@ class SecurityHeadersMiddleware:
         cross_domain = getattr(settings, "X_PERMITTED_CROSS_DOMAIN_POLICIES", "")
         if cross_domain:
             response.setdefault("X-Permitted-Cross-Domain-Policies", cross_domain)
+        # Report-only, deliberately: see the setting's own comment. The
+        # enforcing header would block every pasted map-overlay image whose host
+        # sends neither CORP nor CORS.
+        embedder = getattr(settings, "CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY", "")
+        if embedder:
+            response.setdefault("Cross-Origin-Embedder-Policy-Report-Only", embedder)
         return response
 
 

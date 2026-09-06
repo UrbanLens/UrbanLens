@@ -2262,7 +2262,7 @@ gate design and folding it in would make one change two features. And in the wik
 toasts "Photo deleted." for a dual-owned photo the server only unlinks - both strings are false there,
 and correcting them means changing a response shape three contexts share, so it wants a browser.
 
-## P56 — `Cross-Origin-Embedder-Policy` is unset, and `require-corp` is the wrong variant for a paste-any-URL image feature
+## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 
 `id: P56` · `status: open` · `updated: 2026-09-05`
 
@@ -2293,8 +2293,33 @@ because the inventory is "whatever a user pasted".
 
 That points at `Cross-Origin-Embedder-Policy: credentialless` rather than `require-corp`:
 credentialless sends no-cors subresource requests without credentials instead of demanding CORP, so
-a pasted image still loads. Evaluating it - and its browser support, which is narrower - is the next
-step, not another inventory.
+a pasted image still loads. ~~Evaluating it - and its browser support, which is narrower - is the
+next step~~ **- evaluated 2026-09-06, and it is deployed report-only.**
+
+**`credentialless` is the variant this app could enforce, and sending it costs nothing today.**
+Support is 79% globally (caniuse, 2026-09-06) and Safari does not implement it on any version -
+desktop through 27, iOS through 26.6. That is survivable rather than disqualifying, because the
+HTML spec's "obtain an embedder policy" fails open: a token the browser does not recognise leaves
+the policy at `unsafe-none`. So Safari users get no COEP and nothing breaks, which is exactly where
+they are now.
+
+**The nine attribute changes this entry lists are a `require-corp` requirement, not a prerequisite.**
+Under `credentialless` a no-cors tile loads as-is. Measured in a browser against the dev stack on
+2026-09-06 with `Cross-Origin-Embedder-Policy-Report-Only: credentialless` live: the map page loaded
+48 Leaflet tiles from `server.arcgisonline.com` and `*.tile.openstreetmap.org` with `crossorigin`
+**unset**, plus scripts from unpkg/cdnjs/code.jquery.com and fonts from Google, with zero violation
+reports and zero failed requests. Do not spend a batch adding `crossOrigin` attributes for this.
+
+**Report-only, not enforced, and the reason is a measurement nobody has taken.** The one behaviour
+`credentialless` changes that the probe above cannot see is the Street View embed iframe, which
+would load without the viewer's Google credentials - and it needs a valid Maps API key to observe at
+all, the same key the two unmeasured rows below need. `CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY`
+(settings/base.py) is what to flip, and `SecurityHeadersMiddleware` is where it is attached.
+
+Worth stating plainly, since a scanner is what raised this: COEP buys defence in depth here, not a
+fixed vulnerability. Nothing in this app asks for cross-origin isolation - no `SharedArrayBuffer`,
+no `crossOriginIsolated` - so the header's value is confining what a compromised subresource could
+read, not unlocking a capability.
 
 **Two things could not be measured** and need a valid Google Maps API key: the Street View embed
 iframe (`https://www.google.com/maps/embed/v1/streetview`, which answered 403 to a keyless probe),

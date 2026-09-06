@@ -750,8 +750,24 @@ CROSS_ORIGIN_RESOURCE_POLICY = "same-site"
 # Legacy Flash/Adobe cross-domain policy discovery, unused - free to deny.
 X_PERMITTED_CROSS_DOMAIN_POLICIES = "none"
 
-# Cross-Origin-Embedder-Policy is not set - see docs/PROBLEMS.md, "Nuclei scan
-# follow-ups".
+# Cross-Origin-Embedder-Policy: observed, not enforced - see P56.
+#
+# `require-corp` is the wrong variant here. Map image overlays are a
+# paste-any-URL feature, which is why `img-src` is `https:` - under
+# `require-corp` every overlay whose host sends neither CORP nor CORS stops
+# rendering, and that host set is unbounded by design.
+#
+# `credentialless` loads such an image and strips credentials instead, so it is
+# the variant this app could actually enforce. Measured 2026-09-06: 79% global
+# support, and unsupported by Safari on every version (desktop through 27, iOS
+# through 26.6). A value a browser does not recognise leaves the policy at
+# `unsafe-none` - the spec's model fails open - so sending it costs Safari
+# users nothing and breaks nothing.
+#
+# Report-only until someone has watched a real session: the one behaviour this
+# would change that nobody has measured is the Street View embed iframe, which
+# under `credentialless` loads without the viewer's Google credentials.
+CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
 
 # Content-Security-Policy (django-csp >= 4).
 #
