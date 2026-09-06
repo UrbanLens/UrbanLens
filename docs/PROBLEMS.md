@@ -1721,8 +1721,22 @@ implementer a wrong turn, so they are corrected here rather than quietly fixed i
 a per-connection in-process counter that cannot fail open, and a shared cache counter keyed by
 sender that bounds one account across many sockets. `SafetyCheckinChatConsumer` is the only
 socket converted; the mixin's shape was worth proving against one real consumer first. The daphne
-size flags are passed, derived from `UL_WEBSOCKET_MAX_FRAME_CHARS` so the transport and
-application bounds cannot drift, with `dashboard.E009` refusing a deployment where they have.
+size flags are passed, derived once in `bin/websocket_frame_flags.sh` and appended by
+`docker-entrypoint.sh`, so the transport and application bounds cannot drift.
+
+**Three things about that were wrong on the first attempt, and the shape of each is worth keeping.**
+The byte cap was written into `docker-compose.yml` as `${UL_WEBSOCKET_MAX_MESSAGE_BYTES:-...}` - but
+that name is a *derived Django setting*, not an environment variable, and compose substitutes
+`${...}` from the shell before any container exists, so the two would have drifted the moment anyone
+touched the knob. The guard meant to catch that was registered as a Django system check, which
+`manage.py` runs and daphne does not - it read an argv that could only ever be a management
+command's, and would have passed vacuously forever; it is a plain function called from `asgi.py`
+now, the one module daphne imports in its own process. And the test holding the two caps together
+compared the derived setting against the formula that derives it, so it could not fail. Then the
+helper was resolved against `dirname "$0"`, which is the repo root on a developer's machine and `/`
+inside the image - **the flags silently were not applied and `app-ws` came up healthy anyway**,
+because a missing cap only reverts daphne to its own 1 MiB default. Only starting the real container
+showed it, which is the third time that lesson has been paid for here.
 
 **What is left, in the order it should be done:**
 
