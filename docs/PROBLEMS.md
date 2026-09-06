@@ -2241,6 +2241,14 @@ re-grants exactly those and invents none. Re-granting from the vote count instea
 alternative and is worse: a threshold raised during the seven-day undo window would silently not
 restore a bonus, which is the same "somebody else's action" the one-way rule exists to prevent.
 
+The fourth thing is what the first pass at this missed, and it is the shape to expect from any
+delete whose fix does more than delete: **redo is a second copy of the delete**, and the inherited
+`UndoHandler.redo_delete` only re-deletes rows. Delete, undo, redo left the photo private with the
+bonus standing - the original defect, three clicks in instead of one. `restore` therefore records
+what it actually handed back (`regranted_image_ids`, written into the stashed entry, which
+`restore_undo_action` persists) and `WikiUndoHandler.redo_delete` takes back exactly that; by then
+a re-granted exemption and one that was never revoked are indistinguishable in the column.
+
 **Still open, one.** The reputation ledger keeps the `ReputationEvent` for a withdrawn contribution.
 `retract_event` exists, but that ledger has its own gate design and folding it in would make one
 change two features.

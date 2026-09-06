@@ -164,10 +164,38 @@ class WikiUndoHandler(UndoHandler):
             # Re-grant only what this delete took: a photo back on this wiki
             # that is carrying no exemption now. Restoring is not a grant, and
             # an exemption held for some other reason is not this one's to move.
+            # What was handed back is written into the entry so `redo_delete`
+            # can take back exactly that, and no more - by then every one of
+            # them looks alike in the column.
             bonus_ids = entry.get("bonus_image_ids") or []
+            regranted: list[int] = []
             if bonus_ids:
-                Image.objects.filter(pk__in=bonus_ids, wiki=wiki, quota_exempt_reason="").update(quota_exempt_reason=QuotaExemption.COMMUNITY_CONTRIBUTION)
+                regranted = list(Image.objects.filter(pk__in=bonus_ids, wiki=wiki, quota_exempt_reason="").values_list("pk", flat=True))
+                if regranted:
+                    Image.objects.filter(pk__in=regranted).update(quota_exempt_reason=QuotaExemption.COMMUNITY_CONTRIBUTION)
+            entry["regranted_image_ids"] = regranted
             if entry["label_ids"]:
                 wiki.labels.set(entry["label_ids"])
 
         return restored
+
+    @classmethod
+    def redo_delete(cls, payload: dict[str, Any]) -> None:
+        """Re-delete the wikis ``restore`` recreated, and re-take what it re-granted.
+
+        The inherited implementation only deletes the rows. A wiki delete also
+        ends the deleting contributor's community quota bonus
+        (``services.media.quota_rewards``), so a redo that left the re-granted
+        exemptions standing would hand back permanently what the delete exists
+        to take away - the same defect, reached in three clicks instead of one.
+
+        Args:
+            payload: Wrapped stash of the form
+                ``{"entries": [...], "restored_pks": [...]}``.
+        """
+        for entry in payload.get("entries") or []:
+            regranted = entry.get("regranted_image_ids") or []
+            if regranted:
+                Image.objects.filter(pk__in=regranted, quota_exempt_reason=QuotaExemption.COMMUNITY_CONTRIBUTION).update(quota_exempt_reason="")
+            entry["regranted_image_ids"] = []
+        super().redo_delete(payload)

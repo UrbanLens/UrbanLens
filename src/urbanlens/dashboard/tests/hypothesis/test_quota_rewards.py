@@ -31,7 +31,7 @@ from urbanlens.dashboard.services.media.quota_rewards import (
     revoke_community_quota_bonus,
 )
 from urbanlens.dashboard.services.media.storage import get_exempt_bytes, get_storage_totals, get_storage_used_bytes
-from urbanlens.dashboard.services.undo.service import restore_undo_action
+from urbanlens.dashboard.services.undo.service import redo_undo_action, restore_undo_action
 
 
 def _set_bonus_threshold(votes: int) -> None:
@@ -407,6 +407,33 @@ class WikiDeleteQuotaBonusTests(TestCase):
         self.assertIsNotNone(image.wiki_id, "the photo is back on the restored wiki")
         self.assertEqual(image.quota_exempt_reason, QuotaExemption.COMMUNITY_CONTRIBUTION)
         self.assertEqual(get_storage_used_bytes(self.profile), 0)
+
+    def test_redo_takes_the_re_granted_bonus_back(self) -> None:
+        """Undo then redo must land where the delete did, not somewhere better."""
+        image = self._rewarded_photo(self.profile)
+        self.assertEqual(self._delete_child_wiki().status_code, 200)
+        undo_action = UndoAction.objects.get(profile=self.profile, model_label="wiki")
+        restore_undo_action(undo_action)
+
+        redo_undo_action(undo_action)
+
+        image.refresh_from_db()
+        self.assertIsNone(image.wiki_id, "the wiki is deleted again")
+        self.assertEqual(image.quota_exempt_reason, "", "and so is the bonus it was carrying")
+        self.assertEqual(get_storage_used_bytes(self.profile), 100)
+
+    def test_redo_leaves_another_contributors_bonus_alone(self) -> None:
+        """Redo repeats the delete, which was never theirs to be charged for."""
+        other = baker.make(User).profile
+        theirs = self._rewarded_photo(other)
+        self.assertEqual(self._delete_child_wiki().status_code, 200)
+        undo_action = UndoAction.objects.get(profile=self.profile, model_label="wiki")
+        restore_undo_action(undo_action)
+
+        redo_undo_action(undo_action)
+
+        theirs.refresh_from_db()
+        self.assertEqual(theirs.quota_exempt_reason, QuotaExemption.COMMUNITY_CONTRIBUTION)
 
     def test_undo_does_not_invent_a_bonus_the_photo_never_had(self) -> None:
         """Restoring is not a grant: an unrewarded photo comes back unrewarded."""
