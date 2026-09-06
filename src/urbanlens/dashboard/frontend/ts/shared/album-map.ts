@@ -16,7 +16,7 @@
 
 declare const L: typeof import("leaflet");
 
-import { getCsrfToken } from "./csrf";
+import { sendJson } from "./fetch-json";
 import { toast } from "./dialogs";
 import { showMapContextMenu } from "./map-context-menu";
 import { createMapLayers } from "./map-layers";
@@ -61,15 +61,10 @@ async function savePosition(imageId: number, lat: number, lng: number): Promise<
     const base = panel()?.dataset.repositionBase;
     if (!base) throw new Error("No reposition endpoint for this album.");
 
-    const response = await fetch(`${base}${imageId}/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify({ latitude: lat, longitude: lng }),
-    });
-    if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error || `HTTP ${response.status}`);
-    }
+    // `fetchJson` already reads an `error` key out of a refusal's body and
+    // falls back to `HTTP <status>`, which is what this hand-rolled read did.
+    // The caller catches and toasts that message, so the generic net is off.
+    await sendJson(`${base}${imageId}/`, "POST", { latitude: lat, longitude: lng }, { reportsItsOwnErrors: true });
     setTileMapHidden(imageId, false);
 }
 
@@ -98,15 +93,7 @@ function syncAlbumMapHidden(imageId: number, hidden: boolean): void {
 async function hideFromMap(imageId: number): Promise<void> {
     const base = panel()?.dataset.repositionBase;
     if (!base) throw new Error("No map endpoint for this album.");
-    const response = await fetch(`${base}${imageId}/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify({ map_hidden: true }),
-    });
-    if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error || `HTTP ${response.status}`);
-    }
+    await sendJson(`${base}${imageId}/`, "POST", { map_hidden: true }, { reportsItsOwnErrors: true });
     syncAlbumMapHidden(imageId, true);
     window._galleryRemoveMarker?.(imageId);
     toast.success("Photo hidden from the map. GPS is still saved.");

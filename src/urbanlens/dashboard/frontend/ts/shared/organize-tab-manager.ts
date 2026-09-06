@@ -1,6 +1,7 @@
 import { safeColor } from "./color-safety";
 import { confirmAction, toast } from "./dialogs";
 import { getCsrfToken } from "./csrf";
+import { fetchText, sendForText } from "./fetch-json";
 import { renderIconGlyphHtml, resetIconPicker } from "./icon-picker";
 import { resetColorPicker } from "./color-picker";
 import { renderTreeView } from "./tree-view";
@@ -756,9 +757,14 @@ export class OrgTabManager {
                     fd.append("icon", editIcon);
                     fd.append("color", editColor);
                     const editUrl = this.cfg.endpoints.mergeEditTemplate.replace("99999", capturedId);
-                    const editResponse = await fetch(editUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: fd });
-                    if (!editResponse.ok) toast.warning("Merged, but could not save property changes.");
-                    else html = await editResponse.text();
+                    // Caught here rather than by the merge's own catch below: the
+                    // merge already succeeded, so a failure to save the renamed
+                    // icon/colour is a warning, not "Merge failed".
+                    try {
+                        html = await fetchText(editUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: fd, reportsItsOwnErrors: true });
+                    } catch {
+                        toast.warning("Merged, but could not save property changes.");
+                    }
                 }
                 (document.getElementById(d.dialogId) as HTMLDialogElement).close();
                 this.replaceRows(html);
@@ -774,17 +780,15 @@ export class OrgTabManager {
     }
 
     // ── Shared fetch/DOM helpers ─────────────────────────────────────────
+    /**
+     * POST and hand back the rendered rows.
+     *
+     * Every caller catches and toasts the server's own sentence, so this opts
+     * out of base.html's generic net rather than letting one refusal be
+     * announced twice.
+     */
     private async postForHtml(url: string, body: unknown): Promise<string> {
-        const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-            body: JSON.stringify(body),
-        });
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(text || response.statusText);
-        }
-        return response.text();
+        return sendForText(url, "POST", body, { reportsItsOwnErrors: true });
     }
 
     private replaceRows(html: string): void {

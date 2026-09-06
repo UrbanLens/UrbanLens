@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { HttpError, fetchJson, sendJson } from "./fetch-json";
+import { HttpError, fetchJson, fetchText, sendForText, sendJson } from "./fetch-json";
 
 const realFetch = globalThis.fetch;
 let calls: { url: string; init: RequestInit }[] = [];
@@ -263,5 +263,49 @@ describe("the __ulReported contract with base.html", () => {
         const wrapper = template.slice(template.indexOf("var wrappedFetch"), template.indexOf("wrappedFetch.__urbanLensWrapped"));
         expect(wrapper).toContain("!response.ok && !reported");
         expect(wrapper).toContain("if (!reported) {");
+    });
+});
+
+describe("an endpoint that answers with markup", () => {
+    // Organize's bulk delete/edit/merge answer with the re-rendered row list.
+    // They could not use fetchJson at all, so each grew its own wrapper with
+    // its own idea of what a failed request looks like - which is the
+    // duplication this pair exists to stop.
+    test("fetchText returns the body verbatim rather than parsing it", async () => {
+        stub({ body: "<li class=\"tag-card\">Bridges</li>" });
+        expect(await fetchText("/rows/")).toBe('<li class="tag-card">Bridges</li>');
+    });
+
+    test("an empty fragment is not an error", async () => {
+        // A row list with nothing left in it renders as nothing, and swapping
+        // that in is the correct outcome of deleting the last row.
+        stub({ body: "" });
+        expect(await fetchText("/rows/")).toBe("");
+    });
+
+    test("a non-2xx still throws, carrying the server's own sentence", async () => {
+        stub({ status: 400, body: "You cannot delete a protected label." });
+        await expect(fetchText("/rows/")).rejects.toThrow("You cannot delete a protected label.");
+    });
+
+    test("an HTML error page is still discarded, even though the caller wants HTML", async () => {
+        // The caller wanting markup back does not make Django's debug page a
+        // sensible toast - and swapping it into the row list would be worse.
+        stub({ status: 500, body: "<!doctype html><title>Server Error</title>" });
+        await expect(fetchText("/rows/")).rejects.toThrow("HTTP 500");
+    });
+
+    test("sendForText sends JSON with the CSRF header and hands back markup", async () => {
+        stub({ body: "<li>ok</li>" });
+        expect(await sendForText("/rows/", "POST", { ids: [1, 2] })).toBe("<li>ok</li>");
+        expect(calls[0]!.init.method).toBe("POST");
+        expect(calls[0]!.init.body).toBe('{"ids":[1,2]}');
+        expect((calls[0]!.init.headers as Record<string, string>)["X-CSRFToken"]).toBe("tok123");
+    });
+
+    test("it carries the opt-out through to the wrapper the same way fetchJson does", async () => {
+        stub({ body: "<li>ok</li>" });
+        await sendForText("/rows/", "POST", {}, { reportsItsOwnErrors: true });
+        expect((calls[0]!.init as { __ulReported?: boolean }).__ulReported).toBe(true);
     });
 });

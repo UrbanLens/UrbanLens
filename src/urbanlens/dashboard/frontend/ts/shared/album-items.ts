@@ -12,11 +12,14 @@ import Sortable from "sortablejs";
 import { destroyAlbumMap, highlightAlbumPhoto, initAlbumMap } from "./album-map";
 import { bindAlbumPicker, openAlbumPicker } from "./album-picker";
 import { getCsrfToken } from "./csrf";
-import { fetchJson } from "./fetch-json";
+import { fetchJson, sendJson } from "./fetch-json";
 import { toast } from "./dialogs";
 import { bindPhotoContextMenu } from "./photo-context-menu";
 import { lightboxListFromGrid, parsePhotoIds, renderPhotoTile, tileFromJson, tileHasImage, writePhotoIds } from "./photo-tile";
 import { bindPhotoGrid } from "./photo-virtual-grid";
+
+/** Upload ceiling: long enough for a big photo on a slow uplink, short enough to fail. */
+const UPLOAD_TIMEOUT_MS = 600000;
 
 /**
  * How long to wait before re-rendering after the server queues a download.
@@ -41,16 +44,14 @@ function albumPanel(): HTMLElement | null {
     return document.getElementById("albums-panel");
 }
 
+/**
+ * POST JSON, throwing the server's own sentence on a refusal.
+ *
+ * Every caller catches and toasts that message itself, so this opts out of
+ * base.html's generic net rather than letting one refusal be announced twice.
+ */
 async function postJson(url: string, payload: unknown): Promise<Record<string, unknown>> {
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-        throw new Error((await response.text()) || response.statusText);
-    }
-    return (await response.json()) as Record<string, unknown>;
+    return ((await sendJson<Record<string, unknown>>(url, "POST", payload, { reportsItsOwnErrors: true })) ?? {}) as Record<string, unknown>;
 }
 
 /**
@@ -239,11 +240,10 @@ function ensureMapHiddenHandler(): void {
 function reportUploadFailure(filename: string, error: string): void {
     const url = albumPanel()?.dataset.failureUrl;
     if (!url) return;
-    void fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify({ filename, error }),
-    });
+    // Background telemetry the user never asked for: a failure here is not
+    // theirs to see, and without opting out of base.html's generic net it
+    // would toast "Request failed (HTTP 500)" over the real upload error.
+    void sendJson(url, "POST", { filename, error }, { reportsItsOwnErrors: true }).catch(() => undefined);
 }
 
 function markThumbFailed(img: HTMLImageElement, filename: string, error: string): void {
@@ -300,12 +300,17 @@ async function uploadFilesToAlbum(files: FileList | File[]): Promise<void> {
         const body = new FormData();
         body.append("image", file);
         try {
-            const response = await fetch(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body });
-            const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-            if (!response.ok) {
-                const message = String(data.error || `HTTP ${response.status}`);
-                reportUploadFailure(file.name, message);
-                throw new Error(message);
+            let data: Record<string, unknown>;
+            try {
+                // A longer ceiling than fetchJson's two-minute default, which a
+                // large photo on a slow uplink can legitimately exceed. There
+                // was no ceiling at all before, so an upload could hang forever.
+                data = (await fetchJson<Record<string, unknown>>(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body, timeoutMs: UPLOAD_TIMEOUT_MS, reportsItsOwnErrors: true })) ?? {};
+            } catch (err) {
+                // Reported to the server before rethrowing, which is what the
+                // outer catch's toast does not do.
+                reportUploadFailure(file.name, (err as Error).message);
+                throw err;
             }
             const tile = tileFromJson(data);
             const grid = document.getElementById("album-items-grid");
@@ -759,6 +764,7 @@ document.addEventListener("click", (event) => {
 
 /** How many eligible photos to fetch per request. */
 const ELIGIBLE_PAGE_SIZE = 60;
+
 
 function pickerGrid(): HTMLElement | null {
     return document.querySelector<HTMLElement>(".album-add-grid[data-album-eligible-url]");

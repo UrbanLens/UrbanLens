@@ -1,5 +1,5 @@
 /**
- * JSON requests that fail loudly.
+ * HTTP requests that fail loudly.
  *
  * ``fetch`` resolves for 400s and 500s - it only rejects when the request never
  * completed - so ``fetch(...).then(r => r.json())`` treats a rejected write as a
@@ -93,7 +93,14 @@ async function errorMessage(response: Response): Promise<string> {
     }
 }
 
-export async function fetchJson<T = unknown>(url: string, options: FetchJsonOptions = {}): Promise<T | null> {
+/**
+ * Make the request, apply the timeout, and throw on a non-2xx.
+ *
+ * The half that is the same whether the caller wants JSON or markup back -
+ * which is most of it, since the value of this module is the ``!response.ok``
+ * check and the message extraction rather than the parsing.
+ */
+async function request(url: string, options: FetchJsonOptions): Promise<Response> {
     const { timeoutMs = 120000, reportsItsOwnErrors = false, ...init } = options;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -102,20 +109,40 @@ export async function fetchJson<T = unknown>(url: string, options: FetchJsonOpti
         // `__ulReported` is what base.html's wrapper reads; `fetch` ignores it.
         const response = await fetch(url, { ...init, __ulReported: reportsItsOwnErrors, signal: controller.signal } as RequestInit);
         if (!response.ok) throw new HttpError(response.status, await errorMessage(response));
-        // 204 has no body, and calling .json() on it throws. Callers that expect
-        // nothing back (a recorded position, a DRF delete) would otherwise see a
-        // successful request as a failure.
-        if (response.status === 204) return null;
-        return (await response.json()) as T;
+        return response;
     } finally {
         clearTimeout(timer);
     }
 }
 
-/** Send JSON with the CSRF header Django requires for unsafe methods. */
-export async function sendJson<T = unknown>(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown, options: FetchJsonOptions = {}): Promise<T | null> {
+export async function fetchJson<T = unknown>(url: string, options: FetchJsonOptions = {}): Promise<T | null> {
+    const response = await request(url, options);
+    // 204 has no body, and calling .json() on it throws. Callers that expect
+    // nothing back (a recorded position, a DRF delete) would otherwise see a
+    // successful request as a failure.
+    if (response.status === 204) return null;
+    return (await response.json()) as T;
+}
+
+/**
+ * The same request, for an endpoint that answers with markup rather than JSON.
+ *
+ * Several views here return a rendered fragment the caller swaps into the DOM
+ * (Organize's bulk delete/edit, which re-render the row list). Those call sites
+ * could not use ``fetchJson`` at all, so each grew its own wrapper with its own
+ * idea of what a failed request looks like - which is what this exists to stop.
+ *
+ * Returns the body as text, empty string included: a fragment endpoint that
+ * legitimately renders nothing is not an error.
+ */
+export async function fetchText(url: string, options: FetchJsonOptions = {}): Promise<string> {
+    return (await request(url, options)).text();
+}
+
+/** The JSON body and CSRF header Django requires for an unsafe method. */
+function writeInit(method: string, body: unknown, options: FetchJsonOptions): FetchJsonOptions {
     const { headers, ...rest } = options;
-    return fetchJson<T>(url, {
+    return {
         method,
         headers: {
             "Content-Type": "application/json",
@@ -124,7 +151,17 @@ export async function sendJson<T = unknown>(url: string, method: "POST" | "PUT" 
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         ...rest,
-    });
+    };
+}
+
+/** Send JSON with the CSRF header Django requires for unsafe methods. */
+export async function sendJson<T = unknown>(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown, options: FetchJsonOptions = {}): Promise<T | null> {
+    return fetchJson<T>(url, writeInit(method, body, options));
+}
+
+/** Send JSON to an endpoint that answers with markup. */
+export async function sendForText(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown, options: FetchJsonOptions = {}): Promise<string> {
+    return fetchText(url, writeInit(method, body, options));
 }
 
 declare global {
