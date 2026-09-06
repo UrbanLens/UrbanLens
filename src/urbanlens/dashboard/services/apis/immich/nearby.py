@@ -19,6 +19,7 @@ removing the fetch-everything shape; the cap and the cache stand either way.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.core.cache import cache
@@ -59,7 +60,25 @@ def _cache_key(account: ImmichAccount, point: tuple[float, float]) -> str:
     return f"immich:nearby:{account.pk}:{account.updated.timestamp():.6f}:{latitude:.5f}:{longitude:.5f}"
 
 
-def nearby_assets(gateway: ImmichGateway, account: ImmichAccount, point: tuple[float, float], *, limit: int = NEARBY_ASSET_LIMIT) -> list[tuple[float, MapMarker]]:
+@dataclass(frozen=True, slots=True)
+class Neighbourhood:
+    """One pin's measured surroundings in an Immich library.
+
+    Attributes:
+        nearest: ``(distance in metres, marker)`` pairs, closest first.
+        truncated: Whether the cap dropped anything. Reported from where the
+            cut happens, because it cannot be inferred downstream: a library of
+            exactly the cap size, all of it in range, produces a full result
+            with nothing missing, and a caller comparing the result's length to
+            the cap would tell the user to narrow a search that is already
+            showing them everything.
+    """
+
+    nearest: list[tuple[float, MapMarker]]
+    truncated: bool
+
+
+def nearby_assets(gateway: ImmichGateway, account: ImmichAccount, point: tuple[float, float], *, limit: int = NEARBY_ASSET_LIMIT) -> Neighbourhood:
     """The library's geolocated assets nearest ``point``, closest first.
 
     Args:
@@ -69,8 +88,7 @@ def nearby_assets(gateway: ImmichGateway, account: ImmichAccount, point: tuple[f
         limit: How many of the nearest assets to keep.
 
     Returns:
-        ``(distance in metres, marker)`` pairs, nearest first, at most
-        ``limit`` of them.
+        The nearest assets and whether the cap dropped any.
 
     Raises:
         GatewayRequestError: On a network error or non-2xx response, from the
@@ -83,19 +101,19 @@ def nearby_assets(gateway: ImmichGateway, account: ImmichAccount, point: tuple[f
 
     measured = [(_haversine_km(point, (marker.lat, marker.lon)) * 1000, marker) for marker in gateway.get_map_markers()]
     measured.sort(key=lambda row: row[0])
-    nearest = measured[:limit]
-    cache.set(key, nearest, NEARBY_CACHE_SECONDS)
-    return nearest
+    neighbourhood = Neighbourhood(nearest=measured[:limit], truncated=len(measured) > limit)
+    cache.set(key, neighbourhood, NEARBY_CACHE_SECONDS)
+    return neighbourhood
 
 
-def within_radius(nearest: list[tuple[float, MapMarker]], radius_m: float) -> list[MapMarker]:
-    """The subset of ``nearest`` inside ``radius_m``, still closest first.
+def within_radius(neighbourhood: Neighbourhood, radius_m: float) -> list[MapMarker]:
+    """The subset of ``neighbourhood`` inside ``radius_m``, still closest first.
 
     Args:
-        nearest: Output of :func:`nearby_assets`.
+        neighbourhood: Output of :func:`nearby_assets`.
         radius_m: The selected radius, in metres.
 
     Returns:
         The markers within that distance.
     """
-    return [marker for distance_m, marker in nearest if distance_m <= radius_m]
+    return [marker for distance_m, marker in neighbourhood.nearest if distance_m <= radius_m]

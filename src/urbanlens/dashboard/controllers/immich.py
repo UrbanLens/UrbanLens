@@ -254,10 +254,12 @@ class PinImmichSearchView(LoginRequiredMixin, View):
                 pin_point = (float(pin.location.latitude), float(pin.location.longitude))
                 # Measured and cached per pin, so the radius <select>'s six
                 # options share one library download instead of one each.
-                nearest = nearby_assets(gateway, account, pin_point)
-                results = within_radius(nearest, radius_m)
+                neighbourhood = nearby_assets(gateway, account, pin_point)
+                results = within_radius(neighbourhood, radius_m)
                 context["nearby_limit"] = NEARBY_ASSET_LIMIT
-                context["nearby_truncated"] = len(results) >= NEARBY_ASSET_LIMIT
+                # Reported by the cap, not inferred from the result's length: a
+                # library of exactly the cap size shows everything it has.
+                context["nearby_truncated"] = neighbourhood.truncated
         except GatewayRequestError as exc:
             return render(request, _PICKER_PARTIAL, {**context, "error": str(exc)})
 

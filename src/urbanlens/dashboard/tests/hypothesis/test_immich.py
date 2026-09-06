@@ -588,6 +588,20 @@ class PinImmichSearchViewTests(TestCase):
         )
         self.assertContains(response, f"Showing the {NEARBY_ASSET_LIMIT} photos closest to this pin")
 
+    def test_a_library_of_exactly_the_cap_is_not_reported_as_truncated(self) -> None:
+        # The cap dropped nothing, so the picker is showing everything there
+        # is - telling the user to narrow the search would be a lie. Inferring
+        # truncation from the result's length gets this exact case wrong.
+        crowd = [
+            MapMarker(id=f"a{index}", lat=40.0 + index * 0.000001, lon=-74.0) for index in range(NEARBY_ASSET_LIMIT)
+        ]
+        with mock.patch.object(ImmichGateway, "get_map_markers", return_value=crowd):
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": "5000"})
+
+        self.assertEqual(len(response.context["assets"]), NEARBY_ASSET_LIMIT)
+        self.assertFalse(response.context["nearby_truncated"])
+        self.assertNotContains(response, "photos closest to this pin")
+
     def test_a_short_result_is_not_reported_as_truncated(self) -> None:
         with mock.patch.object(
             ImmichGateway, "get_map_markers", return_value=[MapMarker(id="one", lat=40.0, lon=-74.0)]
