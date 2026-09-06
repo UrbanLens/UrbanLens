@@ -2740,9 +2740,16 @@ at this app's beta scale (~2 users):
   long render. And the toggle buttons name the totals, which also gate the empty state, so those are
   counted rather than measured off the lists. Measured on the dev stack at 23 sent and 23 received
   places: 20 cards on load instead of 46, and the 19KB received half absent from the page entirely.
-- **Memories > Journal** (`services/memories/journal.py:57-203`) merges four unsliced sources (visits,
-  reviews, comments, article edits) with no date-range or windowing at all - no "load more" of any
-  kind, unlike this file's sibling paginated views.
+- ~~**Memories > Journal**~~ **fixed 2026-09-06.** It merged four unsliced sources with no windowing
+  of any kind. Two things the survey did not record. The merge was only half the cost: each rendered
+  entry's title is `Pin.effective_name`, which falls through to `Location.display_name`, which reads
+  the linked `Wiki`, and every source selected only the pin - thirty entries cost 65 queries. The
+  page is 21 now, and flat (`test_query_scaling_memories_journal.py`). And the external API's
+  journal endpoint had the same problem, with a comment saying it had no way around it: pagination
+  needs a `count`, and the only count available was `len()` of the fully-built list. `JournalFeed` is
+  a sliceable sequence whose length is counted rather than measured, which is what `Paginator` and
+  DRF's paginator actually ask for. The per-source limit is exact, not approximate - the newest N of
+  a union can only contain entries in some source's own newest N.
 - ~~**Pin import-failure queue**~~ **fixed 2026-09-06.** It had no pagination and contradicted
   itself: the queue view's docstring said failures are "rare," while `PinImportFailureGuessView`'s
   docstring in the *same file* says "a single import can leave hundreds of failures." The second is
