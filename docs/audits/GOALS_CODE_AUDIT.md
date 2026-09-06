@@ -123,8 +123,12 @@ private pin.
    module's own docstring says is "never actionable, never materializes a Pin." That reference
    isn't inert: `PinShareQuerySet.received_by()` has no status/origin filter
    (`models/pin_share/queryset.py:148-157`), so these DETECTED shares surface on the recipient's
-   Memories→Sharing page like a real share, and `sharing.html:130` renders
-   `{{ group.pin.effective_name }}` — the sharer's live private pin name, unconditionally.
+   Memories→Sharing page like a real share, and
+   `partials/memories/_sharing_received.html:26` renders `{{ group.pin.effective_name }}` — the
+   sharer's live private pin name, unconditionally. (That half moved out of `sharing.html` on
+   2026-09-06 when it became a lazily-fetched partial; the guard this paragraph describes now
+   lives in `_safe_incoming_place_label`, and `test_pin_share_chain.py` pins it against the new
+   endpoint.)
 
 `activity_coords()` (`services/trips/trip_legs.py:41-56`) has the same problem for
 coordinates — it prefers the pin's *current* location over the activity's own stored snapshot,

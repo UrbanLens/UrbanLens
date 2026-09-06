@@ -2730,9 +2730,16 @@ at this app's beta scale (~2 users):
   render. The same measurement found what actually makes this page heavy, which is not queries at
   all: 170KB of its 297KB is inline `<script>`, uncacheable and re-sent on every load - 52KB of map
   preview, 29KB of theme preview, 22KB of dev toolbar. Recorded as P83.
-- **Memories > Sharing** (`controllers/memories.py:798-890`) queries and renders both the full "sent"
-  and full "received" share histories on every load, though only one is visible at a time via a
-  client-side (non-HTMX) toggle.
+- ~~**Memories > Sharing**~~ **fixed 2026-09-06.** It queried, grouped and rendered both the full
+  "sent" and the full "received" history on every load, though a client-side toggle shows one at a
+  time. The received half is its own partial now, fetched the first time that button is clicked, and
+  both halves page at twenty places. Three things the survey did not record. Grouping had to move
+  into the database first: the old code fetched every share and grouped in Python, so a slice on the
+  *shares* would have cut groups in half rather than dropping whole places. The chain count is a BFS
+  *per group*, so an unpaginated list was also an unbounded number of query round trips, not just a
+  long render. And the toggle buttons name the totals, which also gate the empty state, so those are
+  counted rather than measured off the lists. Measured on the dev stack at 23 sent and 23 received
+  places: 20 cards on load instead of 46, and the 19KB received half absent from the page entirely.
 - **Memories > Journal** (`services/memories/journal.py:57-203`) merges four unsliced sources (visits,
   reviews, comments, article edits) with no date-range or windowing at all - no "load more" of any
   kind, unlike this file's sibling paginated views.
