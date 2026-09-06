@@ -9,7 +9,7 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from model_bakery import baker
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import (

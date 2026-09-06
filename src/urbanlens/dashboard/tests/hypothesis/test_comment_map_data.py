@@ -8,7 +8,6 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.controllers.comments import (
     _parse_map_data,
     _sanitize_markup_color,
-    _sanitize_markup_shapes,
     _sanitize_number,
 )
 

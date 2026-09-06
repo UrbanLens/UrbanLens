@@ -5,9 +5,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from django.contrib.gis.db.models import PointField
-from django.contrib.gis.geos import Point
-from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import MaxLengthValidator
 from django.db import DatabaseError, transaction
 from django.db.models import (
@@ -21,7 +18,7 @@ from django.db.models import (
     Q,
     UniqueConstraint,
 )
-from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, DecimalField, IntegerField, TextField
+from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, IntegerField, TextField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract

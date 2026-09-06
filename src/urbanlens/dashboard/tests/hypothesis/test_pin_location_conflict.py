@@ -10,8 +10,6 @@ plain reassignment - it must merge into the existing pin instead.
 
 from __future__ import annotations
 
-from unittest import mock
-
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker

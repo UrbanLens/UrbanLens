@@ -1043,7 +1043,8 @@ class ProfileLabelToggleView(LoginRequiredMixin, View):
     """Toggle a user-type label on another profile (HTMX - re-renders the label chips)."""
 
     def post(self, request: HttpRequest, profile_slug: UUID, label_id: int) -> HttpResponse:
-        from urbanlens.dashboard.models.labels.model import KIND_USER, Label
+        from urbanlens.dashboard.models.labels.meta import KIND_USER
+        from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
 
         subject = get_object_or_404(Profile, slug=profile_slug)

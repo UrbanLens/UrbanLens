@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError
 from django.db.models import SET_NULL, ForeignKey, Index
 from django.db.models.fields import CharField, DateTimeField, DecimalField, SlugField
 
@@ -19,7 +18,6 @@ from urbanlens.dashboard.models.location.queryset import LocationManager
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
 
-    from urbanlens.dashboard.models.google_place.model import GooglePlace
     from urbanlens.dashboard.models.markup.model import PinMarkup
     from urbanlens.dashboard.models.trips.model import TripActivity
     from urbanlens.dashboard.models.wiki.model import Wiki

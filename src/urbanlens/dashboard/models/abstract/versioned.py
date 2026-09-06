@@ -28,25 +28,22 @@ See ``docs/designs/versioned-content.md``.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any
 
 from django.conf import settings as django_settings
 from django.core.exceptions import FieldDoesNotExist
 from django.db import transaction
 from django.db.models import (
-    CASCADE,
     SET_NULL,
     BooleanField,
     CharField,
     DateTimeField,
     Field,
     ForeignKey,
-    Index,
     Manager,
     Model,
     QuerySet,
     TextField,
-    UniqueConstraint,
 )
 
 from urbanlens.dashboard.models.abstract.versioning import (

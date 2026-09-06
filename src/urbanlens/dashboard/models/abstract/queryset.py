@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Self, TypeVar
+from typing import Self, TypeVar
 import uuid as uuid_lib
 
 # Django Imports

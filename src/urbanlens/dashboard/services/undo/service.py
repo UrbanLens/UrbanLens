@@ -24,7 +24,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.undo import UNDO_RETENTION, UndoAction, UndoKind
-from urbanlens.dashboard.services.undo import handlers as _handlers
+from urbanlens.dashboard.services.undo import handlers as _handlers  # noqa: F401 - importing the package is what registers every handler get_handler resolves
 from urbanlens.dashboard.services.undo.base import get_handler
 
 if TYPE_CHECKING:

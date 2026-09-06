@@ -6,11 +6,9 @@ from datetime import date
 from itertools import count
 
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
-from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.services.spotguessr.scoring import (

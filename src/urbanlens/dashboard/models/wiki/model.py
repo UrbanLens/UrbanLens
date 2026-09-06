@@ -31,13 +31,9 @@ from urbanlens.dashboard.models.wiki.queryset import WikiManager
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
-    from decimal import Decimal
-
     from django.db.models import Manager as DjangoManager
 
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.markup.model import PinMarkup
-    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import TripActivity
 
 

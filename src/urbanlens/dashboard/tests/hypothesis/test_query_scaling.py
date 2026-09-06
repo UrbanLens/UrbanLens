@@ -15,8 +15,6 @@ protecting is the *slope*, not the intercept.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.db import connection
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from model_bakery import baker
 

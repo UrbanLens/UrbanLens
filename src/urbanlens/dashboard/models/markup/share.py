@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.core.validators import MaxLengthValidator
-from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, OneToOneField, TextField
+from django.db.models import CASCADE, SET_NULL, ForeignKey, OneToOneField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH

@@ -23,7 +23,6 @@ from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
 
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 

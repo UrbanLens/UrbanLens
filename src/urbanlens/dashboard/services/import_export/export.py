@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import csv
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 import io
 import json
 import logging
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from django.db.models import Model
 
     from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
-    from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
+    from urbanlens.dashboard.models.markup.model import PinMarkup
     from urbanlens.dashboard.models.routes.model import Route
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.models.saved_filter.model import SavedFilter

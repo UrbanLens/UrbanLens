@@ -17,12 +17,8 @@ from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.search import SearchForm
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.models.labels.meta import KIND_USER
-from urbanlens.dashboard.models.labels.model import (
-    COLOR_CHOICES,
-    ICON_CATEGORIES,
-    Label,
-)
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, KIND_USER
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
@@ -182,8 +178,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         )
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        from urbanlens.dashboard.models.labels.model import KIND_USER
-
         tags = Label.objects.tags().visible_to(profile).in_display_order()
         categories = Label.objects.categories().in_display_order()
         filter_labels = Label.objects.exclude(kind=KIND_USER).visible_to(profile).in_display_order()
@@ -841,10 +835,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if label_ids:
             from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
             from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
-            from urbanlens.dashboard.models.labels.model import KIND_USER as _KIND_USER
 
             # visible_to: same foreign-label-id guard as post_add_pin.
-            new_labels = Label.objects.exclude(kind=_KIND_USER).visible_to(request.user.profile).filter(id__in=label_ids)
+            new_labels = Label.objects.exclude(kind=KIND_USER).visible_to(request.user.profile).filter(id__in=label_ids)
             new_ids = set(new_labels.values_list("pk", flat=True))
             removed = pin.labels.filter(kind__in={KIND_TAG, KIND_CATEGORY, KIND_STATUS}).exclude(pk__in=new_ids)
             for label in removed:

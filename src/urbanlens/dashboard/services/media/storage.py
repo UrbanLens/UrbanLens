@@ -16,7 +16,6 @@ from contextlib import contextmanager
 import logging
 from typing import TYPE_CHECKING
 
-from django.core.cache import cache
 from django.db.models import Q, Sum
 from django.template.defaultfilters import filesizeformat
 

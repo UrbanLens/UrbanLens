@@ -88,8 +88,6 @@ class DirectMessageTemporaryAccess(abstract.DashboardModel):
         if not profile_ids:
             return set()
 
-        from django.db.models import Q
-
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 
         granted = set(

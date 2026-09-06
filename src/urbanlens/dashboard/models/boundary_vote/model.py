@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, ForeignKey, Index, UniqueConstraint
+from django.db.models import CASCADE, ForeignKey, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.boundary_vote.queryset import BoundaryVoteManager

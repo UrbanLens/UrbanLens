@@ -324,7 +324,7 @@ def conceal_rows(queryset: Any, viewer: Profile | None) -> Any:
         silently get an unfiltered result for a model this does understand -
         see the KeyError path.
     """
-    from urbanlens.dashboard.models.images.model import Image, ImageSource
+    from urbanlens.dashboard.models.images.model import Image
 
     model_name = queryset.model.__name__
     allowed = visible_actor_ids(viewer)

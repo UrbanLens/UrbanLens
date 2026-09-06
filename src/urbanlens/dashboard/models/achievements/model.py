@@ -38,7 +38,6 @@ if TYPE_CHECKING:
 
     from django.db.models import Manager as DjangoManager
 
-    from urbanlens.dashboard.models.profile import Profile
     from urbanlens.dashboard.services.achievements.metrics import Metric
 
 logger = logging.getLogger(__name__)

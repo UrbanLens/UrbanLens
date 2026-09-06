@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     import datetime
 
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent
+    from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent  # noqa: F401 - mypy resolves these in the class-base subscripts below; ruff does not
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 

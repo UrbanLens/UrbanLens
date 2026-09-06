@@ -52,7 +52,6 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.album.model import Album
-from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.auto_removals.model import PinAutoRemoval
 from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.comments.model import Comment

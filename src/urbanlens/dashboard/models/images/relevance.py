@@ -18,10 +18,6 @@ from django.db.models import CASCADE, BooleanField, CharField, ForeignKey, Index
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.images.queryset import MediaRelevanceManager
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.profile.model import Profile
-
 
 def media_item_key(url: str) -> str:
     """Stable, short identifier for a transient Media gallery item.

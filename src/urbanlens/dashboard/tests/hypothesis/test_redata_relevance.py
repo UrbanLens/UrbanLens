@@ -8,7 +8,7 @@ Every REData HTTP call is mocked - never hits the network.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import UTC, date, datetime, timezone as dt_timezone
+from datetime import UTC, date, datetime
 from unittest import mock
 
 from django.contrib.auth.models import User

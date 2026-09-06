@@ -13,13 +13,12 @@ from urbanlens.dashboard.models.labels.meta import KIND_TAG
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
 
-class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet):
+class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet["Wiki"]):
     """QuerySet for Wiki - the community-editable half of the place model.
 
     Filters here operate on community data (name, labels). For address/geo

@@ -46,7 +46,6 @@ class GateAllowsTests(TestCase):
 
     def test_the_api_list_survives_one_broken_source(self) -> None:
         """The regression that matters: a client must still get every healthy panel."""
-        from urbanlens.dashboard.external_api.views_panels import PinPanelsListView
 
         healthy = dict(panel_sources())
         broken = dict(healthy)

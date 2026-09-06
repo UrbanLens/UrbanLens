@@ -25,18 +25,8 @@ from PIL.Image import DecompressionBombError as PILDecompressionBombError
 
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.models.labels.meta import DEFAULT_LABEL_COLOR
-from urbanlens.dashboard.models.labels.model import (
-    COLOR_CHOICES,
-    ICON_CATEGORIES,
-    ICON_CHOICES,
-    KIND_CATEGORY,
-    KIND_MEDIA,
-    KIND_STATUS,
-    KIND_TAG,
-    KIND_USER,
-    Label,
-)
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, DEFAULT_LABEL_COLOR, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
 from urbanlens.dashboard.models.pin_list.model import PinList

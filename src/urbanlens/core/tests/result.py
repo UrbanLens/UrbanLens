@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable
 import logging
-import traceback
-from typing import TYPE_CHECKING, Any, Optional
 import unittest
 
 from urbanlens.core.tests.testcase import TestCase

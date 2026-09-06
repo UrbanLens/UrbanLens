@@ -182,7 +182,6 @@ ignore = [
     "DOC502",  # This discourages reporting raises from ancestors
     "SIM108",  # Use ternary operator insead of if-else
     "TRY003",  # Avoid specifying long messages outside the exception class
-    "F401",    # unused imports. Enabling this will remove TYPE_CHECKING imports incorrectly.
     "W293",    # blank line contains whitespace
     "W391",    # blank line at end of file
     "DJ012",   # Order of model's inner classes, methods... does not follow Django style guide
@@ -267,11 +266,13 @@ unfixable = ["RUF100"]
     "PLR09",   # too-many-...
     "PLR2004", # magic values
 ]
-# An __init__.py is a re-export surface. Unused imports (F401) are already
-# globally ignored, which covers the plain `import X` half of that; these cover
-# the rest. Import ORDER is deliberately still checked - it was verified safe by
-# applying the fixes and running `manage.py check` in the app container.
+# An __init__.py is a re-export surface: every name it imports is imported so
+# that someone else can import it from here, which is exactly what F401 calls
+# unused. 819 of the tree's 1,063 F401 hits were in these 163 files. Import
+# ORDER is deliberately still checked - it was verified safe by applying the
+# fixes and running `manage.py check` in the app container.
 "**/__init__.py" = [
+    "F401",    # every import here IS the re-export; 110 of 163 have no __all__
     "F403",    # `from .x import *` - prospective re-export
     "F405",    # a name possibly from a star import
     "RUF100",  # a noqa here often documents a deliberate side-effect import

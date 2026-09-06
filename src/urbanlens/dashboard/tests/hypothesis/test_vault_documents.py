@@ -18,7 +18,6 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, MediaKind
-from urbanlens.dashboard.models.profile.model import Profile
 
 
 class ImageQuerySetMediaSplitTests(TestCase):

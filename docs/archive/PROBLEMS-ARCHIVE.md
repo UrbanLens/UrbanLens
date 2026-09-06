@@ -11,6 +11,94 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-06: `F401` was off tree-wide, and 819 of the 1,063 hits were re-export surfaces, not drift
+
+`id: P84` · `status: fixed` · `resolved: 2026-09-06`
+
+`pyproject.toml`'s ruff config disabled `F401` for the whole tree, with the reason written next to
+it: *"unused imports. Enabling this will remove TYPE_CHECKING imports incorrectly."* The rule is on
+now, tree-wide, and `ruff check src/urbanlens` passes.
+
+**The headline number was the wrong number.** This entry opened with "1,124 unused imports have
+accumulated invisibly". Re-measured on 2026-09-06 the count was 1,063, and it broke down as:
+
+| where | count | what it actually was |
+|---|---|---|
+| `**/__init__.py` | 819 | re-export surfaces - the import *is* the export |
+| `**/tests/**` | 103 | genuinely dead |
+| everything else | 141 | mostly genuinely dead, 23 not |
+
+77% of the "drift" was 163 package front doors doing their job, 110 of which have no `__all__` for
+ruff to read the intent from. Those are now covered by a `F401` line in the `**/__init__.py`
+per-file-ignores block, next to the `F403`/`F405` entries that were already there for the same
+reason. That is not a suppression of the finding; it is the finding being 819 files smaller than
+the count suggested.
+
+**The original reason for disabling the rule was wrong, but a version of it was right.** Ruff does
+understand `if TYPE_CHECKING:` and annotation-only use, including string annotations - so the
+config comment's stated fear has not been true for some time. But ruff 0.15.20 does **not** resolve
+a string forward reference inside a *generic base-class subscript*, and this tree is full of them:
+
+```python
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.achievements.model import Achievement
+
+class AchievementQuerySet(abstract.PublicDashboardQuerySet["Achievement"]):   # ruff: unused. mypy: required.
+```
+
+Deleting that import is a clean ruff fix and four `name-defined` errors from mypy. Reproduced
+minimally (`Base["Decimal"]` with `Decimal` imported under `TYPE_CHECKING` → `F401`; the same name
+in `-> "Fraction"` position → no diagnostic), then confirmed against the real file. 20 imports
+across 8 `models/*/queryset.py` files are in this shape and now carry a `# noqa: F401` naming it.
+
+That is a **third** way a blind sweep goes wrong, alongside the two this entry already recorded.
+The other two both fired again on the real run:
+
+1. **An "unused" import can be another module's import path.** `models/labels/model.py` imported
+   ten constants from `models/labels/meta.py` and used four. The other six were reached *through*
+   `model.py` by 18 import statements in controllers, signals, services and tests - while ~80 other
+   statements imported the same constants from `meta` directly. So `model.py` was an accidental
+   facade, not a designed one, and the fix was to point the 18 at `meta` rather than to noqa the
+   re-export into permanence. `services/apis/calendar/google.py` was the same shape for
+   `extract_email_from_id_token`, reached by `controllers/calendar_sync.py`; that one now imports it
+   from `services/auth/google_oauth.py`, where it is defined and where the same file was already
+   importing `GoogleAuthExpiredError`.
+2. **An import can exist for its module's side effects.** Three, all load-bearing, all now carrying
+   a `# noqa: F401` that says why:
+   - `apps.py` - `import urbanlens.dashboard.models.wiki_edit.signals`, one of fourteen sibling
+     signal-registration imports in `ready()`. Ruff flags **only the last one**. Checked with
+     `--select F401,F811` and the noqa stripped: the thirteen above it are reported by neither -
+     they all bind the same name `urbanlens`, and only the surviving binding is tested for use. So
+     thirteen equally load-bearing imports are unmarked because of an implementation detail, not
+     because anything decided they were safe. If ruff's binding model changes they all need the
+     same marker, and the block would be better off as explicit `connect()` calls - the idiom the
+     two non-signal registrations beside it (`connect_achievement_signals`, `connect_file_cleanup`)
+     already use.
+   - `services/undo/service.py` - importing the `handlers` package is what populates the registry
+     `get_handler` reads. Verified: 12 `@register` decorators, 12 entries at runtime.
+   - `tasks.py` - `run_assistant_turn_task`. Celery's `autodiscover_tasks()` only imports
+     `<app>/tasks.py`, so this import is how the ai-worker learns the task exists at all; without it
+     the producer still enqueues and the worker answers "unregistered task". Confirmed by running
+     `app.loader.import_default_modules()` (what a starting worker does) and listing `app.tasks`,
+     then checking every importer of `services.ai.tasks` in non-test source: `dashboard/tasks.py`
+     is the only one at module scope. The other two - `controllers/assistant.py` and
+     `external_api/views_assistant.py` - import it inside a function, which registers it in the web
+     process handling that request and in no worker.
+
+**The checks that caught these, in the order they earn their keep.** An AST pass over the whole tree
+(`from <mod> import <name>`, parenthesised multi-line imports read as one statement) found the seven
+cross-module names before anything was deleted. `pytest --collect-only` over the full suite - 14,658
+tests, 22s - is the cheapest proof that no module lost an import path. `mypy src/urbanlens` is the
+only one of the three that sees the generic-base-class case; it caught one import this session's own
+edits had turned into that shape after the classifier had already run. It does not cover tests
+(`tests/` and `test_.*\.py` are excluded), so for the 80 changed test files, collection plus a run
+is the gate.
+
+**What was swept:** 219 imports, 175 files. Two `models/*/queryset.py` classes were parameterized
+rather than stripped - `GeocodedLocationQuerySet(abstract.DashboardQuerySet)` and `WikiQuerySet` had
+lost their type argument, which is *why* their model import read as dead. That pattern is not rare:
+107 of 148 queryset classes are still unparameterized. See P85.
+
 ## RESOLVED 2026-09-06: `bun-types` was pinned at 1.1.6, so 81 valid assertions looked like type errors
 
 `id: P73` · `status: fixed` · `updated: 2026-09-06`

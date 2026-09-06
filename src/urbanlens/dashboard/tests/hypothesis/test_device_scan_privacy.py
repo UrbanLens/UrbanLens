@@ -45,7 +45,6 @@ from urbanlens.dashboard.external_api.serializers_device_scans import (
 )
 from urbanlens.dashboard.external_api.views_device_scans import DeviceScanUploadView, NearbyDeviceMarkersView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.device_scan.model import (
     DeviceScanEntry,
     DeviceScanUpload,

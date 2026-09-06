@@ -12,7 +12,7 @@ import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from django.db.models import CASCADE, SET_NULL, F, ForeignKey, Index, UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, F, ForeignKey, UniqueConstraint
 from django.db.models.fields import CharField, IntegerField, URLField
 from django.db.models.functions import MD5
 

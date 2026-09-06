@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-from uuid import uuid4
+from typing import TYPE_CHECKING
 
 from django.db.models import (
     CASCADE,
@@ -19,12 +18,11 @@ from django.db.models import (
     Q,
     TextField,
     UniqueConstraint,
-    UUIDField,
 )
 from django.db.models.functions import Lower
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_CHOICES, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, KIND_CHOICES, KIND_TAG
 from urbanlens.dashboard.models.labels.queryset import LabelManager
 from urbanlens.dashboard.services.core.colors import clean_color
 

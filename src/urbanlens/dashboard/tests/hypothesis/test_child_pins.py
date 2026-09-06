@@ -24,8 +24,6 @@ from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.map_pins.autocomplete import search_local
 from urbanlens.dashboard.tests.hypothesis.strategies import (
     coord_pair_float,
-    lat_float,
-    lon_float,
     nonempty_name,
     priority as priority_strategy,
 )

@@ -170,7 +170,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from django.db.models import Case, When
 
         from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
-        from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, Label
+        from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
+        from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.comments.comments import visible_comment_count
 
         try:

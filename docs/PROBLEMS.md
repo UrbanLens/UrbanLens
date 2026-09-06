@@ -2901,44 +2901,96 @@ in `ts/shared/` and then a second time by hand into that template, because the t
 import. Whether the answer is moving it into `frontend/ts/entries/` or something narrower is a
 design question, not a mechanical one.
 
-## P84 — `F401` is off tree-wide, so 1,124 unused imports have accumulated invisibly
+## P85 — Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it
 
-`id: P84` · `status: open` · `updated: 2026-09-06`
+`id: P85` · `status: open` · `updated: 2026-09-06`
 
-`pyproject.toml`'s ruff config disables `F401` for the whole tree, with the reason written next to
-it: *"unused imports. Enabling this will remove TYPE_CHECKING imports incorrectly."* That has not
-been true of ruff for some time - it understands `if TYPE_CHECKING:` blocks and annotation-only
-use - and the rule has been off long enough to accumulate:
+`models/abstract/queryset.py` builds each manager by subclassing a call:
 
-```
-uv run ruff check --config 'lint.ignore=[]' --select F401 src/urbanlens   # 1,124, of which 305 auto-fixable
+```python
+class DashboardManager(django_models.Manager.from_queryset(DashboardQuerySet)): ...
 ```
 
-63 of those were in `controllers/` and are gone as of 2026-09-06. The rest are not, and the reason
-this is filed rather than swept is that **the sweep is not safe to run blind**, in two distinct ways
-both of which this session hit:
+mypy cannot follow a base class that is a function call. It says so - `Unsupported dynamic base
+class "django_models.Manager.from_queryset"  [misc]` - and `[tool.mypy]`'s
+`disable_error_code = ['misc', 'annotation-unchecked']` turns that message off. The class therefore
+resolves to `Any`, and so does every one of the 145 managers built the same way, and so does every
+model's `objects`.
 
-1. **An "unused" import can be another module's import path.** `controllers/trip.py` imported
-   `compute_activity_index_map as _compute_activity_index_map` and `expand_trip_dates as
-   _expand_trip_dates` and called neither; `tests/hypothesis/test_trip_helpers.py` imported both
-   *from the controller*. Removing them breaks that file at collection, and ruff cannot see it.
-   Fixed by pointing the test at `services/trips/trip_activities.py`, which is where they are
-   defined - but the shape recurs, and it is invisible to a name grep that does not read a
-   parenthesised multi-line `import` as one statement. A first pass at this check missed exactly
-   that case and reported the removal as clean.
-2. **An import can exist for its module's side effects.** This tree registers undo handlers and
-   media authorizers by decorator. Neither is actually at risk - `services/undo/handlers/__init__.py`
-   imports every handler explicitly, and the authorizers are decorated in the module that owns the
-   registry - but that is a fact about this tree that had to be checked, not a property of the rule.
+**What that costs, measured rather than reasoned.** With the tree's own settings, none of these is
+an error:
 
-What a safe sweep looks like, having done one subtree: apply `--fix` to one package at a time, then
-for every removed name check whether any other file imports it *from that module* (multi-line
-imports included) or patches it as `<module>.<name>`, then import every module in the package and
-assert the registries still populate. All three checks are cheap; only the second is obvious.
+```python
+x: int = Trip.objects                    # no error
+y: int = Trip.objects.all()              # no error
+w: int = Trip.objects.all().first()      # no error
+Trip.objects.all().first().no_such_field # no error
+```
 
-Turning the rule *on* is the separate half, and it is a policy call rather than a cleanup: with
-1,124 outstanding it cannot be enabled tree-wide without either fixing all of them first or adding a
-per-file-ignore list that is itself the drift this entry describes. The `__init__.py` re-export
-surface already has its own narrowed rule set in `[tool.ruff.lint.per-file-ignores]`, which is where
-a scoped re-enable would go.
+Assigning a manager to an `int` is accepted, so nothing downstream of `.objects` is checked at all.
+The control: an ordinary `x: int = "str"` in the same directory *is* reported, so the file is in
+scope and the checker is running.
 
+**The queryset generics are a smaller, separate half of the same subject.** 107 of 148 queryset
+classes under `models/*/queryset.py` are declared bare (`class TripQuerySet(abstract.DashboardQuerySet)`)
+where 41 are parameterized (`abstract.PublicDashboardQuerySet["Achievement"]`), even though the base
+is generic and its own docstring asks subclasses to parameterize it. Parameterizing does work, where
+code names the queryset type:
+
+```python
+def f(qs: AchievementQuerySet) -> None:
+    qs.first().no_such_field_at_all   # error: "Achievement" has no attribute ...  [attr-defined]
+
+def g(qs: TripQuerySet) -> None:
+    qs.first().no_such_field_at_all   # accepted - element type is Any
+```
+
+But only ~15 annotations in non-test `src/` name a concrete project queryset; the rest of the tree
+reaches the ORM through `.objects`, which the manager problem has already made `Any`. So fixing the
+107 alone buys those 15 sites and nothing else. **The manager is the load-bearing half.**
+
+**What is behind the `misc` disable.** Turning it back on for one run: 181 errors, 146 of them the
+dynamic base class above. Of the other 35, three were checked and all three are django-stubs
+limitations rather than defects:
+
+- `spotguessr/overview.py:143` - `Cannot resolve keyword 'participant_count'`. It is an
+  `.annotate()` name that `participated_sessions` adds; the stubs cannot see runtime annotations.
+- `abstract/versioned.py:298,392,443` - `target_id` on `AbstractFieldRevision`. The abstract base
+  names a column its concrete subclasses declare.
+- `services/photos/uploads.py:202` - `exif_data` "expected `str | Combinable | None`". The field is
+  `EncryptedJSONField`; the stub sees its text base, not the JSON it actually stores.
+
+The remaining 32 are unaudited. Some have the shape of real defects - `Incompatible type for lookup
+'pk': (got "str | None", ...)` at `controllers/site_admin.py:1365` and `services/billing/webhooks.py:149`,
+`Expected iterable as variadic argument` at `forms/settings_form.py:50` - and some are more of the
+`EnrichmentSource` ClassVar-vs-instance-variable pattern that accounts for about a dozen of them.
+Nobody has separated the two, which is the argument for not leaving the code off: a blanket disable
+of the code that reports 146 known-benign findings also silences whatever else `misc` covers.
+
+**Why this is filed rather than fixed.** The fix is not one line, and the obvious shortcut does not
+work. django-stubs *can* type `Manager.from_queryset(SomeQuerySet)` when the result is bound to a
+name; what it cannot follow is a `class` statement whose base is that call. So the mechanical form of
+the fix is
+
+```python
+-class LabelManager(abstract.FrontendDashboardManager.from_queryset(LabelQuerySet)):
+-    """Manager for Label."""
++LabelManager = abstract.FrontendDashboardManager.from_queryset(LabelQuerySet)
+```
+
+which drops the class body. Counting how far that goes: **146** manager classes are declared with a
+`from_queryset()` base, **125** of them have nothing but a docstring and convert this way; the other
+**21** have real bodies and need a decision each (`BoundaryManager` is the largest at 10 statements;
+`LocationManager` and `WikiManager` have 4 each).
+
+That is only the concrete half. The three abstract managers have to be fixed first and bottom-up -
+`DashboardManager` is itself a dynamic base, so everything deriving from it is `Any` no matter how
+the derived class is spelled - and they exist precisely to forward custom queryset methods onto
+`Model.objects`, which is what `from_queryset` generates at runtime and what a hand-written
+`Manager[_ModelT]` subclass would have to re-declare. Doing all of that and *then* re-enabling
+`misc` is a real change to how every model in the tree is typed. It will surface errors that have
+never been reported here, which is the point, and also why it should not ride along inside an
+unrelated commit.
+
+Found while resolving P84; two querysets (`GeocodedLocationQuerySet`, `WikiQuerySet`) were
+parameterized there because their unused model import was the symptom of the missing type argument.

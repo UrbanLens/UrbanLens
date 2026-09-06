@@ -13,7 +13,7 @@ last start time falls in the gap between those two definitions.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from django.contrib.auth.models import User
 from django.db import connection

@@ -18,7 +18,6 @@ Control and cleanup are part of the design, not an afterthought:
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase

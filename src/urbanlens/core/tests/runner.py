@@ -4,7 +4,6 @@ import logging
 import os
 from typing import Any
 import unittest
-from unittest.mock import patch
 
 from django import conf
 from django.db import connections

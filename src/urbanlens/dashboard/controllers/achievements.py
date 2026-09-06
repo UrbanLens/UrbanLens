@@ -22,7 +22,7 @@ from urbanlens.dashboard.models.achievements.model import (
     Achievement,
     UserAchievement,
 )
-from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, ICON_CATEGORIES
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.services.achievements.evaluate import progress_for_profile
 from urbanlens.dashboard.services.achievements.metrics import all_metrics, grouped_metric_choices, streak_summary

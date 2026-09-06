@@ -21,8 +21,6 @@ from django.db.models import (
     OneToOneField,
     Q,
     SlugField,
-    TextChoices,
-    TextField,
 )
 from django.utils import timezone
 

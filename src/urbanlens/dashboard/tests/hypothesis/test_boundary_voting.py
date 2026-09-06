@@ -6,7 +6,7 @@ from datetime import timedelta
 from itertools import count
 from unittest.mock import patch
 
-from django.contrib.gis.geos import MultiPolygon, Point, Polygon
+from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker

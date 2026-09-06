@@ -26,10 +26,6 @@ from django.db.models.fields import CharField
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.auto_removals.queryset import AutoRemovalManager
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.models.wiki.model import Wiki
-
 
 class AutoRemovalKind(TextChoices):
     """The kind of auto-added sub-record a tombstone row suppresses."""

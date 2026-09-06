@@ -24,7 +24,6 @@ from urbanlens.dashboard.models.custom_fields.model import (
     CustomFieldValue,
 )
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
 from urbanlens.dashboard.models.notifications.model import NotificationPreference
 from urbanlens.dashboard.models.pin.model import Pin

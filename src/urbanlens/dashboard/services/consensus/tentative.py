@@ -19,7 +19,6 @@ from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind, Conse
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.consensus.model import ConsensusAnswer, ConsensusRound
-    from urbanlens.dashboard.models.wiki.model import Wiki
 
 #: How close two coordinate proposals must be to count as the same
 #: tentative answer - mirrors ``services.consensus.fields.AGREEMENT_DISTANCE_METERS``.

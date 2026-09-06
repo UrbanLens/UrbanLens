@@ -92,7 +92,7 @@ def _stat_item_context(pin: Pin, field: str) -> dict:
 
 
 def _overview_context(pin: Pin) -> dict:
-    from urbanlens.dashboard.models.labels.model import COLOR_CHOICES
+    from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
     from urbanlens.dashboard.models.pin.model import PinType
 
     detail_pin_icon_choices = [

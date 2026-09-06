@@ -36,7 +36,6 @@ from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField, WikiS
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 

@@ -44,7 +44,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
-from urbanlens.dashboard.external_api.serializers import ErrorSerializer, FriendshipSerializer, ProfileDetailSerializer
+from urbanlens.dashboard.external_api.serializers import ErrorSerializer, ProfileDetailSerializer
 from urbanlens.dashboard.external_api.serializers_social import (
     AvatarEmojiSerializer,
     ProfileAnnotationsSerializer,

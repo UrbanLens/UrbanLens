@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from django.contrib.gis.db.models import LineStringField
 from django.db.models import (
@@ -15,7 +14,6 @@ from django.db.models import (
     Index,
     IntegerField,
     TextChoices,
-    UUIDField,
 )
 
 from urbanlens.dashboard.models import abstract

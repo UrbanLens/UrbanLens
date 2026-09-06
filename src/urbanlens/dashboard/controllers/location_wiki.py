@@ -143,7 +143,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         # services.places.ambiguity for why this is now almost always empty.
         other_locations = [candidate for candidate in competing_wiki_locations(user_pin, profile) if candidate.pk != location.pk]
 
-        from urbanlens.dashboard.models.labels.model import COLOR_CHOICES
+        from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
         from urbanlens.dashboard.models.pin.model import PinType
 
         detail_pin_icon_choices = [

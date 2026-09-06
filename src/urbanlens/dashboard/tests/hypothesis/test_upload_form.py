@@ -163,7 +163,6 @@ class MultipleFileFieldFalsyFilterTests(SimpleTestCase):
         self.assertEqual(len(result), 1)
 
     def test_list_of_all_falsy_after_filter_returns_empty(self) -> None:
-        from django.core.files.uploadedfile import SimpleUploadedFile
 
         # Pass a truthy list to bypass the `if not data` check, then let `if f` filter reduce it.
         # An empty-bytes file is still truthy, so we'd need a truly falsy entry.

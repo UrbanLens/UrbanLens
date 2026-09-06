@@ -191,7 +191,8 @@ class DetailPinCountFilterTests(TestCase):
     def test_count_is_not_inflated_by_an_unrelated_join(self) -> None:
         """Combining a detail-pin-count filter with a label filter must not
         multiply the Count() via the label m2m join (Count(distinct=True) guards this)."""
-        from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG
+        from urbanlens.dashboard.models.labels.model import Label
 
         tag = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Interesting")
         parent = _make_pin(self.profile)

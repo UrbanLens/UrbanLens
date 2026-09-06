@@ -199,7 +199,6 @@ class ArchiveCheckinTests(TestCase):
         """
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.markup.model import MarkupMap
-        from urbanlens.dashboard.models.trips.model import Trip
 
         keypair = nacl.public.PrivateKey.generate()
         _enroll(self.owner, public_key=keypair.public_key.encode())

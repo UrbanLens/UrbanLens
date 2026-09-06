@@ -224,7 +224,7 @@ def add_comment(
             shared limit, or the image was rejected.
         TripNotFoundError: ``parent_id`` is not a comment on this trip.
     """
-    from urbanlens.dashboard.controllers.comments import _discard_comment_image, attach_existing_comment_image, comment_image_error, start_comment_image_scan
+    from urbanlens.dashboard.controllers.comments import attach_existing_comment_image, comment_image_error, start_comment_image_scan
     from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 
     require_perform(actor, trip, trip.allow_comments, COMMENT_DENIED)

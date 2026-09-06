@@ -5,9 +5,9 @@ No database access - these are pure logic tests.
 
 from __future__ import annotations
 
-from hypothesis import assume, given, settings, strategies as st
+from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, SecurityLevel, TextChoices
+from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, SecurityLevel
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
 from urbanlens.dashboard.models.pin.model import PIN_TYPE_ICONS, Pin, PinType
 from urbanlens.dashboard.models.wiki.model import Wiki

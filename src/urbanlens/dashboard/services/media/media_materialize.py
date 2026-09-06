@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 from django.core.files.base import ContentFile
 import requests
@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExe
 from urbanlens.dashboard.models.images.relevance import media_item_key
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.media.images import compute_checksum
-from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url, fetch_public_url
+from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location

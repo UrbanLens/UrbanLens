@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
 from django.core.validators import MaxLengthValidator
 from django.db.models import (
@@ -16,7 +15,6 @@ from django.db.models import (
     Manager as DjangoManager,
     ManyToManyField,
     Max,
-    UUIDField,
 )
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, SlugField, TextField
 from django.utils import timezone

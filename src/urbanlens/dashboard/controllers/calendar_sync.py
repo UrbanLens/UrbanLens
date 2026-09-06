@@ -28,10 +28,9 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     CalendarNotConfiguredError,
     build_authorization_url,
     exchange_code_for_tokens,
-    extract_email_from_id_token,
     revoke_token,
 )
-from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
+from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError, extract_email_from_id_token
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.trips.calendar_sync import (
     build_import_preview,

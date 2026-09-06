@@ -5,7 +5,7 @@ Import these instead of re-declaring primitives in each test module.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timezone
+from datetime import UTC, date, datetime
 import decimal
 
 from hypothesis import strategies as st

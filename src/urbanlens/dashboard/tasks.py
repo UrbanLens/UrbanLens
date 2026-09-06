@@ -22,7 +22,7 @@ from celery import shared_task
 from channels.layers import get_channel_layer
 from django.utils import timezone
 
-from urbanlens.dashboard.services.ai.tasks import (
+from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's autodiscover_tasks() only imports <app>/tasks.py, so this is what registers the task on the worker
     run_assistant_turn_task,
 )
 from urbanlens.dashboard.services.core.celery import update_task_progress
@@ -3023,7 +3023,6 @@ def run_scheduled_enrichment(self) -> dict:
         skip marker when another run holds the single-flight lock.
     """
     from celery.exceptions import SoftTimeLimitExceeded
-    from django.core.cache import cache
 
     from urbanlens.dashboard.services.locations.enrichment import RUN_LOCK_CACHE_KEY, run_enrichment_cycle
 
@@ -3084,7 +3083,6 @@ _CHECKIN_LOCK_TIMEOUT_SECONDS = 270  # just under the 5-minute beat interval
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_due_checkin_reminders() -> int:
     """Send the check-in-due reminder for every safety check-in whose time has arrived."""
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import send_checkin_reminder
@@ -3115,7 +3113,6 @@ def send_due_checkin_reminders() -> int:
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_final_checkin_warnings() -> int:
     """Send a final "check in now" warning for every safety check-in about to escalate."""
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import send_final_warning
@@ -3142,7 +3139,6 @@ def send_final_checkin_warnings() -> int:
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def escalate_overdue_checkins() -> int:
     """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import escalate_checkin
@@ -3197,7 +3193,6 @@ def sweep_due_safety_checkin_archival() -> int:
     getting lost - the same trade-off the other checkin beat tasks above already make
     for their own timing precision vs. this file's 5-minute cadence.
     """
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import archive_checkin
@@ -3704,7 +3699,6 @@ def run_scheduled_trivia_generation() -> dict:
         The sweep summary dict, or a skip marker when another run holds the
         single-flight lock.
     """
-    from django.core.cache import cache
 
     from urbanlens.dashboard.services.trivia.generation import sweep_wikis_for_generation
 
@@ -3734,7 +3728,6 @@ def run_scheduled_trivia_wiki_incorporation() -> dict:
         The sweep summary dict, or a skip marker when another run holds the
         single-flight lock.
     """
-    from django.core.cache import cache
 
     from urbanlens.dashboard.services.trivia.wiki_incorporation import sweep_questions_for_wiki_incorporation
 
@@ -3882,7 +3875,6 @@ def sweep_stalled_spotguessr_sessions() -> int:
     """
     from datetime import timedelta
 
-    from django.core.cache import cache
     from django.utils import timezone
 
     from urbanlens.dashboard.models.spotguessr.model import GameSession
@@ -4033,7 +4025,6 @@ def sweep_stalled_trivia_sessions() -> int:
     """
     from datetime import timedelta
 
-    from django.core.cache import cache
     from django.utils import timezone
 
     from urbanlens.dashboard.models.trivia.model import TriviaSession
@@ -4080,7 +4071,6 @@ def sweep_stalled_consensus_sessions() -> int:
     """
     from datetime import timedelta
 
-    from django.core.cache import cache
     from django.utils import timezone
 
     from urbanlens.dashboard.models.consensus.model import ConsensusRoundResolution, ConsensusSession

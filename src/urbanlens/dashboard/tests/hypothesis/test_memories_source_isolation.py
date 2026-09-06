@@ -15,7 +15,7 @@ that is missing one kind of memory still shows the rest.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth.models import User

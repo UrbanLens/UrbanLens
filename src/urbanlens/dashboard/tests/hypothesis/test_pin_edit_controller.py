@@ -18,7 +18,6 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_edit import PinEditView, PinOverviewView
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
 if TYPE_CHECKING:
     from django.http import HttpResponseBase

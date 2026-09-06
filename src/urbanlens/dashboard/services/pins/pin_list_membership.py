@@ -31,7 +31,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
-from django.db.models import Q
 
 from urbanlens.dashboard.services.geo.longitude import split_at_antimeridian
 

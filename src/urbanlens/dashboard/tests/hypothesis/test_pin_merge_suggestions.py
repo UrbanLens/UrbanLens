@@ -30,7 +30,6 @@ from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.article.model import Article
 from urbanlens.dashboard.models.auto_removals.model import PinAutoRemoval
 from urbanlens.dashboard.models.boundary.model import Boundary
-from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.custom_fields.model import (
     CustomField,
     CustomFieldEntity,
@@ -39,7 +38,7 @@ from urbanlens.dashboard.models.custom_fields.model import (
 )
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.links.model import PinLink
-from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
+from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
@@ -48,13 +47,12 @@ from urbanlens.dashboard.models.pin_merge_suggestions.model import (
     PinMergeSuggestionOrigin,
     PinMergeSuggestionStatus,
 )
-from urbanlens.dashboard.models.pin_share.meta import PinShareOrigin, PinShareStatus
+from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.pin_share.model import PinShare
-from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
+from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin
 from urbanlens.dashboard.models.pin_tombstone.model import PinTombstone
 from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropertySale
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import repair_legacy_pin_coordinates
 from urbanlens.dashboard.services.pins.pin_merge import (

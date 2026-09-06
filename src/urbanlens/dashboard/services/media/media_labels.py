@@ -18,7 +18,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.models.labels.model import KIND_MEDIA, Label
+from urbanlens.dashboard.models.labels.meta import KIND_MEDIA
+from urbanlens.dashboard.models.labels.model import Label
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

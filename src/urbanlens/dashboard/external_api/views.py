@@ -56,7 +56,6 @@ from urbanlens.dashboard.external_api.serializers import (
     NotificationListQuerySerializer,
     NotificationListResponseSerializer,
     NotificationPreferenceSerializer,
-    NotificationSerializer,
     OnThisDayResponseSerializer,
     PhotoFileSerializer,
     PhotoLabelsSerializer,
@@ -163,7 +162,7 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
-from urbanlens.dashboard.models.images.model import Image, ImageSource
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.meta import DEFAULT_LABEL_COLOR
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.links.model import PinLink
@@ -324,8 +323,6 @@ from urbanlens.dashboard.services.wiki.wiki_access import wikis_hidden_by_pin_mo
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from django.db.models import QuerySet
     from rest_framework.request import Request
     from rest_framework.serializers import Serializer

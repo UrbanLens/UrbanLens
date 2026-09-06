@@ -1449,7 +1449,7 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         attribution fields (author/source_url/copyright/taken_at) shown in the
         lightbox, and the two flags the pin gallery's delete prompt reads.
     """
-    from urbanlens.dashboard.models.images.model import ImageSource, MediaKind
+    from urbanlens.dashboard.models.images.model import MediaKind
 
     thumb = img.thumb_url
     marker_thumb = img.marker_thumb_url

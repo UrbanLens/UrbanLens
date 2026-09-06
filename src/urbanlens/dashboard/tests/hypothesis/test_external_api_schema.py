@@ -21,7 +21,6 @@ from oauth2_provider.models import get_access_token_model, get_application_model
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.external_api.serializers import PinDetailSerializer, SyncPinSerializer, SyncPinTagSerializer
-from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 from urbanlens.dashboard.services.pins.pin_detail import build_pin_detail
