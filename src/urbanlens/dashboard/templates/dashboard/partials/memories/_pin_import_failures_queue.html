@@ -24,33 +24,6 @@ Context:
     {% include "dashboard/partials/memories/_pin_import_failure_card.html" %}
     {% endfor %}
 </div>
-{% if failures_page_obj.paginator.num_pages > 1 %}
-<div class="pagination-bar pin-suggestions-pagination">
-    {% if failures_page_obj.has_previous %}
-    <button type="button" class="pagination-btn"
-            hx-get="{% url 'memories.locations.import_failures.queue' %}?failures_page={{ failures_page_obj.previous_page_number }}"
-            hx-target="#pin-import-failures-wrap" hx-swap="innerHTML"
-            aria-label="Previous page of import failures">
-        <i class="material-symbols-outlined">chevron_left</i>
-    </button>
-    {% else %}
-    <button type="button" class="pagination-btn" disabled aria-label="Previous page of import failures">
-        <i class="material-symbols-outlined">chevron_left</i>
-    </button>
-    {% endif %}
-    <span class="pagination-label">Page {{ failures_page_obj.number }} of {{ failures_page_obj.paginator.num_pages }}</span>
-    {% if failures_page_obj.has_next %}
-    <button type="button" class="pagination-btn"
-            hx-get="{% url 'memories.locations.import_failures.queue' %}?failures_page={{ failures_page_obj.next_page_number }}"
-            hx-target="#pin-import-failures-wrap" hx-swap="innerHTML"
-            aria-label="Next page of import failures">
-        <i class="material-symbols-outlined">chevron_right</i>
-    </button>
-    {% else %}
-    <button type="button" class="pagination-btn" disabled aria-label="Next page of import failures">
-        <i class="material-symbols-outlined">chevron_right</i>
-    </button>
-    {% endif %}
-</div>
-{% endif %}
+{% url 'memories.locations.import_failures.queue' as failures_url %}
+{% include "dashboard/partials/ui/_pagination_controls.html" with page_obj=failures_page_obj page_url=failures_url page_param="failures_page" page_target="#pin-import-failures-wrap" page_swap="innerHTML" page_noun="import failures" page_bar_class="pin-suggestions-pagination" %}
 {% endif %}
