@@ -930,6 +930,20 @@ USE_X_FORWARDED_HOST = True
 # Read by the per-IP rate limiters; see the field description in settings/app.py.
 TRUSTED_PROXY_COUNT = _app_settings.trusted_proxy_count
 
+# Bounds on what one WebSocket connection may send; see the field descriptions
+# in settings/app.py and services/core/frame_limits.py.
+UL_WEBSOCKET_MAX_FRAME_CHARS = _app_settings.websocket_max_frame_chars
+UL_WEBSOCKET_FRAMES_PER_MINUTE = _app_settings.websocket_frames_per_minute
+UL_WEBSOCKET_MESSAGES_PER_MINUTE = _app_settings.websocket_messages_per_minute
+
+# What daphne is told to refuse at the transport layer, derived rather than
+# configured so the two bounds cannot drift apart. Autobahn rejects an oversized
+# frame with no error frame and no explanation - the user sees an unexplained
+# disconnect - so the transport bound has to sit strictly above the application
+# one, at the worst case of four UTF-8 bytes per character. docker-compose.yml
+# interpolates this into the app-ws command.
+UL_WEBSOCKET_MAX_MESSAGE_BYTES = UL_WEBSOCKET_MAX_FRAME_CHARS * 4
+
 protocols = ["https://"]
 if _is_local:
     # Local development: cover common ports used by docker-compose and direct runserver.

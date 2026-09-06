@@ -263,6 +263,37 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
 
+    websocket_max_frame_chars: int = Field(
+        default=65_536,
+        ge=1,
+        description=(
+            "Largest inbound WebSocket frame, in characters, a chat consumer will parse. Compared "
+            "against the raw frame before it is JSON-decoded, so an oversized frame costs a length "
+            "check rather than a full parse. Has to stay above the largest legitimate frame: a "
+            "direct message carries up to a 40,000-character ciphertext, and a 4,000-character "
+            "safety message escapes to roughly 24,000 characters when a client sends ASCII-safe "
+            "JSON. Cannot be disabled - a size cap with an off switch is a size cap somebody turns off."
+        ),
+    )
+    websocket_frames_per_minute: int = Field(
+        default=120,
+        description=(
+            "Inbound frames one sender may send per minute on one socket family, counting every "
+            "frame - keep-alives, typing indicators and messages alike - because each one costs "
+            "parsing and dispatch whether or not it writes. The web client throttles typing to one "
+            "frame per 3s and pings every 45s, so a fast typist sits near 25/minute. 0 disables it."
+        ),
+    )
+    websocket_messages_per_minute: int = Field(
+        default=20,
+        description=(
+            "Inbound frames per minute that write or fan out - a chat message, a direct message, a "
+            "typing indicator delivered into somebody else's group. One every three seconds "
+            "sustained is already faster than people type. Charged on top of "
+            "UL_WEBSOCKET_FRAMES_PER_MINUTE. 0 disables it."
+        ),
+    )
+
     metrics_enabled: bool = Field(
         default=False,
         description=(

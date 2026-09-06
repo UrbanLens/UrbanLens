@@ -6,6 +6,7 @@ run on every ``manage.py check``, ``migrate``, ``runserver``, and test session.
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING
 
 from django.apps import apps
@@ -340,4 +341,54 @@ def check_celery_failures_cannot_requeue_forever(app_configs: Sequence[AppConfig
                 id="dashboard.E008",
             ),
         )
+    return errors
+
+
+@register()
+def check_websocket_frame_caps_agree(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """Refuse a transport frame cap below the one the application enforces.
+
+    The consumers refuse an oversized frame with an error frame, so the sender
+    is told what happened. Daphne's cap is enforced a layer lower, by autobahn,
+    at frame-header time: the socket simply dies, with nothing sent and nothing
+    logged on the application side. A deployment whose transport cap sits below
+    its application cap therefore presents as users being disconnected at
+    random while every test passes, which is close to the worst failure shape
+    available.
+
+    The two numbers are derived from one setting, so they can only disagree
+    when a deployment passes daphne a different value than
+    ``UL_WEBSOCKET_MAX_MESSAGE_BYTES``. That is exactly what this reads:
+    ``sys.argv`` on an ASGI process carries the flags it was actually started
+    with, whatever produced them.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        One error when the deployed transport cap would refuse a frame the
+        application would have accepted.
+    """
+    argv = sys.argv
+    required = int(getattr(settings, "UL_WEBSOCKET_MAX_MESSAGE_BYTES", 0) or 0)
+    errors: list[CheckMessage] = []
+    for flag in ("--websocket-max-message-size", "--websocket-max-frame-size"):
+        if flag not in argv:
+            continue
+        raw = argv[argv.index(flag) + 1] if argv.index(flag) + 1 < len(argv) else ""
+        try:
+            deployed = int(raw)
+        except ValueError:
+            continue
+        if deployed < required:
+            errors.append(
+                Error(
+                    f"daphne was started with {flag}={deployed}, below the "
+                    f"{required} bytes UL_WEBSOCKET_MAX_FRAME_CHARS implies. A frame the consumers would accept is "
+                    "refused by autobahn instead, which closes the socket without sending anything - the user sees an "
+                    f"unexplained disconnect. Raise {flag} to at least {required}, or lower UL_WEBSOCKET_MAX_FRAME_CHARS.",
+                    id="dashboard.E009",
+                ),
+            )
     return errors
