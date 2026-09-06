@@ -154,7 +154,7 @@ class DirectMessageVolumeTests(TransactionTestCase):
         self.assertEqual(await _settle(self._acount_messages), 1)
         await comm.disconnect()
 
-    @override_settings(UL_WEBSOCKET_MESSAGES_PER_MINUTE=3)
+    @override_settings(UL_MESSAGES_PER_MINUTE=3)
     def test_a_flood_of_direct_messages_stops_at_the_budget(self) -> None:
         _run(self._flood_stops_at_the_budget())
 
@@ -170,7 +170,7 @@ class DirectMessageVolumeTests(TransactionTestCase):
         self.assertEqual(await _settle(self._acount_messages), 3, "the write budget did not stop the flood")
         await comm.disconnect()
 
-    @override_settings(UL_WEBSOCKET_MESSAGES_PER_MINUTE=2)
+    @override_settings(UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE=2)
     def test_typing_indicators_are_budgeted(self) -> None:
         """The one frame on this socket that writes nothing and still fans out.
 
@@ -195,7 +195,7 @@ class DirectMessageVolumeTests(TransactionTestCase):
         )
         await comm.disconnect()
 
-    @override_settings(UL_WEBSOCKET_MESSAGES_PER_MINUTE=2)
+    @override_settings(UL_MESSAGES_PER_MINUTE=2)
     def test_an_empty_frame_does_not_spend_the_write_budget(self) -> None:
         """A frame with nothing to send is dropped before it is charged.
 
@@ -267,7 +267,7 @@ class TriviaSessionVolumeTests(TransactionTestCase):
     def _acount_chat(self) -> int:
         return TriviaSessionChatMessage.objects.filter(session=self.session).count()
 
-    @override_settings(UL_WEBSOCKET_MESSAGES_PER_MINUTE=3)
+    @override_settings(UL_MESSAGES_PER_MINUTE=3)
     def test_a_chat_flood_stops_at_the_budget(self) -> None:
         _run(self._flood_stops_at_the_budget())
 
@@ -283,7 +283,7 @@ class TriviaSessionVolumeTests(TransactionTestCase):
         self.assertEqual(await _settle(self._acount_chat), 3, "the write budget did not stop the flood")
         await comm.disconnect()
 
-    @override_settings(UL_WEBSOCKET_MESSAGES_PER_MINUTE=2)
+    @override_settings(UL_MESSAGES_PER_MINUTE=2)
     def test_the_refusal_is_an_error_frame_and_not_a_close(self) -> None:
         """Closing would put the client into a reconnect loop over a condition
         retrying cannot fix - the convention this consumer's own scope refusal
@@ -326,7 +326,7 @@ class TriviaSessionVolumeTests(TransactionTestCase):
         )
         await comm.disconnect()
 
-    @override_settings(UL_WEBSOCKET_MESSAGES_PER_MINUTE=1)
+    @override_settings(UL_MESSAGES_PER_MINUTE=1)
     def test_a_ping_does_not_spend_the_message_budget(self) -> None:
         """The client sends one every 45 seconds, because Cloudflare closes an idle
         tunnelled socket at about 100. Charging those against the write budget

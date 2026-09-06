@@ -61,7 +61,8 @@ class WebSocketVolumeSettingsTests(SimpleTestCase):
         for name in (
             "UL_WEBSOCKET_MAX_FRAME_CHARS",
             "UL_WEBSOCKET_FRAMES_PER_MINUTE",
-            "UL_WEBSOCKET_MESSAGES_PER_MINUTE",
+            "UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE",
+            "UL_MESSAGES_PER_MINUTE",
             "UL_WEBSOCKET_MAX_MESSAGE_BYTES",
         ):
             with self.subTest(setting=name):
@@ -188,7 +189,7 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
         comm.scope["user"] = self.owner_user
         return comm
 
-    @override_settings(UL_WEBSOCKET_MESSAGES_PER_MINUTE=3)
+    @override_settings(UL_MESSAGES_PER_MINUTE=3)
     def test_a_flood_of_chat_frames_stops_at_the_budget(self):
         _run(self._flood_stops_at_the_budget())
 
@@ -208,7 +209,7 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
         self.assertEqual(saved, 3, "the write budget did not stop the flood")
         await comm.disconnect()
 
-    @override_settings(UL_WEBSOCKET_MESSAGES_PER_MINUTE=2)
+    @override_settings(UL_MESSAGES_PER_MINUTE=2)
     def test_the_refusal_is_an_error_frame_and_not_a_close(self):
         _run(self._refusal_is_an_error_frame())
 
@@ -241,7 +242,7 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
         self.assertFalse(comm.future.done())
         await comm.disconnect()
 
-    @override_settings(UL_WEBSOCKET_MESSAGES_PER_MINUTE=2)
+    @override_settings(UL_MESSAGES_PER_MINUTE=2)
     def test_one_error_frame_per_window_not_one_per_refused_frame(self):
         _run(self._one_error_frame_per_window())
 
@@ -262,7 +263,7 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
         self.assertEqual(errors, 1, "the throttle answered a flood with a flood")
         await comm.disconnect()
 
-    @override_settings(UL_WEBSOCKET_MAX_FRAME_CHARS=256, UL_WEBSOCKET_MESSAGES_PER_MINUTE=0)
+    @override_settings(UL_WEBSOCKET_MAX_FRAME_CHARS=256, UL_MESSAGES_PER_MINUTE=0)
     def test_an_oversized_frame_is_refused_before_it_is_parsed(self):
         _run(self._oversized_frame_is_refused_before_parsing())
 
@@ -285,7 +286,7 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
         self.assertEqual(await self._acount_saved(), 0)
         await comm.disconnect()
 
-    @override_settings(UL_WEBSOCKET_FRAMES_PER_MINUTE=3, UL_WEBSOCKET_MESSAGES_PER_MINUTE=0)
+    @override_settings(UL_WEBSOCKET_FRAMES_PER_MINUTE=3, UL_MESSAGES_PER_MINUTE=0)
     def test_frames_that_write_nothing_are_still_budgeted(self):
         _run(self._non_writing_frames_are_budgeted())
 

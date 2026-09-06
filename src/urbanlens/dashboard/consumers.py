@@ -11,6 +11,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from django.conf import settings
 
 from urbanlens.dashboard.services.core.frame_limits import ConnectionRate, FrameBudget
+from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.websocket_auth import CREDENTIAL_SCOPE_KEY
 
 if TYPE_CHECKING:
@@ -288,14 +289,20 @@ class InboundVolumeMixin(_CredentialScopeBase):
             return None
         return data
 
-    async def charge_write(self) -> bool:
-        """Charge one frame that writes or fans out.
+    async def charge_fanout(self) -> bool:
+        """Charge one frame that reaches other people without writing a row.
+
+        Only the direct-message typing indicator, today. Anything that creates a
+        message is charged at the service layer instead
+        (``services.core.message_limits``), because those writes are equally
+        reachable over HTTP and a socket-only budget is one a POST loop walks
+        around.
 
         Returns:
             True when the frame may proceed. False once the budget is spent,
             having already told the sender.
         """
-        budget = FrameBudget(name="write", limit=int(getattr(settings, "UL_WEBSOCKET_MESSAGES_PER_MINUTE", 0) or 0))
+        budget = FrameBudget(name="fanout", limit=int(getattr(settings, "UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE", 0) or 0))
         if await budget.aconsume(self.volume_identity()):
             return True
         await self._report_limit(_RATE_LIMITED_DETAIL)
@@ -566,7 +573,7 @@ class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebso
                 # unmetered one the cheapest amplifier on the socket: no
                 # validation, no insert, one channel-layer send per frame to
                 # somebody else's open tabs.
-                if not await self.charge_write():
+                if not await self.charge_fanout():
                     return
 
                 from urbanlens.dashboard.services.messaging.direct_messages import broadcast_typing_indicator
@@ -595,13 +602,10 @@ class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebso
             # message fans out to every active member (see services.messaging.group_chats).
             if not (body or ciphertext):
                 return
-            # Charged after the emptiness guard, so a client emitting blank
-            # frames cannot throttle its own user out of a conversation they
-            # never typed in.
-            if not await self.charge_write():
-                return
             try:
                 await self._create_group_message(group_uuid, body, ciphertext, nonce, key_version)
+            except MessageRateLimitedError as exc:
+                await self._report_limit(exc.safe_message)
             except (ValueError, PermissionError) as exc:
                 await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
             except Exception:
@@ -616,11 +620,11 @@ class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebso
         reply_to_id = int(reply_to_id) if isinstance(reply_to_id, int) else None
         if not recipient_slug or not (body or ciphertext or image_ids or markup_map_uuid):
             return
-        if not await self.charge_write():
-            return
 
         try:
             await self._create_message(recipient_slug, body, ciphertext, nonce, key_version, image_ids, markup_map_uuid, reply_to_id)
+        except MessageRateLimitedError as exc:
+            await self._report_limit(exc.safe_message)
         except (ValueError, PermissionError) as exc:
             await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
         except Exception:
@@ -1014,11 +1018,16 @@ class SafetyCheckinChatConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncW
         body = str(data.get("body") or "").strip()
         if not body:
             return
-        if not await self.charge_write():
-            return
 
         try:
             message = await self._create_message(body)
+        except MessageRateLimitedError as exc:
+            # Reported through _report_limit rather than as a plain error frame:
+            # the refusal is now raised by the service (it has to be, so the HTTP
+            # fallback shares one budget), and answering every refused frame
+            # individually turns a flood into a flood in both directions.
+            await self._report_limit(exc.safe_message)
+            return
         except ValueError as exc:
             await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
             return
@@ -1393,13 +1402,11 @@ class _ParticipantSessionConsumer(InboundVolumeMixin, CredentialScopeMixin, Asyn
         body = str(data.get("body") or "").strip()
         if not body:
             return
-        # After the emptiness guard: a blank frame writes nothing and fans out
-        # nothing, so charging it would let a client bug throttle its own user.
-        if not await self.charge_write():
-            return
 
         try:
             await self._send_chat_message(body)
+        except MessageRateLimitedError as exc:
+            await self._report_limit(exc.safe_message)
         except Exception:
             logger.exception("%s chat message failed on session %s", self.game_label, self.session_id)
             await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))

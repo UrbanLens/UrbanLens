@@ -63,6 +63,11 @@ class SessionChat[SessionT: Model, MessageT]:
     """Send and read back the live text chat for one game's sessions.
 
     Args:
+        name: Which game this is, e.g. ``"trivia"``. Namespaces the per-session
+            rate-limit keys, so two games cannot charge each other's budgets.
+            Named explicitly rather than derived from the session model, because
+            a budget key that changes when a model is renamed silently resets
+            everyone's limit at deploy time.
         manager: The chat-message model's manager (e.g. ``GameSessionChatMessage.objects``).
         realtime: The game's ``realtime`` module, used to push new messages to connected
             participants.
@@ -75,12 +80,14 @@ class SessionChat[SessionT: Model, MessageT]:
     def __init__(
         self,
         *,
+        name: str,
         manager: ChatMessageManager[MessageT],
         realtime: SessionRealtime,
         serialize: Callable[[MessageT], dict[str, Any]],
         history_limit: int = CHAT_HISTORY_LIMIT,
         max_message_length: int = MAX_SESSION_CHAT_MESSAGE_LENGTH,
     ) -> None:
+        self.name = name
         self.manager = manager
         self.realtime = realtime
         self.serialize = serialize
@@ -99,7 +106,18 @@ class SessionChat[SessionT: Model, MessageT]:
 
         Returns:
             The saved message.
+
+        Raises:
+            MessageRateLimitedError: This participant's budget for this session
+                is spent. A ``ValueError``, so the consumers that already answer
+                one with an error frame report it unchanged.
         """
+        from urbanlens.dashboard.services.core.message_limits import charge_message, session_chat_identity
+
+        # The rate limit this class's own docstring says belongs here rather
+        # than three times over. Charged before the insert, and after the caller
+        # has confirmed participation.
+        charge_message(session_chat_identity(self.name, session.pk, profile.pk))
         message = self.manager.create(session=session, profile=profile, body=body.strip()[: self.max_message_length])
         self.realtime.broadcast(session.pk, "chat.message", {"message": self.serialize(message)})
         return message

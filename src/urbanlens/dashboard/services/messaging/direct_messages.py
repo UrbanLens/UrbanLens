@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
+from urbanlens.dashboard.services.core.message_limits import charge_message, sender_identity
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
@@ -773,6 +774,13 @@ def create_direct_message(
 
     if not body and not ciphertext and not eligible_image_ids and not markup_map_uuid:
         raise DirectMessageValidationError("Message cannot be empty.")
+    # Charged here rather than in the consumer: this function is the sending
+    # path for the WebSocket *and* for ConversationSendView, and a budget on only
+    # one of them is one a POST loop walks around (P31). After every content
+    # check above, so a client bug that submits malformed or empty messages
+    # cannot throttle its own user; before the send, so the charge is for a
+    # message that would otherwise have gone out.
+    charge_message(sender_identity(sender.pk))
     if not can_direct_message(sender, recipient):
         raise DirectMessagePermissionError("This user isn't accepting messages from you.")
 

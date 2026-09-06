@@ -934,7 +934,8 @@ TRUSTED_PROXY_COUNT = _app_settings.trusted_proxy_count
 # in settings/app.py and services/core/frame_limits.py.
 UL_WEBSOCKET_MAX_FRAME_CHARS = _app_settings.websocket_max_frame_chars
 UL_WEBSOCKET_FRAMES_PER_MINUTE = _app_settings.websocket_frames_per_minute
-UL_WEBSOCKET_MESSAGES_PER_MINUTE = _app_settings.websocket_messages_per_minute
+UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE = _app_settings.websocket_fanout_frames_per_minute
+UL_MESSAGES_PER_MINUTE = _app_settings.messages_per_minute
 
 # What daphne is told to refuse at the transport layer, derived rather than
 # configured so the two bounds cannot drift apart. Autobahn rejects an oversized

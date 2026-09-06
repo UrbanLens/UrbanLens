@@ -13,7 +13,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
@@ -22,6 +22,7 @@ from urbanlens.dashboard.controllers.direct_messages import _get_profile
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupMessage
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message
 from urbanlens.dashboard.services.messaging.group_chats import (
@@ -40,7 +41,7 @@ from urbanlens.dashboard.services.messaging.group_chats import (
 )
 
 if TYPE_CHECKING:
-    from django.http import HttpRequest, HttpResponse
+    from django.http import HttpRequest
 
     from urbanlens.dashboard.models.group_chats.model import GroupChatMembership
 
@@ -226,6 +227,10 @@ class GroupSendView(LoginRequiredMixin, View):
                 nonce=request.POST.get("nonce", ""),
                 key_version=int(key_version_raw) if key_version_raw.isdigit() else 0,
             )
+        except MessageRateLimitedError as exc:
+            # A 429, not the 400 its ValueError siblings earn: the message was
+            # fine, the sender is ahead of their budget. See ConversationSendView.
+            return HttpResponse(exc.safe_message, status=429, content_type="text/plain; charset=utf-8")
         except GroupChatValidationError as exc:
             return HttpResponseBadRequest(exc.safe_message)
         except GroupChatPermissionError as exc:

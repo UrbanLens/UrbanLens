@@ -18,6 +18,7 @@ MAX_MESSAGE_LENGTH = MAX_SESSION_CHAT_MESSAGE_LENGTH
 __all__ = ["CHAT_HISTORY_LIMIT", "MAX_MESSAGE_LENGTH", "recent_messages", "send_chat_message"]
 
 _chat: SessionChat[TriviaSession, TriviaSessionChatMessage] = SessionChat(
+    name="trivia",
     manager=TriviaSessionChatMessage.objects,
     realtime=realtime,
     serialize=serialize_chat_message,

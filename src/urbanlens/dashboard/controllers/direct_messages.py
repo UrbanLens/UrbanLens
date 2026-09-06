@@ -14,12 +14,13 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
-from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import (
     REACTION_PICKER_EMOJIS,
@@ -48,7 +49,7 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
 )
 
 if TYPE_CHECKING:
-    from django.http import HttpRequest, HttpResponse
+    from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
@@ -351,6 +352,12 @@ class ConversationSendView(LoginRequiredMixin, View):
                 markup_map_uuid=request.POST.get("markup_map_uuid") or None,
                 reply_to_id=int(reply_to_raw) if reply_to_raw.isdigit() else None,
             )
+        except MessageRateLimitedError as exc:
+            # Caught before DirectMessageValidationError: both are ValueErrors,
+            # and this is a 429 rather than a 400 - the message was fine, the
+            # sender is simply ahead of their budget, and a client that reads a
+            # 400 as "malformed" would tell them to edit it.
+            return HttpResponse(exc.safe_message, status=429, content_type="text/plain; charset=utf-8")
         except DirectMessageValidationError as exc:
             return HttpResponseBadRequest(exc.safe_message)
         except DirectMessagePermissionError as exc:

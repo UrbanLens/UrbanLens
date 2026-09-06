@@ -23,6 +23,7 @@ from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title
@@ -1749,6 +1750,13 @@ class SafetyCheckinMessageView(View):
                 # something is already degraded.
                 logger.info("Safety chat HTTP fallback refused message on archived checkin %s", checkin.uuid)
                 return HttpResponse(exc.safe_message, status=409)
+            except MessageRateLimitedError as exc:
+                # Another ValueError sibling, and another distinct answer: 429,
+                # because the body was fine and retrying shortly will work. It
+                # has to be caught above SafetyValidationError for the same
+                # reason CheckinArchivedError is - the handler below would
+                # otherwise fold it into a 400 that reads as "fix your message".
+                return HttpResponse(exc.safe_message, status=429)
             except SafetyValidationError as exc:
                 logger.info("Safety chat HTTP fallback rejected message on checkin %s: %s", checkin.uuid, exc)
                 return HttpResponseBadRequest(exc.safe_message)

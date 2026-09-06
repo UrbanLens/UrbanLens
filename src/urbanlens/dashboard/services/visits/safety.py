@@ -2321,10 +2321,11 @@ def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, c
             distinctly so a REST caller can answer 409 Conflict (the request was
             well-formed, the check-in is simply past the point of writing)
             rather than folding it into the 400 a blank body earns.
-        ValueError: If ``body`` is blank or exceeds ``MAX_CHAT_MESSAGE_LENGTH``.
-            Callers catch this and surface it to the sender - a safety check-in
-            chat failing silently is worse than most other features failing
-            silently.
+        ValueError: If ``body`` is blank or exceeds ``MAX_CHAT_MESSAGE_LENGTH``,
+            or if this sender's message budget for the check-in is spent
+            (``MessageRateLimitedError``, also a ``ValueError``). Callers catch
+            this and surface it to the sender - a safety check-in chat failing
+            silently is worse than most other features failing silently.
     """
     if hasattr(checkin, "archive"):
         raise CheckinArchivedError("This check-in has concluded and can no longer receive messages.")
@@ -2335,6 +2336,20 @@ def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, c
         raise SafetyValidationError(f"Message is too long (max {MAX_CHAT_MESSAGE_LENGTH} characters).")
 
     sender_profile, sender_contact = resolve_message_sender(user, contact)
+    # After the sender is resolved, because the budget is keyed on who they turn
+    # out to be, and after every content check, so a client bug cannot throttle
+    # someone out of an emergency conversation. Charged here rather than in the
+    # consumer because SafetyCheckinMessageView - the no-JS fallback - calls the
+    # same function, and a socket-only budget is one a POST loop walks around (P31).
+    from urbanlens.dashboard.services.core.message_limits import charge_message, safety_chat_identity
+
+    charge_message(
+        safety_chat_identity(
+            checkin.pk,
+            profile_pk=sender_profile.pk if sender_profile else None,
+            contact_pk=sender_contact.pk if sender_contact else None,
+        )
+    )
     message = SafetyCheckinMessage.objects.create(checkin=checkin, sender_profile=sender_profile, sender_contact=sender_contact, body=body)
     logger.info(
         "Safety check-in %s: chat message %s from %s",

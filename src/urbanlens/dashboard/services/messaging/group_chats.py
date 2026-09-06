@@ -27,6 +27,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
+from urbanlens.dashboard.services.core.message_limits import charge_message, sender_identity
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message, direct_message_group_name, reaction_summary
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_identity_for_viewers, resolve_visible_identity
@@ -628,6 +629,12 @@ def create_group_message(
         raise GroupChatValidationError("Malformed encrypted message.")
     if not body and not ciphertext:
         raise GroupChatValidationError("Message cannot be empty.")
+
+    # The same budget a direct message spends, for the reason create_direct_message
+    # gives: this is the sending path for both the socket and GroupSendView, and
+    # one budget per sender rather than per conversation is what stops someone
+    # multiplying their allowance by opening another group (P31).
+    charge_message(sender_identity(sender.pk))
 
     try:
         # Nested atomic: see create_direct_message for why the idempotency
