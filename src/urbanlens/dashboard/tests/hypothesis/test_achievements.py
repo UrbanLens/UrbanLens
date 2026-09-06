@@ -532,6 +532,34 @@ class SignalIntegrationTests(AchievementTestsBase):
 
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
 
+    def test_a_field_excluded_from_update_fields_is_not_re_baselined(self) -> None:
+        """A value that never reached the database must not be recorded as persisted.
+
+        `save()` re-baselines the qualifying markers so a second save of the same
+        instance is not mistaken for another change. If it re-baselined a field
+        the caller excluded from `update_fields`, that field's *real* change
+        would later look like no change - a backfill missed silently. Erring the
+        other way only costs a redundant one.
+        """
+        from urbanlens.dashboard.tasks import backfill_achievement
+
+        baker.make(Pin, profile=self.profile, _quantity=3)
+        achievement = self._achievement(metric="pins_created", threshold=50, name="Excluded")
+
+        # Change the threshold but persist only the name: the new threshold is
+        # still in memory and still absent from the database.
+        achievement.threshold = 3
+        achievement.name = "Excluded Renamed"
+        achievement.save(update_fields=["name"])
+
+        with tasks_run_inline(backfill_achievement), self.captureOnCommitCallbacks(execute=True):
+            achievement.save(update_fields=["threshold"])
+
+        self.assertTrue(
+            UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists(),
+            "the threshold's real save must still count as a change",
+        )
+
     def test_changing_the_metric_requeues_the_backfill(self) -> None:
         """Anti-vacuity: the other field that decides who qualifies."""
         achievement = self._achievement(metric="pins_created", threshold=1, name="Metric Swap")

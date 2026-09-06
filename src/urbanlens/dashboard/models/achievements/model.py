@@ -158,8 +158,16 @@ class Achievement(abstract.PublicDashboardModel):
             **kwargs: Passed through to ``Model.save``.
         """
         super().save(*args, **kwargs)
+        # Only re-baseline what was actually written. A caller that changes a
+        # qualifying field but excludes it from `update_fields` has not
+        # persisted it, and recording the unsaved value here would make the
+        # *next* save of it look like no change - a missed backfill, silently.
+        # Erring the other way only costs a redundant one. `update_fields` is
+        # save()'s fourth positional parameter as well as a keyword.
+        written = kwargs.get("update_fields", args[3] if len(args) > 3 else None)
         for field in self.QUALIFYING_FIELDS:
-            setattr(self, f"_loaded_{field}", getattr(self, field))
+            if written is None or field in written:
+                setattr(self, f"_loaded_{field}", getattr(self, field))
 
     def qualifying_change(self) -> bool:
         """Whether this instance's qualifying fields differ from the loaded row.
