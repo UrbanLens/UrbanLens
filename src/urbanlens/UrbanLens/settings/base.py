@@ -961,6 +961,16 @@ UL_MESSAGES_PER_MINUTE = _app_settings.messages_per_minute
 # interpolates this into the app-ws command.
 UL_WEBSOCKET_MAX_MESSAGE_BYTES = UL_WEBSOCKET_MAX_FRAME_CHARS * 4
 
+# The port this deployment is actually published on. docker-compose.yml sets it
+# on every app-family service; anything running outside compose is served by a
+# real web server on 80/443 and sets UL_SITE_URL instead.
+#
+# Read rather than restated because a literal is what drifted: the compose
+# default said 21080 while the published port was 21800, and every origin minted
+# from the wrong one is a browser POST rejected on CSRF with no hint that a port
+# is why.
+_APP_PORT = os.getenv("UL_APP_PORT", "21800")
+
 protocols = ["https://"]
 if _is_local:
     # Local development: cover common ports used by docker-compose and direct runserver.
@@ -968,19 +978,17 @@ if _is_local:
         "urbanlens.org",
         "localhost",
         "localhost:8000",
-        "localhost:21080",
-        "localhost:21800",
+        f"localhost:{_APP_PORT}",
         "127.0.0.1",
         "127.0.0.1:8000",
-        "127.0.0.1:21080",
-        "127.0.0.1:21800",
+        f"127.0.0.1:{_APP_PORT}",
         "[::1]",
         "[::1]:8000",
     ]
 elif _is_dev:
-    domains = ["urbanlens.org", "localhost", "localhost:21080", "localhost:21800", "127.0.0.1"]
+    domains = ["urbanlens.org", "localhost", f"localhost:{_APP_PORT}", "127.0.0.1"]
 else:
-    domains = ["urbanlens.org", "localhost", "localhost:21080"]
+    domains = ["urbanlens.org", "localhost", f"localhost:{_APP_PORT}"]
 
 subdomains = ["www.", ""]
 if UNSAFE_ALLOW_HTTP:
@@ -1096,7 +1104,7 @@ def _derive_trusted_origins(allowed_hosts: list[str], site_url: str, *, allow_ht
 
 
 # The environment variable rather than SITE_URL (defined further down): SITE_URL
-# falls back to http://localhost:21080 when unset, and a fallback nobody
+# falls back to http://localhost:<the app port> when unset, and a fallback nobody
 # configured must not become an origin this deployment trusts.
 _derived_origins, _derived_wildcard_origins = _derive_trusted_origins(
     ALLOWED_HOSTS,
@@ -1166,7 +1174,7 @@ DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
 # Canonical base URL used to build absolute links in emails/notifications sent
 # from contexts with no HttpRequest to build them from (e.g. Celery tasks).
 _site_url_env = os.getenv("UL_SITE_URL")
-SITE_URL = _site_url_env or "http://localhost:21080"
+SITE_URL = _site_url_env or f"http://localhost:{_APP_PORT}"
 if not _site_url_env and not _is_dev:
     import logging
 

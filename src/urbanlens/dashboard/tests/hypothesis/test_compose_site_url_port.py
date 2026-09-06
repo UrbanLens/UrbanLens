@@ -22,14 +22,18 @@ Found 2026-09-06 when a browser POST to a new endpoint came back 403 with
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
+
+from django.conf import settings
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 #: The repo root - parents[5] from src/urbanlens/dashboard/tests/hypothesis/.
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 _COMPOSE_PATH = _REPO_ROOT / "docker-compose.yml"
+_SETTINGS_PATH = pathlib.Path(__file__).resolve().parents[3] / "UrbanLens" / "settings" / "base.py"
 
 #: `${NAME:-default}`, capturing the default. One level of `${...}` nesting is
 #: allowed inside it, which is how UL_SITE_URL borrows the app's port.
@@ -86,3 +90,46 @@ class ComposeSiteUrlPortTests(SimpleTestCase):
         # default is deliberately not a URL: a deployment nobody configured
         # should refuse framing rather than allow it from a guess.
         self.assertIn("'none'", _defaults("UL_SITE_URL"))
+
+
+class SettingsSiteUrlPortTests(SimpleTestCase):
+    """Django's own fallback, which `docker-compose.yml` does not reach.
+
+    Fixing the compose default alone left `settings/base.py` restating the same
+    stale literal - and that one is what any process started without
+    `UL_SITE_URL` in its environment actually uses to build absolute links.
+    `docs/INTEGRATION_TESTS.md` records this happening on staging for real.
+    """
+
+    def test_the_site_url_fallback_is_not_a_literal_port(self) -> None:
+        source = _SETTINGS_PATH.read_text(encoding="utf-8")
+        fallback = re.search(r"SITE_URL = _site_url_env or ([^\n]+)", source)
+
+        self.assertIsNotNone(fallback)
+        self.assertIn("_APP_PORT", fallback.group(1), "the fallback names a port independently of UL_APP_PORT")
+
+    def test_no_cors_origin_is_minted_from_a_hardcoded_port(self) -> None:
+        # These lists feed CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS. A port
+        # literal in one is an origin this deployment trusts and does not serve,
+        # or - worse, and what happened - serves and does not trust.
+        #
+        # Scoped to the `domains` lists rather than the whole file: a port on a
+        # `redis://` URL is not an origin and has nothing to do with this.
+        source = _SETTINGS_PATH.read_text(encoding="utf-8")
+        listed = re.findall(r"^\s*domains = \[(.+?)\]", source, re.MULTILINE | re.DOTALL)
+
+        self.assertTrue(listed, "no `domains = [...]` found - has this moved?")
+        for block in listed:
+            with self.subTest(block=" ".join(block.split())[:60]):
+                ports = re.findall(r"(?:localhost|127\.0\.0\.1):(\d+)", block)
+                self.assertEqual(
+                    ports,
+                    [port for port in ports if port == "8000"],
+                    f"a port literal other than runserver's 8000: {ports}",
+                )
+
+    def test_the_fallback_resolves_to_the_configured_port(self) -> None:
+        self.assertTrue(
+            settings.SITE_URL.endswith(f":{os.getenv('UL_APP_PORT', '21800')}") or os.getenv("UL_SITE_URL"),
+            settings.SITE_URL,
+        )
