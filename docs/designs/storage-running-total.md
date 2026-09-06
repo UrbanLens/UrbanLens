@@ -1,10 +1,49 @@
-# I4 — The storage running-total column: what it is, and why the lock isn't enough
+# Storage quotas: the running-total proposal, and the decision not to build it
 
-`id: I4` · `status: actionable` · `updated: 2026-09-06`
+## D8 — Storage quotas are enforced generally, not exactly
+
+`id: D8` · `status: accepted` · `updated: 2026-09-06`
+
+**Decided 2026-09-06 by Jess, answering the questions at the foot of this document: no.** Exact
+quota enforcement is not worth a denormalised counter.
+
+The reasoning, in her words: *"It's not absolutely critical that we enforce quotas precisely.
+Enforcing them generally still gets us to a place where users can upload and use assets for the
+site, without completely unbounded storage being eaten up by a single user. General and imprecise
+enforcement is therefore fine."*
+
+The overshoot is bounded and self-limiting, and the behaviour it lands in is already the intended
+one: **an over-quota profile keeps everything it has uploaded and is barred from uploading more
+until it is back under.** Verified 2026-09-06 rather than assumed - nothing in `dashboard/` deletes
+or purges anything on a quota failure; every one of the call sites refuses only the new upload (413
+from the interactive paths, a skip in the four `tasks.py` fetch-and-store ones), and
+`quota_error_for_upload`'s own message tells the user to free space themselves.
+
+**What this decides:**
+
+- The running-total column is **not being built**. The proposal below is kept as the record of what
+  it would have cost and why, so the next session finds an answer instead of re-deriving the
+  question.
+- `per_profile_upload_lock` stays as it is - a fail-open narrowing of the race, applied at every
+  call site since 2026-08-25. It is not a bound on a bulk fan-out, and it is not meant to be.
+- The unknown-size admission described under "What this does *not* fix" is covered by the same
+  reasoning and needs no separate entry: it is imprecision that self-corrects, since the true size
+  is recorded once stored and the *next* check sees it. (That last inference is mine from the
+  reasoning above, not something Jess said in as many words.)
+
+**What would reopen it:** a plan to sell storage, or any other point at which "roughly enforced" is
+no longer a defensible answer to a user who paid for a number of gigabytes. The proposal below is
+the starting point if that day comes.
+
+---
+
+## I4 — The running-total column: what it is, and why the lock isn't enough
+
+`id: I4` · `status: absorbed` · `updated: 2026-09-06`
 
 Written 2026-09-06, because P28's sign-off asked for the "running-total column" proposal to be
-re-explained before anyone implements it. Nothing here is built. This is the explanation, the
-options, and a recommendation to accept or reject.
+re-explained before anyone implements it. Nothing here was built, and per D8 above nothing will be.
+Kept as the record of the option that was considered and declined.
 
 ## What is wrong today, in one paragraph
 
@@ -122,12 +161,13 @@ an index covering it (`idxdb_image_profile_quota` on `profile, quota_exempt_reas
 install's scale the scan is trivial. This should be accepted or rejected on correctness. If it is
 sold as a performance fix, it will be measured and found not to matter.
 
-## The decision being asked for
+## The decision that was asked for — and given
 
 1. Is exact quota enforcement worth a denormalised counter at all, given that the current failure
-   needs a bulk import to trigger and overshoots by a bounded amount?
-2. If yes: mechanism A (trigger), B (model override), or C (service + reconciliation)?
-3. Should the unknown-size admission in the last section be folded in, or filed separately?
+   needs a bulk import to trigger and overshoots by a bounded amount? — **No** (D8, above).
+2. If yes: mechanism A (trigger), B (model override), or C (service + reconciliation)? — Moot.
+3. Should the unknown-size admission in the last section be folded in, or filed separately? —
+   Neither; it is the same kind of imprecision D8 accepts, and it self-corrects.
 
-A "no" to (1) is a perfectly good answer, and it should then be written into P28 so the next
-session stops proposing it.
+The "no" was the answer this section said would be a good one. It is recorded in D8 above and in
+P28's archive entry, so the next session finds the answer rather than re-deriving the question.

@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P86` · `T3` · `PL7` · `D8` · `X14` · `I5` · `R27` · `N9`
+**Next free id:** `P86` · `T3` · `PL7` · `D9` · `X14` · `I5` · `R27` · `N9`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -54,7 +54,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P25 | open | 2026-08-07 | `Comment.profile` CASCADEs but `TripComment.author` SET_NULLs, so account deletion erases only some comments | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P26 | open | 2026-09-06 | A group message can still be sent under a stale key version, and refusing one risks an availability outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P27 | open | 2026-08-08 | Saved-filter regions use leaflet-draw's transactional remove tool, so deleted polygons resurrect on the next draw | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P28 | open | 2026-08-12 | The upload quota check is fail-open under a cache lock, so a bulk import's fan-out can still exceed the quota | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P29 | open | 2026-08-13 | 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P34 | open | 2026-08-13 | 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -92,6 +91,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | D5 | accepted | 2026-08-27 | Thirteen decisions answer the mobile team's asks: what shipped, what was declined, what is deferred | [`docs/notes/mobile_app_notes.md`](notes/mobile_app_notes.md) |
 | D6 | accepted | 2026-09-06 | Media may live in an object store, but a read is never a presigned URL - the gate stays in the data path | [`docs/designs/media-object-storage.md`](designs/media-object-storage.md) |
 | D7 | accepted | 2026-09-06 | Over-cap uploads become chunked posts to Django, not presigned multipart; until then the app advertises the ingress cap | [`docs/designs/large-upload-protocol.md`](designs/large-upload-protocol.md) |
+| D8 | accepted | 2026-09-06 | Storage quotas are enforced generally, not exactly: an over-quota profile keeps its assets and is barred from uploading more | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
 | X1 | holds | 2026-08-27 | A release merge silently dropped --skip-undecryptable from DATA_ENCRYPTION.md; nothing else had drifted | [`docs/audits/DATA_ENCRYPTION_AUDIT.md`](audits/DATA_ENCRYPTION_AUDIT.md) |
 | X2 | holds | 2026-09-01 | A gate enforced in the web UI is repeatedly missing from the parallel external-API endpoint | [`docs/audits/FEATURES_CODE_AUDIT.md`](audits/FEATURES_CODE_AUDIT.md) |
 | X3 | holds | 2026-08-27 | GOALS.md contradicts the other docs on six points and states ten goals no other doc records at all | [`docs/audits/GOALS_AUDIT.md`](audits/GOALS_AUDIT.md) |
@@ -108,7 +108,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | I1 | unvalidated | 2026-08-27 | Splitting into a near-zero-knowledge server and a data-holding agent was planned in full, then deferred | [`docs/designs/rejected-and-deferred/split-architecture.md`](designs/rejected-and-deferred/split-architecture.md) |
 | I2 | actionable | 2026-08-27 | Ten free/open APIs surveyed as integration candidates; several have since shipped as plugins, so re-check before using it | [`docs/reports/api-expansion-candidates.md`](reports/api-expansion-candidates.md) |
 | I3 | absorbed | 2026-07-30 | SpotGuessr's backend was sound and its frontend was the debt; all five recommendations shipped | [`docs/reports/spotguessr-audit.md`](reports/spotguessr-audit.md) |
-| I4 | actionable | 2026-09-06 | Exact storage quotas need the total on one lockable row; the hard part is the five places `file_size` changes | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
+| I4 | absorbed | 2026-09-06 | Exact storage quotas need the total on one lockable row; the hard part is the five places `file_size` changes - declined, see D8 | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
 | R1 | current | 2026-09-02 | The assistant reaches a provider only through three credential-narrowed tiers behind a default-deny egress proxy | [`docs/AI_PIPELINE.md`](AI_PIPELINE.md) |
 | R2 | current | 2026-08-27 | Schemathesis holds the external API to its own published OpenAPI doc; detail routes still only prove 404 handling | [`docs/CONTRACT_TESTS.md`](CONTRACT_TESTS.md) |
 | R3 | stale | 2026-08-31 | Field encryption covers identity/credential/contact data only; core location content is left to disk encryption | [`docs/DATA_ENCRYPTION.md`](DATA_ENCRYPTION.md) |

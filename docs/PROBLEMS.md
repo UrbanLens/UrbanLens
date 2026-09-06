@@ -1540,64 +1540,6 @@ real browser to verify; the roadmap entry carries the design.
 **Page overflows footer** - CSS-level, needs a browser to reproduce; nothing checkable
 statically.
 
-## P28 — The upload quota check is fail-open under a cache lock, so a bulk import's fan-out can still exceed the quota
-
-`id: P28` · `status: open` · `updated: 2026-08-12`
-
-Previously titled "bulk-import paths skip the upload quota lock, which is fail-open anyway".
-
-`per_profile_upload_lock` exists because `quota_error_for_upload` reads current usage and the
-caller creates the `Image` row afterwards - "N concurrent uploads from the same profile can each
-pass the check before any of them commits". Its docstring tells callers to wrap the
-check-then-create sequence in it.
-
-Nine interactive call sites do (photo upload, DM attachments, article images, safety, tools,
-visits, maps, consensus, photo uploads service). **Six do not**, and they are all the background
-ones - `tasks.py` never imports the lock at all (four sites: Immich sync, Google Photos, and two
-other fetch-and-store tasks), plus `services/pins/pin_suggestions.py` and
-`services/import_export/import_data.py`.
-
-Those are the paths where concurrency is *highest*: a bulk import fans out one task per image, so
-many workers run the check for the same profile at once.
-
-**Wrapping them is not the fix, which is why this is filed rather than done.** The lock is
-deliberately fail-open - a caller that cannot acquire it logs a warning and proceeds - so under the
-contention a bulk import actually produces, most workers would simply proceed without it. It
-narrows the window for two near-simultaneous uploads; it does not bound a fan-out. Adding it to
-these sites would look like protection while changing almost nothing.
-
-The docstring already names the real fix: "true DB-level atomicity, which would need a dedicated
-running-total column". A `Profile.storage_used_bytes` counter maintained by the same transaction
-that creates the `Image` row would make the check exact for every path at once, and would also
-remove the repeated `SUM(file_size)` scan that `get_storage_used_bytes` runs on each upload.
-Sizing that (backfill, and keeping it correct across deletions and failed uploads) is a design
-decision, not a refactor.
-
-Fixed in passing: the lock released with a bare `cache.delete` guarded only by "did I acquire it",
-so an upload slower than the 30s timeout - already having lost the lock to its successor - deleted
-*that* upload's lock on the way out. It now uses the token-checked release from
-`services.core.locks` (see the 2026-08-12 sweep-lock entry; same defect, same fix).
-
-**Partially addressed 2026-08-25** (`bf9c31b0`). The six-call-site asymmetry named above is closed:
-all seven background call sites (one more than counted here - `import_data.py` has two distinct
-sites, `_import_photos` and `_restore_overlay_image`, not one) now wrap their check-then-create in
-`per_profile_upload_lock`, matching the interactive-path pattern exactly. **This is still only the
-same partial, fail-open mitigation every interactive path already has** - it narrows the race
-window but does not bound a true concurrent fan-out, exactly as this entry says above. The real
-fix - a dedicated running-total column - is unchanged and still a design decision, not a refactor:
-Jess's 2026-08-25 sign-off on this entry said she didn't follow the "running-total column"
-proposal and wants it re-explained before any implementation, so that half stays open pending that
-conversation.
-
-**The re-explanation exists now: I4, [`designs/storage-running-total.md`](designs/storage-running-total.md)
-(2026-09-06).** Still nothing implemented - it ends with three questions to answer, and "no" to the
-first is a good answer that should be written back here so the next session stops proposing it. The
-short version of why the lock cannot be enough: a `SUM` over many rows can be neither incremented
-atomically nor locked, and a single row can be both. The short version of why it is not a refactor:
-`file_size` changes in **five** places, not one - insert, delete, the post-admission backfill at
-`tasks.py:1270`, the re-encode in that same task, and `quota_rewards` flipping the exemption with a
-`queryset.update()`. The obvious implementation (override `Image.save()`) misses the last three.
-
 ## P29 — 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx
 
 `id: P29` · `status: open` · `updated: 2026-08-13`
@@ -2410,7 +2352,7 @@ Found while auditing existing unit tests for real positive/negative coverage (se
 `docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
 convention rather than fixed inline.
 
-**Nine are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
+**Ten are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
 `make_cache_key` collision, the hard-delete overlap lock, the `SubscriptionRole.clean()` gap, and
 `PinAliasView.post` (same-day, 2026-08-29). Each is struck through below with what the fix found.
 
@@ -2435,7 +2377,7 @@ Three of the "untested surface" entries are covered as of 2026-09-06 too - `Wiki
   credentials - standing. `test_ai_gateway_guarded` still passes, which is what proves it.
 
 What remains is mostly *missing coverage* rather than known defects: two untested surfaces, two
-locks with no real-concurrency proof, and three that need a decision from whoever owns the area.
+locks with no real-concurrency proof, and two that need a decision from whoever owns the area.
 
 Worth noting about this entry's own hit rate: it filed the AI trip tools as tidy-up ("duplicated
 business logic ... can silently drift"), and they were a live permission bypass. Two of the three
@@ -2482,12 +2424,28 @@ producing a 500 instead of the intended 400. **Fixed same day** while reviewing 
 `PinAliasView.post` now sanitizes first, mirroring the wiki view. Guarded by
 `test_create_alias_that_sanitizes_to_empty_is_rejected` in `test_alias_views.py`.
 
-**`models/achievements/signals.py`'s `on_achievement_saved` re-queues a full profile-table backfill
-sweep on every save of an already-active achievement**, not just on creation or reactivation - e.g.
-an admin renaming an award or tweaking its icon/color/order re-triggers the same site-wide backfill
-task. The docstring frames this as intentional for re-activation, but firing on unrelated field
-edits looks unintended. Negligible at current beta scale (~2 users); worth confirming intent before
-it matters.
+~~**`models/achievements/signals.py`'s `on_achievement_saved` re-queues a full profile-table backfill
+sweep on every save of an already-active achievement.**~~ **Fixed 2026-09-06.** No intent needed
+confirming in the end: the handler's own docstring said "newly defined or re-activated" and the code
+did neither check - it never looked at `created` or at what had changed.
+
+**The fix this entry proposed would have been wrong, though.** "Only on creation or reactivation"
+drops a case that genuinely needs the backfill: `metric` and `threshold` decide *who qualifies*, so
+an admin lowering a threshold from 50 to 3 has to reach the users that newly covers. The gate is a
+change to a **qualifying field** (`metric`, `threshold`, `is_active`), not to creation - tracked
+with the `from_db` idiom `Pin`, `Location` and `Wiki` already use here rather than a new mechanism.
+
+Three tests: a cosmetic edit (name, colour, order, secrecy) enqueues nothing, and two anti-vacuity
+ones - a lowered threshold and a changed metric still do. Only the first fails against the old
+code, which is the point: the other two passed before *and* after, and they are what stops the gate
+being narrowed too far.
+
+**`from_db` alone was not enough**, which the tests caught. It only sets the markers on an instance
+*read from the database*, so a second save of an instance built by `objects.create` compared against
+absent markers and enqueued anyway. `Pin.save` already solves this here - it re-baselines
+`_loaded_name` after saving - and `Achievement.save` now does the same. Ordering matters: `post_save`
+fires inside `super().save()`, so the signal still sees the pre-save values, and the re-baseline
+happens after.
 
 **`Location.address` / `Location.address_extended` leave a dangling trailing comma** when the last
 populated component has nothing following it - e.g. a route-only address renders as exactly

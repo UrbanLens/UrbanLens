@@ -11,6 +11,40 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-06: the upload quota check is fail-open, and that is now a decision rather than a defect
+
+`id: P28` · `status: fixed` · `resolved: 2026-09-06`
+
+Both halves are closed, by different means.
+
+**The call-site asymmetry was fixed 2026-08-25** (`bf9c31b0`). Nine interactive paths wrapped their
+check-then-create in `per_profile_upload_lock` and the background ones did not - which was backwards,
+since a bulk import fans out one task per image and is where the contention actually is. All seven
+background sites (one more than this entry had counted: `import_data.py` has two, `_import_photos`
+and `_restore_overlay_image`) wrap it now.
+
+**The remaining half - that the lock is fail-open and therefore does not bound a fan-out - is
+accepted, not fixed.** Decided 2026-09-06 by Jess: see D8 in
+[`designs/storage-running-total.md`](../designs/storage-running-total.md). Exact enforcement is not
+worth a denormalised counter; general enforcement already achieves the point of the quota, which is
+that no single user can eat unbounded storage. An over-quota profile keeps everything it has
+uploaded and is barred from uploading more until it is back under - verified rather than assumed:
+nothing in `dashboard/` deletes or purges on a quota failure, every call site refuses only the new
+upload, and the error message tells the user to free space themselves.
+
+**Do not re-propose the running-total column** without a reason that changes the premise - selling
+storage is the obvious one. I4, in the same document, is the full costing: why a `SUM` over many
+rows can be neither incremented atomically nor locked while a single row can be both, and why the
+hard part is that `file_size` changes in five places (insert, delete, the post-admission backfill at
+`tasks.py:1270`, the re-encode in that same task, and `quota_rewards` flipping the exemption with a
+`queryset.update()`), so the obvious `Image.save()` override misses three of them.
+
+**One correction to this entry's own argument**, worth keeping because it was used to sell the fix:
+it claimed the column "would also remove the repeated `SUM(file_size)` scan". There is already an
+index covering that scan (`idxdb_image_profile_quota`), and at this install's scale it costs
+nothing. The performance case was never real; only the correctness case was, and that is the one
+that was declined on its merits.
+
 ## RESOLVED 2026-09-06: `F401` was off tree-wide, and 819 of the 1,063 hits were re-export surfaces, not drift
 
 `id: P84` · `status: fixed` · `resolved: 2026-09-06`
