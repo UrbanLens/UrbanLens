@@ -679,13 +679,47 @@ STATIC_ROOT = os.path.join(PROJECT_ROOT, "frontend", "static")
 STATICFILES_DIRS = [
     os.path.join(PROJECT_ROOT, "dashboard/frontend/static"),
 ]
+# Where user uploads live. The filesystem is the default and is what a
+# single-machine self-host needs; "s3" points the same FileField API at any
+# S3-compatible object store (Garage, MinIO, AWS). The backend is chosen here
+# rather than hardcoded because moving media to an object store must be a
+# configuration change, not a code change - but it is deliberately NOT only a
+# configuration change in one respect: GatedS3Storage overrides url() so
+# FileField.url keeps returning a /media/ path. Plain S3Storage returns a
+# presigned bucket URL, which would hand every caller a bearer token for the
+# object and take every media read out from behind the gate.
+# See dashboard/services/media/object_storage.py and docs/MEDIA_PIPELINE.md.
+UL_MEDIA_STORAGE_BACKEND = _app_settings.media_storage_backend.strip().lower()
+
+_S3_STORAGE_OPTIONS = {
+    "bucket_name": _app_settings.s3_bucket_name,
+    "endpoint_url": _app_settings.s3_endpoint_url or None,
+    "access_key": _app_settings.s3_access_key_id,
+    "secret_key": _app_settings.s3_secret_access_key,
+    "region_name": _app_settings.s3_region_name,
+    "addressing_style": _app_settings.s3_addressing_style,
+    # The bucket is private and stays private: nothing in this application
+    # serves an object directly, so an object needs no ACL of its own and a
+    # bucket-level grant would be the one way to reach a file without passing
+    # the gate.
+    "default_acl": None,
+    "querystring_auth": True,
+    # Two uploads that hash to the same name are two different files - Django's
+    # own default, restated because S3Storage's default is the opposite and
+    # silently overwrites.
+    "file_overwrite": False,
+    "signature_version": "s3v4",
+}
+
 # CompressedManifestStaticFilesStorage requires collectstatic to have been run
 # to generate the manifest; the test suite never runs collectstatic, so fall
 # back to plain (non-hashed) storage there.
 STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
+    "default": (
+        {"BACKEND": "urbanlens.dashboard.services.media.object_storage.GatedS3Storage", "OPTIONS": _S3_STORAGE_OPTIONS}
+        if UL_MEDIA_STORAGE_BACKEND == "s3"
+        else {"BACKEND": "django.core.files.storage.FileSystemStorage"}
+    ),
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage" if TESTING else "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
@@ -723,6 +757,36 @@ MEDIA_X_ACCEL = _env_bool("UL_MEDIA_X_ACCEL", not _is_dev)
 # Must match the `location /_protected_media/` block in
 # src/urbanlens/config/nginx/django.conf.
 MEDIA_X_ACCEL_PREFIX = "/_protected_media/"
+
+# The object-store equivalent of MEDIA_X_ACCEL_PREFIX, and empty by default
+# because it needs an nginx location this repository does not ship. Set it and
+# the gate authorizes the request, signs a URL for the object itself, and hands
+# that URL to nginx in an X-Accel-Redirect - so the bytes never pass through a
+# gevent worker and the signed URL never reaches the client. Leave it empty and
+# the gate streams the object through Django, which is correct everywhere and
+# is the only option when nothing fronts the app.
+#
+# /_protected_media/ cannot be reused for this: it aliases the local media
+# volume, so pointing it at an object store would serve a stale local file when
+# one exists and 404 when one does not.
+MEDIA_X_ACCEL_OBJECT_PREFIX = _app_settings.media_x_accel_object_prefix
+
+# How long the URL in that hand-off stays valid. Short on purpose: it is
+# consumed by nginx during the request that minted it, and the only reason it is
+# not shorter is clock skew between the app and the object store.
+MEDIA_X_ACCEL_OBJECT_URL_TTL_SECONDS = 60
+
+# What the ingress in front of this deployment will actually pass, in bytes; 0
+# when nothing imposes a limit. It is not a limit this application enforces for
+# its own sake - it enforces it so the user finds out. A proxy that rejects an
+# oversized body answers the browser directly, so the request never reaches
+# Django, no view runs, and the only thing the uploader sees is somebody else's
+# error page after uploading as much as the cap allows.
+#
+# services.media.storage.max_upload_file_size_bytes clamps the site-wide upload
+# limit to this, which is what both the server-side check and the browser's
+# pre-flight read - so the file is refused before it is sent.
+MAX_REQUEST_BODY_BYTES = max(0, _app_settings.max_request_body_mb) * 1_000_000
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

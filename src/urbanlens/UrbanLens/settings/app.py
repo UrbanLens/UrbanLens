@@ -191,6 +191,55 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "when the two hosts are not related that way, and never to a public suffix."
         ),
     )
+    max_request_body_mb: int = Field(
+        default=0,
+        description=(
+            "Largest request body this deployment's ingress will pass, in MB, or 0 when nothing in front of the "
+            "app imposes one. A CDN or proxy that rejects an oversized body answers the browser itself, so the "
+            "app never sees the request and cannot explain it - setting this caps the upload size the app "
+            "advertises and enforces, so the user is told before the bytes are sent. Cloudflare's free and pro "
+            "plans cap it at 100."
+        ),
+    )
+    media_storage_backend: str = Field(
+        default="filesystem",
+        description=(
+            "Where user uploads are stored: 'filesystem' (the default, and the only thing a single-machine "
+            "self-host needs) or 's3' for any S3-compatible object store, including Garage. Switching to 's3' "
+            "changes nothing about who may read a file: uploads stay behind the media gate either way, and "
+            "FileField.url keeps returning a /media/ path rather than a presigned bucket URL."
+        ),
+    )
+    s3_endpoint_url: str = Field(
+        default="",
+        description=(
+            "Base URL of the S3-compatible API, e.g. http://garage-s3.garage.svc.cluster.local:3900. Required "
+            "when UL_MEDIA_STORAGE_BACKEND is 's3'. Leave empty for real AWS S3, which boto3 derives from the region."
+        ),
+    )
+    s3_bucket_name: str = Field(default="", description="Bucket holding user uploads. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
+    s3_access_key_id: str | None = Field(default=None, description="Access key for the object store. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
+    s3_secret_access_key: str | None = Field(default=None, description="Secret key for the object store. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
+    s3_region_name: str = Field(
+        default="garage",
+        description="Region the object store advertises. Garage uses whatever its cluster was initialised with; SigV4 needs it to match.",
+    )
+    s3_addressing_style: str = Field(
+        default="path",
+        description=(
+            "'path' (endpoint/bucket/key) or 'virtual' (bucket.endpoint/key). Garage and most self-hosted stores "
+            "need 'path', because virtual-host style needs a wildcard DNS record and a wildcard certificate."
+        ),
+    )
+    media_x_accel_object_prefix: str = Field(
+        default="",
+        description=(
+            "Internal nginx location that proxies the object store, e.g. '/_object_media/'. When set alongside "
+            "UL_MEDIA_STORAGE_BACKEND=s3, the gate authorizes the request and then hands nginx a URL it signed "
+            "itself, so the bytes never pass through Django and the client never receives a signed URL. Leave "
+            "empty and the gate streams the object itself, which is what a deployment with no nginx must do."
+        ),
+    )
     process_role: str = Field(
         default="unspecified",
         description=(

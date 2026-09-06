@@ -37,6 +37,7 @@ from urbanlens.dashboard.services.import_export.import_data import (
     schedule_import_cleanup,
 )
 from urbanlens.dashboard.services.media.images import compute_checksum
+from urbanlens.dashboard.services.media.storage import cap_to_ingress
 from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, ingest_location_hits
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
@@ -330,9 +331,13 @@ class ImportStartView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        if upload.size and upload.size > _MAX_IMPORT_SIZE_BYTES:
+        # Lowered to the ingress cap, if there is one: a body the proxy rejects
+        # never reaches this view, so the uploader would see the proxy's error
+        # rather than this one.
+        max_import_bytes = cap_to_ingress(_MAX_IMPORT_SIZE_BYTES)
+        if upload.size and upload.size > max_import_bytes:
             return HttpResponse(
-                '<p class="import-error"><i class="material-symbols-outlined">error</i> File is too large (max 500 MB).</p>',
+                f'<p class="import-error"><i class="material-symbols-outlined">error</i> File is too large (max {max_import_bytes // (1024 * 1024)} MB).</p>',
                 status=400,
             )
 

@@ -39,6 +39,7 @@ from urbanlens.dashboard.services.admin.infrastructure_stats import _format_dura
 from urbanlens.dashboard.services.admin.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.text_limits import column_length_error
+from urbanlens.dashboard.services.media.storage import ingress_body_limit_bytes
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 if TYPE_CHECKING:
@@ -143,6 +144,10 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "settings": settings,
                 "page_name": "site-admin",
                 "saved": request.GET.get("saved"),
+                # What the size limit actually resolves to. An ingress cap
+                # lowers it silently otherwise, so an admin would set 250 MB and
+                # watch users be refused at 100 with nothing on this page saying why.
+                "ingress_body_limit_mb": ingress_body_limit_bytes() // 1_000_000,
                 "environment_override_choices": EnvironmentOverrideChoice.choices,
                 "effective_environment_label": settings.get_effective_environment_label(),
                 "env_var_environment": os.getenv("UL_ENVIRONMENT", ""),

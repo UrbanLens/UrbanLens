@@ -396,7 +396,9 @@
                 <label for="max-upload-file-size-mb">Max upload file size (MB)</label>
                 <p class="form-help">
                     Maximum size for a single photo, video, or document upload. Enforced on both the
-                    upload form and the server.
+                    upload form and the server.{% if ingress_body_limit_mb %}
+                    Uploads are additionally capped at {{ ingress_body_limit_mb }} MB by the proxy in front of this
+                    deployment (UL_MAX_REQUEST_BODY_MB), so a larger value here has no effect.{% endif %}
                 </p>
                 <input type="number" name="max_upload_file_size_mb" id="max-upload-file-size-mb"
                        value="{{ settings.max_upload_file_size_mb }}" min="1" max="900" step="1">

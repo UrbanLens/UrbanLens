@@ -77,11 +77,17 @@ class _MultipleFileField(forms.FileField):
             ValidationError: When the file exceeds ``_MAX_UPLOAD_FILE_SIZE_BYTES``
                 or its extension is not in ``_ALLOWED_UPLOAD_EXTENSIONS``.
         """
+        from urbanlens.dashboard.services.media.storage import cap_to_ingress
+
         name = uploaded_file.name or ""
         size = getattr(uploaded_file, "size", None)
-        if size is not None and size > _MAX_UPLOAD_FILE_SIZE_BYTES:
+        # Lowered to whatever the ingress will carry: a body the proxy rejects
+        # never reaches this validator, so the user would get an opaque error
+        # from the proxy after uploading rather than this message before.
+        max_bytes = cap_to_ingress(_MAX_UPLOAD_FILE_SIZE_BYTES)
+        if size is not None and size > max_bytes:
             raise forms.ValidationError(
-                f'"{name}" is too large (max {_MAX_UPLOAD_FILE_SIZE_BYTES // (1024 * 1024)} MB).',
+                f'"{name}" is too large (max {max_bytes // (1024 * 1024)} MB).',
                 code="file_too_large",
             )
 

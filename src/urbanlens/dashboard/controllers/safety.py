@@ -1622,8 +1622,7 @@ class SafetyContactPhotoView(View):
         # (an emergency contact has no account to authorize), so the gate has to
         # be restated here rather than inherited.
         image = get_object_or_404(Image.objects.filter(pk=image_id, safety_checkin=contact.checkin, pending_scan=False).exclude(image=""))
-        rel_path, full_path = resolve_media_path(image.image.name)
-        return serve_media_file(rel_path, full_path)
+        return serve_media_file(resolve_media_path(image.image.name))
 
 
 class SafetyContactMarkSafeView(View):
