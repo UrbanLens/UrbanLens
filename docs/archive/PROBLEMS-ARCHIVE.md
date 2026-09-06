@@ -12116,6 +12116,174 @@ would otherwise have become two places to remember instead of one.
 extends itself when the tuple grows and fails when a chokepoint is added without it. Its teeth were
 checked by turning the fixture off: it fails naming the unpatched method.
 
+## RESOLVED 2026-09-06: the icon picker cost 594 KB per widget, and the site-admin directory ~15 queries per user
+
+`id: P68` · `status: fixed` · `resolved: 2026-09-06`
+
+Previously titled "The achievement icon picker still renders 1,249 icons per row, and the site-admin
+directory costs ~15 queries per user", and before that "N+1s in the site-admin user list, the
+achievement icon picker and Memories > Maps still have no perf test".
+
+Four things were surveyed; two were already fixed when the entry was written, one was fixed on
+2026-09-05, and the two that remained are fixed here.
+
+**Memories > Maps** (`test_query_scaling_memories_maps.py`, 2026-09-05). Adding the six missing
+prefetches changed nothing on its own: `MarkupMap.attachment`/`.attachments` called `.first()` and
+`.select_related(...)` on each manager, and both build a new queryset, so they query straight past a
+prefetch. The properties read `_prefetched_objects_cache` first now. Measured at 2 and 8 cards:
+58/112 queries, then 44/56 once the properties honoured the prefetch, then 42/48 with `pin__location`,
+then flat with `pin__location__wiki`.
+
+**Both games' friend lists** were already batched before the entry was written; `spotguessr/social.py`
+and `trivia/social.py` say so in their docstrings. The "2N+1 queries for N friends" claim was never
+true for either.
+
+**The site-admin directory.** The entry's "up to 5 uncached queries per user" was wrong: the page cost
+about **15 per row**, and the dominant term was neither the quota nor the roles. It was
+`can_view_contact_info`/`can_view_profile`, resolved per listed profile - three `dashboard_friendships`
+variants, a `dashboard_trip_memberships` lookup and a pin/place lookup, each once per user.
+
+Fixed by resolving both for the whole page at once. `Profile.visible_profile_pks` already existed for
+identity; the contact-info half did not, and writing a second copy of the relationship queries would
+have been a fourth place for the semantics to drift from `visibility_permits`. Both are now thin
+wrappers over one `_visible_subject_pks`, parameterised by the three things that actually differ:
+which field supplies the `VisibilityChoice`, whether an unanswered friend request opens the gate
+(it does not, for contact details), and whether a `DirectMessageTemporaryAccess` grant applies (it
+reveals an identity, never a contact method). `test_contact_visibility_batch.py` holds the new path
+to `can_view_contact_info` across every choice and relationship, the same way
+`test_identity_visibility_batch.py` already held the old one - and its two load-bearing tests are the
+negatives, because a helper parameterised over both fields passes everything else whether or not it
+honours them.
+
+**The achievement icon picker**, which was the largest of the set. `_icon_picker.html` nested two
+loops over all 1,249 `ICON_CATEGORIES` entries inside a `hidden` div *per widget*, re-rendered in
+full on every create/edit/delete/backfill via `hx-swap="outerHTML"`.
+
+Measured before: one grid was **594,669 bytes / 2,498 buttons**, the page rendered N+1 of them (the
+create form has one too), and 60 awards came to ~34.6 MB and 76,189 buttons.
+`pages/organize/index.html` rendered **13** as a flat page cost - ~7.6 MB on every load - which is
+very likely the residue of the twelve-second Organize Labels page `render_scaling.py`'s docstring
+cites.
+
+Measured after: the partial is **3,224 bytes**, a 184x cut, and the catalogue is one 451 KB response
+fetched once per session and cached immutably under a content-hashed URL. The achievement admin's
+per-row cost went from 594,669 to 25,533 bytes, and then to a passing render-scaling budget once the
+picker's 28 category tabs joined the shared fetch and the colour swatches stopped repeating a
+297-byte inline handler 21 times per row. Verified in a real browser against the dev stack: four
+pickers on the page, four grid items before opening one and 1,253 after, 29 tabs, **one** network
+request for all four, and a pick that lands in the hidden input.
+
+**The obvious fix - `hx-get` on the placeholder - is the one that must not be used, and this is why.**
+htmx events bubble, and with `hx-swap="outerHTML"` the placeholder is gone by the time
+`htmx:afterRequest` fires, so htmx re-dispatches it on the nearest surviving ancestor. Four templates
+wrap a picker in a `<form>` carrying `hx-on::after-request` that closes a dialog and toasts success on
+`event.detail.successful` - `organize_label_edit_form.html:8`, `organize_label_customize_form.html:7`,
+`organize_label_create_dialog.html:5`, and `pages/map/index.html:398` (which also calls `this.reset()`).
+Merely *opening* the picker would close the dialog, discard the user's edits and toast "saved". The
+achievement admin itself has no `hx-on`, which is exactly why a fix validated against the page this
+entry named would have looked fine. `hx-trigger="click once"` compounds it: htmx spends `once` when
+the event fires, not when the request succeeds, so a single failed fetch leaves that picker reading
+"Loading icons..." until a full page reload.
+
+Fetching from `IconPicker.toggle` emits no htmx events and sidesteps all of it. The cost was the
+third copy of that contract - `pages/map/index.html`'s inline picker, which cannot import the shared
+module because its `pick()` and `_handleUpload()` carry add-pin-specific behaviour. The retry
+behaviour `click once` would have got wrong is covered directly
+(`icon-picker-lazy-grid.test.ts`, "a failed fetch is retried on the next open").
+
+**A separate bug this turned up, fixed here too.** `clean_icon` rejected **29 of the catalogue's own
+1,249 icons** - the 14 keycaps (`0`-`9`, `#`, `*`, whose base code point is ASCII), `!!`, `!?`, and 13
+letter-category entries (Greek, Cyrillic, Hebrew, CJK, kana). Every write path routing through it -
+`labels.py:691`, `labels.py:814`, `services/labels/customization.py:86`, `saved_filters.py:123`,
+`maps.py:829`, `pin_creation.py:291` - silently stored *nothing* when a user picked one of those from
+the picker that offered them. `Achievement.icon` was unaffected only because it skips the validator.
+Fixed by checking membership of the catalogue before the emoji heuristic, rather than loosening the
+heuristic: loosening it would have admitted the bare ASCII those entries are built on, and a set
+cannot. The test asserts over the catalogue itself, so a future entry that trips the heuristic fails
+on the day it is added.
+
+## RESOLVED 2026-09-06: the site-admin directory's search confirmed hidden emails and names by guessing
+
+`id: P80` · `status: fixed` · `resolved: 2026-09-06`
+
+`SiteAdminUsersView`'s own docstring promised the opposite: "even a site admin does not get a
+backdoor around a user's `contact_visibility` setting here. Email is only shown when the viewing
+admin's own profile would satisfy that user's configured visibility rule". The rendering half was
+true. The search half was never checked.
+
+The queryset filtered on `username`, `email` and `first_name` before any visibility rule was
+consulted, and visibility was then applied per row and only decided what the row *rendered*. So for
+a user with `contact_visibility = NO_ONE` and no relationship to the admin, the row correctly showed
+"Hidden" - and `?q=<their address>` still returned exactly that one row, while a wrong guess rendered
+the empty state. One request per guess confirmed or denied any address. The same worked on
+`first_name` and on `username` against `profile_visibility`, since a masked row renders "Invisible
+User" rather than disappearing - which the original entry did not notice, having named only two of
+the three fields.
+
+Found 2026-09-06 by an adversarial review of a proposed P68 fix, which had claimed a masking test
+would close the docstring's promise. It would not have: an assertion that the hidden address is
+absent from the response *body* passes both before and after, because the leak is in which rows come
+back rather than in what they say. The tests written for the fix therefore assert on the **set of
+rows returned** and never on the body, and every hidden-field test is paired with a visible-field
+control - a search that matches nothing is otherwise indistinguishable from a search that is simply
+broken.
+
+**Fixed by restricting matching, not membership.** Each field is now combined with its own gate, so
+an account whose identity is visible but whose contact details are not stays findable by username, and
+a hidden account still appears when the admin browses the directory without a search term - which is
+what the page is for. The entry recorded this as a product decision between "restrict the predicate"
+and "declare admin search privileged and rewrite the docstring"; the first was taken, because the
+docstring's claim is the thing users would rely on.
+
+The shape that made it cheap: a non-`ANYONE` subject can only pass a gate through a relationship, and
+the set of profiles with *any* relationship to one viewer is bounded and enumerable in a fixed number
+of queries. So `Profile.related_profile_ids` enumerates that superset, the existing batch resolvers
+decide it, and the queryset is narrowed with `<field> = ANYONE OR pk IN (decided)` - exact, and one
+statement. `related_profile_ids` is deliberately loose and documented as such: an extra id costs one
+row for the real check to reject, while a missing one hides a profile the viewer is entitled to see,
+so the decision stays in the audited helper and never moves into the enumeration.
+
+Accounts with no `Profile` row satisfy neither clause and so are not matched by a search. That is
+consistent with how they render - `get_or_create` gives them the default visibility, which is not
+`ANYONE` - rather than a separate rule.
+
+## RESOLVED 2026-09-06: one throw in core.js's first line killed the other 23 installs, on every page, for four days
+
+`id: P81` · `status: fixed` · `resolved: 2026-09-06`
+
+`themes/base.html:24` loads `dashboard/js/core.js` as a plain, non-deferred `<script>` inside
+`<head>`, so `document.body` is null while it runs. `entries-classic/core.ts` is a flat list of 24
+top-level `installGlobal*()` calls, which means the first one that throws takes the other 23 with
+it - silently, because nothing catches it and nothing depends on it synchronously.
+
+On 2026-09-02 (`167000b77`) `installGlobalAssistantOverlay` - **the first call in that list** - began
+binding a listener to `document.body`. From that commit until this one, the entire shared frontend
+bundle was dead site-wide: no confirm dialog, no `fetchJson`, no label picker, no markup engine or
+toolbar, no mention autocomplete, no reaction picker, no leave confirmation, no safety live
+location, no map context menu, layers or export, no pin-cache purge, no undo bar.
+
+Measured in a real browser against the running dev stack, on `/dashboard/`: one `pageerror`
+("Cannot read properties of null (reading 'addEventListener')"), and `window.createMarkupToolbar`,
+`window.confirmDialog`, `window.MarkupEngine`, `window.UrbanLensLabelPicker` and
+`window.toggleReactionPicker` all `undefined`. After the fix: no page errors, all five defined.
+
+**The trap was already known, and documented, three times over.** `autosave-guard.ts`,
+`collapsible-sections.ts` and `undo-map-refresh.ts` each wait for the body and each explain in a
+comment that `core.js` loads from `<head>`. What did not exist was anything that *fails* when the
+next module forgets - so the fourth module to reach for `document.body` broke the whole bundle and
+no test, no linter and no CI job noticed.
+
+`core.install.test.ts` is that missing test. It runs the real entry with `document.body` null and
+`readyState` `"loading"` - both halves, because the three existing guards are split between those
+two readings of "the body is not there yet", and faking only one would report a correct module
+broken for a state a browser never produces. It then asserts on the entry's **last** statement,
+`window.createMarkupToolbar`, which is precisely the thing nothing can reach if anything earlier
+throws. It also asserts the premise it depends on: that `base.html` still loads the bundle from
+`<head>` without `defer` or `type="module"`.
+
+Found while browser-verifying an unrelated change (P68's icon picker), which is the second time in
+two days that running the thing rather than reading it produced the more valuable finding.
+
 ## RESOLVED 2026-09-06: an unguarded is_authenticated in a base.html tag 500s any page rendered without a request
 
 `id: P79` · `status: fixed` · `resolved: 2026-09-06`
