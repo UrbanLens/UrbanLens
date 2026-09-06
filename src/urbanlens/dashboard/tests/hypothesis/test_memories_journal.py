@@ -330,6 +330,27 @@ class JournalFeedTests(TestCase):
         self.assertEqual(list(feed[0:5]), everything[0:5])
         self.assertEqual(list(feed[5:10]), everything[5:10])
 
+    def test_a_bound_counted_from_the_end_still_matches_the_full_list(self) -> None:
+        # A negative limit reaches a queryset slice, where Django raises - and
+        # `get_journal_entries` catches per source, so every source vanishes
+        # and the answer is a silently empty list rather than an error.
+        feed = JournalFeed(self.profile)
+        everything = get_journal_entries(self.profile)
+
+        self.assertEqual(feed[-1], everything[-1])
+        self.assertEqual(feed[-3], everything[-3])
+        self.assertEqual(list(feed[:-1]), everything[:-1])
+        self.assertEqual(list(feed[-3:-1]), everything[-3:-1])
+        self.assertEqual(list(feed[-3:]), everything[-3:])
+
+    def test_an_open_ended_or_stepped_slice_matches_too(self) -> None:
+        feed = JournalFeed(self.profile)
+        everything = get_journal_entries(self.profile)
+
+        self.assertEqual(list(feed[5:]), everything[5:])
+        self.assertEqual(list(feed[::2]), everything[::2])
+        self.assertEqual(list(feed[0:0]), [])
+
     def test_it_counts_without_building_the_entries(self) -> None:
         # The point of the count is not to pay for the rows: a `len()` that
         # walked the sources would make the page's total as expensive as the

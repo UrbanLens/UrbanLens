@@ -321,10 +321,21 @@ class JournalFeed(Sequence[JournalEntry]):
         return total
 
     def __getitem__(self, index: int | slice) -> Any:
-        """One entry, or one slice of them, fetched no deeper than it needs."""
+        """One entry, or one slice of them, fetched no deeper than it needs.
+
+        A bound counted from the end (``feed[-1]``, ``feed[:-2]``) needs the
+        whole feed, and says so by building it: there is no prefix of a merged
+        feed that answers "the last one". Both paginators only ever ask for a
+        non-negative window, so nothing pays that today - but a ``Sequence``
+        that answered ``feed[-1]`` with the wrong entry, or with an empty list
+        because a negative limit reached a queryset slice, would be worse than
+        one that is merely slow.
+        """
         if isinstance(index, slice):
-            stop = index.stop
-            if stop is None:
+            counts_from_the_end = (index.start is not None and index.start < 0) or (index.stop is not None and index.stop < 0)
+            if index.stop is None or counts_from_the_end:
                 return get_journal_entries(self.profile, self.sources)[index]
-            return get_journal_entries(self.profile, self.sources, limit=stop)[index]
+            return get_journal_entries(self.profile, self.sources, limit=index.stop)[index]
+        if index < 0:
+            return get_journal_entries(self.profile, self.sources)[index]
         return get_journal_entries(self.profile, self.sources, limit=index + 1)[index]
