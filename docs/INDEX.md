@@ -26,7 +26,7 @@ each, and the house style. `P` numbers entries inside `PROBLEMS.md`; every other
 prefix numbers a whole document.
 
 Resolved problems are **not** listed here — they move to
-[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 313
+[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 314
 of them. This index is what is live. Grep the archive before concluding a defect
 is new - and an archived entry keeps its `id:` line, so a citation of `P70`
 still resolves after it is fixed, and the id is never handed out again.
@@ -52,7 +52,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P23 | open | 2026-07-31 | The production celery worker's env sets `UL_SITE_URL=staging.urbanlens.org`, so built URLs point at staging | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P24 | open | 2026-08-05 | A campus pin aggregates only the nearest CRIS building's media, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P25 | open | 2026-08-07 | `Comment.profile` CASCADEs but `TripComment.author` SET_NULLs, so account deletion erases only some comments | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P26 | open | 2026-08-07 | `create_group_message` never validates `key_version`, so a sender can use a key a removed member holds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P26 | open | 2026-09-06 | A group message can still be sent under a stale key version, and refusing one risks an availability outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P27 | open | 2026-08-08 | Saved-filter regions use leaflet-draw's transactional remove tool, so deleted polygons resurrect on the next draw | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P28 | open | 2026-08-12 | The upload quota check is fail-open under a cache lock, so a bulk import's fan-out can still exceed the quota | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P29 | open | 2026-08-13 | 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -62,7 +62,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P36 | open | 2026-09-05 | 50 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-08-13 | 100 write handlers totalling 1,217 statements never execute under the test suite | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P41 | open | 2026-09-05 | 68 of 249 public queryset methods have no production caller, so their logic may be duplicated inline elsewhere | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P46 | open | 2026-08-16 | A group message can still be sent under a key version a removed member holds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P47 | open | 2026-08-16 | A deleted message's preview survives in the recipient's notification list | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P49 | open | 2026-09-05 | Doc citations drift silently, and a pin-suggestion race can still duplicate a row | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-05 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |

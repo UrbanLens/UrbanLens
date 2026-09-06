@@ -577,6 +577,7 @@ def create_group_message(
         ValueError: Empty/too-long/malformed content.
         PermissionError: When `sender` isn't an active member.
     """
+    from urbanlens.dashboard.models.e2ee import GroupKey
     from urbanlens.dashboard.services.security.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
 
     # Idempotent replay - see create_direct_message for why this precedes both
@@ -608,6 +609,21 @@ def create_group_message(
             raise GroupChatValidationError("A message is either plaintext or encrypted, never both.")
         if not valid_blob(ciphertext, MAX_CIPHERTEXT_LENGTH) or not valid_blob(nonce, MAX_NONCE_LENGTH) or key_version < 1:
             raise GroupChatValidationError("Malformed encrypted message.")
+        # The version has to name a key this group actually has. Without this the
+        # only check was `< 1`, so any positive integer was stored verbatim -
+        # including a version this group never had, or one belonging to a
+        # different group - which makes "versioning enforces membership
+        # boundaries cryptographically" (models/e2ee/group_key.py) a claim about
+        # a number the server never looked at. One indexed lookup: the
+        # (group, version) unique constraint covers it.
+        #
+        # A *stale but real* version is still accepted, deliberately. Refusing
+        # one means a client that has not rotated cannot send, and rotation
+        # requires every member enrolled (409 otherwise) - so one un-enrolled
+        # member would stop the whole group, trading a confidentiality gap for an
+        # availability one. That trade is a product decision; see P26/P46.
+        if not GroupKey.objects.filter(group=group, version=key_version).exists():
+            raise GroupChatValidationError("Unknown key version for this group.")
     elif nonce or key_version:
         raise GroupChatValidationError("Malformed encrypted message.")
     if not body and not ciphertext:

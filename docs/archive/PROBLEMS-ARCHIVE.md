@@ -12132,3 +12132,23 @@ been that way for four days. It is the one unguarded `is_authenticated` in `dash
 Fixed with `getattr(user, "is_authenticated", False)`. Rendering a page without a request is a
 legitimate thing to do, and answering False is the honest result - the assistant surface needs a
 signed-in viewer, and there isn't one.
+
+## RESOLVED 2026-09-06: filed twice, nine days apart, for the same unvalidated key_version
+
+`id: P46` · `status: duplicate` · `resolved: 2026-09-06`
+
+The same defect as P26: `create_group_message` validated `key_version >= 1` and never checked it
+against the group. Filed independently on 2026-08-16 by an investigation that did not find the
+2026-08-07 entry.
+
+Merged into P26 rather than kept, because this one carried the constraint that decides the fix and
+P26 did not: **the obvious server-side fix has a worse failure mode than the gap.** Rotation
+requires every member enrolled and returns 409 when one is not, so refusing stale-version sends
+would let a single un-enrolled member stop the whole group from sending - trading confidentiality
+for availability. That is a product decision, and it is why the half that is now fixed is only the
+half that has no such trade: a `key_version` naming no `GroupKey` for this group is refused
+outright, since no legitimate client sends one.
+
+Worth noting for the next sweep: both entries describe the same code and neither cites the other.
+`docs/INDEX.md` carried both, one line apart in the P-block, with near-identical claims - which is
+the shape a duplicate takes here and is greppable.

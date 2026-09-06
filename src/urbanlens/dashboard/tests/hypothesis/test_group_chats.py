@@ -244,6 +244,13 @@ class CreateGroupMessageTests(TestCase):
             )
 
     def test_encrypted_message_persists(self) -> None:
+        # The key row is part of the fixture because it is part of reality: a
+        # client cannot encrypt under version 1 until it has uploaded that
+        # version's envelopes, which is the only thing that creates a GroupKey
+        # (controllers/e2ee.py). The send path checks it now - see
+        # test_group_key_version_is_real.
+        GroupKey.objects.create(group=self.group, version=1)
+
         message = create_group_message(
             self.creator, self.group, "", ciphertext=_blob(), nonce=_blob(b"\x03" * 24), key_version=1
         )

@@ -1369,9 +1369,9 @@ two is probably not what was intended, but which one is a data-policy question -
 deletion means "erase what I wrote" or "keep the conversation readable" - and not a call to
 make from inside an audit. Recorded here for the owner.
 
-## P26 — `create_group_message` never validates `key_version`, so a sender can use a key a removed member holds
+## P26 — A group message can still be sent under a stale key version, and refusing one risks an availability outage
 
-`id: P26` · `status: open` · `updated: 2026-08-07`
+`id: P26` · `status: open` · `updated: 2026-09-06`
 
 Previously titled "E2EE group messages: the cryptographic membership boundary depends on the server (2026-08-07)".
 
@@ -1381,6 +1381,25 @@ version, so messages sent after their removal are unreadable to them". The serve
 well built: `needs_rotation` is computed by comparing the latest version's envelope set against
 active membership, and the key endpoint refuses to store a version whose envelopes don't cover
 that membership exactly.
+
+**Half of this is fixed as of 2026-09-06, and P46 - the same defect filed again on 2026-08-16 - is
+merged in here.** `create_group_message` now rejects a `key_version` that names no `GroupKey` for
+this group, so the arbitrary-integer half is gone: a version the group never had, or one belonging to
+a different group, is refused. One indexed lookup, on the `(group, version)` unique constraint. See
+`test_group_key_version_is_real.py`.
+
+**What remains open is the stale-but-real version, and it is a product decision rather than a
+missing check.** The obvious fix - refuse a send whose version is behind the current one - has a
+failure mode worse than the gap: rotation requires *every* member to be enrolled and answers 409 when
+one is not, so a single un-enrolled member would stop the whole group from sending. That trades a
+confidentiality gap for an availability outage. Options, in increasing cost: log when the send path
+accepts a stale version; have clients re-check rotation state before sending rather than on poll; or
+refuse stale-version sends only when the group is fully enrolled, so the 409 case cannot arise.
+
+Note also what is *not* at risk in-app: `GroupMessageQuerySet.visible_window` bounds each member to
+their membership stint, so a removed member cannot fetch the ciphertext however it was encrypted. The
+exposure needs the ciphertext obtained another way - captured traffic, a database copy, a compromised
+host - which is exactly the threat model end-to-end encryption exists for.
 
 **But nothing validates the `key_version` a client sends a message with.**
 `create_group_message` checks only `key_version < 1` (alongside the blob checks). It never
@@ -1888,36 +1907,6 @@ noticed was `PinFilter` naming `by_category` in a `method=` string, which is not
 name grep counts as one. A call-graph pass should expect the reverse error too.
 
 ---
-
-## P46 — A group message can still be sent under a key version a removed member holds
-
-`id: P46` · `status: open` · `updated: 2026-08-16`
-
-Removing a member from an encrypted group correctly flags `needs_rotation` (the group-key GET
-compares envelope holders against current members with `!=`, so removals and additions both trip
-it), and that is now pinned by a test. But rotation is client-driven, and the send path only
-validates `key_version >= 1` - it never compares against the group's current version.
-
-So a sender whose client has not yet refreshed - an open tab, a client that missed the rotation
-prompt - keeps encrypting under the version the removed member still holds an envelope for. The
-group's own members are unaffected; the question is only whether the removed member can read
-messages sent after their removal.
-
-In-app they cannot: `GroupMessageQuerySet.visible_window` bounds each member to their membership
-stint, so the ciphertext is not fetchable once `left_at` is set. The exposure needs the ciphertext
-obtained some other way - captured traffic, a database copy, a compromised host - which is precisely
-the threat model end-to-end encryption exists for, so it is not nothing.
-
-**Why this is filed rather than fixed.** The obvious server-side fix is to reject a send whose
-`key_version` is behind the current one while `needs_rotation` is set. Any member may rotate (not
-just the creator) and the concurrent-rotation race is already handled, so that much is safe. What is
-not safe is the failure mode: rotation requires *every* member to be enrolled, and returns 409 when
-one is not. A single un-enrolled member would then block the whole group from sending, turning a
-confidentiality gap into an availability outage. Trading one for the other is a product decision.
-
-Options, roughly in increasing cost: have the send path warn/log when it accepts a stale version;
-have clients re-check rotation state before send rather than on poll; or reject stale-version sends
-only when the group is fully enrolled (so the 409 case cannot arise).
 
 ## P47 — A deleted message's preview survives in the recipient's notification list
 
