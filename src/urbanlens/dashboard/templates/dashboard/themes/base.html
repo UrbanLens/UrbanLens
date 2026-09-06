@@ -1,4 +1,4 @@
-{% load vendor_assets dashboard_tags %}
+{% load static vendor_assets dashboard_tags %}
 <!DOCTYPE html>
 {% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 {% assistant_enabled_flag request.user as assistant_global_enabled %}
@@ -9,7 +9,7 @@
     {# Anti-FOUC: when theme_mode is "system" (no server-side attribute), detect OS preference immediately. #}
     <script>!function(){var e=document.getElementById('html-root');if(!e.getAttribute('data-theme')){var d=window.matchMedia('(prefers-color-scheme: dark)').matches;e.setAttribute('data-theme',d?'dark':'light');window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(c){e.setAttribute('data-theme',c.matches?'dark':'light');});}}();</script>
     <title>{% block page_title %}{{ site_title|default:"UrbanLens" }}{% endblock %}</title>
-    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon">
 
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
     <!-- Compiled and minified CSS -->

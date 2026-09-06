@@ -1,9 +1,10 @@
+{% load static %}
 <nav class="app-nav">
     <div class="app-nav-inner">
 
         {# -- Brand ------------------------------------------------------------ #}
         <a href="{% url 'home' %}" class="app-nav-brand">
-            <img src="/static/logo.png" alt="UrbanLens logo" class="app-nav-logo">
+            <img src="{% static 'logo.png' %}" alt="UrbanLens logo" class="app-nav-logo">
             <span class="app-nav-brand-name">UrbanLens</span>
         </a>
 

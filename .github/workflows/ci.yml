@@ -153,6 +153,14 @@ jobs:
       - name: No template reads a photo's file without checking it is there
         run: python3 bin/check_image_file_reads.py
 
+      # A literal /static/ URL resolves, which is what makes it hard to see: it
+      # carries no content hash, so the asset is served max-age=60 where its
+      # hashed sibling gets ten years and `immutable`, and a CDN edge re-fetches
+      # it every minute. It also ignores STATIC_URL. Four were live, one being
+      # the 1.5 MB header logo on every authenticated page.
+      - name: "Every /static/ URL a template writes goes through the static tag"
+        run: python3 bin/check_static_url_literals.py
+
       # {# #} is Django's single-line comment. An opener that does not meet #}
       # on the same line is emitted as text, so the visitor sees it. The
       # supported multi-line form is {% comment %}.

@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <title>{% block title %}UrbanLens{% endblock %}</title>
-    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    {% load static %}<link rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     {% load static %}
     <link rel="stylesheet" type="text/css" href="{% static 'dashboard/style.css' %}">

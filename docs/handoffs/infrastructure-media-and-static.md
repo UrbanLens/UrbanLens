@@ -85,6 +85,25 @@ build when an entry names a file that is not there **or** carries a backslash;
 those are checked separately, because on Linux a backslash is a legal filename
 character and an existence test alone passes.
 
+**One extra fix your audit could not have seen, because everything 404'd.** Four
+templates wrote a literal `/static/...` URL rather than going through
+`{% static %}` - including the 1.5 MB header logo on every authenticated page.
+A literal resolves, so it would not have shown up as a failure once the
+middleware landed; what it loses is the content hash, so those assets were
+served `max-age=60` where their hashed siblings get ten years and `immutable`.
+Two of the five assets on `/` were in that state. All four now go through the
+tag, and a whole-tree check (`bin/check_static_url_literals.py`, wired into CI)
+stops them coming back. Measured after the fix, rendering with nothing in front
+of the app:
+
+```
+/accounts/login/  4 static refs, 4 resolve, all immutable, none with Set-Cookie
+/                 4 static refs, 4 resolve, all immutable, none with Set-Cookie
+```
+
+Before the change, your own measurement of `/` was five `/static/` URLs and five
+404s totalling 490,790 bytes of 404 HTML per page load.
+
 **Your verification script will now return `197 of 197`, not `166 of 166`.**
 The count moved because the bun bundle output is now collected too. Please
 assert "0 missing", not a specific total.

@@ -180,6 +180,16 @@ repos:
         always_run: true
         stages: [manual]
 
+      - id: static-url-literals
+        name: every /static/ URL a template writes goes through {% static %}
+        entry: python3 bin/check_static_url_literals.py
+        language: system
+        pass_filenames: false
+        # always_run, and manual: it reads every template, and a literal is
+        # equally wrong before and after any single edit.
+        always_run: true
+        stages: [manual]
+
       - id: bem-modifiers
         name: every BEM modifier a template applies has a rule that styles it
         entry: python3 bin/check_bem_modifiers.py
