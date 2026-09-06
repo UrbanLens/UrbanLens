@@ -64,6 +64,12 @@ _RATE_LIMITED_DETAIL = "You're sending messages too quickly. Wait a moment and t
 #: damps the amplification while still telling a person what happened.
 _LIMIT_REPORT_INTERVAL_SECONDS = 2.0
 
+#: Used only when neither the consumer nor the settings offer a positive cap,
+#: which production cannot reach - ``websocket_max_frame_chars`` is ``ge=1``.
+#: It exists so that combination degrades to the documented default rather than
+#: to no limit at all.
+_FALLBACK_MAX_FRAME_CHARS = 65_536
+
 
 def _credential_is_still_valid(credential: Any) -> bool:
     """Re-read *credential* from the database and report whether it can still authenticate.
@@ -231,10 +237,17 @@ class InboundVolumeMixin(_CredentialScopeBase):
 
     @property
     def _effective_max_frame_chars(self) -> int:
+        """The smaller of this consumer's own cap and the site-wide one.
+
+        Never returns zero. A consumer that sets no ``max_frame_chars`` would
+        otherwise inherit "no cap at all" from a setting that had somehow
+        reached zero, which is the one answer this must not give: the site-wide
+        field is documented as having no off switch, and a size cap that
+        silently disables itself is worse than one that is merely too tight.
+        """
         setting = int(getattr(settings, "UL_WEBSOCKET_MAX_FRAME_CHARS", 0) or 0)
-        if self.max_frame_chars is None:
-            return setting
-        return min(self.max_frame_chars, setting) if setting > 0 else self.max_frame_chars
+        candidates = [value for value in (self.max_frame_chars, setting) if value and value > 0]
+        return min(candidates) if candidates else _FALLBACK_MAX_FRAME_CHARS
 
     async def accept_frame(self, text_data: str | None, bytes_data: bytes | None = None) -> dict[str, Any] | None:
         """Size-check, budget-check and decode one inbound frame.

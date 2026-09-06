@@ -344,51 +344,39 @@ def check_celery_failures_cannot_requeue_forever(app_configs: Sequence[AppConfig
     return errors
 
 
-@register()
-def check_websocket_frame_caps_agree(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Refuse a transport frame cap below the one the application enforces.
+def websocket_frame_cap_conflict() -> str | None:
+    """Report a transport frame cap below the one the application enforces.
 
-    The consumers refuse an oversized frame with an error frame, so the sender
-    is told what happened. Daphne's cap is enforced a layer lower, by autobahn,
-    at frame-header time: the socket simply dies, with nothing sent and nothing
-    logged on the application side. A deployment whose transport cap sits below
-    its application cap therefore presents as users being disconnected at
-    random while every test passes, which is close to the worst failure shape
-    available.
+    Not a registered system check, and that is the point. Django's checks run
+    from ``manage.py``; the process that carries daphne's flags never calls
+    them, so a registered version of this reads an argv that can only ever be a
+    management command's and passes vacuously forever. It is called
+    from ``asgi.py`` instead, which daphne imports in its own process after
+    argv is set.
 
-    The two numbers are derived from one setting, so they can only disagree
-    when a deployment passes daphne a different value than
-    ``UL_WEBSOCKET_MAX_MESSAGE_BYTES``. That is exactly what this reads:
-    ``sys.argv`` on an ASGI process carries the flags it was actually started
-    with, whatever produced them.
-
-    Args:
-        app_configs: The app configs being checked, or None for all of them.
-        **kwargs: Ignored; Django passes ``databases`` and friends.
+    ``docker-entrypoint.sh`` derives the flags from the same setting, so the
+    two agree by construction on the shipped path. This exists for the
+    deployment that overrides them by hand.
 
     Returns:
-        One error when the deployed transport cap would refuse a frame the
-        application would have accepted.
+        A description of the conflict, or None when there is none - including
+        when this process was not started with the flags at all.
     """
-    argv = sys.argv
     required = int(getattr(settings, "UL_WEBSOCKET_MAX_MESSAGE_BYTES", 0) or 0)
-    errors: list[CheckMessage] = []
     for flag in ("--websocket-max-message-size", "--websocket-max-frame-size"):
-        if flag not in argv:
+        if flag not in sys.argv:
             continue
-        raw = argv[argv.index(flag) + 1] if argv.index(flag) + 1 < len(argv) else ""
+        index = sys.argv.index(flag) + 1
         try:
-            deployed = int(raw)
+            deployed = int(sys.argv[index]) if index < len(sys.argv) else 0
         except ValueError:
             continue
         if deployed < required:
-            errors.append(
-                Error(
-                    f"daphne was started with {flag}={deployed}, below the "
-                    f"{required} bytes UL_WEBSOCKET_MAX_FRAME_CHARS implies. A frame the consumers would accept is "
-                    "refused by autobahn instead, which closes the socket without sending anything - the user sees an "
-                    f"unexplained disconnect. Raise {flag} to at least {required}, or lower UL_WEBSOCKET_MAX_FRAME_CHARS.",
-                    id="dashboard.E009",
-                ),
+            return (
+                f"daphne was started with {flag}={deployed}, below the {required} bytes "
+                "UL_WEBSOCKET_MAX_FRAME_CHARS implies. A frame the consumers would accept is refused by "
+                "autobahn instead, which closes the socket without sending anything - the user sees an "
+                f"unexplained disconnect. Raise {flag} to at least {required}, or lower "
+                "UL_WEBSOCKET_MAX_FRAME_CHARS."
             )
-    return errors
+    return None

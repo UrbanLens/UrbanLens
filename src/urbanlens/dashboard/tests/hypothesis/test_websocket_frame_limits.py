@@ -13,7 +13,11 @@ one - the order-dependent failure that isolation exists to prevent.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
+import subprocess
+import sys
+from unittest import mock
 
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
@@ -23,6 +27,7 @@ from django.test import SimpleTestCase, TransactionTestCase, override_settings
 from model_bakery import baker
 import yaml
 
+from urbanlens.dashboard.checks import websocket_frame_cap_conflict
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.models.safety.model import SafetyCheckinMessage
 
@@ -62,32 +67,102 @@ class WebSocketVolumeSettingsTests(SimpleTestCase):
             with self.subTest(setting=name):
                 self.assertTrue(hasattr(settings, name), f"{name} is not defined in settings")
 
-    def test_the_daphne_byte_cap_is_looser_than_the_app_character_cap(self):
-        """Daphne must never kill a socket over a frame the app would accept.
-
-        Autobahn refuses an oversized frame at the protocol layer, with no
-        error frame and no explanation - the user sees a random disconnect. So
-        the transport bound has to sit above the application bound, at the
-        worst case of four UTF-8 bytes per character.
-        """
-        self.assertGreaterEqual(
-            settings.UL_WEBSOCKET_MAX_MESSAGE_BYTES,
-            settings.UL_WEBSOCKET_MAX_FRAME_CHARS * 4,
-        )
-
 
 class DaphneFrameSizeWiringTests(SimpleTestCase):
-    """The compose command actually passes the caps daphne needs."""
+    """Daphne is actually started with a cap at or above the application's.
 
-    def test_daphne_is_given_the_websocket_size_flags(self):
-        compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
-        command = compose["services"]["app-ws"]["command"]
-        # Hyphens. Daphne spells these two with hyphens while its neighbours
-        # (--websocket_timeout) use underscores, and an unrecognised flag exits
-        # daphne at startup with no other symptom.
+    Autobahn refuses an oversized frame at the protocol layer, with nothing
+    sent and nothing logged, so a transport cap below the application cap
+    reaches a user as an unexplained disconnect. Asserting that
+    ``UL_WEBSOCKET_MAX_MESSAGE_BYTES >= UL_WEBSOCKET_MAX_FRAME_CHARS * 4``
+    would prove nothing - both sides are the same formula, one line apart. What
+    has to be checked is the number the server is really given.
+    """
+
+    def _derived_flags(self, chars: str | None) -> list[str]:
+        env = {"PATH": os.environ["PATH"]}
+        if chars is not None:
+            env["UL_WEBSOCKET_MAX_FRAME_CHARS"] = chars
+        return subprocess.run(  # noqa: S603
+            ["bash", str(REPO_ROOT / "bin" / "websocket_frame_flags.sh")],
+            capture_output=True,
+            text=True,
+            check=True,
+            env=env,
+        ).stdout.split()
+
+    def test_the_cap_daphne_gets_tracks_the_documented_setting(self):
+        """The one knob has to reach daphne, whatever the operator set it to.
+
+        Written into docker-compose.yml instead, the flag's value would be
+        substituted by compose from the shell before any container starts, and
+        could not track a cap Django derives at import time. Raising
+        UL_WEBSOCKET_MAX_FRAME_CHARS would then raise what the application
+        accepts while leaving what the transport accepts where it was.
+        """
+        argv = self._derived_flags("100000")
+
         for flag in ("--websocket-max-message-size", "--websocket-max-frame-size"):
             with self.subTest(flag=flag):
-                self.assertIn(flag, command)
+                self.assertIn(flag, argv)
+                self.assertEqual(int(argv[argv.index(flag) + 1]), 400_000)
+
+    def test_the_shell_default_matches_the_python_default(self):
+        """Unset, both sides have to land on the same number.
+
+        They are derived twice - once in shell for daphne's argv, once in
+        settings/base.py for the guard - so the defaults are the one place the
+        two derivations can silently disagree.
+        """
+        argv = self._derived_flags(None)
+        derived = int(argv[argv.index("--websocket-max-message-size") + 1])
+
+        self.assertEqual(derived, settings.UL_WEBSOCKET_MAX_MESSAGE_BYTES)
+
+    def test_the_entrypoint_resolves_the_helper_where_the_image_puts_it(self):
+        """The path has to be absolute, and the entrypoint has to die without it.
+
+        The image copies the entrypoint to ``/`` and the repository to
+        ``/app``, so resolving the helper relative to ``dirname "$0"`` looks
+        for it in the root directory. It did, and nothing noticed: a missing
+        helper only reverted daphne to its own 1 MiB default, so app-ws came up
+        healthy with the cap quietly not applied. Only starting the real
+        container showed it.
+        """
+        entrypoint = (REPO_ROOT / "docker-entrypoint.sh").read_text()
+
+        self.assertIn("readarray -t ws_frame_flags < <(/app/bin/websocket_frame_flags.sh)", entrypoint)
+        self.assertIn("refusing to start daphne without its frame caps", entrypoint)
+
+    def test_the_helper_is_executable(self):
+        """The entrypoint tests -x, so a lost mode bit stops app-ws dead."""
+        self.assertTrue(os.access(REPO_ROOT / "bin" / "websocket_frame_flags.sh", os.X_OK))
+
+    def test_compose_does_not_also_hardcode_the_cap(self):
+        """Two places to write the number is how the two numbers drift apart."""
+        compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
+        command = compose["services"]["app-ws"]["command"]
+        self.assertNotIn("--websocket-max-message-size", command)
+
+    def test_a_transport_cap_below_the_application_cap_is_reported(self):
+        """The guard for a deployment that passes the flags by hand anyway."""
+        with mock.patch.object(sys, "argv", ["daphne", "--websocket-max-message-size", "1024", "app:application"]):
+            self.assertIn("1024", websocket_frame_cap_conflict() or "")
+
+    def test_nothing_is_reported_when_the_caps_agree(self):
+        argv = [
+            "daphne",
+            "--websocket-max-message-size",
+            str(settings.UL_WEBSOCKET_MAX_MESSAGE_BYTES),
+            "app:application",
+        ]
+        with mock.patch.object(sys, "argv", argv):
+            self.assertIsNone(websocket_frame_cap_conflict())
+
+    def test_nothing_is_reported_when_the_process_carries_no_such_flag(self):
+        """Every management command and test run takes this path."""
+        with mock.patch.object(sys, "argv", ["manage.py", "migrate"]):
+            self.assertIsNone(websocket_frame_cap_conflict())
 
 
 @override_settings(UL_WEBSOCKET_FRAMES_PER_MINUTE=0)
@@ -112,9 +187,6 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
         comm.scope["url_route"] = {"kwargs": {"checkin_uuid": str(self.checkin.uuid), "token": None}}
         comm.scope["user"] = self.owner_user
         return comm
-
-    def _saved_bodies(self) -> list[str]:
-        return list(SafetyCheckinMessage.objects.filter(checkin=self.checkin).values_list("body", flat=True))
 
     @override_settings(UL_WEBSOCKET_MESSAGES_PER_MINUTE=3)
     def test_a_flood_of_chat_frames_stops_at_the_budget(self):

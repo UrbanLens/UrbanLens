@@ -332,14 +332,11 @@ services:
     # in `docker logs`. Route it to the shared log volume instead so it's still on
     # disk for debugging WS issues (see channels_redis timeout tuning) without
     # flooding the console.
-    # The two size flags are spelled with hyphens; daphne's neighbouring
-    # websocket options use underscores, and an unrecognised flag exits daphne at
-    # startup with no other symptom. The default matches
-    # settings.UL_WEBSOCKET_MAX_MESSAGE_BYTES (UL_WEBSOCKET_MAX_FRAME_CHARS x 4,
-    # the worst case bytes per character), and has to stay at or above it:
-    # autobahn refuses an oversized frame at the protocol layer, so a transport
-    # cap below the application cap reads to a user as a random disconnect.
-    # test_websocket_frame_limits.py holds both halves of that.
+    # The inbound frame-size flags are deliberately absent here and appended by
+    # docker-entrypoint.sh instead: compose substitutes ${...} from the shell
+    # before any container starts, so it cannot read a cap Django derives at
+    # import time, and spelling the number in both places is how the two drift.
+    # Passing --websocket-max-message-size explicitly here overrides that.
     command:
       [
         "-b",
@@ -348,10 +345,6 @@ services:
         "8001",
         "--access-log",
         "/var/log/urbanlens/daphne-access.log",
-        "--websocket-max-message-size",
-        "${UL_WEBSOCKET_MAX_MESSAGE_BYTES:-262144}",
-        "--websocket-max-frame-size",
-        "${UL_WEBSOCKET_MAX_MESSAGE_BYTES:-262144}",
         "urbanlens.UrbanLens.asgi:application",
       ]
 
