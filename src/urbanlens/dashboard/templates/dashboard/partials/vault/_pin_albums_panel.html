@@ -11,6 +11,7 @@ Context:
                pin_page_url - the pin's own detail page (Photos tab, album
                pre-opened), not detail_url, which is the AJAX-only partial
                endpoint the pin's own interactive album cards hx-get instead
+  page_obj   - the Django Page for this slice
 {% endcomment %}
 {% if album_rows %}
 <ul class="albums-grid vault-pin-albums-grid">
@@ -44,6 +45,8 @@ Context:
     </li>
     {% endfor %}
 </ul>
+{% url 'vault.photos.pin_albums' as pin_albums_url %}
+{% include "dashboard/partials/ui/_pagination_controls.html" with page_url=pin_albums_url page_target="#vault-pin-albums-panel" page_swap="innerHTML" page_noun="pin albums" %}
 {% else %}
 <p class="albums-empty settings-help">
     None of your pins have albums yet. Create one from a pin's Photos tab and it'll show up here too.

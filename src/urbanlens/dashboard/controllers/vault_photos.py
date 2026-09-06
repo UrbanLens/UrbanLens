@@ -15,12 +15,14 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.models.album.model import Album
 from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoMetadataConflict, PhotoUploadFailure
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.images.sort import GALLERY_SORT_SPECS, GallerySort, gallery_sort_spec
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
+from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
@@ -32,6 +34,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _GALLERY_PAGE_SIZE = 24
+
+#: Albums per page in the Vault's cross-pin album panel.
+_PIN_ALBUMS_PAGE_SIZE = 24
 _ATTENTION_LIMIT = 60
 
 
@@ -261,17 +266,29 @@ class VaultPinAlbumsView(LoginRequiredMixin, View):
             The rendered pin-albums partial.
         """
         from urbanlens.dashboard.controllers.albums import _album_row
-        from urbanlens.dashboard.services.photos.albums import albums_listing
+        from urbanlens.dashboard.services.photos.albums import describe_albums
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        # No select_related: the loop below reads each album's own parent_pin,
-        # which albums_for_owners already selects with its location/wiki chain -
-        # these instances are only used to build the owner filter.
-        pins = list(Pin.objects.filter(profile=profile).only("pk"))
+        # Filtered through the join rather than by collecting the profile's
+        # pins and OR-ing one clause per pin, which is what albums_listing
+        # would do here: that builds a WHERE term per pin, and this panel's
+        # whole point is the account that has a lot of them.
+        #
+        # The location/wiki chain is selected because every card reads
+        # Pin.effective_name, which walks pin -> location -> wiki. Ordered by
+        # pk as well as name so two albums sharing a name cannot swap places
+        # between one page request and the next.
+        albums = Album.objects.filter(parent_pin__profile=profile).select_related("cover_image", "parent_pin__location__wiki").order_by("name", "pk")
+        page = get_page(request, albums, _PIN_ALBUMS_PAGE_SIZE)
         rows = []
-        for entry in albums_listing(pins, profile):
+        # conceal=False: concealment is a wiki-only concept and every album
+        # here belongs to a pin, which is also what albums_listing concluded.
+        for entry in describe_albums(list(page.object_list), profile):
             pin = entry.album.parent_pin
             if pin is None:
+                # Unreachable: the filter above joins through parent_pin, so a
+                # wiki- or vault-owned album cannot be in this page. Narrowed
+                # rather than assumed because the field itself is nullable.
                 continue
             row = _album_row(pin, entry.album, cover=entry.cover, photo_count=entry.photo_count, date_start=entry.date_start, date_end=entry.date_end)
             row["owner_pin_name"] = pin.effective_name
@@ -281,7 +298,7 @@ class VaultPinAlbumsView(LoginRequiredMixin, View):
             # album pre-opened instead.
             row["pin_page_url"] = f"{reverse('pin.details', args=[pin.slug])}?album={entry.album.slug}#tab-photos"
             rows.append(row)
-        return render(request, "dashboard/partials/vault/_pin_albums_panel.html", {"album_rows": rows})
+        return render(request, "dashboard/partials/vault/_pin_albums_panel.html", {"album_rows": rows, "page_obj": page})
 
 
 class PhotoQueueView(LoginRequiredMixin, View):
