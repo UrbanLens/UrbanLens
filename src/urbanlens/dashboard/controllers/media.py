@@ -229,15 +229,29 @@ class LocalMediaSource(MediaByteSource):
         Returns:
             An ``X-Accel-Redirect`` into ``/_protected_media/`` when nginx
             fronts the app, otherwise a ``FileResponse``.
+
+        Raises:
+            Http404: The file was there when the resolver looked and is gone
+                now. Async processing replaces an upload's stored file
+                (``.jpg`` -> ``.webp``) while the row still names the old one,
+                so authorization passes for a path this open then fails on.
         """
         if getattr(settings, "MEDIA_X_ACCEL", False):
             # Hand the actual byte-serving back to nginx: the internal-only
             # /_protected_media/ location aliases the media volume. Content-Type
             # is deliberately left unset so nginx derives it from the file
-            # extension via its own mime.types.
+            # extension via its own mime.types. Nothing is opened here, so a
+            # file that vanished is nginx's 404 to answer rather than this
+            # process's - and re-checking would cost a stat per media request.
             return _accel_redirect(settings.MEDIA_X_ACCEL_PREFIX + quote(self.rel_path))
 
-        return mark_private_media(FileResponse(self.full_path.open("rb")))  # lgtm[py/path-injection] -- already traversal-checked by resolve_media_path
+        try:
+            handle = self.full_path.open("rb")  # lgtm[py/path-injection] -- already traversal-checked by resolve_media_path
+        except OSError as exc:
+            logger.info("Media file %r could not be opened: %s", self.rel_path, exc)
+            raise Http404 from exc
+
+        return mark_private_media(FileResponse(handle))
 
 
 class ObjectMediaSource(MediaByteSource):

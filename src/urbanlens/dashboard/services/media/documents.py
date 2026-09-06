@@ -9,7 +9,6 @@ binary is missing, rather than failing the upload.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import posixpath
 import shutil
@@ -17,6 +16,7 @@ import subprocess
 import tempfile
 from typing import TYPE_CHECKING
 
+from urbanlens.dashboard.services.media.images import StoredFileReplacement
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
@@ -71,7 +71,7 @@ def soffice_available() -> bool:
 
 
 @untrusted_parse("document.convert")
-def convert_to_pdf(image: Image) -> int | None:
+def convert_to_pdf(image: Image) -> StoredFileReplacement | None:
     """Convert a non-PDF document upload to PDF in place, via LibreOffice headless.
 
     A file that's already a PDF is left untouched (returns None). The stored
@@ -82,7 +82,10 @@ def convert_to_pdf(image: Image) -> int | None:
         image: The Image row whose stored document to convert.
 
     Returns:
-        The new stored size in bytes when converted, else None.
+        The replacement when the file was converted, else None. Its
+        ``superseded_name`` is still on disk; the caller deletes it once the row
+        names the PDF - see
+        :func:`~urbanlens.dashboard.services.media.images.discard_superseded_file`.
     """
     old_name = image.image.name
     if not old_name:
@@ -126,11 +129,8 @@ def convert_to_pdf(image: Image) -> int | None:
 
     stem = posixpath.splitext(posixpath.basename(old_name))[0]
     image.image.save(f"{stem}.pdf", ContentFile(new_bytes), save=False)
-    if image.image.name != old_name:
-        with contextlib.suppress(OSError):
-            image.image.storage.delete(old_name)
     logger.info("Converted document %s to PDF: %s -> %s bytes", image.pk, old_size, len(new_bytes))
-    return len(new_bytes)
+    return StoredFileReplacement(len(new_bytes), old_name if image.image.name != old_name else None)
 
 
 @untrusted_parse("document.ocr")

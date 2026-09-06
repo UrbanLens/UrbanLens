@@ -662,6 +662,9 @@ class _UploadProcessResult:
     update_fields: dict[str, object]
     coords: tuple[float, float] | None = None
     new_stored_size: int | None = None
+    #: Stored name a rewrite replaced, still on disk. Deleted only once the row
+    #: names its successor - see ``media.images.discard_superseded_file``.
+    superseded_name: str | None = None
 
 
 def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max_dimension_override: int | None = None) -> _UploadProcessResult | None:
@@ -816,6 +819,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
             update_fields["author"] = uploader_name
 
     new_stored_size: int | None = None
+    superseded_name: str | None = None
     if image.profile is not None:
         downscale_policy: tuple[int | None, bool] | None = get_downscale_policy(image.profile)
     else:
@@ -839,7 +843,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
         # including the HEIC case (`stored_file_needs_transcode`), where the stored
         # bytes are what a plain <img src> gets and most browsers cannot render them.
         try:
-            new_size = downscale_stored_image(image, max_dimension, convert_webp)
+            replacement = downscale_stored_image(image, max_dimension, convert_webp)
         except (OSError, ValueError, PILDecompressionBombError) as exc:
             # DecompressionBombError inherits straight from Exception, not from
             # OSError/ValueError like the rest of Pillow's failures (Unidentified-
@@ -850,9 +854,10 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
             # upload stored and the rest of the pipeline intact.
             logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
         else:
-            if new_size is not None:
+            if replacement is not None:
                 update_fields["image"] = image.image.name
-                new_stored_size = new_size
+                new_stored_size = replacement.size
+                superseded_name = replacement.superseded_name
 
     try:
         if write_image_thumbnail(image):
@@ -877,7 +882,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
         # decoding one itself - see services.photos.photo_keywords.
         logger.warning("Analysis thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
 
-    return _UploadProcessResult(update_fields, coords, new_stored_size)
+    return _UploadProcessResult(update_fields, coords, new_stored_size, superseded_name)
 
 
 def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessResult:
@@ -889,7 +894,7 @@ def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessR
     # The container's own location tags are always removed from the stored file;
     # strip_location decides only whether the coordinates are recorded on the
     # row, where the app's visibility rules govern them.
-    metadata, new_size = process_uploaded_video(image, max_height)
+    metadata, replacement = process_uploaded_video(image, max_height)
 
     update_fields: dict[str, object] = {}
     coords: tuple[float, float] | None = None
@@ -899,9 +904,14 @@ def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessR
             update_fields["taken_at"] = image.taken_at
         if "latitude" in metadata and "longitude" in metadata:
             coords = (metadata["latitude"], metadata["longitude"])
-    if new_size is not None:
+    if replacement is not None:
         update_fields["image"] = image.image.name
-    return _UploadProcessResult(update_fields, coords, new_size)
+    return _UploadProcessResult(
+        update_fields,
+        coords,
+        replacement.size if replacement else None,
+        replacement.superseded_name if replacement else None,
+    )
 
 
 def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResult:
@@ -910,18 +920,23 @@ def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResul
 
     update_fields: dict[str, object] = {}
     try:
-        new_size = convert_to_pdf(image)
+        replacement = convert_to_pdf(image)
     except (OSError, ValueError) as exc:
         logger.warning("Document conversion failed for image %s: %s", image_id, exc, exc_info=True)
-        new_size = None
-    if new_size is not None:
+        replacement = None
+    if replacement is not None:
         update_fields["image"] = image.image.name
 
     ocr_text = extract_pdf_text(image)
     if ocr_text:
         image.ocr_text = ocr_text
         update_fields["ocr_text"] = ocr_text
-    return _UploadProcessResult(update_fields, None, new_size)
+    return _UploadProcessResult(
+        update_fields,
+        None,
+        replacement.size if replacement else None,
+        replacement.superseded_name if replacement else None,
+    )
 
 
 def _sync_deduped_siblings(image: Image) -> None:
@@ -1158,6 +1173,7 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
     from decimal import Decimal
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.media.images import discard_superseded_file
     from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
     from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
@@ -1264,6 +1280,12 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
 
     if update_fields:
         Image.objects.filter(pk=image_id).update(**update_fields)
+
+    # Only now, with the row naming the processed file. Before this line a
+    # request for the old path is authorized (authorize_media reads the row) and
+    # then finds nothing; after it, the same request is refused, which is the
+    # answer it should have had all along. See P58 in docs/PROBLEMS.md.
+    discard_superseded_file(image, result.superseded_name)
 
     _sync_deduped_siblings(image)
 

@@ -2544,38 +2544,51 @@ permission gate (author or trip creator), but no test file anywhere in the suite
 `TripCommentDeleteView` or `delete_comment` at all - not the basic delete, the permission gate, or
 image cleanup. Would need a full TripComment/Trip fixture setup, not a surgical addition.
 
-## P58 — A photo's grid tile can 404/500 for seconds after upload while async processing renames its file
+## P58 — A renamed photo's old URL still 404s for the uploader who just uploaded it
 
-`id: P58` · `status: open` · `updated: 2026-08-31`
+`id: P58` · `status: open` · `updated: 2026-09-06`
 
-Previously titled "A photo's grid tile can 404/500 for a few seconds right after upload while async processing renames its file".
+Previously titled "A photo's grid tile can 404/500 for seconds after upload while async processing
+renames its file", and before that "... for a few seconds right after upload".
 
-Found live-verifying Batch 4 (lightbox pin/wiki/album associations) against the `ae97b86` dev
-environment - pre-existing (Batch 2's upload/grid work), unrelated to Batch 4 itself, and not a
-Batch 4 regression. `tasks.process_image_upload` (the Celery task queued after every upload) can
-re-encode the stored file and change its path (observed: `.jpg` -> `.webp`), deleting the original
-once the new one is written (see `downscale_stored_image` in `services/media/images.py`, its
-`stale_names` cleanup). A grid tile rendered from the upload response, or from a page load that
-lands between the delete-old and any client-side refresh, points at the old path - a request for it
-404s (`django.views.static.serve` before the delete completes, or racing it) or in one observed case
-500s (`FileNotFoundError` mid-request, presumably the file disappearing between the storage
-existence check and the actual read). Reproduced directly: `manage.py shell` confirmed a freshly
-uploaded, not-yet-processed row's `image.url` serves 200 immediately, but the exact same URL for an
-*older* row whose processing had by then completed and renamed the file returned a Django 500 with
-`FileNotFoundError: ... lightbox-associations.jpg`. This is a narrow window (observed on the order of
-single-digit seconds, worse when the Celery worker has a backlog - this shared dev environment's
-worker was visibly behind after repeated test runs, logging one `Downscaled image N` line every few
-seconds) but is a real, if minor, UX gap: a user who opens their own gallery moments after uploading
-can see a broken image icon on their own new tile until the next refresh. Worth either having the
-client not render/link an image URL until processing is confirmed done, or having the server keep the
-old file (or redirect) until any in-flight requests for it would reasonably have completed, rather
-than deleting eagerly.
+`tasks.process_image_upload` re-encodes an upload and stores it under a new name (`.jpg` ->
+`.webp`, `downscale_stored_image`). A grid tile rendered from the upload response, or from a page
+load that lands before the client refreshes, points at the old path. Found live-verifying Batch 4
+against the `ae97b86` dev environment; pre-existing, and it also hits Vault Documents' `<iframe>`
+lightbox preview (`_setLightboxDocument`), since `upload_photo()` queues the same task for every
+media type.
 
-**Addendum 2026-08-31**: also hits Vault Documents' lightbox preview (`<iframe>`, Batch 5's
-`_setLightboxDocument`) - same race, same root cause (`upload_photo()` queues the identical
-`process_image_upload` task regardless of media type), scoped out live-verifying Batch 5 the same
-way (`guard.allow()` in `tests/integration/specs/ui/vault-documents.spec.ts`). Not a new instance to
-fix separately; the eventual fix above covers both.
+**Two of the three defects behind it are fixed (2026-09-06); the third is what is left.**
+
+1. ~~**The 500.**~~ `LocalMediaSource.response()` opened the file that `resolve_media_path` had
+   just stat'ed, and a `FileNotFoundError` in between escaped as a 500 - against the abstract
+   `MediaByteSource.response`'s own documented contract, which `ObjectMediaSource` honoured and the
+   local branch did not. It raises `Http404` now.
+2. ~~**The window that made it reachable.**~~ The rewrite deleted the superseded file immediately,
+   while the row still named it - and `services.media.access.authorize_media` answers from the row,
+   so for the rest of the task (three thumbnail passes, seconds under load) every request for that
+   path was *authorized* and then missing. All three rewrites (`downscale_stored_image`,
+   `process_uploaded_video`, `convert_to_pdf`) now return a `StoredFileReplacement` naming the
+   superseded file instead of deleting it, and the caller discards it after persisting the new name
+   (`discard_superseded_file`). Deleting late costs one orphaned file if the process dies in
+   between; deleting early cost a row that permanently named a file which no longer existed, which
+   is the better candidate for P59's durably-broken thumbnail than that entry's own theory.
+3. **The 404 itself - still open, and not a bug in the delivery path.** Once the row names the new
+   file, the old path has no owning row, so `authorize_image` refuses it: 404 is the *correct*
+   answer, and no amount of keeping the old file around changes it. What is wrong is that the
+   client is still holding a URL the server has stopped honouring. That needs one of:
+
+   - a stable per-row media URL (`/media/image/<uuid>/`) that resolves to whatever file the row
+     currently names, so a rename is invisible to anything already rendered - the durable fix, and
+     the one that also covers the document lightbox; or
+   - the client not rendering a URL until processing is confirmed done. `Image.pending_scan` already
+     marks exactly that state and is already false for everyone but the uploader, so the uploader's
+     own tile is the only surface that needs it; or
+   - `urbanlensMediaThumbFallback` re-fetching the row rather than retrying the same URL twice
+     (2s, 4s) - the cheapest, and it leaves the stale URL in the page.
+
+   Not chosen here: the first costs a route and a template sweep, and picking between them without
+   measuring how often a tile actually lands in the window would be guessing.
 
 ## P59 — A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing
 
@@ -2590,14 +2603,25 @@ own changes (this test predates it, and nothing touched this session runs anywhe
 consistently fails to restore its `<img src>`, always pointing at
 `.../pin_images/thumbs/5v/S76SWO1keJAXdV/lightbox-associations.webp` - the same filename pattern as
 the async-rename race documented above, but this one reproduces identically across two fully
-isolated `--grep`-scoped runs (not just within a single flaky window), and no `Image` row's stored
-`image` field matches that path (`Image.objects.filter(image__icontains="S76SWO1keJAXdV")` returns
-zero rows), so this looks less like the few-second rename race and more like a thumbnail job that
-started, got a path assigned, and never completed or got cleaned up - or a stale reference cached
-somewhere between the DB and what's served. Didn't chase further (out of scope for Batch 5, and the
-`e2e-primary` account on this ephemeral dev slot is disposable), but worth a look if `vault-photos.spec.ts`
-keeps failing on this specific test: check for an orphaned/stuck row in this account's photo library,
-or a thumbnail-generation task that errored silently.
+isolated `--grep`-scoped runs, not just within a single flaky window.
+
+**The evidence for "durably broken rather than racing" was measured against the wrong column, and
+that is worth fixing before the next attempt.** The entry ran
+`Image.objects.filter(image__icontains="S76SWO1keJAXdV")` and read zero rows as "no row owns this
+path". A `pin_images/thumbs/` path is what `pin_image_thumbnail_path` (`models/images/model.py:130`)
+produces, and it is stored in `Image.thumbnail`, not `Image.image` - so that query could not have
+matched however healthy the row was. Re-run it against `thumbnail__icontains` (and
+`marker_thumbnail`/`analysis_thumbnail`, which share the prefix) before concluding anything.
+
+A likelier cause than the "thumbnail job that got a path assigned and never completed" this entry
+guessed at: until 2026-09-06 every stored-file rewrite deleted the superseded file *before* its row
+was updated (see P58), so a process that died in between left a row permanently naming a file that
+had already been removed - durably broken, by construction, and indistinguishable from this. That
+ordering is fixed; a row already in that state stays in it, and needs a re-run of the thumbnail
+backfill (`backfill_image_thumbnails`) or a repointed row to recover.
+
+Didn't chase further (out of scope for Batch 5, and the `e2e-primary` account on this ephemeral dev
+slot is disposable), but worth a look if `vault-photos.spec.ts` keeps failing on this specific test.
 
 ## P63 — Adding a third Vault media type means copying ~600 lines for ~90 lines of difference
 

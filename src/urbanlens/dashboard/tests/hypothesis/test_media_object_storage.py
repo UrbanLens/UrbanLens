@@ -14,6 +14,8 @@ anywhere a client can see one.
 
 from __future__ import annotations
 
+from pathlib import Path
+import tempfile
 from typing import TYPE_CHECKING
 from unittest import mock
 
@@ -209,6 +211,35 @@ class ByteSourceSelectionTests(SimpleTestCase):
             self.assertRaises(Http404),
         ):
             resolve_media_path("pin_images/../../etc/passwd")
+
+
+class LocalByteDeliveryTests(SimpleTestCase):
+    """The filesystem branch's half of the same contract."""
+
+    def test_a_file_that_vanished_after_resolution_is_a_404_not_a_500(self) -> None:
+        """The resolver checks existence; delivery opens the file. Async processing
+        replaces a just-uploaded photo's file between the two, and the row - which is
+        what authorizes the request - still names the old one until the task ends.
+        The object branch already answers this with a 404 (see the test of the same
+        name below); the local branch raised FileNotFoundError out of the view.
+        """
+        from urbanlens.dashboard.controllers.media import LocalMediaSource
+
+        with tempfile.TemporaryDirectory() as media_root:
+            source = LocalMediaSource(_REAL_KEY, Path(media_root) / "vanished.jpg")
+            with override_settings(MEDIA_X_ACCEL=False), self.assertRaises(Http404):
+                source.response()
+
+    def test_the_accel_hand_off_does_not_re_open_the_file(self) -> None:
+        """nginx serves the bytes, so a vanished file is nginx's 404 to answer, not this
+        process's - and re-checking here would cost a stat on every media request."""
+        from urbanlens.dashboard.controllers.media import LocalMediaSource
+
+        with tempfile.TemporaryDirectory() as media_root:
+            source = LocalMediaSource(_REAL_KEY, Path(media_root) / "vanished.jpg")
+            with override_settings(MEDIA_X_ACCEL=True, MEDIA_X_ACCEL_PREFIX="/_protected_media/"):
+                response = source.response()
+        self.assertTrue(response["X-Accel-Redirect"].startswith("/_protected_media/"))
 
 
 class ObjectByteDeliveryTests(SimpleTestCase):
