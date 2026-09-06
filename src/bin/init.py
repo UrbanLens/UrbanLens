@@ -384,8 +384,9 @@ class DjangoProjectInitializer:
         failed until a browser asked for the file.
 
         Raises:
-            UnrecoverableError: the manifest is missing, unreadable, or
-                describes files that are not there.
+            UnrecoverableError: the manifest is missing, unreadable, describes
+                files that are not there, or is missing a build step's output
+                entirely.
 
         """
         manifest = APP_DIR / "frontend" / "static" / "staticfiles.json"
@@ -412,6 +413,17 @@ class DjangoProjectInitializer:
                 ", ".join(missing[:5]) or "-",
             )
             raise UnrecoverableError(f"Static manifest at {manifest} does not match the collected files.")
+
+        # Present-and-correct is not the same as complete. The sass step runs with
+        # raise_error=False, so a failed compile leaves no style.css, collectstatic
+        # collects nothing to replace it, and the manifest that results is
+        # internally consistent and has no stylesheet in it - at which point
+        # {% static 'dashboard/style.css' %} raises on every page. Each build step
+        # has to have left something behind.
+        for label, suffix in (("sass", ".css"), ("the bundler", ".js")):
+            if not any(name.startswith("dashboard/") and name.endswith(suffix) for name in entries):
+                logger.error("Static manifest has %d entries but no dashboard/*%s - %s produced nothing.", len(entries), suffix, label)
+                raise UnrecoverableError(f"Static manifest at {manifest} contains no dashboard/*{suffix}; {label} produced nothing.")
 
         logger.info("Static manifest verified: %d entries, all present.", len(entries))
 

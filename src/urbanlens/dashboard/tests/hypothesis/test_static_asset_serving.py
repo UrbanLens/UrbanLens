@@ -159,19 +159,45 @@ class StaticManifestVerificationTests(SimpleTestCase):
             written.write_bytes(b"x")
         (static_root / "staticfiles.json").write_text(json.dumps({"version": "1.1", "paths": paths}))
 
+    #: The smallest manifest that is actually complete: one output from sass and
+    #: one from the bundler.
+    _COMPLETE = {
+        "dashboard/style.css": "dashboard/style.abc123.css",
+        "dashboard/js/core.js": "dashboard/js/core.def456.js",
+    }
+
     def test_matching_manifest_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            self._write_manifest(
-                root, {"dashboard/style.css": "dashboard/style.abc123.css"}, create=("dashboard/style.abc123.css",)
-            )
+            self._write_manifest(root, dict(self._COMPLETE), create=tuple(self._COMPLETE.values()))
             self.init_module.APP_DIR = root
             self._initializer().verify_static_manifest()
+
+    def test_a_build_step_that_produced_nothing_is_fatal(self) -> None:
+        """The failure mode the existence check cannot see.
+
+        `bun run sass` runs with raise_error=False, so a failed compile leaves no
+        stylesheet, collectstatic collects nothing to replace it, and the
+        resulting manifest is internally consistent with no CSS in it - at which
+        point every page raises on the stylesheet's `{% static %}` call.
+        """
+        for dropped, remaining in (
+            ("dashboard/style.css", "dashboard/js/core.js"),
+            ("dashboard/js/core.js", "dashboard/style.css"),
+        ):
+            with self.subTest(missing=dropped), tempfile.TemporaryDirectory() as tmp:
+                root = pathlib.Path(tmp)
+                partial = {remaining: self._COMPLETE[remaining]}
+                self._write_manifest(root, partial, create=tuple(partial.values()))
+                self.init_module.APP_DIR = root
+                with self.assertRaises(self.init_module.UnrecoverableError):
+                    self._initializer().verify_static_manifest()
 
     def test_missing_target_is_fatal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            self._write_manifest(root, {"dashboard/style.css": "dashboard/style.abc123.css"}, create=())
+            # Complete on paper, and one of the two files is not on disk.
+            self._write_manifest(root, dict(self._COMPLETE), create=("dashboard/js/core.def456.js",))
             self.init_module.APP_DIR = root
             with self.assertRaises(self.init_module.UnrecoverableError):
                 self._initializer().verify_static_manifest()
@@ -187,8 +213,8 @@ class StaticManifestVerificationTests(SimpleTestCase):
             root = pathlib.Path(tmp)
             self._write_manifest(
                 root,
-                {"dashboard/images/logo.png": "dashboard\\images\\logo.abc123.png"},
-                create=("dashboard\\images\\logo.abc123.png",),
+                {**self._COMPLETE, "dashboard/images/logo.png": "dashboard\\images\\logo.abc123.png"},
+                create=(*self._COMPLETE.values(), "dashboard\\images\\logo.abc123.png"),
             )
             self.init_module.APP_DIR = root
             with self.assertRaises(self.init_module.UnrecoverableError):

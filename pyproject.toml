@@ -80,6 +80,10 @@ dependencies = [
     "drf-spectacular>=0.30.0",
     "django-oauth-toolkit>=3.3.0",
     "anthropic>=0.120,<0.130",
+    # A base dependency rather than an extra: UL_MEDIA_STORAGE_BACKEND=s3 is
+    # what the production deployment is heading for, and an extra our own
+    # image never installs would be a code path nothing exercises. Costs a
+    # self-host an unused boto3 and nothing else.
     "django-storages[s3]~=1.14",
 ]
 
@@ -526,7 +530,9 @@ only_mutate = [
 do_not_mutate = ["*/tests/*", "*/migrations/*"]
 # mutmut runs the suite in a copy of the tree at `mutants/`, which does not
 # contain the collected static files - and any test that renders a full page
-# fails on a missing staticfiles manifest entry without them.
+# fails on a missing staticfiles manifest entry without them. STATIC_ROOT is
+# build output and no longer tracked, so this path exists only after a build has
+# run: on a fresh clone, run one before mutmut.
 also_copy = ["src/urbanlens/frontend/static"]
 pytest_add_cli_args = ["--reuse-db", "-q"]
 # Scope both phases to the tests that actually cover the mutated modules.
