@@ -1589,6 +1589,15 @@ Jess's 2026-08-25 sign-off on this entry said she didn't follow the "running-tot
 proposal and wants it re-explained before any implementation, so that half stays open pending that
 conversation.
 
+**The re-explanation exists now: I4, [`designs/storage-running-total.md`](designs/storage-running-total.md)
+(2026-09-06).** Still nothing implemented - it ends with three questions to answer, and "no" to the
+first is a good answer that should be written back here so the next session stops proposing it. The
+short version of why the lock cannot be enough: a `SUM` over many rows can be neither incremented
+atomically nor locked, and a single row can be both. The short version of why it is not a refactor:
+`file_size` changes in **five** places, not one - insert, delete, the post-admission backfill at
+`tasks.py:1270`, the re-encode in that same task, and `quota_rewards` flipping the exemption with a
+`queryset.update()`. The obvious implementation (override `Image.save()`) misses the last three.
+
 ## P29 — 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx
 
 `id: P29` · `status: open` · `updated: 2026-08-13`
