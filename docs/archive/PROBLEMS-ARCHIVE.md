@@ -12242,6 +12242,21 @@ bypass that looks like a working limit from either side. `MessageRateLimitedErro
 so the consumers report it without new knowledge; the views answer 429 rather than the 400 its
 siblings earn.
 
+**There are five doors, not two, and the first attempt at this counted wrong.** The socket and the
+two web views are what the entry above named; the external API has three more views calling the
+identical create functions. Because the refusal is deliberately a bare `ValueError`, and DRF's
+exception handler returns `None` for anything that is not an `APIException`, every legitimate
+throttling event on the mobile and OAuth surface rendered as a **500** - wrong retry semantics for
+the client, and error alerting fired for expected traffic. It is mapped in
+`uniform_exception_handler` now rather than in each view, so a view added later inherits it. Three
+more defects came out of the same review: the direct-message charge ran *before*
+`can_direct_message`, so being refused by someone whose visibility does not include you cost the
+sender their allowance (`create_group_message` already checked membership first); two concurrent
+retries of one `client_uuid` both charged, since the idempotency guard reads before it writes, which
+`FrameBudget.refund` now gives back; and `ChatComposer`'s in-flight queue outlived a reconnect,
+after which the next message with the same text retired the orphan instead of itself and shifted the
+queue for the rest of the session.
+
 `UL_WEBSOCKET_MESSAGES_PER_MINUTE` became `UL_MESSAGES_PER_MINUTE` in that move. The old name would
 have told an operator it governed only sockets, which stopped being true.
 
