@@ -30,6 +30,7 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
+from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.geo.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote, has_consensus
 from urbanlens.dashboard.services.locations import site_scope
@@ -48,6 +49,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
+
+#: Field edits per page in the wiki's history list.
+_HISTORY_PAGE_SIZE = 25
 
 # Metadata for the four community stat votes (danger / vulnerability / priority /
 # rating) shown on the wiki page - the shared-place equivalent of a pin's own
@@ -385,7 +389,11 @@ def _render_history(request, location: Location, wiki: Wiki):
 
     Shared by the history list view and the revert/delete actions below so a
     successful action re-renders the up-to-date list in place, instead of
-    leaving a stale row (or a raw JSON body) swapped into the DOM.
+    leaving a stale row (or a raw JSON body) swapped into the DOM. Those
+    actions send the page they were fired from, so an expunge on page three
+    does not drop the user back to page one; ``get_page`` clamps an
+    out-of-range number, which is what deleting the only row on the last page
+    produces.
     """
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active, redact_edit_changes
 
@@ -393,6 +401,13 @@ def _render_history(request, location: Location, wiki: Wiki):
     edits = wiki.edits.select_related("editor__user", "reverted_by").order_by("-created")
 
     conceal = concealment_active(wiki, profile)
+    # Narrowed before paginating: a page taken over the unfiltered history
+    # would be short by however many of its rows concealment then removed.
+    page = get_page(request, conceal_rows(edits, profile) if conceal else edits, _HISTORY_PAGE_SIZE)
+    # Materialised before mutating: a queryset re-runs its query on each
+    # iteration, so redacting in place and handing the page to the template
+    # would render the unredacted rows from a second fetch.
+    rows: Any = list(page.object_list)
     if conceal:
         # Two separate problems here. The list itself names every editor and
         # what they changed, so it is filtered to the viewer and their friends.
@@ -400,20 +415,13 @@ def _render_history(request, location: Location, wiki: Wiki):
         # in its "from" side - which for the viewer's own edit is whatever a
         # stranger had written there. That half survives a perfect read gate,
         # because it lands in content the rules promise always to show.
-        # Materialised before mutating: a queryset re-runs its query on each
-        # iteration, so redacting in place and handing the queryset to the
-        # template would render the unredacted rows from a second fetch.
-        visible_edits = list(conceal_rows(edits, profile))
-        for edit in visible_edits:
+        for edit in rows:
             edit.changes = redact_edit_changes(edit.changes)
-        rows: Any = visible_edits
-    else:
-        rows = edits
 
     return render(
         request,
         "dashboard/pages/location/wiki_history.html",
-        {"location": location, "wiki": conceal_wiki(wiki, profile), "edits": rows, "current_profile": profile},
+        {"location": location, "wiki": conceal_wiki(wiki, profile), "edits": rows, "page_obj": page, "current_profile": profile},
     )
 
 
