@@ -12,7 +12,13 @@ Context:
 {% endcomment %}
 <div class="photo-gallery card" id="photo-gallery"
      data-collapse-scope="{{ context_type }}" data-collapse-section="gallery"
-     {% if context_type == "pin" %}data-gallery-bulk-url="{% url 'pin.gallery.bulk' pin.slug %}" hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML"{% endif %}>
+     {% comment %}
+     Both urls, and the same one twice: the pin endpoint answers delete and
+     send-to-wiki alike, so splitting them costs nothing here - but the reader
+     (photo-context-menu.ts) gates send-to-wiki on the wiki url now, because a
+     Vault album has a bulk delete and no wiki to send to.
+     {% endcomment %}
+     {% if context_type == "pin" %}data-gallery-bulk-url="{% url 'pin.gallery.bulk' pin.slug %}" data-gallery-wiki-url="{% url 'pin.gallery.bulk' pin.slug %}" hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML"{% endif %}>
   <div class="card-header">
     <i class="material-symbols-outlined">photo_library</i>
     <span>Photos</span>
