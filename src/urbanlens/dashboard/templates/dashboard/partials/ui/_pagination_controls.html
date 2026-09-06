@@ -26,8 +26,39 @@ Optional overrides, each defaulting to what a plain HTMX-loaded card needs:
                    one pagination bar, since "Previous page" twice tells a
                    screen-reader user nothing about which list moves.
   page_bar_class - extra class(es) on the bar itself.
+  page_links     - emit plain links instead of HTMX buttons. What a full-page
+                   view needs: an `hx-get` there would fetch a whole HTML
+                   document and swap it into one div. A link also keeps the
+                   back button working, which is most of the value on a page
+                   the user arrived at by navigating.
 {% endcomment %}
-{% if adaptive_pagination and page_obj.paginator.num_pages > 1 %}
+{% if page_links %}
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="pagination-bar {{ page_bar_class }}">
+    {% if page_obj.has_previous %}
+    <a class="pagination-btn" href="?{% firstof page_param 'page' %}={{ page_obj.previous_page_number }}{% if extra_query %}&{{ extra_query }}{% endif %}"
+       aria-label="Previous page{% if page_noun %} of {{ page_noun }}{% endif %}">
+        <i class="material-symbols-outlined">chevron_left</i>
+    </a>
+    {% else %}
+    <span class="pagination-btn pagination-btn--disabled" aria-hidden="true">
+        <i class="material-symbols-outlined">chevron_left</i>
+    </span>
+    {% endif %}
+    <span class="pagination-label">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a class="pagination-btn" href="?{% firstof page_param 'page' %}={{ page_obj.next_page_number }}{% if extra_query %}&{{ extra_query }}{% endif %}"
+       aria-label="Next page{% if page_noun %} of {{ page_noun }}{% endif %}">
+        <i class="material-symbols-outlined">chevron_right</i>
+    </a>
+    {% else %}
+    <span class="pagination-btn pagination-btn--disabled" aria-hidden="true">
+        <i class="material-symbols-outlined">chevron_right</i>
+    </span>
+    {% endif %}
+</div>
+{% endif %}
+{% elif adaptive_pagination and page_obj.paginator.num_pages > 1 %}
 {# Starts hidden - it renders with no Prev/Next buttons until initAdaptivePagination #}
 {# (pages/location/index.html) measures the list and calls renderControls, which #}
 {# un-hides it only if pagination actually applies. Without this, the empty bar's #}
