@@ -32,6 +32,18 @@ interface RequestFailure {
     error: string;
 }
 
+/**
+ * What a bodyless success resolves to.
+ *
+ * `fetchJson` answers a 204 with `null`, correctly - a DRF delete has nothing to
+ * return. These two must not pass that through: every call site reads a property
+ * off the result (`response.error`, `data.friends ?? []`), so a `null` is a
+ * `TypeError` rather than a quiet no-op. None of the three games' endpoints
+ * answers 204 today; turning one of them into a bodyless delete should not be
+ * the change that crashes its caller.
+ */
+const EMPTY_BODY = {} as const;
+
 /** What went wrong, preferring the server's own words. */
 function describe(error: unknown): string {
     const message = error instanceof Error ? error.message : String(error);
@@ -57,11 +69,15 @@ function describe(error: unknown): string {
 export async function postForm(url: string, data: Record<string, string> | URLSearchParams): Promise<any> {
     const body = data instanceof URLSearchParams ? data : new URLSearchParams(data);
     try {
-        return await fetchJson(url, {
+        return (await fetchJson(url, {
             method: "POST",
             headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
             body,
-        });
+            // The caller checks `.error` and toasts it; base.html's generic
+            // "Request failed (HTTP 503)." on top of that is a second toast
+            // saying less.
+            reportsItsOwnErrors: true,
+        })) ?? EMPTY_BODY;
     } catch (error) {
         return { error: describe(error) } satisfies RequestFailure;
     }
@@ -80,7 +96,7 @@ export async function postForm(url: string, data: Record<string, string> | URLSe
  */
 export async function getJson(url: string): Promise<any> {
     try {
-        return await fetchJson(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+        return (await fetchJson(url, { headers: { "X-Requested-With": "XMLHttpRequest" }, reportsItsOwnErrors: true })) ?? EMPTY_BODY;
     } catch (error) {
         const message = describe(error);
         toast.error(message);

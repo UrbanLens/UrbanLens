@@ -16,20 +16,29 @@
 export interface FetchJsonOptions extends RequestInit {
     /** Abort after this long. Default two minutes, matching the map's tile fetches. */
     timeoutMs?: number;
-}
 
-/**
- * Tells `themes/base.html`'s global `window.fetch` wrapper to stay quiet.
- *
- * That wrapper is the net under the ~90 raw `fetch()` call sites that still
- * exist, and it toasts a generic "Request failed (HTTP 503)." for any non-2xx.
- * Everything here checks the status itself and reports the server's own
- * sentence, so without this marker a single refusal is announced twice - once
- * usefully and once uselessly. Not a standard `RequestInit` field; `fetch`
- * ignores what it does not recognise, and the wrapper reads it off the same
- * object (P11).
- */
-const REPORTED_BY_CALLER = { __ulReported: true } as const;
+    /**
+     * This caller shows the user its own message, so suppress the generic one.
+     *
+     * `themes/base.html` wraps `window.fetch` and toasts "Request failed (HTTP
+     * 503)." for any non-2xx - the net under the ~90 raw `fetch()` call sites
+     * that have not moved yet (P11). Throwing an `HttpError` carrying the
+     * server's own sentence does not, by itself, mean anyone said anything: most
+     * callers here are inline template scripts that only `console.warn`, and the
+     * generic toast is the only thing a user sees.
+     *
+     * So this is opt-in rather than automatic. Set it where the caller really
+     * does report - `session-request.ts` does - and a single refusal is
+     * announced once instead of twice. Leave it off and the net stays in place,
+     * which is what an unmigrated call site needs.
+     *
+     * The first version of this applied it inside `fetchJson` for everyone,
+     * which turned a generic toast into silence on every page that had not been
+     * migrated - including the map's cold-start pin load, whose only handler is
+     * a `console.warn`.
+     */
+    reportsItsOwnErrors?: boolean;
+}
 
 export class HttpError extends Error {
     readonly status: number;
@@ -85,12 +94,13 @@ async function errorMessage(response: Response): Promise<string> {
 }
 
 export async function fetchJson<T = unknown>(url: string, options: FetchJsonOptions = {}): Promise<T | null> {
-    const { timeoutMs = 120000, ...init } = options;
+    const { timeoutMs = 120000, reportsItsOwnErrors = false, ...init } = options;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-        const response = await fetch(url, { ...init, ...REPORTED_BY_CALLER, signal: controller.signal });
+        // `__ulReported` is what base.html's wrapper reads; `fetch` ignores it.
+        const response = await fetch(url, { ...init, __ulReported: reportsItsOwnErrors, signal: controller.signal } as RequestInit);
         if (!response.ok) throw new HttpError(response.status, await errorMessage(response));
         // 204 has no body, and calling .json() on it throws. Callers that expect
         // nothing back (a recorded position, a DRF delete) would otherwise see a

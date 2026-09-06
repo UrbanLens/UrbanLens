@@ -218,7 +218,43 @@ describe("the __ulReported contract with base.html", () => {
 
     test("the wrapper reads the same flag this module writes", () => {
         expect(template).toContain("init.__ulReported");
-        expect(readFileSync(join(import.meta.dir, "fetch-json.ts"), "utf8")).toContain("__ulReported: true");
+        expect(readFileSync(join(import.meta.dir, "fetch-json.ts"), "utf8")).toContain("__ulReported: reportsItsOwnErrors");
+    });
+
+    test("an ordinary caller keeps the net", async () => {
+        // The regression this replaced: setting the marker inside fetchJson for
+        // everyone turned the generic toast into silence on every page that had
+        // not been migrated - including the map's cold-start pin load, whose only
+        // handler is a console.warn.
+        const inits: RequestInit[] = [];
+        const real = globalThis.fetch;
+        globalThis.fetch = (async (_url: string, init: RequestInit) => {
+            inits.push(init);
+            return new Response("{}", { status: 200 });
+        }) as unknown as typeof fetch;
+        try {
+            await fetchJson("/anything/");
+        } finally {
+            globalThis.fetch = real;
+        }
+
+        expect((inits[0] as { __ulReported?: boolean }).__ulReported).toBe(false);
+    });
+
+    test("a caller that says so opts out", async () => {
+        const inits: RequestInit[] = [];
+        const real = globalThis.fetch;
+        globalThis.fetch = (async (_url: string, init: RequestInit) => {
+            inits.push(init);
+            return new Response("{}", { status: 200 });
+        }) as unknown as typeof fetch;
+        try {
+            await fetchJson("/anything/", { reportsItsOwnErrors: true });
+        } finally {
+            globalThis.fetch = real;
+        }
+
+        expect((inits[0] as { __ulReported?: boolean }).__ulReported).toBe(true);
     });
 
     test("the wrapper stays quiet on both failure paths, not just the non-2xx one", () => {

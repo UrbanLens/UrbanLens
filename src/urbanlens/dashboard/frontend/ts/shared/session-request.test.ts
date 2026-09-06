@@ -145,9 +145,34 @@ describe("session-request", () => {
         expect((await postForm("/games/answer/", {})).error).toContain("took too long");
     });
 
-    test("a 204 is a success, not an empty-body failure", async () => {
+    test("a 204 resolves to an object, because every caller reads a property off it", async () => {
+        // fetchJson answers a bodyless success with null, correctly. Passing that
+        // through would make `if (response.error)` a TypeError - a crash where the
+        // old code merely did nothing. No games endpoint answers 204 today;
+        // turning one into a bodyless delete must not be what breaks its caller.
         respond("", { status: 204 });
 
-        expect(await postForm("/games/leave/", {})).toBeNull();
+        const result = await postForm("/games/leave/", {});
+
+        expect(result).toEqual({});
+        expect(result.error).toBeUndefined();
+    });
+
+    test("both helpers suppress the generic toast, because they report themselves", async () => {
+        // base.html wraps window.fetch and toasts "Request failed (HTTP 503)."
+        // for any non-2xx. These two say something better, so they opt out - and
+        // opting out is per-call, not something fetchJson does for everyone.
+        const inits: RequestInit[] = [];
+        globalThis.fetch = mock(async (_url: string, init: RequestInit) => {
+            inits.push(init);
+            return new Response("{}", { status: 200 });
+        }) as unknown as typeof fetch;
+
+        await postForm("/games/start/", {});
+        await getJson("/games/friends/");
+
+        for (const init of inits) {
+            expect((init as { __ulReported?: boolean }).__ulReported).toBe(true);
+        }
     });
 });

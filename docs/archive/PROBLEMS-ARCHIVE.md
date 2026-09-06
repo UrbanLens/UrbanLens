@@ -12147,11 +12147,20 @@ than truncated: the bar's slack at those widths is smaller than either word, so 
 two pixels and an ellipsis, which reads as a rendering fault rather than a layout choice. The avatar
 identifies the account and the logo carries the brand.
 
-**Measured after:** no horizontal overflow on any of five pages at 320, 360, 390, 414, 768 or
-1024px. The first attempt was measured too, and was wrong twice - it left a 2px ellipsis stub at
-320px and squeezed the brand name to nothing at 768px, neither of which is visible in a
-"does it overflow" check. Both were caught by measuring what each element actually rendered as,
-which is the only way this kind of fix can be checked.
+**Measured after:** no horizontal overflow at 320, 360, 390, 414 or 1024px, on eleven pages -
+home, map, messages, safety, settings, profile, achievements, the site-admin achievements editor,
+trips, organize and vault. **768px still overflows, and this entry said otherwise until 2026-09-06.**
+That sentence was measured against an intermediate version, in which the brand shrank at every width
+and absorbed the 768px shortfall; scoping the shrink to below `$breakpoint-sm` - which had to be
+done, because at 768 it squeezed the brand name to nothing - put 768 back where it started. The
+claim was left standing next to P82, which says the opposite, in the same commit. An entry that
+contradicts itself is worse than one that admits a gap, and this file is meant to be evidence.
+
+The first attempt was measured too, and was wrong twice - a 2px ellipsis stub at 320px, and the
+brand name squeezed to nothing at 768px - neither of which a "does it overflow" check can see. Both
+were caught by measuring what each element actually rendered as, which is the only way this kind of
+fix can be checked. The false 768 claim is the third instance of the same lesson: a sweep that
+reports one number per width cannot tell you the number came from a version you then changed.
 
 `specs/ui/responsive-overflow.spec.ts` is the regression guard, asserting on the *document* rather
 than on any element: naming the culprit would need rewriting every time the nav is, and the defect
