@@ -167,3 +167,63 @@ describe("the floating undo bar", () => {
         expect(Number.parseFloat(offset || "0")).toBeGreaterThan(40);
     });
 });
+
+describe("wrapping window.fetch", () => {
+    // base.html wraps `window.fetch` too, and marks its own wrapper
+    // `__urbanLensWrapped` - that marker is how it declines to wrap a second
+    // time. Replacing that function with a bare one drops the marker, and the
+    // next thing to run that block would wrap again and toast every failed
+    // request twice. The runtime's own `fetch` carries properties as well
+    // (Bun's has `preconnect`), which is what a two-year-stale `bun-types`
+    // was hiding.
+    interface MarkedFetch {
+        __urbanLensWrapped?: boolean;
+        // Stands in for whatever else the replaced function was holding - the
+        // runtime's own `fetch` carries properties too (Bun's has
+        // `preconnect`), but naming that one here would couple this test to
+        // its signature rather than to the mechanism under test.
+        __probe?: string;
+    }
+
+    const realFetch = globalThis.fetch;
+
+    afterEach(() => {
+        globalThis.fetch = realFetch;
+    });
+
+    function markedFetch(): typeof window.fetch {
+        const stub = (async () => new Response("{}", { status: 200 })) as unknown as typeof window.fetch;
+        (stub as MarkedFetch).__urbanLensWrapped = true;
+        (stub as MarkedFetch).__probe = "kept";
+        return stub;
+    }
+
+    test("keeps the properties of the function it replaced", () => {
+        window.fetch = markedFetch();
+
+        installUndoBar();
+
+        expect((window.fetch as MarkedFetch).__urbanLensWrapped).toBe(true);
+        expect((window.fetch as MarkedFetch).__probe).toBe("kept");
+    });
+
+    test("the wrapper is a different function, not the one it replaced", () => {
+        const original = markedFetch();
+        window.fetch = original;
+
+        installUndoBar();
+
+        expect(window.fetch).not.toBe(original);
+    });
+
+    test("restoring puts back the original function, properties and all", () => {
+        const original = markedFetch();
+        window.fetch = original;
+        installUndoBar();
+
+        resetUndoBarForTests();
+
+        expect(window.fetch).toBe(original);
+        expect((window.fetch as MarkedFetch).__urbanLensWrapped).toBe(true);
+    });
+});
