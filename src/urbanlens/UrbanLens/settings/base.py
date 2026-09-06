@@ -154,6 +154,19 @@ MIDDLEWARE = [
     # can short-circuit a response) so CORS headers are applied to redirects
     # and preflight responses - see django-cors-headers docs.
     "corsheaders.middleware.CorsMiddleware",
+    # Serves STATIC_ROOT where nothing else fronts the app - the k8s deployment
+    # runs gunicorn directly, with no nginx and no static volume, so every
+    # /static/ URL 404s without this. Under docker compose nginx answers
+    # /static/ before Django is reached, which makes this a no-op there.
+    #
+    # Position: WhiteNoise short-circuits in the *request* phase, so everything
+    # above it still processes the response and everything below it is skipped.
+    # Here it keeps all four security-header layers (SecurityMiddleware,
+    # SecurityHeadersMiddleware, CSPMiddleware, CorsMiddleware) on a static
+    # response, and skips everything that costs a query or attaches a cookie:
+    # sessions, CSRF, auth, the media-origin cookie, the profile-preview swap.
+    # No Set-Cookie is what makes the response cacheable at a CDN edge.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

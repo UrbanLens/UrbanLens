@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 from pathlib import Path
@@ -316,10 +317,18 @@ class DjangoProjectInitializer:
 
     def build_frontend(self):
         """
-        Builds the frontend
+        Compile SCSS, bundle the TypeScript, and collect the result into STATIC_ROOT.
+
+        Called twice for two different targets. The Dockerfile runs it via
+        ``--frontend-only`` so the published image is self-contained - the k8s
+        deployment runs gunicorn with no nginx and no static volume, and serves
+        these files through WhiteNoise. Container start runs it again because
+        docker-compose mounts a named volume over STATIC_ROOT, and a volume with
+        content in it is never re-seeded from the image.
 
         Raises:
-            UnrecoverableError: if the frontend fails to build
+            UnrecoverableError: if the frontend fails to build, or if the
+                collected manifest does not describe the files beside it.
 
         """
         if self.skip_frontend_build:
@@ -361,6 +370,50 @@ class DjangoProjectInitializer:
 
         self.run_command(command, "building frontend")
         self.run_command(["python", "src/urbanlens/manage.py", "collectstatic", "--noinput"], "collecting static files")
+        self.verify_static_manifest()
+
+    def verify_static_manifest(self):
+        """
+        Check that every entry in ``staticfiles.json`` names a file that exists.
+
+        ``{% static %}`` reads the manifest, so an entry whose target is missing
+        is a render-time error on every page that references it, and an entry
+        holding a Windows path separator is a URL no server on any platform can
+        match. Both states shipped: 62 of 166 targets were present in the
+        published image and 51 entries were backslash-separated, and nothing
+        failed until a browser asked for the file.
+
+        Raises:
+            UnrecoverableError: the manifest is missing, unreadable, or
+                describes files that are not there.
+
+        """
+        manifest = APP_DIR / "frontend" / "static" / "staticfiles.json"
+        try:
+            entries: dict[str, str] = json.loads(manifest.read_text())["paths"]
+        except (OSError, ValueError, KeyError) as exc:
+            logger.exception("Static manifest at %s is missing or unreadable.", manifest)
+            raise UnrecoverableError(f"Unusable static manifest at {manifest}") from exc
+
+        root = manifest.parent
+        # Checked before the existence test, and separately from it: on Linux a
+        # backslash is a legal filename character, so an entry written on
+        # Windows can name a file that exists and a URL that never resolves.
+        separators = sorted(name for name, target in entries.items() if "\\" in target)
+        missing = sorted(name for name, target in entries.items() if "\\" not in target and not (root / target).is_file())
+
+        if separators or missing:
+            logger.error(
+                "Static manifest describes %d entries, %d with a backslash separator (%s) and %d with no file (%s).",
+                len(entries),
+                len(separators),
+                ", ".join(separators[:5]) or "-",
+                len(missing),
+                ", ".join(missing[:5]) or "-",
+            )
+            raise UnrecoverableError(f"Static manifest at {manifest} does not match the collected files.")
+
+        logger.info("Static manifest verified: %d entries, all present.", len(entries))
 
     def run_migrations(self):
         """
@@ -565,6 +618,12 @@ def main():
     )
     parser.add_argument("--debug", "-v", action="store_true", help="Enable debug logging")
     parser.add_argument(
+        "--frontend-only",
+        "-f",
+        action="store_true",
+        help="Build the frontend and collect static files, then exit. Touches no database, so the image build can run it.",
+    )
+    parser.add_argument(
         "--environment",
         "-e",
         choices=["local", "development", "testing", "production", "staging"],
@@ -581,7 +640,10 @@ def main():
 
     try:
         initializer = DjangoProjectInitializer(no_runserver=args.no_runserver, environment=args.environment)
-        initializer.initialize_project()
+        if args.frontend_only:
+            initializer.build_frontend()
+        else:
+            initializer.initialize_project()
     except KeyboardInterrupt:
         logger.info("Initialization cancelled.")
         sys.exit(0)

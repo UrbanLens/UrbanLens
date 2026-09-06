@@ -5,12 +5,18 @@
 # Compiled code
 __pycache__/
 *.pyc
+# STATIC_ROOT. Every file here is collectstatic output; the Dockerfile
+# regenerates it into the image and init.py regenerates it into the shared
+# volume at container start. Committing part of it is what produced a tree that
+# disagreed with its own staticfiles.json - 62 files against a 166-entry
+# manifest, half of them .gz siblings of base files that were never committed.
+/src/urbanlens/frontend/static/
+# Build output written back into the *source* static dirs: sass emits
+# style.css beside its .scss, bun emits the js/ bundles.
 **/frontend/static/admin/
 **/frontend/static/**/*.css
 **/frontend/static/**/*.css.map
 **/frontend/static/*/js/
-src/urbanlens/frontend/static/dashboard/images/
-src/urbanlens/frontend/static/icons/unused/
 src/urbanlens/media/
 docs/screenshots/
 .codeql/
