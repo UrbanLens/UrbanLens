@@ -2215,52 +2215,51 @@ The remaining ~27 concurrent requests are the page's own content (overview, gall
 markup and detail-pin JSON), the site chrome (notifications, undo stack, safety banner), and the
 five off-tab panels. Laning those would delay the page itself, which is a different trade.
 
-## P55 — Deleting a whole wiki still withdraws a contribution without ending its quota bonus
+## P55 — A withdrawn contribution keeps its reputation event, and the wiki gallery's delete strings are false there
 
-`id: P55` · `status: open` · `updated: 2026-09-05`
+`id: P55` · `status: open` · `updated: 2026-09-06`
 
-Previously titled "A community quota bonus survives un-sharing the photo that earned it". The
-single-photo half of that is fixed; this is what is left of it.
+Previously titled "Deleting a whole wiki still withdraws a contribution without ending its quota
+bonus", and before that "A community quota bonus survives un-sharing the photo that earned it".
+Both of those halves are fixed; these two adjacent ones are what is left.
 
-`QuotaExemption.COMMUNITY_CONTRIBUTION` is now taken back when a contributor removes their own photo
-from a wiki, and kept in every other case - votes withdrawn, or the wiki removed by someone else.
-Those two are indistinguishable at the column (each ends as `wiki_id IS NULL`, with no record of who
-did it), so the intent is stated by the caller: `detach_image_from_wiki` takes a keyword-only
-`withdrawn_by_contributor` with no default, so a second unlink path added later has to answer the
-question rather than inherit an answer.
+**What the quota rule now is**, since the next reader will want it in one place.
+`QuotaExemption.COMMUNITY_CONTRIBUTION` is taken back exactly when a contributor ends their own
+contribution, and kept in every other case - votes withdrawn, the photo removed by someone else, the
+low-engagement sweep. Those are indistinguishable at the column (each ends as `wiki_id IS NULL`,
+with no record of who did it), so intent is stated by the caller and never inferred:
+`detach_image_from_wiki` takes a keyword-only `withdrawn_by_contributor` with no default, and
+`revoke_community_bonuses_on_wiki_delete(wiki_ids, deleted_by=...)` scopes a whole-wiki delete to
+`profile=deleted_by` so every other contributor's bonus survives it.
 
-**The way out that is still open.** An owner who can see a child wiki can delete the whole wiki
-(`controllers/detail_pins.py`'s delete is gated on `resolve_visible_wiki`, not on ownership), and
-`Image.wiki` is `SET_NULL`, so their own contributed photos go private with the bonus intact. It is
-the same conversion of community goodwill into permanent private storage as the original entry, one
-level up, and still not self-servable in a loop: it needs genuine relevance votes from other people.
+The wiki-delete half closed on 2026-09-06. It needed three things beyond the one-line revoke, which
+is why it was filed rather than folded into the original fix, and all three are now in place: the
+revoke covers the cascaded subtree (`with_wiki_descendants`, not just the named wiki); it runs after
+the undo stash and before the delete, since the delete nulls the FK it reads; and
+`WikiUndoHandler.serialize` records which photos held the bonus (`bonus_image_ids`) so `restore`
+re-grants exactly those and invents none. Re-granting from the vote count instead was the obvious
+alternative and is worse: a threshold raised during the seven-day undo window would silently not
+restore a bonus, which is the same "somebody else's action" the one-way rule exists to prevent.
 
-Closing it is not a one-liner, which is why it is filed rather than folded into the fix:
+**Still open, one.** The reputation ledger keeps the `ReputationEvent` for a withdrawn contribution.
+`retract_event` exists, but that ledger has its own gate design and folding it in would make one
+change two features.
 
-- The revoke has to be selective. A wiki delete nulls the FK for *every* contributor's photos, and
-  only the deleter's own may lose their bonus - everyone else's is exactly the "somebody else's
-  action" case the one-way rule protects.
-- It has to be reversible. A wiki delete is undoable within the window
-  (`services/undo/handlers/wiki.py` relinks the images), so the restore has to re-grant. The votes
-  survive both, so a re-grant needs no new ones.
-- The same argument applies to `delete_low_engagement_wikis`, which must revoke nothing at all.
+**Still open, two.** In the wiki context the shared `galleryDelete` handler still prompts "This
+cannot be undone - the file is removed permanently" and toasts "Photo deleted." for a dual-owned
+photo the server only unlinks. Both strings are false there, and correcting them means changing a
+response shape three contexts share, so it wants a browser.
 
-**Not doing the "record the bonus as an amount" redesign**, and the reason is worth keeping: it does
-not fix this. A per-wiki credit row with the same missing revoke survives an unlink identically - the
-defect is that nothing revoked, not that the exemption is a flag. It also costs: `get_storage_used_bytes`,
-`get_exempt_bytes` and `get_storage_totals` each answer in one aggregate over `Image` served by
-`idxdb_image_profile_quota`, and a credit table makes all three a second aggregate plus a join. And an
-amount frozen at grant time drifts from the file that earned it, because `file_size` is rewritten later
+**Not doing the "record the bonus as an amount" redesign**, and the reason is worth keeping because
+it reads like the obvious fix: it does not fix anything here. A per-wiki credit row with the same
+missing revoke survives an unlink identically - the defect was that nothing revoked, not that the
+exemption is a flag. It also costs: `get_storage_used_bytes`, `get_exempt_bytes` and
+`get_storage_totals` each answer in one aggregate over `Image` served by `idxdb_image_profile_quota`,
+and a credit table makes all three a second aggregate plus a join. And an amount frozen at grant time
+drifts from the file that earned it, because `file_size` is rewritten later
 (`strip_exif_from_stored_photos` does exactly that). It becomes genuinely necessary only if a credit
 should outlive the photo that earned it - a balance that survives its photo cannot be a flag on that
 photo's row - which is a product question, not an implementation one.
-
-**Two adjacent things this fix did not cover.** The reputation ledger still carries the
-`ReputationEvent` for a withdrawn contribution; `retract_event` exists, but that ledger has its own
-gate design and folding it in would make one change two features. And in the wiki context the shared
-`galleryDelete` handler still prompts "This cannot be undone - the file is removed permanently" and
-toasts "Photo deleted." for a dual-owned photo the server only unlinks - both strings are false there,
-and correcting them means changing a response shape three contexts share, so it wants a browser.
 
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 

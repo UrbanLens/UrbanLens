@@ -22,6 +22,7 @@ from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import safe_int
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+from urbanlens.dashboard.services.media.quota_rewards import revoke_community_bonuses_on_wiki_delete
 from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
@@ -555,6 +556,11 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             # child wiki itself already cascades to every descendant captured in `subtree`
             # above in one bulk operation - no need to delete each subtree member individually.
             stash_for_undo(WIKI_MODEL_LABEL, subtree, profile)
+            # After the stash (which records what to hand back on undo) and
+            # before the delete (which nulls the FK this reads). Only the
+            # deleter's own bonuses go - the function's docstring has why
+            # nobody else's may.
+            revoke_community_bonuses_on_wiki_delete([w.pk for w in subtree], deleted_by=profile)
             Wiki.objects.filter(pk=child_wiki.pk).delete()
 
         WikiEdit.objects.create(

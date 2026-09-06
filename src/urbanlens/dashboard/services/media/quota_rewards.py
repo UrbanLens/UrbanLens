@@ -32,7 +32,10 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.models.images.model import QuotaExemption
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
+
     from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -151,3 +154,45 @@ def revoke_community_quota_bonus(image: Image) -> bool:
     image.quota_exempt_reason = ""
     logger.info("Revoked community quota bonus for image %s (profile %s): withdrawn from its wiki", image.pk, image.profile_id)
     return True
+
+
+def revoke_community_bonuses_on_wiki_delete(wiki_ids: Collection[int], *, deleted_by: Profile) -> int:
+    """Take back the bonuses ``deleted_by`` earned on the wikis they are deleting.
+
+    ``Image.wiki`` is ``SET_NULL``, so deleting a wiki detaches every
+    contributor's photos in one statement. For all but one of them that is
+    somebody else's action, which the one-way rule in this module's docstring
+    exists to protect them from; for the deleter it is the withdrawal
+    :func:`revoke_community_quota_bonus` covers a photo at a time, and without
+    this it converts community goodwill into permanent private storage.
+
+    Must be called *before* the delete, while the rows still name their wiki,
+    and after the undo stash - the stash records which photos held the bonus so
+    a restore can hand it back.
+
+    Only the deleter is scoped out because only the deleter is known to have
+    ended their own contribution. Nothing else infers intent from the column,
+    which cannot tell the two apart afterwards.
+
+    Args:
+        wiki_ids: Primary keys of every wiki the delete will remove, descendants
+            included - the FK is nulled for the whole cascaded subtree, so a
+            revoke that stopped at the named wiki would miss the rest.
+        deleted_by: The profile performing the delete.
+
+    Returns:
+        How many rows lost the exemption.
+    """
+    from urbanlens.dashboard.models.images.model import Image as ImageModel
+
+    if not wiki_ids:
+        return 0
+
+    revoked = ImageModel.objects.filter(
+        wiki_id__in=wiki_ids,
+        profile=deleted_by,
+        quota_exempt_reason=QuotaExemption.COMMUNITY_CONTRIBUTION,
+    ).update(quota_exempt_reason="")
+    if revoked:
+        logger.info("Revoked %s community quota bonus(es) for profile %s: deleted the wiki(s) the photos were on", revoked, deleted_by.pk)
+    return revoked

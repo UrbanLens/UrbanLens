@@ -66,7 +66,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P50 | open | 2026-09-05 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-09-06 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P55 | open | 2026-09-05 | Deleting a whole wiki still withdraws a contribution without ending its quota bonus | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P55 | open | 2026-09-06 | A withdrawn contribution keeps its reputation event, and the wiki gallery's delete strings are false there | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-09-05 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P57 | open | 2026-08-29 | The test-quality audit left ~15 findings unfixed, from an unpatched `connect_ex` guard to untested views | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P58 | open | 2026-08-31 | A photo's grid tile can 404/500 for seconds after upload while async processing renames its file | [`docs/PROBLEMS.md`](PROBLEMS.md) |

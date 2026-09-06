@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
@@ -87,6 +87,12 @@ class WikiUndoHandler(UndoHandler):
     @classmethod
     def _serialize_one(cls, wiki: Wiki) -> dict[str, Any]:
         fields = {name: getattr(wiki, name) for name in _RESTORABLE_FIELDS}
+        # Image.wiki is SET_NULL, so the delete detached these photos rather
+        # than destroying them, and nothing else records where they were. The
+        # exemption comes along in the same read: a delete by the contributor
+        # revokes the community quota bonus their photos earned here
+        # (services.media.quota_rewards), and a restore has to hand it back.
+        photos = list(wiki.images.values_list("pk", "quota_exempt_reason"))
         return {
             "old_pk": wiki.pk,
             "fields": fields,
@@ -94,9 +100,8 @@ class WikiUndoHandler(UndoHandler):
             "created_by_id": wiki.created_by_id,
             "parent_wiki_old_pk": wiki.parent_wiki_id,
             "label_ids": list(wiki.labels.values_list("id", flat=True)),
-            # Image.wiki is SET_NULL, so the delete detached these photos rather
-            # than destroying them, and nothing else records where they were.
-            "image_ids": list(wiki.images.values_list("pk", flat=True)),
+            "image_ids": [pk for pk, _reason in photos],
+            "bonus_image_ids": [pk for pk, reason in photos if reason == QuotaExemption.COMMUNITY_CONTRIBUTION],
         }
 
     @classmethod
@@ -156,6 +161,12 @@ class WikiUndoHandler(UndoHandler):
             image_ids = entry.get("image_ids") or []
             if image_ids:
                 Image.objects.filter(pk__in=image_ids, wiki__isnull=True).update(wiki=wiki)
+            # Re-grant only what this delete took: a photo back on this wiki
+            # that is carrying no exemption now. Restoring is not a grant, and
+            # an exemption held for some other reason is not this one's to move.
+            bonus_ids = entry.get("bonus_image_ids") or []
+            if bonus_ids:
+                Image.objects.filter(pk__in=bonus_ids, wiki=wiki, quota_exempt_reason="").update(quota_exempt_reason=QuotaExemption.COMMUNITY_CONTRIBUTION)
             if entry["label_ids"]:
                 wiki.labels.set(entry["label_ids"])
 
