@@ -169,6 +169,17 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [manual]
+      - id: image-file-reads
+        name: no template reads a photo's file without checking it is there
+        entry: python3 bin/check_image_file_reads.py
+        language: system
+        pass_filenames: false
+        # always_run, and manual: the guard that makes a read safe can sit any
+        # distance above it, and can be in a `{% with %}` a `files:` pattern
+        # would not connect to the read it protects.
+        always_run: true
+        stages: [manual]
+
       - id: bem-modifiers
         name: every BEM modifier a template applies has a rule that styles it
         entry: python3 bin/check_bem_modifiers.py

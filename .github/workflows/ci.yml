@@ -146,6 +146,13 @@ jobs:
       - name: A wiki resolved for reading is never saved
         run: python3 bin/check_concealed_writes.py
 
+      # An Image row can exist with no stored file - a failed external download
+      # keeps its source_url and nothing else - and reading .image.url on one
+      # raises, so a single such row 500s the whole panel. display_url falls
+      # back; sixteen reads across eleven templates did not use it.
+      - name: No template reads a photo's file without checking it is there
+        run: python3 bin/check_image_file_reads.py
+
       # {# #} is Django's single-line comment. An opener that does not meet #}
       # on the same line is emitted as text, so the visitor sees it. The
       # supported multi-line form is {% comment %}.

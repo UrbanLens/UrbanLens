@@ -35,6 +35,7 @@ HOOKS=(
     pin-not-published-to-wiki
     migration-graph
     bem-modifiers
+    image-file-reads
     doc-line-refs
     docs-refs
     docs-index
