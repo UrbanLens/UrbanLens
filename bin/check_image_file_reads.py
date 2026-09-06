@@ -34,16 +34,39 @@ import sys
 _TEMPLATE_DIR = "src/urbanlens/dashboard/templates"
 
 #: `<expr>.image.url`, capturing the object the file hangs off. Deliberately
-#: matches anywhere in the line, not just inside `{{ }}`: the same read appears
-#: in `{% include ... with x=y.image.url %}` and in inline script.
+#: matches anywhere, not just inside `{{ }}`: the same read appears in
+#: `{% include ... with x=y.image.url %}` and in inline script.
 _READ = re.compile(r"([\w.]+)\.image\.url")
 
-#: `{% if <expr>.image %}` - the guard that makes a read safe. Also accepts a
-#: `{% with %}` binding of the same name, which a few list templates use.
-#: Built per expression rather than as one pattern, since Django's own braces
-#: rule out str.format here.
-_GUARD_PREFIX = r"{%\s*(?:if|elif|with)\b[^%]*?\b"
-_GUARD_SUFFIX = r"\.image\b(?!\.)"
+#: `<expr>.image` or `<expr>.image.name` inside a tag - what a guard looks like.
+#: `.name` is the other standard way to ask whether a FieldFile has a file, and
+#: rejecting it would push authors to rewrite a correct guard to satisfy a lint.
+#: `.url` is deliberately not accepted: testing it is what raises.
+_GUARDED_EXPR = re.compile(r"\b([\w.]+)\.image(?:\.name)?\b(?!\.)")
+
+#: Tags and reads together, so they can be walked in document order. DOTALL
+#: because a guard is routinely written across several lines.
+_SCAN = re.compile(
+    r"(?P<tag>{%\s*(?P<tagname>\w+)(?P<tagbody>[^%]*?)%})|(?P<read>(?P<expr>[\w.]+)\.image\.url)",
+    re.DOTALL,
+)
+
+#: Template comments. Stripped before scanning, so a read inside one - which is
+#: never executed - is not reported, and a guard inside one does not protect.
+_COMMENT_BLOCK = re.compile(r"{%\s*comment\s*%}.*?{%\s*endcomment\s*%}", re.DOTALL)
+_COMMENT_LINE = re.compile(r"{#.*?#}", re.DOTALL)
+
+#: Which tags open a scope a guard can live in, and which close one. Only these
+#: three, so the stack stays aligned: no other block tag changes whether a guard
+#: is in force, and pairing every `{% block %}`/`{% spaceless %}` would only add
+#: ways to drift out of sync.
+_OPENERS = {"if", "for", "with"}
+_CLOSERS = {"endif": "if", "endfor": "for", "endwith": "with"}
+
+
+def _blank_out(pattern: re.Pattern[str], text: str) -> str:
+    """Replace each match with same-length whitespace, so line numbers survive."""
+    return pattern.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
 
 
 def _tracked_templates(root: pathlib.Path) -> list[pathlib.Path]:
@@ -53,7 +76,13 @@ def _tracked_templates(root: pathlib.Path) -> list[pathlib.Path]:
 
 
 def _unguarded(text: str) -> list[tuple[int, str]]:
-    """Reads of ``.image.url`` in *text* with no guard anywhere above them.
+    """Reads of ``.image.url`` that no enclosing tag guards.
+
+    Enclosing, not merely earlier: a guard protects the block it opens and
+    nothing else. Matching "anywhere above" instead lets an unrelated earlier
+    loop that happens to reuse a variable name vouch for a later one - which is
+    a plausible shape in a codebase with several similar `{% for %}` galleries,
+    and would silently defeat the whole check.
 
     Args:
         text: One template's source.
@@ -61,14 +90,37 @@ def _unguarded(text: str) -> list[tuple[int, str]]:
     Returns:
         ``(line number, the expression read)`` for each unguarded read.
     """
-    lines = text.splitlines()
+    text = _blank_out(_COMMENT_LINE, _blank_out(_COMMENT_BLOCK, text))
+    # One entry per open block: the expressions that block's own tag guards.
+    # An `{% else %}` replaces the top entry, since the guard does not hold in
+    # its own else-branch.
+    stack: list[set[str]] = []
     found: list[tuple[int, str]] = []
-    for number, line in enumerate(lines, start=1):
-        for match in _READ.finditer(line):
-            expr = match.group(1)
-            guard = re.compile(_GUARD_PREFIX + re.escape(expr) + _GUARD_SUFFIX)
-            if not any(guard.search(earlier) for earlier in lines[:number]):
-                found.append((number, expr))
+
+    def report(expr: str, offset: int) -> None:
+        if not any(expr in scope for scope in stack):
+            found.append((text.count("\n", 0, offset) + 1, expr))
+
+    for match in _SCAN.finditer(text):
+        if match.group("tag"):
+            name, body = match.group("tagname"), match.group("tagbody")
+            # A tag can carry a read of its own: the pin page passes its cover
+            # photo through `{% include ... with hero_image_url=... %}`, which
+            # is where this whole class of bug was found. Checked against the
+            # stack as it stands *before* the tag, since a tag cannot guard
+            # itself.
+            for read in _READ.finditer(body):
+                report(read.group(1), match.start() + read.start())
+            if name in _OPENERS:
+                stack.append({expr.group(1) for expr in _GUARDED_EXPR.finditer(body)})
+            elif name in _CLOSERS:
+                if stack:
+                    stack.pop()
+            elif name in {"else", "elif"} and stack:
+                stack[-1] = {expr.group(1) for expr in _GUARDED_EXPR.finditer(body)}
+            continue
+
+        report(match.group("expr"), match.start())
     return found
 
 
