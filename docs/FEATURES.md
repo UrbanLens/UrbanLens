@@ -852,6 +852,29 @@ a daily `sync_stripe_subscriptions` task re-syncs from Stripe as a safety net fo
 deliveries. `user_has_feature()`/`active_subscription_roles()` treat an active, threshold-met
 paid subscription the same as an admin-issued grant. Service layer lives in `services/billing/`.
 
+## Media Storage & Serving
+
+- **Every `/media/...` request is authenticated and authorized** by
+  `dashboard.controllers.media.MediaGateView`, against a default-deny table keyed by the file's
+  `upload_to` prefix (`services/media/access.py`). A family with no registered authorizer is
+  refused, and `manage.py check` turns that into a startup error - so a new media field cannot
+  ship without a read policy. See `docs/MEDIA_PIPELINE.md`.
+- **Filesystem or object store**, chosen by `UL_MEDIA_STORAGE_BACKEND` (`filesystem` default,
+  `s3` for Garage/MinIO/AWS). The switch changes nothing about who may read a file: `FileField.url`
+  still returns `/media/...` and every read still passes the gate. `exports/`, `imports/` and
+  `preview_sources/` stay on local disk either way.
+- **Four delivery paths, one authorization path** — `X-Accel-Redirect` to nginx off the media
+  volume, `FileResponse` off disk, `X-Accel-Redirect` to an internal nginx proxy carrying a URL
+  Django signed, or a stream from the object store through Django. Adding a fifth is a
+  `MediaByteSource` subclass. See `docs/designs/media-object-storage.md`.
+- **Uploads from their own origin** — `UL_MEDIA_BASE_URL` moves every media URL onto a separate
+  hostname authenticated by a media-only signed cookie, so anything that slips past validation
+  executes where there is no session cookie and no app data.
+- **Upload size is capped to what the ingress will carry** — `UL_MAX_REQUEST_BODY_MB` lowers the
+  site-wide limit, the import form's and the export-import view's, and feeds the browser's own
+  pre-check, so an oversized file is refused before it is sent rather than by a proxy the app
+  never hears from.
+
 ## Site Administration
 
 - The api-limits page also shows a **REData capabilities** card - every domain the connected

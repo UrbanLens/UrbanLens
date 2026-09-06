@@ -253,6 +253,63 @@ file bytes).
 `UL_MEDIA_BASE_URL` must be left empty until the vhost actually resolves -
 setting it rewrites every media URL on the site.
 
+### Where the bytes are stored
+
+`UL_MEDIA_STORAGE_BACKEND` is `filesystem` (the default, and what a
+single-machine deployment wants) or `s3` for any S3-compatible object store.
+The switch changes nothing about *who may read a file* — `FileField.url` keeps
+returning `/media/...` and every read still passes `MediaGateView`. That is the
+point of `services/media/object_storage.GatedS3Storage`, and it is enforced by
+`manage.py check`, not left to convention: plain `S3Storage.url` returns a
+presigned bucket URL, which would take every media read out from behind the
+gate with no code change and no test failure.
+
+```bash
+UL_MEDIA_STORAGE_BACKEND=s3
+UL_S3_ENDPOINT_URL=http://garage-s3.garage.svc.cluster.local:3900
+UL_S3_BUCKET_NAME=ul-media
+UL_S3_ACCESS_KEY_ID=...
+UL_S3_SECRET_ACCESS_KEY=...
+UL_S3_ADDRESSING_STYLE=path            # Garage and most self-hosted stores
+# Optional: an internal-only nginx location that proxies the store, so media
+# bytes never pass through a gevent worker. Unset streams through Django.
+UL_MEDIA_X_ACCEL_OBJECT_PREFIX=/_object_media/
+```
+
+Three things a deployment has to know:
+
+- **The media volume does not go away.** `exports/`, `imports/` and
+  `preview_sources/` under `MEDIA_ROOT` are reached with `os.path` rather than
+  through the storage API. `preview_sources/` is deliberate — see
+  [Media previews](#media-previews); it is how the sandbox worker gets a 60 MB
+  file without putting it through Valkey. `manage.py check` warns and names all
+  three whenever the s3 backend is selected.
+- **botocore rejects a hostname containing an underscore.** A container named
+  `urbanlens_garage` cannot be an endpoint host.
+- **Building an export containing photos is not ported yet.**
+  `services/import_export/export.py` uses `FileField.path` twice, which raises
+  on a non-filesystem storage.
+
+`docs/designs/media-object-storage.md` has the decision and why presigned URLs
+to the client were refused.
+
+### How big an upload may be
+
+Three limits, and an ingress cap that lowers all of them.
+`SiteSettings.max_upload_file_size_mb` (250 MB default) governs photos, videos
+and documents; the data-file import form and the export-archive import view
+each cap at 500 MB. `UL_MAX_REQUEST_BODY_MB` states what the proxy in front of
+the deployment will actually pass, and
+`services/media/storage.cap_to_ingress` lowers each of the three to it.
+
+That exists so the *user* finds out. A body the proxy rejects is answered by
+the proxy: no view runs, nothing is logged here, and the uploader watches an
+upload fail into somebody else's error page after sending the whole cap.
+`max_upload_file_size_bytes()` feeds both the server-side check and the
+`data-max-file-size` the vault upload widget pre-checks against, so an
+oversized file is refused in the browser before any bytes are sent. Set it to
+`100` behind Cloudflare's free or pro tier.
+
 ### The parse policy
 
 `UL_UNTRUSTED_PARSE_POLICY` decides what a non-sandbox process does when it is

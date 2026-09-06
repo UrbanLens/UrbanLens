@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P84` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R27` · `N8`
+**Next free id:** `P84` · `T3` · `PL7` · `D8` · `X14` · `I4` · `R27` · `N9`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -89,6 +89,8 @@ still resolves after it is fixed, and the id is never handed out again.
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |
 | D4 | accepted | 2026-08-27 | Place, with parent_relation and per-domain symmetric access, is the single answer to 'is this the same place?' | [`docs/designs/place-consolidation.md`](designs/place-consolidation.md) |
 | D5 | accepted | 2026-08-27 | Thirteen decisions answer the mobile team's asks: what shipped, what was declined, what is deferred | [`docs/notes/mobile_app_notes.md`](notes/mobile_app_notes.md) |
+| D6 | accepted | 2026-09-06 | Media may live in an object store, but a read is never a presigned URL - the gate stays in the data path | [`docs/designs/media-object-storage.md`](designs/media-object-storage.md) |
+| D7 | accepted | 2026-09-06 | Over-cap uploads become chunked posts to Django, not presigned multipart; until then the app advertises the ingress cap | [`docs/designs/large-upload-protocol.md`](designs/large-upload-protocol.md) |
 | X1 | holds | 2026-08-27 | A release merge silently dropped --skip-undecryptable from DATA_ENCRYPTION.md; nothing else had drifted | [`docs/audits/DATA_ENCRYPTION_AUDIT.md`](audits/DATA_ENCRYPTION_AUDIT.md) |
 | X2 | holds | 2026-09-01 | A gate enforced in the web UI is repeatedly missing from the parallel external-API endpoint | [`docs/audits/FEATURES_CODE_AUDIT.md`](audits/FEATURES_CODE_AUDIT.md) |
 | X3 | holds | 2026-08-27 | GOALS.md contradicts the other docs on six points and states ten goals no other doc records at all | [`docs/audits/GOALS_AUDIT.md`](audits/GOALS_AUDIT.md) |
@@ -138,3 +140,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | N5 | current | 2026-07-30 | Round-3 UAT found messaging and settings working; both 'ongoing' criticals have since been fixed | [`docs/reports/claude_uat_r3.md`](reports/claude_uat_r3.md) |
 | N6 | current | 2026-07-22 | Round-1 staging UAT: 4 criticals, from a misconfigured staging API key to email on public profiles | [`docs/reports/ua_testing.md`](reports/ua_testing.md) |
 | N7 | current | 2026-09-06 | Two Django template traps that each shipped a 500: a filter argument has no failure tolerance, and `.image.url` raises | [`docs/notes/template-render-traps.md`](notes/template-render-traps.md) |
+| N8 | current | 2026-09-06 | Reply to the infrastructure repo's two open handoffs: /static/ 404s, media on Garage, and the 100 MB body cap | [`docs/handoffs/infrastructure-media-and-static.md`](handoffs/infrastructure-media-and-static.md) |
