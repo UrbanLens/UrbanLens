@@ -97,6 +97,57 @@ class LocalhostOnlyNetworkTests(TestCase):
         finally:
             sock.close()
 
+    def test_blocks_external_connect_ex(self) -> None:
+        """`connect_ex` is a separate C-level method - it does not route through `connect`.
+
+        A guard that patches only `connect` reports success here and opens a real
+        outbound socket. Some non-blocking-connect paths in DB drivers use it.
+        """
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                sock.connect_ex(("1.1.1.1", 443))
+            self.assertIn("External network access is disabled during tests", str(ctx.exception))
+        finally:
+            sock.close()
+
+    def test_allows_localhost_connect_ex(self) -> None:
+        """Anti-vacuity: the guard must not break `connect_ex` against loopback."""
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        _host, port = server.getsockname()
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.settimeout(2)
+        try:
+            self.assertEqual(client.connect_ex(("127.0.0.1", port)), 0)
+        finally:
+            client.close()
+            server.close()
+
+    def test_blocks_external_udp_sendto(self) -> None:
+        """A datagram needs no connect at all, so `connect`/`create_connection` never see it."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                sock.sendto(b"probe", ("1.1.1.1", 53))
+            self.assertIn("External network access is disabled during tests", str(ctx.exception))
+        finally:
+            sock.close()
+
+    def test_allows_localhost_udp_sendto(self) -> None:
+        """Anti-vacuity: loopback datagrams still work."""
+        server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        server.bind(("127.0.0.1", 0))
+        _host, port = server.getsockname()
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            self.assertEqual(client.sendto(b"probe", ("127.0.0.1", port)), 5)
+        finally:
+            client.close()
+            server.close()
+
     def test_allows_localhost_connection(self) -> None:
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.bind(("127.0.0.1", 0))

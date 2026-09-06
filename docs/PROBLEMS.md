@@ -2391,9 +2391,9 @@ and the imagery hosts the Maps JS API picks at runtime (`khms0.googleapis.com` 4
 "the known set rather than a proven-complete one". A report-only COEP deployment is what would
 settle both.
 
-## P57 — The test-quality audit left ~15 findings unfixed, from an unpatched `connect_ex` guard to untested views
+## P57 — The test-quality audit's follow-ups: 5 of ~15 fixed, the rest untested views and unproven locks
 
-`id: P57` · `status: open` · `updated: 2026-08-29`
+`id: P57` · `status: open` · `updated: 2026-09-06`
 
 Previously titled "Test-quality audit follow-ups (2026-08-29)".
 
@@ -2401,24 +2401,38 @@ Found while auditing existing unit tests for real positive/negative coverage (se
 `docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
 convention rather than fixed inline.
 
-**`LocalhostOnlyNetwork` (`core/testing_network.py`) doesn't patch `socket.socket.connect_ex`.**
-It patches `.connect` and `.create_connection`, but `connect_ex` is a separate C-level method that
-doesn't delegate through the patched `connect()`. Empirically confirmed: with the guard active,
-`sock.connect_ex(('8.8.8.8', 53))` returned 0 - a real successful outbound connection. Any test or
-third-party library code using `connect_ex` (some non-blocking-connect patterns in DB drivers do)
-bypasses the guard entirely and can make genuine external network calls during the test suite,
-undetected.
+**Five are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
+`make_cache_key` collision, the hard-delete overlap lock, the `SubscriptionRole.clean()` gap, and
+`PinAliasView.post` (same-day, 2026-08-29). Each is struck through below with what the fix found.
+What remains is mostly *missing coverage* rather than known defects: five untested surfaces, two
+locks with no real-concurrency proof, and three that need a decision from whoever owns the area.
 
-**`make_cache_key` (`core/cache_keys.py`) joins parts with a bare colon before hashing**
-(`':'.join(str(part) for part in parts)`), so a part that itself contains a colon can collide with
-a differently-shaped call - `make_cache_key('ns', 'a:b')` and `make_cache_key('ns', 'a', 'b')` hash
-the same raw string and produce an identical key despite representing different logical arguments.
-No current call site (pin lat/lng, location formatting, github repo slugs) passes a colon-bearing
-part, so this is latent, not live - worth a length-prefixed encoding if this utility gains more
-callers.
+~~**`LocalhostOnlyNetwork` (`core/testing_network.py`) doesn't patch `socket.socket.connect_ex`.**~~
+**Fixed 2026-09-06, and it was two holes rather than one.** `connect_ex` is a separate C-level
+method that does not delegate through the patched `connect()` - and a **UDP `sendto` never connects
+at all**, so it was equally invisible to a guard watching `connect`/`create_connection`. Both are
+patched now. Both were reproduced first: against the old guard,
+`test_blocks_external_connect_ex` and `test_blocks_external_udp_sendto` fail while their
+localhost anti-vacuity siblings pass.
 
-**`tasks.hard_delete_expired_accounts()` has no overlap lock, unlike its sibling
-`send_account_deletion_reminders()`.** The reminder sweep acquires
+~~**`make_cache_key` (`core/cache_keys.py`) joins parts with a bare colon before hashing.**~~
+**Fixed 2026-09-06** with the length-prefixed encoding this entry suggested. It was latent rather
+than live - none of the five call sites (pin lat/lng, location formatting, github repo slug) passes
+a colon-bearing part - so the only cost of the change is that every entry cached under an old key
+misses once.
+
+Worth keeping from the fix: **the first property test written for it passed against the broken
+code.** It drew two independent tuples and asserted their keys differed, which hypothesis has no
+reason to satisfy by drawing `["a:b"]` and `["a", "b"]` in one example. Rewritten to *construct*
+the colliding partner from each draw - joining the parts on each candidate separator - it fails on
+the first example. A property test that searches for a coincidence is not a guard against it.
+
+~~**`tasks.hard_delete_expired_accounts()` has no overlap lock, unlike its sibling
+`send_account_deletion_reminders()`.**~~ **Fixed 2026-09-06**, with the sibling's lock treatment
+verbatim (`_HARD_DELETE_LOCK_CACHE_KEY`, 3300s - both sweeps are on the same hourly beat,
+`crontab(minute=27)` and `crontab(minute=32)`). The original text follows.
+
+**Was:** The reminder sweep acquires
 `_DELETION_REMINDER_LOCK_CACHE_KEY` specifically because two overlapping Celery beat runs could
 both select and email the same profile - the hard-delete sweep is on the same hourly beat
 (`settings/base.py`) and has the identical hazard: two overlapping runs can both select the same
@@ -2496,7 +2510,11 @@ database's actual lock. A real-thread version is possible (worked through by ins
 correct locking both thread orderings converge to the same final ledger state, so it wouldn't be
 flaky-when-correct) but needs an actual run to confirm it reliably catches a lock-removal mutant.
 
-**`SubscriptionRole.clean()` doesn't validate `pwyw_minimum_cents` requires `pay_what_you_want`.**
+~~**`SubscriptionRole.clean()` doesn't validate `pwyw_minimum_cents` requires `pay_what_you_want`.**~~
+**Fixed 2026-09-06**, as the symmetric half of the `pwyw_dynamic_threshold` rule beside it. `0`/`None`
+stays valid - that is "unset", not "set to nothing". The original text follows.
+
+**Was:**
 `clean()` (`src/urbanlens/dashboard/models/subscriptions/model.py`) only ties
 `pwyw_dynamic_threshold` back to `pay_what_you_want`; it never checks that a nonzero
 `pwyw_minimum_cents` is meaningless when `pay_what_you_want=False`. An admin can save a role with a

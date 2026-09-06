@@ -56,6 +56,8 @@ class LocalhostOnlyNetwork:
     def __init__(self) -> None:
         self._stack = ExitStack()
         self._original_connect = socket.socket.connect
+        self._original_connect_ex = socket.socket.connect_ex
+        self._original_sendto = socket.socket.sendto
         self._original_create_connection = socket.create_connection
 
     def _blocked_message(self, host: Any) -> str:
@@ -66,6 +68,20 @@ class LocalhostOnlyNetwork:
         if not _host_is_localhost(host):
             raise RuntimeError(self._blocked_message(host))
         return self._original_connect(sock, address)
+
+    def _guarded_connect_ex(self, sock: socket.socket, address: Any) -> Any:
+        host = _address_host(address)
+        if not _host_is_localhost(host):
+            raise RuntimeError(self._blocked_message(host))
+        return self._original_connect_ex(sock, address)
+
+    def _guarded_sendto(self, sock: socket.socket, *args: Any) -> Any:
+        # sendto(data, address) or sendto(data, flags, address); the address is
+        # always last.
+        host = _address_host(args[-1]) if args else None
+        if not _host_is_localhost(host):
+            raise RuntimeError(self._blocked_message(host))
+        return self._original_sendto(sock, *args)
 
     def _guarded_create_connection(
         self,
@@ -88,8 +104,19 @@ class LocalhostOnlyNetwork:
         def guarded_connect(sock: socket.socket, address: Any) -> Any:
             return self._guarded_connect(sock, address)
 
+        def guarded_connect_ex(sock: socket.socket, address: Any) -> Any:
+            return self._guarded_connect_ex(sock, address)
+
+        def guarded_sendto(sock: socket.socket, *args: Any) -> Any:
+            return self._guarded_sendto(sock, *args)
+
         self._stack.enter_context(patch("socket.create_connection", self._guarded_create_connection))
         self._stack.enter_context(patch.object(socket.socket, "connect", guarded_connect))
+        # connect_ex is a separate C-level method rather than a wrapper around
+        # connect(), and a datagram send carries its destination instead of
+        # connecting first - so neither reaches the two patches above.
+        self._stack.enter_context(patch.object(socket.socket, "connect_ex", guarded_connect_ex))
+        self._stack.enter_context(patch.object(socket.socket, "sendto", guarded_sendto))
         return self
 
     def stop(self) -> None:

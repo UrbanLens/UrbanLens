@@ -56,6 +56,24 @@ class MakeCacheKeyTests(SimpleTestCase):
         key_c = make_cache_key("smithsonian", 41.1, -75.6789)
         self.assertNotEqual(key_a, key_c)
 
+    def test_a_part_containing_the_separator_does_not_collide_with_two_parts(self):
+        """Joining on a bare separator makes the part boundaries unrecoverable.
+
+        ``('a:b',)`` and ``('a', 'b')`` are different logical arguments; if both
+        flatten to the raw string ``"a:b"`` they hash to the same key and one
+        caller reads the other's cached value.
+        """
+        self.assertNotEqual(
+            make_cache_key("smithsonian", "a:b"),
+            make_cache_key("smithsonian", "a", "b"),
+        )
+
+    def test_a_trailing_separator_does_not_collide_with_an_empty_part(self):
+        self.assertNotEqual(
+            make_cache_key("smithsonian", "a:"),
+            make_cache_key("smithsonian", "a", ""),
+        )
+
     def test_spaces_and_control_characters_never_appear_in_the_key(self):
         """The docstring's core promise: unsafe part content never survives into the key."""
         key = make_cache_key("smithsonian", "TESTING PIN - DELETEME\n\t\x00")
@@ -74,6 +92,27 @@ class MakeCacheKeyPropertyTests(SimpleTestCase):
         for char in key:
             self.assertFalse(char.isspace(), f"key contains whitespace: {key!r}")
             self.assertNotEqual(unicodedata.category(char)[0], "C", f"key contains a control character: {key!r}")
+
+    @given(parts=st.lists(st.text(alphabet=":|,-0ab", min_size=0, max_size=4), min_size=2, max_size=4))
+    @_hyp
+    def test_a_tuple_never_shares_a_key_with_its_own_flattening(self, parts: list[str]) -> None:
+        """The encoding must be injective, not merely deterministic.
+
+        Constructed rather than searched for. An earlier version of this drew two
+        independent tuples and asserted they differed, which passed against the
+        colon-joined implementation it was written to catch: hypothesis has no
+        reason to draw ``["a:b"]`` and ``["a", "b"]`` in the same example, so the
+        collision was never generated. Here the colliding partner is *built* from
+        the draw - joining the parts on each candidate separator - so any encoding
+        that loses the part boundaries fails on the first example.
+        """
+        for separator in (":", "|", ",", "-"):
+            joined = separator.join(parts)
+            self.assertNotEqual(
+                make_cache_key("ns", *parts),
+                make_cache_key("ns", joined),
+                f"{parts!r} collides with its {separator!r}-joined flattening {joined!r}",
+            )
 
     @given(parts=st.lists(st.text(min_size=0, max_size=5000), min_size=1, max_size=5))
     @_hyp

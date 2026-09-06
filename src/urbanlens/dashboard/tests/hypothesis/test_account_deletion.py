@@ -556,3 +556,68 @@ class DeletionReminderOverlapLockTests(TestCase):
 
         send_account_deletion_reminders()
         self.assertEqual(send_account_deletion_reminders(), 0)
+
+
+class HardDeleteOverlapLockTests(TestCase):
+    """The hard-delete sweep needs the same overlap lock as its reminder sibling.
+
+    `due_for_hard_delete` selects on `deletion_requested_at`, which
+    `hard_delete_profile` does not clear until it has already sent the final
+    "your account has been deleted" email - so two overlapping runs both select
+    the same profile and both send it. The second `User.delete()` affects zero
+    rows and does not raise, which is exactly why this is invisible without a
+    test: the only evidence is a duplicate email.
+
+    Celery delivers at least once and both sweeps sit on the same hourly beat,
+    so "two runs at once" is ordinary rather than exotic.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.user = baker.make(User, email="gone@example.com")
+        self.profile = self.user.profile
+        self.profile.deletion_requested_at = timezone.now() - (
+            ACCOUNT_DELETION_GRACE_PERIOD + datetime.timedelta(hours=1)
+        )
+        self.profile.save(update_fields=["deletion_requested_at"])
+
+    def test_a_run_holding_the_lock_blocks_a_concurrent_one(self) -> None:
+        from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+        from urbanlens.dashboard.tasks import (
+            _HARD_DELETE_LOCK_CACHE_KEY,
+            _HARD_DELETE_LOCK_TIMEOUT_SECONDS,
+            hard_delete_expired_accounts,
+        )
+
+        token = acquire_lock(_HARD_DELETE_LOCK_CACHE_KEY, _HARD_DELETE_LOCK_TIMEOUT_SECONDS)
+        self.addCleanup(release_lock, _HARD_DELETE_LOCK_CACHE_KEY, token)
+        self.assertIsNotNone(token, "precondition: the lock must be free before the test takes it")
+
+        deleted = hard_delete_expired_accounts()
+
+        self.assertEqual(deleted, 0, "the sweep ran while another held the lock")
+        self.assertTrue(User.objects.filter(pk=self.user.pk).exists(), "a blocked run must delete nothing")
+
+    def test_the_blocked_profile_is_still_deleted_on_the_next_tick(self) -> None:
+        """The lock defers, it does not lose - the account must still go."""
+        from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+        from urbanlens.dashboard.tasks import (
+            _HARD_DELETE_LOCK_CACHE_KEY,
+            _HARD_DELETE_LOCK_TIMEOUT_SECONDS,
+            hard_delete_expired_accounts,
+        )
+
+        token = acquire_lock(_HARD_DELETE_LOCK_CACHE_KEY, _HARD_DELETE_LOCK_TIMEOUT_SECONDS)
+        hard_delete_expired_accounts()
+        release_lock(_HARD_DELETE_LOCK_CACHE_KEY, token)
+
+        self.assertEqual(hard_delete_expired_accounts(), 1)
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+
+    def test_an_uncontended_sweep_still_deletes(self) -> None:
+        """Anti-vacuity: the lock must not stop the ordinary path."""
+        from urbanlens.dashboard.tasks import hard_delete_expired_accounts
+
+        self.assertEqual(hard_delete_expired_accounts(), 1)
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())

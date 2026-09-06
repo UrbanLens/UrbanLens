@@ -20,6 +20,9 @@ def make_cache_key(namespace: str, *parts: str | float) -> str:
     """
     if not parts:
         return namespace
-    raw = ":".join(str(part) for part in parts)
+    # Length-prefixed rather than joined on a separator: ":" can occur inside a
+    # part, and ("a:b",) joined that way is indistinguishable from ("a", "b"),
+    # so the two hash alike and one caller reads the other's entry.
+    raw = "".join(f"{len(encoded := str(part))}:{encoded}" for part in parts)
     digest = hashlib.sha256(raw.encode()).hexdigest()
     return f"{namespace}:{digest}"

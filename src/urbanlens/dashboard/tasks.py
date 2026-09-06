@@ -3355,6 +3355,15 @@ def hard_delete_expired_direct_messages(batch_size: int = 2000, max_per_run: int
 _DELETION_REMINDER_LOCK_CACHE_KEY = "urbanlens:account:deletion-reminder-lock"
 _DELETION_REMINDER_LOCK_TIMEOUT_SECONDS = 3300  # just under the hourly beat interval
 
+#: The hard-delete sweep has the same hazard for the same reason: it selects on
+#: `deletion_requested_at`, which `hard_delete_profile` does not clear until it
+#: has already sent the final "your account has been deleted" email. Two
+#: overlapping runs both select the same profile and both send it; the second
+#: `User.delete()` affects zero rows rather than raising, so a duplicate email is
+#: the only symptom.
+_HARD_DELETE_LOCK_CACHE_KEY = "urbanlens:account:hard-delete-lock"
+_HARD_DELETE_LOCK_TIMEOUT_SECONDS = 3300  # just under the hourly beat interval
+
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_account_deletion_reminders() -> int:
@@ -3384,13 +3393,20 @@ def hard_delete_expired_accounts() -> int:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.profile.account_deletion import hard_delete_profile
 
-    count = 0
-    for profile in Profile.objects.due_for_hard_delete():
-        hard_delete_profile(profile)
-        count += 1
-    if count:
-        logger.info("Hard-deleted %s expired account(s)", count)
-    return count
+    _lock_token = acquire_lock(_HARD_DELETE_LOCK_CACHE_KEY, _HARD_DELETE_LOCK_TIMEOUT_SECONDS)
+    if _lock_token is None:
+        logger.info("hard_delete_expired_accounts: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for profile in Profile.objects.due_for_hard_delete():
+            hard_delete_profile(profile)
+            count += 1
+        if count:
+            logger.info("Hard-deleted %s expired account(s)", count)
+        return count
+    finally:
+        release_lock(_HARD_DELETE_LOCK_CACHE_KEY, _lock_token)
 
 
 # No autoretry here, deliberately: run_panel_fetch owns the failure policy

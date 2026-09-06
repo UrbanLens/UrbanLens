@@ -180,6 +180,8 @@ class SubscriptionRole(abstract.DashboardModel):
         errors: dict[str, str] = {}
         if self.pwyw_dynamic_threshold and not self.pay_what_you_want:
             errors["pwyw_dynamic_threshold"] = "Requires pay_what_you_want to be enabled."
+        if self.pwyw_minimum_cents and not self.pay_what_you_want:
+            errors["pwyw_minimum_cents"] = "Requires pay_what_you_want to be enabled."
         if self.pwyw_dynamic_threshold and self.pwyw_minimum_cents:
             errors["pwyw_minimum_cents"] = "Cannot be set together with pwyw_dynamic_threshold - the dynamic cost-per-user figure is used instead."
         if errors:
