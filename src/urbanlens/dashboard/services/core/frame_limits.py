@@ -111,6 +111,27 @@ class FrameBudget:
             logger.exception("Frame budget %s could not be read; allowing the frame", self.name)
             return True
 
+    def refund(self, identity: str) -> None:
+        """Give back one charge, for an event that turned out not to happen.
+
+        Approximate on purpose. A decrement can race the window rolling over,
+        and the honest failure mode for a *refund* is being off by one in the
+        sender's favour rather than holding a lock over a counter whose whole
+        point is that it costs nothing. Silent when the key is gone, which is
+        what an expired window looks like.
+
+        Args:
+            identity: The identity that was charged.
+        """
+        if self.limit <= 0:
+            return
+        key = f"{_KEY_PREFIX}:{self.name}:{identity}"
+        try:
+            if int(cache.get(key) or 0) > 0:
+                cache.decr(key)
+        except Exception:
+            logger.debug("Budget %s could not refund %s", self.name, identity, exc_info=True)
+
     async def aconsume(self, identity: str) -> bool:
         """:meth:`consume`, called from the event loop.
 

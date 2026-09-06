@@ -62,6 +62,23 @@ export class ChatComposer {
         return true;
     }
 
+    /**
+     * Forget what is in flight, because the connection that would have answered
+     * for it is gone.
+     *
+     * Called on every socket open, reconnects included. A dropped connection
+     * takes the acknowledgement with it, so an entry left in the queue is never
+     * retired - and the next message with the same text retires *it* instead of
+     * itself, shifting the whole queue by one for the rest of the session and
+     * handing back the wrong text on a later refusal. Forgetting is the right
+     * answer rather than the lossy one: the message either reached the server
+     * before the drop or did not, and either way this queue is only ever used to
+     * decide which text to give back.
+     */
+    reset(): void {
+        this.inFlight.length = 0;
+    }
+
     /** The sender's own message came back on the broadcast: it was accepted. */
     confirm(body: string): void {
         const index = this.inFlight.indexOf(body);

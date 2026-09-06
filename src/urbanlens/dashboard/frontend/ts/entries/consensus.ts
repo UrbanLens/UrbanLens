@@ -1170,6 +1170,10 @@ function connectSessionSocket(): void {
     state.ws = openLiveSocket({
         path: `/ws/consensus/session/${state.sessionId}/`,
         onMessage: handleSocketMessage,
+        // Every open, reconnects included: a dropped connection takes the
+        // acknowledgement with it, and an entry left in the composer's queue
+        // would retire the wrong message later (see shared/chat-composer.ts).
+        onOpen: () => chatComposer?.reset(),
         // 4404 here means the host removed this player, or the entitlement went
         // away - nothing more is coming, so drop the handle rather than leave a
         // dead one blocking a later join.

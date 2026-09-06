@@ -18,19 +18,31 @@ assert that from both sides:
 The second is the one that matters. A per-door limit that happens to exist on
 both doors is not the same thing as one budget, and only the cross-door test can
 tell them apart.
+
+**There are five doors, not two.** The first version of this file covered the
+socket and the two web views and stopped there, which is what let the external
+API - three more views calling the identical create functions - answer a
+throttled send with a 500. ``MessageRateLimitedError`` is a bare ``ValueError``,
+and DRF's exception handler returns ``None`` for anything that is not an
+``APIException``, which Django then renders as a server error. The mapping lives
+in ``uniform_exception_handler`` rather than in each view, so a view added later
+inherits it.
 """
 
 from __future__ import annotations
 
 import json
+import os
 
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
+from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import DirectMessageConsumer
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.model import Friendship
@@ -167,3 +179,116 @@ class GroupMessageHttpBudgetTests(TransactionTestCase):
 
         self.assertEqual(response.status_code, 429)
         self.assertEqual(DirectMessage.objects.filter(sender=self.sender).count(), 0)
+
+
+class ExternalApiBudgetTests(TestCase):
+    """The three API doors that call the same create functions the web views do."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        self.addCleanup(cache.clear)
+        baker.make(User)  # first user is auto-promoted to site admin
+        self.sender = _make_profile()
+        self.partner = _make_profile()
+        friendship = Friendship.request(self.sender, self.partner)
+        assert friendship is not None
+        friendship.accept()
+        self.auth = {"HTTP_AUTHORIZATION": f"Bearer {self._token()}"}
+
+    def _token(self) -> str:
+        from datetime import timedelta
+
+        from django.utils import timezone
+        from oauth2_provider.models import get_access_token_model
+
+        from urbanlens.core.tests.oauth import first_party_application
+        from urbanlens.dashboard.models.account.model import ApiKeyScope
+
+        token = get_access_token_model().objects.create(
+            user=self.sender.user,
+            application=first_party_application(),
+            token=f"tok-budget-{os.urandom(8).hex()}",
+            expires=timezone.now() + timedelta(hours=1),
+            scope=f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}",
+        )
+        return token.token
+
+    def _send(self, body: str):
+        url = reverse("external_api:messages.thread", kwargs={"peer_slug": self.partner.ensure_slug()})
+        return self.client.post(url, data=json.dumps({"body": body}), content_type="application/json", **self.auth)
+
+    @override_settings(UL_MESSAGES_PER_MINUTE=2)
+    def test_a_throttled_send_is_a_429_not_a_500(self) -> None:
+        """A 500 tells an API client to retry a request the server thinks is broken,
+        fires error alerting for benign traffic, and hides the actual reason."""
+        statuses = [self._send(f"message {index}").status_code for index in range(5)]
+
+        self.assertNotIn(500, statuses, "a throttled send raised through DRF as a server error")
+        self.assertIn(429, statuses, "the throttle never refused an API send")
+
+    @override_settings(UL_MESSAGES_PER_MINUTE=2)
+    def test_the_refusal_carries_the_reason(self) -> None:
+        for index in range(3):
+            response = self._send(f"message {index}")
+
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("too quickly", response.json()["error"])
+
+    @override_settings(UL_MESSAGES_PER_MINUTE=2)
+    def test_the_api_shares_the_budget_with_the_web_view(self) -> None:
+        """Five doors, one budget. Per-door limits would pass every test above."""
+        self.client.force_login(self.sender.user)
+        self.client.post(
+            reverse("messages.send", kwargs={"profile_slug": self.partner.slug}),
+            {"body": "over the web"},
+        )
+        self.client.post(
+            reverse("messages.send", kwargs={"profile_slug": self.partner.slug}),
+            {"body": "over the web again"},
+        )
+
+        self.assertEqual(self._send("over the api").status_code, 429)
+
+
+class ChargePlacementTests(TestCase):
+    """A charge is for a message that would otherwise have been delivered."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        self.addCleanup(cache.clear)
+        baker.make(User)
+        self.sender = _make_profile()
+
+    @override_settings(UL_MESSAGES_PER_MINUTE=3)
+    def test_a_recipient_who_refuses_messages_does_not_cost_the_sender_their_budget(self) -> None:
+        """The default ``direct_message_visibility`` is ANYTHING_IN_COMMON, so
+        messaging someone new and being refused is ordinary use of a site built
+        around discovering other people - not abuse to be charged for.
+
+        ``create_group_message`` already checks membership before charging; this
+        is the same precondition on the other function.
+        """
+        from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
+        from urbanlens.dashboard.services.messaging.direct_messages import (
+            DirectMessagePermissionError,
+            create_direct_message,
+        )
+
+        stranger = _make_profile()
+        for _ in range(5):
+            with self.assertRaises(DirectMessagePermissionError):
+                create_direct_message(self.sender, stranger, "let me in")
+
+        friend = _make_profile()
+        friendship = Friendship.request(self.sender, friend)
+        assert friendship is not None
+        friendship.accept()
+        for index in range(3):
+            create_direct_message(self.sender, friend, f"real {index}")
+
+        with self.assertRaises(MessageRateLimitedError):
+            create_direct_message(self.sender, friend, "one too many")
+
+        self.assertEqual(DirectMessage.objects.filter(sender=self.sender).count(), 3)

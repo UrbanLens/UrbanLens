@@ -27,7 +27,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
-from urbanlens.dashboard.services.core.message_limits import charge_message, sender_identity
+from urbanlens.dashboard.services.core.message_limits import charge_message, refund_message, sender_identity
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message, direct_message_group_name, reaction_summary
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_identity_for_viewers, resolve_visible_identity
@@ -654,6 +654,9 @@ def create_group_message(
         # race - same cross-group check as the pre-check above, since that
         # race could equally be against a message in a different group.
         replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
+        if replayed is not None:
+            # See create_direct_message: both retries charged for one message.
+            refund_message(sender_identity(sender.pk))
         if replayed is None:
             raise
         if replayed.group_id != group.pk:

@@ -68,6 +68,20 @@ def charge_message(identity: str) -> None:
         raise MessageRateLimitedError
 
 
+def refund_message(identity: str) -> None:
+    """Give back a charge for a message that turned out not to exist.
+
+    The idempotency guard in ``create_direct_message``/``create_group_message``
+    reads before it writes, so two requests carrying the same ``client_uuid``
+    can both miss it, both charge, and then have one of them lose the unique
+    constraint and return the row the other created. One message, two charges.
+
+    Args:
+        identity: The key that was charged.
+    """
+    _budget().refund(identity)
+
+
 def sender_identity(sender_pk: int) -> str:
     """The budget key for one person's outbound direct and group messages.
 

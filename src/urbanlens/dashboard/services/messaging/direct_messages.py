@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
-from urbanlens.dashboard.services.core.message_limits import charge_message, sender_identity
+from urbanlens.dashboard.services.core.message_limits import charge_message, refund_message, sender_identity
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
@@ -774,15 +774,18 @@ def create_direct_message(
 
     if not body and not ciphertext and not eligible_image_ids and not markup_map_uuid:
         raise DirectMessageValidationError("Message cannot be empty.")
-    # Charged here rather than in the consumer: this function is the sending
-    # path for the WebSocket *and* for ConversationSendView, and a budget on only
-    # one of them is one a POST loop walks around (P31). After every content
-    # check above, so a client bug that submits malformed or empty messages
-    # cannot throttle its own user; before the send, so the charge is for a
-    # message that would otherwise have gone out.
-    charge_message(sender_identity(sender.pk))
     if not can_direct_message(sender, recipient):
         raise DirectMessagePermissionError("This user isn't accepting messages from you.")
+    # Charged here rather than in the consumer: this function is the sending path
+    # for the WebSocket, for ConversationSendView, and for the external API, and a
+    # budget on only one of them is one a POST loop walks around (P31).
+    #
+    # Last of the preconditions, matching create_group_message. Messaging someone
+    # whose visibility refuses you is ordinary use of a site built around
+    # discovering other people - the default is ANYTHING_IN_COMMON, not "anyone" -
+    # so charging for it would spend a sender's allowance on a message that was
+    # never going to be delivered.
+    charge_message(sender_identity(sender.pk))
 
     from urbanlens.dashboard.models.markup.model import MarkupMap
 
@@ -818,6 +821,10 @@ def create_direct_message(
         replayed = DirectMessage.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
         if replayed is None:
             raise
+        # The charge above bought nothing: the pre-check reads before it writes,
+        # so both retries missed it and both paid for the one message the other
+        # one created.
+        refund_message(sender_identity(sender.pk))
         return replayed
 
     if eligible_image_ids:

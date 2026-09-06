@@ -165,6 +165,35 @@ describe("ChatComposer", () => {
         expect(toasted).toEqual(["This credential isn't allowed to send here."]);
     });
 
+    test("a reconnect forgets what was in flight", () => {
+        // The acknowledgement went down with the connection, so the entry would
+        // never be retired - and the next message with the same text would
+        // retire it instead of itself, shifting the queue for the rest of the
+        // session.
+        const input = makeInput("lost to a drop");
+        const composer = new ChatComposer(input, () => true);
+        composer.submit();
+
+        composer.reset();
+        input.value = "";
+        composer.reportRefusal("nope");
+
+        expect(input.value).toBe("");
+    });
+
+    test("a message sent after a reconnect is still handed back", () => {
+        const input = makeInput("before");
+        const composer = new ChatComposer(input, () => true);
+        composer.submit();
+        composer.reset();
+        input.value = "after";
+        composer.submit();
+
+        composer.reportRefusal("nope");
+
+        expect(input.value).toBe("after");
+    });
+
     test("a blank detail falls back rather than toasting an empty string", () => {
         const composer = new ChatComposer(makeInput("x"), () => true);
         composer.submit();

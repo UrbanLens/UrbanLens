@@ -47,12 +47,13 @@ from typing import TYPE_CHECKING, Any
 
 from django.http import Http404
 from rest_framework.exceptions import NotFound, ParseError
+from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
+
+from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-    from rest_framework.response import Response
 
 #: The single body every 404 under these views renders, regardless of cause.
 NOT_FOUND_BODY = {"error": "Not found."}
@@ -87,6 +88,16 @@ def uniform_exception_handler(exc: Exception, context: dict[str, Any]) -> Respon
         The normalized response, or ``None`` for an exception DRF itself
         declines to handle (which Django then turns into a 500).
     """
+    # Before DRF's handler, which returns None for anything that is not an
+    # APIException - and Django renders that as a 500. The message budget raises
+    # a plain ValueError so the WebSocket consumers can answer it without knowing
+    # the class exists (services.core.message_limits), which is exactly why it
+    # needs mapping here: three API views call the charged create functions, and
+    # a throttled client was getting a server error for behaving normally.
+    # Mapped once rather than in each view so a view added later inherits it.
+    if isinstance(exc, MessageRateLimitedError):
+        return Response({"error": exc.safe_message}, status=429)
+
     response = drf_exception_handler(exc, context)
     if response is None:
         return None
