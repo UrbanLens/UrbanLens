@@ -172,6 +172,17 @@ re-encoding; polyglot tricks stop working because the container is rebuilt.
 Video goes through ffmpeg for the same reason, and always has its container
 location tags stripped.
 
+The rewrite lands under a *new* name whenever the extension changes, and the
+superseded file is **not** deleted by the function that replaced it. It returns
+a `StoredFileReplacement` naming it, and the caller deletes it
+(`discard_superseded_file`) only after persisting `image.image.name`. The
+ordering is load-bearing: `services.media.access` authorizes a media request by
+looking the path up on the row, so between an early delete and the row update
+every request for that path is authorized and then missing - which for the whole
+of a processing run is the uploader's own just-uploaded tile. Deleting late
+leaks one file if the process dies in between; deleting early left a row that
+permanently named a file which no longer existed.
+
 ### 3b. Derived copies
 
 Three smaller copies are written from the original, all in the sandbox worker,

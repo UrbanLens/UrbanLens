@@ -58,6 +58,11 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
         logger.info("Update request initiated by user %s", request.user.id)
+        # Unreachable while `get_queryset` scopes to `profile__user`: a stranger's
+        # pin 404s before this runs. Kept as the backstop for the day that filter
+        # widens (shared pins, an admin view), which is when a write path with no
+        # check of its own becomes the bug. Filed once as dead code - P19 in
+        # docs/PROBLEMS.md - so this says why it stays.
         if instance.profile.user != request.user:
             logger.error(
                 "User %s attempted to update pin %s, but does not have permission",
@@ -152,6 +157,7 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
         """
         logger.info("Delete request initiated by user %s", request.user.id)
         instance = self.get_object()
+        # The same backstop as in `partial_update` above, for the same reason.
         if instance.profile.user != request.user:
             logger.error(
                 "User %s attempted to delete pin %s, but does not have permission",

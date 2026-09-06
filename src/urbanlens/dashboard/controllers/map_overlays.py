@@ -47,7 +47,6 @@ from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
-    from django.db.models import QuerySet
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayQuerySet

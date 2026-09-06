@@ -1,6 +1,5 @@
 import contextlib
 from datetime import datetime
-import json
 import logging
 from typing import Any
 import urllib.parse
@@ -11,7 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db import DatabaseError
 from django.db.models import Count, Prefetch
 from django.db.models.functions import Coalesce, Lower
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from rest_framework.viewsets import GenericViewSet

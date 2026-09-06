@@ -1119,9 +1119,9 @@ bullet, which specifies the weighting rule in detail).
 
 ---
 
-## P19 — Audit re-verification's residual gaps remain: dead ownership re-check, 1,100-line `_dark.scss`, stub AI gateway
+## P19 — Audit re-verification's residual gaps remain: a 1,100-line `_dark.scss`, a stub AI gateway, blocking AI in the request
 
-`id: P19` · `status: open` · `updated: 2026-07-25`
+`id: P19` · `status: open` · `updated: 2026-09-06`
 
 Previously titled "Full-codebase audit: re-verification pass (2026-07-25)".
 
@@ -1207,8 +1207,14 @@ full per-unit detail):
   calls in the request cycle rather than via Celery; `services/ai/huggingface.py` is still an
   unwired, `NotImplementedError`-raising stub (now explicitly documented as such, rather than a
   silent dead end).
-- **Unit 21/22/23**: `models/pin/viewset.py`'s post-`get_object()` ownership re-check is still dead
-  code (queryset already filters it); `GroupMessage` still carries no images/markup_map/
+- **Unit 21/22/23**: ~~`models/pin/viewset.py`'s post-`get_object()` ownership re-check is still dead
+  code (queryset already filters it)~~ - **kept deliberately, 2026-09-06, and now says so.** It is
+  unreachable: `get_queryset` scopes to `profile__user`, so a stranger's pin 404s before either
+  check runs. Deleting a redundant authorization check on a *write* path to satisfy a dead-code
+  note is the change that ages badly - the day that filter widens (shared pins, an admin view) is
+  the day a handler with no check of its own becomes the bug. Both sites carry a comment saying
+  that, so the next reader files it as a backstop rather than as dead code again.
+  `GroupMessage` still carries no images/markup_map/
   location_mentions/reply_to fields; `GameSessionConsumer`/`TriviaSessionConsumer` are still
   near-duplicate classes with no shared base, no per-connection rate limiting on any WS `receive()`.
 - **Unit 24/25**: ~~the SpotGuessr/Trivia `eligible_locations()`/`eligible_questions()` retry loops

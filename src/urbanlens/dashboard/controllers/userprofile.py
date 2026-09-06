@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from itertools import chain
+from datetime import datetime
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -14,7 +13,6 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import validate_email
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.forms.profile_form import (
@@ -35,7 +33,7 @@ from urbanlens.dashboard.models.profile.meta import (
     PhotoTakingPreference,
     PhotoUsagePreference,
 )
-from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 
@@ -1175,7 +1173,7 @@ def _render_profile_annotation_partial(
     """
     from urbanlens.dashboard.controllers.custom_fields import rows_for_target
     from urbanlens.dashboard.models.custom_fields.model import CustomFieldEntity
-    from urbanlens.dashboard.models.labels.model import KIND_USER, Label
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
     from urbanlens.dashboard.models.profile.nickname import ProfileNickname
     from urbanlens.dashboard.models.profile.note import ProfileNote

@@ -23,7 +23,7 @@ from django.views import View
 from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.pins.pin_merge import MergeFieldConflict, PinMergeCollisionError, UnresolvedMergeConflictError, plan_merge_conflicts, plan_merge_conflicts_bulk
+from urbanlens.dashboard.services.pins.pin_merge import PinMergeCollisionError, UnresolvedMergeConflictError, plan_merge_conflicts, plan_merge_conflicts_bulk
 from urbanlens.dashboard.services.pins.pin_merge_suggestions import accept_pin_merge_suggestion, reject_pin_merge_suggestion
 
 if TYPE_CHECKING:

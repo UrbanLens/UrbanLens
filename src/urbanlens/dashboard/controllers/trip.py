@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
@@ -20,7 +20,6 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import (
     Trip,
     TripActivity,
-    TripComment,
     TripMembership,
 )
 from urbanlens.dashboard.services.trips.trip_access import (
@@ -33,14 +32,11 @@ from urbanlens.dashboard.services.trips.trip_activities import (
     activity_queryset as _activity_qs,
     build_activity_rows,
     complete_activity,
-    compute_activity_index_map as _compute_activity_index_map,
     create_activity,
     delete_activity,
-    expand_trip_dates as _expand_trip_dates,
     get_activity,
     parse_scheduled_at as _parse_scheduled_at,
     reorder_activities,
-    resolve_activity_place as _resolve_activity_place,
     set_activity_position,
     set_activity_rsvp,
     set_activity_status,
@@ -58,13 +54,11 @@ from urbanlens.dashboard.services.trips.trip_membership import (
     join_trip,
     leave_trip,
     list_members,
-    notify_added_to_trip as _notify_added_to_trip,
     remove_member,
     require_trip_creator,
     resolve_trip_member,
     set_member_organizer,
     set_trip_rsvp,
-    suggest_connections_for_new_member as _suggest_connections_for_new_member,
 )
 
 if TYPE_CHECKING:
@@ -73,7 +67,6 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from django.http import HttpRequest
 
-    from urbanlens.dashboard.controllers.comments import _ReactionData
     from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot
 
 logger = logging.getLogger(__name__)

@@ -38,7 +38,6 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSException
 from django.http import HttpRequest, JsonResponse
-from django.shortcuts import get_object_or_404
 from django.views import View
 from rest_framework.viewsets import GenericViewSet
 

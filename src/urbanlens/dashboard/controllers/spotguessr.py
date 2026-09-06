@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import date as date_cls, timedelta
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.gdal.error import GDALException

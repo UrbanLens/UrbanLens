@@ -37,7 +37,6 @@ from urbanlens.dashboard.models.labels.model import (
     KIND_USER,
     Label,
 )
-from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
 from urbanlens.dashboard.models.pin_list.model import PinList

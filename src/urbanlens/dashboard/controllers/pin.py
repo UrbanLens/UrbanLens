@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import base64
-from datetime import datetime, timedelta
+from datetime import timedelta
 import json
 import logging
 from typing import TYPE_CHECKING, TypeVar
@@ -42,7 +41,7 @@ if TYPE_CHECKING:
 
     from rest_framework.request import Request
 
-    from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelSource, ProviderFetchResult
+    from urbanlens.dashboard.services.pins.external_data import PanelSource, ProviderFetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -172,8 +171,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
         from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, Label
-        from urbanlens.dashboard.models.location.model import Location
-        from urbanlens.dashboard.models.wiki.model import Wiki
         from urbanlens.dashboard.services.comments.comments import visible_comment_count
 
         try:
@@ -1174,7 +1171,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
     @action(detail=False, methods=["post"])
     def parse_for_preview(self, request: HttpRequest):
         """Parse uploaded files and return pin preview data as JSON without importing."""
-        import json as _json
 
         from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
@@ -2035,7 +2031,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
     @action(detail=False, methods=["post"])
     def import_confirmed(self, request: Request):
         """Stream SSE import progress for user-confirmed pin selections from the preview step."""
-        import json as _json
 
         if not isinstance(request.user, User):
             return JsonResponse({"error": "Authentication required."}, status=401)

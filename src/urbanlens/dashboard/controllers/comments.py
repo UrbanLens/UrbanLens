@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import TYPE_CHECKING, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q, QuerySet
-from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -27,7 +26,6 @@ from urbanlens.dashboard.services.map.map_snapshot import (
     parse_map_data as _parse_map_data,
 )
 from urbanlens.dashboard.services.notifications.comment_notifications import notify_reply
-from urbanlens.dashboard.services.notifications.mentions import render_comment_text, viewer_pinned_uuids
 from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
 from urbanlens.dashboard.services.undo.handlers.markup_map import MODEL_LABEL as MARKUP_MAP_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo

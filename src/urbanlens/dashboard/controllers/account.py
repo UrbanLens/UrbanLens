@@ -14,7 +14,6 @@ from uuid import UUID
 from django import forms
 
 # Aliased: several functions here bind a local `settings` to SiteSettings.
-from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.auth import REDIRECT_FIELD_NAME, get_user_model, login as auth_login, views as auth_views
 from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, SetPasswordForm, UserCreationForm
