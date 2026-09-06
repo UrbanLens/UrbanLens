@@ -38,6 +38,7 @@ from urbanlens.dashboard.models.site_settings import (
 from urbanlens.dashboard.services.admin.infrastructure_stats import _format_duration
 from urbanlens.dashboard.services.admin.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.media.storage import ingress_body_limit_bytes
 from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -638,13 +639,13 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         action = request.POST.get("action", "grant")
 
         if action == "revoke":
-            UserSubscription.objects.filter(pk=request.POST.get("subscription_id"), granted_by=request.user).update(revoked_at=timezone.now())
+            UserSubscription.objects.filter(pk=safe_int_or_none(request.POST.get("subscription_id")), granted_by=request.user).update(revoked_at=timezone.now())
             if is_htmx:
                 return self._grants_list_response(request, toast=("info", "Subscription revoked."))
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=revoked")
 
         if action == "update":
-            sub = UserSubscription.objects.filter(pk=request.POST.get("subscription_id"), granted_by=request.user).first()
+            sub = UserSubscription.objects.filter(pk=safe_int_or_none(request.POST.get("subscription_id")), granted_by=request.user).first()
             if sub:
                 sub.set_duration_months(_parse_duration_months(request.POST.get("duration_months")))
                 sub.save(update_fields=["expires_at", "updated"])
@@ -1362,7 +1363,7 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
         redirect_params = {k: v for k, v in {"q": request.POST.get("q", ""), "page": request.POST.get("page", "")}.items() if v}
         redirect_url = reverse("site_admin_users") + (f"?{urlencode(redirect_params)}" if redirect_params else "")
 
-        target = User.objects.filter(pk=request.POST.get("user_id")).select_related("profile").first()
+        target = User.objects.filter(pk=safe_int_or_none(request.POST.get("user_id"))).select_related("profile").first()
         if target is None:
             messages.error(request, "User not found.")
             return HttpResponseRedirect(redirect_url)

@@ -2960,12 +2960,36 @@ limitations rather than defects:
 - `services/photos/uploads.py:202` - `exif_data` "expected `str | Combinable | None`". The field is
   `EncryptedJSONField`; the stub sees its text base, not the JSON it actually stores.
 
-The remaining 32 are unaudited. Some have the shape of real defects - `Incompatible type for lookup
-'pk': (got "str | None", ...)` at `controllers/site_admin.py:1365` and `services/billing/webhooks.py:149`,
-`Expected iterable as variadic argument` at `forms/settings_form.py:50` - and some are more of the
-`EnrichmentSource` ClassVar-vs-instance-variable pattern that accounts for about a dozen of them.
-Nobody has separated the two, which is the argument for not leaving the code off: a blanket disable
-of the code that reports 146 known-benign findings also silences whatever else `misc` covers.
+Two more were checked and **both were real**, which settles the argument about whether the disable is
+purely noise suppression. `Incompatible type for lookup 'pk': (got "str | None", expected "str | int")`
+at `controllers/site_admin.py:1365` and `services/billing/webhooks.py:149` are
+`filter(pk=<raw request value>)`: Django raises `ValueError: Field 'id' expected a number but got ''`
+for `""` and for any non-numeric string, and only `None` degrades to a zero-row `IS NULL`. Every one
+of those sites had an "it did not resolve" branch on the very next line that a malformed id skipped
+straight past, into a 500. Fixed 2026-09-06 with `services.core.numbers.safe_int_or_none`, across
+seven sites - the two mypy could see plus five it could not, including
+`controllers/userprofile.py`'s two email actions, whose `request.POST.get("email_id", "")` default
+made the crash the behaviour of an *omitted* field rather than a hostile one. Reproduced first: 20
+failures and two logged `Internal Server Error: /dashboard/profile/edit/` against the unfixed code.
+
+Fixing those seven sites turned up a third defect in the helper they now use.
+`services.core.numbers.safe_int` caught `(TypeError, ValueError)` and not `OverflowError`, and
+`int(float("inf"))` raises exactly that - reachable, because Python's `json.loads` accepts the bare
+literals `Infinity`, `-Infinity` and `NaN`, and `controllers/detail_pins.py` and
+`controllers/markup.py` parse their bodies with it directly. Proven end to end rather than at the
+helper: a `POST` of `{"bg_opacity": Infinity}` to `pin.detail_pin.edit` raised `OverflowError` out
+of the view. DRF's own parser refuses the literal, so the four `int()` guards in
+`controllers/e2ee.py` carrying the same narrow `except` are **not** reachable this way - a widening
+of those was written and then reverted, along with a test that asserted the 400 DRF was already
+returning for its own reason and would have passed either way. `safe_int_or_none` now holds the
+parsing rule and `safe_int`/`clamp_int` are built on it, so the three cannot drift apart again.
+
+The remaining 30 are unaudited. About a dozen are more of the `EnrichmentSource`
+ClassVar-vs-instance-variable pattern; `Expected iterable as variadic argument` at
+`forms/settings_form.py:50` and `"dispatch" undefined in superclass` at `controllers/games.py:45`
+and `controllers/labels.py:611` have not been looked at. The tally so far is three false positives
+and two real bugs, which is the argument against leaving the code off: a blanket disable of the code
+that reports 146 known-benign findings also silences whatever else `misc` covers.
 
 **Why this is filed rather than fixed.** The fix is not one line, and the obvious shortcut does not
 work. django-stubs *can* type `Manager.from_queryset(SomeQuerySet)` when the result is bound to a

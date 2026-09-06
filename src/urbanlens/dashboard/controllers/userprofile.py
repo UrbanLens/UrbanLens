@@ -36,6 +36,7 @@ from urbanlens.dashboard.models.profile.meta import (
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -786,13 +787,12 @@ class EditProfileView(LoginRequiredMixin, View):
         return self._emails_response(request, profile, email_error=email_error)
 
     def _remove_email(self, request: HttpRequest, profile: Profile) -> HttpResponse:
-        email_id = request.POST.get("email_id", "")
-        profile.secondary_emails.filter(pk=email_id).delete()
+        profile.secondary_emails.filter(pk=safe_int_or_none(request.POST.get("email_id"))).delete()
         return self._emails_response(request, profile)
 
     def _resend_email_verification(self, request: HttpRequest, profile: Profile) -> HttpResponse:
         email_status = ""
-        secondary_email = profile.secondary_emails.filter(pk=request.POST.get("email_id", ""), is_verified=False).first()
+        secondary_email = profile.secondary_emails.filter(pk=safe_int_or_none(request.POST.get("email_id")), is_verified=False).first()
         if secondary_email:
             from urbanlens.dashboard.models.email_log.model import EmailType
             from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, verification_recently_sent
