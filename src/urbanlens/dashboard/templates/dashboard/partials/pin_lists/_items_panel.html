@@ -3,11 +3,22 @@ Pin List items panel - sortable rows, swapped in after add/remove/reorder.
 Context: pin_list, items (page-1 slice of PinListItem, already ordered),
          page_obj (Django Page - drives the "load more" sentinel further
          pages are lazy-loaded through, see _items_rows.html),
-         items_map_data (every pin on the list, regardless of pagination -
-         see pin_lists.py's _pin_map_marker_data).
+         items_map_data (the list's pins regardless of which page of rows is
+         showing, capped at map_pin_limit - see pin_lists.py's
+         _pin_map_marker_data), map_pin_limit, items_map_truncated.
+
+The truncation notice lives here rather than in detail.html because this
+partial is re-rendered on its own after every add/remove, and a notice left
+behind in the page would go stale the moment a list dropped under the cap.
 {% endcomment %}
 <div class="pin-list-items" id="pin-list-items" data-save-url="{% url 'lists.items.reorder' pin_list.slug %}">
     {{ items_map_data|json_script:"pin-list-items-map-data" }}
+    {% if items_map_truncated %}
+    <p class="pin-list-map-truncated settings-help">
+        <i class="material-symbols-outlined">info</i>
+        Showing the first {{ map_pin_limit }} pins on the map. Every pin is still listed below.
+    </p>
+    {% endif %}
     {% if items %}
     {% include "dashboard/partials/pin_lists/_items_rows.html" %}
     {% else %}
