@@ -2633,7 +2633,7 @@ like Vault's `photo-virtual-grid.ts`/`bindPhotoGrid` - see the tooling entry abo
 wasn't reused as-is: it's built for JSON tile grids, not server-rendered card rows wired into the
 existing bulk-select/merge/convert machinery in `organize-tab-manager.ts`).
 
-## P69 — Unbounded lists with no pagination across most of the site, from album pickers to Immich imports
+## P69 — Unbounded lists across the site: 9 of 11 fixed; one argued against by measurement, one group deliberately left
 
 `id: P69` · `status: open` · `updated: 2026-09-06`
 
@@ -2645,6 +2645,18 @@ here rather than one entry each since the fix is identical in kind (cap it, pagi
 even though the code paths are unrelated. Roughly ranked by how large the realistic ceiling is and how
 heavy the per-row template is - top few are worth prioritizing, the rest are real but currently minor
 at this app's beta scale (~2 users):
+
+**Nine of the eleven bullets below are fixed as of 2026-09-06.** What is left is one half-bullet the
+measurement argues against doing (the Settings tabs' lazy-loading half) and one group deliberately
+left because each of its items is bounded by something other than account age. Read those two before
+concluding there is work here.
+
+The recurring lesson across the nine, worth having before starting the tenth: **the slice is rarely
+the whole fix.** Every one of them had something else the survey had not seen - a numbered list whose
+numbering, "current" marker and per-row delta are all defined against the whole set; a group-by that
+had to move into the database before a slice could mean anything; a per-row query that made the
+render cost survive the cap; a count that gated an empty state and so had to stay exact; a partial
+shared with a mutating action whose pagination links would otherwise point at it.
 
 - ~~**Album detail's "add existing photo" picker**~~ **fixed 2026-09-06.** It listed every photo
   eligible for the album inside a `<dialog>` that stays closed until a click - the same
@@ -2668,19 +2680,20 @@ at this app's beta scale (~2 users):
   the HTMX partial endpoint and loads no scripts - the panel has to be reached through the Private
   Pin page (`?album=<slug>`) for any of its JavaScript to exist, which is worth knowing before
   concluding a picker is broken.
-- **Immich "nearby" photo import** (`controllers/immich.py:186-241`,
-  `services/apis/immich/gateway.py:170-184`) fetches *every geolocated asset in the user's entire
-  Immich library* (no radius param sent to Immich at all) and filters to "nearby" in Python after the
-  full fetch - a self-hosted library built over years could hold 10k-100k+ assets fetched over the
-  network on every picker open. ~~Immich's own `/search/metadata` endpoint accepts lat/lng+radius and
-  isn't used here~~ **- it does not, and anyone following that sentence will spend the batch trying
-  to send a parameter Immich rejects.** Checked 2026-09-06 against the upstream OpenAPI spec and
-  against what this repo's own gateway sends: `MetadataSearchDto` has no geographic field beyond the
-  geocoded `city`/`country`/`state` strings, and `/map/markers` takes only date and archive/favourite
-  filters. Immich exposes no coordinate-radius filter on any endpoint, so the fix has to be a local
-  cap (and a cache, since `_immich_picker_dialog.html` puts `hx-trigger="change"` on the radius
-  `<select>`, meaning each of the six radius options re-downloads the whole library). Re-confirm
-  against the pinned server version before deleting this sentence. The other two modes (`VISITS`,
+- ~~**Immich "nearby" photo import**~~ **fixed 2026-09-06**, as far as it can be. Immich exposes no
+  coordinate-radius filter on any endpoint - ~~its `/search/metadata` accepts lat/lng+radius~~ **it
+  does not**, checked 2026-09-06 against the upstream OpenAPI spec and against what this repo's own
+  gateway sends: `MetadataSearchDto` has no geographic field beyond the geocoded
+  `city`/`country`/`state` strings, and `/map/markers` takes only date and archive/favourite
+  filters. So the fetch-everything shape stays until that changes; what was fixed is that it
+  happened *seven times*. `_immich_picker_dialog.html` puts `hx-trigger="change"` on the radius
+  `<select>`, so each of its six options re-downloaded the whole library, as did switching modes
+  away and back. The measured, distance-sorted neighbourhood is cached per pin for five minutes
+  (`services/apis/immich/nearby.py`) and capped at the nearest 500 - matching the app's own two map
+  caps, and the widest radius offered is 5km. The cache key carries the account's `updated`
+  timestamp at microsecond precision, because reconnecting to a different server inside the same
+  second is exactly what it is there to catch. Re-confirm the no-radius-filter claim against the
+  pinned server version before deleting the fetch-everything shape. The other two modes (`VISITS`,
   `ALL`) *are* bounded server-side, by date and page size respectively - so the docstring in
   `services/photos/photo_import.py` is right about them and wrong only about geography.
 - ~~**Wiki edit history & article revision history**~~ **fixed 2026-09-06.** Neither had a slice
@@ -2762,9 +2775,22 @@ at this app's beta scale (~2 users):
   now. An existing test asserted the unpaginated behaviour by name and was rewritten rather than
   deleted - its ownership half is stronger walking every page, since a slice applied before the
   ownership filter would leak on a page a single-page assertion never looks at.
+- ~~**...and the pin-list overview map**~~ **fixed 2026-09-06.** `_items_map_data` had no cap, unlike
+  the near-identical `SavedFilterPreviewView` in the same feature, and each of its markers carries
+  far more than that one's does - name, address, description, rating, last-visited and every tag
+  chip - so it was the heavier of the two per row as well as the unbounded one. Capped at the same
+  500, with a notice, and the cap is on the fetch: `_paginated_items_context` materialized every
+  item on the list to serve both the map and one page of rows, behind a comment saying that cost no
+  more than the unpaginated render - true only while the map genuinely needed all of them.
+
 - **Undo history, Safety check-ins overview, "view all friends" page, DM conversation list,
-  achievement catalogue, Organize's Lists/Filters tabs, and the pin-list overview map** all follow the
-  identical pattern with lower realistic ceilings or lighter per-row templates today:
+  achievement catalogue, and Organize's Lists/Filters tabs** all follow the identical pattern with
+  lower realistic ceilings or lighter per-row templates today. **Deliberately left, 2026-09-06**:
+  each is bounded by something other than account age - the achievement catalogue by how many awards
+  the *site* defines, undo history by its 7-day window, the friends list and the conversation list
+  by friend count - and paginating a chat sidebar or an awards catalogue trades a theoretical
+  ceiling for worse browsing. Worth revisiting with a `RenderTimeScalingMixin` subclass each, which
+  would answer "is a row cheap next to the page" with a number instead of a guess:
   `controllers/undo.py:58-112`; `controllers/safety.py:314-431` (no auto-delete by default -
   `SafetyPreference.auto_delete_after_days` is nullable and defaults to "never"); 
   `controllers/friendship.py:451-477` (`SiteSettings.max_friends_per_user` defaults to 0/unlimited);
