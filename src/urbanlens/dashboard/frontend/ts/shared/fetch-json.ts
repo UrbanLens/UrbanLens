@@ -18,6 +18,19 @@ export interface FetchJsonOptions extends RequestInit {
     timeoutMs?: number;
 }
 
+/**
+ * Tells `themes/base.html`'s global `window.fetch` wrapper to stay quiet.
+ *
+ * That wrapper is the net under the ~90 raw `fetch()` call sites that still
+ * exist, and it toasts a generic "Request failed (HTTP 503)." for any non-2xx.
+ * Everything here checks the status itself and reports the server's own
+ * sentence, so without this marker a single refusal is announced twice - once
+ * usefully and once uselessly. Not a standard `RequestInit` field; `fetch`
+ * ignores what it does not recognise, and the wrapper reads it off the same
+ * object (P11).
+ */
+const REPORTED_BY_CALLER = { __ulReported: true } as const;
+
 export class HttpError extends Error {
     readonly status: number;
 
@@ -77,7 +90,7 @@ export async function fetchJson<T = unknown>(url: string, options: FetchJsonOpti
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-        const response = await fetch(url, { ...init, signal: controller.signal });
+        const response = await fetch(url, { ...init, ...REPORTED_BY_CALLER, signal: controller.signal });
         if (!response.ok) throw new HttpError(response.status, await errorMessage(response));
         // 204 has no body, and calling .json() on it throws. Callers that expect
         // nothing back (a recorded position, a DRF delete) would otherwise see a

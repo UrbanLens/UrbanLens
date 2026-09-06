@@ -201,15 +201,30 @@
             // not a failure, and was surfacing as a spurious "Request was
             // cancelled" error toast on ordinary filter interactions.
 
+            // A net under every raw fetch() on the site, of which there are still
+            // about ninety: without it a non-2xx resolves normally, the caller
+            // calls .json() on an error page, and the SyntaxError lands in a
+            // void-ed promise nobody sees (P11).
+            //
+            // It says nothing when the caller has already said something better.
+            // shared/fetch-json.ts checks the status itself and reports the
+            // server's own sentence, so a request marked __ulReported would
+            // otherwise be announced twice - once usefully and once as
+            // "Request failed (HTTP 503)." That marker is how the migration off
+            // raw fetch() stays incremental: a call site that moves to fetchJson
+            // opts out of the generic message by moving.
             var nativeFetch = window.fetch;
             if (nativeFetch && !nativeFetch.__urbanLensWrapped) {
-                var wrappedFetch = function () {
+                var wrappedFetch = function (input, init) {
+                    var reported = !!(init && init.__ulReported);
                     return nativeFetch.apply(this, arguments).then(function (response) {
-                        if (!response.ok) _toastError('Request failed (HTTP ' + response.status + ').');
+                        if (!response.ok && !reported) _toastError('Request failed (HTTP ' + response.status + ').');
                         return response;
                     }).catch(function (err) {
-                        if (err && err.name === 'AbortError') _toastError('Request timed out.');
-                        else _toastError('Network request failed.');
+                        if (!reported) {
+                            if (err && err.name === 'AbortError') _toastError('Request timed out.');
+                            else _toastError('Network request failed.');
+                        }
                         throw err;
                     });
                 };

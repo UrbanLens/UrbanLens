@@ -8,7 +8,7 @@
  * over a WebSocket (`consumers.GameSessionConsumer`); solo sessions never
  * open one at all.
  */
-import { getCsrfToken } from "../shared/csrf";
+import { getJson, postForm } from "../shared/session-request";
 import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
@@ -325,23 +325,6 @@ function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number
     if (sessionIdValue !== undefined) resolved = resolved.replace(urls.session_id_sentinel, String(sessionIdValue));
     if (roundIdValue !== undefined) resolved = resolved.replace(urls.round_id_sentinel, String(roundIdValue));
     return resolved;
-}
-
-async function postForm(url: string, data: Record<string, string> | URLSearchParams): Promise<any> {
-    const body = data instanceof URLSearchParams ? data : new URLSearchParams(data);
-    // url is always urlFor(urls.<name>, ...) - a same-origin, server-rendered path
-    // template with only numeric ids substituted, never an arbitrary/external url.
-    const response = await fetch(url, {  // lgtm[js/request-forgery]
-        method: "POST",
-        headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-    });
-    return response.json();
-}
-
-async function getJson(url: string): Promise<any> {
-    const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-    return response.json();
 }
 
 // ---------------------------------------------------------------------------

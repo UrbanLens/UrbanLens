@@ -12,7 +12,7 @@
  * Chrome (panel swapping, focus mode, fullscreen, the players/chat drawer)
  * belongs to the shared game shell - see ts/shared/game-shell.ts.
  */
-import { getCsrfToken } from "../shared/csrf";
+import { getJson, postForm } from "../shared/session-request";
 import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
@@ -160,23 +160,6 @@ function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number
     if (roundIdValue !== undefined) resolved = resolved.replace(urls.round_id_sentinel, String(roundIdValue));
     if (questionIdValue !== undefined) resolved = resolved.replace(urls.question_id_sentinel, String(questionIdValue));
     return resolved;
-}
-
-async function postForm(url: string, data: Record<string, string>): Promise<any> {
-    // url is always urlFor(urls.<name>, ...) - a same-origin, server-rendered path
-    // template with only numeric ids substituted, never an arbitrary/external url.
-    const response = await fetch(url, {  // lgtm[js/request-forgery]
-        method: "POST",
-        headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(data),
-    });
-    return response.json();
-}
-
-async function getJson(url: string): Promise<any> {
-    // Same-origin urlFor(...) path template - see postForm's note above.
-    const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });  // lgtm[js/request-forgery]
-    return response.json();
 }
 
 function el<T extends HTMLElement>(id: string): T {
@@ -848,14 +831,7 @@ async function startGame(): Promise<void> {
     totalRounds = Number(requestedRounds) || 0;
     sessionPoints = 0;
 
-    const payload = await withBusy(el<HTMLButtonElement>("trivia-start-btn"), async () => {
-        const response = await fetch(urls.start, {
-            method: "POST",
-            headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
-            body: params,
-        });
-        return response.json();
-    });
+    const payload = await withBusy(el<HTMLButtonElement>("trivia-start-btn"), () => postForm(urls.start, params));
     await handleStartOrRoundResponse(payload);
 }
 

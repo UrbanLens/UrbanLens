@@ -655,11 +655,12 @@ An earlier draft of this entry said `yelp` is billable, as a reason to curate. I
 `billable=True` appears 11 times in REData and none are in this registry. The real cost is upstream
 queries and quota, not money.
 
-## P11 — ~40 raw `fetch()` calls bypass `fetch-json.ts` and fail silently; Organize's Media tab is unwired dead UI
+## P11 — 99 raw `fetch()` calls bypass `fetch-json.ts`; the three game clients are migrated, the rest are not
 
-`id: P11` · `status: open` · `updated: 2026-08-15`
+`id: P11` · `status: open` · `updated: 2026-09-06`
 
-Previously titled "frontend TypeScript audit - remaining findings".
+Previously titled "~40 raw `fetch()` calls bypass `fetch-json.ts` and fail silently; Organize's Media
+tab is unwired dead UI", and before that "frontend TypeScript audit - remaining findings".
 
 Full-tree audit of `dashboard/frontend/ts/` (every file read, eight passes). The four
 security/safety items were fixed in the same pass; everything below was found but **not** fixed.
@@ -686,15 +687,47 @@ later report claimed it looked at the wrong nesting level; `_resolved_flag`
 (`services/locations/imagery_timeline.py`) already checks `attributes` first and the top level
 second, and has since commit `8bf86daf`.
 
-**Highest-value single change:** ~40 raw `fetch()` call sites bypass `shared/fetch-json.ts`
-(`fetchJson`/`sendJson`), several with no `response.ok` check at all, so a non-2xx dies in a
-`void`-ed promise with no toast. Six hand-rolled wrappers exist beside it: `postForm`/`getJson`
-(triplicated across the three games), `postForHtml` (organize-tab-manager), `postJson`
-(album-items), `savePosition` (album-map). Migrating them is mechanical, adds timeouts (several
-uploads can currently hang forever), and converts the dominant silent-failure mode into the
-required toast-on-error behaviour. Two deliberate exceptions to keep: `webauthn-client.ts`
-(self-contained for the minimal auth layout, already ok-checked) and the two E2EE calls that need
-raw `Response` semantics (201-vs-200, `redirected`).
+**Highest-value single change:** raw `fetch()` call sites bypass `shared/fetch-json.ts`
+(`fetchJson`/`sendJson`), several with no `response.ok` check at all. Six hand-rolled wrappers exist
+beside it: `postForm`/`getJson` (triplicated across the three games), `postForHtml`
+(organize-tab-manager), `postJson` (album-items), `savePosition` (album-map). Migrating them is
+mechanical, adds timeouts (several uploads can currently hang forever), and converts the dominant
+silent-failure mode into the required toast-on-error behaviour. Two deliberate exceptions to keep:
+`webauthn-client.ts` (self-contained for the minimal auth layout, already ok-checked) and the two
+E2EE calls that need raw `Response` semantics (201-vs-200, `redirected`).
+
+**Two corrections, both found 2026-09-06 while doing the first slice.**
+
+- **"~40" was low. It is 99**, counted across `frontend/ts/` excluding tests and `fetch-json.ts`
+  itself. Two files hold 43 of them: `entries/map-annotations.ts` (22) and `shared/e2ee-client.ts`
+  (21), and the second is mostly the raw-`Response` exception this entry already names.
+- **"a non-2xx dies in a `void`-ed promise with no toast" is not quite right, and the reason
+  matters.** `themes/base.html:204-231` wraps `window.fetch` globally and toasts
+  `Request failed (HTTP 503).` for every non-ok response - so there *is* a net, it is just a
+  generic one, and it does not stop the caller then calling `.json()` on an error page and throwing
+  a `SyntaxError` into that voided promise. Migrating a call site therefore has to opt *out* of the
+  generic message or the user gets told twice: once usefully, once not. `fetchJson` sets
+  `__ulReported` on the init object the wrapper reads, which is what lets the rest of this migration
+  happen one call site at a time. `fetch-json.test.ts` holds the two sides together, since the
+  template is inline JS that `tsc` cannot see.
+
+**Done 2026-09-06: the three game clients.** `shared/session-request.ts` replaces the triplicated
+`postForm`/`getJson`, and `entries/trivia.ts` no longer has a fourth unchecked `fetch` for
+`urls.start`. Both helpers keep resolving with the parsed body rather than throwing, because that is
+the contract 62 call sites already have; a refusal comes back as `{ error: "<the server's own
+message>" }`, which is exactly what every `postForm` caller already tests for - so those call sites
+started handling non-2xx responses without being touched. `getJson` additionally toasts and
+`postForm` does not, which is asymmetric on purpose: **all 33 `getJson` call sites ignore the
+result's shape entirely** (`data.friends ?? []`, so a failure rendered an empty list and said
+nothing), while the `postForm` ones test `.error` themselves.
+
+Verified in a browser against the running dev stack, not only in unit tests: the trivia page's
+friends fetch returns 200 and renders, and with the same route stubbed to 503 the user gets one
+toast carrying the server's own sentence, with no page errors. One `fetch` remains in those three
+files - Consensus's multipart photo upload, which is already ok-checked and is not form-encoded.
+
+The remaining wrappers (`postForHtml`, `postJson`, `savePosition`) and the two big files are
+untouched.
 
 **Correctness, user-visible:**
 

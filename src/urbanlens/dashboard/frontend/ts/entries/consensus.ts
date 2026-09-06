@@ -15,6 +15,7 @@
  * ratings, no distance/date scoring, no photo-feedback thumbs).
  */
 import { getCsrfToken } from "../shared/csrf";
+import { getJson, postForm } from "../shared/session-request";
 import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
@@ -247,23 +248,6 @@ function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number
     if (sessionIdValue !== undefined) resolved = resolved.replace(urls.session_id_sentinel, String(sessionIdValue));
     if (roundIdValue !== undefined) resolved = resolved.replace(urls.round_id_sentinel, String(roundIdValue));
     return resolved;
-}
-
-async function postForm(url: string, data: Record<string, string> | URLSearchParams): Promise<any> {
-    const body = data instanceof URLSearchParams ? data : new URLSearchParams(data);
-    // url is always urlFor(urls.<name>, ...) - a same-origin, server-rendered path
-    // template with only numeric ids substituted, never an arbitrary/external url.
-    const response = await fetch(url, {  // lgtm[js/request-forgery]
-        method: "POST",
-        headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-    });
-    return response.json();
-}
-
-async function getJson(url: string): Promise<any> {
-    const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-    return response.json();
 }
 
 /** Runs `action` with `button` disabled and spinning, so no round-trip is silent. */
@@ -865,7 +849,9 @@ async function uploadPhoto(): Promise<void> {
     }
     const formData = new FormData();
     formData.append("image", file);
-    // Same-origin urlFor(...) path template - see postForm's note above.
+    // Multipart, so not postForm's business - and already ok-checked below,
+    // which is what postForm exists to add. Same-origin urlFor(...) path
+    // template, never an arbitrary url.
     const response = await fetch(urlFor(urls.photo, state.sessionId, state.currentRoundId), {  // lgtm[js/request-forgery]
         method: "POST",
         headers: { "X-CSRFToken": getCsrfToken() },

@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { HttpError, fetchJson, sendJson } from "./fetch-json";
 
@@ -187,5 +189,43 @@ describe("sendJson", () => {
     test("a 204 write resolves with null", async () => {
         stub({ status: 204 });
         expect(await sendJson("/pins/1/", "DELETE")).toBeNull();
+    });
+});
+
+/**
+ * The marker is a contract with a template, held together by a string.
+ *
+ * `themes/base.html` wraps `window.fetch` and toasts a generic "Request failed
+ * (HTTP 503)." for every non-2xx - the net under the ~90 raw `fetch()` call
+ * sites that have not moved yet. `fetchJson` reports the server's own sentence
+ * instead, so it opts out by setting `__ulReported` on the init object the
+ * wrapper reads.
+ *
+ * Neither side can see the other: the template is inline JS that `tsc` does not
+ * read, and this module is bundled. Rename the flag on one side and the failure
+ * is two toasts for one refusal - which nobody would file a bug about and
+ * everybody would find slightly annoying. Same shape as
+ * `pin-cache.contract.test.ts`, and that contract has already drifted once.
+ */
+describe("the __ulReported contract with base.html", () => {
+    const template = readFileSync(join(import.meta.dir, "../../../templates/dashboard/themes/base.html"), "utf8");
+
+    test("the template still wraps window.fetch", () => {
+        // If this goes, the marker is harmless but pointless, and the ~90
+        // unmigrated call sites have lost their net.
+        expect(template).toContain("__urbanLensWrapped");
+    });
+
+    test("the wrapper reads the same flag this module writes", () => {
+        expect(template).toContain("init.__ulReported");
+        expect(readFileSync(join(import.meta.dir, "fetch-json.ts"), "utf8")).toContain("__ulReported: true");
+    });
+
+    test("the wrapper stays quiet on both failure paths, not just the non-2xx one", () => {
+        // A timeout aborts, which lands in the catch rather than the then - and
+        // fetchJson's own timeout is exactly the case that would double-toast.
+        const wrapper = template.slice(template.indexOf("var wrappedFetch"), template.indexOf("wrappedFetch.__urbanLensWrapped"));
+        expect(wrapper).toContain("!response.ok && !reported");
+        expect(wrapper).toContain("if (!reported) {");
     });
 });
