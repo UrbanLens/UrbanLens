@@ -98,10 +98,22 @@ decision (wire up a profile-scoped bulk endpoint, or document the refusal) rathe
 **Fixed 2026-09-06**, and the decision this asks for splits by action rather than resolving one way.
 
 - **Delete** transfers, and was the real gap. A vault photo already had a per-photo delete
-  (`PhotoActionView.delete`); only the bulk form was missing. `VaultGalleryBulkView`
-  (`vault.photos.bulk`) is that, scoped by profile, and the pin endpoint's delete body moved into a
-  shared `_delete_owned_images` unchanged - including the rule the vault needs just as much, that a
-  photo also linked to a wiki is unlinked rather than destroyed.
+  (`PhotoActionView.delete_photo`); only the bulk form was missing. `VaultGalleryBulkView`
+  (`vault.photos.bulk`) is that, scoped by profile.
+
+  **The first version of it shared too much, and the browser check did not catch that.** The pin
+  endpoint's delete body moved into a shared helper *including* its wiki rule - a row also on a wiki
+  is unlinked from its pin rather than destroyed - which is pin-specific. A vault album may hold a
+  photo that is also filed to one of the profile's pins (`owner_kwargs_to_image_scope`'s docstring
+  says so deliberately), so deleting it from the vault ran `update(pin=None)` and quietly emptied a
+  gallery the user was not looking at, while leaving the vault tile in place: the client removes a
+  tile on any 2xx, so it read as "Deleted" and came back on refresh. Found by adversarial review,
+  not by the browser pass - which exercised a plain vault photo, the one shape where the two rules
+  agree. The rule is a caller's decision now.
+
+  Worth carrying forward: whether the *vault* should also protect a wiki-contributed photo is a real
+  question and a different one. It would have to change the per-photo delete too, and it belongs
+  with P55.
 - **Send to wiki** cannot. The pin endpoint derives the wiki from `pin.location`, and a vault album
   has no location; the vault's own per-photo version asks *which* wiki, from a picker the bulk bar
   has nowhere to put. The endpoint refuses with that sentence rather than a generic 400.
@@ -114,11 +126,17 @@ the original symptom - a vault album could not be handed a bulk endpoint without
 an action that endpoint refuses.
 
 Verified in a browser: in a vault album, Delete shows and Send-to-wiki stays hidden, and deleting a
-selected photo removes its tile. Two things about doing that verification are worth knowing.
+selected photo removes its tile - for a plain vault photo, which is the shape that pass covered and
+the reason it missed the case above. Three things about doing that verification are worth knowing.
 `/dashboard/vault/photos/albums/` is an HTMX partial endpoint that loads no scripts - the panel has
 to be reached through `/dashboard/vault/photos/?album=<slug>`, the same trap the album-picker entry
 records. And the first attempt's POST came back 403 on CSRF origin checking, which turned out to be
-a real defect of its own in `docker-compose.yml`'s `UL_SITE_URL` default, fixed separately.
+a real defect of its own in `UL_SITE_URL`'s default port - in `docker-compose.yml` *and*, missed on
+the first pass, in `settings/base.py`, which is the one any process outside compose actually uses.
+
+Also missed on the first pass and worth the warning: gating send-to-wiki on its own URL took that
+menu item off every pin's flat Photos tab, because `_photo_gallery.html` was not updated to emit it.
+A contract test now fails when a template offers one of the pair without the other.
 
 
 ## RESOLVED 2026-08-20: the mobile panel's `unpinned_count` still counts what the import won't create
