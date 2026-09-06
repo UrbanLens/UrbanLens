@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 
+from django.contrib.gis.gdal import GDALException
 from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Polygon
 
 
@@ -43,12 +44,25 @@ def parse_multipolygon_geojson(polygon_geojson: dict) -> MultiPolygon:
     """
     try:
         geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
-    except (GEOSException, TypeError, ValueError) as exc:
+    except (GDALException, GEOSException, TypeError, ValueError) as exc:
+        # GDALException, not just GEOSException: GEOSGeometry parses GeoJSON
+        # through OGR, so most malformed input - a bare `{}`, an unknown `type`,
+        # a `Polygon` with no coordinates - surfaces as GDALException, which is
+        # not a GEOSException subclass. Every caller handles
+        # InvalidPolygonGeoJSONError as a 400, so anything escaping here is a
+        # 500 instead, on the public API as well as the drawing editors.
         raise InvalidPolygonGeoJSONError("Invalid polygon geometry") from exc
     if isinstance(geom, Polygon):
         geom = MultiPolygon(geom, srid=geom.srid)
     if not isinstance(geom, MultiPolygon):
         raise InvalidPolygonGeoJSONError("Boundary must be a Polygon or MultiPolygon")
+    if geom.empty:
+        # `{"type": "Polygon", "coordinates": []}` parses cleanly into an empty
+        # geometry. Storing it is worse than rejecting it: `dissolve_polygons`
+        # below documents the same trap - an empty polygon in a `__within`
+        # lookup matches zero rows rather than imposing no restriction - and a
+        # boundary row holding one draws nothing while reading as "set".
+        raise InvalidPolygonGeoJSONError("Boundary must not be empty")
     return geom
 
 

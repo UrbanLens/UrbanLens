@@ -2401,10 +2401,31 @@ Found while auditing existing unit tests for real positive/negative coverage (se
 `docs/notes/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
 convention rather than fixed inline.
 
-**Five are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
+**Eight are fixed as of 2026-09-06** - the `connect_ex` guard (which turned out to be two holes), the
 `make_cache_key` collision, the hard-delete overlap lock, the `SubscriptionRole.clean()` gap, and
 `PinAliasView.post` (same-day, 2026-08-29). Each is struck through below with what the fix found.
-What remains is mostly *missing coverage* rather than known defects: five untested surfaces, two
+
+Three of the "untested surface" entries are covered as of 2026-09-06 too - `WikiBoundaryView`,
+`purge_old_backups`'s count-based retention, and `RedataBasemapTilesGateway.list_sources` - and
+**writing those tests found two live defects neither this entry nor anything else had noticed**:
+
+- **`parse_multipolygon_geojson` turned most malformed GeoJSON into a 500.** Its
+  `except (GEOSException, TypeError, ValueError)` did not name `GDALException`, which is not a
+  `GEOSException` subclass and is what `GEOSGeometry` actually raises for a bare `{}`, an unknown
+  `type`, or a `Polygon` with no `coordinates` - because it parses GeoJSON through OGR. Seven
+  features reach that parser, including `external_api/views_wiki.py` and
+  `external_api/serializers.py`, so this was a 500 on the public API for an ordinary malformed
+  request. Fixed, along with `{"type": "Polygon", "coordinates": []}`, which parses *cleanly* into
+  an empty geometry - the exact trap `dissolve_polygons` documents two functions below, where an
+  empty polygon in a `__within` lookup matches zero rows instead of imposing no restriction.
+- **The AI-gateway guard mocked out the method its own test file exists to test.** `ai_guard.py`
+  (added 2026-09-06 for P78) patches `LLMGateway.send_with_tools` for the whole session, so
+  `test_ai_gateway_tool_calling.py`'s six tests asserted against a call that never happened and had
+  been failing since. `real_ai_chokepoint(target)` restores one named chokepoint for a test whose
+  subject *is* that method, leaving the rest of the guard - and the socket guard and the placeholder
+  credentials - standing. `test_ai_gateway_guarded` still passes, which is what proves it.
+
+What remains is mostly *missing coverage* rather than known defects: two untested surfaces, two
 locks with no real-concurrency proof, and three that need a decision from whoever owns the area.
 
 ~~**`LocalhostOnlyNetwork` (`core/testing_network.py`) doesn't patch `socket.socket.connect_ex`.**~~
@@ -2475,8 +2496,13 @@ ever construct Pin-owned albums - the community/wiki half of the Album model (`p
 Building that out correctly needs the wiki-access/concealment rules understood well enough to avoid
 a shallow test - flagged for a dedicated pass rather than folded into this audit.
 
-**`purge_old_backups`'s count-based retention (deleting the oldest backups beyond
-`backup_retention`) has no dedicated test anywhere in the suite.** `test_backup_temp_purge.py` only
+~~**`purge_old_backups`'s count-based retention has no dedicated test anywhere in the suite.**~~
+**Covered 2026-09-06**, asserting by identity as this entry asked - which of the files survive, not
+how many - so an implementation that kept the oldest and deleted the newest would fail. Includes the
+`len(files) > retention` boundary and a stray non-backup file, which must be neither counted toward
+retention nor deleted. The original text follows.
+
+**Was:** `test_backup_temp_purge.py` only
 exercises the `.tmp`-reaping side effect of `purge_old_backups()` with zero real `.sql` backups on
 disk, so the count-deletion loop (`backup_files[self.backup_retention:]`, sorted by mtime
 descending) never actually runs in any test - nor does `DatabaseBackup.run()`'s success path
@@ -2486,7 +2512,13 @@ and tested", which overstates it for this specific branch. Worth a dedicated pas
 with N backups on disk and a lower retention, exactly the oldest excess files are removed (by
 identity, not just resulting count) and the newest `retention` survive.
 
-**`RedataBasemapTilesGateway.list_sources()` envelope parsing is untested at the unit level.**
+~~**`RedataBasemapTilesGateway.list_sources()` envelope parsing is untested at the unit level.**~~
+**Covered 2026-09-06** - the bare-list/`sources`/`results` shapes, the fallback order, the empty-
+`sources`-falls-through-to-`results` case, and the id filter. Mocked at `get_json` rather than at
+`session`, which this entry suggested: `get_json` is the seam between "talk to REData" and "make
+sense of the answer", and only the second half was untested. The original text follows.
+
+**Was:**
 `test_basemap_tile_proxy.py` only ever mocks `RedataBasemapTilesGateway.list_sources`/
 `download_tile` at the controller boundary, so the gateway's own body-shape handling (bare list vs
 `{"sources": [...]}` vs `{"results": [...]}` dict envelopes, and the
@@ -2532,7 +2564,12 @@ testing run showed a dropped `select_for_update()` survived every non-threaded t
 needs a `TransactionTestCase` + real-thread test (as `test_billing_ledger_lock.py` does via
 `core.tests.concurrency.run_concurrently`).
 
-**`WikiBoundaryView` has no test coverage at all.** `dashboard/controllers/boundary.py`'s
+~~**`WikiBoundaryView` has no test coverage at all.**~~ **Covered 2026-09-06** - the area limit,
+the `WikiEdit` audit write on both save and clear, the `just_drawn` concealment bypass, and request
+validation. Writing it found the `parse_multipolygon_geojson` 500 described at the top of this
+entry. The original text follows.
+
+**Was:** `dashboard/controllers/boundary.py`'s
 `WikiBoundaryView` (GET/POST `/location/<slug>/wiki/boundary/`) - the community boundary-editor
 endpoint with its area-limit check against `SiteSettings.max_bbox_area_km2`, its `WikiEdit`
 audit-trail write, and the `just_drawn` concealment-bypass logic documented in
