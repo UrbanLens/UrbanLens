@@ -2079,27 +2079,37 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
-## P52 — `.app-nav-right` runs 40px past a 390px viewport, so every page scrolls sideways at phone width
+## P82 — At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways
 
-`id: P52` · `status: open` · `updated: 2026-08-24`
+`id: P82` · `status: open` · `updated: 2026-09-06`
 
-Previously titled "the nav bar, not the map, is what overflows at phone width".
+The phone half of this is fixed (see the archived P52). What remains is one breakpoint up.
 
-The 2026-08-23 entry recorded "the map page scrolls sideways at 390px" and
-guessed the map. It is not the map. Once the overflow probe was taught to ignore
-elements clipped by an ancestor - `getBoundingClientRect` reports geometry as if
-nothing clipped it, so every Leaflet tile drawn past its own `overflow: hidden`
-container looked guilty - the real culprits came out shallowest-first:
+`$breakpoint-sm` is 768px, and `down()` compiles to `max-width: 767px` - so at exactly 768 the seven
+primary links appear and the hamburger does not. Measured in Chromium against the running
+`development_main` stack, on `/dashboard/`: `document.documentElement.scrollWidth` is **837** in a
+768px viewport. The bar spends 18px of padding, 116 on the brand, about 470 on the links and 227 on
+the right-hand group.
 
-    div.app-nav-right       — right edge at 430px (viewport 390px), width 230px
-    div#nav-user.nav-user   — right edge at 430px (viewport 390px), width 140px
-    button#nav-user-btn     — right edge at 430px (viewport 390px)
+It predates the P52 fix rather than being caused by it: 837 reproduces on the unmodified stylesheet,
+measured by stashing the change and rebuilding. Below 768 the brand absorbs the shortfall, which is
+why the phone widths are now clean; at 768 the links are what would have to absorb it, and
+truncating or scrolling a navigation menu is worse than the overflow.
 
-The navigation bar's right-hand group runs 40px past a 390px viewport. It is on
-every page; the map page is simply where it was noticed, presumably because
-other pages clip it somewhere up the tree. Fixing it is a CSS change to
-`.app-nav-right`'s layout at narrow widths, which wants doing in front of a
-browser rather than blind - but the element is now named.
+**Not fixed because the ways out are product calls, not layout fixes.**
+
+1. **Raise the hamburger breakpoint to `$breakpoint-md`.** One line, and it works - the links hide
+   and the bar collapses to the phone layout, which fits with room to spare. It also means a
+   1000px-wide laptop window gets a hamburger, which is a real change to how the application reads
+   on the machines most likely to be running it.
+2. **Shorten the link row.** Seven top-level sections is what makes it 470px wide. Which of them are
+   top-level is an information-architecture decision.
+3. **Let the link row scroll horizontally inside itself.** Keeps every link reachable and stops the
+   page scrolling, at the cost of an affordance nobody sees - a scrollable row with no visible edge
+   is a row whose last item does not exist as far as most users are concerned.
+
+`specs/ui/responsive-overflow.spec.ts` covers 320-414 only, deliberately: adding 768 would ship a
+red test for a decision nobody has made. Extend `PHONE_WIDTHS` when this is resolved.
 
 ## P53 — One Private Pin page load fires dozens of concurrent panel requests and can exhaust the DB connection pool
 

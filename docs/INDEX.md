@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P82` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R27` · `N7`
+**Next free id:** `P83` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R27` · `N7`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -65,7 +65,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P49 | open | 2026-09-05 | Doc citations drift silently, and a pin-suggestion race can still duplicate a row | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-05 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P52 | open | 2026-08-24 | `.app-nav-right` runs 40px past a 390px viewport, so every page scrolls sideways at phone width | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-08-24 | One Private Pin page load fires dozens of concurrent panel requests and can exhaust the DB connection pool | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P55 | open | 2026-09-05 | Deleting a whole wiki still withdraws a contribution without ending its quota bonus | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P56 | open | 2026-09-05 | `Cross-Origin-Embedder-Policy` is unset, and `require-corp` is the wrong variant for a paste-any-URL image feature | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -85,6 +84,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL4 | live | 2026-08-27 | Existence, not detail, is the oracle - so the gate conceals a wiki's contributions rather than degrading it | [`docs/designs/reputation-and-gating.md`](designs/reputation-and-gating.md) |
 | PL5 | live | 2026-08-27 | One row per (target, field, write) resolves a per-viewer view in one DISTINCT ON query, with no replay | [`docs/designs/versioned-content.md`](designs/versioned-content.md) |
 | PL6 | live | 2026-08-29 | Every test file is being reviewed for negative coverage; 73 of 832 done, resume at manifest line 94 | [`docs/notes/test-quality-audit.md`](notes/test-quality-audit.md) |
+| P82 | open | 2026-09-06 | At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |

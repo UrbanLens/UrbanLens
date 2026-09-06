@@ -12116,6 +12116,56 @@ would otherwise have become two places to remember instead of one.
 extends itself when the tuple grows and fails when a chokepoint is added without it. Its teeth were
 checked by turning the fixture off: it fails naming the unpatched method.
 
+## RESOLVED 2026-09-06: the nav bar ran 40px past a phone viewport, so every page scrolled sideways
+
+`id: P52` · `status: fixed` · `resolved: 2026-09-06`
+
+Previously titled "`.app-nav-right` runs 40px past a 390px viewport, so every page scrolls sideways
+at phone width", and before that "the nav bar, not the map, is what overflows at phone width", and
+before that "the map page scrolls sideways at 390px" - which guessed the map. It was never the map.
+Once the overflow probe was taught to ignore elements clipped by an ancestor
+(`getBoundingClientRect` reports geometry as if nothing clipped it, so every Leaflet tile drawn past
+its own `overflow: hidden` container looked guilty) the nav came out shallowest-first.
+
+**Measured before, in Chromium against the running `development_main` stack:** 427px of content in
+viewports of 320, 360, 390 and 414px - identical at every phone width, on `/dashboard/`,
+`/dashboard/map/`, `/dashboard/trips/` and `/dashboard/organize/` alike, because the offender is the
+navigation bar and the navigation bar is on every page.
+
+The arithmetic at 390px: the bar has 375px of usable width, of which the brand takes 116 and the
+hamburger 38, leaving 200px for a right-hand group that wanted 227 - a 137px user button (68 of it
+the username), plus search and notification buttons. `.app-nav-right` is a flex item, and a flex
+item's default `min-width` is its own content, so it could not shrink and simply ran past the
+viewport instead.
+
+**Fixed by deciding which element yields.** Everything right of the brand is fixed-size icon
+buttons with nothing to give up, so they are `flex-shrink: 0` and the brand absorbs a narrow
+viewport instead - but only below `$breakpoint-sm`, where the primary links are already hidden.
+Above it the links are what absorb, and letting the brand shrink there squeezed its name to zero
+width at exactly 768px. The username and the brand name are hidden below `$breakpoint-xs` rather
+than truncated: the bar's slack at those widths is smaller than either word, so truncating renders
+two pixels and an ellipsis, which reads as a rendering fault rather than a layout choice. The avatar
+identifies the account and the logo carries the brand.
+
+**Measured after:** no horizontal overflow on any of five pages at 320, 360, 390, 414, 768 or
+1024px. The first attempt was measured too, and was wrong twice - it left a 2px ellipsis stub at
+320px and squeezed the brand name to nothing at 768px, neither of which is visible in a
+"does it overflow" check. Both were caught by measuring what each element actually rendered as,
+which is the only way this kind of fix can be checked.
+
+`specs/ui/responsive-overflow.spec.ts` is the regression guard, asserting on the *document* rather
+than on any element: naming the culprit would need rewriting every time the nav is, and the defect
+is "the page scrolls sideways", not "`.app-nav-right` is 227px wide". Its failure message lists the
+widest unclipped offenders, so it ends an investigation rather than starting one. That suite needs a
+routed deployment, so the measurements above came from a direct Playwright probe against this
+checkout's own stack.
+
+**One thing this turned up and did not fix.** At exactly 768px the bar needs 837px: the seven
+primary links appear at that width and, with the brand and the right-hand group, do not fit. That is
+the same defect one breakpoint up, it predates this entry (the 837px reading reproduces on the
+unmodified stylesheet), and closing it means deciding whether a tablet gets the hamburger - which is
+a product call, not a layout fix. Filed as P82.
+
 ## RESOLVED 2026-09-06: four chat sockets bounded nothing, and every write they made was reachable over unthrottled HTTP
 
 `id: P31` · `status: fixed` · `resolved: 2026-09-06`
