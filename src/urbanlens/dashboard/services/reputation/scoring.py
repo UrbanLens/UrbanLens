@@ -286,6 +286,54 @@ def retract_events_for_target(target: Any, *, reason: str) -> int:
     return sum(1 for event in rows if retract_event(event, reason=reason))
 
 
+#: What a contribution ended by somebody other than its contributor is worth
+#: afterwards. Deliberately near 1: the removal is a signal, not a verdict, and
+#: D9 says it should cost standing "only very slightly for the time being". A
+#: placeholder rather than a researched figure - changing it re-weights every
+#: future application, and `weight_events_for_target` can re-weight past ones.
+MODERATED_REMOVAL_WEIGHT = Decimal("0.9")
+
+
+def weight_events_for_target(target: Any, *, weight: Decimal, reason: str) -> int:
+    """Scale what every row about ``target`` contributes, without erasing it.
+
+    The middle ground between counting in full and :func:`retract_event`'s
+    all-or-nothing. For an ending the contributor did not choose: the
+    contribution happened, so the ledger keeps it and its original score, and
+    only its weight in the total moves.
+
+    Reversible by calling again with ``weight=1``, and re-weightable by calling
+    again with anything else - neither re-scores, so diminishing returns and the
+    caps are not re-applied.
+
+    Args:
+        target: The object the rows are about.
+        weight: The multiplier to store. 1 restores full value.
+        reason: Short machine-readable label, stored for the audit trail.
+
+    Returns:
+        How many rows this call changed.
+    """
+    from urbanlens.dashboard.models.reputation.model import ReputationEvent
+    from urbanlens.dashboard.services.reputation.rules import target_kind_for
+
+    kind = target_kind_for(target)
+    if kind is None or target.pk is None:
+        return 0
+    changed = ReputationEvent.objects.filter(target_kind=kind, target_id=target.pk).exclude(weight=weight).update(weight=weight, weight_reason=reason)
+    if changed:
+        _mark_stale_for_target(kind, target.pk)
+    return changed
+
+
+def _mark_stale_for_target(kind: str, target_id: int) -> None:
+    """Mark every profile holding a row about this target as needing a recompute."""
+    from urbanlens.dashboard.models.reputation.model import ReputationEvent
+
+    for profile_id in ReputationEvent.objects.filter(target_kind=kind, target_id=target_id).values_list("profile_id", flat=True).distinct():
+        _mark_stale(profile_id)
+
+
 def restore_event(event: ReputationEvent) -> bool:
     """Undo a retraction - the revert-of-a-revert case.
 

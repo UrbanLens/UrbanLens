@@ -1589,9 +1589,27 @@ granularity Jess asked for. `lifetime_earned` must be excluded from the weight f
 it already ignores retraction - a moderator's removal should cost standing, never already-granted
 access.
 
-Two sub-questions D9 deliberately leaves open: the number (0.9 is a placeholder), and whether a
-*cascade* counts - deleting a wiki removes its comments, and those contributors did nothing. A
-weight makes it safe to start with the narrow case and widen later.
+Both sub-questions are answered too. The number stays 0.9 ("nothing that isn't open to
+re-assessment... no pressing need to research this currently"). A **cascade strips nothing** - "I'd
+rather err on the side of keeping positive benefits awarded to users who contributed rather than
+stripping them" - and `CascadeKeepsBenefitsTests` pins that, so a future blanket `post_delete`
+cannot reverse it quietly.
+
+**Built 2026-09-07**, and two of the premises turned out to need correcting - see D9's Status
+section. In short: users *can* still delete a wiki (a detail pin **is** a child `Wiki`, and both
+`Wiki.parent_wiki` and `Comment.wiki` are `CASCADE`), so the cascade case is live rather than
+hypothetical; and no path currently exists by which anyone removes somebody else's scored
+contribution, so the weight has no caller yet - it is the mechanism, in place for the first
+moderation path that needs it.
+
+What the work actually fixed was a different asymmetry it exposed: a contributor **deleting their
+own wiki comment** kept its points, while withdrawing a photo retracted them. Same act, two
+answers. `WikiCommentDeleteView` is author-only, so every deletion through it is a withdrawal, and
+it retracts now.
+
+**Still open here:** the general "an event outlives its target" case for deletions that are neither
+a withdrawal nor a moderation - a cleanup command, say. Per the sign-off, anything that deletes in
+future "can handle the fallout of what that means", erring toward keeping benefits.
 
 **What is already fixed**, so this entry is not read as covering it: the *withdrawal* case -
 `detach_image_from_wiki(..., withdrawn_by_contributor=True)` - retracts as of 2026-09-06 via

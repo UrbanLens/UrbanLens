@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING, Self
 
-from django.db.models import Model, Sum
+from django.db.models import DecimalField, ExpressionWrapper, F, Model, Sum
 
 from urbanlens.dashboard.models import abstract
 
@@ -69,8 +69,16 @@ class ReputationEventQuerySet(abstract.DashboardQuerySet["ReputationEvent"]):
         return self.filter(wiki_id=_pk_of(wiki))
 
     def total_value(self) -> Decimal:
-        """Sum the value of the counting rows in this queryset."""
-        return self.counting().aggregate(total=Sum("value"))["total"] or Decimal(0)
+        """Sum the weighted value of the counting rows in this queryset.
+
+        ``weight`` is 1 for almost every row; it is how an ending that should
+        reduce standing without erasing it is expressed (D9), as against
+        ``retracted``, which removes the row from this sum entirely. Applied
+        here rather than folded into ``value`` so the original score survives
+        and the weight can be changed, or undone, without re-scoring.
+        """
+        weighted = ExpressionWrapper(F("value") * F("weight"), output_field=DecimalField(max_digits=18, decimal_places=4))
+        return self.counting().aggregate(total=Sum(weighted))["total"] or Decimal(0)
 
 
 class ReputationEventManager(abstract.DashboardManager.from_queryset(ReputationEventQuerySet)):

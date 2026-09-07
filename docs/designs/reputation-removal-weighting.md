@@ -67,6 +67,30 @@ job is this, rather than shaping anything else around reputation.
 
 ## Status
 
-Recorded, not built. P86 stays open with this as its answer: it is no longer blocked on a decision,
-only on someone implementing it. The withdrawal half is already done and is unaffected - a
-contributor ending their own contribution still retracts in full.
+**Built 2026-09-07**, and building it corrected two of the premises the decision was given under.
+Neither changes the decision; both change what it applies to.
+
+**Users can still delete a wiki - just not a top-level one.** There is no top-level wiki-delete
+route, as the sign-off assumed. But `location.wiki.detail_pin.edit` has a `delete()` that removes a
+**child `Wiki`** - a detail pin *is* a child wiki - and `Wiki.parent_wiki` is `CASCADE`, so it takes
+the whole subtree. `Comment.wiki` is `CASCADE` too, so other people's comments go with it. The
+cascade case the sign-off treated as hypothetical is live, and
+`CascadeKeepsBenefitsTests` pins the ruling on it: a cascade retracts nothing and weights nothing.
+
+**There is no site to apply the weight to yet.** Every path by which a reputation-earning
+contribution disappears was checked: the wiki photo delete is owner-only and already passes
+`withdrawn_by_contributor=True`; `WikiCommentDeleteView` refuses a non-author;
+`detach_image_from_wiki` has one caller. Nobody can currently remove somebody else's scored
+contribution, so `MODERATED_REMOVAL_WEIGHT` has no caller - it is the mechanism, waiting for the
+first moderation path that needs it. That is the point of building it now rather than later: the
+column and the sum are in place, so the path that needs it is a one-line change instead of a
+migration argument.
+
+**What the implementation actually fixed** was therefore not the moderator case at all. It was that
+a contributor **deleting their own wiki comment** kept its points, while withdrawing a photo
+retracted them - the same act, two different answers. `WikiCommentDeleteView` is author-only, so
+every deletion through it is a withdrawal; it retracts now, exactly as the photo path does.
+
+Shipped: `ReputationEvent.weight`/`weight_reason` (migration `0056`), `total_value()` summing
+`value * weight`, `lifetime_earned` left untouched, `weight_events_for_target`, and
+`MODERATED_REMOVAL_WEIGHT = 0.9` as the placeholder the sign-off confirmed.

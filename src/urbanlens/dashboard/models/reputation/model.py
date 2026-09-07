@@ -97,6 +97,13 @@ class ReputationEvent(abstract.DashboardModel):
             decay are an indexed equality filter.
         retracted: Whether this row currently counts. Reversible.
         retracted_reason: Why, for the audit trail.
+        weight: A multiplier on this row's contribution to the total, for
+            endings that should reduce standing without erasing it - see D9.
+            1 is "counts in full"; `retracted` is the separate, all-or-nothing
+            case. Deliberately a stored number rather than a rule: it is
+            reversible by setting it back, re-weightable by changing whatever
+            sets it, and a model can later set it per row.
+        weight_reason: Why the weight is not 1, for the audit trail.
     """
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="reputation_events")
@@ -110,6 +117,8 @@ class ReputationEvent(abstract.DashboardModel):
     period_key = CharField(max_length=7, db_index=True)
     retracted = BooleanField(default=False)
     retracted_reason = CharField(max_length=64, blank=True, default="")
+    weight = DecimalField(max_digits=6, decimal_places=4, default=Decimal(1))
+    weight_reason = CharField(max_length=64, blank=True, default="")
 
     objects = ReputationEventManager()
 

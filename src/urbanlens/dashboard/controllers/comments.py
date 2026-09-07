@@ -546,6 +546,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
     """DELETE /location/<slug>/wiki/comments/<int>/delete/"""
 
     def delete(self, request, location_slug, comment_id):
+        from urbanlens.dashboard.services.reputation.scoring import retract_events_for_target
         from urbanlens.dashboard.services.wiki.concealment import concealment_active
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
@@ -553,6 +554,12 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
+        # Owner-only, per the guard above, so this is always the contributor
+        # ending their own contribution - the same case, and the same treatment,
+        # as withdrawing a photo from a wiki (see detach_image_from_wiki). A
+        # removal by anyone else would be the weighted case instead; there is no
+        # such path here today, which is why this retracts outright.
+        retract_events_for_target(comment, reason="contribution_withdrawn")
         comment.delete()
         _discard_comment_image(comment)
         if markup_map is not None:
