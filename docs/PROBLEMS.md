@@ -1540,7 +1540,7 @@ real browser to verify; the roadmap entry carries the design.
 **Page overflows footer** - CSS-level, needs a browser to reproduce; nothing checkable
 statically.
 
-## P86 — Deleting a contribution outright leaves its reputation points standing, and `post_delete` cannot tell whose deletion it was
+## P86 — Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction
 
 `id: P86` · `status: open` · `updated: 2026-09-06`
 
@@ -1572,18 +1572,26 @@ a moderator removing a photo, a sweep, a cascade from a parent - must not. That 
 `revoke_community_bonuses_on_wiki_delete` is scoped to `deleted_by`, rather than either of them
 inferring intent from the row.
 
-So the question to answer first, and it is a product one:
+**Answered 2026-09-07: yes, but only slightly, and reversibly.** See D9,
+[`designs/reputation-removal-weighting.md`](designs/reputation-removal-weighting.md). This entry is
+no longer blocked on a decision - only on someone implementing it.
 
-1. **Should a contribution deleted by somebody else stop counting?** For the *quota bonus* the
-   answer is settled and is no - see P55 - because losing storage over a moderation action would
-   penalise the contributor. Points are arguably different: the argument for retracting is that the
-   ledger should count contributions that exist, and the argument against is that it hands any
-   moderator a lever on someone's standing.
-2. If the answer is "only the contributor's own deletions", every delete path that can be a
-   withdrawal needs to pass that intent in, the way the two quota paths already do - which is the
-   work, and it is spread across the delete paths rather than concentrated in a signal.
-3. If the answer is "any deletion retracts", it is the one loop over `_SUBSCRIPTIONS`, plus deciding
-   what a cascade means (deleting a wiki cascades its comments; those contributors did nothing).
+**The answer rules out what this entry proposed.** `retract_event` is a boolean: it removes the
+contribution's whole value. That is right for a withdrawal (P55) and is the opposite of "only very
+slightly". Re-scoring is out too - `score_event` values an *unscored* row and re-running it would
+re-apply diminishing returns and the caps.
+
+What fits is a per-event **weight** applied where the total is summed rather than where the value is
+written: a `weight` column defaulting to 1, `counting()` summing `value * weight`, and a removal
+setting it near 1. Reversal is setting it back; re-weighting later is changing one constant, with no
+migration and no lost history; and a future model can set per-event weights, which is the
+granularity Jess asked for. `lifetime_earned` must be excluded from the weight for the same reason
+it already ignores retraction - a moderator's removal should cost standing, never already-granted
+access.
+
+Two sub-questions D9 deliberately leaves open: the number (0.9 is a placeholder), and whether a
+*cascade* counts - deleting a wiki removes its comments, and those contributors did nothing. A
+weight makes it safe to start with the narrow case and widen later.
 
 **What is already fixed**, so this entry is not read as covering it: the *withdrawal* case -
 `detach_image_from_wiki(..., withdrawn_by_contributor=True)` - retracts as of 2026-09-06 via
