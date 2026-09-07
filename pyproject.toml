@@ -885,7 +885,7 @@ dev = [
     # against the browser's libsodium implementation (see docs/e2ee.md).
     "pynacl~=1.6.2",
     "pytest>=9.1.1",
-    "pytest-django~=4.12.0",
+    "pytest-django>=4.12,<4.15",
     # Installed but disabled in `addopts`; `bin/run_tests.sh --shuffle` enables it.
     "pytest-randomly~=4.1.0",
     # Parallel test workers. Off by default: each worker takes its own database,
