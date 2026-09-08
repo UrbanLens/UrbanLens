@@ -73,6 +73,7 @@ class DefinitionScopeTests(_CustomFieldsApiTestCase):
         cases = (
             ("get", reverse("external_api:custom_fields")),
             ("post", reverse("external_api:custom_fields")),
+            ("get", reverse("external_api:custom_fields.detail", kwargs={"field_id": field.pk})),
             ("patch", reverse("external_api:custom_fields.detail", kwargs={"field_id": field.pk})),
             ("delete", reverse("external_api:custom_fields.detail", kwargs={"field_id": field.pk})),
         )
@@ -164,6 +165,18 @@ class DefinitionCrudTests(_CustomFieldsApiTestCase):
         )
         self.assertEqual(response.status_code, HTTPStatus.CREATED, response.content)
         self.assertEqual(response.json()["options"], ["Indoor", "Outdoor"])
+
+    def test_get_returns_own_field(self) -> None:
+        """The owner can fetch one of their own field definitions by id."""
+        field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PHOTO, name="Gate code", field_type=CustomFieldType.TEXT
+        )
+        url = reverse("external_api:custom_fields.detail", kwargs={"field_id": field.pk})
+        response = self.client.get(url, **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, HTTPStatus.OK, response.content)
+        body = response.json()
+        self.assertEqual(body["name"], "Gate code")
+        self.assertEqual(body["id"], field.pk)
 
     def test_patch_renames_field(self) -> None:
         """PATCH applies a partial update without touching other attributes."""
@@ -266,6 +279,8 @@ class DefinitionCrudTests(_CustomFieldsApiTestCase):
             profile=self.other_profile, entity_type=CustomFieldEntity.PHOTO, name="Gate code"
         )
         url = reverse("external_api:custom_fields.detail", kwargs={"field_id": field.pk})
+        response = self.client.get(url, **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)
         response = self.client.patch(
             url, {"name": "Hijacked"}, content_type="application/json", **_bearer(self.raw_key)
         )
