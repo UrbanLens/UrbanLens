@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
@@ -98,6 +99,22 @@ class HistoricalFeaturesPlugin(UrbanLensPlugin):
     verbose_name: ClassVar[str] = "Historical Features"
     description: ClassVar[str] = "Shows buildings, roads, water features, railways and other historical features mapped near the pin, sourced through REData's OpenHistoricalMap registry."
     author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for REData's historical-features endpoint."""
+        return {
+            "redata_historical_features": ServiceDefaults(
+                display_name="REData Historical Features",
+                # Shares REData's single 1,000 req/hour "lookup" pool with
+                # geocode/weather/cultural-resources/etc. (see REData's own
+                # api-reference.md, "Rate limiting") - one call per pin-detail
+                # panel render, the same low-volume shape as the sibling
+                # redata_cultural_resources panel, so mirrored to match.
+                calls_per_minute=20,
+                calls_per_day=None,
+                notes="Mapped historical buildings/roads/water/etc. via GET /historical-features/. See services.apis.locations.redata_historical_features_gateway.",
+            ),
+        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the historical-features pin-detail panel."""

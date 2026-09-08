@@ -20,9 +20,13 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
-from urbanlens.dashboard.plugins.builtin.redata_historical_features import HistoricalFeaturesPanelSource
+from urbanlens.dashboard.plugins.builtin.redata_historical_features import (
+    HistoricalFeaturesPanelSource,
+    HistoricalFeaturesPlugin,
+)
 from urbanlens.dashboard.plugins.builtin.redata_incidents import IncidentHistoryPanelSource
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+from urbanlens.dashboard.services.core import rate_limiter
 from urbanlens.dashboard.services.pins.external_data import get_panel_source
 from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
@@ -90,7 +94,42 @@ class IncidentHistoryPanelRenderTests(TestCase):
                 count=0, complete=True, results=[]
             )
             self.source.fetch_envelope(40.5, -74.5)
-        gateway_cls.return_value.get_incidents.assert_called_once_with(40.5, -74.5, years=25, limit=500)
+        gateway_cls.return_value.get_incidents.assert_called_once_with(
+            40.5, -74.5, years=25, limit=500, force_refresh=True
+        )
+
+    def test_forces_a_live_refresh_so_the_free_panels_cache_cannot_truncate_the_window(self) -> None:
+        """P94: REData's incident cache has no ``years`` dimension - it keys purely on
+        coordinate + a radius pinned the same for every provider. If the free 3-year
+        panel populates that cache first (the common case, since it is the default
+        panel), an unforced fetch here would silently be served those same narrow
+        3-year rows for a full cache window with no error and no way to tell.
+        """
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_incidents_gateway.RedataIncidentsGateway"
+        ) as gateway_cls:
+            gateway_cls.return_value.get_incidents.return_value = LocationContextEnvelope(
+                count=0, complete=True, results=[]
+            )
+            self.source.fetch_envelope(40.5, -74.5)
+        _, kwargs = gateway_cls.return_value.get_incidents.call_args
+        self.assertTrue(kwargs.get("force_refresh"))
+
+    def test_the_free_panel_does_not_force_refresh(self) -> None:
+        """Anti-vacuity: force_refresh must stay scoped to the paid panel. Forcing it on
+        the free panel too would silently regress its whole caching benefit.
+        """
+        from urbanlens.dashboard.plugins.builtin.redata_incidents import PoliceIncidentsPanelSource
+
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_incidents_gateway.RedataIncidentsGateway"
+        ) as gateway_cls:
+            gateway_cls.return_value.get_incidents.return_value = LocationContextEnvelope(
+                count=0, complete=True, results=[]
+            )
+            PoliceIncidentsPanelSource().fetch_envelope(40.5, -74.5)
+        _, kwargs = gateway_cls.return_value.get_incidents.call_args
+        self.assertFalse(kwargs.get("force_refresh"))
 
     def test_cache_source_is_independent_of_the_free_panel(self) -> None:
         """Different years/limit fetches must never collide in LocationCache."""
@@ -230,3 +269,22 @@ class NewPanelsAreRegisteredTests(TestCase):
 
     def test_historical_features_is_registered(self) -> None:
         self.assertIsNotNone(get_panel_source("redata_historical_features"))
+
+
+class HistoricalFeaturesRateLimitTests(TestCase):
+    """A gateway with no registered defaults is unbudgeted, not free - see redata_historic_registers's own test."""
+
+    def test_the_plugin_declares_its_own_service_key(self) -> None:
+        self.assertIn("redata_historical_features", HistoricalFeaturesPlugin().get_service_defaults())
+
+    def test_get_limit_config_uses_the_declared_defaults_not_the_generic_fallback(self) -> None:
+        """Without a get_service_defaults() override, get_limit_config() falls through to the
+        generic 20/min-500/day default with no notes - indistinguishable from a service nobody
+        ever configured. calls_per_day=None here is what tells the two cases apart.
+        """
+        config = rate_limiter.get_limit_config("redata_historical_features")
+
+        self.assertEqual(config.display_name, "REData Historical Features")
+        self.assertEqual(config.calls_per_minute, 20)
+        self.assertIsNone(config.calls_per_day)
+        self.assertNotEqual(config.notes, "")

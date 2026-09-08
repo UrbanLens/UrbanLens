@@ -3513,3 +3513,42 @@ in this codebase today, per a search for `window.UL =`/`globalThis.UL =`), or (b
 script into a proper bundled TS entry the way `map-annotations.ts` already is for pin-detail/wiki maps - which is
 the broader, already-tracked P83/P34 initiative ("over half of every page's HTML is inline `<script>`"), not a
 scoped fix for this one badge. Left open and cross-referenced from both rather than attempted piecemeal here.
+
+## P93 — Nine REData plugins declare no rate-limit defaults for their own gateway's service key
+
+`id: P93` · `status: open` · `updated: 2026-09-08`
+
+Found 2026-09-08 in the pre-PR audit of `release/v_0_8_0`, while fixing the same gap on the release's new
+`HistoricalFeaturesPlugin` (`redata_historical_features.py`, fixed in the same commit as this entry - its
+`get_service_defaults()` now declares `redata_historical_features` and is **not** one of the plugins below).
+
+`dashboard/CLAUDE.md`'s "API Integrations" section says a plugin subclass "declares its rate-limit defaults." Nine
+pre-existing REData plugins don't: they define a gateway with its own `service_key`, but no
+`get_service_defaults()` override, and that key appears in neither `rate_limiter.SERVICE_REGISTRY` nor any
+plugin's declared defaults. `rate_limiter.get_limit_config()` never sees these keys as configured, so the first
+call to any of them silently creates an `ApiRateLimit` row from the generic fallback baked into
+`get_limit_config()` itself (`calls_per_minute=20`, `calls_per_day=500`, a `.title()`-cased display name, no
+`notes`) instead of a number anyone actually reasoned about for that integration.
+
+Affected plugin files (`dashboard/plugins/builtin/`) and the ungoverned service key(s) each one's gateway declares:
+
+- `redata_air_quality.py` → `redata_air_quality`
+- `redata_underground.py` → `redata_underground`
+- `redata_hydrology.py` → `redata_hydrology`
+- `redata_permits.py` → `redata_permits`
+- `redata_incidents.py` → `redata_incidents`
+- `hazard_history.py` → `redata_hazards`
+- `usgs_earthquakes.py` → `redata_hazards` (same key as `hazard_history.py` - two plugins share one ungoverned
+  budget)
+- `open_elevation.py` → `redata_elevation`
+- `redata_site_conditions.py` → `redata_land_cover`, `redata_soil`, `redata_walkability` (three keys from one
+  plugin)
+
+Not fixed here: each of these ten keys needs its own considered `calls_per_minute`/`calls_per_day` pair and
+`notes` explaining the choice (per-endpoint, referencing REData's `api-reference.md` "Rate limiting" section, the
+way `redata_historic_registers.py` and the now-fixed `redata_historical_features.py` do) rather than a single
+mechanical pass copying the same numbers into all nine files - that judgment call belongs with whoever does the
+fix, not rushed to close this entry out. `dashboard/tests/hypothesis/test_plugin_rate_limit_coverage.py` will not
+catch this class of gap on its own: it asserts every key present in `all_service_defaults()` has *a* limit, but a
+key that was never registered at all - like these - is simply absent from that mapping rather than showing up
+`unlimited`, so the existing test passes today with all nine still ungoverned.
