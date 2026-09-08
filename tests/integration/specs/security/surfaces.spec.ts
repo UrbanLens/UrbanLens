@@ -17,6 +17,7 @@ import {
     expectIndistinguishableFromMissing,
     expectNotServerError,
     expectRefused,
+    fetchOwnPhotoBytes,
     MISSING_UUID,
     wasRefused,
 } from "../../lib/security.js";
@@ -172,10 +173,14 @@ test.describe("media is gated", () => {
             test.skip(true, `Photo URL is off-origin (${target}); object-store signatures are a different contract.`);
         }
 
-        const owner = await apiRequestContext.get(target, { headers: { Authorization: `Bearer ${account.apiKey}` } });
+        // fetchOwnPhotoBytes rides out the P58 async-rename race
+        // (tasks.process_image_upload re-encodes the stored file shortly
+        // after upload) instead of trusting the url the upload response
+        // carried, which can already be superseded by the time this runs.
+        const { response: owner, url: photoUrl } = await fetchOwnPhotoBytes(api, apiRequestContext, photo.uuid, { Authorization: `Bearer ${account.apiKey}` });
         expect(owner.status(), "the owner cannot fetch their own photo URL, so the stranger's refusal would prove nothing").toBe(200);
 
-        const stranger = await apiRequestContext.get(target, {
+        const stranger = await apiRequestContext.get(photoUrl, {
             headers: { Authorization: `Bearer ${secondaryApi.apiKey}` },
         });
         await expectNotServerError(stranger, "stranger GET of a private photo URL");
