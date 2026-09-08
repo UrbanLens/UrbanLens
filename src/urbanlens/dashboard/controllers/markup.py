@@ -265,13 +265,32 @@ class MarkupJsonView(LoginRequiredMixin, View):
             child's name (``owner_name``).
         """
         owner, items = _resolve_owner(request, pin_slug, location_slug, map_uuid)
+        # Wiki-scoped concealment needs the requester's profile below in two
+        # places - the children=1 subtree filter and the layer-visibility
+        # computation - so it's resolved once here rather than twice.
+        # isinstance(owner, Wiki) already implies a wiki-route request (only
+        # location_slug resolves to a Wiki owner), matching the narrower
+        # `location_slug is not None and isinstance(owner, Wiki)` check the
+        # layer-visibility block below used to gate this on.
+        profile: Profile | None = None
+        if isinstance(owner, Wiki):
+            profile, _ = Profile.objects.get_or_create(user=request.user)
+
         include_children = request.GET.get("children") == "1"
         if include_children and isinstance(owner, Pin):
             subtree = Pin.objects.filter(pk=owner.pk).with_descendants()
             items = PinMarkup.objects.filter(parent_pin__in=subtree).select_related("parent_pin__location", "parent_pin__location__wiki", "layer")
         elif include_children and isinstance(owner, Wiki):
+            # Mirrors _resolve_owner's own single-wiki narrowing - the raw
+            # subtree filter below carries no concealment of its own.
+            from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
             subtree = Wiki.objects.filter(pk=owner.pk).with_descendants()
-            items = PinMarkup.objects.filter(parent_wiki__in=subtree).select_related("parent_wiki__location", "layer")
+            items = visible_rows(
+                PinMarkup.objects.filter(parent_wiki__in=subtree).select_related("parent_wiki__location", "layer"),
+                owner,
+                profile,
+            )
 
         # A visible item can still be filed under a layer this viewer cannot
         # see - wiki-scoped layer assignment isn't restricted to the item's
@@ -284,7 +303,6 @@ class MarkupJsonView(LoginRequiredMixin, View):
         if location_slug is not None and isinstance(owner, Wiki):
             from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
-            profile, _ = Profile.objects.get_or_create(user=request.user)
             visible_layer_ids = set(visible_rows(CustomLayer.objects.for_wiki(owner), owner, profile).values_list("pk", flat=True))
 
         markup_items = []
