@@ -615,9 +615,6 @@ class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebso
             except GroupChatPermissionError as exc:
                 logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
                 await self.send(text_data=json.dumps({"type": "error", "detail": "You don't have permission to do that."}))
-            except PermissionError as exc:
-                logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
-                await self.send(text_data=json.dumps({"type": "error", "detail": "You don't have permission to do that."}))
             except GroupChatValidationError as exc:
                 logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
                 await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please check it and try again."}))
