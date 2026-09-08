@@ -95,16 +95,23 @@ class StripeWebhookViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(StripeWebhookEvent.objects.exists())
 
-    def test_missing_webhook_secret_returns_503(self) -> None:
+    def test_missing_webhook_secret_is_a_clean_refusal_not_a_503(self) -> None:
+        """A deployment with no UL_STRIPE_WEBHOOK_SECRET configured can never verify any
+        signature, so every POST here is refused the same way a bad signature is (400) -
+        not a 503, which Stripe (and any prober) reads as a transient crash worth retrying.
+        Reproduces the live-deployment Playwright finding at
+        specs/security/surfaces.spec.ts:224 ("the Stripe webhook does not accept an unsigned
+        POST"), which failed against this exact misconfiguration on a dev stack."""
         with mock.patch.object(app_settings, "stripe_webhook_secret", None):
             response = self.client.post(
                 reverse("billing.stripe_webhook"),
-                data=b"{}",
+                data=b'{"type": "ping"}',
                 content_type="application/json",
-                HTTP_STRIPE_SIGNATURE="sig",
             )
 
-        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn(b"Traceback", response.content)
+        self.assertFalse(StripeWebhookEvent.objects.exists())
 
     def test_replaying_an_already_processed_event_does_not_reinvoke_the_handler(self) -> None:
         with (
