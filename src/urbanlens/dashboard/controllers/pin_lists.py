@@ -409,7 +409,8 @@ class PinListEditView(LoginRequiredMixin, View):
                 try:
                     pin_list.smart_boundary = parse_multipolygon_geojson(polygon_geojson)
                 except InvalidPolygonGeoJSONError as exc:
-                    return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
+                    logger.info("smart_boundary rejected: %s", exc)
+                    return JsonResponse({"ok": False, "error": "smart_boundary isn't a valid polygon or multipolygon."}, status=400)
             else:
                 pin_list.smart_boundary = None
             changed_fields.add("smart_boundary")

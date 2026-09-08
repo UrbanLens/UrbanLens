@@ -54,13 +54,33 @@ from urbanlens.dashboard.external_api.serializers_messaging import (
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
-from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupMessage
+from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupMessage
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.messaging.direct_message_shares import ShareTargetNotFoundError, ShareTargetPermissionError, ShareValidationError, send_message_with_share
+from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.services.messaging.direct_message_shares import (
+    CannotRecommendSelfError,
+    FriendRecommendationUnavailableError,
+    NotATripMemberError,
+    RecommendedProfileNotConnectedError,
+    SharedPinNotFoundError,
+    SharedProfileNotFoundError,
+    SharedTripNotFoundError,
+    ShareValidationError,
+    TripInviteNotConnectedError,
+    send_message_with_share,
+)
 from urbanlens.dashboard.services.messaging.direct_messages import (
     THREAD_PAGE_SIZE,
-    DirectMessagePermissionError,
+    DirectMessageTooLongError,
     DirectMessageValidationError,
+    EmptyDirectMessageError,
+    MalformedCiphertextError,
+    MixedPlaintextAndCiphertextError,
+    NoEligibleAttachmentsError,
+    NotConversationParticipantError,
+    NotDirectMessageRecipientError,
+    NotDirectMessageSenderError,
+    RecipientNotAcceptingMessagesError,
     can_direct_message,
     clear_email_debounce,
     delete_message_for_everyone,
@@ -74,8 +94,25 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
 )
 from urbanlens.dashboard.services.messaging.group_chats import (
     GROUP_THREAD_PAGE_SIZE,
+    MAX_GROUP_MEMBERS,
+    AddMembersRequiresCreatorError,
+    ClientUuidReusedAcrossGroupsError,
+    ConflictingMessageContentError,
+    EmptyMessageError,
     GroupChatPermissionError,
     GroupChatValidationError,
+    GroupNameRequiredError,
+    GroupNameTooLongError,
+    GroupNeedsMembersError,
+    MalformedEncryptedMessageError,
+    MemberNotAcceptingMessagesError,
+    MessageTooLongError,
+    NotAGroupMemberError,
+    NotMessageSenderError,
+    RemoveMemberRequiresCreatorError,
+    TargetNotAMemberError,
+    TooManyGroupMembersError,
+    UnknownKeyVersionError,
     add_group_members,
     create_group_chat,
     create_group_message,
@@ -367,15 +404,61 @@ class MessageThreadView(ExternalApiView):
                 image_ids=resolve_attachment_ids(profile, image_ids=data.get("image_ids"), image_uuids=data.get("image_uuids")),
                 client_uuid=client_uuid,
             )
-        except ShareTargetNotFoundError as exc:
-            return Response({"error": exc.safe_message}, status=404)
-        except (ShareTargetPermissionError, DirectMessagePermissionError) as exc:
+        except SharedPinNotFoundError as exc:
+            logger.info("external API message-send share rejected: %s", exc)
+            return Response({"error": "No such pin."}, status=404)
+        except SharedTripNotFoundError as exc:
+            logger.info("external API message-send share rejected: %s", exc)
+            return Response({"error": "No such trip."}, status=404)
+        except SharedProfileNotFoundError as exc:
+            logger.info("external API message-send share rejected: %s", exc)
+            return Response({"error": "No such profile."}, status=404)
+        except TripInviteNotConnectedError as exc:
+            logger.info("external API message-send share rejected: %s", exc)
+            return Response({"error": "You can only invite connected friends to a trip."}, status=403)
+        except NotATripMemberError as exc:
+            logger.info("external API message-send share rejected: %s", exc)
+            return Response({"error": "You aren't a member of that trip."}, status=403)
+        except CannotRecommendSelfError as exc:
+            logger.info("external API message-send share rejected: %s", exc)
+            return Response({"error": "Choose a different friend to recommend."}, status=403)
+        except RecommendedProfileNotConnectedError as exc:
+            logger.info("external API message-send share rejected: %s", exc)
+            return Response({"error": "You can only recommend your own connected friends."}, status=403)
+        except FriendRecommendationUnavailableError as exc:
+            # Deliberately one generic message for both the opt-out and the
+            # blocked case - see FriendRecommendationUnavailableError.
+            logger.info("external API message-send share rejected: %s", exc)
+            return Response({"error": "That profile can't be recommended right now."}, status=403)
+        except RecipientNotAcceptingMessagesError as exc:
             # send_message_with_share also propagates create_direct_message's
-            # own PermissionError, not just its own connected-friends check.
-            return Response({"error": exc.safe_message}, status=403)
-        except (ShareValidationError, DirectMessageValidationError) as exc:
-            # Likewise for create_direct_message's own ValueError.
-            return Response({"error": exc.safe_message}, status=400)
+            # own permission check, not just its own connected-friends check.
+            logger.info("external API message-send rejected: %s", exc)
+            return Response({"error": "This user isn't accepting messages from you."}, status=403)
+        except ShareValidationError as exc:
+            logger.info("external API message-send share rejected: %s", exc)
+            return Response({"error": "A message can carry only one share."}, status=400)
+        except DirectMessageTooLongError as exc:
+            logger.info("external API message-send rejected: %s", exc)
+            return Response({"error": f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters)."}, status=400)
+        except MixedPlaintextAndCiphertextError as exc:
+            logger.info("external API message-send rejected: %s", exc)
+            return Response({"error": "A message can't be both plaintext and encrypted."}, status=400)
+        except MalformedCiphertextError as exc:
+            logger.info("external API message-send rejected: %s", exc)
+            return Response({"error": "That encrypted message is malformed."}, status=400)
+        except NoEligibleAttachmentsError as exc:
+            logger.info("external API message-send rejected: %s", exc)
+            return Response({"error": "None of those attachments could be sent."}, status=400)
+        except EmptyDirectMessageError as exc:
+            logger.info("external API message-send rejected: %s", exc)
+            return Response({"error": "Message cannot be empty."}, status=400)
+        except DirectMessageValidationError as exc:
+            # send_message_with_share also propagates create_direct_message's
+            # own ValueError, not just its own validation - this is a fallback
+            # for a subclass not enumerated above.
+            logger.info("external API message-send rejected: %s", exc)
+            return Response({"error": "That message couldn't be sent."}, status=400)
 
         return Response(build_direct_message_payload(message, profile), status=200 if existed else 201)
 
@@ -432,8 +515,9 @@ class MessageReactionView(ExternalApiView):
 
         try:
             action = toggle_reaction(profile, message, emoji)
-        except DirectMessagePermissionError as exc:
-            return Response({"error": exc.safe_message}, status=403)
+        except NotConversationParticipantError as exc:
+            logger.info("external API reaction toggle rejected: %s", exc)
+            return Response({"error": "You aren't part of this conversation."}, status=403)
         return Response({"action": action, "reactions": build_direct_message_payload(message, profile)["reactions"]})
 
 
@@ -472,8 +556,9 @@ class MessageDetailView(ExternalApiView):
                 delete_message_for_everyone(message, profile)
             else:
                 delete_message_for_self(message, profile)
-        except DirectMessagePermissionError as exc:
-            return Response({"error": exc.safe_message}, status=403)
+        except (NotDirectMessageSenderError, NotDirectMessageRecipientError) as exc:
+            logger.info("external API message delete rejected: %s", exc)
+            return Response({"error": "You don't have permission to delete this message."}, status=403)
         return Response(status=204)
 
 
@@ -564,10 +649,27 @@ class GroupsView(ExternalApiView):
 
         try:
             group = create_group_chat(profile, serializer.validated_data["name"], members)
+        except MemberNotAcceptingMessagesError as exc:
+            logger.info("external API group creation rejected: %s", exc)
+            return Response({"error": "One of the people you tried to add isn't accepting messages from you."}, status=403)
         except GroupChatPermissionError as exc:
-            return Response({"error": exc.safe_message}, status=403)
+            logger.info("external API group creation rejected: %s", exc)
+            return Response({"error": "You don't have permission to do that."}, status=403)
+        except GroupNameRequiredError as exc:
+            logger.info("external API group creation rejected: %s", exc)
+            return Response({"error": "A group name is required."}, status=400)
+        except GroupNameTooLongError as exc:
+            logger.info("external API group creation rejected: %s", exc)
+            return Response({"error": f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters."}, status=400)
+        except GroupNeedsMembersError as exc:
+            logger.info("external API group creation rejected: %s", exc)
+            return Response({"error": "Add at least one other person to start a group."}, status=400)
+        except TooManyGroupMembersError as exc:
+            logger.info("external API group creation rejected: %s", exc)
+            return Response({"error": f"Groups are limited to {MAX_GROUP_MEMBERS} members."}, status=400)
         except GroupChatValidationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API group creation rejected: %s", exc)
+            return Response({"error": "That group couldn't be created."}, status=400)
 
         return Response(_group_payload(group, member_count=group.active_memberships().count(), is_muted=False), status=201)
 
@@ -609,10 +711,21 @@ class GroupDetailView(ExternalApiView):
         serializer.is_valid(raise_exception=True)
         try:
             group = rename_group_chat(group, profile, serializer.validated_data["name"])
+        except NotAGroupMemberError as exc:
+            logger.info("external API group rename rejected: %s", exc)
+            return Response({"error": "You aren't a member of this group."}, status=403)
         except GroupChatPermissionError as exc:
-            return Response({"error": exc.safe_message}, status=403)
+            logger.info("external API group rename rejected: %s", exc)
+            return Response({"error": "You don't have permission to do that."}, status=403)
+        except GroupNameRequiredError as exc:
+            logger.info("external API group rename rejected: %s", exc)
+            return Response({"error": "A group name is required."}, status=400)
+        except GroupNameTooLongError as exc:
+            logger.info("external API group rename rejected: %s", exc)
+            return Response({"error": f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters."}, status=400)
         except GroupChatValidationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API group rename rejected: %s", exc)
+            return Response({"error": "That name couldn't be used."}, status=400)
 
         membership = group.membership_for(profile)
         return Response(_group_payload(group, member_count=group.active_memberships().count(), is_muted=bool(membership and membership.muted)))
@@ -660,10 +773,33 @@ class GroupMessagesView(ExternalApiView):
                 key_version=data.get("key_version") or 0,
                 client_uuid=client_uuid,
             )
+        except NotAGroupMemberError as exc:
+            logger.info("external API group message rejected: %s", exc)
+            return Response({"error": "You aren't a member of this group."}, status=403)
         except GroupChatPermissionError as exc:
-            return Response({"error": exc.safe_message}, status=403)
+            logger.info("external API group message rejected: %s", exc)
+            return Response({"error": "You don't have permission to do that."}, status=403)
+        except ClientUuidReusedAcrossGroupsError as exc:
+            logger.info("external API group message rejected: %s", exc)
+            return Response({"error": "That client_uuid was already used for a message in a different group."}, status=400)
+        except MessageTooLongError as exc:
+            logger.info("external API group message rejected: %s", exc)
+            return Response({"error": f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters)."}, status=400)
+        except ConflictingMessageContentError as exc:
+            logger.info("external API group message rejected: %s", exc)
+            return Response({"error": "A message is either plaintext or encrypted, never both."}, status=400)
+        except MalformedEncryptedMessageError as exc:
+            logger.info("external API group message rejected: %s", exc)
+            return Response({"error": "That encrypted message is malformed."}, status=400)
+        except UnknownKeyVersionError as exc:
+            logger.info("external API group message rejected: %s", exc)
+            return Response({"error": "Unknown encryption key version for this group."}, status=400)
+        except EmptyMessageError as exc:
+            logger.info("external API group message rejected: %s", exc)
+            return Response({"error": "Message cannot be empty."}, status=400)
         except GroupChatValidationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API group message rejected: %s", exc)
+            return Response({"error": "That message couldn't be sent."}, status=400)
 
         return Response(build_group_message_payload(message, profile), status=200 if existed else 201)
 
@@ -779,12 +915,23 @@ class GroupMembersView(ExternalApiView):
 
         try:
             created = add_group_members(group, profile, members)
-        except GroupChatPermissionError as exc:
+        except AddMembersRequiresCreatorError as exc:
             # Still authoritative - the pre-check above is an anti-enumeration
             # measure, not a replacement for the service's own permission rule.
-            return Response({"error": exc.safe_message}, status=403)
+            logger.info("external API group add-members rejected: %s", exc)
+            return Response({"error": "Only the group's creator can add members."}, status=403)
+        except MemberNotAcceptingMessagesError as exc:
+            logger.info("external API group add-members rejected: %s", exc)
+            return Response({"error": "One of the people you tried to add isn't accepting messages from you."}, status=403)
+        except GroupChatPermissionError as exc:
+            logger.info("external API group add-members rejected: %s", exc)
+            return Response({"error": "You don't have permission to do that."}, status=403)
+        except TooManyGroupMembersError as exc:
+            logger.info("external API group add-members rejected: %s", exc)
+            return Response({"error": f"Groups are limited to {MAX_GROUP_MEMBERS} members."}, status=400)
         except GroupChatValidationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API group add-members rejected: %s", exc)
+            return Response({"error": "Those members couldn't be added."}, status=400)
         return Response({"added": len(created)})
 
     @extend_schema(
@@ -828,10 +975,18 @@ class GroupMembersView(ExternalApiView):
         for target in targets:
             try:
                 remove_group_member(group, profile, target)
+            except RemoveMemberRequiresCreatorError as exc:
+                logger.info("external API group remove-member rejected: %s", exc)
+                return Response({"error": "Only the group's creator can remove other members."}, status=403)
             except GroupChatPermissionError as exc:
-                return Response({"error": exc.safe_message}, status=403)
+                logger.info("external API group remove-member rejected: %s", exc)
+                return Response({"error": "You don't have permission to do that."}, status=403)
+            except TargetNotAMemberError as exc:
+                logger.info("external API group remove-member rejected: %s", exc)
+                return Response({"error": "They aren't a member of this group."}, status=400)
             except GroupChatValidationError as exc:
-                return Response({"error": exc.safe_message}, status=400)
+                logger.info("external API group remove-member rejected: %s", exc)
+                return Response({"error": "That member couldn't be removed."}, status=400)
             removed += 1
         return Response({"removed": removed})
 
@@ -887,10 +1042,21 @@ class GroupPinShareView(ExternalApiView):
 
         try:
             message = share_pin_in_group_message(profile, group, pin, data.get("body") or "", client_uuid=client_uuid)
+        except NotAGroupMemberError as exc:
+            logger.info("external API group pin-share rejected: %s", exc)
+            return Response({"error": "You aren't a member of this group."}, status=403)
         except GroupChatPermissionError as exc:
-            return Response({"error": exc.safe_message}, status=403)
+            logger.info("external API group pin-share rejected: %s", exc)
+            return Response({"error": "You don't have permission to do that."}, status=403)
+        except ClientUuidReusedAcrossGroupsError as exc:
+            logger.info("external API group pin-share rejected: %s", exc)
+            return Response({"error": "That client_uuid was already used for a message in a different group."}, status=400)
+        except MessageTooLongError as exc:
+            logger.info("external API group pin-share rejected: %s", exc)
+            return Response({"error": f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters)."}, status=400)
         except GroupChatValidationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API group pin-share rejected: %s", exc)
+            return Response({"error": "That pin couldn't be shared."}, status=400)
 
         return Response(build_group_message_payload(message, profile), status=200 if existed else 201)
 
@@ -992,7 +1158,7 @@ class GroupMessageDetailView(ExternalApiView):
 
         try:
             delete_group_message(message, profile)
-        except GroupChatPermissionError as exc:
+        except NotMessageSenderError as exc:
             # A deliberate 403 where the rest of this package answers 404. The
             # 404-everywhere rule exists to stop a caller learning whether a
             # row exists; here they were provably already shown it - the lookup
@@ -1001,7 +1167,11 @@ class GroupMessageDetailView(ExternalApiView):
             # leaks nothing they don't have. Answering 404 instead would tell a
             # client "that message is gone" for a message still sitting in
             # their thread, which reads as a sync bug.
-            return Response({"error": exc.safe_message}, status=403)
+            logger.info("external API group message delete rejected: %s", exc)
+            return Response({"error": "Only the sender can delete this message."}, status=403)
+        except GroupChatPermissionError as exc:
+            logger.info("external API group message delete rejected: %s", exc)
+            return Response({"error": "You don't have permission to do that."}, status=403)
         return Response(status=204)
 
 

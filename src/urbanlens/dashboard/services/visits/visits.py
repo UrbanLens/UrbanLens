@@ -597,25 +597,21 @@ def sync_last_visited(pin: Pin) -> None:
 
 
 class VisitLoggingDisabledError(Exception):
-    """The profile has turned visit-history tracking off.
+    """The profile being visited has ``track_pin_visits`` off.
 
-    The message is safe to surface to the caller.
+    The message is for logs, not the response: a catch site must author its
+    own user-facing text rather than relay it - see ``PinCreationError``'s
+    docstring in ``services.pins.pin_creation`` for why.
     """
-
-    def __init__(self, message: str = "Visit logging is turned off - enable it in Settings to log a visit.") -> None:
-        self.safe_message = message
-        super().__init__(message)
 
 
 class VisitInFutureError(Exception):
     """The submitted visit time has not happened yet.
 
-    The message is safe to surface to the caller.
+    The message is for logs, not the response: a catch site must author its
+    own user-facing text rather than relay it - see ``PinCreationError``'s
+    docstring in ``services.pins.pin_creation`` for why.
     """
-
-    def __init__(self, message: str = "A visit cannot be logged in the future.") -> None:
-        self.safe_message = message
-        super().__init__(message)
 
 
 #: How far ahead of this machine's clock a visit time may sit before it is
@@ -657,9 +653,9 @@ def create_manual_visit(pin: Pin, *, visited_at: datetime.datetime, notes: str |
             permanently the most recently visited thing its owner has.
     """
     if not visit_logging_allowed(pin.profile):
-        raise VisitLoggingDisabledError
+        raise VisitLoggingDisabledError(f"profile {pin.profile_id} has track_pin_visits=False (pin {pin.pk})")
     if visited_at > timezone.now() + MAX_VISIT_CLOCK_SKEW:
-        raise VisitInFutureError
+        raise VisitInFutureError(f"pin {pin.pk}: visited_at={visited_at.isoformat()} exceeds now+{MAX_VISIT_CLOCK_SKEW} skew allowance")
 
     visit = PinVisit.objects.create(pin=pin, visited_at=visited_at, notes=notes, source=VisitSource.MANUAL, markup_map=markup_map)
     sync_last_visited(pin)

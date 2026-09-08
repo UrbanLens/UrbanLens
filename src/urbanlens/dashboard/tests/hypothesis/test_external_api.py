@@ -487,7 +487,9 @@ class PinTombstoneTests(TestCase):
         self.assertEqual(response.status_code, 410)
         body = response.json()
         self.assertTrue(body["full_resync_required"])
-        self.assertIn("resync", body["error"])
+        self.assertEqual(
+            body["error"], "That deletion range is too old to sync incrementally - do a full resync instead."
+        )
 
     def test_deleted_since_inside_retention_is_served_normally(self) -> None:
         from urbanlens.dashboard.services.pins.pin_sync import TOMBSTONE_RETENTION

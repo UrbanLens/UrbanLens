@@ -60,12 +60,12 @@ TOMBSTONE_RETENTION = timedelta(days=400)
 class InvalidSyncCursorError(ValueError):
     """The supplied cursor is not one this service issued.
 
-    ``safe_message`` is safe to surface to the caller.
+    The message is for logs, not the response: a caller's HTTP-facing code
+    should catch this and author its own user-facing text, rather than
+    relaying the exception's message - that keeps a future raise site here
+    from being able to smuggle unreviewed text into a response just by
+    adding a new ``raise``.
     """
-
-    def __init__(self) -> None:
-        self.safe_message = "Invalid sync cursor."
-        super().__init__(self.safe_message)
 
 
 class StaleDeletedSinceError(ValueError):
@@ -75,12 +75,13 @@ class StaleDeletedSinceError(ValueError):
     asking for deletions from before that floor could silently miss some -
     incremental sync is no longer trustworthy and the client must resync its
     pins from scratch (drop local rows absent from a full ``pins/`` walk).
-    ``safe_message`` is safe to surface to the caller.
-    """
 
-    def __init__(self) -> None:
-        self.safe_message = "deleted_since is older than the deletion-history retention window; do a full resync instead."
-        super().__init__(self.safe_message)
+    The message is for logs, not the response: a caller's HTTP-facing code
+    should catch this and author its own user-facing text, rather than
+    relaying the exception's message - that keeps a future raise site here
+    from being able to smuggle unreviewed text into a response just by
+    adding a new ``raise``.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,9 +126,9 @@ def _decode_cursor(cursor: str) -> tuple[datetime, int]:
         stamp = datetime.fromisoformat(stamp_raw)
         pk = int(pk_raw)
     except (ValueError, binascii.Error, UnicodeDecodeError) as exc:
-        raise InvalidSyncCursorError from exc
+        raise InvalidSyncCursorError(f"cursor {cursor!r} failed to decode: {exc}") from exc
     if timezone.is_naive(stamp):
-        raise InvalidSyncCursorError
+        raise InvalidSyncCursorError(f"cursor {cursor!r} decoded to a naive timestamp {stamp!r}")
     return stamp, pk
 
 
@@ -246,7 +247,7 @@ def sync_tombstones_page(
             never saw, so it must full-resync instead (HTTP 410 upstream).
     """
     if deleted_since is not None and deleted_since < timezone.now() - TOMBSTONE_RETENTION:
-        raise StaleDeletedSinceError
+        raise StaleDeletedSinceError(f"deleted_since={deleted_since.isoformat()} is older than TOMBSTONE_RETENTION ({TOMBSTONE_RETENTION.days} days) for profile {profile.pk}; tombstones this old may already be pruned.")
     watermark = _watermark()
     limit = min(max(int(limit or MapPinPayloadService.DEFAULT_LIMIT), 1), MapPinPayloadService.MAX_LIMIT)
 

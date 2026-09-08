@@ -33,7 +33,8 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.two_factor import has_second_factor
 from urbanlens.dashboard.services.auth.webauthn import (
     SESSION_AUTHENTICATION_CHALLENGE,
-    WebAuthnError,
+    CredentialNotRegisteredError,
+    NoLoginPasskeysError,
     build_authentication_options,
     build_registration_options,
     has_passkeys,
@@ -142,7 +143,7 @@ class UnlockOnlyPasskeysAreNotLoginFactorsTests(TestCase):
         request = RequestFactory().get("/")
         request.session = {}
 
-        with pytest.raises(WebAuthnError):
+        with pytest.raises(NoLoginPasskeysError):
             build_authentication_options(request, profile.user)
 
     def test_unlock_only_assertion_cannot_complete_login(self) -> None:
@@ -153,7 +154,7 @@ class UnlockOnlyPasskeysAreNotLoginFactorsTests(TestCase):
         request.session = {SESSION_AUTHENTICATION_CHALLENGE: _b64url(os.urandom(32))}
         assertion = json.dumps({"rawId": _b64url(bytes(unlock_cred.credential_id))})
 
-        with pytest.raises(WebAuthnError, match="not registered"):
+        with pytest.raises(CredentialNotRegisteredError):
             verify_authentication(request, profile.user, assertion)
 
 

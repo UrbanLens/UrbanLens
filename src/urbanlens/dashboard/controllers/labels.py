@@ -37,7 +37,15 @@ from urbanlens.dashboard.services.core.numbers import safe_int
 from urbanlens.dashboard.services.core.text_limits import column_length_error, column_max_length
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
-from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
+from urbanlens.dashboard.services.labels.merge import (
+    LabelKindMismatchError,
+    NoSourceLabelsError,
+    ProtectedSourceLabelError,
+    SelfMergeError,
+    TargetLabelNotFoundError,
+    UnownedSourceLabelError,
+    merge_labels,
+)
 from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
 from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -957,8 +965,24 @@ class LabelMergeView(_LabelKindMixin, LoginRequiredMixin, View):
 
         try:
             merge_labels(target=target, sources=[source], profile=profile)
-        except LabelMergeError as exc:
-            return HttpResponse(exc.safe_message, status=400)
+        except NoSourceLabelsError as exc:
+            logger.info("label merge rejected: %s", exc)
+            return HttpResponse("Select at least one label to merge.", status=400)
+        except TargetLabelNotFoundError as exc:
+            logger.info("label merge rejected: %s", exc)
+            return HttpResponse("No such label to merge into.", status=400)
+        except SelfMergeError as exc:
+            logger.info("label merge rejected: %s", exc)
+            return HttpResponse("A label can't be merged into itself.", status=400)
+        except LabelKindMismatchError as exc:
+            logger.info("label merge rejected: %s", exc)
+            return HttpResponse("Labels must be the same kind to be merged.", status=400)
+        except UnownedSourceLabelError as exc:
+            logger.info("label merge rejected: %s", exc)
+            return HttpResponse("You can only merge labels you own.", status=400)
+        except ProtectedSourceLabelError as exc:
+            logger.info("label merge rejected: %s", exc)
+            return HttpResponse("Protected labels can't be merged away.", status=400)
 
         return _render_rows(request, self.kind, profile)
 
@@ -1011,8 +1035,24 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
 
         try:
             merge_labels(target=target, sources=source_list, profile=profile)
-        except LabelMergeError as exc:
-            return HttpResponse(exc.safe_message, status=400)
+        except NoSourceLabelsError as exc:
+            logger.info("bulk label merge rejected: %s", exc)
+            return HttpResponse("Select at least one label to merge.", status=400)
+        except TargetLabelNotFoundError as exc:
+            logger.info("bulk label merge rejected: %s", exc)
+            return HttpResponse("No such label to merge into.", status=400)
+        except SelfMergeError as exc:
+            logger.info("bulk label merge rejected: %s", exc)
+            return HttpResponse("A label can't be merged into itself.", status=400)
+        except LabelKindMismatchError as exc:
+            logger.info("bulk label merge rejected: %s", exc)
+            return HttpResponse("Labels must be the same kind to be merged.", status=400)
+        except UnownedSourceLabelError as exc:
+            logger.info("bulk label merge rejected: %s", exc)
+            return HttpResponse("You can only merge labels you own.", status=400)
+        except ProtectedSourceLabelError as exc:
+            logger.info("bulk label merge rejected: %s", exc)
+            return HttpResponse("Protected labels can't be merged away.", status=400)
 
         return _render_rows(request, self.kind, profile)
 

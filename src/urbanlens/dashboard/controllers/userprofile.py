@@ -110,12 +110,32 @@ class ViewProfileView(LoginRequiredMixin, View):
         if avatar_file:
             from django.contrib import messages
 
-            from urbanlens.dashboard.services.profile.avatar import AvatarUploadError, set_profile_avatar
+            from urbanlens.dashboard.services.profile.avatar import (
+                AvatarMalwareDetectedError,
+                AvatarScanUnavailableError,
+                AvatarTooLargeError,
+                AvatarUnsupportedFormatError,
+                AvatarUploadError,
+                set_profile_avatar,
+            )
 
             try:
                 set_profile_avatar(profile, avatar_file)
+            except AvatarTooLargeError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That file is too large. Please upload a smaller image.")
+            except AvatarUnsupportedFormatError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That file isn't a supported image format. Please upload a JPEG, PNG, GIF, WebP, HEIC, BMP, TIFF, or AVIF file.")
+            except AvatarMalwareDetectedError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That file failed a security scan and wasn't uploaded.")
+            except AvatarScanUnavailableError as exc:
+                logger.warning("avatar upload scan unavailable for %s: %s", profile.pk, exc)
+                messages.error(request, "Our antivirus scanner is temporarily unavailable. Please try again shortly.")
             except AvatarUploadError as exc:
-                messages.error(request, exc.safe_message)
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That avatar couldn't be uploaded.")
         return redirect("profile.view")
 
     def _can_view_profile(self, request: HttpRequest, profile: Profile) -> bool:
@@ -450,7 +470,14 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if field == "avatar":
-            from urbanlens.dashboard.services.profile.avatar import AvatarUploadError, set_profile_avatar
+            from urbanlens.dashboard.services.profile.avatar import (
+                AvatarMalwareDetectedError,
+                AvatarScanUnavailableError,
+                AvatarTooLargeError,
+                AvatarUnsupportedFormatError,
+                AvatarUploadError,
+                set_profile_avatar,
+            )
 
             file = request.FILES.get("file_value")
             if not file:
@@ -461,8 +488,21 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             # the hero card's form takes.
             try:
                 set_profile_avatar(profile, file)
+            except AvatarTooLargeError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That file is too large. Please upload a smaller image."}, status=413)
+            except AvatarUnsupportedFormatError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That file isn't a supported image format. Please upload a JPEG, PNG, GIF, WebP, HEIC, BMP, TIFF, or AVIF file."}, status=400)
+            except AvatarMalwareDetectedError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That file failed a security scan and wasn't uploaded."}, status=422)
+            except AvatarScanUnavailableError as exc:
+                logger.warning("avatar upload scan unavailable for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "Our antivirus scanner is temporarily unavailable. Please try again shortly."}, status=503)
             except AvatarUploadError as exc:
-                return JsonResponse({"error": exc.safe_message}, status=exc.status_code)
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That avatar couldn't be uploaded."}, status=400)
             return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
 
         if field == "avatar_gravatar":
@@ -1098,9 +1138,10 @@ class ProfileTrustView(LoginRequiredMixin, View):
         author = _authenticated_profile(request)
 
         try:
-            require_distinct(author, subject, "Cannot rate your own profile.")
+            require_distinct(author, subject, "self-rating attempt")
         except SelfAnnotationError as exc:
-            return HttpResponse(exc.safe_message, status=400)
+            logger.info("trust rating rejected: %s", exc)
+            return HttpResponse("You cannot rate your own profile.", status=400)
 
         try:
             rating = int(request.POST.get("rating", 0))
@@ -1134,15 +1175,24 @@ class ProfileNicknameView(LoginRequiredMixin, View):
         Returns:
             The re-rendered annotation partial, or 400 for a self-nickname.
         """
-        from urbanlens.dashboard.services.profile.profile_annotations import AnnotationError, SelfAnnotationError, clear_nickname, require_distinct, set_nickname
+        from urbanlens.dashboard.services.profile.profile_annotations import (
+            MAX_PROFILE_NICKNAME_LENGTH,
+            AnnotationError,
+            NicknameTooLongError,
+            SelfAnnotationError,
+            clear_nickname,
+            require_distinct,
+            set_nickname,
+        )
 
         subject = get_object_or_404(Profile, slug=profile_slug)
         author = _authenticated_profile(request)
 
         try:
-            require_distinct(author, subject, "Cannot nickname your own profile.")
+            require_distinct(author, subject, "self-nickname attempt")
         except SelfAnnotationError as exc:
-            return HttpResponse(exc.safe_message, status=400)
+            logger.info("nickname rejected: %s", exc)
+            return HttpResponse("You cannot set a nickname for your own profile.", status=400)
 
         nickname = request.POST.get("nickname", "").strip()
         if not nickname:
@@ -1151,8 +1201,12 @@ class ProfileNicknameView(LoginRequiredMixin, View):
         else:
             try:
                 set_nickname(author, subject, nickname)
+            except NicknameTooLongError as exc:
+                logger.info("nickname rejected: %s", exc)
+                return HttpResponse(f"Nickname must be {MAX_PROFILE_NICKNAME_LENGTH} characters or fewer.", status=400)
             except AnnotationError as exc:
-                return HttpResponse(exc.safe_message, status=400)
+                logger.info("nickname rejected: %s", exc)
+                return HttpResponse("That nickname is invalid.", status=400)
 
         return _render_profile_annotation_partial(request, author, subject)
 

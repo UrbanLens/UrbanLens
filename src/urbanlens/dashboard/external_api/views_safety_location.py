@@ -34,6 +34,7 @@ not even a partner on it".
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from drf_spectacular.utils import extend_schema
@@ -44,10 +45,12 @@ from urbanlens.dashboard.external_api.serializers import ErrorSerializer
 from urbanlens.dashboard.external_api.serializers_safety_location import SafetyCheckinLocationSerializer, SafetyCheckinLocationUpdateSerializer
 from urbanlens.dashboard.external_api.throttling import ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle, SafetyLocationThrottle
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.services.visits.safety import SafetyValidationError, set_live_location_sharing, update_live_location
+from urbanlens.dashboard.services.visits.safety import LiveLocationUnavailableError, set_live_location_sharing, update_live_location
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
+
+logger = logging.getLogger(__name__)
 
 
 class SafetyCheckinLocationView(SafetyCheckinViewerScopedView):
@@ -116,7 +119,8 @@ class SafetyCheckinLocationView(SafetyCheckinViewerScopedView):
         if "latitude" in data:
             try:
                 update_live_location(checkin, latitude=data["latitude"], longitude=data["longitude"], accuracy=data.get("accuracy"))
-            except SafetyValidationError as exc:
-                return Response({"error": exc.safe_message}, status=400)
+            except LiveLocationUnavailableError as exc:
+                logger.info("external API live location update rejected on checkin %s: %s", checkin.pk, exc)
+                return Response({"error": "Live location sharing is not enabled for this check-in, or it has already concluded."}, status=400)
 
         return Response(SafetyCheckinLocationSerializer(checkin).data)

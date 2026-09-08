@@ -15,7 +15,7 @@ from django.views import View
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, CommentValidationError, comment_is_visible, toggle_reaction, top_level_comment_queryset, visible_comment_count, visible_comment_tree
+from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, UnsupportedReactionEmojiError, comment_is_visible, toggle_reaction, top_level_comment_queryset, visible_comment_count, visible_comment_tree
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import (
@@ -621,7 +621,8 @@ class CommentReactionView(LoginRequiredMixin, View):
         # untouched, and only the panel's copy happened to already be correct.
         try:
             toggle_reaction(profile, comment, request.POST.get("emoji", ""))
-        except CommentValidationError:
+        except UnsupportedReactionEmojiError as exc:
+            logger.info("comment reaction rejected: %s", exc)
             return HttpResponse("Invalid emoji.", status=400)
         return _render_reaction_row(request, comment, profile)
 

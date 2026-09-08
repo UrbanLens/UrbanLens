@@ -1019,12 +1019,16 @@ class LoginTwoFactorOptionsView(View):
         if user is None:
             return JsonResponse({"error": "No sign-in in progress. Please log in again."}, status=400)
 
-        from urbanlens.dashboard.services.auth.webauthn import WebAuthnError, build_authentication_options
+        from urbanlens.dashboard.services.auth.webauthn import NoLoginPasskeysError, WebAuthnError, build_authentication_options
 
         try:
             options_json = build_authentication_options(request, user)
+        except NoLoginPasskeysError as exc:
+            logger.info("2fa passkey options rejected: %s", exc)
+            return JsonResponse({"error": "This account has no passkeys registered."}, status=400)
         except WebAuthnError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("2fa passkey options rejected: %s", exc)
+            return JsonResponse({"error": "Passkey sign-in could not be started."}, status=400)
         return HttpResponse(options_json, content_type="application/json")
 
 
@@ -1036,17 +1040,35 @@ class LoginTwoFactorVerifyView(View):
         if user is None:
             return JsonResponse({"error": "No sign-in in progress. Please log in again."}, status=400)
 
-        from urbanlens.dashboard.services.auth.webauthn import WebAuthnError, verify_authentication
+        from urbanlens.dashboard.services.auth.webauthn import (
+            AuthenticationNotPendingError,
+            AuthenticationVerificationError,
+            CredentialNotRegisteredError,
+            MalformedCredentialResponseError,
+            WebAuthnError,
+            verify_authentication,
+        )
 
         try:
             verify_authentication(request, user, request.body.decode("utf-8"))
-        except (WebAuthnError, UnicodeDecodeError) as exc:
-            if isinstance(exc, WebAuthnError):
-                message = exc.safe_message
-            else:
-                logger.warning("Passkey verification body was not valid UTF-8: %s", exc, exc_info=True)
-                message = "Invalid passkey response."
-            return JsonResponse({"error": message}, status=400)
+        except UnicodeDecodeError as exc:
+            logger.warning("Passkey verification body was not valid UTF-8: %s", exc, exc_info=True)
+            return JsonResponse({"error": "Invalid passkey response."}, status=400)
+        except AuthenticationNotPendingError as exc:
+            logger.info("2fa passkey verification rejected: %s", exc)
+            return JsonResponse({"error": "No passkey sign-in in progress. Please try again."}, status=400)
+        except MalformedCredentialResponseError as exc:
+            logger.info("2fa passkey verification rejected: %s", exc)
+            return JsonResponse({"error": "Malformed passkey response."}, status=400)
+        except CredentialNotRegisteredError as exc:
+            logger.info("2fa passkey verification rejected: %s", exc)
+            return JsonResponse({"error": "That passkey is not registered to this account."}, status=400)
+        except AuthenticationVerificationError as exc:
+            logger.info("2fa passkey verification rejected: %s", exc)
+            return JsonResponse({"error": "That passkey could not be verified."}, status=400)
+        except WebAuthnError as exc:
+            logger.info("2fa passkey verification rejected: %s", exc)
+            return JsonResponse({"error": "That passkey could not be verified."}, status=400)
 
         redirect_to = _complete_two_factor_login(request, user)
         return JsonResponse({"ok": True, "redirect": redirect_to})

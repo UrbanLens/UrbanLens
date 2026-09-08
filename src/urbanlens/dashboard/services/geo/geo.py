@@ -12,16 +12,29 @@ from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, P
 
 
 class InvalidPolygonGeoJSONError(ValueError):
-    """The submitted GeoJSON isn't a valid polygon/multipolygon geometry.
+    """Base for every way a submitted geometry can fail to be a usable polygon.
 
-    Deliberately never carries the underlying ``GEOSException`` text - that
-    can echo back GEOS/GDAL internals, not just a description of what the
-    caller submitted. ``safe_message`` is safe to surface directly.
+    ``message`` is for logs, not a response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    (and possibly GEOS/GDAL-internals-bearing) text into a response just by
+    adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class GeoJSONParseError(InvalidPolygonGeoJSONError):
+    """The payload isn't parseable geometry at all - malformed JSON, an unknown
+    ``type``, or a shape GEOS/GDAL otherwise rejects.
+    """
+
+
+class NotPolygonalGeometryError(InvalidPolygonGeoJSONError):
+    """The payload parsed to a real geometry, but not a Polygon or MultiPolygon."""
+
+
+class EmptyPolygonGeometryError(InvalidPolygonGeoJSONError):
+    """The payload parsed to a Polygon/MultiPolygon with no coordinates."""
 
 
 def geometry_to_geojson(geom) -> dict | None:
@@ -39,8 +52,9 @@ def parse_multipolygon_geojson(polygon_geojson: dict) -> MultiPolygon:
         The parsed geometry, coerced to MultiPolygon.
 
     Raises:
-        InvalidPolygonGeoJSONError: If the payload isn't valid polygonal GeoJSON,
-            or is valid but not polygonal.
+        GeoJSONParseError: The payload isn't valid GeoJSON/geometry at all.
+        NotPolygonalGeometryError: It parsed, but isn't a Polygon or MultiPolygon.
+        EmptyPolygonGeometryError: It parsed to a Polygon/MultiPolygon with no coordinates.
     """
     try:
         geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
@@ -49,20 +63,21 @@ def parse_multipolygon_geojson(polygon_geojson: dict) -> MultiPolygon:
         # through OGR, so most malformed input - a bare `{}`, an unknown `type`,
         # a `Polygon` with no coordinates - surfaces as GDALException, which is
         # not a GEOSException subclass. Every caller handles
-        # InvalidPolygonGeoJSONError as a 400, so anything escaping here is a
-        # 500 instead, on the public API as well as the drawing editors.
-        raise InvalidPolygonGeoJSONError("Invalid polygon geometry") from exc
+        # InvalidPolygonGeoJSONError (of which this is a subclass) as a 400, so
+        # anything escaping here is a 500 instead, on the public API as well as
+        # the drawing editors.
+        raise GeoJSONParseError(f"GEOSGeometry rejected the submitted GeoJSON: {exc!r}") from exc
     if isinstance(geom, Polygon):
         geom = MultiPolygon(geom, srid=geom.srid)
     if not isinstance(geom, MultiPolygon):
-        raise InvalidPolygonGeoJSONError("Boundary must be a Polygon or MultiPolygon")
+        raise NotPolygonalGeometryError(f"Parsed to a {geom.geom_type}, not a Polygon or MultiPolygon")
     if geom.empty:
         # `{"type": "Polygon", "coordinates": []}` parses cleanly into an empty
         # geometry. Storing it is worse than rejecting it: `dissolve_polygons`
         # below documents the same trap - an empty polygon in a `__within`
         # lookup matches zero rows rather than imposing no restriction - and a
         # boundary row holding one draws nothing while reading as "set".
-        raise InvalidPolygonGeoJSONError("Boundary must not be empty")
+        raise EmptyPolygonGeometryError("Parsed geometry has no coordinates")
     return geom
 
 

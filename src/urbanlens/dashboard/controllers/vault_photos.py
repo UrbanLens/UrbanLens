@@ -555,8 +555,9 @@ class PhotoActionView(LoginRequiredMixin, View):
         from django.db import transaction
 
         from urbanlens.dashboard.services.messaging.direct_messages import (
-            DirectMessagePermissionError,
             DirectMessageValidationError,
+            NoEligibleAttachmentsError,
+            RecipientNotAcceptingMessagesError,
             create_direct_message,
         )
         from urbanlens.dashboard.services.photos.uploads import attach_deduped_copy
@@ -572,8 +573,15 @@ class PhotoActionView(LoginRequiredMixin, View):
                 to_send = attach_deduped_copy(locked_image, profile, profile, locked_image.caption or "")
             try:
                 create_direct_message(profile, friend, "", image_ids=[to_send.pk])
-            except (DirectMessageValidationError, DirectMessagePermissionError) as exc:
-                return _toast(exc.safe_message, "error")
+            except RecipientNotAcceptingMessagesError as exc:
+                logger.info("Photo share as direct message rejected for profile %s: %s", profile.pk, exc)
+                return _toast("That friend isn't accepting messages from you.", "error")
+            except NoEligibleAttachmentsError as exc:
+                logger.info("Photo share as direct message rejected for profile %s: %s", profile.pk, exc)
+                return _toast("That photo could not be shared.", "error")
+            except DirectMessageValidationError as exc:
+                logger.info("Photo share as direct message rejected for profile %s: %s", profile.pk, exc)
+                return _toast("That message could not be sent.", "error")
         return _toast(f"Shared with {friend.username}.")
 
     _ACTIONS = {

@@ -18,11 +18,15 @@ from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
 from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.social.friendship import (
+    CommunityDisabledError,
     FriendLimitExceededError,
     FriendshipActionError,
     FriendshipNotFoundError,
+    InviteMessageTooLongError,
     InviteRateLimitedError,
     InviteValidationError,
+    MalformedEmailAddressError,
+    SelfInviteError,
     _mark_friend_request_notifications_read,
     accept_friend_request,
     block_profile,
@@ -310,11 +314,23 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         try:
             action(request.user.profile, target)
         except FriendshipNotFoundError as exc:
-            return HttpResponse(exc.safe_message, status=404)
+            logger.info("friend action %s(%s -> %s) found no relationship: %s", action.__name__, request.user.profile.pk, profile_id, exc)
+            # Reuses missing_message rather than a fixed literal so this stays
+            # indistinguishable from the target-not-found branch above -
+            # required for unblock_friend, where confirming a block exists at
+            # all is the one thing this endpoint must never do.
+            return HttpResponse(missing_message, status=404)
+        except FriendLimitExceededError as exc:
+            logger.info("friend action %s(%s -> %s) hit the friend limit: %s", action.__name__, request.user.profile.pk, profile_id, exc)
+            return HttpResponse("This would exceed the maximum number of friends allowed.", status=403)
+        except CommunityDisabledError as exc:
+            logger.info("friend action %s(%s -> %s) refused: %s", action.__name__, request.user.profile.pk, profile_id, exc)
+            return HttpResponse("Enable Community in Settings to accept friend requests.", status=403)
         except FriendshipActionError as exc:
-            # Covers FriendLimitExceededError and the community-disabled case,
-            # both of which this surface has always answered with 403.
-            return HttpResponse(exc.safe_message, status=403)
+            # Fallback for any subclass not specifically handled above; this
+            # surface has always answered 403 for anything past not-found.
+            logger.warning("friend action %s(%s -> %s) raised %s: %s", action.__name__, request.user.profile.pk, profile_id, type(exc).__name__, exc)
+            return HttpResponse("This action could not be completed.", status=403)
 
         if request.headers.get("HX-Request"):
             return htmx_response(request)
@@ -503,9 +519,11 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 accept_friend_request(viewer_profile, from_profile)
             else:
                 reject_friend_request(viewer_profile, from_profile)
-        except FriendshipNotFoundError:
+        except FriendshipNotFoundError as exc:
+            logger.info("friend request action %s(%s -> %s) found no relationship: %s", action, viewer_profile.pk, from_profile_id, exc)
             return HttpResponse("Friend request not found.", status=404)
-        except FriendLimitExceededError:
+        except FriendLimitExceededError as exc:
+            logger.info("friend request action %s(%s -> %s) hit the friend limit: %s", action, viewer_profile.pk, from_profile_id, exc)
             return HttpResponse("You've reached the maximum number of friends.", status=403)
         except FriendshipActionError as exc:
             logger.info("friend request action %s rejected: %s", action, exc)
@@ -560,10 +578,21 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 subscription_role=subscription_role,
                 subscription_duration=subscription_duration,
             )
+        except MalformedEmailAddressError as exc:
+            logger.info("invite by %s rejected: %s", inviter.pk, exc)
+            return HttpResponse("Please enter a valid email address.", status=400)
+        except SelfInviteError as exc:
+            logger.info("invite by %s rejected: %s", inviter.pk, exc)
+            return HttpResponse("That's your own email address.", status=400)
+        except InviteMessageTooLongError as exc:
+            logger.info("invite by %s rejected: %s", inviter.pk, exc)
+            return HttpResponse("Your message is too long. Please shorten it and try again.", status=400)
         except InviteValidationError as exc:
-            return HttpResponse(exc.safe_message, status=400)
+            logger.info("invite by %s rejected: %s", inviter.pk, exc)
+            return HttpResponse("Please check the email address and message, then try again.", status=400)
         except InviteRateLimitedError as exc:
-            return HttpResponse(exc.safe_message, status=429)
+            logger.info("invite by %s rate-limited: %s", inviter.pk, exc)
+            return HttpResponse("You've sent too many invitations recently. Please try again later.", status=429)
 
         # The response body must be byte-identical no matter what happened above -
         # embedding a friend-list refresh directly here would let a caller tell a

@@ -28,8 +28,18 @@ from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_tit
 from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json, parse_reposition_payload
 from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.visits.safety import (
-    CheckinArchivedError,
+    MAX_CHAT_MESSAGE_LENGTH,
+    ActiveCheckinExistsError,
+    CannotInviteSelfError,
+    CheckinEditArchivedError,
+    CheckinMessagingArchivedError,
     ContactInput,
+    EmptyMessageError,
+    LiveLocationUnavailableError,
+    MaxPartnersReachedError,
+    MessageTooLongError,
+    PartnerAlreadyInvitedError,
+    PartnerNotFoundError,
     SafetyValidationError,
     accept_checkin_partner_invite,
     apply_checkin_edit,
@@ -595,8 +605,9 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
                 contacts=allowed_contacts,
                 notify_community_wiki="notify_community_wiki" in request.POST,
             )
-        except SafetyValidationError as exc:
-            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": exc.safe_message}, status=400)
+        except ActiveCheckinExistsError as exc:
+            logger.info("Safety check-in create rejected for profile %s: %s", profile.pk, exc)
+            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "You already have an active check-in. Check in or cancel it before starting a new one."}, status=400)
         self._link_markup_map(request, profile, checkin)
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
@@ -834,12 +845,14 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 notify_community_wiki="notify_community_wiki" in request.POST,
                 contacts=_parse_contacts_from_post(request, profile),
             )
-        except CheckinArchivedError as exc:
+        except CheckinEditArchivedError as exc:
             # The GET path already renders archived check-ins read-only, so reaching
             # here means a stale tab autosaved into the archival window.
+            logger.info("Safety check-in edit rejected on checkin %s: %s", checkin.pk, exc)
+            error_text = "This check-in has been archived and can no longer be edited."
             if is_xhr:
-                return JsonResponse({"ok": False, "error": exc.safe_message}, status=409)
-            messages.error(request, exc.safe_message)
+                return JsonResponse({"ok": False, "error": error_text}, status=409)
+            messages.error(request, error_text)
             return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
         warnings = outcome.warnings
@@ -1017,8 +1030,21 @@ class SafetyCheckinPartnersView(LoginRequiredMixin, View):
         else:
             try:
                 invite_checkin_partner(checkin, inviter=profile, username=username)
+            except MaxPartnersReachedError as exc:
+                logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+                error = "This check-in already has as many partners as it can hold."
+            except PartnerNotFoundError as exc:
+                logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+                error = f'No user found with username "{username}".'
+            except CannotInviteSelfError as exc:
+                logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+                error = "You can't add yourself as a partner on your own check-in."
+            except PartnerAlreadyInvitedError as exc:
+                logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+                error = f"{username} has already been invited."
             except SafetyValidationError as exc:
-                error = exc.safe_message
+                logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+                error = "That invite couldn't be sent."
         return _render_partner_picker(request, checkin, error=error)
 
 
@@ -1198,8 +1224,9 @@ class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
 
         try:
             update_live_location(checkin, latitude=latitude, longitude=longitude, accuracy=accuracy)
-        except SafetyValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+        except LiveLocationUnavailableError as exc:
+            logger.info("Safety live location update rejected on checkin %s: %s", checkin.pk, exc)
+            return HttpResponseBadRequest("Live location sharing is not enabled for this check-in, or it has already concluded.")
         return HttpResponse(status=204)
 
 
@@ -1735,7 +1762,7 @@ class SafetyCheckinMessageView(View):
                 # every other participant with an open socket (they'd only see it
                 # on their next manual reload).
                 post_chat_message(checkin, user=request.user, contact=contact, body=body)
-            except CheckinArchivedError as exc:
+            except CheckinMessagingArchivedError as exc:
                 # A sibling of SafetyValidationError, not a subclass - both
                 # derive from ValueError - so the handler below never covered
                 # it, and posting to an archived check-in through this fallback
@@ -1745,18 +1772,25 @@ class SafetyCheckinMessageView(View):
                 # this surface should say the same thing. It matters most here:
                 # this is the no-JS/socket-down path, which runs precisely when
                 # something is already degraded.
-                logger.info("Safety chat HTTP fallback refused message on archived checkin %s", checkin.uuid)
-                return HttpResponse(exc.safe_message, status=409)
+                logger.info("Safety chat HTTP fallback refused message on archived checkin %s: %s", checkin.uuid, exc)
+                return HttpResponse("This check-in has concluded and can no longer receive messages.", status=409)
             except MessageRateLimitedError as exc:
                 # Another ValueError sibling, and another distinct answer: 429,
                 # because the body was fine and retrying shortly will work. It
                 # has to be caught above SafetyValidationError for the same
-                # reason CheckinArchivedError is - the handler below would
-                # otherwise fold it into a 400 that reads as "fix your message".
-                return HttpResponse(exc.safe_message, status=429)
+                # reason CheckinMessagingArchivedError is - the handler below
+                # would otherwise fold it into a 400 that reads as "fix your message".
+                logger.info("Safety chat HTTP fallback rate-limited message on checkin %s: %s", checkin.uuid, exc)
+                return HttpResponse("You're sending messages too quickly. Wait a moment and try again.", status=429)
+            except EmptyMessageError as exc:
+                logger.info("Safety chat HTTP fallback rejected message on checkin %s: %s", checkin.uuid, exc)
+                return HttpResponseBadRequest("Message cannot be empty.")
+            except MessageTooLongError as exc:
+                logger.info("Safety chat HTTP fallback rejected message on checkin %s: %s", checkin.uuid, exc)
+                return HttpResponseBadRequest(f"Message is too long (max {MAX_CHAT_MESSAGE_LENGTH} characters).")
             except SafetyValidationError as exc:
                 logger.info("Safety chat HTTP fallback rejected message on checkin %s: %s", checkin.uuid, exc)
-                return HttpResponseBadRequest(exc.safe_message)
+                return HttpResponseBadRequest("Your message couldn't be sent.")
         return render(
             request,
             "dashboard/partials/safety/_chat_panel.html",

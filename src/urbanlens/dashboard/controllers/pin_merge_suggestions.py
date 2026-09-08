@@ -197,8 +197,9 @@ class PinMergeSuggestionActionView(LoginRequiredMixin, View):
         except PinMergeCollisionError as exc:
             # Refused rather than "went wrong": the user can act on this one by
             # moving the blocking top-level pin first.
+            logger.info("Merge suggestion %s: merge refused by collision: %s", suggestion.pk, exc)
             response = render(request, _CARD_PARTIAL, {"suggestion": suggestion, "conflicts": conflicts})
-            response["HX-Trigger"] = json.dumps({"showToast": {"message": exc.safe_message, "level": "error"}})
+            response["HX-Trigger"] = json.dumps({"showToast": {"message": "Another pin is already in the spot this merge needs to move a pin to. Move that pin first, then try again.", "level": "error"}})
             return response
         except ValueError:
             response = render(request, _CARD_PARTIAL, {"suggestion": suggestion, "conflicts": conflicts})

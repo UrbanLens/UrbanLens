@@ -32,7 +32,14 @@ from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.geo.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote
 from urbanlens.dashboard.services.locations import site_scope
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
-from urbanlens.dashboard.services.pins.public_pins import PublicVoteError, cast_public_vote, public_vote_context
+from urbanlens.dashboard.services.pins.public_pins import (
+    PublicVoteError,
+    UnrecognizedVoteChoiceError,
+    VoteNotOpenError,
+    VoterNotPinnedError,
+    cast_public_vote,
+    public_vote_context,
+)
 from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
 from urbanlens.dashboard.services.places.scope import scope_badge
 from urbanlens.dashboard.services.wiki.concealment import visible_rows
@@ -553,8 +560,18 @@ class PublicPinVoteView(LoginRequiredMixin, View):
 
         try:
             cast_public_vote(location, profile, request.POST.get("choice") or "")
+        except VoteNotOpenError as exc:
+            logger.info("public vote rejected: %s", exc)
+            return JsonResponse({"error": "Voting isn't open for this location."}, status=400)
+        except VoterNotPinnedError as exc:
+            logger.info("public vote rejected: %s", exc)
+            return JsonResponse({"error": "You need a pin at this location to vote."}, status=400)
+        except UnrecognizedVoteChoiceError as exc:
+            logger.info("public vote rejected: %s", exc)
+            return JsonResponse({"error": "That vote choice wasn't recognized."}, status=400)
         except PublicVoteError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("public vote rejected: %s", exc)
+            return JsonResponse({"error": "That vote couldn't be recorded."}, status=400)
 
         return render(
             request,
@@ -587,7 +604,8 @@ class BoundaryVoteView(LoginRequiredMixin, View):
         try:
             vote = cast_boundary_vote(location.place, profile, boundary_id)
         except BoundaryVoteError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("boundary vote rejected: %s", exc)
+            return JsonResponse({"error": "That boundary isn't a valid option for this place."}, status=400)
 
         # Same conceal-aware answer the GET's boundary_vote_context computes -
         # the raw has_consensus() states that other people voted, which is

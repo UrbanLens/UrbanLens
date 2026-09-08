@@ -37,23 +37,59 @@ logger = logging.getLogger(__name__)
 class DirectMessageValidationError(ValueError):
     """A direct message could not be created or modified as submitted.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class DirectMessageTooLongError(DirectMessageValidationError):
+    """The plaintext body exceeds ``MAX_DIRECT_MESSAGE_LENGTH``."""
+
+
+class MixedPlaintextAndCiphertextError(DirectMessageValidationError):
+    """Both ``body`` and ``ciphertext`` were given; a message must be exactly one."""
+
+
+class MalformedCiphertextError(DirectMessageValidationError):
+    """The ``ciphertext``/``nonce``/``key_version`` triple isn't a valid encrypted message."""
+
+
+class NoEligibleAttachmentsError(DirectMessageValidationError):
+    """None of the given ``image_ids`` are unattached images owned by the sender."""
+
+
+class EmptyDirectMessageError(DirectMessageValidationError):
+    """Neither a body, ciphertext, an eligible attachment, nor a map was given."""
 
 
 class DirectMessagePermissionError(PermissionError):
     """A direct-message action was refused because of who is involved.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class RecipientNotAcceptingMessagesError(DirectMessagePermissionError):
+    """The recipient's ``direct_message_visibility`` setting refuses this sender."""
+
+
+class NotDirectMessageSenderError(DirectMessagePermissionError):
+    """The actor isn't this message's sender; only the sender may delete it for everyone."""
+
+
+class NotDirectMessageRecipientError(DirectMessagePermissionError):
+    """The actor isn't this message's recipient; only the recipient may remove it from their own view."""
+
+
+class NotConversationParticipantError(DirectMessagePermissionError):
+    """The profile is neither this message's sender nor its recipient."""
 
 
 #: Common emoji offered by the quick "add a reaction" picker on each message.
@@ -730,10 +766,15 @@ def create_direct_message(
         The newly created DirectMessage.
 
     Raises:
-        ValueError: If both ``body`` and ``ciphertext`` are given, both (and
-            every attachment) are absent, or either exceeds its length limit.
-        PermissionError: If the recipient's privacy settings don't permit the
-            sender. Callers surface this as a 403 / socket error message.
+        DirectMessageTooLongError: ``body`` exceeds ``MAX_DIRECT_MESSAGE_LENGTH``.
+        MixedPlaintextAndCiphertextError: Both ``body`` and ``ciphertext`` were given.
+        MalformedCiphertextError: The ``ciphertext``/``nonce``/``key_version`` triple isn't valid.
+        NoEligibleAttachmentsError: ``image_ids`` was given but none resolve to
+            an unattached image owned by ``sender``.
+        EmptyDirectMessageError: Neither ``body``, ``ciphertext``, an eligible
+            attachment, nor ``markup_map_uuid`` was given.
+        RecipientNotAcceptingMessagesError: The recipient's privacy settings don't
+            permit the sender. Callers surface this as a 403 / socket error message.
     """
     from urbanlens.dashboard.services.security.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
 
@@ -749,14 +790,14 @@ def create_direct_message(
 
     body = body.strip()
     if len(body) > MAX_DIRECT_MESSAGE_LENGTH:
-        raise DirectMessageValidationError(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
+        raise DirectMessageTooLongError(f"Sender {sender.pk} submitted a {len(body)}-character body, exceeding the {MAX_DIRECT_MESSAGE_LENGTH} limit.")
     if ciphertext:
         if body:
-            raise DirectMessageValidationError("A message is either plaintext or encrypted, never both.")
+            raise MixedPlaintextAndCiphertextError(f"Sender {sender.pk} submitted both a plaintext body and ciphertext.")
         if not valid_blob(ciphertext, MAX_CIPHERTEXT_LENGTH) or not valid_blob(nonce, MAX_NONCE_LENGTH) or key_version < 1:
-            raise DirectMessageValidationError("Malformed encrypted message.")
+            raise MalformedCiphertextError(f"Sender {sender.pk} submitted an invalid ciphertext/nonce/key_version triple.")
     elif nonce or key_version:
-        raise DirectMessageValidationError("Malformed encrypted message.")
+        raise MalformedCiphertextError(f"Sender {sender.pk} submitted nonce/key_version without ciphertext.")
     # Attachments are resolved *before* the emptiness check, not after the
     # insert. The check counts image_ids as content, but the attach step below
     # filters them by ownership and un-attachedness - so resolving afterwards
@@ -770,12 +811,12 @@ def create_direct_message(
     if image_ids:
         eligible_image_ids = list(Image.objects.filter(pk__in=image_ids, profile=sender, direct_message__isnull=True).values_list("pk", flat=True))
         if not eligible_image_ids:
-            raise DirectMessageValidationError("None of those attachments are available to send.")
+            raise NoEligibleAttachmentsError(f"Sender {sender.pk} submitted image_ids {image_ids} but none are unattached images they own.")
 
     if not body and not ciphertext and not eligible_image_ids and not markup_map_uuid:
-        raise DirectMessageValidationError("Message cannot be empty.")
+        raise EmptyDirectMessageError(f"Sender {sender.pk} submitted no body, ciphertext, attachment, or map to recipient {recipient.pk}.")
     if not can_direct_message(sender, recipient):
-        raise DirectMessagePermissionError("This user isn't accepting messages from you.")
+        raise RecipientNotAcceptingMessagesError(f"Recipient {recipient.pk}'s direct_message_visibility setting refuses sender {sender.pk}.")
     # Charged here rather than in the consumer: this function is the sending path
     # for the WebSocket, for ConversationSendView, and for the external API, and a
     # budget on only one of them is one a POST loop walks around (P31).
@@ -939,10 +980,10 @@ def delete_message_for_everyone(message: DirectMessage, actor: Profile) -> Direc
         The updated message.
 
     Raises:
-        PermissionError: If `actor` isn't the message's sender.
+        NotDirectMessageSenderError: If `actor` isn't the message's sender.
     """
     if actor.pk != message.sender_id:
-        raise DirectMessagePermissionError("Only the sender can delete this message for everyone.")
+        raise NotDirectMessageSenderError(f"Profile {actor.pk} attempted to delete message {message.pk} for everyone but is not its sender ({message.sender_id}).")
     if message.deleted_by_sender_at is None:
         message.deleted_by_sender_at = timezone.now()
         message.save(update_fields=["deleted_by_sender_at"])
@@ -970,10 +1011,10 @@ def delete_message_for_self(message: DirectMessage, actor: Profile) -> DirectMes
         The updated message.
 
     Raises:
-        PermissionError: If `actor` isn't the message's recipient.
+        NotDirectMessageRecipientError: If `actor` isn't the message's recipient.
     """
     if actor.pk != message.recipient_id:
-        raise DirectMessagePermissionError("Only the recipient can remove this message from their own view.")
+        raise NotDirectMessageRecipientError(f"Profile {actor.pk} attempted to remove message {message.pk} from their own view but is not its recipient ({message.recipient_id}).")
     if message.deleted_by_recipient_at is None:
         message.deleted_by_recipient_at = timezone.now()
         message.save(update_fields=["deleted_by_recipient_at"])
@@ -1053,12 +1094,13 @@ def toggle_reaction(profile: Profile, message: DirectMessage, emoji: str) -> str
         ``"added"`` or ``"removed"``.
 
     Raises:
-        PermissionError: If `profile` isn't a participant in this message's conversation.
+        NotConversationParticipantError: If `profile` isn't a participant in
+            this message's conversation.
     """
     from urbanlens.dashboard.models.reactions.model import Reaction
 
     if profile.pk not in (message.sender_id, message.recipient_id):
-        raise DirectMessagePermissionError("You aren't part of this conversation.")
+        raise NotConversationParticipantError(f"Profile {profile.pk} attempted to react to message {message.pk} but is neither its sender ({message.sender_id}) nor recipient ({message.recipient_id}).")
 
     existing = Reaction.objects.existing(profile, emoji, direct_message=message)
     if existing:

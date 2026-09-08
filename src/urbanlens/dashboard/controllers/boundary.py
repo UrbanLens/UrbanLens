@@ -213,7 +213,8 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
             try:
                 geom = _parse_multipolygon(polygon_geojson)
             except InvalidPolygonGeoJSONError as exc:
-                return JsonResponse({"error": exc.safe_message}, status=400)
+                logger.info("boundary polygon rejected: %s", exc)
+                return JsonResponse({"error": "That boundary isn't a valid polygon or multipolygon."}, status=400)
             row, _created = Boundary.objects.get_or_create(
                 pin=pin,
                 boundary_type=boundary_type,
@@ -284,7 +285,8 @@ class WikiBoundaryView(LoginRequiredMixin, View):
             try:
                 geom = _parse_multipolygon(polygon_geojson)
             except InvalidPolygonGeoJSONError as exc:
-                return JsonResponse({"error": exc.safe_message}, status=400)
+                logger.info("boundary polygon rejected: %s", exc)
+                return JsonResponse({"error": "That boundary isn't a valid polygon or multipolygon."}, status=400)
 
             # Check area against the site-wide limit.  Project to an equal-area
             # CRS (EPSG:6933) so the area calculation is meaningful globally.

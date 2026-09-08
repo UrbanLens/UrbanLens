@@ -50,22 +50,16 @@ _validate_link_url = URLValidator(schemes=["http", "https"])
 class PinSubResourceError(Exception):
     """Base for the recoverable failures these operations raise.
 
-    Every message is written to be safe to surface directly to the caller.
-    ``safe_message`` carries it explicitly rather than relying on callers to
-    read ``str(exc)`` - a generic exception accessor invites a future
-    subclass to smuggle unsafe content in without anyone noticing.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below and author its own user-facing
+    text, rather than relaying ``message`` - that keeps a future raise site
+    here from being able to smuggle unreviewed text into a response just by
+    adding a new ``raise``.
     """
-
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
 
 
 class AliasExistsError(PinSubResourceError):
     """The pin already has an alias with this name, case-insensitively."""
-
-    def __init__(self, message: str = "That alias already exists.") -> None:
-        super().__init__(message)
 
 
 class AliasIsCurrentNameError(PinSubResourceError):
@@ -75,19 +69,28 @@ class AliasIsCurrentNameError(PinSubResourceError):
     which the alias list is defined to always contain.
     """
 
-    def __init__(self, message: str = "This alias is the current name - pick another name first.") -> None:
-        super().__init__(message)
-
 
 class InvalidLinkError(PinSubResourceError):
-    """The submitted link url is missing, too long, or not a valid http(s) url."""
+    """Base for a submitted link url failing validation - never raised directly.
+
+    See the subclasses below for the specific, mutually-exclusive reason.
+    """
+
+
+class MissingLinkUrlError(InvalidLinkError):
+    """No url was given at all."""
+
+
+class LinkUrlTooLongError(InvalidLinkError):
+    """The url is longer than ``MAX_LINK_URL_LENGTH``."""
+
+
+class InvalidLinkUrlFormatError(InvalidLinkError):
+    """The url isn't a valid http(s) url (wrong/missing scheme, malformed, etc.)."""
 
 
 class LinkExistsError(PinSubResourceError):
     """The pin already has a link with this url."""
-
-    def __init__(self, message: str = "That link is already on this pin.") -> None:
-        super().__init__(message)
 
 
 def touch_pin(pin: Pin) -> None:
@@ -170,7 +173,7 @@ def create_pin_alias(pin: Pin, *, name: str, kind: str = AliasType.ALTERNATE) ->
         with transaction.atomic():
             alias = PinAlias.objects.create(pin=pin, name=cleaned, kind=kind)
     except IntegrityError as exc:
-        raise AliasExistsError from exc
+        raise AliasExistsError(f"Pin {pin.pk} already has an alias matching {cleaned!r} case-insensitively.") from exc
     from urbanlens.dashboard.services.undo.mutations import stash_pin_alias_add
 
     stash_pin_alias_add(pin, alias)
@@ -189,7 +192,7 @@ def delete_pin_alias(pin: Pin, alias: PinAlias) -> None:
         AliasIsCurrentNameError: *alias* is the pin's current name.
     """
     if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(pin.effective_name):
-        raise AliasIsCurrentNameError
+        raise AliasIsCurrentNameError(f"Alias {alias.pk} ({alias.name!r}) on pin {pin.pk} is the pin's current name; refusing delete.")
     from urbanlens.dashboard.services.undo.mutations import stash_pin_alias_remove
 
     stash_pin_alias_remove(pin, alias)
@@ -265,20 +268,20 @@ def create_pin_link(pin: Pin, *, name: str, url: str) -> PinLink:
     cleaned_url = (url or "").strip()
     cleaned_name = (name or "").strip()
     if not cleaned_url:
-        raise InvalidLinkError("A url is required.")
+        raise MissingLinkUrlError(f"No url given for a link on pin {pin.pk}.")
     if len(cleaned_url) > MAX_LINK_URL_LENGTH:
-        raise InvalidLinkError(f"That url is too long (max {MAX_LINK_URL_LENGTH:,} characters).")
+        raise LinkUrlTooLongError(f"Link url for pin {pin.pk} is {len(cleaned_url)} chars, over the {MAX_LINK_URL_LENGTH} max.")
     try:
         _validate_link_url(cleaned_url)
     except DjangoValidationError as exc:
-        raise InvalidLinkError("That doesn't look like a valid http(s) url.") from exc
+        raise InvalidLinkUrlFormatError(f"Link url {cleaned_url!r} for pin {pin.pk} failed http(s) URLValidator.") from exc
 
     try:
         # Same savepoint reasoning as add_pin_alias above.
         with transaction.atomic():
             link = PinLink.objects.create(pin=pin, name=cleaned_name, url=cleaned_url)
     except IntegrityError as exc:
-        raise LinkExistsError from exc
+        raise LinkExistsError(f"Pin {pin.pk} already has a link with url {cleaned_url!r}.") from exc
     touch_pin(pin)
     return link
 

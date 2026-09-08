@@ -43,6 +43,7 @@ must be indistinguishable from one that was never created.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from django.http import Http404
@@ -54,6 +55,8 @@ from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedE
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
 
 #: The single body every 404 under these views renders, regardless of cause.
 NOT_FOUND_BODY = {"error": "Not found."}
@@ -96,7 +99,8 @@ def uniform_exception_handler(exc: Exception, context: dict[str, Any]) -> Respon
     # a throttled client was getting a server error for behaving normally.
     # Mapped once rather than in each view so a view added later inherits it.
     if isinstance(exc, MessageRateLimitedError):
-        return Response({"error": exc.safe_message}, status=429)
+        logger.info("external API message send rate-limited: %s", exc)
+        return Response({"error": "You're sending messages too quickly. Wait a moment and try again."}, status=429)
 
     response = drf_exception_handler(exc, context)
     if response is None:

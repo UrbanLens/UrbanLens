@@ -57,26 +57,51 @@ UNRECOGNIZED_AVATAR_COLOR_FALLBACK = MaterialColor.GREY.value
 
 
 class AvatarUploadError(Exception):
-    """An avatar write was refused before anything was stored.
+    """Base class: an avatar write was refused before anything was stored.
 
-    Carries the HTTP status the refusal maps to, because the underlying
-    ``services.media.images.image_upload_error`` already distinguishes them - 413 for
-    an over-large file, 400 for a content-type that doesn't match its bytes,
-    422 for a malware hit, 503 when the scanner itself is unreachable - and
-    collapsing them would tell a client "bad image" when the real answer is
-    "try again in a minute".
+    ``args[0]`` is log-only detail from whichever ``services.media.images.image_upload_error``
+    check failed - never surface it to a user. A catch site should catch one
+    of the subclasses below (or this class as a fallback) and author its own
+    user-facing text, dispatching on the exception TYPE rather than relaying
+    this message.
     """
 
-    def __init__(self, message: str, status_code: int = 400) -> None:
-        """Initialize with a caller-safe message and its HTTP status.
 
-        Args:
-            message: Human-readable detail, safe to surface verbatim.
-            status_code: The HTTP status this refusal maps to.
-        """
-        super().__init__(message)
-        self.safe_message = message
-        self.status_code = status_code
+class AvatarTooLargeError(AvatarUploadError):
+    """The uploaded file exceeds the site's max upload size. Maps to HTTP 413."""
+
+
+class AvatarUnsupportedFormatError(AvatarUploadError):
+    """The upload isn't an accepted image type, or its declared type doesn't match its bytes.
+
+    Covers every 400 `image_upload_error` can return for an avatar: an
+    unsupported extension, bytes that don't look like an image at all, and a
+    declared content-type that mismatches the sniffed one. The three checks
+    live upstream in ``services.security.content_sniffing`` and are collapsed
+    here because no catch site in this app treats them differently.
+    """
+
+
+class AvatarMalwareDetectedError(AvatarUploadError):
+    """The antivirus scan flagged the upload. Maps to HTTP 422."""
+
+
+class AvatarScanUnavailableError(AvatarUploadError):
+    """The antivirus scanner couldn't be reached to scan the upload. Maps to HTTP 503."""
+
+
+#: Dispatches on the HTTP status ``image_upload_error`` paired with its
+#: message - the only structured signal available for which check failed,
+#: since that function hands back a plain ``(message, status_code)`` tuple
+#: shared by a dozen other, unrelated upload call sites this refactor does
+#: not own. Falls back to the base class for a status this table doesn't
+#: recognize, rather than raising on an unmapped code.
+_AVATAR_ERROR_TYPES_BY_STATUS: dict[int, type[AvatarUploadError]] = {
+    413: AvatarTooLargeError,
+    400: AvatarUnsupportedFormatError,
+    422: AvatarMalwareDetectedError,
+    503: AvatarScanUnavailableError,
+}
 
 
 class AvatarService:
@@ -309,8 +334,11 @@ def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile
         The same profile, with ``avatar`` saved.
 
     Raises:
-        AvatarUploadError: The file failed one of the pre-storage checks. The
-            exception carries the status code that check maps to.
+        AvatarTooLargeError: The file exceeds the site's max upload size.
+        AvatarUnsupportedFormatError: The file isn't an accepted image type,
+            or its declared type doesn't match its bytes.
+        AvatarMalwareDetectedError: The antivirus scan flagged the file.
+        AvatarScanUnavailableError: The antivirus scanner couldn't be reached.
     """
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.media.images import image_upload_error
@@ -318,7 +346,8 @@ def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile
     upload_error = image_upload_error(uploaded_file, MediaKind.PHOTO)
     if upload_error:
         message, status_code = upload_error
-        raise AvatarUploadError(message, status_code)
+        error_cls = _AVATAR_ERROR_TYPES_BY_STATUS.get(status_code, AvatarUploadError)
+        raise error_cls(message)
 
     profile.avatar = uploaded_file
     profile.save(update_fields=["avatar"])

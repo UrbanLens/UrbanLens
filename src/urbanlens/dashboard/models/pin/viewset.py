@@ -104,7 +104,8 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
                 try:
                     move_pin_to_coordinates(instance, latitude, longitude)
                 except PinMoveError as exc:
-                    return Response({"detail": exc.safe_message}, status=status.HTTP_400_BAD_REQUEST)
+                    logger.info("Pin move rejected for pin %s: %s", instance.id, exc)
+                    return Response({"detail": "You already have a pin at these exact coordinates."}, status=status.HTTP_400_BAD_REQUEST)
 
             self.perform_update(serializer)
             instance.refresh_from_db()
@@ -170,6 +171,7 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
         try:
             delete_pin(instance, children_mode=children_mode)
         except PinHasChildrenError as exc:
+            logger.info("Pin delete rejected for pin %s: %s", instance.id, exc)
             return Response(
                 {"requires_children_decision": True, "children": exc.descendant_count},
                 status=status.HTTP_409_CONFLICT,

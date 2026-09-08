@@ -49,11 +49,43 @@ logger = logging.getLogger(__name__)
 
 
 class LabelMergeError(Exception):
-    """A merge was refused. ``safe_message`` is safe to show a caller verbatim."""
+    """A merge was refused.
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below and author its own user-facing
+    text, rather than relaying ``message`` - that keeps a future raise site
+    here from being able to smuggle unreviewed text into a response just by
+    adding a new ``raise``.
+    """
+
+
+class NoSourceLabelsError(LabelMergeError):
+    """No source labels were given to merge."""
+
+
+class TargetLabelNotFoundError(LabelMergeError):
+    """The target doesn't resolve to a label visible to this profile."""
+
+
+class SelfMergeError(LabelMergeError):
+    """The target was also given as one of the sources."""
+
+
+class LabelKindMismatchError(LabelMergeError):
+    """A source's ``kind`` doesn't match the target's."""
+
+
+class UnownedSourceLabelError(LabelMergeError):
+    """A source isn't owned by the profile requesting the merge.
+
+    Global labels (``profile=None``) always trip this too: they're shared by
+    every user, so consuming one as a merge source would destroy other
+    people's data - a user who wants one gone can only stop using it.
+    """
+
+
+class ProtectedSourceLabelError(LabelMergeError):
+    """A source is protected and cannot be merged away."""
 
 
 @dataclass(frozen=True)
@@ -85,34 +117,39 @@ def _validate(target: Label, sources: Sequence[Label], profile: Profile) -> None
         profile: The profile on whose behalf the merge runs.
 
     Raises:
-        LabelMergeError: If any rule below is violated.
+        NoSourceLabelsError: No sources were given.
+        TargetLabelNotFoundError: The target isn't visible to this profile.
+        SelfMergeError: The target is also among the sources.
+        LabelKindMismatchError: A source's kind doesn't match the target's.
+        UnownedSourceLabelError: A source isn't owned by this profile.
+        ProtectedSourceLabelError: A source is protected.
     """
     from urbanlens.dashboard.models.labels.model import Label as LabelModel
 
     if not sources:
-        raise LabelMergeError("Select at least one label to merge.")
+        raise NoSourceLabelsError(f"merge_labels called with no sources (target={target.pk}, profile={profile.pk}).")
 
     # The target must be one this profile can actually see. Global labels are
     # legitimate *targets* (merging your own tag into a global category is a
     # normal cleanup), which is why this is visible_to rather than an
     # ownership check.
     if not LabelModel.objects.visible_to(profile).filter(pk=target.pk).exists():
-        raise LabelMergeError("No such label to merge into.")
+        raise TargetLabelNotFoundError(f"Target label {target.pk} is not visible to profile {profile.pk}.")
 
     source_ids = {source.pk for source in sources}
     if target.pk in source_ids:
-        raise LabelMergeError("Cannot merge a label into itself.")
+        raise SelfMergeError(f"Target label {target.pk} was also given as a source (profile={profile.pk}).")
 
     for source in sources:
         if source.kind != target.kind:
-            raise LabelMergeError("Labels must be of the same kind to be merged.")
+            raise LabelKindMismatchError(f"Source label {source.pk} has kind {source.kind!r}, target {target.pk} has kind {target.kind!r}.")
         # Global labels (profile=None) can never be a merge source: they are
         # shared by every user, so consuming one would destroy other people's
         # data. A user who wants one gone can only stop using it.
         if source.profile_id != profile.pk:
-            raise LabelMergeError("You can only merge labels you own.")
+            raise UnownedSourceLabelError(f"Source label {source.pk} is owned by profile {source.profile_id!r}, not requesting profile {profile.pk}.")
         if source.is_protected:
-            raise LabelMergeError("Protected labels cannot be merged away.")
+            raise ProtectedSourceLabelError(f"Source label {source.pk} is protected and cannot be merged away.")
 
 
 def _reparent_children(target: Label, source: Label) -> None:
@@ -161,8 +198,8 @@ def merge_labels(*, target: Label, sources: Sequence[Label], profile: Profile) -
         A :class:`LabelMergeResult` describing the merge.
 
     Raises:
-        LabelMergeError: If the merge is refused (see :func:`_validate`). The
-            message is safe to surface to the caller.
+        LabelMergeError: If the merge is refused - see :func:`_validate` for
+            the specific subclass raised for each condition.
     """
     _validate(target, sources, profile)
 

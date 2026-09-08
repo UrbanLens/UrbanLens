@@ -67,12 +67,9 @@ _SOURCE_PRIORITY = {
 class BoundaryVoteError(Exception):
     """A boundary vote could not be cast (bad candidate, wrong place...).
 
-    ``safe_message`` is safe to surface directly to the caller.
+    The message is for logs, not the response: an HTTP-facing catch site
+    should author its own user-facing text rather than relaying it.
     """
-
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
 
 
 def vote_weight(voted_at: datetime, now: datetime | None = None) -> float:
@@ -239,7 +236,7 @@ def cast_boundary_vote(place: Place | None, profile: Profile, boundary_id: int) 
     options = {option.pk: option for option in boundary_options(place)}
     choice = options.get(boundary_id)
     if choice is None:
-        raise BoundaryVoteError("That boundary is not a votable option for this place.")
+        raise BoundaryVoteError(f"boundary_id {boundary_id} is not a votable candidate for place {place.pk if place is not None else None!r} (options: {sorted(options)})")
     vote, _created = BoundaryVote.objects.update_or_create(
         place=place,
         profile=profile,

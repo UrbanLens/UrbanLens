@@ -20,7 +20,14 @@ from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, Wiki
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink, WikiLink
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.pins.pin_subresources import InvalidLinkError, LinkExistsError, create_pin_link, delete_pin_link
+from urbanlens.dashboard.services.pins.pin_subresources import (
+    InvalidLinkUrlFormatError,
+    LinkExistsError,
+    LinkUrlTooLongError,
+    MissingLinkUrlError,
+    create_pin_link,
+    delete_pin_link,
+)
 from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
@@ -104,8 +111,18 @@ class PinLinksView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         try:
             create_pin_link(pin, name=(request.POST.get("name") or ""), url=(request.POST.get("url") or ""))
-        except (InvalidLinkError, LinkExistsError) as exc:
-            return HttpResponse(exc.safe_message, status=400)
+        except MissingLinkUrlError as exc:
+            logger.info("pin link creation rejected: %s", exc)
+            return HttpResponse("A url is required.", status=400)
+        except LinkUrlTooLongError as exc:
+            logger.info("pin link creation rejected: %s", exc)
+            return HttpResponse(f"That url is too long (max {MAX_LINK_URL_LENGTH:,} characters).", status=400)
+        except InvalidLinkUrlFormatError as exc:
+            logger.info("pin link creation rejected: %s", exc)
+            return HttpResponse("That doesn't look like a valid http(s) url.", status=400)
+        except LinkExistsError as exc:
+            logger.info("pin link creation rejected: %s", exc)
+            return HttpResponse("That link is already on this pin.", status=400)
         return _render_pin_links(request, pin)
 
 

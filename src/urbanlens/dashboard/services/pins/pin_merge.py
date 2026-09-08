@@ -106,29 +106,28 @@ class UnresolvedMergeConflictError(ValueError):
 class PinMergeCollisionError(ValueError):
     """Raised when a merge cannot proceed without destroying data.
 
-    Two situations produce this, both because leaving a pin parented to
-    ``loser`` would let ``Pin.parent_pin``'s CASCADE take it - and anything
-    nested beneath it, survivor included - out with ``loser.delete()``:
+    Both subclasses below exist because leaving a pin parented to ``loser``
+    would let ``Pin.parent_pin``'s CASCADE take it - and anything nested
+    beneath it, survivor included - out with ``loser.delete()``.
 
-    - A child pin has to be detached to top level (because re-parenting it
-      under the survivor would close a loop), but another top-level pin
-      already occupies its location.
-    - The survivor is itself one of loser's direct children and has to move
-      to loser's own parent, but another top-level pin already occupies the
-      survivor's location (only possible when that parent is None, i.e. the
-      survivor would become a new top-level pin).
-
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        """Store the caller-safe message.
 
-        Args:
-            message: Explanation of which pin blocked the merge.
-        """
-        self.safe_message = message
-        super().__init__(message)
+class SurvivorRelocationCollisionError(PinMergeCollisionError):
+    """The survivor is one of loser's direct children and must move to loser's own parent - avoiding being deleted with it - but another top-level pin already occupies that location.
+
+    Only possible when loser's parent is None, i.e. the survivor would become
+    a new top-level pin.
+    """
+
+
+class ChildDetachCollisionError(PinMergeCollisionError):
+    """A child of loser has to be detached to top level - re-parenting it under the survivor would close a loop - but another top-level pin already occupies its location."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,8 +342,8 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
         if child.pk == survivor.pk:
             survivor.parent_pin = loser.parent_pin
             if not _save_within_savepoint(survivor, ["parent_pin", "updated"]):
-                raise PinMergeCollisionError(
-                    f"Cannot merge: survivor pin {survivor.pk} has to move to the loser's own parent to avoid being deleted with it, but another top-level pin already occupies its location.",
+                raise SurvivorRelocationCollisionError(
+                    f"Pin merge blocked: survivor pin {survivor.pk} is loser pin {loser.pk}'s direct child and must relocate to loser.parent_pin_id={loser.parent_pin_id} to avoid CASCADE deletion, but a top-level pin already occupies that location.",
                 )
             continue
         if child.would_create_cycle(survivor):
@@ -355,8 +354,8 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
                 # Pin.parent_pin CASCADEs - so this child, and the survivor
                 # somewhere beneath it, would both be destroyed by the delete
                 # this detach exists to prevent. Refuse the merge instead.
-                raise PinMergeCollisionError(
-                    f"Cannot merge: child pin {child.pk} has to be detached to top level to avoid a loop, but another top-level pin already occupies its location.",
+                raise ChildDetachCollisionError(
+                    f"Pin merge blocked: child pin {child.pk} of loser pin {loser.pk} must detach to top level (survivor pin {survivor.pk} sits beneath it) to avoid a cycle, but a top-level pin already occupies its location.",
                 )
             continue
         child.parent_pin = survivor

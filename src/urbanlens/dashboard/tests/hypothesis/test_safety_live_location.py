@@ -27,7 +27,11 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyCheckinPartnerStatus,
     SafetyCheckinStatus,
 )
-from urbanlens.dashboard.services.visits.safety import set_live_location_sharing, update_live_location
+from urbanlens.dashboard.services.visits.safety import (
+    LiveLocationUnavailableError,
+    set_live_location_sharing,
+    update_live_location,
+)
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -56,7 +60,7 @@ class UpdateLiveLocationTests(TestCase):
         self.checkin = _checkin(self.owner)
 
     def test_raises_when_sharing_disabled(self):
-        with self.assertRaisesMessage(ValueError, "not enabled"):
+        with self.assertRaises(LiveLocationUnavailableError):
             update_live_location(self.checkin, latitude=1.0, longitude=2.0, accuracy=None)
 
     def test_raises_when_checkin_already_resolved(self):
@@ -65,7 +69,7 @@ class UpdateLiveLocationTests(TestCase):
         self.checkin.resolved_at = timezone.now()
         self.checkin.save(update_fields=["status", "resolved_at", "updated"])
 
-        with self.assertRaisesMessage(ValueError, "already concluded"):
+        with self.assertRaises(LiveLocationUnavailableError):
             update_live_location(self.checkin, latitude=1.0, longitude=2.0, accuracy=None)
 
     def test_update_succeeds_while_sharing_is_enabled(self):
@@ -90,7 +94,7 @@ class UpdateLiveLocationTests(TestCase):
         # this in-memory `self.checkin` - it still reads live_location_sharing_enabled=True.
         SafetyCheckin.objects.filter(pk=self.checkin.pk).update(live_location_sharing_enabled=False)
 
-        with self.assertRaisesMessage(ValueError, "not enabled"):
+        with self.assertRaises(LiveLocationUnavailableError):
             update_live_location(self.checkin, latitude=40.0, longitude=-74.0, accuracy=12.5)
 
         self.checkin.refresh_from_db()

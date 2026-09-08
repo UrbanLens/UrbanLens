@@ -272,13 +272,13 @@ class ChargePlacementTests(TestCase):
         """
         from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
         from urbanlens.dashboard.services.messaging.direct_messages import (
-            DirectMessagePermissionError,
+            RecipientNotAcceptingMessagesError,
             create_direct_message,
         )
 
         stranger = _make_profile()
         for _ in range(5):
-            with self.assertRaises(DirectMessagePermissionError):
+            with self.assertRaises(RecipientNotAcceptingMessagesError):
                 create_direct_message(self.sender, stranger, "let me in")
 
         friend = _make_profile()

@@ -100,14 +100,26 @@ _PLACEHOLDER_NAMES = frozenset({"untitled", "unknown", "unnamed", "new location"
 
 
 class PublicVoteError(Exception):
-    """A ballot was refused (not eligible, not open, or bad input).
+    """A ballot was refused.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class VoteNotOpenError(PublicVoteError):
+    """This location has no public-pin candidate, or its vote isn't open."""
+
+
+class VoterNotPinnedError(PublicVoteError):
+    """The profile doesn't hold a root pin at this location, so it can't vote."""
+
+
+class UnrecognizedVoteChoiceError(PublicVoteError):
+    """``choice`` wasn't "public", "private", or "withdraw"."""
 
 
 def is_meaningful_name(name: str | None) -> bool:
@@ -420,20 +432,24 @@ def cast_public_vote(location: Location, profile: Profile, choice: str, config: 
         choice: ``"public"``, ``"private"``, or ``"withdraw"``.
 
     Raises:
-        PublicVoteError: When there is no open vote, the profile can't vote
-            here, or the choice is unrecognized.
+        VoteNotOpenError: There is no public-pin candidate for this
+            location, or its vote isn't currently open.
+        VoterNotPinnedError: ``profile`` doesn't hold a root pin at this
+            location.
+        UnrecognizedVoteChoiceError: ``choice`` isn't one of ``"public"``,
+            ``"private"``, or ``"withdraw"``.
     """
     candidate = PublicPinCandidate.objects.filter(location=location).first()
     if candidate is None or not candidate.is_open:
-        raise PublicVoteError("There is no open vote for this location.")
+        raise VoteNotOpenError(f"No open public-pin candidate for location {location.pk} (status={candidate.status if candidate else 'none'}).")
     if not Pin.objects.filter(location=location, profile=profile, parent_pin__isnull=True).exists():
-        raise PublicVoteError("Only users with this location pinned can vote.")
+        raise VoterNotPinnedError(f"Profile {profile.pk} holds no root pin at location {location.pk}; vote refused.")
 
     if choice == "withdraw":
         PublicPinVote.objects.filter(candidate=candidate, profile=profile).delete()
         return
     if choice not in ("public", "private"):
-        raise PublicVoteError("Unrecognized vote.")
+        raise UnrecognizedVoteChoiceError(f"Unrecognized vote choice {choice!r} for candidate {candidate.pk}.")
 
     PublicPinVote.objects.update_or_create(
         candidate=candidate,

@@ -598,6 +598,8 @@ class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebso
 
         group_uuid = str(data.get("group") or "").strip()
         if group_uuid:
+            from urbanlens.dashboard.services.messaging.group_chats import GroupChatPermissionError, GroupChatValidationError, NotAGroupMemberError
+
             # A group-chat frame: same validation/broadcast pipeline, but the
             # message fans out to every active member (see services.messaging.group_chats).
             if not (body or ciphertext):
@@ -605,9 +607,25 @@ class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebso
             try:
                 await self._create_group_message(group_uuid, body, ciphertext, nonce, key_version)
             except MessageRateLimitedError as exc:
-                await self._report_limit(exc.safe_message)
-            except (ValueError, PermissionError) as exc:
-                await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
+                logger.info("Group message rate-limited for profile %s: %s", self.profile_id, exc)
+                await self._report_limit(_RATE_LIMITED_DETAIL)
+            except NotAGroupMemberError as exc:
+                logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
+                await self.send(text_data=json.dumps({"type": "error", "detail": "You aren't a member of this group."}))
+            except GroupChatPermissionError as exc:
+                logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
+                await self.send(text_data=json.dumps({"type": "error", "detail": "You don't have permission to do that."}))
+            except PermissionError as exc:
+                logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
+                await self.send(text_data=json.dumps({"type": "error", "detail": "You don't have permission to do that."}))
+            except GroupChatValidationError as exc:
+                logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
+                await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please check it and try again."}))
+            except ValueError as exc:
+                # Not a GroupChatValidationError - _create_group_message's own
+                # "no such group" check.
+                logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
+                await self.send(text_data=json.dumps({"type": "error", "detail": "That group could not be found."}))
             except Exception:
                 logger.exception("Group message failed to save from profile %s", self.profile_id)
                 await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
@@ -621,12 +639,24 @@ class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebso
         if not recipient_slug or not (body or ciphertext or image_ids or markup_map_uuid):
             return
 
+        from urbanlens.dashboard.services.messaging.direct_messages import DirectMessageValidationError, RecipientNotAcceptingMessagesError
+
         try:
             await self._create_message(recipient_slug, body, ciphertext, nonce, key_version, image_ids, markup_map_uuid, reply_to_id)
         except MessageRateLimitedError as exc:
-            await self._report_limit(exc.safe_message)
-        except (ValueError, PermissionError) as exc:
-            await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
+            logger.info("Direct message rate-limited for profile %s: %s", self.profile_id, exc)
+            await self._report_limit(_RATE_LIMITED_DETAIL)
+        except RecipientNotAcceptingMessagesError as exc:
+            logger.info("Direct message rejected for profile %s: %s", self.profile_id, exc)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "This user isn't accepting messages from you."}))
+        except DirectMessageValidationError as exc:
+            logger.info("Direct message rejected for profile %s: %s", self.profile_id, exc)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please check it and try again."}))
+        except ValueError as exc:
+            # Not a DirectMessageValidationError - _create_message's own "no
+            # such recipient" check.
+            logger.info("Direct message rejected for profile %s: %s", self.profile_id, exc)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "That user could not be found."}))
         except Exception:
             logger.exception("Direct message failed to save from profile %s", self.profile_id)
             await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
@@ -1019,6 +1049,8 @@ class SafetyCheckinChatConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncW
         if not body:
             return
 
+        from urbanlens.dashboard.services.visits.safety import CheckinMessagingArchivedError, SafetyValidationError
+
         try:
             message = await self._create_message(body)
         except MessageRateLimitedError as exc:
@@ -1026,9 +1058,28 @@ class SafetyCheckinChatConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncW
             # the refusal is now raised by the service (it has to be, so the HTTP
             # fallback shares one budget), and answering every refused frame
             # individually turns a flood into a flood in both directions.
-            await self._report_limit(exc.safe_message)
+            logger.info("Safety chat message rate-limited on checkin %s: %s", self.checkin.pk, exc)
+            await self._report_limit(_RATE_LIMITED_DETAIL)
+            return
+        except CheckinMessagingArchivedError as exc:
+            # Named explicitly rather than falling into the bare ValueError
+            # branch below - previously the only thing that made that branch
+            # safe for this case was that __init__ passed the same string to
+            # both str(exc) and safe_message, which SafetyValidationError (see
+            # below) no longer does. The message is log-only now, same as
+            # SafetyValidationError - never relay str(exc) here.
+            logger.info("Safety chat message refused on archived checkin %s: %s", self.checkin.pk, exc)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "This check-in has concluded and can no longer receive messages."}))
+            return
+        except SafetyValidationError as exc:
+            # The message is log-only now (may be more detailed than anything
+            # meant for a client) - never relay str(exc) here.
+            logger.info("Safety chat message rejected on checkin %s: %s", self.checkin.pk, exc)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent."}))
             return
         except ValueError as exc:
+            # Not a SafetyValidationError - e.g. _create_message's own "you no
+            # longer have access" check. Its own text is written to be shown.
             await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
             return
         except Exception:
@@ -1406,7 +1457,8 @@ class _ParticipantSessionConsumer(InboundVolumeMixin, CredentialScopeMixin, Asyn
         try:
             await self._send_chat_message(body)
         except MessageRateLimitedError as exc:
-            await self._report_limit(exc.safe_message)
+            logger.info("%s chat message rate-limited on session %s: %s", self.game_label, self.session_id, exc)
+            await self._report_limit(_RATE_LIMITED_DETAIL)
         except Exception:
             logger.exception("%s chat message failed on session %s", self.game_label, self.session_id)
             await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))

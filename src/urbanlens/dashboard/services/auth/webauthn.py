@@ -56,12 +56,48 @@ MAX_CREDENTIALS_PER_USER = 10
 class WebAuthnError(Exception):
     """Raised when a registration or authentication ceremony can't be completed.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    The message is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying the message -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class MaxCredentialsReachedError(WebAuthnError):
+    """The account has already registered the maximum number of passkeys."""
+
+
+class RegistrationNotPendingError(WebAuthnError):
+    """No passkey registration ceremony is pending for this session."""
+
+
+class RegistrationVerificationError(WebAuthnError):
+    """The registration ceremony's response failed verification, or was malformed."""
+
+
+class CredentialAlreadyRegisteredError(WebAuthnError):
+    """The verified credential id is already registered to some account."""
+
+
+class NoLoginPasskeysError(WebAuthnError):
+    """The account has no sign-in-factor passkeys to build a challenge from."""
+
+
+class AuthenticationNotPendingError(WebAuthnError):
+    """No passkey authentication ceremony is pending for this session."""
+
+
+class MalformedCredentialResponseError(WebAuthnError):
+    """The credential response payload couldn't be parsed."""
+
+
+class CredentialNotRegisteredError(WebAuthnError):
+    """The asserted credential isn't registered as a login factor for this user."""
+
+
+class AuthenticationVerificationError(WebAuthnError):
+    """The authentication ceremony's response failed verification."""
 
 
 def _rp_id(request: HttpRequest) -> str:
@@ -149,11 +185,11 @@ def build_registration_options(request: HttpRequest, user: User) -> str:
         JSON string suitable for ``navigator.credentials.create()`` on the client.
 
     Raises:
-        WebAuthnError: If the account has already reached the per-user credential cap.
+        MaxCredentialsReachedError: If the account has already reached the per-user credential cap.
     """
     existing = list(WebAuthnCredential.objects.for_user(user))
     if len(existing) >= MAX_CREDENTIALS_PER_USER:
-        raise WebAuthnError(f"You can register at most {MAX_CREDENTIALS_PER_USER} passkeys. Remove one first.")
+        raise MaxCredentialsReachedError(f"user {user.pk} already has {len(existing)} credentials (max {MAX_CREDENTIALS_PER_USER})")
 
     options = generate_registration_options(
         rp_id=_rp_id(request),
@@ -196,11 +232,14 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
         The newly created WebAuthnCredential.
 
     Raises:
-        WebAuthnError: If no registration is pending, the payload is malformed, or verification fails.
+        RegistrationNotPendingError: If no registration is pending.
+        RegistrationVerificationError: If the payload is malformed or verification fails.
+        CredentialAlreadyRegisteredError: If the verified credential id already belongs to a
+            saved credential.
     """
     challenge = request.session.pop(SESSION_REGISTRATION_CHALLENGE, None)
     if not challenge:
-        raise WebAuthnError("No passkey registration in progress. Please try again.")
+        raise RegistrationNotPendingError(f"no registration challenge in session for user {user.pk}")
 
     try:
         verified = verify_registration_response(
@@ -212,10 +251,10 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
         transports = [t.value for t in (parse_registration_credential_json(credential_json).response.transports or [])]
     except (InvalidRegistrationResponse, InvalidJSONStructure, KeyError, ValueError) as exc:
         logger.warning("WebAuthn registration failed for user %s: %s", user.pk, exc)
-        raise WebAuthnError("That passkey could not be verified.") from exc
+        raise RegistrationVerificationError(f"registration verification failed for user {user.pk}: {exc}") from exc
 
     if WebAuthnCredential.objects.filter(credential_id=verified.credential_id).exists():
-        raise WebAuthnError("That passkey is already registered.")
+        raise CredentialAlreadyRegisteredError(f"credential_id already registered (re-registration attempted by user {user.pk})")
 
     clean_name = (name or "").strip()[:100]
     if not clean_name:
@@ -254,11 +293,11 @@ def build_authentication_options(request: HttpRequest, user: User) -> str:
         JSON string suitable for ``navigator.credentials.get()`` on the client.
 
     Raises:
-        WebAuthnError: If the account has no sign-in passkeys.
+        NoLoginPasskeysError: If the account has no sign-in passkeys.
     """
     credentials = list(WebAuthnCredential.objects.for_user(user).filter(is_login_factor=True).select_related("e2ee_wrap__bundle"))
     if not credentials:
-        raise WebAuthnError("This account has no passkeys registered.")
+        raise NoLoginPasskeysError(f"user {user.pk} has no login-factor passkeys")
 
     options = generate_authentication_options(
         rp_id=_rp_id(request),
@@ -292,17 +331,20 @@ def verify_authentication(request: HttpRequest, user: User, credential_json: str
         The WebAuthnCredential that was used, with its sign count/last-used timestamp updated.
 
     Raises:
-        WebAuthnError: If no authentication is pending, the payload is malformed, the credential
-            isn't registered to this user, or verification fails.
+        AuthenticationNotPendingError: If no authentication is pending.
+        MalformedCredentialResponseError: If the payload is malformed.
+        CredentialNotRegisteredError: If the credential isn't registered as a login factor for
+            this user.
+        AuthenticationVerificationError: If verification fails.
     """
     challenge = request.session.pop(SESSION_AUTHENTICATION_CHALLENGE, None)
     if not challenge:
-        raise WebAuthnError("No passkey sign-in in progress. Please try again.")
+        raise AuthenticationNotPendingError(f"no authentication challenge in session for user {user.pk}")
 
     try:
         raw_id = base64url_to_bytes(json.loads(credential_json)["rawId"])
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-        raise WebAuthnError("Malformed passkey response.") from exc
+        raise MalformedCredentialResponseError(f"could not parse rawId from credential response for user {user.pk}: {exc}") from exc
 
     try:
         # is_login_factor filter: an unlock-only key was excluded from the
@@ -310,7 +352,7 @@ def verify_authentication(request: HttpRequest, user: User, credential_json: str
         # be a sign-in factor - an assertion from one must not complete login.
         stored = WebAuthnCredential.objects.get(user=user, credential_id=raw_id, is_login_factor=True)
     except WebAuthnCredential.DoesNotExist as exc:
-        raise WebAuthnError("That passkey is not registered to this account.") from exc
+        raise CredentialNotRegisteredError(f"credential {raw_id!r} not registered as a login factor for user {user.pk}") from exc
 
     try:
         verified = verify_authentication_response(
@@ -323,7 +365,7 @@ def verify_authentication(request: HttpRequest, user: User, credential_json: str
         )
     except InvalidAuthenticationResponse as exc:
         logger.warning("WebAuthn authentication failed for user %s: %s", user.pk, exc)
-        raise WebAuthnError("That passkey could not be verified.") from exc
+        raise AuthenticationVerificationError(f"authentication verification failed for user {user.pk}: {exc}") from exc
 
     WebAuthnCredential.objects.filter(pk=stored.pk).update(
         sign_count=verified.new_sign_count,

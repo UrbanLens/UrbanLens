@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, NoReturn
 
 from urbanlens.dashboard.models.aliases.model import PinAlias
@@ -10,6 +11,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.undo.base import MutationUndoHandler, register
 
 MODEL_LABEL = "pin_mutation"
+
+logger = logging.getLogger(__name__)
 
 
 def _expired(message: str) -> NoReturn:
@@ -31,7 +34,8 @@ def _move(pin: Pin, latitude: float, longitude: float) -> None:
     try:
         move_pin_to_coordinates(pin, latitude, longitude)
     except PinMoveError as exc:
-        _expired(exc.safe_message)
+        logger.info("Undo/redo move of pin %s to (%s, %s) rejected: %s", pin.pk, latitude, longitude, exc)
+        _expired("This move can't be replayed: another pin now occupies that exact location.")
 
 
 def _apply_fields(pin: Pin, fields: dict[str, Any]) -> None:

@@ -39,7 +39,7 @@ from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for, reaction_summary
 from urbanlens.dashboard.services.messaging.group_chats import (
-    GroupChatValidationError,
+    ClientUuidReusedAcrossGroupsError,
     add_group_members,
     create_group_chat,
     create_group_message,
@@ -401,7 +401,7 @@ class GroupMessageReplayScopingTests(TestCase):
         shared_uuid = uuid_module.uuid4()
         share_pin_in_group_message(self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid)
 
-        with self.assertRaises(GroupChatValidationError):
+        with self.assertRaises(ClientUuidReusedAcrossGroupsError):
             share_pin_in_group_message(self.sender, self.group_b, self.pin_b, "for group B", client_uuid=shared_uuid)
 
         # The rejected call must not have fanned out any real access to group

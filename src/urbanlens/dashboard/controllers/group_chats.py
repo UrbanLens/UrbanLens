@@ -26,8 +26,24 @@ from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedE
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message
 from urbanlens.dashboard.services.messaging.group_chats import (
+    MAX_GROUP_MEMBERS,
+    AddMembersRequiresCreatorError,
+    ConflictingMessageContentError,
+    EmptyMessageError,
     GroupChatPermissionError,
     GroupChatValidationError,
+    GroupNameRequiredError,
+    GroupNameTooLongError,
+    GroupNeedsMembersError,
+    MalformedEncryptedMessageError,
+    MemberNotAcceptingMessagesError,
+    MessageTooLongError,
+    NotAGroupMemberError,
+    NotMessageSenderError,
+    RemoveMemberRequiresCreatorError,
+    TargetNotAMemberError,
+    TooManyGroupMembersError,
+    UnknownKeyVersionError,
     create_group_chat,
     create_group_message,
     delete_group_message,
@@ -156,10 +172,27 @@ class GroupCreateView(LoginRequiredMixin, View):
         members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
         try:
             group = create_group_chat(profile, name, members)
+        except GroupNameRequiredError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("A group name is required.")
+        except GroupNameTooLongError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
+        except GroupNeedsMembersError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Add at least one other person to start a group.")
+        except TooManyGroupMembersError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That group couldn't be created.")
+        except MemberNotAcceptingMessagesError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("One of the people you tried to add isn't accepting messages from you.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         return JsonResponse({"uuid": str(group.uuid), "url": reverse("messages.group", kwargs={"group_uuid": group.uuid})}, status=201)
 
 
@@ -230,11 +263,32 @@ class GroupSendView(LoginRequiredMixin, View):
         except MessageRateLimitedError as exc:
             # A 429, not the 400 its ValueError siblings earn: the message was
             # fine, the sender is ahead of their budget. See ConversationSendView.
-            return HttpResponse(exc.safe_message, status=429, content_type="text/plain; charset=utf-8")
+            logger.info("Group message rate-limited for profile %s: %s", profile.pk, exc)
+            return HttpResponse("You're sending messages too quickly. Wait a moment and try again.", status=429, content_type="text/plain; charset=utf-8")
+        except MessageTooLongError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
+        except ConflictingMessageContentError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("A message is either plaintext or encrypted, never both.")
+        except MalformedEncryptedMessageError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That encrypted message is malformed.")
+        except UnknownKeyVersionError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Unknown encryption key version for this group.")
+        except EmptyMessageError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Message cannot be empty.")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That message couldn't be sent.")
+        except NotAGroupMemberError as exc:
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You aren't a member of this group.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -321,10 +375,21 @@ class GroupRenameView(LoginRequiredMixin, View):
         group, membership = _get_group(profile, group_uuid)
         try:
             rename_group_chat(group, profile, request.POST.get("name", ""))
+        except GroupNameRequiredError as exc:
+            logger.info("Group rename rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("A group name is required.")
+        except GroupNameTooLongError as exc:
+            logger.info("Group rename rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group rename rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That name couldn't be used.")
+        except NotAGroupMemberError as exc:
+            logger.info("Group rename rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You aren't a member of this group.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group rename rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -417,10 +482,21 @@ class GroupAddMembersView(LoginRequiredMixin, View):
             return HttpResponseBadRequest("Pick at least one person to add.")
         try:
             add_group_members(group, profile, members)
+        except TooManyGroupMembersError as exc:
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Those members couldn't be added.")
+        except AddMembersRequiresCreatorError as exc:
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("Only the group's creator can add members.")
+        except MemberNotAcceptingMessagesError as exc:
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("One of the people you tried to add isn't accepting messages from you.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -451,10 +527,18 @@ class GroupRemoveMemberView(LoginRequiredMixin, View):
         target = get_object_or_404(Profile.objects.select_related("user"), pk=profile_id_raw)
         try:
             remove_group_member(group, profile, target)
+        except TargetNotAMemberError as exc:
+            logger.info("Group remove-member rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("They aren't a member of this group.")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group remove-member rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That member couldn't be removed.")
+        except RemoveMemberRequiresCreatorError as exc:
+            logger.info("Group remove-member rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("Only the group's creator can remove other members.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group remove-member rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -501,8 +585,12 @@ class GroupMessageDeleteView(LoginRequiredMixin, View):
         message = get_object_or_404(GroupMessage, pk=message_id, group=group)
         try:
             delete_group_message(message, profile)
+        except NotMessageSenderError as exc:
+            logger.info("Group message delete rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("Only the sender can delete this message.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group message delete rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -541,10 +629,18 @@ class GroupSharePinView(LoginRequiredMixin, View):
         body = request.POST.get("body", "").strip() or f"Check out {pin.display_label}!"
         try:
             share_pin_in_group_message(profile, group, pin, body)
+        except MessageTooLongError as exc:
+            logger.info("Group pin-share rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
         except GroupChatValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            logger.info("Group pin-share rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That pin couldn't be shared.")
+        except NotAGroupMemberError as exc:
+            logger.info("Group pin-share rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You aren't a member of this group.")
         except GroupChatPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Group pin-share rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to do that.")
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 

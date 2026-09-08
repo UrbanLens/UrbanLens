@@ -27,7 +27,7 @@ from urbanlens.dashboard.models.e2ee import GroupKey
 from urbanlens.dashboard.models.group_chats.model import GroupMessage
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.messaging.group_chats import (
-    GroupChatValidationError,
+    UnknownKeyVersionError,
     create_group_chat,
     create_group_message,
 )
@@ -62,7 +62,7 @@ class GroupKeyVersionIsRealTests(TestCase):
         )
 
     def test_a_version_this_group_has_never_had_is_rejected(self) -> None:
-        with self.assertRaises(GroupChatValidationError):
+        with self.assertRaises(UnknownKeyVersionError):
             self._send(999)
 
     def test_a_version_belonging_to_another_group_is_rejected(self) -> None:
@@ -70,7 +70,7 @@ class GroupKeyVersionIsRealTests(TestCase):
         other = create_group_chat(_profile(), "Elsewhere", [_profile()])
         GroupKey.objects.create(group=other, version=7)
 
-        with self.assertRaises(GroupChatValidationError):
+        with self.assertRaises(UnknownKeyVersionError):
             self._send(7)
 
     def test_the_current_version_is_accepted(self) -> None:

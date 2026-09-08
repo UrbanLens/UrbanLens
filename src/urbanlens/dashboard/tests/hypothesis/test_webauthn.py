@@ -375,7 +375,9 @@ class LoginTwoFactorVerifyViewTests(TestCase):
 
     def test_failed_assertion_does_not_log_in(self) -> None:
         with patch.object(
-            webauthn_service, "verify_authentication", side_effect=webauthn_service.WebAuthnError("nope")
+            webauthn_service,
+            "verify_authentication",
+            side_effect=webauthn_service.AuthenticationVerificationError("nope"),
         ):
             response = self.client.post(reverse("login.2fa.verify"), data="{}", content_type="application/json")
 
@@ -446,11 +448,16 @@ class PasskeyRegistrationEndpointTests(TestCase):
     def test_options_endpoint_maps_service_errors_to_400(self) -> None:
         with patch(
             "urbanlens.dashboard.controllers.webauthn.build_registration_options",
-            side_effect=webauthn_service.WebAuthnError("Too many passkeys."),
+            side_effect=webauthn_service.MaxCredentialsReachedError("too many for test"),
         ):
             response = self.client.post(reverse("settings.security.passkeys.options"))
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json(), {"error": "Too many passkeys."})
+        self.assertEqual(
+            response.json(),
+            {
+                "error": f"You can register at most {webauthn_service.MAX_CREDENTIALS_PER_USER} passkeys. Remove one first."
+            },
+        )
 
     def test_register_endpoint_requires_a_credential_payload(self) -> None:
         response = self.client.post(reverse("settings.security.passkeys.register"), {"name": "My Key"})
@@ -460,13 +467,13 @@ class PasskeyRegistrationEndpointTests(TestCase):
     def test_register_endpoint_maps_verification_failure_to_400(self) -> None:
         with patch(
             "urbanlens.dashboard.controllers.webauthn.verify_and_save_registration",
-            side_effect=webauthn_service.WebAuthnError("Verification failed."),
+            side_effect=webauthn_service.RegistrationVerificationError("verification failed in test"),
         ):
             response = self.client.post(
                 reverse("settings.security.passkeys.register"), {"credential": "{}", "name": "My Key"}
             )
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json(), {"error": "Verification failed."})
+        self.assertEqual(response.json(), {"error": "That passkey could not be verified."})
 
     def test_register_endpoint_returns_201_with_the_saved_name(self) -> None:
         credential = baker.make(WebAuthnCredential, user=self.user, name="Saved Key")

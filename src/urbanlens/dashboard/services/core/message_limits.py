@@ -28,10 +28,6 @@ from django.conf import settings
 
 from urbanlens.dashboard.services.core.frame_limits import FrameBudget
 
-#: What a throttled sender is told. Deliberately actionable and free of numbers:
-#: the limit is a setting, and quoting it here would be one more thing to drift.
-RATE_LIMITED_MESSAGE = "You're sending messages too quickly. Wait a moment and try again."
-
 
 class MessageRateLimitedError(ValueError):
     """This sender's message budget for the current window is spent.
@@ -40,13 +36,11 @@ class MessageRateLimitedError(ValueError):
     ``ValueError`` with an error frame carrying its text, report it without
     knowing this class exists. HTTP callers catch it by name and answer 429.
 
-    ``safe_message`` matches the convention of ``DirectMessageValidationError``
-    and ``GroupChatValidationError``: it is safe to show a user verbatim.
+    The message is for logs, not the response: a catch site authors its own
+    user-facing text rather than relaying it, the same convention
+    :class:`~urbanlens.dashboard.services.pins.pin_creation.PinCreationError`
+    uses. There is only ever one raise site, so no subclass is needed.
     """
-
-    def __init__(self, message: str = RATE_LIMITED_MESSAGE) -> None:
-        self.safe_message = message
-        super().__init__(message)
 
 
 def _budget() -> FrameBudget:
@@ -65,7 +59,7 @@ def charge_message(identity: str) -> None:
         MessageRateLimitedError: The budget for this window is spent.
     """
     if not _budget().consume(identity):
-        raise MessageRateLimitedError
+        raise MessageRateLimitedError(f"message budget spent for identity={identity!r}")
 
 
 def refund_message(identity: str) -> None:

@@ -116,14 +116,14 @@ class AvatarSvgTests(TestCase):
     """End to end through the avatar path, which serves `avatars/` site-wide."""
 
     def test_avatar_upload_refuses_a_scripted_svg(self) -> None:
-        from urbanlens.dashboard.services.profile.avatar import AvatarUploadError, set_profile_avatar
+        from urbanlens.dashboard.services.profile.avatar import AvatarUnsupportedFormatError, set_profile_avatar
 
         root = tempfile.mkdtemp(prefix="ul_svg_avatar_")
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
         (Path(root) / "avatars").mkdir(parents=True, exist_ok=True)
         profile = Profile.objects.get(user=baker.make("auth.User"))
 
-        with override_settings(MEDIA_ROOT=root), self.assertRaises(AvatarUploadError):
+        with override_settings(MEDIA_ROOT=root), self.assertRaises(AvatarUnsupportedFormatError):
             set_profile_avatar(profile, SimpleUploadedFile("avatar.svg", _SCRIPTED_SVG, content_type="image/svg+xml"))
 
         profile.refresh_from_db()

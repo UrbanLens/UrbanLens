@@ -25,14 +25,22 @@ if TYPE_CHECKING:
 
 
 class ConsensusVotingError(Exception):
-    """Raised for invalid vote operations.
+    """Raised when ``record_vote`` can't cast a vote.
 
-    ``safe_message`` is always safe to surface to the caller verbatim.
+    The message is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a
+    fallback) and author its own user-facing text, rather than relaying the
+    message - that keeps a future raise site here from being able to
+    smuggle unreviewed text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class AnswerNotInRoundError(ConsensusVotingError):
+    """``chosen_answer`` doesn't belong to the round being voted on."""
+
+
+class DuplicateVoteError(ConsensusVotingError):
+    """``profile`` already cast a vote for this round."""
 
 
 @dataclass(frozen=True)
@@ -62,14 +70,14 @@ def record_vote(round_: ConsensusRound, profile: Profile, chosen_answer: Consens
     """Cast ``profile``'s vote for ``chosen_answer`` (not necessarily their own submission).
 
     Raises:
-        ConsensusVotingError: if ``chosen_answer`` isn't part of this round,
-            or ``profile`` already voted this round.
+        AnswerNotInRoundError: ``chosen_answer`` isn't part of this round.
+        DuplicateVoteError: ``profile`` already voted this round.
     """
     if chosen_answer.round_id != round_.pk:
-        raise ConsensusVotingError("That answer isn't part of this round.")
+        raise AnswerNotInRoundError(f"answer {chosen_answer.pk} belongs to round {chosen_answer.round_id}, not round {round_.pk}")
     vote, created = ConsensusVote.objects.get_or_create(round=round_, profile=profile, defaults={"chosen_answer": chosen_answer})
     if not created:
-        raise ConsensusVotingError("You've already voted this round.")
+        raise DuplicateVoteError(f"profile {profile.pk} already voted in round {round_.pk}")
     return vote
 
 

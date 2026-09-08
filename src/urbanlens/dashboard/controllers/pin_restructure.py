@@ -322,7 +322,8 @@ class PinRestructureApplyView(LoginRequiredMixin, View):
             except UnresolvedMergeConflictError:
                 unresolved.append(candidate)
             except PinMergeCollisionError as exc:
-                collision_messages.append(exc.safe_message)
+                logger.info("Pin restructure: merge of pin %s into %s refused by collision: %s", candidate.pk, pin.pk, exc)
+                collision_messages.append(f"Couldn't merge {candidate.effective_name} - another pin is already in the spot it would need to move to.")
 
         if unresolved:
             # Recomputing the plan would drop these candidates too (merge_pins

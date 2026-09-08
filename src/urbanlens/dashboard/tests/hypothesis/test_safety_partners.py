@@ -27,6 +27,10 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinPartner, SafetyCheckinPartnerStatus
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.visits.safety import (
+    CannotInviteSelfError,
+    MaxPartnersReachedError,
+    PartnerAlreadyInvitedError,
+    PartnerNotFoundError,
     accept_checkin_partner_invite,
     invite_checkin_partner,
     is_owner_or_accepted_partner,
@@ -60,27 +64,27 @@ class InviteCheckinPartnerTests(TestCase):
         self.checkin = _checkin(self.owner)
 
     def test_unknown_username_raises(self):
-        with self.assertRaisesMessage(ValueError, "No user found"):
+        with self.assertRaises(PartnerNotFoundError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username="nobody-by-this-name")
 
     def test_self_invite_raises(self):
-        with self.assertRaisesMessage(ValueError, "your own check-in"):
+        with self.assertRaises(CannotInviteSelfError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=self.owner.username)
 
     def test_blocked_invitee_raises(self):
-        """Same message as an unknown username - confirming a block would itself
-        confirm the account exists, which is the enumeration leak this guards."""
+        """Same exception type as an unknown username - confirming a block would
+        itself confirm the account exists, which is the enumeration leak this guards."""
         invitee = _profile()
         Friendship.objects.create(from_profile=invitee, to_profile=self.owner, status=FriendshipStatus.BLOCKED)
 
-        with self.assertRaisesMessage(ValueError, "No user found"):
+        with self.assertRaises(PartnerNotFoundError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=invitee.username)
 
     def test_duplicate_invite_raises(self):
         invitee = _profile()
         invite_checkin_partner(self.checkin, inviter=self.owner, username=invitee.username)
 
-        with self.assertRaisesMessage(ValueError, "already been invited"):
+        with self.assertRaises(PartnerAlreadyInvitedError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=invitee.username)
 
     def test_over_cap_raises(self):
@@ -91,7 +95,7 @@ class InviteCheckinPartnerTests(TestCase):
         second = _profile()
         invite_checkin_partner(self.checkin, inviter=self.owner, username=first.username)
 
-        with self.assertRaisesMessage(ValueError, "at most 1 partners"):
+        with self.assertRaises(MaxPartnersReachedError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=second.username)
 
     def test_over_cap_raises_even_for_unknown_username(self):
@@ -107,7 +111,7 @@ class InviteCheckinPartnerTests(TestCase):
         first = _profile()
         invite_checkin_partner(self.checkin, inviter=self.owner, username=first.username)
 
-        with self.assertRaisesMessage(ValueError, "at most 1 partners"):
+        with self.assertRaises(MaxPartnersReachedError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username="no-such-person-at-all")
 
     def test_successful_invite_creates_invited_partner(self):

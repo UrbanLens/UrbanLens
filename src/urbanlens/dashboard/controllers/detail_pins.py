@@ -67,14 +67,12 @@ def _schedule_classification(kind: str, pk: int) -> None:
 
 
 class ChildWikiLocationError(ValueError):
-    """A child wiki can't be placed at the requested point.
+    """A child wiki can't be placed at the requested point - it's already taken.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a catch site should author its
+    own user-facing text rather than relaying it, so a future raise here can't
+    smuggle unreviewed text into a response.
     """
-
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
 
 
 def _location_for_child_wiki(latitude, longitude, *, exclude_wiki: Wiki | None = None) -> Location:
@@ -112,7 +110,7 @@ def _location_for_child_wiki(latitude, longitude, *, exclude_wiki: Wiki | None =
         return location
     if exclude_wiki is not None and existing_wiki.pk == exclude_wiki.pk:
         return location
-    raise ChildWikiLocationError("There is already a wiki marker at these exact coordinates. Place this one slightly apart.")
+    raise ChildWikiLocationError(f"wiki {existing_wiki.pk} already occupies location {location.pk} ({latitude}, {longitude})")
 
 
 class DetailPinPanelView(LoginRequiredMixin, View):
@@ -405,7 +403,8 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         try:
             child_location = _location_for_child_wiki(lat, lon)
         except ChildWikiLocationError as exc:
-            return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
+            logger.info("child wiki location rejected: %s", exc)
+            return JsonResponse({"ok": False, "error": "There is already a wiki marker at these exact coordinates. Place this one slightly apart."}, status=400)
 
         # The real row's name for the fallback: `wiki` may be a concealed
         # projection, and its name is the automatic placeholder this viewer was
@@ -479,7 +478,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             try:
                 new_location = _location_for_child_wiki(new_latitude, new_longitude, exclude_wiki=child_wiki)
             except ChildWikiLocationError as exc:
-                return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
+                logger.info("child wiki move rejected: %s", exc)
+                return JsonResponse({"ok": False, "error": "There is already a wiki marker at these exact coordinates. Move it slightly apart."}, status=400)
 
         # Style/content fields update silently (no WikiEdit) - same reasoning
         # as personal detail pins: these autosave on every panel change, and a
