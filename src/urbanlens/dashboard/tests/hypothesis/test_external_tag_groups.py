@@ -465,3 +465,126 @@ class VocabularyAutoRegistrationTests(TestCase):
         entry.refresh_from_db()
         self.assertEqual(entry.group_id, group.pk)
         self.assertTrue(entry.is_preferred)
+
+
+class MatchingVocabularyCachingTests(TestCase):
+    """matching_vocabulary()'s cache: served from a shared cache, invalidated on every write path."""
+
+    def test_first_call_after_a_miss_queries_the_database_once(self):
+        ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
+
+        with self.assertNumQueries(1):
+            matching_vocabulary("restaurant")
+
+    def test_a_second_call_with_no_writes_between_does_not_requery(self):
+        ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
+        matching_vocabulary("restaurant")  # warms the cache
+
+        with self.assertNumQueries(0):
+            matching_vocabulary("restaurant")
+
+    def test_tag_match_q_second_call_with_no_writes_between_does_not_requery(self):
+        ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
+        tag_match_q("restaurant", "external_tags")  # warms the cache
+
+        with self.assertNumQueries(0):
+            tag_match_q("restaurant", "external_tags")
+
+    def test_a_multi_word_query_reuses_one_cache_fill_across_every_term(self):
+        """The exact multiplication P87 describes: one matching_vocabulary() call per search word."""
+        ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
+        ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="cafe")
+        matching_vocabulary("restaurant")  # warms the cache
+
+        with self.assertNumQueries(0):
+            matching_vocabulary("restaurant")
+            matching_vocabulary("cafe")
+            matching_vocabulary("nonexistentterm")
+
+    def test_create_group_is_visible_on_the_very_next_call(self):
+        osm = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="eatery")
+        overture = ExternalTagVocabularyEntry.objects.create(
+            source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant"
+        )
+        # Warm the cache before the two entries share a bucket - "restaurant"
+        # only reaches the overture entry's own text at this point.
+        self.assertEqual({m.pk for m in matching_vocabulary("restaurant")}, {overture.pk})
+
+        create_group([osm.pk, overture.pk])
+
+        self.assertEqual({m.pk for m in matching_vocabulary("restaurant")}, {osm.pk, overture.pk})
+
+    def test_move_entry_leaving_a_non_empty_group_is_visible_on_the_very_next_call(self):
+        a = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="eatery")
+        b = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="cuisine", value="italian")
+        create_group([a.pk, b.pk])
+        c = ExternalTagVocabularyEntry.objects.create(
+            source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant"
+        )
+        group_b = create_group([c.pk])
+        # Warm the cache before a joins c's group.
+        self.assertEqual({m.pk for m in matching_vocabulary("restaurant")}, {c.pk})
+
+        move_entry(a.pk, group_b.pk)
+
+        self.assertEqual({m.pk for m in matching_vocabulary("restaurant")}, {a.pk, c.pk})
+
+    def test_move_entry_that_empties_and_deletes_the_old_group_is_visible_on_the_very_next_call(self):
+        a = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="eatery")
+        group_a = create_group([a.pk])  # singleton - moving a out empties and deletes it
+        b = ExternalTagVocabularyEntry.objects.create(
+            source=ExternalTagSource.OVERTURE, key="building_subtype", value="restaurant"
+        )
+        group_b = create_group([b.pk])
+        # Warm the cache before a moves (and group_a is deleted as a side effect).
+        self.assertEqual({m.pk for m in matching_vocabulary("restaurant")}, {b.pk})
+
+        emptied = move_entry(a.pk, group_b.pk)
+
+        self.assertEqual(emptied, group_a.pk)
+        self.assertEqual({m.pk for m in matching_vocabulary("restaurant")}, {a.pk, b.pk})
+
+    def test_set_preferred_is_visible_on_the_very_next_call(self):
+        a = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
+        b = ExternalTagVocabularyEntry.objects.create(
+            source=ExternalTagSource.OVERTURE, key="building_subtype", value="eatery"
+        )
+        group = create_group([a.pk, b.pk], preferred_id=a.pk)
+        # Warm the cache with a's is_preferred=True baked into the cached entries.
+        warm = {m.pk: m.is_preferred for m in matching_vocabulary("restaurant")}
+        self.assertTrue(warm[a.pk])
+        self.assertFalse(warm[b.pk])
+
+        set_preferred(b.pk, group.pk)
+
+        refreshed = {m.pk: m.is_preferred for m in matching_vocabulary("restaurant")}
+        self.assertFalse(refreshed[a.pk])
+        self.assertTrue(refreshed[b.pk])
+
+    def test_a_newly_synced_tag_is_visible_on_the_very_next_call(self):
+        """PlaceExternalTag.sync_for_source registers new vocabulary outside this module's three
+        admin functions (see ExternalTagVocabularyEntry's docstring) - it must invalidate too."""
+        place = baker.make(Place)
+        # Warm the cache while the vocabulary table is still empty.
+        self.assertEqual(matching_vocabulary("restaurant"), [])
+
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)]
+        )
+
+        self.assertEqual(len(matching_vocabulary("restaurant")), 1)
+
+    def test_resyncing_an_already_known_tag_does_not_invalidate_the_cache(self):
+        """The common case (re-syncing tags already in the vocabulary) must not thrash the cache."""
+        place = baker.make(Place)
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)]
+        )
+        matching_vocabulary("restaurant")  # warms the cache
+
+        PlaceExternalTag.sync_for_source(
+            place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)]
+        )
+
+        with self.assertNumQueries(0):
+            matching_vocabulary("restaurant")

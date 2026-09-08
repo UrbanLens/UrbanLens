@@ -139,12 +139,22 @@ class PlaceExternalTag(abstract.DashboardModel):
             tags: The tags to store; entries with an empty value are skipped.
         """
         from urbanlens.dashboard.models.place.external_tag_group import ExternalTagVocabularyEntry
+        from urbanlens.dashboard.services.locations.external_tag_groups import _invalidate_vocabulary_cache
 
         kept = [tag for tag in tags if tag.value]
+        registered_new = False
         with transaction.atomic():
             cls.objects.filter(place=place, source=source).delete()
             cls.objects.bulk_create(cls(place=place, source=source, key=tag.key, value=tag.value, is_primary=tag.is_primary, confidence=tag.confidence) for tag in kept)
             # Registers new vocabulary as it's first seen; get_or_create leaves
             # an existing entry's group/is_preferred untouched on a resync.
             for tag in kept:
-                ExternalTagVocabularyEntry.objects.get_or_create(source=source, key=tag.key, value=tag.value)
+                _, created = ExternalTagVocabularyEntry.objects.get_or_create(source=source, key=tag.key, value=tag.value)
+                registered_new = registered_new or created
+        if registered_new:
+            # A newly-seen tag changes what matching_vocabulary() resolves,
+            # same as an admin's create_group/move_entry/set_preferred - see
+            # that module's cache. Skipped on a plain resync (the common
+            # case) so this doesn't invalidate on every re-sync of tags
+            # already known.
+            _invalidate_vocabulary_cache()

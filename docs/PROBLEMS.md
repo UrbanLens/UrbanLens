@@ -3278,48 +3278,6 @@ unrelated commit.
 Found while resolving P84; two querysets (`GeocodedLocationQuerySet`, `WikiQuerySet`) were
 parameterized there because their unused model import was the symptom of the missing type argument.
 
-## P87 — `matching_vocabulary()` reloads the entire tag-vocabulary table on every search term, uncached
-
-`id: P87` · `status: open` · `updated: 2026-09-08`
-
-Found 2026-09-08 during the pre-merge audit of `release/v_0_8_0` against `docs/GOALS.md`,
-performance, maintainability and completeness; confirmed on an independent adversarial pass.
-
-`matching_vocabulary()` (`services/locations/external_tag_groups.py:172`, new this branch - `26f12a4da`,
-`3c80a6f44`) does `ExternalTagVocabularyEntry.objects.all()` at line 194: every row in the table,
-unfiltered, no `.only()`/`.values()` narrowing, and no cache of any kind. It re-runs that full load
-on every single call.
-
-Multiplied twice over by its callers:
-
-- `tag_match_q()` (`external_tag_groups.py:217`) calls `matching_vocabulary(term)` once per search
-  term. `term_filter()`'s per-term `extra` callable (`services/global_search/providers.py`) is
-  `tag_match_q`, so a multi-word query does one full-table load per word through this path alone.
-- It backs both the map's autocomplete bar (`services/map_pins/autocomplete.py:71,101,161,229` -
-  `search_local()`) and global search (`services/global_search/providers.py:690,860`, two provider
-  classes each passing their own `tag_path=`), so a global search that matches both providers
-  multiplies again per provider on top of per term.
-
-Same bug class as two performance defects already fixed elsewhere in this branch - `39b23660a`
-(a cost paid needlessly on every request until fixed) and `46b1a0007` (a save handler re-evaluating
-a whole table it did not need to touch) - but this instance shipped with the same branch's own
-tag-vocabulary feature and was missed by both of those passes.
-
-Not measured against row counts or load this session - the vocabulary table is admin-curated (see
-the module docstring: entries and groups only change through `create_group`/`move_entry`/
-`set_preferred`, all admin actions on the tag-grouping page), so it is almost certainly small in the
-dev environment today, which is exactly why this would not have been noticed yet.
-
-**Why this needs a considered fix, not a rushed patch.** The obvious shortcut is a process-local or
-Django cache of the vocabulary, invalidated on write. But there are three separate mutation entry
-points to cover - `create_group`, `move_entry`, `set_preferred` - and `move_entry` also deletes a
-now-empty `ExternalTagGroup` as a side effect (`external_tag_groups.py:307-310`), which is a fourth
-way the cached shape can go stale if the invalidation is written against the three obvious call
-names instead of "anything that touches this table." Given how rarely this table is written and how
-often it is read on the hot path (every keystroke of an autocomplete search), get the invalidation
-right before landing rather than shipping something that returns stale buckets between an admin's
-edit and the next full restart.
-
 ## P88 — Every wiki view mints a permanent access grant, with no product sign-off recorded for it
 
 `id: P88` · `status: open` · `updated: 2026-09-08`

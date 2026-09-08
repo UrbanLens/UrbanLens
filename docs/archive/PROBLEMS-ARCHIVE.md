@@ -12742,3 +12742,32 @@ outright, since no legitimate client sends one.
 Worth noting for the next sweep: both entries describe the same code and neither cites the other.
 `docs/INDEX.md` carried both, one line apart in the P-block, with near-identical claims - which is
 the shape a duplicate takes here and is greppable.
+
+## RESOLVED 2026-09-08: `matching_vocabulary()` reloaded the entire tag-vocabulary table on every search term, uncached
+
+`id: P87` · `status: fixed` · `resolved: 2026-09-08`
+
+`matching_vocabulary()` (`services/locations/external_tag_groups.py`) now serves the vocabulary
+table from `django.core.cache.cache` (materialized once, on the first miss) instead of re-running
+`ExternalTagVocabularyEntry.objects.all()` on every call - fixing the per-search-term, per-provider
+multiplication the original entry measured. `_invalidate_vocabulary_cache()` is `cache.delete`d
+(not TTL-only) at the end of `create_group`, `move_entry` - once, covering both its normal-move
+and its old-group-empties-and-deletes branches, since the branch itself changes no surviving
+entry's bucket key beyond what the preceding `entry.save()` already did - and `set_preferred`.
+Tests in `tests/hypothesis/test_external_tag_groups.py::MatchingVocabularyCachingTests` cover both
+halves: a second call with no writes between does not requery (`assertNumQueries(0)`), and a write
+through each of the three functions (plus the delete branch specifically) is visible on the very
+next call with no manual cache-clear in the test.
+
+**The original entry's premise was incomplete, not just its fix.** It says the table "only changes
+through `create_group`/`move_entry`/`set_preferred`" (citing the module docstring) and that the
+fourth risk was `move_entry`'s group-delete side effect. Neither the module nor that survey caught
+a fourth *class* of write: `ExternalTagVocabularyEntry`'s own docstring says it is "Auto-registered
+(`get_or_create`) by `PlaceExternalTag.sync_for_source` as new tags appear" -
+`models/place/external_tag.py:sync_for_source`, a different file entirely, called on every tag
+ingestion from OSM/Overture, not an admin action. Left uncovered, the cache built for this entry
+would have hidden a newly-synced tag from search for up to the cache's TTL. `sync_for_source` now
+calls the same `_invalidate_vocabulary_cache()` helper, gated on `get_or_create`'s `created` flag so
+a plain resync (the common case - most tags it sees are already known) does not thrash the cache.
+Confirms the entry's own "anything that touches this table" framing was the right standard - it
+just was not applied to every file that does.
