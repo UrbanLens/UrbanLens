@@ -49,6 +49,21 @@
             </div>
             {% endif %}
 
+            {% if alerts %}
+            <ul class="nps-alerts">
+                {% for alert in alerts %}
+                <li class="nps-alert">
+                    <i class="material-symbols-outlined">{{ alert.icon }}</i>
+                    {% if alert.href %}
+                    <a href="{{ alert.href }}" target="_blank" rel="noopener noreferrer">{{ alert.text }}</a>
+                    {% else %}
+                    <span>{{ alert.text }}</span>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
             {% if facts %}
             <dl class="nps-facts">
                 {% for fact in facts %}

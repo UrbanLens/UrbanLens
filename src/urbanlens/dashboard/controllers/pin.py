@@ -1473,13 +1473,21 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nps_info: pin %s is not within any NPS unit", pin_slug)
             return HttpResponse(status=204)
 
-        from urbanlens.dashboard.plugins.builtin.nps import park_facts
+        from urbanlens.dashboard.plugins.builtin.nps import alert_facts, park_facts
 
-        # The same rows the API serves, from the same helper - the two rendered
+        # The same rows the API serves, from the same helpers - the two rendered
         # different subsets of this payload by hand before, and the hours the
         # template did have it declined to read ("Standard hours vary - check
-        # NPS.gov", printed over the cached hours).
-        context = {"park": data, "facts": park_facts(data), "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1)}
+        # NPS.gov", printed over the cached hours). Alerts are kept out of
+        # `facts` here too, same reasoning as `NpsPanelSource.api_payload`: a
+        # closure or hazard is safety-critical and belongs ahead of routine
+        # facts like hours, not mixed into the same list.
+        context = {
+            "park": data,
+            "alerts": alert_facts(data),
+            "facts": park_facts(data),
+            "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1),
+        }
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
 
     def _location_data_overview_fields(self, source_key: str, data: dict) -> dict | None:

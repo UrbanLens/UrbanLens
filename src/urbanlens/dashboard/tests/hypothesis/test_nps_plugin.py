@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -251,3 +252,52 @@ class NpsEnrichmentSourceTests(TestCase):
         self.assertEqual(data["visitor_centers"], [])
         self.assertEqual(data["campgrounds"], [])
         mock_gateway_cls.return_value.get_alerts.assert_called_once_with("yell")
+
+
+class NpsInfoViewTests(TestCase):
+    """``PinController.nps_info`` - the web HTMX partial, not the JSON API.
+
+    Alerts reach the JSON API through ``api_payload``'s ``facts``, but the web
+    panel is bespoke markup (``pin_nps.html``) rather than the generic
+    ``_simple_info_panel.html`` renderer, so it needs its own explicit wiring -
+    this pins that a closure/hazard alert actually reaches the rendered page,
+    not just the API.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location: Location = baker.make("dashboard.Location", latitude=44.6, longitude=-110.5)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=self.location)
+        self.url = reverse("pin.nps", args=[self.pin.slug])
+
+    def _seed_cache(self, *, park: dict | None, alerts: list | None = None) -> None:
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls, mock.patch(_CONFIGURED_PATH, return_value=True):
+            _gateway_returning(mock_gateway_cls, park=park, alerts=alerts)
+            NpsPanelSource().fetch(self.pin)
+
+    def test_an_active_alert_renders_on_the_web_panel(self) -> None:
+        self._seed_cache(
+            park={"park_code": "yell", "full_name": "Yellowstone National Park"},
+            alerts=[{"id": 1, "title": "Road closed", "category": "Park Closure"}],
+        )
+        self.client.force_login(self.pin.profile.user)
+
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        ):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Park Closure: Road closed")
+
+    def test_no_alerts_renders_cleanly_with_no_alert_markup(self) -> None:
+        self._seed_cache(park={"park_code": "yell", "full_name": "Yellowstone National Park"}, alerts=[])
+        self.client.force_login(self.pin.profile.user)
+
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        ):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "nps-alerts")
