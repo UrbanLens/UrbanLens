@@ -1,6 +1,16 @@
 /**
- * Shared Leaflet.markercluster helpers used by every map that groups nearby
- * pins: the main map's inline cluster layer, and the pin-detail / wiki maps.
+ * Shared Leaflet.markercluster helpers actually used by the pin-detail / wiki
+ * maps (`entries/map-annotations.ts`'s `detailPinLayer`) and, via
+ * `photo-map.ts`, their photo layer.
+ *
+ * The main `/map/` page does **not** import this module. Its inline
+ * `<script>` (`pages/map/index.html`) hand-rolls its own equivalent
+ * `L.markerClusterGroup`/`iconCreateFunction`/badge markup, independently of
+ * `createPinClusterGroup`/`pinClusterIconParts` here - inline template
+ * scripts can't import a TS module (see P34/P83). The two copies currently
+ * agree (`PIN_CLUSTER_PX` below and `pages/map/index.html`'s own `{ s: 34,
+ * m: 42, l: 50 }` both say the same sizes as `.pin-cluster--{s,m,l}` in
+ * `_map.scss`), but nothing enforces that: see P92.
  *
  * Pin-detail and wiki maps zoom in close enough that neighbouring buildings
  * must stay independently clickable. Clustering therefore collapses to a 1px

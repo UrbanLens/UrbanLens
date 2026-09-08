@@ -77,14 +77,22 @@ the whole subtree. `Comment.wiki` is `CASCADE` too, so other people's comments g
 cascade case the sign-off treated as hypothetical is live, and
 `CascadeKeepsBenefitsTests` pins the ruling on it: a cascade retracts nothing and weights nothing.
 
-**There is no site to apply the weight to yet.** Every path by which a reputation-earning
+**There is no site to apply the weight to yet.** ~~Every path by which a reputation-earning
 contribution disappears was checked: the wiki photo delete is owner-only and already passes
 `withdrawn_by_contributor=True`; `WikiCommentDeleteView` refuses a non-author;
 `detach_image_from_wiki` has one caller. Nobody can currently remove somebody else's scored
 contribution, so `MODERATED_REMOVAL_WEIGHT` has no caller - it is the mechanism, waiting for the
-first moderation path that needs it. That is the point of building it now rather than later: the
-column and the sum are in place, so the path that needs it is a one-line change instead of a
-migration argument.
+first moderation path that needs it.~~ **Corrected 2026-09-08:** this premise was wrong at the time
+it was written. `LocationWikiRevertView`'s history template shows its Revert button to any viewer
+with wiki access, not just the edit's author, unlike the author-only Expunge button beside it -
+the audit that checked "every path" missed this pre-existing one, and `on_wiki_edit_reverted`
+retracted any revert's reputation event in full regardless of who performed it, letting any
+wiki-access viewer erase another editor's standing outright. Fixed in `e32584be6`:
+`on_wiki_edit_reverted` is now `MODERATED_REMOVAL_WEIGHT`'s first real caller - a self-revert still
+retracts in full (a withdrawal), a revert by anyone else weights the event instead of erasing it
+(P86's moderated-removal case, per this decision). That is the point of building it now rather than
+later: the column and the sum are in place, so the path that needs it is a one-line change instead
+of a migration argument.
 
 **What the implementation actually fixed** was therefore not the moderator case at all. It was that
 a contributor **deleting their own wiki comment** kept its points, while withdrawing a photo

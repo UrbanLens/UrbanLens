@@ -908,9 +908,13 @@ raw-`Response` exception this entry already names) are what a next slice should 
   conversation/group key once per message (50 sequential identical failing requests on a
   50-message thread). :1459 `decryptDom` also strips `data-e2ee-*` *before* attempting decryption,
   so a transient failure is permanently unrecoverable on WS-appended messages.
-- E2EE keys persist in IndexedDB across logout - `clearProfileKeys` is called only from
+- ~~E2EE keys persist in IndexedDB across logout - `clearProfileKeys` is called only from
   `resetKeys`. Possibly intended (documented same-origin trust boundary), but the logout gap looks
-  unconsidered rather than chosen; decide it explicitly and add a "forget this device" action.
+  unconsidered rather than chosen; decide it explicitly and add a "forget this device" action.~~
+  Fixed 2026-09-05, tracked separately as P48 (`docs/archive/PROBLEMS-ARCHIVE.md`): `wireSignOutForm`
+  now clears a signed-out profile's keys too, so this bullet was stale leftover text from before
+  that landed - found still asserting the opposite of current behavior during the pre-merge audit
+  of `release/v_0_8_0` (2026-09-08). Removed rather than left standing next to its own resolution.
 
 **Operational:**
 
@@ -3507,3 +3511,47 @@ pending separately. This entry is not claiming nobody is acting on it - it recor
 state on disk, seven of the eight files have no evidence of ever having executed, so whoever reviews
 the pending run's results should close or narrow this entry against what that run actually finds,
 rather than leaving it open by default once the run completes.
+
+## P92 — `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's inline script
+
+`id: P92` · `status: open` · `updated: 2026-09-08`
+
+Found 2026-09-08 while closing out the pre-merge audit of `release/v_0_8_0` (the "audit wasn't done yet" tail of
+that pass, not a new sweep - see the audit's own confirmed finding "map-clusters.ts's shared cluster-icon module
+was never wired into the main map it claims to cover").
+
+`shared/map-clusters.ts`'s module docstring used to claim it was shared by "the main map's inline cluster layer,
+and the pin-detail / wiki maps." That was only half true: `entries/map-annotations.ts` (the pin-detail/wiki map
+entry) does import and use `createPinClusterGroup`/`pinClusterIconParts` from it (`detailPinLayer`), but the main
+`/map/` page's own inline `<script>` (`templates/dashboard/pages/map/index.html:979-999`) never imports this
+module at all - it hand-rolls its own `L.markerClusterGroup` call with its own copy of the badge sizing table and
+`iconCreateFunction`:
+
+```js
+var clusterGroup = L.markerClusterGroup({
+    ...
+    iconCreateFunction(cluster) {
+        const n   = cluster.getChildCount();
+        const siz = n < 10 ? 's' : n < 100 ? 'm' : 'l';
+        // Must match the width/height of .pin-cluster--{s,m,l} in _map.scss - a
+        // mismatch here makes the flex-centered wrapper squash into an oval.
+        const px  = { s: 34, m: 42, l: 50 }[siz];
+        return L.divIcon({ html: `<div class="pin-cluster pin-cluster--${siz}"><span>${n}</span></div>`, ... });
+    },
+});
+```
+
+versus `map-clusters.ts`'s `PIN_CLUSTER_PX = { s: 34, m: 42, l: 50 }` and `pinClusterIconParts()`, which produce
+the identical `html`/size. The two are hand-kept in lockstep today (both docstrings separately say "must match
+`.pin-cluster--{s,m,l}` in `_map.scss`"), but nothing enforces that agreement - a future change to either the
+threshold counts (`< 10`/`< 100`) or the pixel sizes in one place silently stops matching the other, and CSS is
+the only place both would visibly disagree (a squashed-oval badge on one map but not the other).
+
+Docstring corrected in the same pass this entry was filed (no longer overclaims shared coverage), but the actual
+duplication is unfixed. Not fixed here because the real fix isn't a one-liner: the main map's clustering code is
+inline template JavaScript, which cannot `import` a TS module - unifying it needs either (a) a mechanism for an
+inline `<script>` to read shared constants/functions from a bundled entry (no such mechanism exists anywhere else
+in this codebase today, per a search for `window.UL =`/`globalThis.UL =`), or (b) migrating the main map's inline
+script into a proper bundled TS entry the way `map-annotations.ts` already is for pin-detail/wiki maps - which is
+the broader, already-tracked P83/P34 initiative ("over half of every page's HTML is inline `<script>`"), not a
+scoped fix for this one badge. Left open and cross-referenced from both rather than attempted piecemeal here.
