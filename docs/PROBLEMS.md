@@ -3278,53 +3278,6 @@ unrelated commit.
 Found while resolving P84; two querysets (`GeocodedLocationQuerySet`, `WikiQuerySet`) were
 parameterized there because their unused model import was the symptom of the missing type argument.
 
-## P88 — Every wiki view mints a permanent access grant, with no product sign-off recorded for it
-
-`id: P88` · `status: open` · `updated: 2026-09-08`
-
-Found 2026-09-08 during the pre-merge audit of `release/v_0_8_0` against `docs/GOALS.md`; confirmed
-on an independent adversarial pass.
-
-`resolve_visible_wiki()` (`services/wiki/wiki_access.py:504`) calls
-`PlaceAccessGrant.objects.record_engagement(profile, location.place)` unconditionally on every
-successful wiki view (guarded only by `location.place_id is not None`, line 501).
-`record_engagement()` (`models/place/queryset.py:194-213`) is a `get_or_create` under
-`GrantReason.GRANDFATHERED_ENGAGEMENT`, and `PlaceAccessGrant`'s own docstring
-(`models/place/model.py:274-275`) states the consequence plainly: "Grants are permanent and are
-never revoked by pin churn, unlike computed access." So the first time a profile loads a wiki they
-currently qualify for, they keep that access forever - even after the pin that earned it is later
-deleted, unpinned, or moved.
-
-`docs/GOALS.md:33-34` states the access rule this sits inside: "A user earns access to a location's
-wiki only by having their own pin inside that place's official boundary... nothing else grants
-access." A silent, permanent grandfather-on-read converts that from "you must currently hold a
-qualifying pin" into "you must have held one at least once and happened to open the page" - a
-material weakening of a stated goal, done as a side effect rather than a decision.
-
-**Not itself a discovery leak.** The existing 404 in the same function
-(`if not location_visible_to(location, profile): raise Http404`, line 493) still gates the first
-view, so this only ever entrenches access already legitimately granted at least once. It is also
-well-tested behaviorally: `tests/hypothesis/test_grandfathered_parcel_split_access.py::WikiEngagementGrandfatheringTests`
-exercises exactly this path, and its docstring describes the resulting behavior accurately. The gap
-is documentation and decision-making, not a crash or an exploit.
-
-**What is missing is the sign-off, not the code.** The sibling mechanism landed in the same commit
-family - split-family permanence (`PlaceAccessGrantManager.snapshot_family`, called from
-`services/places/splits.process_split` and `wiki_access._snapshot_earned_split_families`) - carries
-an explicit product decision recorded in its test docstring: "Confirmed with Jess 2026-08-31:
-grandfathering here is truly permanent - once granted, no amount of unpinning ever takes it away
-again" (`tests/hypothesis/test_grandfathered_parcel_split_access.py:14-16`). The engagement-
-grandfathering case is described two paragraphs below that in the very same module docstring, does
-the same kind of permanent and irreversible thing to the same model, and has no equivalent sign-off
-anywhere - not in that test file, not in `docs/designs/`, not in `docs/GOALS.md`.
-`grep -rn "Confirmed with Jess" src/urbanlens/dashboard` returns exactly one hit, and it is the
-split case, not this one.
-
-Not proposing a specific resolution here (re-check on each view, expire the grant, or keep it
-exactly as built) - that is Jess's call to make, the same way the split case's was. Filing this so
-the permanence of "viewed once while access was held" is a decision someone made on purpose, rather
-than an implicit consequence of a `get_or_create` nobody was asked about.
-
 ## P89 — `MarkupJsonView`'s `?children=1` wiki path skips concealment; dormant only because `concealment_active()` is hardcoded False
 
 `id: P89` · `status: open` · `updated: 2026-09-08`

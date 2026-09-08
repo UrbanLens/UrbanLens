@@ -12818,3 +12818,35 @@ unconditionally, is accurate again now that `force_refresh=True` makes that assu
 `tests/hypothesis/test_redata_incident_history_and_historical_features.py` pin both halves: the paid
 panel's gateway call carries `force_refresh=True`, and the free panel's does not (anti-vacuity -
 this fix must not regress the free panel's caching).
+
+## RESOLVED 2026-09-08: every wiki view minted a permanent access grant, with no product sign-off recorded for it
+
+`id: P88` · `status: fixed` · `resolved: 2026-09-08`
+
+Filed 2026-09-08 during the pre-merge audit of `release/v_0_8_0` against `docs/GOALS.md`; confirmed
+on an independent adversarial pass.
+
+`resolve_visible_wiki()` (`services/wiki/wiki_access.py:504`) calls
+`PlaceAccessGrant.objects.record_engagement(profile, location.place)` unconditionally on every
+successful wiki view. `record_engagement()` is a `get_or_create` under
+`GrantReason.GRANDFATHERED_ENGAGEMENT`, and grants are permanent - never revoked by pin churn. So
+the first time a profile loads a wiki they currently qualify for, they keep that access forever,
+even after the pin that earned it is later deleted, unpinned, or moved. `docs/GOALS.md:33-34`
+states the access rule this sits inside - "A user earns access to a location's wiki only by having
+their own pin inside that place's official boundary" - and a silent, permanent grandfather-on-read
+converts that into "you must have held one at least once and happened to open the page."
+
+**This was never a discovery leak or a code bug.** The existing 404 in the same function still
+gates the first view, so this only ever entrenched access already legitimately granted at least
+once, and the behavior was already well-tested
+(`tests/hypothesis/test_grandfathered_parcel_split_access.py::WikiEngagementGrandfatheringTests`).
+The gap was entirely that the sibling mechanism - split-family permanence
+(`PlaceAccessGrantManager.snapshot_family`) - carried an explicit "Confirmed with Jess" sign-off in
+its test docstring, and this one, doing the same kind of permanent and irreversible thing to the
+same model, had none anywhere.
+
+**Confirmed with Jess 2026-09-08: this is intended, not a bug.** Viewing a wiki once while access
+is legitimately held is meant to keep that access forever. No code changed - the sign-off itself
+was the fix. Added alongside the split-family one in
+`tests/hypothesis/test_grandfathered_parcel_split_access.py`'s module docstring, so both permanent
+mechanisms now carry the confirmation the original filing asked for.
