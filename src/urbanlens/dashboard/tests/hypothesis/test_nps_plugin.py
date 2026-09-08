@@ -37,6 +37,28 @@ class NpsPanelSourceGateTests(TestCase):
             self.assertTrue(self.source.gate(self.pin))
 
 
+def _gateway_returning(
+    mock_gateway_cls: mock.Mock,
+    *,
+    park: dict | None,
+    alerts: list | None = None,
+    visitor_centers: list | None = None,
+    campgrounds: list | None = None,
+) -> None:
+    """Configure a mocked ``RedataNationalParksGateway`` class's instance methods.
+
+    Every facet defaults to ``[]`` (rather than leaving a bare ``Mock`` in
+    place) since the cache write is real ``JSONField`` storage in these
+    tests' ``TestCase`` - an unconfigured facet call would otherwise fail
+    to serialize instead of failing the assertion that matters.
+    """
+    instance = mock_gateway_cls.return_value
+    instance.find_nearest_park.return_value = park
+    instance.get_alerts.return_value = alerts if alerts is not None else []
+    instance.get_visitor_centers.return_value = visitor_centers if visitor_centers is not None else []
+    instance.get_campgrounds.return_value = campgrounds if campgrounds is not None else []
+
+
 class NpsPanelSourceFetchTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -53,18 +75,131 @@ class NpsPanelSourceFetchTests(TestCase):
     def test_caches_the_nearest_park(self) -> None:
         park = {"park_code": "yell", "full_name": "Yellowstone National Park"}
         with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
-            mock_gateway_cls.return_value.find_nearest_park.return_value = park
+            _gateway_returning(mock_gateway_cls, park=park)
             self.source.fetch(self.pin)
 
-        self.assertEqual(self._cached(), park)
+        cached = self._cached()
+        assert cached is not None
+        self.assertEqual(cached["park_code"], "yell")
+        self.assertEqual(cached["full_name"], "Yellowstone National Park")
         mock_gateway_cls.return_value.find_nearest_park.assert_called_once_with(44.6, -110.5)
 
     def test_caches_an_empty_dict_when_nothing_is_within_range(self) -> None:
         with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
-            mock_gateway_cls.return_value.find_nearest_park.return_value = None
+            _gateway_returning(mock_gateway_cls, park=None)
             self.source.fetch(self.pin)
 
         self.assertEqual(self._cached(), {})
+
+    def test_does_not_fetch_facets_when_nothing_is_within_range(self) -> None:
+        """No ``park_code`` to fetch per-park facets by - fetching them would be a wasted call."""
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            _gateway_returning(mock_gateway_cls, park=None)
+            self.source.fetch(self.pin)
+
+        mock_gateway_cls.return_value.get_alerts.assert_not_called()
+        mock_gateway_cls.return_value.get_visitor_centers.assert_not_called()
+        mock_gateway_cls.return_value.get_campgrounds.assert_not_called()
+
+    def test_caches_alerts_visitor_centers_and_campgrounds_once_a_park_is_found(self) -> None:
+        park = {"park_code": "yell", "full_name": "Yellowstone National Park"}
+        alerts = [{"id": 1, "title": "Road closed", "category": "Park Closure"}]
+        visitor_centers = [{"id": 1, "name": "Old Faithful Visitor Center"}]
+        campgrounds = [{"id": 1, "name": "Madison Campground"}]
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            _gateway_returning(
+                mock_gateway_cls, park=park, alerts=alerts, visitor_centers=visitor_centers, campgrounds=campgrounds
+            )
+            self.source.fetch(self.pin)
+
+        cached = self._cached()
+        assert cached is not None
+        self.assertEqual(cached["alerts"], alerts)
+        self.assertEqual(cached["visitor_centers"], visitor_centers)
+        self.assertEqual(cached["campgrounds"], campgrounds)
+        mock_gateway_cls.return_value.get_alerts.assert_called_once_with("yell")
+        mock_gateway_cls.return_value.get_visitor_centers.assert_called_once_with("yell")
+        mock_gateway_cls.return_value.get_campgrounds.assert_called_once_with("yell")
+
+
+class NpsPanelSourceApiPayloadTests(TestCase):
+    """The API's info card, including the alerts -> ``facts`` wiring."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        self.source = NpsPanelSource()
+        self.location: Location = baker.make("dashboard.Location", latitude=44.6, longitude=-110.5)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=self.location)
+        self.LocationCache = LocationCache
+
+    def _cache(self, data: dict) -> None:
+        self.LocationCache.set(self.location, "nps", data, query_key="44.60000,-110.50000")
+
+    def test_an_active_danger_alert_shows_up_as_a_fact(self) -> None:
+        self._cache(
+            {
+                "park_code": "yell",
+                "full_name": "Yellowstone National Park",
+                "alerts": [
+                    {
+                        "id": 1,
+                        "title": "Grizzly activity near trailhead",
+                        "category": "Danger",
+                        "url": "https://nps.gov/yell/alert1",
+                    }
+                ],
+            }
+        )
+
+        payload = self.source.api_payload(self.pin)
+
+        assert payload is not None
+        facts = payload["info"]["facts"]
+        self.assertEqual(len(facts), 1)
+        self.assertEqual(
+            facts[0],
+            {
+                "icon": "warning",
+                "text": "Danger: Grizzly activity near trailhead",
+                "href": "https://nps.gov/yell/alert1",
+            },
+        )
+
+    def test_zero_alerts_renders_cleanly(self) -> None:
+        self._cache({"park_code": "yell", "full_name": "Yellowstone National Park", "alerts": []})
+
+        payload = self.source.api_payload(self.pin)
+
+        assert payload is not None
+        self.assertEqual(payload["info"]["facts"], [])
+
+    def test_no_alerts_key_at_all_renders_cleanly(self) -> None:
+        """A row cached before this feature shipped has no ``alerts`` key at all."""
+        self._cache({"park_code": "yell", "full_name": "Yellowstone National Park"})
+
+        payload = self.source.api_payload(self.pin)
+
+        assert payload is not None
+        self.assertEqual(payload["info"]["facts"], [])
+
+    def test_visitor_centers_and_campgrounds_summarize_into_meta(self) -> None:
+        self._cache(
+            {
+                "park_code": "yell",
+                "full_name": "Yellowstone National Park",
+                "visitor_centers": [{"id": 1, "name": "Old Faithful Visitor Center"}],
+                "campgrounds": [{"id": 1, "name": "Madison Campground"}, {"id": 2, "name": "Bridge Bay Campground"}],
+            }
+        )
+
+        payload = self.source.api_payload(self.pin)
+
+        assert payload is not None
+        meta = {row["label"]: row["value"] for row in payload["info"]["meta"]}
+        self.assertEqual(meta["Visitor Centers"], "1 (Old Faithful Visitor Center)")
+        self.assertEqual(meta["Campgrounds"], "2 (Madison Campground, Bridge Bay Campground)")
 
 
 class NpsEnrichmentSourceTests(TestCase):
@@ -82,15 +217,37 @@ class NpsEnrichmentSourceTests(TestCase):
     def test_fetch_returns_the_nearest_park_and_query_key(self) -> None:
         park = {"park_code": "yell", "full_name": "Yellowstone National Park"}
         with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
-            mock_gateway_cls.return_value.find_nearest_park.return_value = park
+            _gateway_returning(mock_gateway_cls, park=park)
             data, query_key = self.source.fetch(self.location)
 
-        self.assertEqual(data, park)
+        assert data is not None
+        self.assertEqual(data["park_code"], "yell")
+        self.assertEqual(data["full_name"], "Yellowstone National Park")
         self.assertEqual(query_key, "44.60000,-110.50000")
 
     def test_fetch_returns_none_when_nothing_is_within_range(self) -> None:
         with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
-            mock_gateway_cls.return_value.find_nearest_park.return_value = None
+            _gateway_returning(mock_gateway_cls, park=None)
             data, _query_key = self.source.fetch(self.location)
 
         self.assertIsNone(data)
+
+    def test_fetch_does_not_fetch_facets_when_nothing_is_within_range(self) -> None:
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            _gateway_returning(mock_gateway_cls, park=None)
+            self.source.fetch(self.location)
+
+        mock_gateway_cls.return_value.get_alerts.assert_not_called()
+
+    def test_fetch_includes_alerts_visitor_centers_and_campgrounds(self) -> None:
+        park = {"park_code": "yell", "full_name": "Yellowstone National Park"}
+        alerts = [{"id": 1, "title": "Road closed", "category": "Park Closure"}]
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            _gateway_returning(mock_gateway_cls, park=park, alerts=alerts)
+            data, _query_key = self.source.fetch(self.location)
+
+        assert data is not None
+        self.assertEqual(data["alerts"], alerts)
+        self.assertEqual(data["visitor_centers"], [])
+        self.assertEqual(data["campgrounds"], [])
+        mock_gateway_cls.return_value.get_alerts.assert_called_once_with("yell")

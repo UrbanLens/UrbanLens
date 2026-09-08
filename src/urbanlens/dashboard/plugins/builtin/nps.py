@@ -27,6 +27,7 @@ from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSo
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
     from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
@@ -37,6 +38,17 @@ if TYPE_CHECKING:
 #: handful they stop characterizing the place and just become a wall of pills.
 #: Mirrors the ``|slice:":8"`` the HTML panel applies for the same reason.
 _MAX_ACTIVITY_CHIPS = 8
+
+#: How many active alerts become quick-facts. NPS alert lists are ordinarily
+#: short, but nothing upstream bounds them, and this is the one section of the
+#: card that must never silently balloon past its budget.
+_MAX_ALERT_FACTS = 8
+
+#: How many facility names to spell out in the "Visitor Centers"/"Campgrounds"
+#: meta rows before collapsing the rest into "+N more" - same reasoning as
+#: :data:`_MAX_ACTIVITY_CHIPS`: past a handful, names stop being useful and
+#: just take up card space.
+_MAX_FACILITY_NAMES = 5
 
 
 #: NPS's ``standardHours`` keys, in the order a week is read. Lowercase because
@@ -152,6 +164,64 @@ def standard_hours_summary(operating_hours: Any) -> str:
     return "; ".join(f"{start}: {value}" if start == end else f"{start}-{end}: {value}" for start, end, value in groups)
 
 
+def alert_facts(data: dict[str, Any]) -> list[dict[str, str]]:
+    """Published alerts as icon-led quick facts - the safety-critical section of the card.
+
+    NPS's own alert categories run from routine ("Information") to urgent
+    ("Park Closure", "Danger"); REData does not rank them and this project has
+    no authority to invent a severity order, so alerts are shown in whatever
+    order REData returns them rather than resorted here.
+
+    Args:
+        data: The cached park payload (``alerts`` key -
+            :meth:`RedataNationalParksGateway.get_alerts`-shaped dicts).
+
+    Returns:
+        ``{"icon", "text", "href"?}`` rows, one per alert, capped at
+        :data:`_MAX_ALERT_FACTS` - ``[]`` when nothing is published.
+    """
+    alerts = data.get("alerts")
+    if not isinstance(alerts, list):
+        return []
+
+    facts: list[dict[str, str]] = []
+    for alert in alerts[:_MAX_ALERT_FACTS]:
+        if not isinstance(alert, dict):
+            continue
+        title = str(alert.get("title") or "").strip()
+        if not title:
+            continue
+        category = str(alert.get("category") or "").strip()
+        fact: dict[str, str] = {"icon": "warning", "text": f"{category}: {title}" if category else title}
+        if url := str(alert.get("url") or "").strip():
+            fact["href"] = url
+        facts.append(fact)
+    return facts
+
+
+def _facility_summary(rows: Any) -> str:
+    """Render a facility list (visitor centers, campgrounds) as ``"<n> (<name1>, <name2>, ...)"``.
+
+    A reasonable minimal treatment for facets that can run long: the count is
+    always exact even when the name list is truncated, so "12 (...)" never
+    understates how many there are.
+
+    Args:
+        rows: REData's raw facility rows, each carrying at least ``name``.
+
+    Returns:
+        A display string, or ``""`` when there are no rows.
+    """
+    if not isinstance(rows, list) or not rows:
+        return ""
+    names = [name for row in rows if isinstance(row, dict) and (name := str(row.get("name") or "").strip())]
+    shown = ", ".join(names[:_MAX_FACILITY_NAMES])
+    remainder = len(names) - _MAX_FACILITY_NAMES
+    if remainder > 0:
+        shown = f"{shown}, +{remainder} more" if shown else f"+{remainder} more"
+    return f"{len(rows)} ({shown})" if shown else str(len(rows))
+
+
 def park_facts(data: dict[str, Any]) -> list[dict[str, str]]:
     """The park facts worth showing beside its name, as ``{label, value, href}`` rows.
 
@@ -160,9 +230,14 @@ def park_facts(data: dict[str, Any]) -> list[dict[str, str]]:
     the API a different subset.
 
     Reads fields REData has been caching and nothing was displaying: entrance
-    fees, published hours, and the park's own directions page. ``weather_info``
-    is deliberately left out - it is a paragraph of seasonal prose, and this pin
-    already has a weather panel showing the actual forecast.
+    fees, published hours, and the park's own directions page, plus the
+    visitor-center/campground facets cached alongside the park itself (see
+    :meth:`NpsPanelSource.fetch`). ``weather_info`` is deliberately left out -
+    it is a paragraph of seasonal prose, and this pin already has a weather
+    panel showing the actual forecast. Alerts are deliberately *not* here -
+    they are safety-critical and go through :func:`alert_facts` into the
+    card's icon-led ``facts`` instead, so they render ahead of this whole
+    section rather than mixed into a label/value grid.
 
     Args:
         data: The cached park payload.
@@ -178,6 +253,10 @@ def park_facts(data: dict[str, Any]) -> list[dict[str, str]]:
         rows.append({"label": "Entry", "value": fee})
     if hours := standard_hours_summary(data.get("operating_hours")):
         rows.append({"label": "Hours", "value": hours})
+    if visitor_centers := _facility_summary(data.get("visitor_centers")):
+        rows.append({"label": "Visitor Centers", "value": visitor_centers})
+    if campgrounds := _facility_summary(data.get("campgrounds")):
+        rows.append({"label": "Campgrounds", "value": campgrounds})
     if directions := str(data.get("directions_url") or "").strip():
         rows.append({"label": "Directions", "value": "Getting there", "href": directions})
     # Last: it is a cross-reference ("HUTR"), not something a reader wants
@@ -185,6 +264,32 @@ def park_facts(data: dict[str, Any]) -> list[dict[str, str]]:
     if data.get("park_code"):
         rows.append({"label": "Park Code", "value": str(data["park_code"])})
     return rows
+
+
+def _park_with_facets(gateway: RedataNationalParksGateway, park: dict[str, Any] | None) -> dict[str, Any]:
+    """Attach a park's alerts/visitor-centers/campgrounds to its nearby-search row.
+
+    Shared by :meth:`NpsPanelSource.fetch` and :meth:`NpsEnrichmentSource.fetch`
+    so the two cache the same shape. These three facets are per-park-unit, not
+    per-coordinate, so they are only worth fetching once a nearest park has
+    actually been found - nothing within range means no ``park_code`` to fetch
+    them by.
+
+    Args:
+        gateway: The gateway to fetch the facets through.
+        park: The nearest-park dict from :meth:`RedataNationalParksGateway.find_nearest_park`,
+            or None when nothing was within range.
+
+    Returns:
+        A copy of ``park`` (``{}`` when None) with ``alerts``,
+        ``visitor_centers`` and ``campgrounds`` keys added.
+    """
+    data = dict(park) if park else {}
+    if park_code := data.get("park_code"):
+        data["alerts"] = gateway.get_alerts(park_code)
+        data["visitor_centers"] = gateway.get_visitor_centers(park_code)
+        data["campgrounds"] = gateway.get_campgrounds(park_code)
+    return data
 
 
 class NpsPanelSource(LocationCachePanelSource):
@@ -206,16 +311,23 @@ class NpsPanelSource(LocationCachePanelSource):
         return redata_configured()
 
     def fetch(self, pin: Pin) -> None:
-        """Cache the nearest NPS park unit to the pin, if any is within REData's search radius."""
+        """Cache the nearest NPS park unit to the pin, if any is within REData's search radius.
+
+        Once a unit is found, also fetches and caches its alerts, visitor
+        centers and campgrounds - all three are per-park-unit facets, so
+        there is nothing to fetch them by until a park has actually been
+        resolved.
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
 
         location = pin.location
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        park = RedataNationalParksGateway().find_nearest_park(lat, lng)
+        gateway = RedataNationalParksGateway()
+        park = gateway.find_nearest_park(lat, lng)
         query_key = f"{lat:.5f},{lng:.5f}"
-        LocationCache.set(location, self.cache_source, park or {}, query_key=query_key)
+        LocationCache.set(location, self.cache_source, _park_with_facets(gateway, park), query_key=query_key)
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The nearest NPS unit as an information card, or None.
@@ -239,13 +351,18 @@ class NpsPanelSource(LocationCachePanelSource):
         park_url = data.get("url") or ""
         images = data.get("images") or []
         first_image = images[0] if isinstance(images, list) and images else {}
-        meta = park_facts(data)
 
         return {
             PanelApiKind.INFO.value: info_card(
                 heading_name=data.get("full_name"),
                 chips=[activity.get("name") for activity in (data.get("activities") or [])[:_MAX_ACTIVITY_CHIPS] if isinstance(activity, dict)],
-                meta=meta,
+                # Alerts go in `facts`, not `meta`: every info-card consumer
+                # (see `_simple_info_panel.html`, the shape's other renderer)
+                # reads `facts` ahead of `meta`, so a closure or hazard
+                # reaches a client before routine facts like hours - never
+                # buried behind them.
+                facts=alert_facts(data),
+                meta=park_facts(data),
                 header_link={"url": park_url, "label": "View on NPS.gov"} if park_url else None,
                 footer_link={"url": park_url, "label": "View on NPS.gov"} if park_url else None,
                 image_url=first_image.get("url") if isinstance(first_image, dict) else None,
@@ -270,6 +387,9 @@ class NpsEnrichmentSource(LocationCacheEnrichmentSource):
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Look up the nearest NPS unit to a location, if any is within range.
 
+        Once a unit is found, also fetches its alerts, visitor centers and
+        campgrounds - see :meth:`NpsPanelSource.fetch`.
+
         Args:
             location: The location to check.
 
@@ -280,8 +400,12 @@ class NpsEnrichmentSource(LocationCacheEnrichmentSource):
 
         lat = float(location.latitude or 0)
         lng = float(location.longitude or 0)
-        park = RedataNationalParksGateway().find_nearest_park(lat, lng)
-        return park, f"{lat:.5f},{lng:.5f}"
+        gateway = RedataNationalParksGateway()
+        park = gateway.find_nearest_park(lat, lng)
+        query_key = f"{lat:.5f},{lng:.5f}"
+        if park is None:
+            return None, query_key
+        return _park_with_facets(gateway, park), query_key
 
 
 class NpsPlugin(UrbanLensPlugin):

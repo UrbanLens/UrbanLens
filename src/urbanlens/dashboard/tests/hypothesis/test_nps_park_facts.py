@@ -15,7 +15,12 @@ values are free text ("9:00AM - 5:00PM", "All Day", "Closed").
 from __future__ import annotations
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.plugins.builtin.nps import entrance_fee_summary, park_facts, standard_hours_summary
+from urbanlens.dashboard.plugins.builtin.nps import (
+    alert_facts,
+    entrance_fee_summary,
+    park_facts,
+    standard_hours_summary,
+)
 
 
 def _hours(**overrides: str) -> list[dict]:
@@ -122,6 +127,79 @@ class StandardHoursTests(SimpleTestCase):
         self.assertEqual(standard_hours_summary([{"name": "Park Hours"}]), "")
 
 
+class AlertFactsTests(SimpleTestCase):
+    def test_an_active_danger_alert_shows_up(self) -> None:
+        """The safety-critical case: a closure or hazard must actually surface."""
+        alerts = [
+            {
+                "id": 1,
+                "title": "Bridge out on North Rim Road",
+                "category": "Danger",
+                "url": "https://www.nps.gov/grca/alert1",
+            }
+        ]
+
+        facts = alert_facts({"alerts": alerts})
+
+        self.assertEqual(
+            facts,
+            [
+                {
+                    "icon": "warning",
+                    "text": "Danger: Bridge out on North Rim Road",
+                    "href": "https://www.nps.gov/grca/alert1",
+                }
+            ],
+        )
+
+    def test_zero_alerts_renders_cleanly(self) -> None:
+        self.assertEqual(alert_facts({"alerts": []}), [])
+
+    def test_a_missing_alerts_key_renders_cleanly(self) -> None:
+        self.assertEqual(alert_facts({}), [])
+
+    def test_a_category_less_alert_still_shows_its_title(self) -> None:
+        facts = alert_facts({"alerts": [{"title": "Seasonal road closure"}]})
+
+        self.assertEqual(facts, [{"icon": "warning", "text": "Seasonal road closure"}])
+
+    def test_an_alert_with_no_url_omits_href(self) -> None:
+        facts = alert_facts({"alerts": [{"title": "Fire danger: extreme", "category": "Caution"}]})
+
+        self.assertNotIn("href", facts[0])
+
+    def test_a_titleless_alert_is_skipped(self) -> None:
+        self.assertEqual(alert_facts({"alerts": [{"category": "Information"}]}), [])
+
+    def test_malformed_rows_do_not_raise(self) -> None:
+        self.assertEqual(alert_facts({"alerts": ["not a dict", None, 7]}), [])
+
+    def test_malformed_alerts_value_does_not_raise(self) -> None:
+        self.assertEqual(alert_facts({"alerts": "not a list"}), [])
+        self.assertEqual(alert_facts({"alerts": None}), [])
+
+    def test_alerts_beyond_the_cap_are_dropped(self) -> None:
+        alerts = [{"title": f"Alert {i}", "category": "Information"} for i in range(20)]
+
+        facts = alert_facts({"alerts": alerts})
+
+        self.assertEqual(len(facts), 8)
+        self.assertEqual(facts[0]["text"], "Information: Alert 0")
+
+    def test_multiple_categories_preserve_redatas_own_order(self) -> None:
+        """No severity ranking is invented here - REData's own order is shown as-is."""
+        alerts = [
+            {"title": "Fee waived today", "category": "Information"},
+            {"title": "Entrance closed", "category": "Park Closure"},
+        ]
+
+        facts = alert_facts({"alerts": alerts})
+
+        self.assertEqual(
+            [fact["text"] for fact in facts], ["Information: Fee waived today", "Park Closure: Entrance closed"]
+        )
+
+
 class ParkFactsTests(SimpleTestCase):
     def _facts(self, **data) -> dict[str, str]:
         return {row["label"]: row["value"] for row in park_facts(data)}
@@ -161,3 +239,42 @@ class ParkFactsTests(SimpleTestCase):
         rows = park_facts({"weather_info": "Summers are hot and dry. Winters bring occasional snow."})
 
         self.assertEqual(rows, [])
+
+    def test_visitor_centers_and_campgrounds_summarize_as_count_and_names(self) -> None:
+        facts = self._facts(
+            visitor_centers=[{"name": "Old Faithful Visitor Center"}, {"name": "Canyon Visitor Education Center"}],
+            campgrounds=[{"name": "Madison Campground"}],
+        )
+
+        self.assertEqual(facts["Visitor Centers"], "2 (Old Faithful Visitor Center, Canyon Visitor Education Center)")
+        self.assertEqual(facts["Campgrounds"], "1 (Madison Campground)")
+
+    def test_a_long_facility_list_collapses_the_tail_into_a_count(self) -> None:
+        campgrounds = [{"name": f"Campground {i}"} for i in range(8)]
+
+        facts = self._facts(campgrounds=campgrounds)
+
+        self.assertEqual(
+            facts["Campgrounds"],
+            "8 (Campground 0, Campground 1, Campground 2, Campground 3, Campground 4, +3 more)",
+        )
+
+    def test_no_visitor_centers_or_campgrounds_omits_the_rows(self) -> None:
+        rows = park_facts({"visitor_centers": [], "campgrounds": []})
+
+        self.assertEqual(rows, [])
+
+    def test_facility_rows_come_after_hours_and_before_directions(self) -> None:
+        labels = [
+            row["label"]
+            for row in park_facts(
+                {
+                    "operating_hours": _hours(),
+                    "visitor_centers": [{"name": "Old Faithful Visitor Center"}],
+                    "campgrounds": [{"name": "Madison Campground"}],
+                    "directions_url": "https://www.nps.gov/yell/directions.htm",
+                }
+            )
+        ]
+
+        self.assertEqual(labels, ["Hours", "Visitor Centers", "Campgrounds", "Directions"])
