@@ -13,7 +13,10 @@
  * 404 pair, and a missing DOM node are the evidence.
  */
 
-import { expect, type APIRequestContext, type APIResponse, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import * as net from "node:net";
+import * as tls from "node:tls";
+
+import { expect, type APIResponse, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 import type { ApiClient } from "./api-client.js";
 import { env } from "./env.js";
@@ -180,66 +183,6 @@ export async function whoami(api: ApiClient): Promise<{ uuid: string; slug: stri
     return api.json<{ uuid: string; slug: string }>("get", "whoami/");
 }
 
-/** A successful owner fetch of a photo's bytes, and the url it finally worked at. */
-export interface OwnPhotoFetch {
-    response: APIResponse;
-    url: string;
-}
-
-/**
- * Fetches a just-uploaded photo's bytes as its owner, riding out the
- * async-rename race documented at `docs/PROBLEMS.md` P58: `tasks.process_image_upload`
- * re-encodes the stored file shortly after upload (`.png` -> `.webp`,
- * `downscale_stored_image`) and the row's `image` column - and therefore the
- * `url` a client was handed at upload time - can go stale before a
- * same-test fetch runs. The old path then 404s for everyone, including the
- * uploader: correct per `services.media.access` (the row no longer names it),
- * but not something a security spec asserting "the owner can still read their
- * own upload" should be tripped up by.
- *
- * Re-reads the photo's *current* `url` from `GET photos/{uuid}/` before each
- * attempt rather than trusting a url captured once, so a caller gets back the
- * url that actually resolved - use that (not the upload response's `url`) for
- * any fetch made afterwards, such as the stranger-refusal check this control
- * exists for.
- *
- * @param api The photo owner's client, for re-reading current metadata.
- * @param apiRequestContext Raw request context the media-gate fetch itself uses.
- * @param photoUuid The photo to fetch.
- * @param headers Auth headers for the media-gate request (session or bearer).
- * @returns The first 200 response and the url it came from, or the last
- *     non-200 response once attempts are exhausted.
- */
-export async function fetchOwnPhotoBytes(
-    api: ApiClient,
-    apiRequestContext: APIRequestContext,
-    photoUuid: string,
-    headers: Record<string, string>,
-): Promise<OwnPhotoFetch> {
-    const ATTEMPTS = 6;
-    const RETRY_DELAY_MS = 500;
-    let last: OwnPhotoFetch | undefined;
-    for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
-        const meta = await api.json<{ url?: string }>("get", `photos/${photoUuid}/`);
-        if (!meta.url) {
-            break;
-        }
-        const url = meta.url.startsWith("http") ? meta.url : new URL(meta.url, env.baseUrl).toString();
-        const response = await apiRequestContext.get(url, { headers });
-        last = { response, url };
-        if (response.status() === 200) {
-            return last;
-        }
-        if (attempt < ATTEMPTS - 1) {
-            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-        }
-    }
-    if (!last) {
-        throw new Error(`GET photos/${photoUuid}/ never returned a url to fetch`);
-    }
-    return last;
-}
-
 export async function expectCanaryNotInDom(page: Page, marker: string): Promise<void> {
     expect(
         await page.locator(`#${marker}`).count(),
@@ -261,4 +204,93 @@ export function containsMarker(haystack: string, marker: string): boolean {
 export function header(response: { headers: () => Record<string, string> }, name: string): string {
     const headers = response.headers();
     return headers[name.toLowerCase()] ?? "";
+}
+
+/** A response assembled from raw bytes read off a socket - see {@link sendRawRequest}. */
+export interface RawResponse {
+    status: number;
+    headers: Record<string, string>;
+    body: string;
+}
+
+/**
+ * Sends one GET request over a bare socket, with the request line and
+ * headers written byte-for-byte instead of through an HTTP client's header
+ * setter.
+ *
+ * Playwright's `APIRequestContext` (fetch/undici under the hood) and Node's
+ * own `http` module both refuse a header value containing a raw CR/LF before
+ * a request is ever issued - they exist to stop a caller from *accidentally*
+ * malforming a request, not to model what a real attacker can put on the
+ * wire. A check that a raw CR/LF in a header does not get reflected into the
+ * response has to actually deliver one, so this bypasses both validators by
+ * talking to the socket directly. Deliberately minimal - HTTP/1.1,
+ * `Connection: close`, no request body - just enough to land a malformed
+ * header line and read back whatever the server sends.
+ */
+export async function sendRawRequest(path: string, rawHeaderLines: string[]): Promise<RawResponse> {
+    const target = new URL(env.baseUrl);
+    const isTls = target.protocol === "https:";
+    const port = target.port ? Number(target.port) : isTls ? 443 : 80;
+
+    const request =
+        `GET ${path} HTTP/1.1\r\n` +
+        `Host: ${target.host}\r\n` +
+        rawHeaderLines.map((line) => `${line}\r\n`).join("") +
+        `Connection: close\r\n` +
+        `\r\n`;
+
+    const raw = await new Promise<string>((resolve, reject) => {
+        const socket = isTls
+            ? tls.connect({
+                  host: target.hostname,
+                  port,
+                  servername: target.hostname,
+                  rejectUnauthorized: !env.ignoreHttpsErrors,
+              })
+            : net.connect({ host: target.hostname, port });
+
+        const chunks: Buffer[] = [];
+        let settled = false;
+        const finish = () => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            socket.destroy();
+            resolve(Buffer.concat(chunks).toString("latin1"));
+        };
+
+        socket.setTimeout(15_000, () => finish());
+        socket.on("data", (chunk: Buffer) => chunks.push(chunk));
+        socket.on("end", finish);
+        socket.on("close", finish);
+        socket.on("error", (error) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            reject(error);
+        });
+        socket.write(request, "latin1");
+    });
+
+    const separator = raw.indexOf("\r\n\r\n");
+    const head = separator === -1 ? raw : raw.slice(0, separator);
+    const body = separator === -1 ? "" : raw.slice(separator + 4);
+    const [statusLine = "", ...headerLines] = head.split("\r\n");
+    const status = Number(statusLine.split(" ")[1] ?? "");
+
+    const headers: Record<string, string> = {};
+    for (const line of headerLines) {
+        const colon = line.indexOf(":");
+        if (colon === -1) {
+            continue;
+        }
+        const name = line.slice(0, colon).trim().toLowerCase();
+        const value = line.slice(colon + 1).trim();
+        headers[name] = name in headers ? `${headers[name]}, ${value}` : value;
+    }
+
+    return { status, headers, body };
 }
