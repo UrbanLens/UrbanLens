@@ -9,7 +9,11 @@ from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, Ext
 from urbanlens.dashboard.models.place.external_tag_group import ExternalTagGroup, ExternalTagVocabularyEntry
 from urbanlens.dashboard.models.place.model import Place
 from urbanlens.dashboard.services.locations.external_tag_groups import (
-    ExternalTagGroupError,
+    AlreadyGroupedError,
+    EmptySelectionError,
+    EntryNotInGroupError,
+    UnknownGroupError,
+    UnknownVocabularyEntryError,
     create_group,
     default_group_key,
     matching_vocabulary,
@@ -202,7 +206,7 @@ class CreateGroupTests(TestCase):
         self.assertEqual(a.group_id, group.pk)
 
     def test_empty_selection_is_refused(self):
-        with self.assertRaises(ExternalTagGroupError):
+        with self.assertRaises(EmptySelectionError):
             create_group([])
 
     def test_an_already_grouped_entry_is_refused(self):
@@ -212,13 +216,13 @@ class CreateGroupTests(TestCase):
         )
         create_group([a.pk])
 
-        with self.assertRaises(ExternalTagGroupError):
+        with self.assertRaises(AlreadyGroupedError):
             create_group([a.pk, b.pk])
 
     def test_an_unknown_id_is_refused(self):
         a = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
 
-        with self.assertRaises(ExternalTagGroupError):
+        with self.assertRaises(UnknownVocabularyEntryError):
             create_group([a.pk, 999_999])
 
 
@@ -308,13 +312,13 @@ class MoveEntryTests(TestCase):
         self.assertEqual(b.group_id, group.pk)
 
     def test_unknown_entry_is_refused(self):
-        with self.assertRaises(ExternalTagGroupError):
+        with self.assertRaises(UnknownVocabularyEntryError):
             move_entry(999_999, None)
 
     def test_unknown_target_group_is_refused(self):
         a = ExternalTagVocabularyEntry.objects.create(source=ExternalTagSource.OSM, key="amenity", value="restaurant")
 
-        with self.assertRaises(ExternalTagGroupError):
+        with self.assertRaises(UnknownGroupError):
             move_entry(a.pk, 999_999)
 
 
@@ -341,7 +345,7 @@ class SetPreferredTests(TestCase):
         create_group([a.pk])
         other_group = create_group([b.pk])
 
-        with self.assertRaises(ExternalTagGroupError):
+        with self.assertRaises(EntryNotInGroupError):
             set_preferred(a.pk, other_group.pk)
 
 

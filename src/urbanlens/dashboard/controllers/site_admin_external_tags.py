@@ -21,7 +21,12 @@ from django.views import View
 from urbanlens.dashboard.models.place.external_tag_group import ExternalTagGroup, ExternalTagVocabularyEntry
 from urbanlens.dashboard.services.core.numbers import safe_int
 from urbanlens.dashboard.services.locations.external_tag_groups import (
+    AlreadyGroupedError,
+    EmptySelectionError,
+    EntryNotInGroupError,
     ExternalTagGroupError,
+    UnknownGroupError,
+    UnknownVocabularyEntryError,
     create_group,
     move_entry,
     set_preferred,
@@ -127,8 +132,18 @@ class SiteAdminExternalTagsGroupView(_ExternalTagsAdminMixin, View):
 
         try:
             create_group(entry_ids, preferred_id=preferred_id)
+        except EmptySelectionError as exc:
+            logger.info("external tag group creation rejected: %s", exc)
+            return _toast_response(request, level="error", message="Select at least one tag to group.", search=search, status=400)
+        except UnknownVocabularyEntryError as exc:
+            logger.info("external tag group creation rejected: %s", exc)
+            return _toast_response(request, level="error", message="One or more tags could not be found.", search=search, status=400)
+        except AlreadyGroupedError as exc:
+            logger.info("external tag group creation rejected: %s", exc)
+            return _toast_response(request, level="error", message="One or more tags already belong to a group.", search=search, status=400)
         except ExternalTagGroupError as exc:
-            return _toast_response(request, level="error", message=exc.safe_message, search=search, status=400)
+            logger.info("external tag group creation rejected: %s", exc)
+            return _toast_response(request, level="error", message="That group couldn't be created.", search=search, status=400)
 
         return _toast_response(request, level="success", message="Tags grouped.", search=search)
 
@@ -157,8 +172,15 @@ class SiteAdminExternalTagsMoveView(_ExternalTagsAdminMixin, View):
 
         try:
             emptied_group_id = move_entry(entry_id, target_group_id)
+        except UnknownVocabularyEntryError as exc:
+            logger.info("external tag move rejected: %s", exc)
+            return JsonResponse({"ok": False, "message": "Tag not found."}, status=400)
+        except UnknownGroupError as exc:
+            logger.info("external tag move rejected: %s", exc)
+            return JsonResponse({"ok": False, "message": "Group not found."}, status=400)
         except ExternalTagGroupError as exc:
-            return JsonResponse({"ok": False, "message": exc.safe_message}, status=400)
+            logger.info("external tag move rejected: %s", exc)
+            return JsonResponse({"ok": False, "message": "That tag couldn't be moved."}, status=400)
 
         return JsonResponse({"ok": True, "emptied_group_id": emptied_group_id})
 
@@ -181,7 +203,11 @@ class SiteAdminExternalTagsPreferredView(_ExternalTagsAdminMixin, View):
 
         try:
             set_preferred(entry_id, group_id)
+        except EntryNotInGroupError as exc:
+            logger.info("external tag preferred-update rejected: %s", exc)
+            return _toast_response(request, level="error", message="Tag not found in that group.", search=search, status=400)
         except ExternalTagGroupError as exc:
-            return _toast_response(request, level="error", message=exc.safe_message, search=search, status=400)
+            logger.info("external tag preferred-update rejected: %s", exc)
+            return _toast_response(request, level="error", message="That tag couldn't be updated.", search=search, status=400)
 
         return _toast_response(request, level="success", message="Preferred tag updated.", search=search)

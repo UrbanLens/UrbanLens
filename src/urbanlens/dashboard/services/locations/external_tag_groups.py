@@ -36,11 +36,34 @@ if TYPE_CHECKING:
 
 
 class ExternalTagGroupError(Exception):
-    """A mapping action was refused. ``safe_message`` is safe to show a caller verbatim."""
+    """A mapping action was refused.
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+    The message is for logs, not the response: an HTTP-facing caller should
+    catch a specific subclass below (or this base class as a fallback) and
+    author its own user-facing text, rather than relaying the message - that
+    keeps a future raise site here from being able to smuggle unreviewed text
+    into a response just by adding a new ``raise``.
+    """
+
+
+class EmptySelectionError(ExternalTagGroupError):
+    """No vocabulary entry ids were given to group."""
+
+
+class UnknownVocabularyEntryError(ExternalTagGroupError):
+    """One or more given vocabulary entry ids don't exist."""
+
+
+class AlreadyGroupedError(ExternalTagGroupError):
+    """One or more given entries already belong to a group."""
+
+
+class UnknownGroupError(ExternalTagGroupError):
+    """The given target group id doesn't exist."""
+
+
+class EntryNotInGroupError(ExternalTagGroupError):
+    """The given entry doesn't belong to the given group."""
 
 
 def default_group_key(value: str) -> str:
@@ -242,17 +265,20 @@ def create_group(entry_ids: Sequence[int], *, preferred_id: int | None = None) -
         The new group.
 
     Raises:
-        ExternalTagGroupError: No entries given, an unknown id, or an entry
-            that already belongs to a group.
+        EmptySelectionError: ``entry_ids`` was empty.
+        UnknownVocabularyEntryError: One or more ids don't resolve to an
+            existing entry.
+        AlreadyGroupedError: One or more entries already belong to a group.
     """
     if len(entry_ids) < 1:
-        raise ExternalTagGroupError("Select at least one tag to group.")
+        raise EmptySelectionError("create_group called with an empty entry_ids.")
 
     entries = list(ExternalTagVocabularyEntry.objects.filter(pk__in=entry_ids))
     if len(entries) != len(set(entry_ids)):
-        raise ExternalTagGroupError("One or more tags could not be found.")
-    if any(entry.group_id is not None for entry in entries):
-        raise ExternalTagGroupError("One or more tags already belong to a group.")
+        missing = set(entry_ids) - {entry.pk for entry in entries}
+        raise UnknownVocabularyEntryError(f"create_group: entry_ids {sorted(missing)} do not exist.")
+    if already_grouped := [entry.pk for entry in entries if entry.group_id is not None]:
+        raise AlreadyGroupedError(f"create_group: entry_ids {already_grouped} already belong to a group.")
 
     preferred = preferred_id if preferred_id is not None else entry_ids[0]
     group = ExternalTagGroup.objects.create()
@@ -284,11 +310,12 @@ def move_entry(entry_id: int, target_group_id: int | None) -> int | None:
         else ``None``. Also ``None`` for a no-op drop back where it started.
 
     Raises:
-        ExternalTagGroupError: The entry, or a given target group, is unknown.
+        UnknownVocabularyEntryError: ``entry_id`` doesn't exist.
+        UnknownGroupError: ``target_group_id`` was given but doesn't exist.
     """
     entry = ExternalTagVocabularyEntry.objects.filter(pk=entry_id).first()
     if entry is None:
-        raise ExternalTagGroupError("Tag not found.")
+        raise UnknownVocabularyEntryError(f"move_entry: entry_id {entry_id} does not exist.")
 
     if entry.group_id == target_group_id:
         return None
@@ -297,7 +324,7 @@ def move_entry(entry_id: int, target_group_id: int | None) -> int | None:
     if target_group_id is not None:
         target_group = ExternalTagGroup.objects.filter(pk=target_group_id).first()
         if target_group is None:
-            raise ExternalTagGroupError("Group not found.")
+            raise UnknownGroupError(f"move_entry: target_group_id {target_group_id} does not exist.")
 
     old_group = entry.group
     entry.group = target_group
@@ -319,11 +346,11 @@ def set_preferred(entry_id: int, group_id: int) -> None:
         group_id: The group it must belong to.
 
     Raises:
-        ExternalTagGroupError: The entry doesn't belong to ``group_id``.
+        EntryNotInGroupError: The entry doesn't belong to ``group_id``.
     """
     entry = ExternalTagVocabularyEntry.objects.filter(pk=entry_id, group_id=group_id).first()
     if entry is None:
-        raise ExternalTagGroupError("Tag not found in that group.")
+        raise EntryNotInGroupError(f"set_preferred: entry_id {entry_id} does not belong to group_id {group_id}.")
     with transaction.atomic():
         ExternalTagVocabularyEntry.objects.filter(group_id=group_id, is_preferred=True).update(is_preferred=False)
         entry.is_preferred = True
