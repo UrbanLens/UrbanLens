@@ -88,11 +88,11 @@ class PhotoUploadViewTests(TestCase):
         """Anything that isn't an image, video, or known document type is refused."""
         response = self._upload(name="notes.bin", content=b"not-an-image", content_type="application/octet-stream")
         self.assertEqual(response.status_code, HTTPStatus.BAD_REQUEST)
-        self.assertEqual(response.json()["error"], "That file is not an image, video, or supported document type.")
+        self.assertEqual(response.json()["error"], "That file couldn't be processed.")
 
     def test_video_without_the_feature_is_403(self) -> None:
         """Video uploads stay behind their account feature gate."""
         with patch("urbanlens.dashboard.models.subscriptions.user_has_feature", return_value=False):
             response = self._upload(name="clip.mp4", content=b"\x00\x00\x00\x18ftypmp42", content_type="video/mp4")
         self.assertEqual(response.status_code, HTTPStatus.FORBIDDEN)
-        self.assertEqual(response.json()["error"], "Video uploads are not enabled for your account.")
+        self.assertEqual(response.json()["error"], "That upload type isn't enabled for your account.")

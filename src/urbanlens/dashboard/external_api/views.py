@@ -813,8 +813,13 @@ class PinsView(ExternalApiView):
             logger.info("external API pin creation rejected: %s", exc)
             return Response({"error": "That address couldn't be converted to coordinates."}, status=400)
         except DuplicateUuidError as exc:
+            # 400, not 409: a distinct status here would tell an attacker probing
+            # uuids that this one belongs to *someone* (a Conflict, vs. plain
+            # Bad Request for one that doesn't exist at all) - the original code's
+            # single blanket 400 for every PinCreationError avoided that distinction
+            # entirely, and this is the case it matters for.
             logger.info("external API pin creation rejected: %s", exc)
-            return Response({"error": "That uuid is already in use."}, status=409)
+            return Response({"error": "That pin couldn't be created."}, status=400)
         except PinCreationError as exc:
             logger.info("external API pin creation rejected: %s", exc)
             return Response({"error": "That pin couldn't be created."}, status=400)

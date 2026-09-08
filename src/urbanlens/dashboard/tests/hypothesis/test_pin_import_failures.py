@@ -630,7 +630,7 @@ class PinImportFailureResolveViewTests(TestCase):
         failure.refresh_from_db()
         self.assertEqual(failure.status, PinImportFailureStatus.PENDING)
 
-    def test_pin_creation_error_rerenders_the_card_with_the_safe_message(self) -> None:
+    def test_pin_creation_error_rerenders_the_card_with_an_error_toast(self) -> None:
         failure = self._failure()
         response = self.client.post(reverse("memories.locations.import_failures.resolve", args=[failure.pk]), {})
 

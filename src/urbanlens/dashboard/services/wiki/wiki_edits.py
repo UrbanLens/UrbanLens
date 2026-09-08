@@ -324,7 +324,7 @@ def revert_wiki_edit(location: Location, wiki: Wiki, profile: Profile, target_ed
 
 
 def _restore_reputation_for(edit_ids: list[int]) -> None:
-    """Un-retract the ledger rows for edits whose revert was itself reverted.
+    """Undo whichever reputation adjustment a now-undone revert had applied.
 
     Called here rather than left to the reputation signal, because the line
     above is a queryset ``update()`` and emits no ``post_save`` - so the
@@ -333,18 +333,34 @@ def _restore_reputation_for(edit_ids: list[int]) -> None:
     puts the original edit back in force; without this the reversal half never
     ran, and the design's justification for the flag was untrue.
 
+    Covers both adjustments ``on_wiki_edit_reverted`` can apply going the
+    other way (self-revert retracts in full; anyone else's revert weights at
+    ``MODERATED_REMOVAL_WEIGHT`` instead, per D9) - a row can be in either
+    state, never both, so restoring both is safe regardless of which fired.
+
     Args:
         edit_ids: WikiEdit pks whose reverts have just been undone.
     """
+    from decimal import Decimal
+
+    from django.db.models import Q
+
     from urbanlens.dashboard.models.reputation.meta import TargetKind
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
-    from urbanlens.dashboard.services.reputation.scoring import restore_event
+    from urbanlens.dashboard.services.reputation.scoring import restore_event, weight_events_for_target
 
     rows = ReputationEvent.objects.filter(
         rule_key="wiki_field_edit",
         target_kind=TargetKind.WIKI_EDIT,
         target_id__in=edit_ids,
-        retracted=True,
-    )
+    ).filter(Q(retracted=True) | ~Q(weight=Decimal(1)))
+    weighted_edit_ids: list[int] = []
     for event in rows:
-        restore_event(event)
+        if event.retracted:
+            restore_event(event)
+        else:
+            weighted_edit_ids.append(event.target_id)
+    # weight_events_for_target resolves its own target_kind from the instance
+    # it's given, so it needs the WikiEdit rows themselves, not the ledger rows.
+    for wiki_edit in WikiEdit.objects.filter(pk__in=weighted_edit_ids):
+        weight_events_for_target(wiki_edit, weight=Decimal(1), reason="")

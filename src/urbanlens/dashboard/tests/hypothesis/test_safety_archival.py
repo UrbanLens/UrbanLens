@@ -322,9 +322,9 @@ class ChatBlockedAfterArchivalTests(TestCase):
         self.checkin.refresh_from_db()
 
     def test_owner_message_is_rejected_after_archival(self):
-        from urbanlens.dashboard.services.visits.safety import create_chat_message
+        from urbanlens.dashboard.services.visits.safety import CheckinMessagingArchivedError, create_chat_message
 
-        with self.assertRaisesMessage(ValueError, "concluded"):
+        with self.assertRaises(CheckinMessagingArchivedError):
             create_chat_message(self.checkin, user=self.owner.user, contact=None, body="One more thing")
 
         self.assertEqual(self.checkin.messages.count(), 0)

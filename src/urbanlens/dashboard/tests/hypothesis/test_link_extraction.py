@@ -416,7 +416,7 @@ class RunExtractionPipelineTests(TestCase):
     def test_fetch_failure_is_recorded_and_notifies(self) -> None:
         extraction = self._run(page_text=None)
         self.assertEqual(extraction.status, LinkExtractionStatus.FAILED)
-        self.assertIn("couldn't be fetched", extraction.error)
+        self.assertIn("couldn't be read", extraction.error)
         self.assertTrue(
             NotificationLog.objects.filter(
                 profile=self.profile, notification_type=NotificationType.AI_EXTRACTION

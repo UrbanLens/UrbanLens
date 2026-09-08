@@ -226,7 +226,7 @@ class DocumentUploadViewTests(TestCase):
         with patch("urbanlens.dashboard.models.subscriptions.user_has_feature", return_value=False):
             response = self._upload()
         self.assertEqual(response.status_code, HTTPStatus.FORBIDDEN)
-        self.assertEqual(response.json()["error"], "Document uploads are not enabled for your account.")
+        self.assertEqual(response.json()["error"], "That upload type isn't enabled for your account.")
 
     @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_uploaded_document_does_not_appear_on_vault_photos(self, _mock_enqueue) -> None:

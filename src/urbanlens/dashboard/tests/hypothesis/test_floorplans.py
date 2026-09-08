@@ -867,10 +867,13 @@ class FloorplanEndpointTests(TestCase):
         self.assertEqual(self.client.get(f"/dashboard/map/pin/{other.slug}/floorplan/json/").status_code, 404)
 
     def test_a_bad_number_is_a_400_naming_the_field(self) -> None:
-        response = self._save({"floor_count": "several"})
+        """The field name reaches the log now, not the response - see FloorplanValidationError's catch site."""
+        with self.assertLogs("urbanlens.dashboard.controllers.floorplans", level="WARNING") as logs:
+            response = self._save({"floor_count": "several"})
 
         self.assertEqual(response.status_code, 400, "a non-numeric field must not reach the database as a 500")
-        self.assertIn("floor_count", response.json()["error"])
+        self.assertIn("That floorplan has an invalid value", response.json()["error"])
+        self.assertTrue(any("floor_count" in message for message in logs.output))
 
     def test_a_bad_date_is_a_400(self) -> None:
         response = self._save({"floors": [{"level": 0, "built_date": "sometime in 1890"}]})
@@ -878,15 +881,18 @@ class FloorplanEndpointTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_a_missing_wall_coordinate_is_a_400_naming_the_defect(self) -> None:
-        response = self._save(
-            {
-                "plan_origin": _ORIGIN,
-                "floors": [{"level": 0, "walls": [{"kind": "interior", "ax": 0, "ay": 0, "bx": 5}]}],
-            }
-        )
+        """The specific defect reaches the log now, not the response - see FloorplanValidationError's catch site."""
+        with self.assertLogs("urbanlens.dashboard.controllers.floorplans", level="WARNING") as logs:
+            response = self._save(
+                {
+                    "plan_origin": _ORIGIN,
+                    "floors": [{"level": 0, "walls": [{"kind": "interior", "ax": 0, "ay": 0, "bx": 5}]}],
+                }
+            )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("by", response.json()["error"])
+        self.assertIn("That floorplan has an invalid value", response.json()["error"])
+        self.assertTrue(any("by" in message for message in logs.output))
 
     def test_the_editor_page_renders(self) -> None:
         response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")

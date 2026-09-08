@@ -22,7 +22,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.pins.pin_creation import PinCreationError
+from urbanlens.dashboard.services.pins.pin_creation import AddressResolutionError, NoLocationProvidedError, PinCreationError, PinCreationForbiddenError
 from urbanlens.dashboard.services.pins.pin_import_failures import dismiss_pin_import_failure, resolve_pin_import_failure
 
 if TYPE_CHECKING:
@@ -232,13 +232,25 @@ class PinImportFailureResolveView(LoginRequiredMixin, View):
 
         try:
             pin = resolve_pin_import_failure(failure, profile, address=address, latitude=latitude, longitude=longitude)
+        except PinCreationForbiddenError as exc:
+            logger.info("pin import failure %s resolve forbidden: %s", failure.pk, exc)
+            message = "External lookups are turned off in your settings."
+        except NoLocationProvidedError as exc:
+            logger.info("pin import failure %s resolve rejected: %s", failure.pk, exc)
+            message = "An address or coordinates are required."
+        except AddressResolutionError as exc:
+            logger.info("pin import failure %s resolve rejected: %s", failure.pk, exc)
+            message = "That address couldn't be converted to coordinates."
         except PinCreationError as exc:
-            response = render(request, _CARD_PARTIAL, {"failure": failure})
-            response["HX-Trigger"] = json.dumps({"showToast": {"message": exc.safe_message, "level": "error"}})
-            return response
+            logger.info("pin import failure %s resolve rejected: %s", failure.pk, exc)
+            message = "That pin couldn't be placed."
+        else:
+            view_pin_url = reverse("pin.details", args=[pin.slug or pin.uuid])
+            return _toast(f"Pin placed for {pin.effective_name}.", refresh_queue=True, view_pin_url=view_pin_url)
 
-        view_pin_url = reverse("pin.details", args=[pin.slug or pin.uuid])
-        return _toast(f"Pin placed for {pin.effective_name}.", refresh_queue=True, view_pin_url=view_pin_url)
+        response = render(request, _CARD_PARTIAL, {"failure": failure})
+        response["HX-Trigger"] = json.dumps({"showToast": {"message": message, "level": "error"}})
+        return response
 
 
 class PinImportFailureDismissView(LoginRequiredMixin, View):

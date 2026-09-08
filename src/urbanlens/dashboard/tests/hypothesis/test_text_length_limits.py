@@ -246,7 +246,7 @@ class WikiEditDescriptionLengthTests(TestCase):
         )
 
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("not a valid value", resp.json()["error"])
+        self.assertEqual(resp.json()["error"], "That edit couldn't be saved.")
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.cameras, before)
 
@@ -258,7 +258,7 @@ class WikiEditDescriptionLengthTests(TestCase):
         )
 
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("YYYY-MM-DD", resp.json()["error"])
+        self.assertEqual(resp.json()["error"], "That edit couldn't be saved.")
         self.wiki.refresh_from_db()
         self.assertIsNone(self.wiki.date_abandoned)
 
