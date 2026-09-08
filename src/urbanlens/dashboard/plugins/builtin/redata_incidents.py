@@ -129,7 +129,14 @@ class IncidentHistoryPanelSource(RedataInfoPanelSource):
         """The full 25-year incident window near the pin."""
         from urbanlens.dashboard.services.apis.locations.redata_incidents_gateway import RedataIncidentsGateway
 
-        return RedataIncidentsGateway().get_incidents(latitude, longitude, years=_HISTORY_YEARS, limit=_HISTORY_LIMIT)
+        # force_refresh=True: REData's coverage cache has no `years` dimension - it
+        # keys purely on coordinate + a radius pinned the same for every provider - so
+        # a cached hit here could silently be the free panel's narrower 3-year fetch.
+        # A live query costs more (portal load, our own API-cost tracking) than the
+        # free panel's cached-when-possible fetch below, but this panel's whole promise
+        # to subscribers is the 25-year window; serving a truncated one with no signal
+        # anything is wrong is worse than the extra cost. Scoped to this panel only.
+        return RedataIncidentsGateway().get_incidents(latitude, longitude, years=_HISTORY_YEARS, limit=_HISTORY_LIMIT, force_refresh=True)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Summarize the whole window by year, most recent first."""

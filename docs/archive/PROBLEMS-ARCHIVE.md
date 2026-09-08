@@ -12771,3 +12771,50 @@ calls the same `_invalidate_vocabulary_cache()` helper, gated on `get_or_create`
 a plain resync (the common case - most tags it sees are already known) does not thrash the cache.
 Confirms the entry's own "anything that touches this table" framing was the right standard - it
 just was not applied to every file that does.
+
+## RESOLVED 2026-09-08: the paid Incident History panel could silently be served the free panel's narrower 3-year cache
+
+`id: P94` · `status: fixed` · `resolved: 2026-09-08`
+
+Found and fixed 2026-09-08 during the pre-merge audit of `release/v_0_8_0`; confirmed on an
+independent adversarial pass.
+
+`IncidentHistoryPanelSource` (`plugins/builtin/redata_incidents.py`, added `5795c4c3a` this release)
+promises subscribers a `_HISTORY_YEARS = 25` incident window and calls
+`RedataIncidentsGateway().get_incidents(latitude, longitude, years=25, limit=500)` with no
+`force_refresh` - identical to the sibling free `PoliceIncidentsPanelSource` (`_YEARS = 3`), which
+also never passed it. Both panels hit the exact same REData-side cache token: REData's
+`find_incidents_near` (`redata/parcels/services/incidents/lookup.py`) keys coverage purely by
+`coordinate_token(lat, lng, decimals=3)` plus a radius pinned to 500 m for every provider
+(`core/services/search_coverage.py`'s `_Coverage` dataclass carries only `radius_meters` and
+`checked_at` - no `years` field at all). So whichever panel populates the cache first for a given
+block wins the fetch window for both: since the free 3-year panel is the default/more-visited one,
+it usually populates first, and the paid 25-year panel would then silently be served the same
+narrow 3-year rows for a deterministic `incident_cache_min_ttl_hours` window (72 h,
+`REData/settings/app.py:668`) and probabilistically longer - with no error, no flag, and no way to
+tell from the response, since REData's `complete` field reflects provider reachability, not
+fetch-window narrowing.
+
+**Fixed entirely on the UrbanLens side - no REData change needed.** The plumbing already existed and
+was simply unused: `RedataIncidentsGateway.get_incidents` (`services/apis/locations/redata_incidents_gateway.py`)
+already accepted and forwarded `force_refresh: bool = False` ("Bypass REData's cache and re-query
+live"), and REData's `/api/v1/incidents/` endpoint already fully honored it
+(`lookup.py:159`: `if not force_refresh and is_covered(...)`). `IncidentHistoryPanelSource.fetch_envelope`
+now passes `force_refresh=True`, with a comment at the call site documenting the tradeoff: every
+Incident History view now does a live portal query rather than a cached one, which costs more
+(REData portal load, UrbanLens's own API-cost tracking per `dashboard/CLAUDE.md`'s "API
+Integrations" section) than the free panel's cached-when-possible fetch - but this panel is
+subscriber-gated (lower volume than the free panel) and its whole promise is the 25-year window;
+silently truncating it with no signal anything is wrong is worse than the extra cost.
+`PoliceIncidentsPanelSource` (the free panel) is deliberately left unchanged - its cached behavior
+was never broken, and forcing a refresh there would regress the caching benefit it exists for.
+
+The panel's `"{n} on this block in 25 years"` chip, which already assumed the full window
+unconditionally, is accurate again now that `force_refresh=True` makes that assumption true.
+
+`IncidentHistoryPanelRenderTests::test_fetches_the_full_25_year_window` (updated) and two new tests
+(`test_forces_a_live_refresh_so_the_free_panels_cache_cannot_truncate_the_window`,
+`test_the_free_panel_does_not_force_refresh`) in
+`tests/hypothesis/test_redata_incident_history_and_historical_features.py` pin both halves: the paid
+panel's gateway call carries `force_refresh=True`, and the free panel's does not (anti-vacuity -
+this fix must not regress the free panel's caching).
