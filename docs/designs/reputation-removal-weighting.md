@@ -91,6 +91,6 @@ a contributor **deleting their own wiki comment** kept its points, while withdra
 retracted them - the same act, two different answers. `WikiCommentDeleteView` is author-only, so
 every deletion through it is a withdrawal; it retracts now, exactly as the photo path does.
 
-Shipped: `ReputationEvent.weight`/`weight_reason` (migration `0056`), `total_value()` summing
+Shipped: `ReputationEvent.weight`/`weight_reason` (migration `0032_v0_8_0`, which the v0.8.0 squash folded 0056 into), `total_value()` summing
 `value * weight`, `lifetime_earned` left untouched, `weight_events_for_target`, and
 `MODERATED_REMOVAL_WEIGHT = 0.9` as the placeholder the sign-off confirmed.

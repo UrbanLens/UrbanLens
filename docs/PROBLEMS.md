@@ -62,7 +62,7 @@ before the sandbox tier existed to catch it.
 Fix: `prepare_photo_upload` now stores the raw upload untouched and returns
 `{"pending_scan": True}` as its `metadata` - every caller already splats that dict into
 `Image.objects.create(...)`, so all ~9 call sites picked it up with no change of their own.
-`Image.pending_scan` (migration 0038) gates `services/media/access.py::authorize_image` and
+`Image.pending_scan` (migration `0032_v0_8_0`, which the v0.8.0 squash folded 0038 into) gates `services/media/access.py::authorize_image` and
 `ImageQuerySet.visible_to` the same way `Comment.pending_scan` already gated comment images: the
 uploader always sees their own row; nobody else can read or list it until
 `tasks.process_image_upload` has read its EXIF and downscaled it, which is also what now clears

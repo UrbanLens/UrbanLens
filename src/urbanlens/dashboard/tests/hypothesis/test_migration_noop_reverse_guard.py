@@ -70,20 +70,14 @@ REVIEWED: dict[str, str] = {
         "drop_duplicate_links (was 0047) both merge/remove duplicates ahead of a unique constraint - un-merging is "
         "impossible and unnecessary, what remains is valid in the old schema."
     ),
-    "0049_friendinvitation_email_normalized.py": (
-        "backfill_friendinvitation_email_normalized fills email_normalized, a derived column this same migration "
-        "adds. The reverse drops the column outright, so there is nothing for the RunPython reverse to restore, and "
-        "`email` - the only source - is never written."
-    ),
-    "0052_wiki_edit_consensus_points.py": (
-        "_backfill fills is_revert / consensus_points / consensus_points_retracted, all three added by this same "
-        "migration and all three dropped by its reverse. Same shape as 0049: a derived column reversing to nothing."
-    ),
-    "0054_merge_reciprocal_friendships.py": (
-        "merge_reciprocal_rows collapses A->B / B->A duplicates ahead of the constraint, keeping the lowest pk to "
-        "match what FriendshipQuerySet.between has been treating as authoritative. Lossy - the merged-away rows are "
-        "gone and cannot be recreated - but the survivors are ordinary Friendship rows the pre-migration code reads "
-        "unchanged. Same shape as 0005 and as 0030's merge_duplicate_labels."
+    "0032_v0_8_0.py": (
+        "The v0.8.0 squash, carrying three reviewed noop reverses inlined from the files it replaced. "
+        "_0049_backfill_friendinvitation_email_normalized and _0052__backfill fill columns this same file adds "
+        "and its reverse drops, so there is nothing for a reverse to restore. _0054_merge_reciprocal_rows "
+        "collapses A->B / B->A duplicates ahead of the constraint, keeping the lowest pk to match what "
+        "FriendshipQuerySet.between has been treating as authoritative - lossy, since the merged-away rows are "
+        "gone, but the survivors are ordinary Friendship rows the pre-migration code reads unchanged. Same shape "
+        "as 0005 and as 0030's merge_duplicate_labels."
     ),
 }
 

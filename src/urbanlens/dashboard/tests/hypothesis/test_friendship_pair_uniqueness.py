@@ -16,8 +16,9 @@ Two properties, and the second is the one a constraint alone would not give:
   constraint on the *ordered* pair rather than a normalisation of the columns
   into id order, which would have inverted that for half the table.
 
-The merge rule that migration 0054 applies to rows that already exist is tested
-here too, against the function itself: it has to be safe for every combination
+The merge rule applied to rows that already exist is tested here too, against the
+function itself (it was migration 0054's; the v0.8.0 squash inlined it into
+`0032_v0_8_0`, and its constraint into the `0033_v0_8_0_indexes` companion): it has to be safe for every combination
 of statuses, because nothing recorded which of two conflicting ones was right.
 """
 
@@ -25,19 +26,21 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from pathlib import Path
 from unittest import mock
 
 from django.contrib.auth.models import User
-from django.db import IntegrityError, connection, transaction
+from django.db import IntegrityError, OperationalError, connection, migrations, transaction
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard import migrations as migrations_package
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.friendship.queryset import QuerySet as FriendshipQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
 
-_MERGE = importlib.import_module("urbanlens.dashboard.migrations.0054_merge_reciprocal_friendships")
+_MERGE = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
 
 
 class FriendshipPairConstraintTests(TestCase):
@@ -217,7 +220,7 @@ def _run_merge(rows: list[_Row]) -> None:
     original = _MERGE._duplicated_pairs
     _MERGE._duplicated_pairs = lambda _model: pairs
     try:
-        _MERGE.merge_reciprocal_rows(_Apps, None)
+        _MERGE._0054_merge_reciprocal_rows(_Apps, None)
     finally:
         _MERGE._duplicated_pairs = original
 
@@ -403,7 +406,7 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
         """
         keeper, _loser = self._pair(self.a, self.b, FriendshipStatus.ACCEPTED, FriendshipStatus.BLOCKED)
 
-        _MERGE.merge_reciprocal_rows(_RealApps, None)
+        _MERGE._0054_merge_reciprocal_rows(_RealApps, None)
 
         self.assertEqual(Friendship.objects.count(), 1)
         survivor = Friendship.objects.get()
@@ -416,7 +419,7 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
         """The non-swapping case - which passed all along, and is the control for it."""
         keeper, _loser = self._pair(self.a, self.b, FriendshipStatus.BLOCKED, FriendshipStatus.ACCEPTED)
 
-        _MERGE.merge_reciprocal_rows(_RealApps, None)
+        _MERGE._0054_merge_reciprocal_rows(_RealApps, None)
 
         survivor = Friendship.objects.get()
         self.assertEqual(survivor.pk, keeper.pk)
@@ -432,11 +435,37 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
         _keeper, loser = self._pair(self.a, self.b, FriendshipStatus.ACCEPTED, FriendshipStatus.BLOCKED)
 
         with self.assertLogs(_MERGE.logger.name, level="WARNING") as captured:
-            _MERGE.merge_reciprocal_rows(_RealApps, None)
+            _MERGE._0054_merge_reciprocal_rows(_RealApps, None)
 
         deletions = [line for line in captured.output if "Deleting reciprocal friendship row" in line]
         self.assertEqual(len(deletions), 1, "one row was discarded, so one line records it")
         self.assertIn(f"row {loser.pk} ", deletions[0], "the discarded row's id must survive its deletion")
+
+    def test_the_merge_and_the_constraint_cannot_share_a_transaction(self) -> None:
+        """Why they are two migrations - demonstrated, not asserted.
+
+        The merge's UPDATE and DELETE queue deferred FK trigger events, and
+        Postgres refuses to build an index over a table holding them. 0054 and
+        0055 were split for this; the v0.8.0 squash first folded them back into
+        one file and raised exactly this on the first database that had a pair to
+        merge. One migration is one transaction, so moving the constraint to the
+        end of the same file would not have helped either.
+
+        If this ever stops raising, the separation it justifies is still harmless
+        - but the reason recorded for it has changed and is worth re-measuring.
+        """
+        self._pair(self.a, self.b, FriendshipStatus.ACCEPTED, FriendshipStatus.BLOCKED)
+        constraint = next(item for item in Friendship._meta.constraints if item.name == "friendship_one_row_per_pair")
+        _MERGE._0054_merge_reciprocal_rows(_RealApps, None)
+
+        with (
+            self.assertRaises(OperationalError) as raised,
+            transaction.atomic(),
+            connection.schema_editor(atomic=False) as editor,
+        ):
+            editor.add_constraint(Friendship, constraint)
+
+        self.assertIn("pending trigger events", str(raised.exception))
 
     def test_every_pair_is_merged_not_just_the_first(self) -> None:
         """An abort on pair one leaves the rest of the table untouched.
@@ -452,7 +481,7 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
         self._pair(third, fourth, FriendshipStatus.REQUESTED, FriendshipStatus.ACCEPTED)
         self._pair(fifth, sixth, FriendshipStatus.PENDING, FriendshipStatus.IGNORED)
 
-        _MERGE.merge_reciprocal_rows(_RealApps, None)
+        _MERGE._0054_merge_reciprocal_rows(_RealApps, None)
 
         self.assertEqual(Friendship.objects.count(), 3, "one row per pair, and every pair reached")
         self.assertEqual(
@@ -460,3 +489,87 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
             sorted([FriendshipStatus.BLOCKED, FriendshipStatus.ACCEPTED, FriendshipStatus.IGNORED]),
             "each pair keeps the more restrictive of its two statuses",
         )
+
+
+class IndexWorkLivesInItsOwnMigrationTests(SimpleTestCase):
+    """The merge and the constraint it clears the way for must stay in two migrations.
+
+    A release squash collapses a branch's migrations into one file, and one file
+    is one transaction - which is the whole hazard: see
+    `ReciprocalMergeAgainstTheDatabaseTests.test_the_merge_and_the_constraint_cannot_share_a_transaction`
+    for the failure itself. The squash tool splits index and constraint creation
+    into an `_indexes` companion so that stays true across future squashes; this
+    is what notices if it stops.
+
+    Asserted against the migration graph rather than by applying it, because a
+    from-scratch database cannot see the problem: with no rows the merge returns
+    before touching anything.
+    """
+
+    def _module_of(self, predicate) -> str:
+        """The one migration module whose operations satisfy `predicate`."""
+        directory = Path(migrations_package.__file__).resolve().parent
+        matches = [
+            path.stem
+            for path in sorted(directory.glob("[0-9]*.py"))
+            if any(
+                predicate(op)
+                for op in importlib.import_module(f"urbanlens.dashboard.migrations.{path.stem}").Migration.operations
+            )
+        ]
+        self.assertEqual(len(matches), 1, f"expected exactly one migration to match, got {matches}")
+        return matches[0]
+
+    def test_the_constraint_is_not_in_the_migration_that_merges(self) -> None:
+        merge = self._module_of(
+            lambda op: isinstance(op, migrations.RunPython) and op.code is _MERGE._0054_merge_reciprocal_rows
+        )
+        constraint = self._module_of(
+            lambda op: isinstance(op, migrations.AddConstraint) and op.constraint.name == "friendship_one_row_per_pair"
+        )
+
+        self.assertNotEqual(
+            merge, constraint, "one migration is one transaction, and the constraint cannot share it with the merge"
+        )
+        self.assertLess(
+            merge, constraint, "and the merge has to run first, or the constraint rejects the rows it exists to merge"
+        )
+
+    #: Release squashes that predate the split, listed rather than fixed. Every
+    #: one is already applied on every database that has them, and a database
+    #: applying them for the first time is empty - so their backfills touch no
+    #: rows and queue no trigger events. Rewriting an applied migration to satisfy
+    #: a guard is the more dangerous move. The guard is here for the next squash.
+    SETTLED = frozenset({"0003_v0_4_0_data", "0005_v0_4_0_pin_location_dedupe", "0010_v0_6_0", "0030_v0_7_0"})
+
+    def test_no_new_release_migration_creates_an_index_beside_a_data_migration(self) -> None:
+        """The general form of the rule, for the files a squash produces.
+
+        Scoped to release squashes rather than the whole directory: a
+        hand-written migration pairing a backfill with an index on a table it
+        just created is safe and commonplace, and flagging those would make this
+        all noise. What a squash does is different - it folds together files that
+        were deliberately kept apart, and v0.4.0's own `_data`/`_indexes` naming
+        shows the split was a convention here before it was lost.
+        """
+        directory = Path(migrations_package.__file__).resolve().parent
+        offenders = []
+        for path in sorted(directory.glob("[0-9]*_v[0-9]*.py")):
+            if path.stem.endswith("_indexes") or path.stem in self.SETTLED:
+                continue
+            operations = importlib.import_module(f"urbanlens.dashboard.migrations.{path.stem}").Migration.operations
+            has_data = any(isinstance(op, migrations.RunPython | migrations.RunSQL) for op in operations)
+            indexing = [op for op in operations if isinstance(op, migrations.AddIndex | migrations.AddConstraint)]
+            if has_data and indexing:
+                offenders.append(f"{path.stem}: {len(indexing)} index/constraint op(s) alongside a data migration")
+
+        self.assertEqual(
+            offenders, [], "move these into the release's `_indexes` companion - a second transaction is the point"
+        )
+
+    def test_the_settled_list_still_names_files_that_exist(self) -> None:
+        """An exemption for a migration that is gone hides a real one behind it."""
+        directory = Path(migrations_package.__file__).resolve().parent
+        present = {path.stem for path in directory.glob("[0-9]*.py")}
+
+        self.assertEqual(self.SETTLED - present, set(), "these were squashed away; drop them from SETTLED")

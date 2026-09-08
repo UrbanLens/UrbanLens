@@ -68,6 +68,11 @@ worth recording on this side too: the image's `CMD` is `src/bin/init.py`, which 
 container that never comes up, not a sync that declines to proceed.
 
 **Note for whoever re-runs this against a restored database.** 0032–0056 have since been squashed
-into `0032_v0_8_0.py` for the release; the merge is the same function, inlined. A shadow-stack run
+for the release, into `0032_v0_8_0.py` plus an `0033_v0_8_0_indexes.py` companion. The merge is the
+same function, inlined. The split is not cosmetic: the first attempt at the squash put the merge and
+0055's constraint in one migration, and one migration is one transaction — Postgres refuses
+`CREATE INDEX` over a table holding the pending trigger events the merge's own UPDATE and DELETE
+leave behind. That is a second, worse abort on the same rows, and it is why 0054 and 0055 were two
+files to begin with. The squash tool now splits index and constraint creation out on every run. A shadow-stack run
 should be repeated against the squashed chain rather than the one measured on 2026-09-07 — that
 squash is a bigger change to what `migrate` does on a fresh database than this fix is.
