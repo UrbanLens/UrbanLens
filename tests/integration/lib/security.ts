@@ -16,7 +16,7 @@
 import * as net from "node:net";
 import * as tls from "node:tls";
 
-import { expect, type APIResponse, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, type APIRequestContext, type APIResponse, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 import type { ApiClient } from "./api-client.js";
 import { env } from "./env.js";
@@ -181,6 +181,66 @@ export const DIRECTORY_PROBES = ["/static/", "/media/", "/dashboard/static/", "/
  */
 export async function whoami(api: ApiClient): Promise<{ uuid: string; slug: string }> {
     return api.json<{ uuid: string; slug: string }>("get", "whoami/");
+}
+
+/** A successful owner fetch of a photo's bytes, and the url it finally worked at. */
+export interface OwnPhotoFetch {
+    response: APIResponse;
+    url: string;
+}
+
+/**
+ * Fetches a just-uploaded photo's bytes as its owner, riding out the
+ * async-rename race documented at `docs/PROBLEMS.md` P58: `tasks.process_image_upload`
+ * re-encodes the stored file shortly after upload (`.png` -> `.webp`,
+ * `downscale_stored_image`) and the row's `image` column - and therefore the
+ * `url` a client was handed at upload time - can go stale before a
+ * same-test fetch runs. The old path then 404s for everyone, including the
+ * uploader: correct per `services.media.access` (the row no longer names it),
+ * but not something a security spec asserting "the owner can still read their
+ * own upload" should be tripped up by.
+ *
+ * Re-reads the photo's *current* `url` from `GET photos/{uuid}/` before each
+ * attempt rather than trusting a url captured once, so a caller gets back the
+ * url that actually resolved - use that (not the upload response's `url`) for
+ * any fetch made afterwards, such as the stranger-refusal check this control
+ * exists for.
+ *
+ * @param api The photo owner's client, for re-reading current metadata.
+ * @param apiRequestContext Raw request context the media-gate fetch itself uses.
+ * @param photoUuid The photo to fetch.
+ * @param headers Auth headers for the media-gate request (session or bearer).
+ * @returns The first 200 response and the url it came from, or the last
+ *     non-200 response once attempts are exhausted.
+ */
+export async function fetchOwnPhotoBytes(
+    api: ApiClient,
+    apiRequestContext: APIRequestContext,
+    photoUuid: string,
+    headers: Record<string, string>,
+): Promise<OwnPhotoFetch> {
+    const ATTEMPTS = 6;
+    const RETRY_DELAY_MS = 500;
+    let last: OwnPhotoFetch | undefined;
+    for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+        const meta = await api.json<{ url?: string }>("get", `photos/${photoUuid}/`);
+        if (!meta.url) {
+            break;
+        }
+        const url = meta.url.startsWith("http") ? meta.url : new URL(meta.url, env.baseUrl).toString();
+        const response = await apiRequestContext.get(url, { headers });
+        last = { response, url };
+        if (response.status() === 200) {
+            return last;
+        }
+        if (attempt < ATTEMPTS - 1) {
+            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        }
+    }
+    if (!last) {
+        throw new Error(`GET photos/${photoUuid}/ never returned a url to fetch`);
+    }
+    return last;
 }
 
 export async function expectCanaryNotInDom(page: Page, marker: string): Promise<void> {
