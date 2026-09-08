@@ -64,6 +64,29 @@ _CACHE_SOURCE = "property_records"
 _MAX_LIEN_ROWS = 8
 
 
+def _coverage_worth_calling(coverage: dict[str, Any], domain: str) -> bool:
+    """Whether a coverage-precheck domain is worth an actual supplementary call.
+
+    A missing key, a non-dict entry, or ``available`` not exactly ``False``
+    are all treated as "call it" - :meth:`RedataGateway.lookup_coverage` is
+    only ever used to *skip* a call REData positively knows is pointless,
+    never to withhold one it simply didn't mention (most domains, including
+    ``liens``/``tax-payments``, have no coverage key at all).
+
+    Args:
+        coverage: :meth:`RedataGateway.lookup_coverage`'s payload - ``{}``
+            both for a parcel with no coverage data and for a failed precheck
+            (see :func:`_fetch_payload`), which is why this defaults to
+            calling rather than skipping.
+        domain: The coverage key to check (e.g. ``"assessments"``, ``"sale_records"``).
+
+    Returns:
+        False only when ``coverage[domain]["available"]`` is exactly ``False``.
+    """
+    entry = coverage.get(domain)
+    return not (isinstance(entry, dict) and entry.get("available") is False)
+
+
 def _fetch_payload(location: Location, latitude: float, longitude: float) -> dict[str, Any]:
     """Call REData and return the shared LocationCache payload shape.
 
@@ -110,48 +133,91 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
     payload["available"] = True
 
     if payload.get("uuid"):
+        parcel_uuid = payload["uuid"]
+        gateway = RedataGateway()
+
+        # Cheap local precheck for the two supplementary calls below that
+        # *are* coverage-registry domains (assessments, sale_records) - see
+        # RedataGateway.lookup_coverage. An optimization, not a dependency:
+        # a failed precheck falls back to calling both unconditionally rather
+        # than losing them, so a coverage-endpoint outage never blanks
+        # sections the parcel actually has data for.
+        try:
+            coverage = gateway.lookup_coverage(parcel_uuid)
+        except PropertyRecordsUnavailableError:
+            coverage = {}
+
         # Supplementary assessor history (annual valuations; Cook County
         # today). Best-effort: the record card stands on its own, so a
         # failure or no-coverage answer here must not blank it - the history
         # simply reappears on the next refresh cycle.
-        gateway = RedataGateway()
-        try:
-            rows = gateway.lookup_assessments(payload["uuid"])
-        except PropertyRecordsUnavailableError:
-            rows = []
-        history = _assessment_history(rows, payload.get("apn") or "")
-        if history:
-            payload["assessment_history"] = history
+        if _coverage_worth_calling(coverage, "assessments"):
+            try:
+                rows = gateway.lookup_assessments(parcel_uuid)
+            except PropertyRecordsUnavailableError:
+                rows = []
+            history = _assessment_history(rows, payload.get("apn") or "")
+            if history:
+                payload["assessment_history"] = history
 
         # Supplementary recorded sales (CT OPM, Cook County) - same
         # best-effort stance. Matched rows are appended to sales_history so
         # the existing OFFICIAL-sale pipeline ingests them unchanged.
-        try:
-            sale_rows = gateway.lookup_sale_records(payload["uuid"])
-        except PropertyRecordsUnavailableError:
-            sale_rows = []
-        supplementary = _supplementary_sales(sale_rows, payload.get("situs_address") or "", payload.get("apn") or "")
-        if supplementary:
-            payload["sales_history"] = list(payload.get("sales_history") or []) + supplementary
+        if _coverage_worth_calling(coverage, "sale_records"):
+            try:
+                sale_rows = gateway.lookup_sale_records(parcel_uuid)
+            except PropertyRecordsUnavailableError:
+                sale_rows = []
+            supplementary = _supplementary_sales(sale_rows, payload.get("situs_address") or "", payload.get("apn") or "")
+            if supplementary:
+                payload["sales_history"] = list(payload.get("sales_history") or []) + supplementary
 
         # Encumbrances and unpaid tax. For this application these are the most
         # telling records on the card: an open code-enforcement lien and years
         # of delinquent tax are what "abandoned" looks like in public records,
         # long before anything says so in words. Same best-effort stance as
-        # above - the card stands without them.
+        # above - the card stands without them. Neither is a coverage-registry
+        # domain (see lookup_coverage's own docstring), so there is no cheap
+        # way to know in advance whether either will return anything - these
+        # stay unconditional.
         try:
-            lien_rows = gateway.lookup_liens(payload["uuid"])
+            lien_rows = gateway.lookup_liens(parcel_uuid)
         except PropertyRecordsUnavailableError:
             lien_rows = []
         if lien_rows:
             payload["liens"] = _lien_rows(lien_rows)
 
         try:
-            tax_rows = gateway.lookup_tax_payments(payload["uuid"])
+            tax_rows = gateway.lookup_tax_payments(parcel_uuid)
         except PropertyRecordsUnavailableError:
             tax_rows = []
         if tax_rows:
             payload["tax_status"] = _tax_status(tax_rows)
+
+        # Neighbourhood demographics (census tract population/income/home
+        # value/rent/owner-renter split) - genuinely useful context for
+        # someone researching a site. Best-effort: the endpoint 503s wholesale
+        # without REData's own Census API key configured server-side, and that
+        # is no different from any other supplementary source being down.
+        try:
+            demographics = gateway.lookup_demographics(parcel_uuid)
+        except PropertyRecordsUnavailableError:
+            demographics = None
+        if demographics:
+            payload["demographics"] = demographics
+
+        # The park containing this parcel, if any - a real point-in-boundary
+        # check, unlike plugins.builtin.nps's nearest-by-coordinate panel
+        # elsewhere on the same pin (see that plugin's own docstring for the
+        # precision tradeoff it accepts). nearby_parks duplicates that
+        # existing panel, so it is read and discarded here rather than shown
+        # twice.
+        try:
+            national_parks = gateway.lookup_national_parks(parcel_uuid)
+        except PropertyRecordsUnavailableError:
+            national_parks = {}
+        if containing_park := national_parks.get("containing_park"):
+            payload["containing_park"] = containing_park
 
     return payload
 
@@ -460,6 +526,54 @@ def special_land_use_rows(areas: Any) -> list[dict[str, str]]:
     return rows
 
 
+def _demographic_number(value: Any) -> float | None:
+    """Parse one of REData's demographics fields (a decimal string, per the ACS API) to a float."""
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _demographics_rows(demographics: Any) -> list[dict[str, str]]:
+    """Neighbourhood context from the parcel's census tract, as display rows.
+
+    REData has been resolving this on every parcel fetch (see
+    :meth:`RedataGateway.lookup_demographics`) and this app has shown none of
+    it - genuinely useful context for someone researching a site, distinct
+    from the parcel's own facts above it.
+
+    Args:
+        demographics: :meth:`RedataGateway.lookup_demographics`'s payload, or
+            None/anything falsy (no coordinate, outside the USA, or the
+            endpoint was unavailable - see ``_fetch_payload``'s best-effort
+            handling of it).
+
+    Returns:
+        Display rows for population, median household income, median home
+        value, median rent, and the owner/renter split - omitting any field
+        the ACS estimate doesn't carry.
+    """
+    if not isinstance(demographics, dict):
+        return []
+
+    rows: list[dict[str, str]] = []
+    if (population := _demographic_number(demographics.get("population"))) is not None:
+        rows.append({"label": "Neighborhood population", "value": f"{population:,.0f}"})
+    if (income := _demographic_number(demographics.get("median_household_income"))) is not None:
+        rows.append({"label": "Median household income", "value": f"${income:,.0f}"})
+    if (home_value := _demographic_number(demographics.get("median_home_value"))) is not None:
+        rows.append({"label": "Median home value", "value": f"${home_value:,.0f}"})
+    if (rent := _demographic_number(demographics.get("median_gross_rent"))) is not None:
+        rows.append({"label": "Median gross rent", "value": f"${rent:,.0f}/mo"})
+    owner_pct = _demographic_number(demographics.get("percent_owner_occupied"))
+    renter_pct = _demographic_number(demographics.get("percent_renter_occupied"))
+    if owner_pct is not None and renter_pct is not None:
+        rows.append({"label": "Owner/renter occupied", "value": f"{owner_pct:.0f}% / {renter_pct:.0f}%"})
+    return rows
+
+
 def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, Any]:
     """Build the info-panel context for a successful record.
 
@@ -539,6 +653,11 @@ def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, An
     if data.get("school_district"):
         meta.append({"label": "School district", "value": data["school_district"]})
 
+    # Neighbourhood demographics (the parcel's census tract) - context about
+    # the area, not the parcel itself, so it sits after the parcel's own tax
+    # geography rather than among the parcel facts above it.
+    meta.extend(_demographics_rows(data.get("demographics")))
+
     # Recorded-document references (deeds, plats). Linked rather than listed as
     # bare URLs: they are the primary sources behind the ownership history above,
     # and a recorder's URL is not text anyone reads. Capped because a
@@ -554,6 +673,13 @@ def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, An
     # First, because it is the one fact here that changes what a visit *is*
     # rather than describing the property.
     chips.extend(area["label"] for area in special_land_use_rows(data.get("special_land_use_areas")))
+    # A real point-in-boundary check (see RedataGateway.lookup_national_parks),
+    # not the nearest-by-coordinate answer plugins.builtin.nps shows elsewhere
+    # on this same pin - same rationale as the Special Land Use chips above:
+    # it changes what a visit is, not just describes the property.
+    containing_park = data.get("containing_park") or {}
+    if full_name := containing_park.get("full_name"):
+        chips.append(f"Situated within {full_name}")
     if data.get("field_mismatches"):
         chips.append("Sources disagree")
     if any(entry.get("delinquent") for entry in data.get("tax_history") or []):
