@@ -398,8 +398,9 @@ class PhotoUploadView(LoginRequiredMixin, View):
             # panel (_photo_issues.html) that the pin/wiki upload path already
             # feeds. Without this its own dropzone's failures show a toast that
             # is gone in seconds and never reach the panel that exists for them.
-            record_photo_upload_failure(profile, image_file.name or "photo", exc.message)
-            return JsonResponse({"error": exc.message}, status=exc.status)
+            logger.info("photo upload rejected for profile %s: %s", profile.pk, exc.message)
+            record_photo_upload_failure(profile, image_file.name or "photo", exc.generic_message)
+            return JsonResponse({"error": exc.generic_message}, status=exc.status)
 
         return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
 

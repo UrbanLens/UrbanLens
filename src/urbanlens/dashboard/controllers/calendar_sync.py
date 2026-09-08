@@ -394,7 +394,8 @@ class TripCalendarExportView(LoginRequiredMixin, View):
         try:
             link, activity_count = export_trip_to_calendar(account, trip, trip_url=trip_url)
         except ValueError as exc:
-            return self._render_button(request, trip, profile, toast=("warning", str(exc)))
+            logger.info("calendar export rejected for trip %s: %s", trip.pk, exc)
+            return self._render_button(request, trip, profile, toast=("warning", "That trip couldn't be exported to your calendar."))
         except GoogleAuthExpiredError:
             _drop_expired_account(account)
             return self._render_button(request, trip, profile, toast=("warning", _RECONNECT_MESSAGE))

@@ -706,6 +706,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 # coerce_coordinates() raises one of a fixed set of
                 # developer-authored literals; match rather than echo exc so a
                 # future raise site added there can't leak unsafe text here.
+                logger.info("coerce_coordinates rejected input: %s", exc)
                 if str(exc) == "Coordinates must be finite numbers.":
                     return JsonResponse({"error": "Coordinates must be finite numbers."}, status=400)
                 if str(exc) == "Coordinates out of range.":

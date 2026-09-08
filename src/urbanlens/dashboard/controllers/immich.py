@@ -261,7 +261,8 @@ class PinImmichSearchView(LoginRequiredMixin, View):
                 # library of exactly the cap size shows everything it has.
                 context["nearby_truncated"] = neighbourhood.truncated
         except GatewayRequestError as exc:
-            return render(request, _PICKER_PARTIAL, {**context, "error": str(exc)})
+            logger.warning("Immich picker request failed: %s", exc)
+            return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Immich library right now."})
 
         already_imported = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
         assets = [{"id": result.id, "already_imported": account.asset_web_url(result.id) in already_imported} for result in results]

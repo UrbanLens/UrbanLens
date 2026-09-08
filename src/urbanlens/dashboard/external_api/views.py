@@ -205,7 +205,17 @@ from urbanlens.dashboard.services.notifications.notification_center import (
 )
 from urbanlens.dashboard.services.notifications.push import PushRegistrationError, register_device, unregister_device
 from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
-from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_creation import (
+    AddressResolutionError,
+    DuplicateCoordinatesError,
+    DuplicatePropertyError,
+    DuplicateUuidError,
+    NoLocationProvidedError,
+    PinCreationError,
+    PinCreationForbiddenError,
+    PinParentNotFoundError,
+    create_pin_for_profile,
+)
 from urbanlens.dashboard.services.pins.pin_detail import build_pin_detail
 from urbanlens.dashboard.services.pins.pin_edit import (
     ORGANIZE_LABEL_KINDS,
@@ -745,9 +755,29 @@ class PinsView(ExternalApiView):
                 name_is_user_provided=data.get("name_is_user_provided", False),
             )
         except PinCreationForbiddenError as exc:
-            return Response({"error": exc.safe_message}, status=403)
+            logger.info("external API pin creation forbidden: %s", exc)
+            return Response({"error": "External lookups are turned off in your settings."}, status=403)
+        except DuplicateCoordinatesError as exc:
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "You already have a pin at these exact coordinates."}, status=400)
+        except DuplicatePropertyError as exc:
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "You already have a pin on this property."}, status=400)
+        except PinParentNotFoundError as exc:
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "No such pin to set as parent."}, status=400)
+        except NoLocationProvidedError as exc:
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "An address or coordinates are required."}, status=400)
+        except AddressResolutionError as exc:
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "That address couldn't be converted to coordinates."}, status=400)
+        except DuplicateUuidError as exc:
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "That uuid is already in use."}, status=409)
         except PinCreationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "That pin couldn't be created."}, status=400)
 
         pin = result.pin
         parent_pin = pin.parent_pin
@@ -1336,7 +1366,8 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
         try:
             image = upload_photo(profile, data["file"], caption=data.get("caption") or None, pin=pin, visit=visit)
         except PhotoUploadError as exc:
-            return Response({"error": exc.message}, status=exc.status)
+            logger.info("external API photo upload rejected for profile %s: %s", profile.pk, exc.message)
+            return Response({"error": exc.generic_message}, status=exc.status)
 
         return Response(PhotoSerializer(build_photo_payload(image, profile)).data, status=201)
 

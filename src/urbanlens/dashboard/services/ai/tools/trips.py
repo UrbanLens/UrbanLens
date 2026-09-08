@@ -9,12 +9,15 @@ requesting profile - :attr:`~registry.DataScope.VISIBLE_SHARED`, not
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.services.ai.tools.registry import DataScope, ToolContext, ToolSpec, register
+
+logger = logging.getLogger(__name__)
 
 #: Rows any single trip tool may return.
 _ROW_LIMIT = 10
@@ -75,7 +78,8 @@ def _create_trip(context: ToolContext, args: CreateTripArgs) -> dict[str, Any]:
     try:
         trip, _created = create_trip(context.profile, name=args.name, description=args.description)
     except TripError as exc:
-        return {"error": str(exc)}
+        logger.info("assistant create_trip rejected for profile %s: %s", context.profile.pk, exc)
+        return {"error": "That trip couldn't be created."}
     return {"created": {"name": trip.name, "slug": trip.slug}}
 
 
@@ -141,7 +145,8 @@ def _add_trip_activity(context: ToolContext, args: AddTripActivityArgs) -> dict[
     try:
         activity = create_activity(trip, context.profile, place={"pin_slug": args.pin_slug}, scheduled_at=scheduled_at)
     except TripError as exc:
-        return {"error": str(exc)}
+        logger.info("assistant add_activity rejected for trip %s: %s", trip.pk, exc)
+        return {"error": "That activity couldn't be added to the trip."}
     return {"added": {"trip": trip.name, "pin": pin.effective_name, "activity_id": activity.id}}
 
 

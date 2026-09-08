@@ -257,7 +257,8 @@ def materialize_media_item(
         response.raise_for_status()
         content = response.raw.read(_MAX_DOWNLOAD_BYTES + 1, decode_content=True)
     except (requests.RequestException, OSError, UnsafeUrlError) as exc:
-        raise MaterializeError(f"Could not download {url}: {exc}") from exc
+        logger.info("Could not download %s: %s", url, exc)
+        raise MaterializeError(f"Could not download {url}.") from exc
     if len(content) > _MAX_DOWNLOAD_BYTES:
         raise MaterializeError(f"{url} is larger than the {_MAX_DOWNLOAD_BYTES // (1024 * 1024)}MB limit for Media gallery photos.")
     if not content:

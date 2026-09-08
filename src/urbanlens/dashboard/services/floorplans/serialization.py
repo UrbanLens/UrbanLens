@@ -476,7 +476,8 @@ def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, prof
     try:
         row.built_date = _date_in(payload.get("built_date"))
     except ValueError as exc:
-        raise FloorplanValidationError(f"built_date: {exc}") from exc
+        logger.info("Invalid built_date on floorplan item: %s", exc)
+        raise FloorplanValidationError("built_date must be a date in YYYY-MM-DD form.") from exc
     attributes = dict(payload.get("attributes") or {})
     local = dict(attributes.get(LOCAL_NAMESPACE) or {})
     label_uuids = local.pop("labels", None) or payload.get("labels") or []

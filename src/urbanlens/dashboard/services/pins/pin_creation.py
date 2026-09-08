@@ -39,14 +39,36 @@ logger = logging.getLogger(__name__)
 class PinCreationError(ValueError):
     """Raised when the given input can't be turned into a Pin.
 
-    ``safe_message`` is safe to surface directly to the caller (map UI or
-    external API) - it never includes anything beyond what the caller itself
-    submitted.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class DuplicateCoordinatesError(PinCreationError):
+    """This profile already has a pin at these exact coordinates."""
+
+
+class DuplicatePropertyError(PinCreationError):
+    """This profile already has a root pin on this property/location."""
+
+
+class PinParentNotFoundError(PinCreationError):
+    """The named ``parent_id`` doesn't resolve to one of this profile's pins."""
+
+
+class NoLocationProvidedError(PinCreationError):
+    """Neither coordinates nor an address were given."""
+
+
+class AddressResolutionError(PinCreationError):
+    """The given address couldn't be geocoded to coordinates."""
+
+
+class DuplicateUuidError(PinCreationError):
+    """The caller-supplied uuid already belongs to a different pin."""
 
 
 class PinCreationForbiddenError(PinCreationError):
@@ -102,7 +124,7 @@ def resolve_child_pin_location(
     if exclude_pin is not None and exclude_pin.pk is not None:
         overlapping = overlapping.exclude(pk=exclude_pin.pk)
     if overlapping.exists():
-        raise PinCreationError("You already have a pin at these exact coordinates. Place it slightly apart to keep both.")
+        raise DuplicateCoordinatesError("Duplicate pin at these exact coordinates.")
     return location
 
 
@@ -213,7 +235,7 @@ def create_pin_for_profile(
     if parent_id is not None:
         new_parent = Pin.objects.filter(uuid=parent_id, profile=profile).first()
         if new_parent is None:
-            raise PinCreationError("No such pin to set as parent.")
+            raise PinParentNotFoundError("parent_id does not resolve to one of this profile's pins.")
     # An unset coordinate arrives as None or "" (e.g. the map's blank hidden
     # input) - normalize both to None so the checks below can use `is None`
     # without treating a valid 0/0.0 coordinate (equator, prime meridian) as missing.
@@ -224,12 +246,12 @@ def create_pin_for_profile(
 
     if latitude is None or longitude is None:
         if not address:
-            raise PinCreationError("No address or lat/lon provided.")
+            raise NoLocationProvidedError("Neither coordinates nor an address were given.")
         if not profile.external_apis_enabled:
-            raise PinCreationForbiddenError("External lookups are turned off in your settings - drop a pin on the map instead.")
+            raise PinCreationForbiddenError("external_apis_enabled is False for this profile.")
         latitude, longitude = get_pin_by_address(address)
         if latitude is None or longitude is None:
-            raise PinCreationError("Unable to convert address to lat/lng.")
+            raise AddressResolutionError("Geocoding the given address returned no coordinates.")
 
     lat_f = float(latitude)
     lon_f = float(longitude)
@@ -260,7 +282,7 @@ def create_pin_for_profile(
     # really providing, now expressed against the property itself instead of
     # against whichever coordinate happened to be recorded first.
     if new_parent is None and location.place_id and Pin.objects.filter(profile=profile, parent_pin__isnull=True, location__place_id=location.place_id).exists():
-        raise PinCreationError("You already have a pin on this property.")
+        raise DuplicatePropertyError("Duplicate root pin on this property.")
 
     # The chosen location, plus any property this coordinate could plausibly
     # mean instead - so a caller can still treat "more than one" as "there is
@@ -320,9 +342,9 @@ def create_pin_for_profile(
             if existing is not None:
                 return PinCreationResult(pin=existing, all_locations=all_locations, created=False)
             if Pin.objects.filter(uuid=client_uuid).exists():
-                raise PinCreationError("This uuid is already in use.") from exc
+                raise DuplicateUuidError("Client-supplied uuid already belongs to a different pin.") from exc
         if Pin.objects.filter(profile=profile, location=location, parent_pin__isnull=True).exists():
-            raise PinCreationError("You already have a pin at this location.") from exc
+            raise DuplicatePropertyError("Duplicate root pin at this location (race with a concurrent create).") from exc
         raise
 
     # visible_to keeps the id__in lookups from resolving another user's

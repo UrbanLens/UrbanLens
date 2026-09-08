@@ -30,8 +30,13 @@ from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
 from urbanlens.dashboard.services.pins.pin_creation import (
+    AddressResolutionError,
+    DuplicateCoordinatesError,
+    DuplicatePropertyError,
+    NoLocationProvidedError,
     PinCreationError,
     PinCreationForbiddenError,
+    PinParentNotFoundError,
     create_pin_for_profile,
 )
 from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
@@ -262,7 +267,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             bounds = parse_infrastructure_bbox(request.GET.get("bbox"))
         except ValueError as exc:
             logger.warning("Unable to parse infrastructure bbox: %s", str(exc))
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": "Invalid bbox parameter."}, status=400)
 
         try:
             collection = infrastructure_feature_collection(bounds)
@@ -321,9 +326,26 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     name_is_user_provided=bool((name or "").strip()),
                 )
             except PinCreationForbiddenError as e:
-                return HttpResponse(f"Error: {e}", status=403)
+                logger.info("pin creation forbidden: %s", e)
+                return HttpResponse("Error: external lookups are turned off in your settings - drop a pin on the map instead.", status=403)
+            except DuplicateCoordinatesError as e:
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: you already have a pin at these exact coordinates. Place it slightly apart to keep both.", status=400)
+            except DuplicatePropertyError as e:
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: you already have a pin on this property.", status=400)
+            except PinParentNotFoundError as e:
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: no such pin to set as parent.", status=400)
+            except NoLocationProvidedError as e:
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: an address or coordinates are required.", status=400)
+            except AddressResolutionError as e:
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: that address couldn't be converted to coordinates.", status=400)
             except PinCreationError as e:
-                return HttpResponse(f"Error: {e}", status=400)
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: that pin couldn't be created.", status=400)
 
             pin = result.pin
             response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid), "pin_uuid": str(pin.uuid)}

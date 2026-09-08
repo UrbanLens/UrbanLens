@@ -508,7 +508,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         except FriendLimitExceededError:
             return HttpResponse("You've reached the maximum number of friends.", status=403)
         except FriendshipActionError as exc:
-            return HttpResponse(str(exc) or "Could not answer that friend request.", status=403)
+            logger.info("friend request action %s rejected: %s", action, exc)
+            return HttpResponse("Could not answer that friend request.", status=403)
 
         notification = (
             NotificationLog.objects.for_display()

@@ -11,6 +11,7 @@ is already media-type-agnostic - it only checks ownership).
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -26,6 +27,8 @@ from urbanlens.dashboard.services.media.images import image_to_gallery_json
 if TYPE_CHECKING:
     from django.db.models import QuerySet
     from django.http import HttpRequest, HttpResponse
+
+logger = logging.getLogger(__name__)
 
 _GALLERY_PAGE_SIZE = 24
 
@@ -165,7 +168,8 @@ class DocumentUploadView(LoginRequiredMixin, View):
         except PhotoUploadError as exc:
             # See the same call in vault_photos.PhotoUploadView: a failure here
             # belongs in the retry panel on Vault > Photos, not only in a toast.
-            record_photo_upload_failure(profile, doc_file.name or "document", exc.message)
-            return JsonResponse({"error": exc.message}, status=exc.status)
+            logger.info("document upload rejected for profile %s: %s", profile.pk, exc.message)
+            record_photo_upload_failure(profile, doc_file.name or "document", exc.generic_message)
+            return JsonResponse({"error": exc.generic_message}, status=exc.status)
 
         return JsonResponse(image_to_gallery_json(doc, request, profile), status=201)

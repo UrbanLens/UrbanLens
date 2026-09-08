@@ -32,6 +32,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.pins.pin_creation import (
+    DuplicateCoordinatesError,
     PinCreationError,
     create_pin_for_profile,
     resolve_child_pin_location,
@@ -166,9 +167,8 @@ class ChildPinExactOverlapServiceTests(TestCase):
         self.assertNotEqual(result.pin.location_id, self.root.location_id)
 
     def test_resolver_rejects_a_point_the_profile_already_pinned(self) -> None:
-        with self.assertRaises(PinCreationError) as ctx:
+        with self.assertRaises(DuplicateCoordinatesError):
             resolve_child_pin_location(self.profile, 41.0, -75.0)
-        self.assertIn("exact coordinates", ctx.exception.safe_message)
 
     def test_resolver_ignores_the_pin_being_moved(self) -> None:
         """Re-resolving a pin's own current point is what a no-op move does."""

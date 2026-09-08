@@ -364,7 +364,8 @@ class LocationWikiEditView(LoginRequiredMixin, View):
             # posts every field, touched or not.
             edit = apply_wiki_edit(target, profile, body, baseline=wiki)
         except WikiEditValidationError as exc:
-            return JsonResponse({"error": exc.message}, status=400)
+            logger.info("wiki edit rejected for %s by profile %s: %s", wiki.pk, profile.pk, exc.message)
+            return JsonResponse({"error": "That edit couldn't be saved."}, status=400)
 
         if edit is None:
             return JsonResponse({"ok": True, "message": "No changes detected."})

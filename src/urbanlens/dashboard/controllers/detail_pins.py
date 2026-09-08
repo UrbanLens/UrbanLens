@@ -23,7 +23,7 @@ from urbanlens.dashboard.services.core.numbers import safe_int
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.media.quota_rewards import revoke_community_bonuses_on_wiki_delete
-from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
+from urbanlens.dashboard.services.pins.pin_creation import DuplicateCoordinatesError, resolve_child_pin_location
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -159,8 +159,9 @@ class DetailPinPanelView(LoginRequiredMixin, View):
 
         try:
             location = resolve_child_pin_location(parent.profile, lat, lon)
-        except PinCreationError as exc:
-            return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
+        except DuplicateCoordinatesError as exc:
+            logger.info("detail pin location rejected: %s", exc)
+            return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
 
         detail_name = body.get("name") or None
         name_error = column_length_error(Pin, "name", detail_name, "Name")
@@ -215,8 +216,9 @@ class DetailPinEditView(LoginRequiredMixin, View):
         if moved := bool(new_latitude and new_longitude):
             try:
                 new_location = resolve_child_pin_location(detail_pin.profile, new_latitude, new_longitude, exclude_pin=detail_pin)
-            except PinCreationError as exc:
-                return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
+            except DuplicateCoordinatesError as exc:
+                logger.info("detail pin move rejected: %s", exc)
+                return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
 
         for field, value in {
             "name": body.get("name") or None,

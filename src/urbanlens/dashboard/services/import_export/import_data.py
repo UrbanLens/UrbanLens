@@ -196,7 +196,7 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
 
     except _ImportValidationError as exc:
         logger.warning("Import validation failed for user %s: %s", user_id, exc)
-        job_status.write("error", 0, str(exc))
+        job_status.write("error", 0, "That archive couldn't be imported.")
         return False
     except (OSError, DatabaseError, ValueError):
         logger.exception("Import failed for user %s", user_id)

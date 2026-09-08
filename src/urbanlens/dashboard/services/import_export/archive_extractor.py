@@ -368,7 +368,8 @@ def _extract_zip(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
                 results.append(ExtractedFile(safe_name, content))
 
     except zipfile.BadZipFile as exc:
-        raise ValueError(f"Invalid ZIP archive: {exc}") from exc
+        logger.info("Invalid ZIP archive: %s", exc)
+        raise ValueError("Invalid ZIP archive.") from exc
 
     return results
 
@@ -419,6 +420,7 @@ def _extract_tgz(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
                 results.append(ExtractedFile(safe_name, content))
 
     except tarfile.TarError as exc:
-        raise ValueError(f"Invalid TGZ archive: {exc}") from exc
+        logger.info("Invalid TGZ archive: %s", exc)
+        raise ValueError("Invalid TGZ archive.") from exc
 
     return results

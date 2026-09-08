@@ -644,9 +644,13 @@ class TripCommentReactionView(LoginRequiredMixin, View):
             already = Reaction.objects.existing(profile, emoji, trip_comment=comment) is not None if emoji in ALLOWED_COMMENT_EMOJIS else False
             set_comment_reaction(comment, profile, emoji, reacted=not already)
         except TripNotFoundError as exc:
-            raise Http404(exc.message) from exc
+            logger.info("trip comment reaction: not found: %s", exc)
+            raise Http404("Comment not found.") from exc
         except TripError as exc:
-            return HttpResponse(exc.message, status=403 if isinstance(exc, TripPermissionError) else 400)
+            logger.info("trip comment reaction rejected: %s", exc)
+            if isinstance(exc, TripPermissionError):
+                return HttpResponse("You don't have permission to react to that comment.", status=403)
+            return HttpResponse("Couldn't react to that comment.", status=400)
         return _render_trip_reaction_row(request, comment, profile)
 
 

@@ -1185,5 +1185,6 @@ class AlbumMoveView(LoginRequiredMixin, View):
         try:
             moved = move_album_to_pin(album, target)
         except ValueError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            logger.info("album %s move to pin %s rejected: %s", album.pk, target.pk, exc)
+            return JsonResponse({"error": "That album couldn't be moved there."}, status=400)
         return JsonResponse({"ok": True, "slug": moved.slug, "pin_slug": target.slug})
