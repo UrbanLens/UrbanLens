@@ -33,6 +33,14 @@ from urbanlens.dashboard.models.custom_fields.model import (
     CustomFieldType,
     CustomFieldValue,
     CustomFieldValueError,
+    InvalidCheckboxValueError,
+    InvalidDateError,
+    InvalidNumberError,
+    InvalidSelectOptionError,
+    InvalidTimeError,
+    InvalidUrlError,
+    ReferenceKindNotConfiguredError,
+    ReferenceTargetNotFoundError,
 )
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
@@ -121,8 +129,36 @@ def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldVa
     value = existing or CustomFieldValue(field=field, **{target_attr: target})
     try:
         value.set_value(raw)
+    except InvalidNumberError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not a valid number."
+    except InvalidDateError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not a valid date. Use YYYY-MM-DD."
+    except InvalidTimeError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not a valid time. Use HH:MM."
+    except InvalidCheckboxValueError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not a valid checkbox value."
+    except InvalidSelectOptionError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not one of this field's options."
+    except InvalidUrlError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That's not a valid link."
+    except ReferenceKindNotConfiguredError as e:
+        logger.warning("custom field value rejected: %s", e)
+        return None, "This field isn't fully configured yet - edit it to choose what it references."
+    except ReferenceTargetNotFoundError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, "That item wasn't found (or you can't reference it)."
     except CustomFieldValueError as e:
-        return None, e.safe_message
+        # Only EmptyValueError reaches here in practice - raw is already
+        # stripped and checked non-blank above - but the base class is caught
+        # too so a future subclass fails safe instead of raising uncaught.
+        logger.warning("unexpected custom field value error: %s", e)
+        return None, "That value couldn't be saved."
     value.save()
     return value, None
 
