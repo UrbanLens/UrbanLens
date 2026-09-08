@@ -422,9 +422,9 @@ the current tree - re-verified 2026-08-19. `_resolved_flag` reads the `attribute
 falls back to the top level, and has since commit `8bf86daf`; the finding described the code before
 that.
 
-## P9 — REData gaps remain - `?limit=` is inert, 15 routes unwired, and a `tile_template` slide is a single 256px tile
+## P9 — REData gaps remain - `?limit=` is inert, the 15-route list is already stale (missed a post-sweep route), a `tile_template` slide is one 256px tile
 
-`id: P9` · `status: open` · `updated: 2026-08-19`
+`id: P9` · `status: open` · `updated: 2026-09-08`
 
 Previously titled "REData consumption gaps left after this session's sweep".
 
@@ -654,6 +654,37 @@ things about *how*, since the obvious implementation would have been wrong:
 An earlier draft of this entry said `yelp` is billable, as a reason to curate. It is not:
 `billable=True` appears 11 times in REData and none are in this registry. The real cost is upstream
 queries and quota, not money.
+
+**Added 2026-09-08: `/historical-features/` is now consumed - and the 45/15 counts above were
+already stale in a way this sweep did not anticipate.** REData's `/api/v1/historical-features/`
+(retrospectively-mapped buildings, roads, water, railways, land use, places and venues near a
+point, self-hosted OpenHistoricalMap/Overpass-backed) did not exist as of the 2026-08-19 sweep -
+it is REData's single newest endpoint (`parcels/migrations/0094_historicalfeature.py`, the top
+commit in REData's `git log`, first bullet in REData's `CHANGELOG.md` `[Unreleased]` section) - so
+it was never on either count above. Wiring it up therefore does not shrink the "15 unwired" list;
+it demonstrates that the list ages in a second direction nobody had reason to check for at the
+time: REData adds endpoints continuously (the entry above already says "a summary claim ... ages
+badly against a service that adds endpoints weekly"), so any route diff is stale the moment new
+routes ship, not only when an old one finally gets consumed. New:
+`services/apis/locations/redata_historical_features_gateway.RedataHistoricalFeaturesGateway`
+(follows the same `RedataLocationContextGateway.near_point()` pattern as every other REData
+near-point gateway) and `plugins/builtin/redata_historical_features.HistoricalFeaturesPanelSource`,
+a free/ungated "Historical Features" card on the Private Pin page - REData's own docs are explicit
+that `start_year` is frequently the date of the *source map* a feature was traced from, not a
+construction year, and the panel never presents it as an age.
+
+**Also added 2026-09-08, and not a route-consumption change: `/incidents/` gained a second, paid
+consumer.** `IncidentHistoryPanelSource` (`plugins/builtin/redata_incidents.py:89-153`) calls the
+same `RedataIncidentsGateway.get_incidents` the free `PoliceIncidentsPanelSource` already called,
+at REData's full `years=25` ceiling (`_HISTORY_YEARS`, REData's own max) instead of the free
+panel's 3, rendering a year-by-year trend instead of a short recent-rows list, and requires the new
+`SiteFeature.INCIDENT_HISTORY` (`models/subscriptions/model.py:58`). The existing free "Reported
+Incidents" panel is untouched and deliberately stays free: `SiteFeature.NEARBY_RESEARCH`'s own
+docstring (`models/subscriptions/model.py:41-51`) already named it as one of several panels
+"deliberately left free," and gating it now would take away something users already have, which
+was never the ask - the new panel is purely additive. Why a dedicated flag rather than reusing
+`NEARBY_RESEARCH` (which already gates EPA ECHO's nearby-facilities panel) is recorded as its own
+decision - see [D10](designs/incident-history-feature-gate.md).
 
 ## P11 — 84 raw `fetch()` calls bypass `fetch-json.ts`, and "all the wrappers are gone" was a count, not a search
 

@@ -373,6 +373,14 @@ direct-only because REData's contract can't reproduce what they show:
   and any `WikiOwner` the community typed in themselves
 - **USGS Historical Topo Maps** (USA) — historical topographic maps, direct-only (a gallery of
   individually-dated scans, a shape REData's imagery contract doesn't offer)
+- **Historical Features** — retrospectively-mapped buildings, roads, water features, railways, land
+  use, places and venues that once stood near the pin (mostly demolished, mostly never formally
+  designated), via REData's `/historical-features/` (self-hosted OpenHistoricalMap/Overpass-backed,
+  worldwide but volunteer-traced/city-scale coverage) (`plugins.builtin.redata_historical_features`).
+  Distinct from Historic Registers (a body's own designation) and USGS Historical Topo Maps (a
+  scanned page) — this is per-feature data with its own validity interval. `start_year` is
+  frequently the date of the *source map* a feature was traced from, not a construction year, and
+  the panel never presents it as an age
 - **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim
   structured data, kept direct-only for its OSM extratags REData doesn't normalize; Photon
   nearest-feature lookup, via REData)
@@ -402,7 +410,12 @@ direct-only because REData's contract can't reproduce what they show:
   (`plugins.builtin.redata_permits`); flags when a dense block capped the result
 - **Reported Incidents** (US cities) — block-scale police-incident reports from city open-data
   portals as visit-safety context, via REData (`plugins.builtin.redata_incidents`); traffic
-  collisions excluded, block-scale location precision stated on the panel
+  collisions excluded, block-scale location precision stated on the panel. **Incident History is
+  subscriber-only** (`SiteFeature.INCIDENT_HISTORY`) — a deeper, separately-gated sibling panel
+  pulling REData's full 25-year window as a year-by-year trend, instead of the free panel's last 3
+  years/top 6 rows; the free panel is unaffected and stays free (see D10,
+  `docs/designs/incident-history-feature-gate.md`, for why it isn't folded into
+  `SiteFeature.NEARBY_RESEARCH`)
 - **Water & Hydrology** (USA) — streams, waterbodies, wetlands (USFWS NWI decoded) within 1 km and
   the containing HUC12 watershed, via REData (`plugins.builtin.redata_hydrology`)
 - **Site Conditions** (USA) — NLCD land cover, EPA walkability index (incl. transit distance), and
@@ -851,6 +864,13 @@ webhooks (`/billing/webhooks/stripe/`) keep `RoleSubscription` status/pledge/thr
 a daily `sync_stripe_subscriptions` task re-syncs from Stripe as a safety net for missed
 deliveries. `user_has_feature()`/`active_subscription_roles()` treat an active, threshold-met
 paid subscription the same as an admin-issued grant. Service layer lives in `services/billing/`.
+
+What a role's `features` field can gate is any individual `SiteFeature`, not only broad tiers -
+a site admin can bundle a single Private Pin panel behind its own paid role rather than an
+all-or-nothing "premium" tier. Two examples: `SiteFeature.PROPERTY_OWNERS` restricts owner
+names/contact info on the Property Records card (see above; the parcel/tax/assessment facts stay
+free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Incident History panel
+(see "Reported Incidents" above) while its sibling free panel is untouched.
 
 ## Media Storage & Serving
 

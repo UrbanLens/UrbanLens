@@ -2,10 +2,12 @@
 
 ``PanelSource.required_feature`` states, as a fact about the source itself,
 which :class:`~urbanlens.dashboard.models.subscriptions.SiteFeature` a viewer
-must hold before that source's data may be shown to them. Today exactly one
-source declares it - EPA ECHO's *nearby*-facilities list (its exact-site
-compliance card is deliberately free) - but the property being pinned here is
-not about EPA at all:
+must hold before that source's data may be shown to them. This test suite was
+first written against EPA ECHO's *nearby*-facilities list (its exact-site
+compliance card is deliberately free); ``IncidentHistoryPanelSource`` later
+became a second, real example (see
+``test_redata_incident_history_and_historical_features.py``). The property
+being pinned here is not about either one specifically:
 
 1. **The gate is enforced where the data is served, not only where the tab is
    drawn.** Hiding the tab strip is a presentation choice; ``panel_info`` is a
