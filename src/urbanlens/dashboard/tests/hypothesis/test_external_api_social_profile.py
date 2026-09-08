@@ -231,26 +231,32 @@ class AvatarUploadTests(_SocialProfileTestCase):
         self.assertFalse(self.profile.avatar)
 
     def test_upload_refusals_keep_their_own_status_and_message(self) -> None:
-        """The shared ``image_upload_error`` vocabulary is passed through verbatim.
+        """Each status keeps its own hand-authored text, not ``image_upload_error``'s.
 
-        A client needs one mapping for uploads, not one per endpoint - and the
-        503 in particular must stay distinguishable from a 400, because it is
-        the only one worth retrying.
+        That message is log-only now (see ``services.profile.avatar``) - a
+        caller-supplied string must never reach the response. The 503 in
+        particular must stay distinguishable from a 413, because it is the
+        only one worth retrying.
         """
         cases = (
-            ("This file is too large.", 413),
-            ("Our antivirus scanner is temporarily unavailable. Please try again shortly.", 503),
+            ("This file is too large.", 413, "That file is too large. Please upload a smaller image."),
+            (
+                "Our antivirus scanner is temporarily unavailable. Please try again shortly.",
+                503,
+                "Our antivirus scanner is temporarily unavailable. Please try again shortly.",
+            ),
         )
-        for message, status_code in cases:
+        for raise_message, status_code, expected_message in cases:
             with (
                 self.subTest(status=status_code),
                 patch(
-                    "urbanlens.dashboard.services.media.images.image_upload_error", return_value=(message, status_code)
+                    "urbanlens.dashboard.services.media.images.image_upload_error",
+                    return_value=(raise_message, status_code),
                 ),
             ):
                 response = self._put_png(self.profile)
                 self.assertEqual(response.status_code, status_code)
-                self.assertEqual(response.json(), {"error": message})
+                self.assertEqual(response.json(), {"error": expected_message})
 
     def test_put_requires_social_write(self) -> None:
         """``photos:write`` must not reach this route, and read-only must not either."""

@@ -19,9 +19,10 @@ which is why these routes are gated on ``social:write`` rather than
 ``photos:write``. Reusing the photo scope would over-grant: ``photos:write``
 also authorizes deleting a user's actual photographs. The upload itself goes
 through ``services.profile.avatar.set_profile_avatar``, so the size/sniffing/antivirus
-checks are the same ones the site's own form runs, and the refusal messages are
-verbatim the shared ``image_upload_error`` vocabulary so an app needs one
-mapping rather than two.
+checks are the same ones the site's own form runs. The refusal messages here are
+this route's own hand-authored text, one per ``AvatarUploadError`` subclass -
+``image_upload_error``'s own message is log-only, per the same convention every
+other catch site in this app follows.
 
 The gravatar path is deliberately not exposed. It performs an outbound fetch
 keyed on the account's email address; that is acceptable as a button its owner
