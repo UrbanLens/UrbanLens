@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P87` · `T3` · `PL7` · `D10` · `X14` · `I5` · `R27` · `N10`
+**Next free id:** `P92` · `T3` · `PL7` · `D10` · `X14` · `I5` · `R27` · `N10`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -59,7 +59,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P34 | open | 2026-08-13 | 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-09-05 | 50 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P37 | open | 2026-08-13 | 100 write handlers totalling 1,217 statements never execute under the test suite | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P37 | open | 2026-09-08 | 100 write handlers totalling 1,217 statements never execute under the test suite | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P41 | open | 2026-09-06 | The queryset API's unused half, by call graph: 26 methods deleted, 27 test-only ones left | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P47 | open | 2026-08-16 | A deleted message's preview survives in the recipient's notification list | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P49 | open | 2026-09-05 | Doc citations drift silently, and a pin-suggestion race can still duplicate a row | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -73,7 +73,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P59 | open | 2026-09-06 | A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P63 | open | 2026-08-31 | Adding a third Vault media type means copying ~600 lines for ~90 lines of difference | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P66 | open | 2026-08-31 | Organize's active label tab still renders its full card list unpaginated | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P69 | open | 2026-09-06 | Unbounded lists across the site: 9 of 11 fixed; one argued against by measurement, one group deliberately left | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P69 | open | 2026-09-08 | Unbounded lists across the site: 9 of 11 fixed; one argued against by measurement, one group deliberately left | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | T1 | done | 2026-08-27 | The mobile team's 2026-07-27 ask list is spent: its P0 was already false and its P2 remainder moved on | [`docs/notes/mobile_app_requirements.md`](notes/mobile_app_requirements.md) |
 | T2 | open | 2026-08-27 | HIGH 0-ref findings are all triaged; the MEDIUM tier and Jess's caching requests are still open | [`docs/reports/code_audit_status.txt`](reports/code_audit_status.txt) |
 | PL1 | live | 2026-09-01 | The strategy plus a six-tier backlog: locations are both the product and the thing being protected | [`docs/ROADMAP.md`](ROADMAP.md) |
@@ -85,6 +85,11 @@ still resolves after it is fixed, and the id is never handed out again.
 | P82 | open | 2026-09-06 | At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P83 | open | 2026-09-06 | Over half of every page's HTML is inline `<script>`, re-sent uncached on every load | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P85 | open | 2026-09-06 | Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P87 | open | 2026-09-08 | `matching_vocabulary()` reloads the entire tag-vocabulary table on every search term, uncached | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P88 | open | 2026-09-08 | Every wiki view mints a permanent access grant, with no product sign-off recorded for it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P89 | open | 2026-09-08 | `MarkupJsonView`'s `?children=1` wiki path skips concealment; dormant only because `concealment_active()` is hardcoded False | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P90 | open | 2026-09-08 | `backfill_wiki_edit_points`, extracted from its migration specifically to be testable, has no test | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P91 | open | 2026-09-08 | Seven of eight new security integration specs have never run against a live deployment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |

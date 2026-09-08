@@ -1893,7 +1893,7 @@ the component gallery whose entire purpose is to show what each variant looks li
 
 ## P37 — 100 write handlers totalling 1,217 statements never execute under the test suite
 
-`id: P37` · `status: open` · `updated: 2026-08-13`
+`id: P37` · `status: open` · `updated: 2026-09-08`
 
 Previously titled "1,217 statements of write handlers that no test executes".
 
@@ -1911,9 +1911,8 @@ Suggested order, highest risk first (statement counts in brackets):
 2. `controllers/site_admin.py::SiteAdminUsersView.post` [35] - user administration.
 3. `controllers/detail_pins.py::LocationWikiDetailPinEditView.post` [34] - wiki-scoped edits, which
    touch the place-domain visibility rules.
-4. `controllers/albums.py::AlbumEditView.post` [31], `consensus.py::ConsensusPhotoUploadView.post`
-   [31], `visit_suggestions.py::VisitSuggestionRespondView.post` [31],
-   `calendar_sync.py::CalendarImportView.post` [30].
+4. `consensus.py::ConsensusPhotoUploadView.post` [31], `visit_suggestions.py::VisitSuggestionRespondView.post`
+   [31], `calendar_sync.py::CalendarImportView.post` [30].
 
 `controllers/pin.py::PinController.upload_takeout` [39] is a special case: it is also on the
 caller-less route list above, so it should be resolved (deleted or tested) before anything else -
@@ -1922,6 +1921,17 @@ two independent signals agree that nothing reaches it.
 Caveats worth keeping attached to this number: coverage measures execution, not correctness, and
 the run was scoped to `controllers/` and `external_api/`, so a service called by an uncovered
 handler may itself be well tested.
+
+**Corrected 2026-09-08:** item 4 previously also listed `controllers/albums.py::AlbumEditView.post`
+[31]. `01e1b5988` ("test: wiki-owned albums, including the concealment path that had no coverage")
+added `WikiAlbumBySlugScopingTests::test_a_concealed_viewer_cannot_rename_another_contributors_album`
+and `::test_an_unconcealed_viewer_can` in
+`src/urbanlens/dashboard/tests/hypothesis/test_wiki_albums.py`, both of which POST a rename through
+`AlbumEditView`, so that handler is exercised now. Removed from the roster rather than left to imply
+it is still uncovered; the other three items in this bullet and the rest of the 100-handler count are
+not re-measured this session, so treat only this one line as updated. The underlying snapshot in
+`docs/reports/2026-08-14-view-coverage.md` (X12) is left as-is - it is a dated measurement, not a
+live roster.
 
 ---
 
@@ -2898,7 +2908,7 @@ existing bulk-select/merge/convert machinery in `organize-tab-manager.ts`).
 
 ## P69 — Unbounded lists across the site: 9 of 11 fixed; one argued against by measurement, one group deliberately left
 
-`id: P69` · `status: open` · `updated: 2026-09-06`
+`id: P69` · `status: open` · `updated: 2026-09-08`
 
 Previously titled "unbounded lists with no pagination, found across most of the site".
 
@@ -3059,12 +3069,18 @@ shared with a mutating action whose pagination links would otherwise point at it
   `controllers/friendship.py:451-477` (`SiteSettings.max_friends_per_user` defaults to 0/unlimited);
   `controllers/direct_messages.py:710-734` (query count already proven flat by
   `ConversationListQueryScalingTests`, but that test can't see render-time cost, and the list is
-  re-fetched on nearly every DM sent anywhere in the app); `controllers/achievements.py:98-113`;
+  re-fetched on nearly every DM sent anywhere in the app); `controllers/achievements.py:98-113`; and
   `controllers/pin_lists.py:214-246` (also structurally invisible to `test_route_query_scaling.py`'s
   generic sweep, which hits `lists.list` without an `HX-Request` header and only ever exercises its
-  redirect branch); and `controllers/pin_lists.py:155-176` (`_items_map_data` plots every matching pin
-  on the overview map with no cap, unlike the near-identical `SavedFilterPreviewView`'s explicit
-  `_PREVIEW_MAP_PIN_LIMIT = 500`).
+  redirect branch).
+
+  **Corrected 2026-09-08:** this bullet previously also listed `controllers/pin_lists.py:155-176`
+  (`_items_map_data`) as deliberately left uncapped, contradicting the "...and the pin-list overview
+  map" bullet above, which records that exact function as fixed the same day. Checked against the
+  code: `_MAP_PIN_LIMIT = 500` (`controllers/pin_lists.py:56`) is applied at
+  `controllers/pin_lists.py:182` (`_items_map_data(items[:_MAP_PIN_LIMIT])`) - the cap is real, so
+  the citation was stale leftover text from before that fix landed, not a second unbounded case.
+  Removed rather than left standing next to its own contradiction.
 
 ## P83 — Over half of every page's HTML is inline `<script>`, re-sent uncached on every load
 
@@ -3226,3 +3242,237 @@ unrelated commit.
 
 Found while resolving P84; two querysets (`GeocodedLocationQuerySet`, `WikiQuerySet`) were
 parameterized there because their unused model import was the symptom of the missing type argument.
+
+## P87 — `matching_vocabulary()` reloads the entire tag-vocabulary table on every search term, uncached
+
+`id: P87` · `status: open` · `updated: 2026-09-08`
+
+Found 2026-09-08 during the pre-merge audit of `release/v_0_8_0` against `docs/GOALS.md`,
+performance, maintainability and completeness; confirmed on an independent adversarial pass.
+
+`matching_vocabulary()` (`services/locations/external_tag_groups.py:172`, new this branch - `26f12a4da`,
+`3c80a6f44`) does `ExternalTagVocabularyEntry.objects.all()` at line 194: every row in the table,
+unfiltered, no `.only()`/`.values()` narrowing, and no cache of any kind. It re-runs that full load
+on every single call.
+
+Multiplied twice over by its callers:
+
+- `tag_match_q()` (`external_tag_groups.py:217`) calls `matching_vocabulary(term)` once per search
+  term. `term_filter()`'s per-term `extra` callable (`services/global_search/providers.py`) is
+  `tag_match_q`, so a multi-word query does one full-table load per word through this path alone.
+- It backs both the map's autocomplete bar (`services/map_pins/autocomplete.py:71,101,161,229` -
+  `search_local()`) and global search (`services/global_search/providers.py:690,860`, two provider
+  classes each passing their own `tag_path=`), so a global search that matches both providers
+  multiplies again per provider on top of per term.
+
+Same bug class as two performance defects already fixed elsewhere in this branch - `39b23660a`
+(a cost paid needlessly on every request until fixed) and `46b1a0007` (a save handler re-evaluating
+a whole table it did not need to touch) - but this instance shipped with the same branch's own
+tag-vocabulary feature and was missed by both of those passes.
+
+Not measured against row counts or load this session - the vocabulary table is admin-curated (see
+the module docstring: entries and groups only change through `create_group`/`move_entry`/
+`set_preferred`, all admin actions on the tag-grouping page), so it is almost certainly small in the
+dev environment today, which is exactly why this would not have been noticed yet.
+
+**Why this needs a considered fix, not a rushed patch.** The obvious shortcut is a process-local or
+Django cache of the vocabulary, invalidated on write. But there are three separate mutation entry
+points to cover - `create_group`, `move_entry`, `set_preferred` - and `move_entry` also deletes a
+now-empty `ExternalTagGroup` as a side effect (`external_tag_groups.py:307-310`), which is a fourth
+way the cached shape can go stale if the invalidation is written against the three obvious call
+names instead of "anything that touches this table." Given how rarely this table is written and how
+often it is read on the hot path (every keystroke of an autocomplete search), get the invalidation
+right before landing rather than shipping something that returns stale buckets between an admin's
+edit and the next full restart.
+
+## P88 — Every wiki view mints a permanent access grant, with no product sign-off recorded for it
+
+`id: P88` · `status: open` · `updated: 2026-09-08`
+
+Found 2026-09-08 during the pre-merge audit of `release/v_0_8_0` against `docs/GOALS.md`; confirmed
+on an independent adversarial pass.
+
+`resolve_visible_wiki()` (`services/wiki/wiki_access.py:504`) calls
+`PlaceAccessGrant.objects.record_engagement(profile, location.place)` unconditionally on every
+successful wiki view (guarded only by `location.place_id is not None`, line 501).
+`record_engagement()` (`models/place/queryset.py:194-213`) is a `get_or_create` under
+`GrantReason.GRANDFATHERED_ENGAGEMENT`, and `PlaceAccessGrant`'s own docstring
+(`models/place/model.py:274-275`) states the consequence plainly: "Grants are permanent and are
+never revoked by pin churn, unlike computed access." So the first time a profile loads a wiki they
+currently qualify for, they keep that access forever - even after the pin that earned it is later
+deleted, unpinned, or moved.
+
+`docs/GOALS.md:33-34` states the access rule this sits inside: "A user earns access to a location's
+wiki only by having their own pin inside that place's official boundary... nothing else grants
+access." A silent, permanent grandfather-on-read converts that from "you must currently hold a
+qualifying pin" into "you must have held one at least once and happened to open the page" - a
+material weakening of a stated goal, done as a side effect rather than a decision.
+
+**Not itself a discovery leak.** The existing 404 in the same function
+(`if not location_visible_to(location, profile): raise Http404`, line 493) still gates the first
+view, so this only ever entrenches access already legitimately granted at least once. It is also
+well-tested behaviorally: `tests/hypothesis/test_grandfathered_parcel_split_access.py::WikiEngagementGrandfatheringTests`
+exercises exactly this path, and its docstring describes the resulting behavior accurately. The gap
+is documentation and decision-making, not a crash or an exploit.
+
+**What is missing is the sign-off, not the code.** The sibling mechanism landed in the same commit
+family - split-family permanence (`PlaceAccessGrantManager.snapshot_family`, called from
+`services/places/splits.process_split` and `wiki_access._snapshot_earned_split_families`) - carries
+an explicit product decision recorded in its test docstring: "Confirmed with Jess 2026-08-31:
+grandfathering here is truly permanent - once granted, no amount of unpinning ever takes it away
+again" (`tests/hypothesis/test_grandfathered_parcel_split_access.py:14-16`). The engagement-
+grandfathering case is described two paragraphs below that in the very same module docstring, does
+the same kind of permanent and irreversible thing to the same model, and has no equivalent sign-off
+anywhere - not in that test file, not in `docs/designs/`, not in `docs/GOALS.md`.
+`grep -rn "Confirmed with Jess" src/urbanlens/dashboard` returns exactly one hit, and it is the
+split case, not this one.
+
+Not proposing a specific resolution here (re-check on each view, expire the grant, or keep it
+exactly as built) - that is Jess's call to make, the same way the split case's was. Filing this so
+the permanence of "viewed once while access was held" is a decision someone made on purpose, rather
+than an implicit consequence of a `get_or_create` nobody was asked about.
+
+## P89 — `MarkupJsonView`'s `?children=1` wiki path skips concealment; dormant only because `concealment_active()` is hardcoded False
+
+`id: P89` · `status: open` · `updated: 2026-09-08`
+
+Found 2026-09-08 during the pre-merge audit of `release/v_0_8_0`; confirmed on an independent
+adversarial pass.
+
+`MarkupJsonView.get()` (`controllers/markup.py`) builds its `items` queryset two different ways, and
+only one of them applies wiki concealment. The single-wiki path - `_resolve_owner()`'s wiki branch
+(`controllers/markup.py:170-180`, function starts at line 136) - resolves through
+`resolve_visible_wiki()` and then explicitly narrows:
+`return wiki, visible_rows(PinMarkup.objects.for_wiki(wiki), wiki, profile)` (line 180).
+The `?children=1` aggregation path, inside `MarkupJsonView.get()` 94 lines later in the same file, replaces that
+already-concealed `items` with a raw, unfiltered query:
+
+```python
+elif include_children and isinstance(owner, Wiki):
+    subtree = Wiki.objects.filter(pk=owner.pk).with_descendants()
+    items = PinMarkup.objects.filter(parent_wiki__in=subtree).select_related("parent_wiki__location", "layer")
+```
+
+(`controllers/markup.py:272-274`). `.filter(parent_wiki__in=subtree)` never calls `visible_rows`, so
+a concealed viewer requesting `?children=1` would get every descendant wiki's markup items, not the
+subset `conceal_rows` would let through.
+
+**Not a live leak today.** `concealment_active()` (`services/wiki/concealment.py:153`) is hardcoded
+to return `False` site-wide - "the threshold is a reputation score scaled by the wiki's
+community-voted vulnerability, and cannot be chosen before there is real score data" - so
+`visible_rows()` (`services/wiki/concealment.py:396`:
+`return conceal_rows(queryset, viewer) if concealment_active(wiki, viewer) else queryset`) is
+currently a no-op everywhere, including on the correctly-guarded single-wiki path directly above.
+The two paths behave identically right now for exactly that reason - this is a landmine, not an
+active leak.
+
+**It becomes a live concealment bypass the moment `concealment_active` starts returning `True` for
+anyone.** `?children=1` is reachable by any authenticated request naming a pin or wiki slug/uuid
+with descendants - no elevated privilege needed. The fix `_resolve_owner()` already demonstrates at
+line 180 is one call: wrap the `.filter(...)` result at `controllers/markup.py:274` in
+`visible_rows(items, owner, profile)` the same way. (The `Pin` branch immediately above,
+`controllers/markup.py:269-271`, needs no equivalent fix - concealment is a wiki-only concept, per
+`_current_layer_is_visible`'s docstring at `controllers/markup.py:224-225`.)
+
+Worth flagging now rather than after concealment ships: later in the same `get()` method, the
+wiki-owner layer-visibility computation (`visible_layer_ids`, `controllers/markup.py:284-289`) *does*
+call `visible_rows` correctly. So this is an inconsistency within one view - concealment applied
+correctly a few lines below the exact spot it was skipped - rather than a case where nobody thought
+to apply the filter at all, which is worth knowing before assuming this needs a wider audit than
+just this one queryset.
+
+## P90 — `backfill_wiki_edit_points`, extracted from its migration specifically to be testable, has no test
+
+`id: P90` · `status: open` · `updated: 2026-09-08`
+
+Found 2026-09-08 during the pre-merge audit of `release/v_0_8_0`; confirmed on an independent
+adversarial pass.
+
+`migrations/0032_v0_8_0.py` (the v0.8.0 squash of migrations 0032-0056, `9b3bb298a`) carries three
+`RunPython` data migrations:
+
+1. `_0049_backfill_friendinvitation_email_normalized` (line 14, wired line 319) - tested by
+   `tests/hypothesis/test_friend_invitation.py`.
+2. `_0052__backfill` (line 32, wired line 324) - calls
+   `services.consensus.points.backfill_wiki_edit_points(WikiEdit)`. **No test references it
+   anywhere in the tree**: `grep -rln "backfill_wiki_edit_points" src/urbanlens/dashboard/tests`
+   returns nothing.
+3. `_0054_merge_reciprocal_rows` (line 82, wired line 330) - tested by
+   `tests/hypothesis/test_friendship_pair_uniqueness.py`, which caught a real bug before release
+   (`21a48e652`, "migration 0054 aborted on exactly the rows it exists to merge").
+
+Item 2's own docstring (`services/consensus/points.py:315-317`) says why it is a standalone function
+at all: "Extracted from the migration that calls it so it can be exercised by a test - this repo has
+no migration-test harness, so logic left inline in a `RunPython` is logic nothing runs until
+deploy." Nobody wrote that test. Both siblings, extracted or already standalone for the identical
+reason, got one - and sibling 3 is the proof the extraction pays for itself: its test found a real
+ordering bug that would otherwise have shipped.
+
+What this migration does, unreviewed by any test: marks every `WikiEdit` that is some other row's
+`reverted_by` target as `is_revert=True`, then sets `consensus_points=MANUAL_EDIT_POINTS` on every
+`WikiEdit` with an editor, no `consensus_round`, and `is_revert=False`
+(`services/consensus/points.py:329-335`). It runs once, irreversibly - `_0052__backfill`'s
+`reverse_code` is `RunPython.noop` (line 324) - against every production `WikiEdit` row that
+predates `consensus_points` existing.
+
+It reads `MANUAL_EDIT_POINTS` (`services/consensus/points.py:45`), the same constant
+`points_for_changes()` prices ordinary edits with, and that function itself carries `TODO: reassess
+this whole scheme once there is real usage to look at` (`services/consensus/points.py:150`) -
+flagging the constant as a provisional first cut. An untested, irreversible, one-shot backfill
+reading a constant its own module already says needs reassessment is exactly the combination the
+extraction-for-testability was meant to catch before it reached production.
+
+Suggested test shape, matching the siblings: call `backfill_wiki_edit_points` directly against real
+`WikiEdit` rows (its docstring implies this was the intent of extracting it), seed a revert chain
+plus a mix of consensus-scored, non-consensus, and already-scored rows, run it, and assert
+`is_revert` and `consensus_points` land where `services/consensus/points.py:329-335` says they
+should - in particular that a revert row's *own* award is left standing, per the docstring's explicit
+"draining points people have already been shown is a bigger change... and is not what this is for."
+
+## P91 — Seven of eight new security integration specs have never run against a live deployment
+
+`id: P91` · `status: open` · `updated: 2026-09-08`
+
+Found 2026-09-08 during the pre-merge audit of `release/v_0_8_0`; confirmed on an independent
+adversarial pass.
+
+`3547deb11` ("security related integration tests, not yet run -- needs review and expansion") added
+eight spec files under `tests/integration/specs/security/`: `assumptions.spec.ts`,
+`authorization.spec.ts`, `disclosure.spec.ts`, `input.spec.ts`, `isolation.spec.ts`,
+`session.spec.ts`, `surfaces.spec.ts`, `transport.spec.ts`. Per-file `git log --oneline`:
+
+```
+assumptions.spec.ts    3547deb11 only
+authorization.spec.ts  3547deb11 only
+disclosure.spec.ts     3547deb11 only
+input.spec.ts          3547deb11 only
+isolation.spec.ts      3547deb11, 72890b5a4, 463a87eba
+session.spec.ts        3547deb11 only
+surfaces.spec.ts       3547deb11 only
+transport.spec.ts      3547deb11 only
+```
+
+Only `isolation.spec.ts` shows evidence of a real run: `72890b5a4` added live regression coverage for
+the media-gate and trip-photo fixes, and `463a87eba` ("fix: correct three false-positive marker
+checks found running the new suite live") corrected assertions the suite itself proved wrong once
+someone actually executed it against a deployed instance. The other seven are byte-identical to
+their initial commit - never edited since being authored - which, given what `463a87eba` found in
+their sibling, is what "never run" looks like: a spec that would need at least one correction if it
+had ever been executed, and no evidence any of the seven has been.
+
+Same risk class `docs/archive/PROBLEMS-ARCHIVE.md`'s P75 already documents shipping:
+`disclosure.spec.ts:32` asserted `/dashboard/this-path-does-not-exist-91b2c/` returns 404 while the
+`dashboard/` catch-all answered 200 for an unknown span of time, because - per that entry - "That
+spec has only ever run when someone triggered it by hand - `integration.yml` is `workflow_dispatch`
+only, deliberately, because it drives a deployed instance - so an assertion encoding the correct
+behaviour sat next to code that could not satisfy it, and nothing said so." The underlying 404 bug
+is fixed (P75, resolved 2026-09-05), but it was found by a different investigation (P35's
+hardcoded-URL audit), not by running this file - so `disclosure.spec.ts` remains one of the seven
+with no evidence it has ever caught anything by being executed, the exact gap P75 describes.
+
+**In progress, not newly discovered as unaddressed.** The integration suite, including this security
+directory, is being run against a live dev instance as part of this same release audit, with results
+pending separately. This entry is not claiming nobody is acting on it - it records that, as of the
+state on disk, seven of the eight files have no evidence of ever having executed, so whoever reviews
+the pending run's results should close or narrow this entry against what that run actually finds,
+rather than leaving it open by default once the run completes.
