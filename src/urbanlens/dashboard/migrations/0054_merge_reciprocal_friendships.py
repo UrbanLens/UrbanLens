@@ -172,11 +172,19 @@ def merge_reciprocal_rows(apps, schema_editor) -> None:
             keeper.muted_by_to_profile = True
             fields.append("muted_by_to_profile")
 
-        if fields:
-            keeper.save(update_fields=sorted(set(fields)))
-
+        # Order matters, in both directions. A swap moves the keeper onto the
+        # loser's exact `(from_profile, to_profile)`, and `unique_together` is
+        # still on the model - so the loser has to be gone before the keeper is
+        # written, or the write collides with a row that is still there. And the
+        # log line has to come before the delete, because `Model.delete()` nulls
+        # the instance's pk, and on a real database this line is the only record
+        # that the discarded row existed. Everything the keeper needs from `row`
+        # was read above.
         logger.warning("Deleting reciprocal friendship row %s (%s -> %s), merged into %s", row.pk, row.from_profile_id, row.to_profile_id, keeper.pk)
         row.delete()
+
+        if fields:
+            keeper.save(update_fields=sorted(set(fields)))
         merged += 1
 
     if merged:

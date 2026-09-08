@@ -3,7 +3,8 @@
 Status: **messaging half implemented** (2026-08-15; third revision of the design — the filename
 is historical). Extends `docs/designs/e2ee.md`, whose sections now describe the shipped passkey
 layer. Supersedes both same-day drafts: the PRF-primary draft and the escrow-by-default draft.
-Shipped: `E2EEPasskeyWrap` + `WebAuthnCredential.is_login_factor` (migration 0049), the
+Shipped: `E2EEPasskeyWrap` + `WebAuthnCredential.is_login_factor` (migration `0030_v0_7_0`,
+which the v0.7.0 squash folded it into — it was 0049 when this was written), the
 passkey-wrap endpoints, PRF injection into registration/2FA-login ceremonies, the client
 enroll/unlock flows and passkey-first unlock dialog, the 2FA ride-along, and the monthly
 passkey-or-password prompt replacing the per-session set-password nag. Still design-only: the

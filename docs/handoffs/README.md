@@ -15,6 +15,7 @@ sentence is a bug and gets rewritten; here it is the content.
 | Note | Direction | Status |
 |---|---|---|
 | [`infrastructure-media-and-static.md`](infrastructure-media-and-static.md) — reply on `/static/`, object-storage media, and the 100 MB upload cap | outbound, `UrbanLens/infrastructure` | SENT 2026-09-06 |
+| [`infrastructure-0054-friendship-merge.md`](infrastructure-0054-friendship-merge.md) — reply confirming 0054's `IntegrityError` on a reciprocal pair, and what the suggested fix would have cost | outbound, `UrbanLens/infrastructure` | SENT 2026-09-08 |
 
 ## The convention
 

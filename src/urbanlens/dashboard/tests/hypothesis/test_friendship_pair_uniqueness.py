@@ -28,7 +28,7 @@ import inspect
 from unittest import mock
 
 from django.contrib.auth.models import User
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -326,3 +326,137 @@ class ReciprocalMergeBehaviourTests(TestCase):
         newer = _Row(2, 20, 10, FriendshipStatus.ACCEPTED)
         _run_merge([older, newer])
         self.assertEqual(older.from_profile_id, 10, "the keeper's own block direction must be left alone")
+
+
+class _RealApps:
+    """`apps` as the merge receives it, answering with the live `Friendship`.
+
+    The historical model differs from this one only by the constraint the
+    fixture below drops; the merge touches no field that has changed since.
+    """
+
+    @staticmethod
+    def get_model(*_args: str) -> type[Friendship]:
+        """The one model the merge asks for."""
+        return Friendship
+
+
+class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
+    """The merge run over real rows, against the constraints production carries.
+
+    `ReciprocalMergeBehaviourTests` above drives the merge through `_Row`, whose
+    `save()` is a no-op - so none of those tests can see a database constraint,
+    the swap cases included. `unique_together = ("from_profile", "to_profile")`
+    predates this branch and is still on the model, and when the loser's status
+    wins, the merge writes the keeper into the loser's *exact* `(from_profile,
+    to_profile)`. Whether that collides depends on whether the loser is still
+    there - which no stub can answer.
+
+    Reaching the state needs `friendship_one_row_per_pair` dropped, since that is
+    what makes the pair uncreatable. Not a contrivance: it is the database this
+    migration runs against, one that predates 0055. The DDL rolls back with the
+    test's transaction.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.a = Profile.objects.get(user=baker.make(User))
+        self.b = Profile.objects.get(user=baker.make(User))
+        constraint = next(item for item in Friendship._meta.constraints if item.name == "friendship_one_row_per_pair")
+        with connection.schema_editor(atomic=False) as editor:
+            editor.remove_constraint(Friendship, constraint)
+
+    def _pair(
+        self,
+        sender: Profile,
+        receiver: Profile,
+        keeper_status: str,
+        loser_status: str,
+    ) -> tuple[Friendship, Friendship]:
+        """A reciprocal pair. The keeper is written first, so it holds the lower pk."""
+        keeper = Friendship.objects.create(
+            from_profile=sender,
+            to_profile=receiver,
+            status=keeper_status,
+            relationship_type=FriendshipType.FRIEND,
+        )
+        loser = Friendship.objects.create(
+            from_profile=receiver,
+            to_profile=sender,
+            status=loser_status,
+            relationship_type=FriendshipType.FRIEND,
+        )
+        return keeper, loser
+
+    def test_the_pair_can_be_created_once_the_constraint_is_dropped(self) -> None:
+        """Anti-vacuity: otherwise every merge below could pass over an empty table."""
+        keeper, loser = self._pair(self.a, self.b, FriendshipStatus.ACCEPTED, FriendshipStatus.BLOCKED)
+
+        self.assertEqual(Friendship.objects.count(), 2)
+        self.assertLess(keeper.pk, loser.pk, "the keeper is the lowest-pk row, which is what the merge assumes")
+
+    def test_a_pair_whose_losing_row_holds_the_restrictive_status_merges(self) -> None:
+        """The shape the migration exists for, and the one that aborted a release.
+
+        `a -> b Accepted` and `b -> a Blocked`: the block wins, so the keeper's
+        ends swap to `(b, a)` - which is the loser's own key.
+        """
+        keeper, _loser = self._pair(self.a, self.b, FriendshipStatus.ACCEPTED, FriendshipStatus.BLOCKED)
+
+        _MERGE.merge_reciprocal_rows(_RealApps, None)
+
+        self.assertEqual(Friendship.objects.count(), 1)
+        survivor = Friendship.objects.get()
+        self.assertEqual(survivor.pk, keeper.pk)
+        self.assertEqual(survivor.status, FriendshipStatus.BLOCKED)
+        self.assertEqual(survivor.from_profile_id, self.b.pk, "the blocker must stay the blocker")
+        self.assertEqual(survivor.to_profile_id, self.a.pk)
+
+    def test_a_pair_whose_keeper_already_wins_merges_too(self) -> None:
+        """The non-swapping case - which passed all along, and is the control for it."""
+        keeper, _loser = self._pair(self.a, self.b, FriendshipStatus.BLOCKED, FriendshipStatus.ACCEPTED)
+
+        _MERGE.merge_reciprocal_rows(_RealApps, None)
+
+        survivor = Friendship.objects.get()
+        self.assertEqual(survivor.pk, keeper.pk)
+        self.assertEqual(survivor.from_profile_id, self.a.pk, "the keeper's own direction must be left alone")
+        self.assertEqual(survivor.status, FriendshipStatus.BLOCKED)
+
+    def test_the_discarded_row_is_still_named_in_the_log(self) -> None:
+        """On a real database the log line is the only trace the row existed.
+
+        `Model.delete()` sets the instance's pk to `None`, so deleting before
+        logging reports "row None" - losing exactly what these warnings are for.
+        """
+        _keeper, loser = self._pair(self.a, self.b, FriendshipStatus.ACCEPTED, FriendshipStatus.BLOCKED)
+
+        with self.assertLogs(_MERGE.logger.name, level="WARNING") as captured:
+            _MERGE.merge_reciprocal_rows(_RealApps, None)
+
+        deletions = [line for line in captured.output if "Deleting reciprocal friendship row" in line]
+        self.assertEqual(len(deletions), 1, "one row was discarded, so one line records it")
+        self.assertIn(f"row {loser.pk} ", deletions[0], "the discarded row's id must survive its deletion")
+
+    def test_every_pair_is_merged_not_just_the_first(self) -> None:
+        """An abort on pair one leaves the rest of the table untouched.
+
+        The reported failure had three pairs and reached one, which is what makes
+        a partial run worth asserting against rather than a single merge.
+        """
+        third = Profile.objects.get(user=baker.make(User))
+        fourth = Profile.objects.get(user=baker.make(User))
+        fifth = Profile.objects.get(user=baker.make(User))
+        sixth = Profile.objects.get(user=baker.make(User))
+        self._pair(self.a, self.b, FriendshipStatus.ACCEPTED, FriendshipStatus.BLOCKED)
+        self._pair(third, fourth, FriendshipStatus.REQUESTED, FriendshipStatus.ACCEPTED)
+        self._pair(fifth, sixth, FriendshipStatus.PENDING, FriendshipStatus.IGNORED)
+
+        _MERGE.merge_reciprocal_rows(_RealApps, None)
+
+        self.assertEqual(Friendship.objects.count(), 3, "one row per pair, and every pair reached")
+        self.assertEqual(
+            sorted(Friendship.objects.values_list("status", flat=True)),
+            sorted([FriendshipStatus.BLOCKED, FriendshipStatus.ACCEPTED, FriendshipStatus.IGNORED]),
+            "each pair keeps the more restrictive of its two statuses",
+        )

@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P87` · `T3` · `PL7` · `D10` · `X14` · `I5` · `R27` · `N9`
+**Next free id:** `P87` · `T3` · `PL7` · `D10` · `X14` · `I5` · `R27` · `N10`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -145,3 +145,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | N6 | current | 2026-07-22 | Round-1 staging UAT: 4 criticals, from a misconfigured staging API key to email on public profiles | [`docs/reports/ua_testing.md`](reports/ua_testing.md) |
 | N7 | current | 2026-09-06 | Two Django template traps that each shipped a 500: a filter argument has no failure tolerance, and `.image.url` raises | [`docs/notes/template-render-traps.md`](notes/template-render-traps.md) |
 | N8 | current | 2026-09-06 | Reply to the infrastructure repo's two open handoffs: /static/ 404s, media on Garage, and the 100 MB body cap | [`docs/handoffs/infrastructure-media-and-static.md`](handoffs/infrastructure-media-and-static.md) |
+| N9 | current | 2026-09-08 | Reply on migration 0054: its IntegrityError confirmed and fixed, and why a stub-driven test could not have caught it | [`docs/handoffs/infrastructure-0054-friendship-merge.md`](handoffs/infrastructure-0054-friendship-merge.md) |
