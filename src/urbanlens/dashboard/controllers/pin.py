@@ -2113,7 +2113,7 @@ class RedataMediaProxyMixin:
     already has.
     """
 
-    def serve_media(self, request: HttpRequest, cache_key: str, download) -> HttpResponse:
+    def serve_media(self, request: HttpRequest, cache_key: str, download: Callable[[], tuple[bytes, str]], *, unavailable_errors: tuple[type[Exception], ...] | None = None) -> HttpResponse:
         """Serve one REData file, converting it to a preview image when asked.
 
         Args:
@@ -2122,9 +2122,15 @@ class RedataMediaProxyMixin:
             cache_key: Django cache key for the *original* bytes. The preview
                 is cached under a suffix of it, so both forms of the same file
                 are cached independently and neither invalidates the other.
-            download: Zero-argument callable returning ``(content, content_type)``,
-                raising ``PropertyRecordsUnavailableError``/``ValueError`` when
-                the file isn't available.
+            download: Zero-argument callable returning ``(content, content_type)``.
+            unavailable_errors: Exception types ``download`` raises to mean
+                "not available" (a 404, an unconfigured gateway, ...), each
+                turned into a 404 response rather than propagating. Defaults
+                to ``(PropertyRecordsUnavailableError, ValueError)`` - the
+                property-records ``RedataGateway``'s own exceptions, which
+                ``PinLoopnetPhotoView``/``PinCrisAttachmentView`` raise; a
+                proxy backed by a different gateway (e.g. ``RedataCidGateway``,
+                whose failures are ``GatewayRequestError``) passes its own.
 
         Returns:
             The file (or its preview), or a 404 when REData couldn't supply it
@@ -2132,6 +2138,9 @@ class RedataMediaProxyMixin:
         """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
         from urbanlens.dashboard.services.media.previews import cached_preview, is_web_safe, request_sandbox_render
+
+        if unavailable_errors is None:
+            unavailable_errors = (PropertyRecordsUnavailableError, ValueError)
 
         wants_preview = request.GET.get("preview") == "1"
         serve_key = f"{cache_key}_preview" if wants_preview else cache_key
@@ -2144,7 +2153,7 @@ class RedataMediaProxyMixin:
         if original is None:
             try:
                 original = download()
-            except (PropertyRecordsUnavailableError, ValueError):
+            except unavailable_errors:
                 return HttpResponse(status=404)
             cache.set(cache_key, original, _REDATA_MEDIA_CACHE_TTL)
 
@@ -2221,4 +2230,34 @@ class PinCrisExtractedImageView(RedataMediaProxyMixin, View):
             request,
             f"ul_cris_extracted_image_{resource_uuid}_{attachment_id}_{image_id}",
             lambda: RedataGateway().download_extracted_image(resource_uuid, attachment_id, image_id),
+        )
+
+
+class PinPlaceCidMediaView(RedataMediaProxyMixin, View):
+    """GET pin/place-cid/media/<cid>/<media_id>/ - proxies one REData deep-scrape media item.
+
+    Same reasoning as ``PinLoopnetPhotoView``/``PinCrisAttachmentView`` -
+    REData's API key must never reach the browser - and the same "no login
+    required" call: this is REData's ``../REData/docs/api-reference.md``
+    "GET /places/cid/{cid}/media/{id}/download/" (photos, videos, 360s,
+    Street View captured for a resolved Google Maps CID), public Google Maps
+    listing media rather than anything private to a user, and
+    ``materialize_media_item`` needs an unauthenticated URL to re-download it.
+
+    Diverges from those two on the exception it hands ``serve_media``:
+    ``RedataCidGateway`` (this view's gateway) raises ``GatewayRequestError``
+    on failure, not the property-records ``RedataGateway``'s
+    ``PropertyRecordsUnavailableError`` - see ``serve_media``'s
+    ``unavailable_errors`` parameter.
+    """
+
+    def get(self, request: HttpRequest, cid: int, media_id: int) -> HttpResponse:
+        from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
+        from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+
+        return self.serve_media(
+            request,
+            f"ul_place_cid_media_{cid}_{media_id}",
+            lambda: RedataCidGateway().download_media(cid, media_id),
+            unavailable_errors=(GatewayRequestError, ValueError),
         )

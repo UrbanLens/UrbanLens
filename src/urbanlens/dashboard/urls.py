@@ -431,6 +431,11 @@ urlpatterns = [
                                 pin.PinCrisExtractedImageView.as_view(),
                                 name="pin.cris.extracted_image",
                             ),
+                            path(
+                                "place-cid/media/<int:cid>/<int:media_id>/",
+                                pin.PinPlaceCidMediaView.as_view(),
+                                name="pin.place_cid.media",
+                            ),
                             path("<slug:pin_slug>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
                             path("<slug:pin_slug>/share/", pin_sharing.PinShareDialogView.as_view(), name="pin.share.dialog"),
                             path("<slug:pin_slug>/share/send/", pin_sharing.PinShareCreateView.as_view(), name="pin.share.send"),
