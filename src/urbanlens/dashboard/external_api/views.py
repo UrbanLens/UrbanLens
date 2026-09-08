@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, overload
 from uuid import UUID
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Model
 from django.db.models.functions import Coalesce
 from django.urls import reverse
@@ -2020,7 +2020,16 @@ class PinListsView(PaginatedListMixin, ExternalApiView):
             smart_boundary=data.get("smart_boundary"),
             source_saved_filter=source_filter,
         )
-        pin_list.save()
+        try:
+            pin_list.save()
+        except IntegrityError:
+            # Two concurrent creates can both pass the .exists() check above
+            # before either commits - the loser's save() then hits
+            # uq_pin_list_profile_name directly. Same response as the
+            # pre-check, so a client can't tell the two racing outcomes apart.
+            # (PublicDashboardModel.save() already runs in its own atomic()
+            # savepoint, so this doesn't need one of its own.)
+            return Response({"error": "You already have a list with that name."}, status=400)
 
         # A list created with rules should show its matching pins immediately,
         # not only after the next pin edit triggers the signal.
