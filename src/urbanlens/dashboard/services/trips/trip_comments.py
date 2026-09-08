@@ -286,7 +286,7 @@ def delete_comment(trip: Trip, actor: Profile, comment: TripComment) -> None:
         markup_map.delete()
 
 
-def _comment_visible_to(comment: TripComment, viewer: Profile) -> bool:
+def trip_comment_is_visible(comment: TripComment, viewer: Profile) -> bool:
     """Whether one trip comment survives every gate :func:`build_comment_tree` applies.
 
     The single-comment counterpart to that function, for the paths that address
@@ -354,7 +354,7 @@ def set_comment_reaction(comment: TripComment, profile: Profile, emoji: str, *, 
     # confirm the comment exists and fire a reaction notification at its
     # author - the exact probe this function's "not found" answer exists to
     # prevent.
-    if not _comment_visible_to(comment, profile):
+    if not trip_comment_is_visible(comment, profile):
         raise TripNotFoundError(COMMENT_NOT_FOUND)
 
     existing = Reaction.objects.existing(profile, emoji, trip_comment=comment)

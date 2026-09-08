@@ -172,18 +172,42 @@ def on_wiki_edit_reverted(sender: type[Model], instance: Any, created: bool, raw
     Both directions, because ``revert_wiki_edit`` clears the flag when the
     revert is itself reverted - so this is current state, not a one-way
     subtraction.
+
+    Reverting is not author-only (the history template shows the Revert
+    button to any viewer with wiki access, unlike the author-only Expunge
+    button beside it) - so who performed it decides retract vs. weight (D9):
+    reverting your own edit is a withdrawal and retracts in full; anyone
+    else's revert is a removal the original editor did not choose, so it
+    costs standing at ``MODERATED_REMOVAL_WEIGHT`` instead of erasing it. This
+    is the first caller for that mechanism - P86's own commit audited the
+    photo/comment removal paths and found no live one, but missed this
+    pre-existing route.
     """
     if raw or created:
         return
 
+    from decimal import Decimal
+
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
-    from urbanlens.dashboard.services.reputation.scoring import restore_event, retract_event
+    from urbanlens.dashboard.services.reputation.scoring import MODERATED_REMOVAL_WEIGHT, restore_event, retract_event, weight_events_for_target
 
     event = ReputationEvent.objects.filter(rule_key="wiki_field_edit", target_kind=TargetKind.WIKI_EDIT, target_id=instance.pk).first()
     if event is None:
         return
 
-    changed = retract_event(event, reason="edit_reverted") if instance.reverted else restore_event(event)
+    if instance.reverted:
+        reverter_id = instance.reverted_by.editor_id if instance.reverted_by_id else instance.editor_id
+        if reverter_id != instance.editor_id:
+            changed = bool(weight_events_for_target(instance, weight=MODERATED_REMOVAL_WEIGHT, reason="wiki_edit_reverted_by_other"))
+        else:
+            changed = retract_event(event, reason="edit_reverted")
+    else:
+        # Undo whichever of the two adjustments above was applied - both are
+        # no-ops against the other's prior state, so calling both is safe
+        # regardless of which one actually fired.
+        restored = restore_event(event)
+        reweighted = bool(weight_events_for_target(instance, weight=Decimal(1), reason=""))
+        changed = restored or reweighted
     if not changed:
         return
 

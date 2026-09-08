@@ -327,3 +327,83 @@ class WikiCommentDeleteRetractionTests(TestCase):
         event = ReputationEvent.objects.get(rule_key="wiki_comment", target_id=theirs.pk)
         self.assertFalse(event.retracted, "and their points stand, unretracted")
         self.assertEqual(event.weight, Decimal(1), "and unweighted")
+
+
+class WikiEditRevertReputationTests(TestCase):
+    """Reverting a wiki edit is not author-only, unlike deleting a comment.
+
+    `LocationWikiRevertView` shows its Revert button to any viewer with wiki
+    access (the sibling Expunge button beside it is the author-only one), so
+    a non-author reverting somebody else's edit is a real, live path - not a
+    hypothetical D9 was written to cover in advance. Before this test existed,
+    `on_wiki_edit_reverted` retracted in full regardless of who reverted,
+    which let any wiki-access viewer erase another editor's standing outright
+    - exactly the removal-costs-only-slightly case `MODERATED_REMOVAL_WEIGHT`
+    exists for, left unwired at this, its first real call site.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        register_builtin_rules()
+        baker.make(User)
+        self.editor = baker.make(User).profile
+        self.reverter = baker.make(User).profile
+        self.location = baker.make(Location)
+        self.wiki = baker.make(Wiki, location=self.location)
+
+    def _edit(self):
+        from urbanlens.dashboard.services.wiki.wiki_edits import apply_wiki_edit
+
+        edit = apply_wiki_edit(self.wiki, self.editor, {"name": "New Name"})
+        assert edit is not None
+        ReputationEvent.objects.filter(target_id=edit.pk, rule_key="wiki_field_edit").update(value=Decimal(3))
+        return edit
+
+    def _event(self, edit) -> ReputationEvent:
+        return ReputationEvent.objects.get(rule_key="wiki_field_edit", target_id=edit.pk)
+
+    def test_reverting_your_own_edit_retracts_in_full(self) -> None:
+        """Self-reverting is a withdrawal, same as any other - it retracts."""
+        from urbanlens.dashboard.services.wiki.wiki_edits import revert_wiki_edit
+
+        edit = self._edit()
+        self.assertEqual(ReputationEvent.objects.for_profile(self.editor).total_value(), Decimal(3))
+
+        revert_wiki_edit(self.location, self.wiki, self.editor, edit)
+
+        event = self._event(edit)
+        self.assertTrue(event.retracted, "the editor undid their own contribution")
+        self.assertEqual(event.weight, Decimal(1), "a withdrawal is not a moderated removal")
+        self.assertEqual(ReputationEvent.objects.for_profile(self.editor).total_value(), Decimal(0))
+
+    def test_someone_else_reverting_weights_instead_of_retracting(self) -> None:
+        """The bug this test pins: a non-author revert must not erase standing outright."""
+        from urbanlens.dashboard.services.reputation.scoring import MODERATED_REMOVAL_WEIGHT
+        from urbanlens.dashboard.services.wiki.wiki_edits import revert_wiki_edit
+
+        edit = self._edit()
+
+        revert_wiki_edit(self.location, self.wiki, self.reverter, edit)
+
+        event = self._event(edit)
+        self.assertFalse(event.retracted, "a removal the editor did not choose must not retract outright")
+        self.assertEqual(event.weight, MODERATED_REMOVAL_WEIGHT)
+        self.assertEqual(
+            ReputationEvent.objects.for_profile(self.editor).total_value(),
+            Decimal(3) * MODERATED_REMOVAL_WEIGHT,
+        )
+
+    def test_reverting_the_revert_restores_full_weight(self) -> None:
+        """Un-reverting undoes whichever adjustment fired, self or other."""
+        from urbanlens.dashboard.services.wiki.wiki_edits import revert_wiki_edit
+
+        edit = self._edit()
+        revert_edit, skipped = revert_wiki_edit(self.location, self.wiki, self.reverter, edit)
+        assert revert_edit is not None and not skipped
+
+        revert_wiki_edit(self.location, self.wiki, self.editor, revert_edit)
+
+        event = self._event(edit)
+        self.assertFalse(event.retracted)
+        self.assertEqual(event.weight, Decimal(1))
+        self.assertEqual(ReputationEvent.objects.for_profile(self.editor).total_value(), Decimal(3))

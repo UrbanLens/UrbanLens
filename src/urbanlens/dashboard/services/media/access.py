@@ -227,6 +227,8 @@ def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
     """
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.models.trips.model import TripComment, TripMembership
+    from urbanlens.dashboard.services.comments.comments import comment_is_visible
+    from urbanlens.dashboard.services.trips.trip_comments import trip_comment_is_visible
     from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
 
     comment = Comment.objects.filter(image=rel_path).select_related("pin", "wiki__location", "profile").first()
@@ -245,12 +247,20 @@ def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
             # Pin comment threads are visible only on the owner's own pin page
             # (see PinCommentsView.get), so owner + comment authors are the
             # whole audience.
-            return comment.pin.profile_id == profile.pk
-        if comment.wiki is not None:
-            return location_visible_to(comment.wiki.location, profile)
-        return False
+            host_visible = comment.pin.profile_id == profile.pk
+        elif comment.wiki is not None:
+            host_visible = location_visible_to(comment.wiki.location, profile)
+        else:
+            return False
+        # Host-level (pin/wiki) visibility is necessary but not sufficient - an
+        # @loc mention naming a place this viewer hasn't pinned still drops the
+        # whole comment (services.comments.comments's gate 3), same as
+        # visible_comment_tree applies to its text. Without this, the image
+        # was servable even though the comment thread that carries it hid the
+        # comment entirely.
+        return host_visible and comment_is_visible(comment, profile)
 
-    trip_comment = TripComment.objects.filter(image=rel_path).select_related("author").first()
+    trip_comment = TripComment.objects.filter(image=rel_path).select_related("author", "trip").first()
     if trip_comment is not None:
         if trip_comment.author_id == profile.pk:
             return True
@@ -258,7 +268,12 @@ def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
             return False
         if trip_comment.author is not None and not profile.can_view_comments_from(trip_comment.author):
             return False
-        return TripMembership.objects.filter(trip_id=trip_comment.trip_id, profile=profile).exists()
+        if not TripMembership.objects.filter(trip_id=trip_comment.trip_id, profile=profile).exists():
+            return False
+        # Same reasoning as the wiki-comment case above: an @activity or @loc
+        # mention this viewer can't resolve drops the whole comment from
+        # build_comment_tree, and the image must follow it.
+        return trip_comment_is_visible(trip_comment, profile)
 
     return False
 
