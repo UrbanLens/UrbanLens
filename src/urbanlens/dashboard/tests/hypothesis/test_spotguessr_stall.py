@@ -33,7 +33,8 @@ from urbanlens.dashboard.models.spotguessr.model import (
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import (
     GameConfig,
-    SpotGuessrError,
+    NotSessionHostForEndError,
+    SessionAlreadyEndedError,
     begin_session,
     end_session_now,
     expire_round_timer,
@@ -184,7 +185,7 @@ class ExpireRoundTimerTests(TestCase):
 class EndSessionNowTests(TestCase):
     def test_non_host_cannot_end_the_game(self) -> None:
         host, guest, location, session, round_ = _setup_two_player_game()
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(NotSessionHostForEndError):
             end_session_now(session, guest)
 
     def test_host_can_end_a_lobby_before_it_even_starts(self) -> None:
@@ -216,7 +217,7 @@ class EndSessionNowTests(TestCase):
     def test_cannot_end_an_already_completed_session(self) -> None:
         host, guest, location, session, round_ = _setup_two_player_game()
         end_session_now(session, host)
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(SessionAlreadyEndedError):
             end_session_now(session, host)
 
 

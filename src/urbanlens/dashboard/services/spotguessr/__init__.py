@@ -46,7 +46,19 @@ from urbanlens.dashboard.services.spotguessr.street_view import candidate_street
 # a plain `manage.py check` didn't) - see "Package __init__ import
 # ordering" in docs/NOTES.md.
 from urbanlens.dashboard.services.spotguessr.session import (
+    DuplicateGuessError,
     GameConfig,
+    InviteeNotFriendError,
+    LobbyClosedForInviteError,
+    LobbyClosedForJoinError,
+    NotSessionHostForEndError,
+    NotSessionHostForInviteError,
+    NotSessionHostForStartError,
+    ParticipantNotInvitedError,
+    ParticipantNotJoinedError,
+    RoundGenerationUnavailableError,
+    SessionAlreadyEndedError,
+    SessionAlreadyStartedError,
     SpotGuessrError,
     begin_session,
     complete_session,

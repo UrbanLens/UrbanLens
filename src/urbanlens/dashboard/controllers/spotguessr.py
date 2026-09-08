@@ -374,8 +374,16 @@ class SpotGuessrStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
             invitees = list(Profile.objects.filter(pk__in=invite_ids))
             try:
                 game_session = spotguessr_session.start_multiplayer_session(profile, mode, config, invitees, total_rounds=total_rounds)
-            except spotguessr_session.SpotGuessrError as exc:
-                return JsonResponse({"error": exc.safe_message}, status=400)
+            except spotguessr_session.InviteeNotFriendError as exc:
+                logger.info("spotguessr multiplayer start by %s rejected: %s", profile.pk, exc)
+                return JsonResponse({"error": "You can only invite friends."}, status=400)
+            except (spotguessr_session.NotSessionHostForInviteError, spotguessr_session.LobbyClosedForInviteError) as exc:
+                # Unreachable today (the session is freshly created with this
+                # profile as host and status LOBBY right before this loop
+                # runs) - kept so a future change to start_multiplayer_session
+                # can't silently turn this into an unhandled 500.
+                logger.warning("spotguessr multiplayer start by %s hit an unexpected invite error: %s", profile.pk, exc)
+                return JsonResponse({"error": "That session couldn't be started."}, status=400)
             return JsonResponse({"session_id": game_session.pk, "lobby": True, "session": serializers.serialize_session(game_session)})
 
         # The whole create-then-verify-then-clean-up sequence lives in the
@@ -384,8 +392,9 @@ class SpotGuessrStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         # unplayable ACTIVE sessions behind.
         try:
             result = spotguessr_session.start_solo_playthrough(profile, mode, config, total_rounds=total_rounds)
-        except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+        except spotguessr_session.RoundGenerationUnavailableError as exc:
+            logger.warning("spotguessr solo start by %s hit a round-generation bug: %s", profile.pk, exc)
+            return JsonResponse({"error": "This game mode isn't available right now."}, status=400)
 
         if result.round is None or result.session is None:
             return JsonResponse({"error_code": "no_eligible_locations"})
@@ -422,8 +431,15 @@ class SpotGuessrInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             participant = spotguessr_session.invite_to_session(game_session, profile, invitee)
-        except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+        except spotguessr_session.NotSessionHostForInviteError as exc:
+            logger.info("spotguessr invite in session %s rejected: %s", session_id, exc)
+            return JsonResponse({"error": "Only the host can invite players."}, status=400)
+        except spotguessr_session.LobbyClosedForInviteError as exc:
+            logger.info("spotguessr invite in session %s rejected: %s", session_id, exc)
+            return JsonResponse({"error": "Can't invite once the game has started."}, status=400)
+        except spotguessr_session.InviteeNotFriendError as exc:
+            logger.info("spotguessr invite in session %s rejected: %s", session_id, exc)
+            return JsonResponse({"error": "You can only invite friends."}, status=400)
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -439,8 +455,12 @@ class SpotGuessrJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             participant = spotguessr_session.join_session(game_session, profile)
-        except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+        except spotguessr_session.ParticipantNotInvitedError as exc:
+            logger.info("spotguessr join of session %s by %s rejected: %s", session_id, profile.pk, exc)
+            return JsonResponse({"error": "You were not invited to this session."}, status=400)
+        except spotguessr_session.LobbyClosedForJoinError as exc:
+            logger.info("spotguessr join of session %s by %s rejected: %s", session_id, profile.pk, exc)
+            return JsonResponse({"error": "This game has already started - you can no longer join."}, status=400)
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -463,8 +483,15 @@ class SpotGuessrBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             round_ = spotguessr_session.begin_session(game_session, profile)
-        except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+        except spotguessr_session.NotSessionHostForStartError as exc:
+            logger.info("spotguessr begin of session %s by %s rejected: %s", session_id, profile.pk, exc)
+            return JsonResponse({"error": "Only the host can start the game."}, status=400)
+        except spotguessr_session.SessionAlreadyStartedError as exc:
+            logger.info("spotguessr begin of session %s by %s rejected: %s", session_id, profile.pk, exc)
+            return JsonResponse({"error": "This session has already started."}, status=400)
+        except spotguessr_session.RoundGenerationUnavailableError as exc:
+            logger.warning("spotguessr begin of session %s hit a round-generation bug: %s", session_id, exc)
+            return JsonResponse({"error": "This game mode isn't available right now."}, status=400)
 
         if round_ is None:
             if spotguessr_session.rounds_played(game_session) == 0:
@@ -492,8 +519,12 @@ class SpotGuessrEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
 
         try:
             spotguessr_session.end_session_now(game_session, profile)
-        except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+        except spotguessr_session.NotSessionHostForEndError as exc:
+            logger.info("spotguessr end of session %s by %s rejected: %s", session_id, profile.pk, exc)
+            return JsonResponse({"error": "Only the host can end the game."}, status=400)
+        except spotguessr_session.SessionAlreadyEndedError as exc:
+            logger.info("spotguessr end of session %s by %s rejected: %s", session_id, profile.pk, exc)
+            return JsonResponse({"error": "This game has already ended."}, status=400)
         return JsonResponse({"finished": True, "summary": spotguessr_session.session_summary(game_session)})
 
 
@@ -552,8 +583,12 @@ class SpotGuessrGuessView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         guess_point = Point(longitude, latitude, srid=4326)
         try:
             guess, bonus_tiers, rating_change = spotguessr_session.submit_guess(round_, profile, guess_point, guessed_date)
-        except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+        except spotguessr_session.ParticipantNotJoinedError as exc:
+            logger.info("spotguessr guess in session %s round %s by %s rejected: %s", session_id, round_id, profile.pk, exc)
+            return JsonResponse({"error": "You must join this session before submitting a guess."}, status=400)
+        except spotguessr_session.DuplicateGuessError as exc:
+            logger.info("spotguessr guess in session %s round %s by %s rejected: %s", session_id, round_id, profile.pk, exc)
+            return JsonResponse({"error": "This profile has already guessed this round."}, status=400)
 
         round_.refresh_from_db()
         return JsonResponse(serializers.serialize_reveal(round_, guess, bonus_tiers, rating_change))
