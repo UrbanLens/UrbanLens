@@ -154,7 +154,7 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
     Returns:
         How many child wikis were created.
     """
-    from urbanlens.dashboard.controllers.detail_pins import _location_for_child_wiki
+    from urbanlens.dashboard.controllers.detail_pins import ChildWikiLocationError, _location_for_child_wiki
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.models.wiki_edit import WikiEdit
 
@@ -171,6 +171,17 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
             if existing is not None:
                 unmatched_wikis.remove(existing)
                 continue
+            try:
+                child_location = _location_for_child_wiki(child.latitude, child.longitude)
+            except ChildWikiLocationError:
+                # Same collision services.pins.pin_restructure.mirror_buildings_to_wiki
+                # already guards against: something (often the parent wiki
+                # itself) already occupies that exact point. Skip it rather than
+                # aborting the whole batch - this whole call is inside one
+                # transaction.atomic(), so an uncaught raise here used to roll
+                # back every child wiki this send had already created.
+                logger.info("send_pins_to_wiki: skipping pin %s - a wiki marker already occupies its point", child.pk)
+                continue
             child_wiki = Wiki.objects.create(
                 # The pin's owner placed this, by sending their pins to the
                 # wiki - see the matching note in controllers/detail_pins.py.
@@ -182,7 +193,7 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
                 pin_type=child.pin_type,
                 pin_type_is_user_provided=child.pin_type_is_user_provided,
                 parent_wiki=wiki,
-                location=_location_for_child_wiki(child.latitude, child.longitude),
+                location=child_location,
             )
             created += 1
             logger.debug("send_pins_to_wiki: created child wiki %s from pin %s", child_wiki.pk, child.pk)

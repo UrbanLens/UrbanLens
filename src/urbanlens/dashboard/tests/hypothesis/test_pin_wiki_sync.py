@@ -106,6 +106,38 @@ class SendPinsToWikiTests(TestCase):
         self.assertEqual(created, 0)
         self.assertEqual(wiki.child_wikis.count(), 1)
 
+    def test_a_pin_at_the_parent_wikis_own_point_is_skipped_not_a_500(self) -> None:
+        """A child pin landing exactly on the parent wiki's own coordinate.
+
+        `_location_for_child_wiki` refuses a second Location at a point that
+        already carries a wiki (`ChildWikiLocationError`) - most often the
+        parent wiki itself, since a parcel's own coordinate is frequently one
+        of its buildings' centroids. Left uncaught, that used to abort the
+        whole `transaction.atomic()` block, rolling back every child wiki this
+        same call had already created and 500ing the request.
+        """
+        wiki = baker.make(Wiki, location=self.location, name="Campus")
+        # Location has a real unique constraint on (latitude, longitude) - the
+        # collision under test is reusing the parent wiki's own point, not a
+        # second row that happens to match it (which the constraint refuses
+        # outright, before this test would even reach send_pins_to_wiki).
+        colliding = baker.make(
+            Pin,
+            profile=self.profile,
+            parent_pin=self.parent,
+            location=self.location,
+            name="Same Spot",
+        )
+        fine = baker.make(
+            Pin, profile=self.profile, parent_pin=self.parent, location=_make_location(), name="Tool Shed"
+        )
+
+        created = send_pins_to_wiki(self.parent, [colliding, fine], self.profile)
+
+        self.assertEqual(created, 1, "the colliding pin is skipped, not the whole batch")
+        self.assertEqual(wiki.child_wikis.count(), 1)
+        self.assertEqual(wiki.child_wikis.get().name, "Tool Shed")
+
     def test_only_the_selected_pins_are_sent(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
         selected = baker.make(
