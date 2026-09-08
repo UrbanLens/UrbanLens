@@ -422,11 +422,13 @@ the current tree - re-verified 2026-08-19. `_resolved_flag` reads the `attribute
 falls back to the top level, and has since commit `8bf86daf`; the finding described the code before
 that.
 
-## P9 — REData gaps remain - `?limit=` is inert, the 15-route list is already stale (missed a post-sweep route), a `tile_template` slide is one 256px tile
+## P9 — REData gaps: mostly closed 2026-09-08; `?limit=` is REData-side, land-use-area geometry needs a map-overlay decision
 
 `id: P9` · `status: open` · `updated: 2026-09-08`
 
-Previously titled "REData consumption gaps left after this session's sweep".
+Previously titled "REData consumption gaps left after this session's sweep", then "REData gaps
+remain - `?limit=` is inert, the 15-route list is already stale (missed a post-sweep route), a
+`tile_template` slide is one 256px tile".
 
 A full cross-repo sweep of UrbanLens's REData integration on 2026-08-19 (both repos read end to end:
 REData's `api/urls.py`, every serializer, `../REData/docs/api-reference.md`, `docs/fields-available.md` and the
@@ -434,27 +436,93 @@ whole `CHANGELOG.md` `[Unreleased]` section, against all ~32 `redata_*` gateways
 Everything that was *wrong* was fixed in the same pass - four panels reading keys REData has never
 emitted, the places gateway parsing a `{count, results}` envelope as a bare array, `?is_aerial=true`
 being a parameter of a different endpoint, CRIS selecting resources that were not CRIS's, Florida's
-whole sale-record provider being dropped on attribution. What follows is what was found and
-deliberately **not** done, so the next pass starts from here rather than re-deriving it.
+whole sale-record provider being dropped on attribution. What followed was what the sweep found and
+deliberately did not build - kept below so the fix-it-later history stays legible - and this section
+records that **every item worth building has now been built** except one that needs a product
+decision first.
 
-**`?limit=` is inert on every REData near-point endpoint.** `NearPointQuery`
-(`REData/src/redata/api/coordinates.py`) parses `lat`/`lng`/`radius_meters`/`provider`/
-`force_refresh` and nothing else; the `limit` parsing at :411 belongs to the *text*-query parser. So
-every panel that passes `limit=20`/`25`/`30`/`50` caches up to REData's own server-side cap instead.
-Not fixed here on purpose: trimming client-side would change the user-visible counts panels report
-("N mapped within 250 m") from REData's floor to our own arbitrary bound, which is less accurate,
-not more. The fix belongs in REData - have `parse_near_point_query` accept `limit` - after which the
-UrbanLens side needs no change at all.
+**`?limit=` is still inert on every REData near-point endpoint** (unchanged - not re-verified this
+session). `NearPointQuery` (`REData/src/redata/api/coordinates.py`) parses `lat`/`lng`/
+`radius_meters`/`provider`/`force_refresh` and nothing else; the `limit` parsing at :411 belongs to
+the *text*-query parser. So every panel that passes `limit=20`/`25`/`30`/`50` caches up to REData's
+own server-side cap instead. Not fixed here on purpose: trimming client-side would change the
+user-visible counts panels report ("N mapped within 250 m") from REData's floor to our own
+arbitrary bound, which is less accurate, not more. The fix belongs in REData - have
+`parse_near_point_query` accept `limit` - after which the UrbanLens side needs no change at all.
 
-**45 of REData's 106 routes have no UrbanLens caller.** 15 are judged worth wiring up, in rough
-value order: the `/street-view/` base endpoint and its two mirrored-bytes download routes (the
-carousel currently hot-links provider URLs that rot), `GET /places/cid/{cid}/` plus its media
-download (UrbanLens already holds the CID and throws the deep-scraped place data away),
-`/parcels/{uuid}/coverage/` (the Property Records panel fires four supplementary calls per parcel
-blind), four `/parks/{code}/` routes including live closure/hazard alerts, `POST /imagery/capture/`,
-`/reference-documents/` near-point (Wikidata's structured heritage claims reach UrbanLens from
-nowhere else), and the `land-use-areas`/`demographics`/`national-parks` parcel trio. 23 are
-irrelevant by design (nested write CRUD, the readback ViewSets, IIIF).
+**Re-audited 2026-09-08: of the 15 routes this entry originally judged worth wiring up, all but one
+are now built**, and one (the street-view base/download routes) turned out on inspection to already
+be a non-issue rather than a gap. In value order, as originally written, with what actually happened
+to each:
+
+1. ~~The `/street-view/` base endpoint and its two mirrored-bytes download routes (the carousel
+   currently hot-links provider URLs that rot).~~ **Not a gap.** `/street-view/timeline/` (a superset
+   of the base endpoint - every capture at every date, not just current) was already consumed
+   (pre-existing, `services/apis/locations/redata_street_view_gateway.py`), and the download routes
+   were already a considered, documented tradeoff rather than an oversight:
+   `RedataStreetViewGateway`'s own module docstring explains `download_url` needs REData API auth,
+   so the browser is deliberately served the network's own `image_url`/`thumbnail_url` instead, which
+   attribution requires linking to anyway. The "rot" framing in the original title was speculative,
+   not measured.
+2. **Built:** `GET /places/cid/{cid}/` plus its media download. New "Google Maps Details" info card
+   (name, category, rating/review count, price level, hours summary, phone, website, up to 3 photos)
+   for any pin whose `Location.cid` is already known, reading REData's already-run deep scrape
+   instead of discarding it - `RedataCidGateway.get_place_detail`/`download_media`,
+   `plugins/builtin/redata_place_details.py`, a server-side media proxy
+   (`PinPlaceCidMediaView`) so REData's key never reaches the browser. Commit `069f43e8e`.
+3. **Built:** `/parcels/{uuid}/coverage/`. `RedataGateway.lookup_coverage` now gates the Property
+   Records panel's `assessments`/`sale-records` calls (the two supplementary domains coverage
+   actually reports on - `liens`/`tax-payments` aren't coverage-registry domains at all, so those
+   two stay unconditional as before), falling back to "always call" if the precheck itself fails.
+   Commit `a12827a6f`.
+4. **Built:** three of the four `/parks/{code}/` routes - `alerts` (the live closure/hazard one,
+   surfaced as icon-led, safety-critical `facts` ahead of routine park info, on both the JSON API and
+   now the web panel - see below), `visitor-centers`, `campgrounds`.
+   `RedataNationalParksGateway.get_alerts`/`get_visitor_centers`/`get_campgrounds`,
+   `plugins/builtin/nps.py`. The bare park-detail route (`GET /parks/{code}/`) and `places`/`webcams`/
+   `media` were left unbuilt: detail's fields are already embedded in the `/parks/nearby/` row this
+   panel already caches, and places/webcams/media resolve to the same generic `PointOfInterest`/
+   `MediaItem` rows other panels already surface, at lower value than the four built. Commit
+   `4d01e40aa`.
+5. **Built:** `POST /imagery/capture/`, for materializing one date of a `time_series` (NASA GIBS)
+   layer - previously skipped entirely (`if delivery == "time_series": return None`), now
+   materializes the most recent published date per layer via
+   `RedataImageryGateway.capture_time_series`. Bundled with a second, related imagery fix: the
+   satellite carousel's `tile_template` slides (see the still-open finding this entry used to lead
+   with, below) also went from one raw, badly-framed 256px tile to REData's own composited
+   `GET /imagery/{uuid}/download/` image. Commit `3d97e6d36`.
+6. **Built:** `/reference-documents/` near-point (Wikipedia + Wikidata). New free/ungated panel
+   surfacing the nearest Wikipedia article (as the card's description/footer link) and the nearest
+   Wikidata entity's structured claims (what it is, when built, designer, architectural style,
+   heritage designation) - data no other panel in this app surfaces.
+   `RedataReferenceDocumentsGateway.get_reference_documents` (added to the *existing* gateway class,
+   which already served the unrelated by-name `/reference-documents/search/` endpoint - do not
+   confuse the two), `plugins/builtin/redata_reference_documents_nearby.py`. Commit `a34e1c197`.
+7. **Partly built, one part deliberately deferred:** the `land-use-areas`/`demographics`/
+   `national-parks` parcel trio. `demographics` (census-tract population/income/home-value/rent/
+   owner-renter-split) and `national-parks`' `containing_park` (a real point-in-boundary check, more
+   precise than the existing `nps.py` panel's nearest-by-coordinate search - kept deliberately
+   decoupled from that panel rather than wired together, to avoid a cross-plugin coupling that wasn't
+   asked for) both now render on the Property Records card.
+   `RedataGateway.lookup_demographics`/`lookup_national_parks`. Commit `a12827a6f`. **Still not
+   built, on purpose:** `land-use-areas`' boundary *geometry* (as opposed to the category chips
+   already shown from a different, already-consumed field) - rendering an actual polygon needs a
+   map-overlay UX decision (a new layer? a toggle? which existing boundary-rendering chain, if any)
+   that wasn't this pass's to make. Flagging for product input rather than guessing at it.
+
+Of the original "45 of 106 routes with no UrbanLens caller" count, 23 were already correctly judged
+irrelevant by design (nested write CRUD, the readback ViewSets, IIIF) and are still irrelevant; the
+7 items above accounted for the rest that were worth a look. That 45/106 count itself was already
+stated as stale the moment it was written (REData adds routes continuously - see the
+`/historical-features/` entry below) and should not be re-cited as current without re-deriving it.
+
+**Web panel follow-up, same day:** the alerts JSON-API wiring above (item 4) only reached
+`NpsPanelSource.api_payload` - `PinController.nps_info` (the actual web-rendered `pin_nps.html`
+partial a park explorer sees) still called only the pre-existing `park_facts()`, never the new
+`alert_facts()`, so a live closure/hazard alert reached API clients but not the page itself. Fixed
+in the same pass that wrote this entry: `nps_info` now passes `alert_facts(data)` into the template
+context, rendered as its own icon-led list ahead of the routine facts block, mirroring the API's own
+"safety-critical first" ordering.
 
 **`GET /weather/history/` is consumed on trips and on visit history; the bulk Memories lists are
 deliberately left out.** (Visit history added 2026-08-20.)
@@ -619,13 +687,15 @@ The satellite half, since the fix is not simply "call capabilities":
   end**, so "everything applicable belongs to another panel" has to mean *no request at all* - there
   is a test for that, because the two empty cases read identically at the call site.
 
-**Open, found while doing it: a `tile_template` slide is one 256px tile, and the pin can be at its
-edge.** `_resolve_tile_template` resolves the single tile *containing* the coordinate at zoom 15
-(~1.2 km across), so a site near a tile boundary is shown in the corner of its own photograph, or
-half out of frame. Tolerable for OpenTopoMap, where the slide is terrain context; wrong for
-`s2cloudless` and any future tiled imagery, where the slide is supposed to be a picture of the
-place. The fix is compositing a 2x2 or 3x3 block centred on the point, which is a real piece of
-work (fetch, stitch, encode) rather than a parameter change.
+**RESOLVED 2026-09-08: a `tile_template` slide used to be one 256px tile, and the pin could be at
+its edge.** `_resolve_tile_template` resolved the single tile *containing* the coordinate at zoom 15
+(~1.2 km across), so a site near a tile boundary was shown in the corner of its own photograph, or
+half out of frame - tolerable for OpenTopoMap, where the slide is terrain context, wrong for
+`s2cloudless`, where the slide is supposed to be a picture of the place. The compositing this entry
+guessed would be "a real piece of work (fetch, stitch, encode)" turned out to already exist
+server-side: `GET /imagery/{uuid}/download/` composes exactly that from the covering tiles. The fix
+was a client-side call to it, not the pipeline this entry expected to have to build. Commit
+`3d97e6d36` (bundled with `POST /imagery/capture/`'s wiring, item 5 above).
 
 **RESOLVED 2026-08-19: the points-of-interest registry is consumed.** It was the largest
 unconsumed surface and the one most relevant to this app - agency surveillance-camera registers,
