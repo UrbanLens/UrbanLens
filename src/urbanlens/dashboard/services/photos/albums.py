@@ -580,8 +580,16 @@ def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
 
     items_by_id = {item.pk: item for item in AlbumItem.objects.for_album(album)}
     updated: list[AlbumItem] = []
+    processed = 0
     for order, item_id in enumerate(ordered_ids):
-        item = items_by_id[item_id]
+        # *current* (and so *ordered_ids*) came from an earlier query, so a
+        # membership row removed in between (another tab, a concurrent
+        # remove-from-album request) is simply gone now. Skipping it drops the
+        # photo from the reorder instead of raising over one that's already gone.
+        item = items_by_id.get(item_id)
+        if item is None:
+            continue
+        processed += 1
         if item.order != order:
             item.order = order
             updated.append(item)
@@ -590,7 +598,7 @@ def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
     if album.sort != AlbumSort.CUSTOM:
         Album.objects.filter(pk=album.pk).update(sort=AlbumSort.CUSTOM)
         album.sort = AlbumSort.CUSTOM
-    return len(ordered_ids)
+    return processed
 
 
 def album_date_range(images: Sequence[Image]) -> tuple[datetime | None, datetime | None]:

@@ -166,6 +166,27 @@ class AlbumOrderingTests(TestCase):
         ids = self._display_item_ids()
         self.assertEqual(reorder_album_items(self.album, [foreign_id, *ids]), 3)
 
+    def test_reorder_survives_an_item_deleted_between_its_two_queries(self) -> None:
+        """The display-order read and the hydration read aren't atomic - a row
+        removed in between (another tab, a concurrent remove-from-album request)
+        must not 500 the whole reorder over one photo that's already gone. Same
+        bug class as _hydrate_album_items, fixed the same way: skip the missing
+        row rather than KeyError on it."""
+        ids = self._display_item_ids()
+        victim_id = ids[1]
+        real_for_album = AlbumItem.objects.for_album
+
+        def delete_victim_then_call_through(*args, **kwargs):
+            AlbumItem.objects.filter(pk=victim_id).delete()
+            return real_for_album(*args, **kwargs)
+
+        with mock.patch.object(AlbumItem.objects, "for_album", side_effect=delete_victim_then_call_through):
+            reordered = reorder_album_items(self.album, list(reversed(ids)))
+
+        self.assertEqual(reordered, 2)
+        self.assertFalse(AlbumItem.objects.filter(pk=victim_id).exists())
+        self.assertEqual(self._display_item_ids(), [item_id for item_id in reversed(ids) if item_id != victim_id])
+
     def test_reorder_with_no_recognized_ids_is_a_no_op(self) -> None:
         """An empty (or all-foreign) drop must not stamp orders or flip the sort."""
         reordered = reorder_album_items(self.album, [])
