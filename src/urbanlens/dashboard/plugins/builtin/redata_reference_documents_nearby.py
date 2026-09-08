@@ -23,12 +23,21 @@ Only the *nearest* article and the *nearest* claims-bearing entity are shown, mi
 return several unrelated Wikidata entities (a building, a nearby statue, a transit stop),
 and averaging or listing all of them would say less than picking the one actually at this
 point.
+
+**Gated behind ``SiteFeature.PLACES``** (decided 2026-09-08): unlike a panel about the pin's
+own place, a near-a-coordinate search is inherently about *something else nearby* - the
+Wikipedia article and Wikidata entity are their own thing, not necessarily the pin's subject.
+Reuses the flag that already gates the map's Places layer for this same provider
+(``places_wikipedia_enabled`` in ``services.profile.profile_settings``), rather than
+``NEARBY_RESEARCH``: this is the same Wikipedia data by the same product concept, just shown
+on the pin page instead of as a map marker.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import info_card_from_render_context
@@ -73,6 +82,7 @@ class ReferenceDocumentsNearbyPanelSource(RedataInfoPanelSource):
     section_id = "reference-documents-nearby-section"
     icon = "auto_stories"
     title = "Reference Documents"
+    required_feature: ClassVar[SiteFeature | None] = SiteFeature.PLACES
 
     payload_key: ClassVar[str] = "documents"
 

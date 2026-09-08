@@ -15,7 +15,12 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.plugins.builtin.nps import NpsEnrichmentSource, NpsPanelSource
+from urbanlens.dashboard.plugins.builtin.nps import (
+    NpsEnrichmentSource,
+    NpsPanelSource,
+    _is_park_containing_location,
+    facility_facets_visible,
+)
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -130,6 +135,10 @@ class NpsPanelSourceApiPayloadTests(TestCase):
         super().setUp()
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
+        # The first user in a fresh test DB is auto-promoted to site admin, and a
+        # site admin holds every SiteFeature - a throwaway user absorbs that so
+        # self.pin's owner is an ordinary, unsubscribed user (see test_panel_feature_gate.py).
+        baker.make(User)
         self.source = NpsPanelSource()
         self.location: Location = baker.make("dashboard.Location", latitude=44.6, longitude=-110.5)
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=self.location)
@@ -143,6 +152,9 @@ class NpsPanelSourceApiPayloadTests(TestCase):
             {
                 "park_code": "yell",
                 "full_name": "Yellowstone National Park",
+                # Contained, so this viewer sees the gated facets for free -
+                # see FacilityFacetsGateTests below for the not-contained case.
+                "is_contained": True,
                 "alerts": [
                     {
                         "id": 1,
@@ -190,6 +202,7 @@ class NpsPanelSourceApiPayloadTests(TestCase):
             {
                 "park_code": "yell",
                 "full_name": "Yellowstone National Park",
+                "is_contained": True,
                 "visitor_centers": [{"id": 1, "name": "Old Faithful Visitor Center"}],
                 "campgrounds": [{"id": 1, "name": "Madison Campground"}, {"id": 2, "name": "Bridge Bay Campground"}],
             }
@@ -201,6 +214,43 @@ class NpsPanelSourceApiPayloadTests(TestCase):
         meta = {row["label"]: row["value"] for row in payload["info"]["meta"]}
         self.assertEqual(meta["Visitor Centers"], "1 (Old Faithful Visitor Center)")
         self.assertEqual(meta["Campgrounds"], "2 (Madison Campground, Bridge Bay Campground)")
+
+    def test_facets_are_hidden_when_not_contained_and_the_viewer_has_no_subscription(self) -> None:
+        """The default case: nearest-by-proximity only, no SiteFeature.PLACES."""
+        self._cache(
+            {
+                "park_code": "yell",
+                "full_name": "Yellowstone National Park",
+                "is_contained": False,
+                "alerts": [{"id": 1, "title": "Bridge out", "category": "Danger", "url": "https://nps.gov/yell/a1"}],
+                "visitor_centers": [{"id": 1, "name": "Old Faithful Visitor Center"}],
+            }
+        )
+
+        payload = self.source.api_payload(self.pin)
+
+        assert payload is not None
+        self.assertEqual(payload["info"]["facts"], [])
+        self.assertNotIn("Visitor Centers", {row["label"] for row in payload["info"]["meta"]})
+
+    def test_facets_show_when_not_contained_but_the_viewer_holds_the_places_feature(self) -> None:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.PLACES)
+        grant_subscription(self.pin.profile.user, role, self.pin.profile.user, None)
+        self._cache(
+            {
+                "park_code": "yell",
+                "full_name": "Yellowstone National Park",
+                "is_contained": False,
+                "alerts": [{"id": 1, "title": "Bridge out", "category": "Danger", "url": "https://nps.gov/yell/a1"}],
+            }
+        )
+
+        payload = self.source.api_payload(self.pin)
+
+        assert payload is not None
+        self.assertEqual(len(payload["info"]["facts"]), 1)
 
 
 class NpsEnrichmentSourceTests(TestCase):
@@ -266,6 +316,9 @@ class NpsInfoViewTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        # See NpsPanelSourceApiPayloadTests.setUp for why: absorbs the first-user
+        # site-admin auto-promotion so self.pin's owner is an ordinary user.
+        baker.make(User)
         self.location: Location = baker.make("dashboard.Location", latitude=44.6, longitude=-110.5)
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=self.location)
         self.url = reverse("pin.nps", args=[self.pin.slug])
@@ -275,7 +328,59 @@ class NpsInfoViewTests(TestCase):
             _gateway_returning(mock_gateway_cls, park=park, alerts=alerts)
             NpsPanelSource().fetch(self.pin)
 
-    def test_an_active_alert_renders_on_the_web_panel(self) -> None:
+    def _seed_containment(self, park_code: str) -> None:
+        """A Property Records cache row saying this pin sits inside ``park_code``.
+
+        ``NpsPanelSource.fetch`` reads this (``_is_park_containing_location``)
+        to decide ``is_contained`` - see the nps.py module docstring.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.property_records import PropertyRecordsPanelSource
+
+        LocationCache.set(
+            self.location,
+            PropertyRecordsPanelSource.cache_source,
+            {"containing_park": {"park_code": park_code, "full_name": "Yellowstone National Park"}},
+        )
+
+    def test_an_active_alert_renders_on_the_web_panel_when_the_pin_is_contained(self) -> None:
+        self._seed_containment("yell")
+        self._seed_cache(
+            park={"park_code": "yell", "full_name": "Yellowstone National Park"},
+            alerts=[{"id": 1, "title": "Road closed", "category": "Park Closure"}],
+        )
+        self.client.force_login(self.pin.profile.user)
+
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        ):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Park Closure: Road closed")
+
+    def test_an_active_alert_is_hidden_when_not_contained_and_unsubscribed(self) -> None:
+        """The default case: nearest-by-proximity only, no SiteFeature.PLACES."""
+        self._seed_cache(
+            park={"park_code": "yell", "full_name": "Yellowstone National Park"},
+            alerts=[{"id": 1, "title": "Road closed", "category": "Park Closure"}],
+        )
+        self.client.force_login(self.pin.profile.user)
+
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        ):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Park Closure: Road closed")
+        self.assertNotContains(response, "nps-alerts")
+
+    def test_an_active_alert_renders_when_not_contained_but_subscribed(self) -> None:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.PLACES)
+        grant_subscription(self.pin.profile.user, role, self.pin.profile.user, None)
         self._seed_cache(
             park={"park_code": "yell", "full_name": "Yellowstone National Park"},
             alerts=[{"id": 1, "title": "Road closed", "category": "Park Closure"}],
@@ -291,6 +396,7 @@ class NpsInfoViewTests(TestCase):
         self.assertContains(response, "Park Closure: Road closed")
 
     def test_no_alerts_renders_cleanly_with_no_alert_markup(self) -> None:
+        self._seed_containment("yell")
         self._seed_cache(park={"park_code": "yell", "full_name": "Yellowstone National Park"}, alerts=[])
         self.client.force_login(self.pin.profile.user)
 
@@ -301,3 +407,64 @@ class NpsInfoViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "nps-alerts")
+
+
+class IsParkContainingLocationTests(TestCase):
+    """``_is_park_containing_location`` reads Property Records' own cached
+    point-in-boundary result rather than re-querying REData - see the
+    function's own docstring for why, and its "fail closed" default."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location: Location = baker.make("dashboard.Location", latitude=44.6, longitude=-110.5)
+
+    def _seed_property_records(self, data: dict) -> None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.property_records import PropertyRecordsPanelSource
+
+        LocationCache.set(self.location, PropertyRecordsPanelSource.cache_source, data)
+
+    def test_false_when_property_records_has_never_cached_anything(self) -> None:
+        self.assertFalse(_is_park_containing_location(self.location, "yell"))
+
+    def test_false_when_property_records_cached_no_containing_park(self) -> None:
+        self._seed_property_records({"available": True, "situs_address": "1 Main St"})
+
+        self.assertFalse(_is_park_containing_location(self.location, "yell"))
+
+    def test_true_when_the_cached_containing_park_matches(self) -> None:
+        self._seed_property_records({"containing_park": {"park_code": "yell", "full_name": "Yellowstone"}})
+
+        self.assertTrue(_is_park_containing_location(self.location, "yell"))
+
+    def test_false_when_the_cached_containing_park_is_a_different_unit(self) -> None:
+        """Two overlapping park boundaries, or a stale/mismatched row - never trust it on a guess."""
+        self._seed_property_records({"containing_park": {"park_code": "grte", "full_name": "Grand Teton"}})
+
+        self.assertFalse(_is_park_containing_location(self.location, "yell"))
+
+
+class FacilityFacetsVisibleTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        # See NpsPanelSourceApiPayloadTests.setUp for why.
+        baker.make(User)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile)
+
+    def test_true_when_contained_regardless_of_subscription(self) -> None:
+        self.assertTrue(facility_facets_visible({"is_contained": True}, self.pin))
+
+    def test_false_when_not_contained_and_unsubscribed(self) -> None:
+        self.assertFalse(facility_facets_visible({"is_contained": False}, self.pin))
+
+    def test_false_when_is_contained_key_is_missing_entirely(self) -> None:
+        """A row cached before this feature shipped - fails closed, not open."""
+        self.assertFalse(facility_facets_visible({}, self.pin))
+
+    def test_true_when_not_contained_but_the_viewer_holds_the_places_feature(self) -> None:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.PLACES)
+        grant_subscription(self.pin.profile.user, role, self.pin.profile.user, None)
+
+        self.assertTrue(facility_facets_visible({"is_contained": False}, self.pin))

@@ -29,6 +29,18 @@ unreachable, or a county source it depends on is down) is never cached at all
 - the fetch raises so the panel framework's failure-skip/retry machinery
 handles it, instead of a days-long ``LocationCache`` row remembering an
 outage as "no data".
+
+**Neighbourhood demographics are gated behind ``SiteFeature.NEARBY_RESEARCH``**
+(decided 2026-09-08): a census tract's population/income/home-value/rent
+figures describe the area around the parcel, not the parcel itself, so they
+follow the same "don't show information about anywhere but the pin's own
+place to a non-subscriber" rule ``epa_echo.py``'s nearby-facility panel
+already applies. **The rest of this card, including the ``containing_park``
+chip, stays free for everyone** - a parcel's own facts (situs address, APN,
+zoning, tax history, sale records, ``containing_park``) describe the parcel
+itself, a real point-in-boundary answer about the pin's own place rather than
+somewhere nearby, same as ``owner_name``'s existing ``SiteFeature.PROPERTY_OWNERS``
+gate this mirrors.
 """
 
 from __future__ import annotations
@@ -536,7 +548,28 @@ def _demographic_number(value: Any) -> float | None:
         return None
 
 
-def _demographics_rows(demographics: Any) -> list[dict[str, str]]:
+def _may_see_nearby_research(user: Any) -> bool:
+    """Whether this user may see this panel's nearby-area (not-the-parcel-itself) data.
+
+    Currently gates only the neighbourhood demographics section - see
+    :func:`_demographics_rows` and the module docstring.
+
+    Args:
+        user: The viewing user (``services.property.owner_access.viewer_of(pin)``),
+            or None for a caller with no viewer to resolve - fails closed,
+            same reasoning as ``can_see_official_owners``.
+
+    Returns:
+        True when the user holds ``SiteFeature.NEARBY_RESEARCH``.
+    """
+    from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+    if user is None:
+        return False
+    return user_has_feature(user, SiteFeature.NEARBY_RESEARCH)
+
+
+def _demographics_rows(demographics: Any, *, show_demographics: bool) -> list[dict[str, str]]:
     """Neighbourhood context from the parcel's census tract, as display rows.
 
     REData has been resolving this on every parcel fetch (see
@@ -549,13 +582,15 @@ def _demographics_rows(demographics: Any) -> list[dict[str, str]]:
             None/anything falsy (no coordinate, outside the USA, or the
             endpoint was unavailable - see ``_fetch_payload``'s best-effort
             handling of it).
+        show_demographics: See :func:`_may_see_nearby_research` - False
+            returns ``[]`` unconditionally, without even reading ``demographics``.
 
     Returns:
         Display rows for population, median household income, median home
         value, median rent, and the owner/renter split - omitting any field
         the ACS estimate doesn't carry.
     """
-    if not isinstance(demographics, dict):
+    if not show_demographics or not isinstance(demographics, dict):
         return []
 
     rows: list[dict[str, str]] = []
@@ -574,7 +609,7 @@ def _demographics_rows(demographics: Any) -> list[dict[str, str]]:
     return rows
 
 
-def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, Any]:
+def _render_available(data: dict[str, Any], *, show_owner: bool, show_demographics: bool) -> dict[str, Any]:
     """Build the info-panel context for a successful record.
 
     Args:
@@ -583,6 +618,9 @@ def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, An
             assessor data is the paid half of this card - the parcel/tax
             facts stay unconditional, the private individual's name does not
             (see ``services.property.owner_access``).
+        show_demographics: Whether this viewer may see the neighbourhood
+            demographics section - see :func:`_may_see_nearby_research` and
+            the module docstring.
     """
     meta = [{"label": "Address", "value": data["situs_address"]}] if data.get("situs_address") else []
     if data.get("apn"):
@@ -656,7 +694,7 @@ def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, An
     # Neighbourhood demographics (the parcel's census tract) - context about
     # the area, not the parcel itself, so it sits after the parcel's own tax
     # geography rather than among the parcel facts above it.
-    meta.extend(_demographics_rows(data.get("demographics")))
+    meta.extend(_demographics_rows(data.get("demographics"), show_demographics=show_demographics))
 
     # Recorded-document references (deeds, plats). Linked rather than listed as
     # bare URLs: they are the primary sources behind the ownership history above,
@@ -745,16 +783,18 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Render the found record, the manual-lookup pointer card, or nothing (204).
 
-        The owner's name is shown only to a viewer entitled to it - see
-        ``services.property.owner_access.viewer_of`` for who that is, and why
-        an unresolvable viewer withholds the name rather than showing it.
+        The owner's name and the demographics section are each shown only to
+        a viewer entitled to them - see ``services.property.owner_access.viewer_of``
+        for who that is, and why an unresolvable viewer withholds both rather
+        than showing them.
         """
         from urbanlens.dashboard.services.property.owner_access import can_see_official_owners, viewer_of
 
         if not data:
             return None
         if data.get("available"):
-            return _render_available(data, show_owner=can_see_official_owners(viewer_of(pin)))
+            viewer = viewer_of(pin)
+            return _render_available(data, show_owner=can_see_official_owners(viewer), show_demographics=_may_see_nearby_research(viewer))
         if data.get("reason") in (REASON_MANUAL_ONLY, REASON_BLOCKED):
             return _render_manual_only(data)
         return None

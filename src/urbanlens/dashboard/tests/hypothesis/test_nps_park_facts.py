@@ -139,7 +139,7 @@ class AlertFactsTests(SimpleTestCase):
             }
         ]
 
-        facts = alert_facts({"alerts": alerts})
+        facts = alert_facts({"alerts": alerts}, show_facility_facets=True)
 
         self.assertEqual(
             facts,
@@ -153,35 +153,37 @@ class AlertFactsTests(SimpleTestCase):
         )
 
     def test_zero_alerts_renders_cleanly(self) -> None:
-        self.assertEqual(alert_facts({"alerts": []}), [])
+        self.assertEqual(alert_facts({"alerts": []}, show_facility_facets=True), [])
 
     def test_a_missing_alerts_key_renders_cleanly(self) -> None:
-        self.assertEqual(alert_facts({}), [])
+        self.assertEqual(alert_facts({}, show_facility_facets=True), [])
 
     def test_a_category_less_alert_still_shows_its_title(self) -> None:
-        facts = alert_facts({"alerts": [{"title": "Seasonal road closure"}]})
+        facts = alert_facts({"alerts": [{"title": "Seasonal road closure"}]}, show_facility_facets=True)
 
         self.assertEqual(facts, [{"icon": "warning", "text": "Seasonal road closure"}])
 
     def test_an_alert_with_no_url_omits_href(self) -> None:
-        facts = alert_facts({"alerts": [{"title": "Fire danger: extreme", "category": "Caution"}]})
+        facts = alert_facts(
+            {"alerts": [{"title": "Fire danger: extreme", "category": "Caution"}]}, show_facility_facets=True
+        )
 
         self.assertNotIn("href", facts[0])
 
     def test_a_titleless_alert_is_skipped(self) -> None:
-        self.assertEqual(alert_facts({"alerts": [{"category": "Information"}]}), [])
+        self.assertEqual(alert_facts({"alerts": [{"category": "Information"}]}, show_facility_facets=True), [])
 
     def test_malformed_rows_do_not_raise(self) -> None:
-        self.assertEqual(alert_facts({"alerts": ["not a dict", None, 7]}), [])
+        self.assertEqual(alert_facts({"alerts": ["not a dict", None, 7]}, show_facility_facets=True), [])
 
     def test_malformed_alerts_value_does_not_raise(self) -> None:
-        self.assertEqual(alert_facts({"alerts": "not a list"}), [])
-        self.assertEqual(alert_facts({"alerts": None}), [])
+        self.assertEqual(alert_facts({"alerts": "not a list"}, show_facility_facets=True), [])
+        self.assertEqual(alert_facts({"alerts": None}, show_facility_facets=True), [])
 
     def test_alerts_beyond_the_cap_are_dropped(self) -> None:
         alerts = [{"title": f"Alert {i}", "category": "Information"} for i in range(20)]
 
-        facts = alert_facts({"alerts": alerts})
+        facts = alert_facts({"alerts": alerts}, show_facility_facets=True)
 
         self.assertEqual(len(facts), 8)
         self.assertEqual(facts[0]["text"], "Information: Alert 0")
@@ -193,7 +195,7 @@ class AlertFactsTests(SimpleTestCase):
             {"title": "Entrance closed", "category": "Park Closure"},
         ]
 
-        facts = alert_facts({"alerts": alerts})
+        facts = alert_facts({"alerts": alerts}, show_facility_facets=True)
 
         self.assertEqual(
             [fact["text"] for fact in facts], ["Information: Fee waived today", "Park Closure: Entrance closed"]
@@ -201,8 +203,8 @@ class AlertFactsTests(SimpleTestCase):
 
 
 class ParkFactsTests(SimpleTestCase):
-    def _facts(self, **data) -> dict[str, str]:
-        return {row["label"]: row["value"] for row in park_facts(data)}
+    def _facts(self, *, show_facility_facets: bool = True, **data) -> dict[str, str]:
+        return {row["label"]: row["value"] for row in park_facts(data, show_facility_facets=show_facility_facets)}
 
     def test_the_previously_unread_fields_are_shown(self) -> None:
         facts = self._facts(
@@ -219,7 +221,7 @@ class ParkFactsTests(SimpleTestCase):
         self.assertEqual(facts["Directions"], "Getting there")
 
     def test_the_directions_row_carries_the_link(self) -> None:
-        rows = park_facts({"directions_url": "https://www.nps.gov/hutr/directions.htm"})
+        rows = park_facts({"directions_url": "https://www.nps.gov/hutr/directions.htm"}, show_facility_facets=True)
 
         self.assertEqual(
             rows, [{"label": "Directions", "value": "Getting there", "href": "https://www.nps.gov/hutr/directions.htm"}]
@@ -227,16 +229,21 @@ class ParkFactsTests(SimpleTestCase):
 
     def test_hours_come_before_the_cross_reference_code(self) -> None:
         """Reading order is by usefulness; "HUTR" is a cross-reference, not a fact about visiting."""
-        labels = [row["label"] for row in park_facts({"operating_hours": _hours(), "park_code": "HUTR"})]
+        labels = [
+            row["label"]
+            for row in park_facts({"operating_hours": _hours(), "park_code": "HUTR"}, show_facility_facets=True)
+        ]
 
         self.assertEqual(labels, ["Hours", "Park Code"])
 
     def test_a_sparse_park_yields_only_what_it_publishes(self) -> None:
-        self.assertEqual(park_facts({"full_name": "Somewhere"}), [])
+        self.assertEqual(park_facts({"full_name": "Somewhere"}, show_facility_facets=True), [])
 
     def test_weather_prose_is_deliberately_not_a_fact_row(self) -> None:
         """The pin has a weather panel with the actual forecast; this is seasonal prose."""
-        rows = park_facts({"weather_info": "Summers are hot and dry. Winters bring occasional snow."})
+        rows = park_facts(
+            {"weather_info": "Summers are hot and dry. Winters bring occasional snow."}, show_facility_facets=True
+        )
 
         self.assertEqual(rows, [])
 
@@ -260,7 +267,7 @@ class ParkFactsTests(SimpleTestCase):
         )
 
     def test_no_visitor_centers_or_campgrounds_omits_the_rows(self) -> None:
-        rows = park_facts({"visitor_centers": [], "campgrounds": []})
+        rows = park_facts({"visitor_centers": [], "campgrounds": []}, show_facility_facets=True)
 
         self.assertEqual(rows, [])
 
@@ -273,8 +280,54 @@ class ParkFactsTests(SimpleTestCase):
                     "visitor_centers": [{"name": "Old Faithful Visitor Center"}],
                     "campgrounds": [{"name": "Madison Campground"}],
                     "directions_url": "https://www.nps.gov/yell/directions.htm",
-                }
+                },
+                show_facility_facets=True,
             )
         ]
 
         self.assertEqual(labels, ["Hours", "Visitor Centers", "Campgrounds", "Directions"])
+
+
+class FacilityFacetsGateTests(SimpleTestCase):
+    """``show_facility_facets=False`` hides alerts and visitor-centers/campgrounds -
+    see P9's subscription-gating decision (2026-09-08): this pin is merely near
+    the park, not inside it, so this section is nearby-area data, not data
+    about the pin's own place.
+    """
+
+    def test_alerts_are_hidden_when_facets_are_not_visible(self) -> None:
+        alerts = [{"title": "Bridge out", "category": "Danger", "url": "https://nps.gov/x/alert1"}]
+
+        self.assertEqual(alert_facts({"alerts": alerts}, show_facility_facets=False), [])
+
+    def test_alerts_are_not_even_read_when_facets_are_not_visible(self) -> None:
+        """Malformed data in a section that will not render must not raise."""
+        self.assertEqual(alert_facts({"alerts": "not a list, and it does not matter"}, show_facility_facets=False), [])
+
+    def test_visitor_centers_and_campgrounds_are_hidden_when_facets_are_not_visible(self) -> None:
+        rows = park_facts(
+            {
+                "visitor_centers": [{"name": "Old Faithful Visitor Center"}],
+                "campgrounds": [{"name": "Madison Campground"}],
+            },
+            show_facility_facets=False,
+        )
+
+        self.assertEqual(rows, [])
+
+    def test_routine_facts_stay_free_even_when_facility_facets_are_not_visible(self) -> None:
+        """Designation/hours/entry/directions are the pre-existing free base card - unaffected."""
+        rows = park_facts(
+            {
+                "designation": "National Historic Site",
+                "operating_hours": _hours(),
+                "entrance_fees": [{"cost": "0.00", "title": "Entrance Fee - Free"}],
+                "directions_url": "https://www.nps.gov/hutr/directions.htm",
+                "visitor_centers": [{"name": "Old Faithful Visitor Center"}],
+            },
+            show_facility_facets=False,
+        )
+
+        labels = [row["label"] for row in rows]
+        self.assertEqual(labels, ["Designation", "Entry", "Hours", "Directions"])
+        self.assertNotIn("Visitor Centers", labels)

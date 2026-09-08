@@ -522,10 +522,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source, panel_visible_to
 
         panel = get_panel_source(source)
         if not isinstance(panel, GalleryMediaSource):
+            return HttpResponse(status=404)
+
+        # Same gate the generic info-panel dispatch applies (_viewer_may_see_panel) -
+        # a feature-gated source's photos must not leak through this separate gallery
+        # route just because it has no required_feature check of its own. 404, not
+        # 204: matches the info-panel route's anti-enumeration policy for the same fact.
+        if not panel_visible_to(request.user, panel):
             return HttpResponse(status=404)
 
         try:
@@ -1473,7 +1480,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nps_info: pin %s is not within any NPS unit", pin_slug)
             return HttpResponse(status=204)
 
-        from urbanlens.dashboard.plugins.builtin.nps import alert_facts, park_facts
+        from urbanlens.dashboard.plugins.builtin.nps import alert_facts, facility_facets_visible, park_facts
 
         # The same rows the API serves, from the same helpers - the two rendered
         # different subsets of this payload by hand before, and the hours the
@@ -1481,11 +1488,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # NPS.gov", printed over the cached hours). Alerts are kept out of
         # `facts` here too, same reasoning as `NpsPanelSource.api_payload`: a
         # closure or hazard is safety-critical and belongs ahead of routine
-        # facts like hours, not mixed into the same list.
+        # facts like hours, not mixed into the same list. Both are also gated
+        # by facility_facets_visible - see the plugin's module docstring.
+        show_facility_facets = facility_facets_visible(data, pin)
         context = {
             "park": data,
-            "alerts": alert_facts(data),
-            "facts": park_facts(data),
+            "alerts": alert_facts(data, show_facility_facets=show_facility_facets),
+            "facts": park_facts(data, show_facility_facets=show_facility_facets),
             "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1),
         }
         return render(request, "dashboard/partials/pins/pin_nps.html", context)

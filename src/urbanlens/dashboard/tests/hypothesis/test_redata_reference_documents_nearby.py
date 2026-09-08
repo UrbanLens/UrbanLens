@@ -386,8 +386,13 @@ class FetchTests(TestCase):
             with pytest.raises(LocationContextUnavailableError):
                 self.source.fetch(self.pin)
 
-    def test_is_free_not_subscriber_gated(self) -> None:
-        self.assertIsNone(self.source.required_feature)
+    def test_is_gated_behind_the_places_feature(self) -> None:
+        """Decided 2026-09-08: a near-a-coordinate search is inherently about somewhere
+        other than the pin's own place - see the module docstring and
+        test_panel_feature_gate.py for the framework this relies on."""
+        from urbanlens.dashboard.models.subscriptions import SiteFeature
+
+        self.assertEqual(self.source.required_feature, SiteFeature.PLACES)
 
 
 # ---------------------------------------------------------------------------
@@ -415,3 +420,47 @@ class RateLimitTests(TestCase):
         self.assertEqual(config.calls_per_minute, 20)
         self.assertIsNone(config.calls_per_day)
         self.assertNotEqual(config.notes, "")
+
+
+# ---------------------------------------------------------------------------
+# Subscription gating (end-to-end, mirrors test_panel_feature_gate.py's
+# real-example pattern for EPA ECHO/Incident History)
+# ---------------------------------------------------------------------------
+
+
+class PanelDispatchGatingTests(TestCase):
+    """``PinController.panel`` actually refuses this panel to a non-subscriber."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from django.contrib.auth.models import User as DjangoUser
+
+        # See test_panel_feature_gate.py's own GatedPanelServingTests.setUp docstring:
+        # the first user in a fresh test DB is auto-promoted to site admin, and a site
+        # admin holds every SiteFeature - a throwaway user absorbs that.
+        baker.make(DjangoUser)
+        self.pin = _us_pin()
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        LocationCache.set(self.pin.location, "redata_reference_documents_nearby", {"documents": [_wikipedia_doc()]})
+
+    def test_unsubscribed_viewer_gets_404(self) -> None:
+        from django.urls import reverse
+
+        self.client.force_login(self.pin.profile.user)
+        response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "redata_reference_documents_nearby"]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_subscriber_with_places_feature_gets_the_panel(self) -> None:
+        from django.urls import reverse
+
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.PLACES)
+        grant_subscription(self.pin.profile.user, role, self.pin.profile.user, None)
+        self.client.force_login(self.pin.profile.user)
+
+        response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "redata_reference_documents_nearby"]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bannerman Castle")

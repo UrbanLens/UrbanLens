@@ -269,3 +269,70 @@ class RedataPlaceDetailsEnrichmentSourceTests(TestCase):
         matches = set(Location.objects.filter(self.source.missing_filter()).values_list("pk", flat=True))
 
         self.assertNotIn(location.pk, matches)
+
+
+class RedataPlaceDetailsRequiredFeatureTests(TestCase):
+    def test_gated_behind_the_places_feature(self) -> None:
+        """Decided 2026-09-08: reuses the flag that already gates the map's Places
+        layer for this same Google Places provider - see the module docstring."""
+        from urbanlens.dashboard.models.subscriptions import SiteFeature
+
+        self.assertEqual(RedataPlaceDetailsPanelSource().required_feature, SiteFeature.PLACES)
+
+
+class PanelDispatchGatingTests(TestCase):
+    """The info card (``pin.panel``) and the photo gallery (``pin.media``) both
+    actually refuse a non-subscriber, and both actually serve a subscriber -
+    the panel declares MEDIA as well as INFO (see ``_MAX_PHOTOS``), so the
+    gate has to hold on both routes, not just the one the generic
+    ``InfoPanelSource`` dispatch was already proven against in
+    test_panel_feature_gate.py."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        # See test_panel_feature_gate.py's GatedPanelServingTests.setUp docstring:
+        # absorbs the first-user site-admin auto-promotion.
+        baker.make(User)
+        self.location = _location_with_cid(123456789012345678)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=self.location)
+        LocationCache.set(
+            self.location,
+            "redata_place_details",
+            {
+                "cid": 123456789012345678,
+                "name": "Katz's Delicatessen",
+                "media": [{"id": 1, "kind": "photo", "content_type": "image/jpeg"}],
+            },
+            query_key="123456789012345678",
+        )
+        self.client.force_login(self.pin.profile.user)
+
+    def _grant_places(self) -> None:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.PLACES)
+        grant_subscription(self.pin.profile.user, role, self.pin.profile.user, None)
+
+    def test_info_card_404s_without_the_feature(self) -> None:
+        response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "redata_place_details"]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_photo_gallery_404s_without_the_feature(self) -> None:
+        """The gap this task closed in controllers.pin.media_provider/wiki_media.py."""
+        response = self.client.get(reverse("pin.media", args=[self.pin.slug, "redata_place_details"]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_info_card_serves_with_the_feature(self) -> None:
+        self._grant_places()
+        response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "redata_place_details"]))
+        self.assertEqual(response.status_code, 200)
+        # Not "Katz's Delicatessen" - the template HTML-escapes the apostrophe
+        # (&#x27;), and assertContains matches raw bytes, not rendered text.
+        self.assertContains(response, "Delicatessen")
+
+    def test_photo_gallery_serves_with_the_feature(self) -> None:
+        self._grant_places()
+        response = self.client.get(reverse("pin.media", args=[self.pin.slug, "redata_place_details"]))
+        self.assertEqual(response.status_code, 200)

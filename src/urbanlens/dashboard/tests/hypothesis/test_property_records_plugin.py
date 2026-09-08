@@ -19,6 +19,8 @@ from urbanlens.dashboard.plugins.builtin.property_records import (
     PropertyRecordsPanelSource,
     _coverage_worth_calling,
     _demographics_rows,
+    _may_see_nearby_research,
+    _render_available,
     _write_official_owners_and_sales,
 )
 
@@ -228,7 +230,12 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertEqual(self.source.debug_count({"available": False, "reason": "no_data_found"}), 0)
         self.assertEqual(self.source.debug_count({}), 0)
 
-    def test_demographics_are_rendered_as_meta_rows(self) -> None:
+    def test_demographics_are_rendered_as_meta_rows_when_the_viewer_may_see_them(self) -> None:
+        """``render_context(self.pin, ...)`` can't exercise show_demographics=True - this
+        class's ``self.pin`` is deliberately None (no viewer to resolve), so this calls
+        ``_render_available`` directly, the same as ``DemographicsRowsTests`` below tests
+        ``_demographics_rows`` directly - see ``RenderContextViewerGatingTests`` below for
+        the full-stack (real pin, real subscription) render-context equivalent."""
         data = self._base_available_data(
             demographics={
                 "population": 295911,
@@ -239,8 +246,7 @@ class PanelRenderContextTests(SimpleTestCase):
                 "percent_renter_occupied": "31.80",
             },
         )
-        ctx = self.source.render_context(self.pin, data)
-        assert ctx is not None
+        ctx = _render_available(data, show_owner=False, show_demographics=True)
         labels_values = {entry["label"]: entry["value"] for entry in ctx["meta"]}
         self.assertEqual(labels_values["Neighborhood population"], "295,911")
         self.assertEqual(labels_values["Median household income"], "$81,234")
@@ -248,18 +254,26 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertEqual(labels_values["Median gross rent"], "$1,345/mo")
         self.assertEqual(labels_values["Owner/renter occupied"], "68% / 32%")
 
-    def test_no_demographics_adds_no_meta_entries(self) -> None:
-        data = self._base_available_data(demographics=None)
+    def test_demographics_are_hidden_from_the_default_unresolvable_viewer(self) -> None:
+        """``self.pin`` is None in this class, so ``_may_see_nearby_research`` fails closed -
+        the ordinary ``render_context`` path never shows demographics here, matching
+        ``show_owner``'s existing behaviour in this same class."""
+        data = self._base_available_data(demographics={"population": 295911})
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
+        labels = {entry["label"] for entry in ctx["meta"]}
+        self.assertNotIn("Neighborhood population", labels)
+
+    def test_no_demographics_adds_no_meta_entries(self) -> None:
+        data = self._base_available_data(demographics=None)
+        ctx = _render_available(data, show_owner=False, show_demographics=True)
         labels = {entry["label"] for entry in ctx["meta"]}
         self.assertNotIn("Neighborhood population", labels)
 
     def test_demographics_missing_key_is_the_same_as_none(self) -> None:
         """The 503/best-effort case: ``_fetch_payload`` never sets the key at all."""
         data = self._base_available_data()
-        ctx = self.source.render_context(self.pin, data)
-        assert ctx is not None
+        ctx = _render_available(data, show_owner=False, show_demographics=True)
         labels = {entry["label"] for entry in ctx["meta"]}
         self.assertNotIn("Neighborhood population", labels)
 
@@ -276,6 +290,64 @@ class PanelRenderContextTests(SimpleTestCase):
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertFalse(any(chip.startswith("Situated within") for chip in ctx["chips"]))
+
+
+class RenderContextViewerGatingTests(TestCase):
+    """The full stack, with a real pin/profile: ``render_context`` actually resolves the
+    viewer and wires ``_may_see_nearby_research`` through - what
+    ``PanelRenderContextTests`` above can't prove, since its ``self.pin`` is always None."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from django.contrib.auth.models import User
+
+        # The first user in a fresh test DB is auto-promoted to site admin, and a
+        # site admin holds every SiteFeature - a throwaway user absorbs that so
+        # self.pin's owner is an ordinary, unsubscribed user (see test_panel_feature_gate.py).
+        baker.make(User)
+        self.source = PropertyRecordsPanelSource()
+        self.pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile)
+        self.data = {
+            "available": True,
+            "situs_address": "",
+            "apn": "",
+            "owner_name": [],
+            "land_use_code": None,
+            "lot_size_sqft": None,
+            "building_sqft": None,
+            "year_built": None,
+            "assessed_value": None,
+            "market_value": None,
+            "tax_history": [],
+            "demographics": {"population": 295911},
+        }
+
+    def test_demographics_are_hidden_from_an_unsubscribed_owner(self) -> None:
+        ctx = self.source.render_context(self.pin, self.data)
+        assert ctx is not None
+        self.assertNotIn("Neighborhood population", {entry["label"] for entry in ctx["meta"]})
+
+    def test_demographics_show_for_an_owner_holding_nearby_research(self) -> None:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)
+        grant_subscription(self.pin.profile.user, role, self.pin.profile.user, None)
+
+        ctx = self.source.render_context(self.pin, self.data)
+
+        assert ctx is not None
+        self.assertEqual(
+            {entry["label"]: entry["value"] for entry in ctx["meta"]}["Neighborhood population"], "295,911"
+        )
+
+    def test_containing_park_chip_is_unaffected_by_the_demographics_gate(self) -> None:
+        """The parcel's own facts (including containing_park) stay free regardless."""
+        data = dict(self.data, containing_park={"park_code": "yell", "full_name": "Yellowstone National Park"})
+
+        ctx = self.source.render_context(self.pin, data)
+
+        assert ctx is not None
+        self.assertIn("Situated within Yellowstone National Park", ctx["chips"])
 
 
 class CoverageWorthCallingTests(SimpleTestCase):
@@ -302,18 +374,27 @@ class CoverageWorthCallingTests(SimpleTestCase):
 
 class DemographicsRowsTests(SimpleTestCase):
     def test_none_yields_no_rows(self) -> None:
-        self.assertEqual(_demographics_rows(None), [])
+        self.assertEqual(_demographics_rows(None, show_demographics=True), [])
 
     def test_partial_data_omits_missing_fields(self) -> None:
-        rows = _demographics_rows({"population": 1000})
+        rows = _demographics_rows({"population": 1000}, show_demographics=True)
         labels = {row["label"] for row in rows}
         self.assertIn("Neighborhood population", labels)
         self.assertNotIn("Median household income", labels)
 
     def test_owner_renter_split_needs_both_percentages(self) -> None:
-        rows = _demographics_rows({"percent_owner_occupied": "68.20"})
+        rows = _demographics_rows({"percent_owner_occupied": "68.20"}, show_demographics=True)
         labels = {row["label"] for row in rows}
         self.assertNotIn("Owner/renter occupied", labels)
+
+    def test_show_demographics_false_hides_everything_unconditionally(self) -> None:
+        rows = _demographics_rows({"population": 1000, "median_household_income": "81234.00"}, show_demographics=False)
+        self.assertEqual(rows, [])
+
+
+class MaySeeNearbyResearchTests(SimpleTestCase):
+    def test_none_user_fails_closed(self) -> None:
+        self.assertFalse(_may_see_nearby_research(None))
 
 
 class FetchPayloadTransientErrorTests(TestCase):

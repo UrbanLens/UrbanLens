@@ -18,12 +18,21 @@ worth visiting needs the facts above, not a second copy of Google's own review p
 Photos are served through :class:`~urbanlens.dashboard.controllers.pin.PinPlaceCidMediaView`
 so REData's API key never reaches the browser (same reasoning as every other REData-backed
 media proxy in this app - see ``controllers.pin.RedataMediaProxyMixin``).
+
+**Gated behind ``SiteFeature.PLACES``** (decided 2026-09-08): reuses the flag that already
+gates the map's Places layer for this same provider (``places_google_enabled`` in
+``services.profile.profile_settings``). The underlying REData record can still be fetched
+and cached in the background for the benefit of other users who do hold the feature
+(:class:`RedataPlaceDetailsEnrichmentSource` carries no feature check - see its own
+docstring) - only the per-viewer *fetch-on-demand* and *display* are gated, never the shared
+cache write.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
@@ -77,6 +86,7 @@ class RedataPlaceDetailsPanelSource(CoordinateGatedInfoPanelSource, GalleryMedia
     title = "Google Maps Details"
     # Both an info card and a media provider - see _MAX_PHOTOS above for why.
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO, PanelApiKind.MEDIA})
+    required_feature: ClassVar[SiteFeature | None] = SiteFeature.PLACES
 
     def gate(self, pin: Pin) -> bool:
         """Requires REData to be configured and this pin's location to already carry a CID.
