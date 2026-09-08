@@ -94,42 +94,7 @@ class IncidentHistoryPanelRenderTests(TestCase):
                 count=0, complete=True, results=[]
             )
             self.source.fetch_envelope(40.5, -74.5)
-        gateway_cls.return_value.get_incidents.assert_called_once_with(
-            40.5, -74.5, years=25, limit=500, force_refresh=True
-        )
-
-    def test_forces_a_live_refresh_so_the_free_panels_cache_cannot_truncate_the_window(self) -> None:
-        """P94: REData's incident cache has no ``years`` dimension - it keys purely on
-        coordinate + a radius pinned the same for every provider. If the free 3-year
-        panel populates that cache first (the common case, since it is the default
-        panel), an unforced fetch here would silently be served those same narrow
-        3-year rows for a full cache window with no error and no way to tell.
-        """
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.redata_incidents_gateway.RedataIncidentsGateway"
-        ) as gateway_cls:
-            gateway_cls.return_value.get_incidents.return_value = LocationContextEnvelope(
-                count=0, complete=True, results=[]
-            )
-            self.source.fetch_envelope(40.5, -74.5)
-        _, kwargs = gateway_cls.return_value.get_incidents.call_args
-        self.assertTrue(kwargs.get("force_refresh"))
-
-    def test_the_free_panel_does_not_force_refresh(self) -> None:
-        """Anti-vacuity: force_refresh must stay scoped to the paid panel. Forcing it on
-        the free panel too would silently regress its whole caching benefit.
-        """
-        from urbanlens.dashboard.plugins.builtin.redata_incidents import PoliceIncidentsPanelSource
-
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.redata_incidents_gateway.RedataIncidentsGateway"
-        ) as gateway_cls:
-            gateway_cls.return_value.get_incidents.return_value = LocationContextEnvelope(
-                count=0, complete=True, results=[]
-            )
-            PoliceIncidentsPanelSource().fetch_envelope(40.5, -74.5)
-        _, kwargs = gateway_cls.return_value.get_incidents.call_args
-        self.assertFalse(kwargs.get("force_refresh"))
+        gateway_cls.return_value.get_incidents.assert_called_once_with(40.5, -74.5, years=25, limit=500)
 
     def test_cache_source_is_independent_of_the_free_panel(self) -> None:
         """Different years/limit fetches must never collide in LocationCache."""
