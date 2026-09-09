@@ -300,22 +300,32 @@ the add/remove controls inline right away - only meaningful when not `locked`).
             suggestions.hidden = false;
         }
 
+        // Commits the current input value as a chip if it's an exact friend match
+        // or a valid email; returns whether anything was committed. Shared by the
+        // Enter/','-key handler and by blur, so a value the user types and then
+        // clicks or tabs away from (without pressing Enter) isn't silently
+        // dropped from the submission - see keydown below for the same rules.
+        function tryCommitCurrentValue() {
+            var value = input.value.trim().replace(/,$/, '');
+            if (!value) return false;
+            var exact = friends.filter(function (f) { return f.username.toLowerCase() === value.toLowerCase(); })[0];
+            if (exact && addedProfileIds().indexOf(exact.id) === -1) {
+                addProfileChip(exact);
+            } else if (EMAIL_RE.test(value)) {
+                addEmailChip(value);
+            } else {
+                return false;
+            }
+            input.value = '';
+            suggestions.hidden = true;
+            return true;
+        }
+
         input.addEventListener('input', function () { renderSuggestions(input.value); });
         input.addEventListener('keydown', function (evt) {
             if (evt.key === 'Enter' || evt.key === ',') {
                 evt.preventDefault();
-                var value = input.value.trim().replace(/,$/, '');
-                if (!value) return;
-                var exact = friends.filter(function (f) { return f.username.toLowerCase() === value.toLowerCase(); })[0];
-                if (exact && addedProfileIds().indexOf(exact.id) === -1) {
-                    addProfileChip(exact);
-                } else if (EMAIL_RE.test(value)) {
-                    addEmailChip(value);
-                } else {
-                    return;
-                }
-                input.value = '';
-                suggestions.hidden = true;
+                tryCommitCurrentValue();
             } else if (evt.key === ' ') {
                 // A space right after a fully-qualified email acts like a comma,
                 // so users can just type "jane@example.com " and keep going -
@@ -332,6 +342,11 @@ the add/remove controls inline right away - only meaningful when not `locked`).
             }
         });
         input.addEventListener('blur', function () {
+            // Committing here (not just hiding suggestions) is what makes tabbing
+            // or clicking away from a typed-but-unsubmitted valid value actually
+            // add it - previously it silently vanished, including when clicking
+            // the page's own submit button (which blurs this field first).
+            tryCommitCurrentValue();
             setTimeout(function () { suggestions.hidden = true; }, 150);
         });
     });
