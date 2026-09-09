@@ -48,7 +48,6 @@
         {% endif %}
 
         {% if not has_memory_data %}
-        {% if not unlogged_visits %}
         <div class="memories-empty-state">
             <div class="memories-empty-state-icon"><i class="material-symbols-outlined">auto_awesome_motion</i></div>
             <h2>No memory data yet</h2>
@@ -58,8 +57,15 @@
                 <i class="material-symbols-outlined">upload</i> Import routes &amp; history
             </button>
         </div>
-        {% endif %}
         {% else %}
+        {% if unlogged_visits %}
+        {# Pins marked "Visited" (by label or last_visited) with no dated PinVisit #}
+        {# yet - real content even before there's a date to plot on the timeline. #}
+        {# Each card swaps itself (by #memories-unlogged-band id) after an action - #}
+        {# same partial, same wiring, as its home on the Visits subpage. #}
+        {% include "dashboard/partials/memories/_unlogged_visits.html" %}
+        {% endif %}
+
         <div id="memories-hero-stats"
             hx-get="{% url 'memories.hero_stats' %}"
             hx-trigger="memoriesFeedRefresh from:body"

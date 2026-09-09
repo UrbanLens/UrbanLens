@@ -344,7 +344,12 @@ def _compute_hero_stats(profile: Profile) -> tuple[dict[str, object], bool]:
     route_count = Route.objects.for_profile(profile).count()
     total_distance_km = total_travel_distance_km(profile)
     units = profile.effective_distance_units
-    places_visited = PinVisit.objects.filter(pin__profile=profile).values("pin_id").distinct().count()
+    # Pin.objects.visited() ORs in the "Visited" status label alongside a
+    # dated PinVisit record - a pin marked visited by label alone (no PinVisit
+    # row yet) must still count here, both for the stat itself and so
+    # has_memory_data (below) doesn't read a profile with only label-only
+    # visits as having no memory data at all.
+    places_visited = Pin.objects.filter(profile=profile).visited().count()
     photo_count = Image.objects.filter(profile=profile).photos().count()
     trip_count = TripMembership.objects.trip_ids_for(profile).distinct().count()
     has_memory_data = any((route_count, places_visited, photo_count, trip_count))
