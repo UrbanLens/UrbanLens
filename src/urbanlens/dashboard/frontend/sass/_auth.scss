@@ -553,3 +553,32 @@ button.auth-inline-link {
         }
     }
 }
+
+// -- set_password.html - passkey-vs-password choice --------------------------
+.set-password-intro {
+    margin-bottom: 1rem;
+}
+
+.passkey-option {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    margin-bottom: 1.25rem;
+}
+
+.passkey-option-icon {
+    vertical-align: -6px;
+}
+
+.set-password-toggle-summary {
+    cursor: pointer;
+}
+
+.set-password-fields-wrap {
+    margin-top: .75rem;
+}
+
+.set-password-skip-form {
+    margin-top: 1rem;
+    text-align: center;
+}
