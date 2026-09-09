@@ -40,7 +40,8 @@
     {% endif %}
 
     {# -- Multi-select tool: floating action bar + bulk action dialogs ------- #}
-    {% include "dashboard/partials/pins/_bulk_select_toolbar.html" %}
+    {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="pins" actions=pin_bulk_actions %}
+    <script src="{% static 'js/bulk-toolbar.js' %}"></script>
     {% include "dashboard/partials/pins/_bulk_delete_dialog.html" %}
     {% include "dashboard/partials/pins/_bulk_merge_dialog.html" %}
     {% include "dashboard/partials/pins/_bulk_edit_dialog.html" %}
@@ -3061,7 +3062,6 @@
         document.getElementById('map')?.classList.add('select-mode');
         _addPinClickMode = false;
         _markerMap.forEach(function (m) { if (m.dragging) m.dragging.disable(); });
-        document.getElementById('bulk-select-toolbar').hidden = false;
         _renderBulkSelectToolbar();
     }
 
@@ -3076,7 +3076,7 @@
         _markerMap.forEach(function (m) { if (m.dragging) m.dragging.enable(); });
         _lastClickedPinUuid = null;
         _clearSelection();
-        document.getElementById('bulk-select-toolbar').hidden = true;
+        if (window.ulBulkToolbar) window.ulBulkToolbar.clear('pins');
     }
 
     // Root and child (sub) pin markers/data live in separate registries - these
@@ -3116,19 +3116,21 @@
     map.on('zoomend moveend', function () { requestAnimationFrame(_syncSelectionClasses); });
 
     function _renderBulkSelectToolbar() {
+        if (!window.ulBulkToolbar) return;
         const n = _selectedPinUuids.size;
-        const countEl = document.getElementById('bulk-select-count');
-        if (countEl) countEl.textContent = n === 1 ? '1 selected' : `${n} selected`;
-        const mergeBtn = document.getElementById('bulk-select-merge-btn');
-        const editBtn = document.getElementById('bulk-select-edit-btn');
-        const delBtn = document.getElementById('bulk-select-delete-btn');
-        const listBtn = document.getElementById('bulk-select-list-btn');
-        const exportBtn = document.getElementById('bulk-select-export-btn');
-        if (mergeBtn) mergeBtn.disabled = n < 2;
-        if (editBtn) editBtn.disabled = n < 1;
-        if (delBtn) delBtn.disabled = n < 1;
-        if (listBtn) listBtn.disabled = n < 1;
-        if (exportBtn) exportBtn.disabled = n < 1;
+        // Select mode itself stays on regardless of count (see
+        // enterSelectMode/exitSelectMode) - only the shared bar's visibility
+        // and per-button availability track the selection. Merge needs at
+        // least 2 pins; everything else needs at least 1. "deselect" doubles
+        // as "exit select mode" here, same as every other page's bulk bar.
+        window.ulBulkToolbar.sync('pins', n, {
+            add_to_list: n >= 1 ? _openAddToListForSelection : null,
+            merge: n >= 2 ? openBulkMergeDialog : null,
+            edit: n >= 1 ? openBulkEditDialog : null,
+            export: n >= 1 ? function () { document.getElementById('bulk-export-dialog').showModal(); } : null,
+            delete: n >= 1 ? openBulkDeleteDialog : null,
+            deselect: exitSelectMode,
+        });
     }
 
     // Submit the hidden bulk-export form for the current selection in the

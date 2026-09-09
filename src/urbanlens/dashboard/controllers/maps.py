@@ -252,6 +252,13 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 # footer partial's `show_map_footer` doc comment.
                 "show_map_footer": True,
                 "show_pin_suggestions_intro": show_pin_suggestions_intro,
+                "pin_bulk_actions": [
+                    {"action": "add_to_list", "icon": "playlist_add", "label": "Add to List"},
+                    {"action": "merge", "icon": "merge", "label": "Merge"},
+                    {"action": "edit", "icon": "edit", "label": "Edit"},
+                    {"action": "export", "icon": "download", "label": "Export"},
+                    {"action": "delete", "icon": "delete", "label": "Delete"},
+                ],
             },
         )
 

@@ -212,8 +212,9 @@ body.page-map-view {
 
 // Multi-select tool: selected-marker ring + select-mode cursor + a persistent
 // inset outline around the whole map, so the mode reads as active even before
-// the user hovers or selects anything (the crosshair cursor and the bottom
-// bulk-select-toolbar are both easy to miss on first glance).
+// the user hovers or selects anything (the crosshair cursor and the shared
+// .ul-bulk-bar, which only appears once something is selected, are both easy
+// to miss on first glance).
 #map.select-mode {
     cursor: crosshair;
     box-shadow: inset 0 0 0 3px rgba($color-blue-500, .55);
@@ -3385,39 +3386,12 @@ div.container .addr-search-bar {
     }
 }
 
-// Multi-select tool: floating bottom-center action bar.
-.bulk-select-toolbar {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+// Multi-select tool: shares the generic .ul-bulk-bar markup/JS (see
+// partials/ui/_bulk_toolbar.html, bulk-toolbar.js) - the map's own docked
+// controls (.map-buttons, #place-info-panel) run up to z-index 1200, above
+// the bar's site-wide default of 900, so raise it to match on this page only.
+#map .ul-bulk-bar {
     z-index: 1200;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: $space-sm;
-    align-items: center;
-    background: rgba(18, 22, 30, .96);
-    border: 1px solid rgba(255, 255, 255, .12);
-    border-radius: $radius-md;
-    padding: $space-sm $space-md;
-    box-shadow: 0 6px 28px rgba(0, 0, 0, .55);
-    max-width: min(560px, 92vw);
-
-    &[hidden] {
-        display: none;
-    }
-
-    .bulk-select-count {
-        color: rgba(255, 255, 255, .7);
-        font-size: .82rem;
-        margin-right: $space-sm;
-        white-space: nowrap;
-    }
-
-    .bulk-select-close {
-        margin-left: $space-sm;
-    }
 }
 
 // -- Child pins (child pins) layer on the main map -----------------------------
@@ -3891,12 +3865,18 @@ div.container .addr-search-bar {
         pointer-events: none;
     }
 
-    .bulk-select-toolbar {
+    // Scoped to #map - .ul-bulk-bar is shared site-wide and every other page
+    // keeps the default centered pill at this breakpoint.
+    #map .ul-bulk-bar {
         left: 10px;
         right: 10px;
         bottom: 10px;
         transform: none;
         max-width: none;
+
+        &.visible {
+            transform: none;
+        }
     }
 }
 
