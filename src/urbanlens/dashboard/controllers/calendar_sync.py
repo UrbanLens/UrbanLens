@@ -54,6 +54,21 @@ def _resolve_next_view_name(name: str | None) -> str:
     return name if name in _ALLOWED_NEXT_VIEW_NAMES else "trips.list"
 
 
+def _next_url(next_name: str) -> str:
+    """The actual redirect target for an already-resolved next-view name.
+
+    ``settings.view`` specifically returns to its Connections tab (matching
+    every other integration's connect/callback flow - see flickr.py,
+    google_photos.py) rather than the bare settings URL, which would
+    silently leave the default Privacy tab active: settings/index.html's
+    ``activateFromHash()`` only switches tabs when the URL carries a
+    ``#...`` fragment.
+    """
+    if next_name == "settings.view":
+        return f"{reverse('settings.view')}#google-calendar-settings-section"
+    return reverse(next_name)
+
+
 def _callback_uri(request: HttpRequest) -> str:
     """Absolute OAuth callback URL for this deployment.
 
@@ -124,7 +139,7 @@ class GoogleCalendarConnectView(LoginRequiredMixin, View):
             url = build_authorization_url(_callback_uri(request), state)
         except CalendarNotConfiguredError:
             messages.error(request, "Google Calendar integration is not configured on this server.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
         return redirect(url)
 
 
@@ -146,19 +161,19 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
 
         if request.GET.get("error"):
             messages.error(request, "Google Calendar access was not granted.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
 
         code = request.GET.get("code") or ""
         if payload.get("pid") != profile.id or not code:
             messages.error(request, "The calendar connection request was invalid or expired. Please try again.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
 
         try:
             tokens = exchange_code_for_tokens(code, _callback_uri(request))
         except (CalendarNotConfiguredError, GatewayRequestError):
             logger.exception("Google Calendar token exchange failed for profile %s", profile.id)
             messages.error(request, "Connecting to Google Calendar failed. Please try again.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
 
         expires_in = int(tokens.get("expires_in") or 3600)
         account, _created = GoogleCalendarAccount.objects.update_or_create(
@@ -177,7 +192,7 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
             account.save(update_fields=["refresh_token", "updated"])
 
         messages.success(request, "Google Calendar connected. You can now import events and export trips.")
-        return redirect(next_name)
+        return redirect(_next_url(next_name))
 
 
 class GoogleCalendarDisconnectView(LoginRequiredMixin, View):

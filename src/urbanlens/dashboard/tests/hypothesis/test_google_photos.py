@@ -161,6 +161,25 @@ class GooglePhotosSettingsViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
 
+    def test_successful_connect_redirects_to_the_connections_tab(self) -> None:
+        """Regression guard: the success path used to redirect to the bare
+        settings URL (no #hash), unlike every error branch in the same view -
+        settings/index.html's tab-switch JS only activates a non-default tab
+        when the URL carries a fragment, so this silently landed the user on
+        the default Privacy tab instead of Connections."""
+        from django.core import signing
+
+        state = signing.dumps({"pid": self.profile.id}, salt="google-photos-connect")
+        with mock.patch(
+            "urbanlens.dashboard.controllers.google_photos.exchange_code_for_tokens",
+            return_value={"access_token": "tok", "refresh_token": "ref", "expires_in": 3600},
+        ):
+            response = self.client.get(reverse("settings.google_photos.callback"), {"state": state, "code": "abc"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"{reverse('settings.view')}#google-photos-settings-section")
+        self.assertTrue(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
+
     def test_disconnect_removes_the_account(self) -> None:
         GooglePhotosAccount.objects.create(profile=self.profile, access_token="a", refresh_token="r")
         with mock.patch("urbanlens.dashboard.controllers.google_photos.revoke_token"):

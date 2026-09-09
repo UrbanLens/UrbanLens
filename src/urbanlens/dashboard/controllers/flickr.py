@@ -156,7 +156,7 @@ class FlickrCallbackView(LoginRequiredMixin, View):
             },
         )
         messages.success(request, "Flickr connected.")
-        return redirect("settings.view")
+        return redirect(f"{reverse('settings.view')}#flickr-settings-section")
 
 
 class FlickrDisconnectView(LoginRequiredMixin, View):

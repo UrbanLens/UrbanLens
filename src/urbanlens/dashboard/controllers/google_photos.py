@@ -158,7 +158,7 @@ class GooglePhotosCallbackView(LoginRequiredMixin, View):
             account.refresh_token = tokens["refresh_token"]
             account.save(update_fields=["refresh_token", "updated"])
         messages.success(request, "Google Photos connected.")
-        return redirect("settings.view")
+        return redirect(f"{reverse('settings.view')}#google-photos-settings-section")
 
 
 class GooglePhotosDisconnectView(LoginRequiredMixin, View):
