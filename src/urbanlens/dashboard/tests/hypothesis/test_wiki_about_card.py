@@ -31,7 +31,13 @@ _ALL_UNKNOWN = {field_name: "unknown" for field_name, _label in SECURITY_FIELDS}
 
 
 def _render_about_card(wiki: Wiki) -> str:
-    return render_to_string("dashboard/partials/wiki/_wiki_about_card.html", {"wiki": wiki})
+    # wiki_links: real callers (LocationWikiView.get, LocationWikiEditView.post)
+    # pass this already narrowed by concealment.visible_rows - this helper has
+    # no viewer to narrow for (these tests aren't about concealment; see
+    # test_concealed_render.py for that), so it's the plain unfiltered set.
+    return render_to_string(
+        "dashboard/partials/wiki/_wiki_about_card.html", {"wiki": wiki, "wiki_links": wiki.links.all()}
+    )
 
 
 class EmptyWikiRendersTheAddLinkAffordanceTests(TestCase):

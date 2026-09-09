@@ -186,6 +186,11 @@ class LocationWikiView(LoginRequiredMixin, View):
         custom_layers = list(visible_rows(CustomLayer.objects.for_wiki(wiki), wiki, profile).order_by("order", "created"))
         visible_layer_ids = {layer.pk for layer in custom_layers}
 
+        # Filtered the same way as every other related-row type on this page
+        # (comments, custom layers, overlays, edit history) - the About
+        # card's own template used to compute `wiki.links.all` unfiltered.
+        wiki_links = visible_rows(wiki.links.all(), wiki, profile)
+
         wiki_is_site_scope = site_scope.is_site_scope(wiki)
         # Page-wide "show child pin details" toggle: when on (?children=1), the
         # map, photo gallery, and comments all include content from this wiki's
@@ -199,6 +204,7 @@ class LocationWikiView(LoginRequiredMixin, View):
             "dashboard/pages/location/wiki.html",
             {
                 "wiki": shown,
+                "wiki_links": wiki_links,
                 "custom_layers": custom_layers,
                 "custom_layers_json": [layer.to_json() for layer in custom_layers],
                 "manage_layers_url": reverse("location.wiki.layers", args=[location.slug]),
@@ -383,7 +389,11 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         # swap it in place instead of leaving edited-but-unrendered fields stale.
         # Concealed again on the way out: this fragment goes back to the viewer
         # who just wrote, and `target` is now carrying everyone's values.
-        about_html = render_to_string("dashboard/partials/wiki/_wiki_about_card.html", {"wiki": conceal_wiki(target, profile)}, request=request)
+        about_html = render_to_string(
+            "dashboard/partials/wiki/_wiki_about_card.html",
+            {"wiki": conceal_wiki(target, profile), "wiki_links": visible_rows(target.links.all(), target, profile)},
+            request=request,
+        )
         return JsonResponse({"ok": True, "changes": list(changes.keys()), "about_html": about_html})
 
 

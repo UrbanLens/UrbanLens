@@ -33,12 +33,14 @@ AUTOMATIC_BLURB = "AUTOMATIC-BLURB-relayed-from-a-provider"
 
 #: Planted in every field a stranger can write. Any of these reaching the page
 #: is a leak, and naming them individually is what makes the failure readable.
-#: Only `name` and `description` render in the page response - aliases and
-#: comments load over HTMX from their own endpoints, so those two are asserted
-#: in ConcealedPanelTests, not here (V7).
+#: `name`, `description` and the WikiLink's `url` all render in the initial
+#: page response (the link row is not lazy-loaded like aliases/comments,
+#: which load over HTMX from their own endpoints and are asserted in
+#: ConcealedPanelTests instead, not here - V7).
 CANARIES = {
     "description": "CANARY-DESCRIPTION-entry through the north fence",
     "name": "CANARY-NAME",
+    "link": "https://canary-link.example.invalid/north-fence",
 }
 
 
@@ -78,6 +80,10 @@ class ConcealedRenderTests(TestCase):
         # ConcealedPanelTests covers them where they actually render.
         baker.make("dashboard.WikiAlias", wiki=self.wiki, name="PANEL-ONLY-ALIAS", created_by=self.stranger)
         baker.make("dashboard.Comment", wiki=self.wiki, pin=None, profile=self.stranger, text="PANEL-ONLY-COMMENT")
+        # Unlike the two above, WikiLink renders directly in the About card on
+        # the initial page load (wiki.html includes _wiki_about_card.html
+        # plainly, no hx-get) - so this one belongs in CANARIES, not here.
+        baker.make("dashboard.WikiLink", wiki=self.wiki, created_by=self.stranger, url=CANARIES["link"])
 
         self.viewer_user = baker.make(User)
         # A pin is what grants wiki access at all; it says nothing about
