@@ -398,6 +398,9 @@ def create_visit_suggestion(
         pref = suggested_to.notification_preferences.visit_suggested
     except AttributeError:
         pref = DeliveryPreference.SITE
+    # "Email" and "Notification" are indistinguishable here on purpose - this
+    # type has no email-sending code, so anything but NONE still gets the
+    # in-app row (see controllers.notifications.EMAIL_UNAVAILABLE_PREF_FIELDS).
     if pref == DeliveryPreference.NONE:
         return suggestion
 

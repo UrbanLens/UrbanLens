@@ -188,6 +188,9 @@ def _notify(profile: Profile, award: UserAchievement) -> None:
         preference = getattr(profile.notification_preferences, "achievement_earned", DeliveryPreference.SITE)
     except AttributeError:
         preference = DeliveryPreference.SITE
+    # "Email" and "Notification" are indistinguishable here on purpose - this
+    # type has no email-sending code, so anything but NONE still gets the
+    # in-app row (see controllers.notifications.EMAIL_UNAVAILABLE_PREF_FIELDS).
     if preference == DeliveryPreference.NONE:
         return
 

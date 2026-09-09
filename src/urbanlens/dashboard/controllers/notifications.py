@@ -44,6 +44,28 @@ _PREF_FIELDS = [
     ("achievement_earned", "Achievement Unlocked"),
 ]
 
+#: Categories with no email-sending code behind them at all - only "message"
+#: (services.messaging.direct_messages) and the two safety check-in types
+#: (services.visits.safety) actually gate a real email send on
+#: DeliveryPreference.EMAIL/BOTH. Every notify_* for these eight still treats
+#: "anything but NONE" as "show the in-app row" (matching
+#: services.messaging.group_chats' own documented no-email-channel
+#: reasoning), so choosing Email here is not silently discarded - it behaves
+#: exactly like Notification - but nothing ever emails about it, which the
+#: settings UI must not promise.
+EMAIL_UNAVAILABLE_PREF_FIELDS = frozenset(
+    {
+        "friend_request",
+        "friend_accepted",
+        "comment_reply",
+        "comment_liked",
+        "pin_shared",
+        "visit_suggested",
+        "added_to_trip",
+        "achievement_earned",
+    }
+)
+
 _HISTORY_PAGE_SIZE = 30
 
 
@@ -242,6 +264,7 @@ class NotificationPreferencesView(LoginRequiredMixin, View):
                 # (without touching stored preferences) until then.
                 "has_whatsapp_number": bool(profile.whatsapp_number),
                 "has_phone_number": bool(profile.phone_number),
+                "email_unavailable_fields": EMAIL_UNAVAILABLE_PREF_FIELDS,
             },
         )
 

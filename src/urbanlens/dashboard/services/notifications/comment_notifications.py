@@ -18,7 +18,10 @@ The rules that live here, and only here:
   ``comment_liked`` on ``notification_preferences`` can be set to
   ``DeliveryPreference.NONE``, which must suppress the row entirely rather than
   writing it and hiding it at render time - a stored notification still shows
-  up in counts and digests.
+  up in counts and digests. Neither type has any email-sending code behind
+  it, though, so "Email" and "Notification" are indistinguishable here on
+  purpose - anything but NONE still gets the in-app row (see
+  ``controllers.notifications.EMAIL_UNAVAILABLE_PREF_FIELDS``).
 - **Name the actor only as far as the recipient may see them.** Both helpers
   resolve the actor through ``resolve_visible_identity`` before building their
   strings, so a notification never discloses someone the thread it links to

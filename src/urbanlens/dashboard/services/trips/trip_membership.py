@@ -153,6 +153,9 @@ def notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> None
         pref = invitee.notification_preferences.added_to_trip
     except AttributeError:
         pref = DeliveryPreference.SITE
+    # "Email" and "Notification" are indistinguishable here on purpose - this
+    # type has no email-sending code, so anything but NONE still gets the
+    # in-app row (see controllers.notifications.EMAIL_UNAVAILABLE_PREF_FIELDS).
     if pref == DeliveryPreference.NONE:
         return
     # Resolved (and masked if needed) toward the specific recipient before

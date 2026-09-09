@@ -129,6 +129,9 @@ def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: 
     except AttributeError:
         pref = DeliveryPreference.SITE
 
+    # "Email" and "Notification" are indistinguishable here on purpose - this
+    # type has no email-sending code, so anything but NONE still gets the
+    # in-app row (see controllers.notifications.EMAIL_UNAVAILABLE_PREF_FIELDS).
     if pref != DeliveryPreference.NONE:
         sender_name = resolve_visible_identity(recipient, sender)["display_name"]
         base_message = f"{sender_name} shared {pin.display_label} with you."

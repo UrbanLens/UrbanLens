@@ -192,6 +192,9 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile, message: s
     except AttributeError:
         pref = DeliveryPreference.SITE
 
+    # "Email" and "Notification" are indistinguishable here on purpose - this
+    # type has no email-sending code, so anything but NONE still gets the
+    # in-app row (see controllers.notifications.EMAIL_UNAVAILABLE_PREF_FIELDS).
     if pref == DeliveryPreference.NONE:
         return
 
@@ -237,6 +240,7 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, mes
             accepted_pref = to_profile.notification_preferences.friend_accepted
         except AttributeError:
             accepted_pref = DeliveryPreference.SITE
+        # See notify_friend_request's comment above - same no-email-channel tradeoff.
         if accepted_pref != DeliveryPreference.NONE:
             NotificationLog.objects.notify(
                 profile=to_profile,
@@ -389,6 +393,7 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
         accepted_pref = requester.notification_preferences.friend_accepted
     except AttributeError:
         accepted_pref = DeliveryPreference.SITE
+    # See notify_friend_request's comment above - same no-email-channel tradeoff.
     if accepted_pref != DeliveryPreference.NONE:
         _notify_friend_accepted(requester, actor)
     _dismiss_friend_request_notifications(actor, target.pk)
