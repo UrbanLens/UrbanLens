@@ -92,6 +92,10 @@ class NotConversationParticipantError(DirectMessagePermissionError):
     """The profile is neither this message's sender nor its recipient."""
 
 
+class BlockedParticipantError(DirectMessagePermissionError):
+    """Either party has blocked the other - an absolute veto, regardless of who blocked whom."""
+
+
 #: Common emoji offered by the quick "add a reaction" picker on each message.
 REACTION_PICKER_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "🎉"]
 
@@ -1096,11 +1100,21 @@ def toggle_reaction(profile: Profile, message: DirectMessage, emoji: str) -> str
     Raises:
         NotConversationParticipantError: If `profile` isn't a participant in
             this message's conversation.
+        BlockedParticipantError: If `profile` and the message's other
+            participant have blocked each other.
     """
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
     from urbanlens.dashboard.models.reactions.model import Reaction
 
     if profile.pk not in (message.sender_id, message.recipient_id):
         raise NotConversationParticipantError(f"Profile {profile.pk} attempted to react to message {message.pk} but is neither its sender ({message.sender_id}) nor recipient ({message.recipient_id}).")
+    # Reacting is a live, real-time interaction (see _broadcast_reaction below) -
+    # the same veto new sends already respect (accepts_direct_messages_from,
+    # via can_direct_message) has to apply here too, or a block does not
+    # actually stop contact, it just stops new text.
+    partner = message.partner_for(profile)
+    if ProfileModel.are_blocked(profile, partner):
+        raise BlockedParticipantError(f"Profile {profile.pk} attempted to react to message {message.pk}, but is blocked with its other participant ({partner.pk}).")
 
     existing = Reaction.objects.existing(profile, emoji, direct_message=message)
     if existing:

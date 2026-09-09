@@ -24,6 +24,7 @@ from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedE
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import (
     REACTION_PICKER_EMOJIS,
+    BlockedParticipantError,
     DirectMessageTooLongError,
     DirectMessageValidationError,
     EmptyDirectMessageError,
@@ -563,6 +564,9 @@ class MessageReactionToggleView(LoginRequiredMixin, View):
         except NotConversationParticipantError as exc:
             logger.info("Reaction toggle rejected for profile %s: %s", profile.pk, exc)
             return HttpResponseForbidden("You aren't part of this conversation.")
+        except BlockedParticipantError as exc:
+            logger.info("Reaction toggle rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You can't react to this message.")
 
         return render(
             request,
