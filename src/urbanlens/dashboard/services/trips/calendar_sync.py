@@ -450,15 +450,12 @@ def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], 
     Returns:
         The number of members actually added.
     """
-    from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
-    from urbanlens.dashboard.models.notifications.model import NotificationLog
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
     from urbanlens.dashboard.models.site_settings import SiteSettings
+    from urbanlens.dashboard.services.trips.trip_membership import notify_added_to_trip
 
     if not profile_ids:
         return 0
-
-    from django.urls import reverse
 
     max_members = SiteSettings.get_current().max_trip_members
     invited = 0
@@ -477,25 +474,12 @@ def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], 
             break
         _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=invitee, defaults={"status": TripMembership.STATUS_INVITED})
         if created:
-            # Masked toward this specific recipient before formatting, like
-            # trip_membership.invite_to_trip's identical notification. Being
-            # friends is not sufficient permission: VisibilityChoice's own
-            # docstring notes accepted friends qualify for every level *except*
-            # NO_ONE, so an importer who has hidden their identity would
-            # otherwise be named here. The message is stored as plain text and
-            # is picked up by push delivery and SMS, so masking has to happen at
-            # write time - it cannot be undone at render time.
-            importer_name = resolve_visible_identity(invitee, importer)["display_name"]
-            NotificationLog.objects.notify(
-                profile=invitee,
-                source_profile=importer,
-                status=Status.UNREAD,
-                importance=Importance.MEDIUM,
-                notification_type=NotificationType.ADDED_TO_TRIP,
-                title="Added to a trip",
-                message=f'{importer_name} added you to the trip "{trip.name}".',
-                url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
-            )
+            # Delegates to the canonical implementation rather than
+            # duplicating it, so this path can't drift from - or forget to
+            # apply, as it once did - the recipient's added_to_trip delivery
+            # preference (including NONE, which must suppress the row
+            # entirely, not just skip email).
+            notify_added_to_trip(importer, invitee, trip)
             invited += 1
     return invited
 
