@@ -89,12 +89,15 @@ class ViewProfileView(LoginRequiredMixin, View):
         else:
             profile_photos = Image.objects.none()
 
+        from urbanlens.dashboard.models.achievements.model import UserAchievement
+
         context = {
             "profile": profile,
             "social_links": get_profile_links(profile),
             "contact_info": contact_info,
             "can_view_contact": can_view_contact,
             "profile_photos": profile_photos,
+            "has_achievements": UserAchievement.objects.for_profile(profile).exists(),
         }
         if request.user == profile.user:
             from urbanlens.dashboard.services.profile.profile_preview import preview_modes
@@ -625,6 +628,7 @@ class EditProfileView(LoginRequiredMixin, View):
     ) -> dict:
         import hashlib
 
+        from urbanlens.dashboard.models.achievements.model import UserAchievement
         from urbanlens.dashboard.services.profile.avatar import AvatarService
         from urbanlens.dashboard.services.profile.profile_preview import preview_modes
         from urbanlens.dashboard.services.profile.social_links import URL_INPUT_PLATFORM_LABELS, get_profile_links
@@ -663,6 +667,7 @@ class EditProfileView(LoginRequiredMixin, View):
             "gravatar_preview_url": gravatar_preview_url,
             "emoji_options": AvatarService.random_options(4),
             "secondary_emails": profile.secondary_emails.all(),
+            "has_achievements": UserAchievement.objects.for_profile(profile).exists(),
         }
 
     def get(self, request: HttpRequest) -> HttpResponse:

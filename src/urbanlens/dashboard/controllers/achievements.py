@@ -99,6 +99,7 @@ class AchievementListView(LoginRequiredMixin, View):
         profile, viewer = _visible_profile_or_404(request, profile_slug)
         is_owner = viewer is not None and viewer.pk == profile.pk
         rows = progress_for_profile(profile, viewer=viewer)
+        earned_count = sum(1 for row in rows if row["earned"])
         return render(
             request,
             "dashboard/pages/achievements/index.html",
@@ -107,7 +108,8 @@ class AchievementListView(LoginRequiredMixin, View):
                 "is_owner": is_owner,
                 "profile_url": reverse("profile.view") if is_owner else reverse("profile.view_user", args=[profile.slug]),
                 "rows": rows,
-                "earned_count": sum(1 for row in rows if row["earned"]),
+                "earned_count": earned_count,
+                "has_achievements": bool(earned_count),
                 "streaks": streak_summary(profile),
             },
         )
