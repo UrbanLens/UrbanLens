@@ -227,6 +227,32 @@ def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
     return _trigger_label_refresh(response)
 
 
+def _block_htmx_response(request: HttpRequest, profile_id: int) -> HttpResponse:
+    """Re-render the DM thread after blocking its partner, in place.
+
+    The DM thread panel's Block button is the only caller of ``block_friend``
+    that sends ``HX-Request`` today (the profile page's own Block form is a
+    plain submit, correctly reloading the profile it's already on) - so this
+    can assume the swap target is ``#dm-thread-pane``. Re-rendering rather
+    than returning a placeholder string means the composer picks up its new
+    locked state immediately, via the same ``can_direct_message`` check
+    ``_thread_context`` already applies for every other reason messaging
+    might be closed.
+
+    Args:
+        request: The incoming HTMX request.
+        profile_id: pk of the profile that was just blocked.
+
+    Returns:
+        The re-rendered thread partial.
+    """
+    from urbanlens.dashboard.controllers.direct_messages import _thread_context
+
+    viewer_profile, _ = Profile.objects.get_or_create(user=request.user)
+    partner = Profile.objects.get(pk=profile_id)
+    return render(request, "dashboard/partials/messages/_thread.html", _thread_context(viewer_profile, partner))
+
+
 def _redirect_to_profile(profile_id: int, fallback_view_name: str = "profile.view") -> HttpResponse:
     """Redirect back to a profile page after a plain (non-HTMX) form submission."""
     other_profile = Profile.objects.filter(pk=profile_id).first()
@@ -354,7 +380,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             request,
             profile_id,
             block_profile,
-            htmx_response=lambda _request: HttpResponse("Profile blocked."),
+            htmx_response=lambda req: _block_htmx_response(req, profile_id),
             missing_message="Profile not found.",
         )
 
