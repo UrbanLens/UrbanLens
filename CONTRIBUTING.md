@@ -4,7 +4,7 @@ Thanks for your interest in UrbanLens. This document covers the project's licens
 
 ## License
 
-UrbanLens is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. The full text is in [`LICENSE`](./LICENSE).
+UrbanLens is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. The full text is in [`LICENSE.md`](./LICENSE.md).
 
 ### Why AGPL instead of MIT/Apache/GPL?
 

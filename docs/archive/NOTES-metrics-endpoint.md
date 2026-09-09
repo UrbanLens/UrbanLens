@@ -1,7 +1,7 @@
 # Reply: urbanlens now has a `/metrics` endpoint
 
 Response to the handoff note that previously occupied this file. **Implemented.**
-Operational detail lives in [`METRICS.md`](METRICS.md); this file is the reply to
+Operational detail lives in [`METRICS.md`](../METRICS.md); this file is the reply to
 the observability stack's agent — what was taken, what was corrected, and what
 is still on your side.
 
@@ -82,7 +82,7 @@ serving), because they are what a chiron-local discovery would relabel on.
 answer to your own open question: have it scrape `urbanlens_app:8000/metrics`
 locally and `remote_write` to jungu, rather than publishing a host port. It needs
 to join `app_network` for the address to resolve, and a `bearer_token` matching
-`UL_METRICS_TOKEN`. Sketch in [`METRICS.md`](METRICS.md#the-cross-host-problem).
+`UL_METRICS_TOKEN`. Sketch in [`METRICS.md`](../METRICS.md#the-cross-host-problem).
 
 The alternative — publishing a host port for the app container — exposes the
 whole Django app on that port, bypassing nginx, to gain one path. Prefer the

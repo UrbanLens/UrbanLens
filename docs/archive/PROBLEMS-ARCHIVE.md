@@ -304,7 +304,7 @@ Worth knowing: the repo's own fixture already reproduced this. `test_panel_api_i
 ## RESOLVED 2026-09-03: a permanently failed media task leaves the upload silently unfinished
 
 Found while closing the Celery requeue loop (`CELERY_TASK_REJECT_ON_WORKER_LOST`,
-see `docs/NOTES-celery-acks.md`), not caused by it.
+see `docs/archive/NOTES-celery-acks.md`), not caused by it.
 
 `process_image_upload` and its siblings set `Image.upload_processed_at` on
 success. Nothing sets anything on permanent failure: there is no `task_failure`

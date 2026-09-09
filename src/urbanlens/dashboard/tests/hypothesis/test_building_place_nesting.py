@@ -2,7 +2,7 @@
 
 REData's reconciled `/parcels/{uuid}/buildings/` reports structure: a coarse
 footprint enclosing finer ones becomes their ``parent_ref`` rather than a
-duplicate of them (its ``../REData/docs/archive/buildings-dedup-spec.md``). `parcel_buildings`
+duplicate of them (its ``../REData/docs/buildings-dedup-spec.md``). `parcel_buildings`
 already reads that for display order and counting.
 
 `ensure_building_places` did not: every building was created with

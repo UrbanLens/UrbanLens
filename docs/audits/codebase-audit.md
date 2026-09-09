@@ -1161,7 +1161,7 @@ spec feature scaffolded in the schema but never implemented.
    `revealed` before all actually-joined players answer. Untested (the existing test builds the
    scenario but never has the never-joined participant call `submit_answer`). **Identical gap
    exists in `services/spotguessr/session.py:submit_guess`** — a shared architectural hole, not Trivia-specific.
-2. **[bug/gap]** `models/trivia/model.py:105-107` (`wiki_incorporated_at`) — docs/prompts/todo.md
+2. **[bug/gap]** `models/trivia/model.py:105-107` (`wiki_incorporated_at`) — docs/notes/ai/todo.md (untracked)
    specifies AI should incorporate upvoted trivia into wiki articles; the field exists in the
    schema for this purpose but is never read/set anywhere outside `model.py` and its migration —
    entirely unimplemented, just looks done because the column exists.
