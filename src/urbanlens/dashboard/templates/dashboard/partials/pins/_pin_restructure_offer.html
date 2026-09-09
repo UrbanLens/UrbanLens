@@ -50,9 +50,8 @@ than sitting there stale.
             Add a child pin for each building{% if sample_names %} &mdash; {% for name in sample_names %}{{ name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if building_count > 3 %}, and more{% endif %}{% endif %}.
             {% endif %}
             {% if nestable_count %}
-            On the next screen, choose per pin whether to move {% if nestable_count == 1 %}it{% else %}them{% endif %} under this pin as a child pin, or merge {% if nestable_count == 1 %}it{% else %}them{% endif %} in if it's really the same place.
+            On the next screen, choose which of {% if nestable_count == 1 %}it{% else %}them{% endif %} to move under this pin as a child pin - nothing else about {% if nestable_count == 1 %}it{% else %}them{% endif %} changes, and it can be undone afterwards.
             {% endif %}
-            Child pins can be undone afterwards; a merge is final.
         </p>
         {% if nestable %}
         <ul class="pin-restructure-nestable">

@@ -793,13 +793,15 @@ class BuildingUnderExistingRootPinTests(TestCase):
         self.assertIn(self.stray, pin_restructure.nestable_root_pins(self.pin))
 
 
-class RestructureNestOrMergeChoiceTests(TestCase):
-    """The organize dialog's per-pin "child pin" vs "merge" choice.
+class RestructureNestChoiceTests(TestCase):
+    """The organize dialog's per-pin include/exclude choice.
 
     Covers controllers.pin_restructure.PinRestructureApplyView.post's
-    nest_selection/nest_keys/nest_mode__<pk> handling, alongside
-    services.pins.pin_merge.merge_pins - the true consolidating merge, not
-    the "nest" half this view already had.
+    nest_selection/nest_keys handling. Organizing a pin under a property is
+    always a pure reparent - nothing about the candidate's own data changes.
+    Actually consolidating two pins into one is a separate, deliberate action
+    (services.pins.pin_merge, reached from the map's "Merge pins" bulk-select
+    flow) that this dialog does not offer.
     """
 
     def setUp(self) -> None:
@@ -811,8 +813,8 @@ class RestructureNestOrMergeChoiceTests(TestCase):
             Pin, profile=self.user.profile, location=self.location, slug="campus", name="Hudson River State Hospital"
         )
         official_geometry(self.location, _parcel_polygon())
-        # No REData buildings in this fixture - isolates the nest/merge choice
-        # from the building-import half already covered above.
+        # No REData buildings in this fixture - isolates the nest choice from
+        # the building-import half already covered above.
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
         self.dup1 = baker.make(
             Pin,
@@ -833,25 +835,26 @@ class RestructureNestOrMergeChoiceTests(TestCase):
             "building_selection": "1",
             "nest_selection": "1",
             "nest_keys": [str(self.dup1.pk), str(self.dup2.pk)],
-            f"nest_mode__{self.dup1.pk}": "child",
-            f"nest_mode__{self.dup2.pk}": "child",
         }
         data.update(overrides)
         return self.client.post(self.url, data)
 
-    def test_default_mode_nests_as_a_child_pin(self) -> None:
+    def test_a_selected_pin_nests_as_a_child_pin(self) -> None:
         self._post()
         self.dup1.refresh_from_db()
         self.assertEqual(self.dup1.parent_pin_id, self.pin.pk)
         self.assertTrue(Pin.objects.filter(pk=self.dup1.pk).exists(), "nesting must not delete the pin")
 
-    def test_merge_mode_deletes_the_loser_and_moves_its_data(self) -> None:
-        baker.make("dashboard.PinVisit", pin=self.dup2)
-        self._post(**{f"nest_mode__{self.dup2.pk}": "merge"})
+    def test_nesting_does_not_touch_the_candidates_own_data(self) -> None:
+        """Reparenting is not a merge - an article on the candidate must survive untouched."""
+        from urbanlens.dashboard.models.article.model import Article
 
-        self.assertFalse(Pin.objects.filter(pk=self.dup2.pk).exists())
-        self.pin.refresh_from_db()
-        self.assertEqual(self.pin.visit_history.count(), 1)
+        article = baker.make(Article, pin=self.dup1, content="the candidate's own article")
+        self._post()
+
+        article.refresh_from_db()
+        self.assertEqual(article.content, "the candidate's own article")
+        self.assertEqual(article.pin_id, self.dup1.pk)
 
     def test_unchecking_a_pin_leaves_it_untouched(self) -> None:
         self._post(nest_keys=[str(self.dup1.pk)])
@@ -859,65 +862,20 @@ class RestructureNestOrMergeChoiceTests(TestCase):
         self.assertIsNone(self.dup2.parent_pin_id)
         self.assertTrue(Pin.objects.filter(pk=self.dup2.pk).exists())
 
-    def test_toast_reports_merges_separately_from_nests(self) -> None:
-        response = self._post(**{f"nest_mode__{self.dup2.pk}": "merge"})
+    def test_toast_reports_the_nest_count(self) -> None:
+        response = self._post()
         trigger = response["HX-Trigger"]
-        self.assertIn("Merged 1 pin", trigger)
-        self.assertIn("Nested 1 existing pin", trigger)
+        self.assertIn("Nested 2 existing pins", trigger)
 
-    def test_a_merge_conflict_keeps_the_dialog_open_for_resolution(self) -> None:
-        """Both pins have their own article - merge_pins refuses without a choice."""
-        from urbanlens.dashboard.models.article.model import Article
-
-        baker.make(Article, pin=self.pin)
-        baker.make(Article, pin=self.dup2)
-
-        response = self._post(**{f"nest_mode__{self.dup2.pk}": "merge"})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["HX-Keep-Open"], "1")
-        self.assertTrue(Pin.objects.filter(pk=self.dup2.pk).exists(), "an unresolved conflict must not delete anything")
-        self.assertIn("resolution__", response.content.decode())
-        self.assertIn("Resolve the highlighted differences", response["HX-Trigger"])
-
-    def test_resubmitting_with_a_resolution_completes_the_merge(self) -> None:
-        from urbanlens.dashboard.models.article.model import Article
-        from urbanlens.dashboard.services.pins.pin_merge import plan_merge_conflicts
-
-        baker.make(Article, pin=self.pin)
-        baker.make(Article, pin=self.dup2)
-        conflicts = plan_merge_conflicts(self.pin, self.dup2)
-        self.assertEqual([c.key for c in conflicts], ["article"])
-
-        response = self._post(
-            nest_keys=[str(self.dup2.pk)],
-            **{f"nest_mode__{self.dup2.pk}": "merge", f"resolution__{self.dup2.pk}__article": str(self.pin.pk)},
-        )
-
-        self.assertNotIn("HX-Keep-Open", response)
-        self.assertFalse(Pin.objects.filter(pk=self.dup2.pk).exists())
-
-    def test_a_response_that_stays_open_still_fires_the_refresh_event(self) -> None:
-        """Buildings/other nests may have already changed the pin's children even
-        though this candidate's conflict is unresolved - the page's own panels
-        (and the suggestion card) must still catch up."""
-        from urbanlens.dashboard.models.article.model import Article
-
-        baker.make(Article, pin=self.pin)
-        baker.make(Article, pin=self.dup2)
-
-        response = self._post(
-            nest_keys=[str(self.dup1.pk), str(self.dup2.pk)], **{f"nest_mode__{self.dup2.pk}": "merge"}
-        )
-
+    def test_a_successful_submit_fires_the_refresh_event(self) -> None:
+        response = self._post()
         self.assertIn("pinDetailPinsChanged", response["HX-Trigger"])
-        self.dup1.refresh_from_db()
-        self.assertEqual(self.dup1.parent_pin_id, self.pin.pk, "the other candidate's nest must still go through")
 
-    def test_get_shows_a_mode_toggle_and_the_map_legend_for_pin_candidates(self) -> None:
+    def test_get_shows_the_pin_candidates_and_map_legend(self) -> None:
         response = self.client.get(self.url)
         self.assertContains(response, "<strong>Hudson River State Hospital</strong>", count=2)  # the two candidate rows
-        self.assertContains(response, f'name="nest_mode__{self.dup1.pk}"')
+        self.assertContains(response, f'name="nest_keys" value="{self.dup1.pk}"')
+        self.assertNotContains(response, "nest_mode__")
         self.assertContains(response, "building-import-map-legend")
         self.assertContains(response, 'id="building-import-nestable-map-data"')
 
@@ -967,10 +925,10 @@ class OrganizeDialogQueryScalingTests(QueryScalingMixin, TestCase):
     building, so a large candidate list is the normal case rather than the
     extreme one - and ``nestable_root_pins`` offers up to 500 of them.
 
-    A candidate with a REFERENCE custom field is deliberately not seeded: its
-    ``display_value`` dereferences the target per conflict, which is a
-    per-conflict tail this fix does not address and which would make a pass
-    here mean less than it says.
+    Each candidate carries its own article and custom field value as
+    realistic incidental data (the dialog never compares them against the
+    property pin's own - organizing a pin only ever changes its parent), to
+    confirm rendering a candidate row (effective_name, etc.) doesn't N+1.
     """
 
     def setUp(self) -> None:
@@ -991,8 +949,6 @@ class OrganizeDialogQueryScalingTests(QueryScalingMixin, TestCase):
             name="Condition",
             field_type=CustomFieldType.TEXT,
         )
-        # On the survivor, so every candidate collides on both and the dialog
-        # renders a real conflict picker per row rather than an empty list.
         Article.objects.create(pin=self.pin, content="The property's own article")
         CustomFieldValue.objects.create(field=self.field, pin=self.pin, value_text="Derelict")
         self.url = reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug})

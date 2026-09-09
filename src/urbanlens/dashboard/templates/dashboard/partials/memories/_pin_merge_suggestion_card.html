@@ -58,11 +58,11 @@ Context:
                 <p class="pin-merge-suggestion-conflict-label">{{ conflict.label }} - keep which one?</p>
                 <label class="pin-merge-suggestion-conflict-option">
                     <input type="radio" name="resolution__{{ conflict.key }}" value="{{ suggestion.pin_a.pk }}" required>
-                    {{ suggestion.pin_a.effective_name }}'s ({{ conflict.pin_a_summary }})
+                    <span>{{ suggestion.pin_a.effective_name }}'s ({{ conflict.pin_a_summary }})</span>
                 </label>
                 <label class="pin-merge-suggestion-conflict-option">
                     <input type="radio" name="resolution__{{ conflict.key }}" value="{{ suggestion.pin_b.pk }}" required>
-                    {{ suggestion.pin_b.effective_name }}'s ({{ conflict.pin_b_summary }})
+                    <span>{{ suggestion.pin_b.effective_name }}'s ({{ conflict.pin_b_summary }})</span>
                 </label>
             </div>
             {% endfor %}

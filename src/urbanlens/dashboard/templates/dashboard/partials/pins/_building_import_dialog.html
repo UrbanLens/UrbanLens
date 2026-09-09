@@ -4,15 +4,10 @@ enclosing dialog lives on the Private Pin page so either HTMX-loaded button can
 replace this body, open it, and initialize its Leaflet preview afterwards.
 
 Rendered fresh (this file, header included) only when the dialog is first
-opened - see controllers.pin_restructure._render_building_dialog. Every
-in-dialog resubmit instead re-renders just _building_import_dialog_body.html,
-whose own form always targets its own #building-import-dialog-body wrapper -
-never the page's #pin-restructure-offer card. That card refreshes itself off
-the pinDetailPinsChanged event every response here fires instead (see
-_toast(..., refresh=True)), which is what lets a response *keep the dialog
-open* (an unresolved merge conflict) without needing to also leave the
-suggestion card's markup alone. The dialog closes only when a response carries
-no HX-Keep-Open header - see this body's hx-on::after-request.
+opened - see controllers.pin_restructure._render_building_dialog. A submit
+always closes the dialog; the page's own #pin-restructure-offer card catches
+up via the pinDetailPinsChanged event the response fires (see
+_toast(..., refresh=True)) rather than the dialog re-rendering itself.
 {% endcomment %}
 {% include "dashboard/partials/ui/_dialog_header.html" with title=dialog_title %}
 {% include "dashboard/partials/pins/_building_import_dialog_body.html" %}
