@@ -614,14 +614,22 @@ class CommentReactionView(LoginRequiredMixin, View):
             Comment.objects.filter(Q(pin__profile=profile) | Q(wiki__isnull=False)).select_related("wiki__location", "profile"),
             id=comment_id,
         )
-        if comment.wiki_id and not location_visible_to(comment.wiki.location, profile):
-            raise Http404
+        if comment.wiki_id:
+            if not location_visible_to(comment.wiki.location, profile):
+                raise Http404
+            # Re-resolved through the same concealment-aware lookup every
+            # other by-id wiki-comment path uses (reply-parent resolution,
+            # delete) - the fetch above only established which wiki this is;
+            # it applies no concealment narrowing itself, so a concealed
+            # comment was otherwise still reachable (and reactable) by a
+            # guessed sequential id.
+            comment = _wiki_comment_addressable_by(comment.wiki, profile, comment_id)
         # Page-level visibility isn't enough on its own. comment_is_visible
         # applies the same per-comment gates the listing does: the author's
         # comment_visibility, a pending malware scan, and an @loc mention the
         # caller has not pinned. Checking only comment_visibility left the
         # other two reachable by sequential id.
-        if not comment_is_visible(comment, profile):
+        elif not comment_is_visible(comment, profile):
             raise Http404
         # The add/remove/notify sequence lives in the service, not here. It used
         # to be hand-rolled in this view as well, and the two copies agreeing was
