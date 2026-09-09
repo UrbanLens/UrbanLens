@@ -1101,14 +1101,14 @@
 
     // -- LocalStorage cache ----------------------------------------------------
     // Only the fields needed for marker rendering and popup display are cached.
-    // Dropping address/city/state/country/priority/profile/statuses/tags_data_json
-    // cuts the stored payload by ~40%, keeping it under the 5 MB quota.
+    // Dropping address/city/state/country/priority/profile/statuses cuts the
+    // stored payload by ~40%, keeping it under the 5 MB quota.
     const _CACHE_FIELDS = new Set([
         'uuid', 'id', 'name', 'icon', 'color',
         'own_icon', 'own_custom_icon_url', 'own_color',
         'latitude', 'longitude',
         'description', 'status', 'last_visited', 'rating',
-        'tags', 'tags_data', 'viewLocationUrl', 'address', 'cover_photo_url',
+        'tags', 'viewLocationUrl', 'address', 'cover_photo_url',
     ]);
     function _slimPin(pin) {
         const slim = {};
@@ -1127,7 +1127,7 @@
             // on every load, until a fresh _writeCache() happens to overwrite it
             // (which isn't guaranteed - e.g. if the next fetch fails, or the tab
             // closes before a scheduled write fires).
-            if (c.v !== 9 || c.profileUuid !== _PROFILE_UUID) { localStorage.removeItem(_CACHE_KEY); return null; }
+            if (c.v !== 10 || c.profileUuid !== _PROFILE_UUID) { localStorage.removeItem(_CACHE_KEY); return null; }
             if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
             // App UUID mismatch = DB was wiped or app was redeployed with a fresh database.
             // Clear cache so ghost pins from the old DB don't appear on the map.
@@ -1159,7 +1159,7 @@
         if (!_pinStore.size) return;   // nothing to cache yet
         const ts = Date.now();
         const payload = JSON.stringify({
-            v: 9, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
+            v: 10, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
             lastUpdated: _lastKnownUpdated,
             tiles: [..._fetchedTiles],
             pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
@@ -1507,6 +1507,19 @@
     }
 
     // -- Marker builder --------------------------------------------------------
+    // A pin's labels as objects, whatever wrote the entry. Every endpoint now
+    // returns `tags` as [{id, name, color, icon}]; `tags_data` was the filter
+    // panel's and the single-pin refresh's separate shape, and a comma-joined
+    // string was the same paths' `tags`. Both linger only in caches written
+    // before the shapes were unified.
+    function _pinTagObjects(pin) {
+        if (Array.isArray(pin.tags) && pin.tags.length) {
+            return pin.tags.map(t => (typeof t === 'object' && t !== null) ? t : { name: String(t) });
+        }
+        if (Array.isArray(pin.tags_data) && pin.tags_data.length) return pin.tags_data;
+        return String(pin.tags || '').split(',').map(s => s.trim()).filter(Boolean).map(n => ({ name: n }));
+    }
+
     function _normalizeHexColor(hex) {
         let h = String(hex).replace('#', '').toLowerCase();
         if (h.length === 3) h = h.split('').map(c => c + c).join('');
@@ -1565,18 +1578,10 @@
             marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize, iconAnchor }));
         }
 
-        // Build tag chips: prefer tags_data (template path), then tag objects from API/cache, then CSV
-        let tagChipsData = pin.tags_data;
-        if (!tagChipsData || !tagChipsData.length) {
-            const rawTags = pin.tags;
-            if (Array.isArray(rawTags)) {
-                tagChipsData = rawTags.map(t =>
-                    (typeof t === 'object' && t !== null) ? t : { name: String(t) }
-                );
-            } else {
-                tagChipsData = (rawTags || '').split(',').map(s => s.trim()).filter(Boolean).map(n => ({ name: n }));
-            }
-        }
+        // Tag chips come from `tags`, which every map endpoint now returns as
+        // objects. The string branch is only for cache entries written before
+        // that was true, and can go once no client can be holding one.
+        let tagChipsData = _pinTagObjects(pin);
         const tagChips = tagChipsData.map(t => {
             const bg = t.color ? `${t.color}22` : 'rgba(100,120,160,0.18)';
             const border = t.color ? `${t.color}55` : 'rgba(100,120,160,0.3)';
@@ -4232,7 +4237,7 @@
     }
 
     // Best-effort client-side predicate over a cached pin, using only fields the map's
-    // pin payload actually carries (name, rating, last_visited, tags_data ids, lat/lng).
+    // pin payload actually carries (name, rating, last_visited, label ids, lat/lng).
     // Dimensions the payload doesn't carry at all today (danger, priority, vulnerability,
     // visited/created date ranges, custom fields, overlapping_pins, and label-group
     // ancestor/descendant expansion) are NOT evaluated here - this function only ever
@@ -4249,7 +4254,7 @@
         if (criteria.has_visits === 'yes' && (!pin.last_visited || pin.last_visited === 'Never')) return false;
         if (criteria.has_visits === 'no' && pin.last_visited && pin.last_visited !== 'Never') return false;
 
-        const pinLabelIds = new Set((pin.tags_data || []).map(t => String(t.id)).filter(Boolean));
+        const pinLabelIds = new Set(_pinTagObjects(pin).map(t => String(t.id)).filter(Boolean));
         if (Array.isArray(criteria.label_groups) && criteria.label_groups.length) {
             for (const group of criteria.label_groups) {
                 const ids = (group.ids || []).map(String);
@@ -5208,13 +5213,13 @@
             pickColor('apdlg-color-picker', 'apdlg-color-value', pin.own_color, swatch);
         }
 
-        // Pre-fill labels from cached tags_data. Match by id (the reliable key -
+        // Pre-fill labels from the pin's own labels. Match by id (the reliable key -
         // label names aren't guaranteed unique across kinds/owners) and fall back
         // to a name match only for stale cache entries from before ids were cached.
         // If a label can't be found in _apdlgAllLabels at all (e.g. it's no longer
         // visible to this profile), keep it selected anyway using the cached data
         // so saving the form doesn't silently drop it from the pin.
-        const tagsData = pin.tags_data || [];
+        const tagsData = _pinTagObjects(pin);
         _apdlgSelectedLabels = tagsData.map(tag => {
             const found = (tag.id != null)
                 ? _apdlgAllLabels.find(b => b.id === tag.id)

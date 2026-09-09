@@ -18,7 +18,7 @@
 // matched. Both are exported so pin-cache.contract.test.ts can read the template
 // and fail the build when the two sides disagree again, rather than the feature
 // just going quiet.
-export const PIN_CACHE_VERSION = 9;
+export const PIN_CACHE_VERSION = 10;
 
 /** The localStorage key holding one profile's cached pin store. */
 export function pinCacheKey(profileUuid: string): string {

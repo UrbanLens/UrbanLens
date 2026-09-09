@@ -1,17 +1,16 @@
 """XSS regression tests for the main map page and its data feed.
 
 Invariants verified:
-  - A Label (tag/category) name is never embedded raw into the `<script>` blocks
-    that build `filter_labels_json` (map/index.html, view_map) or `tags_data_json`
-    (map/data.html, init_map) - both are JSON payloads written directly into an
-    executing <script> tag via `|safe`, so an unescaped `</script>` (or `<`/`&`)
-    in a label name would let stored label data break out of the script and
-    inject arbitrary markup/script.
-  - Pin.icon / Pin.color are always JS-string-escaped (`|escapejs`) when embedded
-    in map/data.html's inline `<script>` block, matching the other pin fields
-    (name, description, status, ...) which were already escaped - a raw quote
-    in either field would otherwise let stored pin data break out of the JS
-    string literal.
+  - A Label (tag/category) name is never embedded raw into the `<script>` block
+    that builds `filter_labels_json` (map/index.html, view_map), which is a JSON
+    payload written directly into an executing <script> tag via `|safe`, so an
+    unescaped `</script>` (or `<`/`&`) in a label name would let stored label
+    data break out of the script and inject arbitrary markup/script.
+  - The same holds for the pin document map/data.html emits. It carries the
+    payload through `json_script` rather than a per-pin object literal now, so
+    the escaping is Django's rather than a filter per field - which is why the
+    pin cases below assert only that the payload never appears raw, and not
+    which mechanism kept it out.
 """
 
 from __future__ import annotations
@@ -64,7 +63,7 @@ class FilterLabelsJsonXssTests(_MapXssTestCase):
 
 
 class TagsDataJsonXssTests(_MapXssTestCase):
-    """init_map ("/dashboard/map/init/") embeds each pin's `tags_data_json` inline via `|safe`."""
+    """init_map ("/dashboard/map/init/") embeds its pins as a `json_script` document."""
 
     def test_malicious_tag_name_is_not_embedded_raw(self) -> None:
         location = baker.make(Location, latitude=40.0, longitude=-75.0)
@@ -80,7 +79,7 @@ class TagsDataJsonXssTests(_MapXssTestCase):
 
 
 class PinIconColorEscapejsTests(_MapXssTestCase):
-    """init_map's inline pin object literal must JS-escape every string field, including icon/color."""
+    """Every pin string field, icon and color included, must survive encoding inert."""
 
     def test_malicious_pin_icon_is_escaped(self) -> None:
         location = baker.make(Location, latitude=40.0, longitude=-75.0)

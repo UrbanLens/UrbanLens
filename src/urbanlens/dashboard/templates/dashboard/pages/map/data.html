@@ -1,4 +1,11 @@
+{# The filter panel's result set, as one document rather than a script per pin. #}
+{# Rendering a JS object literal per pin cost 2.62s and 11.45MB of HTML for a #}
+{# 10,000-pin account - a {% url %} reverse and ~20 escapejs filters each - to #}
+{# deliver data that serializes in 0.13s. json_script escapes it safely, and #}
+{# the payload is the same shape map.pins returns, so _buildMarker reads it #}
+{# without a second code path. #}
 <div id="map-body">
+{{ map_pins|json_script:"map-filter-pins" }}
 <script>
 {
     _filterMode = true;
@@ -17,35 +24,12 @@
     })();
 
     const batch = [];
-    {% for pin in map_data %}
-    (function() {
-        const p = {
-            id: "{{ pin.id|default_if_none:'' }}",
-            latitude: "{{ pin.latitude }}",
-            longitude: "{{ pin.longitude }}",
-            icon: "{{ pin.icon|default_if_none:''|escapejs }}",
-            color: "{{ pin.color|default_if_none:''|escapejs }}",
-            own_icon: "{{ pin.own_icon|default_if_none:''|escapejs }}",
-            own_custom_icon_url: "{{ pin.own_custom_icon_url|default_if_none:''|escapejs }}",
-            own_color: "{{ pin.own_color|default_if_none:''|escapejs }}",
-            uuid: "{{ pin.uuid }}",
-            slug: "{{ pin.slug }}",
-            name: "{{ pin.name|default_if_none:''|escapejs }}",
-            description: "{{ pin.description|default_if_none:''|escapejs }}",
-            rating: "{{ pin.rating|stringformat:'s' }}",
-            status: "{{ pin.status|default_if_none:''|escapejs }}",
-            categories: "{{ pin.categories|default_if_none:''|escapejs }}",
-            last_visited: "{{ pin.last_visited|default_if_none:'Never'|escapejs }}",
-            tags: "{{ pin.tags|default_if_none:''|escapejs }}",
-            tags_data: {{ pin.tags_data_json|default:'[]'|safe }},
-            viewLocationUrl: "{% url 'pin.details' pin.slug %}"
-        };
+    for (const p of JSON.parse(document.getElementById('map-filter-pins').textContent)) {
         if (p.latitude && p.longitude) {
             const m = _buildMarker(p);
             if (m) { _markerMap.set(p.uuid, m); batch.push(m); }
         }
-    })();
-    {% endfor %}
+    }
     if (batch.length) clusterGroup.addLayers(batch);
     if (window._fitToFilteredPinsOnce) {
         window._fitToFilteredPinsOnce = false;

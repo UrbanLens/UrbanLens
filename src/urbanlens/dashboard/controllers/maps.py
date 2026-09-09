@@ -1,5 +1,4 @@
 import contextlib
-from datetime import datetime
 import logging
 from typing import Any
 import urllib.parse
@@ -44,6 +43,10 @@ from urbanlens.dashboard.services.security.redact import redact_secret
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
+
+#: Stand-in slug used to reverse the pin detail route once, then split it, so
+#: per-pin URLs are string formatting rather than a resolver call each.
+_URL_PLACEHOLDER = "pin-slug-placeholder"
 
 #: Default/fallback page size for the pin-list sidebar, used when the client
 #: hasn't measured a "how many rows fit in the container" size yet (e.g. the
@@ -530,8 +533,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria)
             query = _apply_toolbar_filters(query, profile, request.POST.get("toolbar_filter_ids", ""))
-            map_data = self.get_map_data(request, query)
-            return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
+            return render(request, "dashboard/pages/map/data.html", {"map_pins": self.get_map_data(request, query)})
 
         logger.error("Invalid search criteria: %s", search_form.errors)
         return HttpResponse(status=400, content="Invalid search criteria.")
@@ -681,8 +683,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             limit=limit,
             include_total=include_total,
         )
-        for pin_dict in cached_page.page.pins:
-            pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin_dict['slug']}/"
+        _with_view_urls(cached_page.page.pins)
 
         payload: dict[str, Any] = {
             "pins": cached_page.page.pins,
@@ -788,9 +789,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         map_data = self.get_map_data(request, Pin.objects.filter(pk=pin.pk).select_related("location"))
         if not map_data:
             return JsonResponse({"error": "not found"}, status=404)
-        pin_dict = map_data[0]
-        pin_dict["viewLocationUrl"] = f"/dashboard/map/pin/{pin.slug or str(pin.uuid)}/"
-        return JsonResponse({"pin": pin_dict})
+        return JsonResponse({"pin": map_data[0]})
 
     def patch_pin(self, request, pin_slug, *args, **kwargs):
         """Quick-edit a pin from the map popup dialog.
@@ -1096,56 +1095,49 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"place": detail, "cached": False})
 
     def init_map(self, request, *args, **kwargs):
-        map_data = self.get_map_data(request)
+        return render(request, "dashboard/pages/map/data.html", {"map_pins": self.get_map_data(request)})
 
-        return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
+    def get_map_data(self, request, query: PinQuerySet | None = None) -> list[dict[str, Any]]:
+        """The map payload for *query*, in the one shape every map endpoint returns.
 
-    def get_map_data(self, request, query: PinQuerySet | None = None):
+        Deliberately no reshaping. This used to rewrite each payload for
+        `map/data.html`'s per-pin template loop - tags joined into a string with
+        the objects moved to a `tags_data` key, categories joined, dates
+        reformatted, status capitalized - which gave the filter panel and the
+        single-pin refresh a different shape from the bulk fetch. All three feed
+        the same client store and the same versioned cache, so the difference
+        surfaced as a pin whose labels read as empty depending on which endpoint
+        last loaded it.
 
+        Args:
+            request: The current request, for the requesting profile.
+            query: Pins to serialize. Defaults to the profile's root pins.
+
+        Returns:
+            One payload per pin, each carrying its own detail-page URL.
+        """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if query is None:
-            query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
+            query = Pin.objects.filter(profile=profile).root_pins()
+        return _with_view_urls(MapPinPayloadService(profile).all(query))
 
-        map_data = MapPinPayloadService(profile).all(query)
 
-        for pin in map_data:
-            if "description" in pin and pin["description"] is None:
-                pin["description"] = ""
+def _with_view_urls(pins: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attach each pin's detail-page URL to its payload.
 
-            # Preserve tag objects for popup chips, then collapse to CSV for data.html
-            if pin.get("tags"):
-                tags = pin["tags"]
-                if tags and isinstance(tags[0], dict):
-                    pin["tags_data"] = [{"id": t.get("id"), "name": t["name"], "color": t.get("color"), "icon": t.get("icon")} for t in tags]
-                    pin["tags"] = ", ".join(t["name"] for t in tags)
-                else:
-                    pin["tags_data"] = [{"name": t} for t in tags]
-                    pin["tags"] = ", ".join(tags)
-            else:
-                pin["tags_data"] = []
-                pin["tags"] = ""
-            pin["tags_data_json"] = safe_json_for_script(pin["tags_data"])
-            if pin.get("categories"):
-                pin["categories"] = ", ".join(pin["categories"])
-            else:
-                pin["categories"] = ""
+    Reversed once against a placeholder rather than per pin: `reverse` is not
+    free, and the map serializes whole accounts at a time.
 
-            # Last visited = None => Never
-            if "last_visited" not in pin or not pin["last_visited"] or pin["last_visited"] == "never":
-                pin["last_visited"] = "Never"
-            else:
-                try:
-                    # Dates look like this: 2023-01-02T00:00:00+00:00
-                    pin["last_visited"] = datetime.strptime(pin["last_visited"], "%Y-%m-%dT%H:%M:%S%z").strftime(
-                        "%Y-%m-%d",
-                    )
-                except ValueError:
-                    logger.warning("Unable to parse date: %s", pin["last_visited"])
+    Args:
+        pins: Map payloads, each carrying a ``slug``.
 
-            if pin.get("status"):
-                pin["status"] = pin["status"].replace("_", " ").capitalize()
-
-        return map_data
+    Returns:
+        The same list, each payload given a ``viewLocationUrl``.
+    """
+    prefix, _, suffix = reverse("pin.details", kwargs={"pin_slug": _URL_PLACEHOLDER}).partition(_URL_PLACEHOLDER)
+    for pin in pins:
+        pin["viewLocationUrl"] = f"{prefix}{urllib.parse.quote(str(pin['slug']))}{suffix}"
+    return pins
 
 
 def _safe_positive_int(value: str | None) -> int | None:
