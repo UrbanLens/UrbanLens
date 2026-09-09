@@ -607,6 +607,14 @@ def create_activity(
     from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares
 
     record_trip_activity_shares(activity)
+
+    # Mirrors update_activity/set_activity_status/complete_activity: a newly
+    # added confirmed activity outside the trip's current range must widen it
+    # too, or the header/hero date badge and the calendar's default month
+    # window stay stuck at the old range even though the itinerary now
+    # extends past it.
+    if activity.status == TripActivity.STATUS_CONFIRMED and activity.scheduled_at:
+        expand_trip_dates(trip, activity.scheduled_at.date())
     return activity
 
 
@@ -755,6 +763,38 @@ def set_activity_position(trip: Trip, actor: Profile, activity_id: int, *, lat: 
     activity.lng_override = lng_value
     activity.save(update_fields=["lat_override", "lng_override", "updated"])
     return lat_value, lng_value
+
+
+def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetime.date) -> TripActivity:
+    """Reschedule an activity to a new date (calendar drag-and-drop).
+
+    Only the date changes - an existing time-of-day component is preserved.
+
+    Args:
+        trip: The trip owning the activity.
+        actor: The profile dragging the activity.
+        activity_id: Primary key of the activity being moved.
+        date: The new date.
+
+    Returns:
+        The saved activity.
+
+    Raises:
+        TripPermissionError: The actor may not edit activities on this trip.
+        TripNotFoundError: No such activity on this trip.
+    """
+    require_perform(actor, trip, trip.allow_edit_activities, MOVE_ACTIVITY_DENIED)
+    activity = get_activity(trip, activity_id)
+
+    if activity.scheduled_at:
+        activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(date, activity.scheduled_at.time()))
+    else:
+        activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(date, datetime.time(0, 0)))
+    activity.save(update_fields=["scheduled_at", "updated"])
+
+    if activity.status == TripActivity.STATUS_CONFIRMED:
+        expand_trip_dates(trip, date)
+    return activity
 
 
 def set_activity_vote(trip: Trip, actor: Profile, activity_id: int, *, vote: str | None) -> None:

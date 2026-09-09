@@ -553,6 +553,34 @@ class TripActivitiesViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(TripActivity.objects.filter(trip=self.trip, title="Visit Factory").exists())
 
+    def test_adding_a_confirmed_activity_outside_the_trip_range_widens_it(self):
+        """Regression guard: create_activity used to never call
+        expand_trip_dates (unlike update_activity/set_activity_status/
+        complete_activity), so a brand-new confirmed activity dated outside
+        the trip's current range left start_date/end_date stale."""
+        self.trip.start_date = datetime.date(2026, 8, 1)
+        self.trip.end_date = datetime.date(2026, 8, 5)
+        self.trip.save()
+        client = Client()
+        client.force_login(self.creator_user)
+
+        resp = client.post(
+            self._url(),
+            data=json.dumps(
+                {
+                    "title": "Late Add-on",
+                    "status": "confirmed",
+                    "scheduled_date": "2026-08-20",
+                    "scheduled_time": "10:00",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.trip.refresh_from_db()
+        self.assertEqual(self.trip.end_date, datetime.date(2026, 8, 20))
+
     def test_activity_attribution_shows_full_name_not_username(self):
         """Regression guard: the "Added by" line used to show the raw
         username even when the adder has a real name set."""
@@ -1347,3 +1375,62 @@ class TripActivityMoveViewTests(TestCase):
         self.activity.refresh_from_db()
         self.assertTrue(timezone.is_aware(self.activity.scheduled_at))
         self.assertEqual(self.activity.scheduled_at.date(), datetime.date(2026, 8, 10))
+
+    def test_member_blocked_when_edit_activities_is_organizers_only(self):
+        """Regression guard: this endpoint used to check only trip membership
+        (Trip.PERM_EVERYONE, hardcoded) rather than the trip's own configurable
+        allow_edit_activities setting - see services.trips.trip_activities.move_activity,
+        which now shares the same require_perform check as every other
+        activity-editing path (set_activity_position, update_activity)."""
+        self.trip.allow_edit_activities = Trip.PERM_ORGANIZERS
+        self.trip.save()
+        member_user = baker.make("auth.User")
+        member = member_user.profile
+        TripMembership.objects.create(trip=self.trip, profile=member)
+        client = Client()
+        client.force_login(member_user)
+
+        resp = client.post(
+            self._url(),
+            data=json.dumps({"date": "2026-08-10"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 403)
+        self.activity.refresh_from_db()
+        self.assertIsNone(self.activity.scheduled_at)
+
+    def test_organizer_can_still_move_activities_when_restricted(self):
+        self.trip.allow_edit_activities = Trip.PERM_ORGANIZERS
+        self.trip.save()
+
+        resp = self.client.post(
+            self._url(),
+            data=json.dumps({"date": "2026-08-10"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.activity.refresh_from_db()
+        self.assertEqual(self.activity.scheduled_at.date(), datetime.date(2026, 8, 10))
+
+    def test_moving_a_confirmed_activity_outside_the_trip_range_widens_it(self):
+        """Regression guard: moving an activity used to never call
+        expand_trip_dates, so the trip's own start_date/end_date (and the
+        header/calendar's date-range display) stayed stuck at the old range."""
+        self.trip.start_date = datetime.date(2026, 8, 1)
+        self.trip.end_date = datetime.date(2026, 8, 5)
+        self.trip.save()
+        self.activity.status = TripActivity.STATUS_CONFIRMED
+        self.activity.scheduled_at = timezone.make_aware(datetime.datetime(2026, 8, 2, 10, 0))
+        self.activity.save()
+
+        resp = self.client.post(
+            self._url(),
+            data=json.dumps({"date": "2026-08-20"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.trip.refresh_from_db()
+        self.assertEqual(self.trip.end_date, datetime.date(2026, 8, 20))

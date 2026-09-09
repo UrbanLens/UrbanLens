@@ -34,7 +34,7 @@ from urbanlens.dashboard.services.trips.trip_activities import (
     complete_activity,
     create_activity,
     delete_activity,
-    get_activity,
+    move_activity,
     parse_scheduled_at as _parse_scheduled_at,
     reorder_activities,
     set_activity_position,
@@ -1118,14 +1118,6 @@ class TripActivityMoveView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        if not _can_perform(profile, trip, Trip.PERM_EVERYONE):
-            return HttpResponse("Join this trip to contribute.", status=403)
-
-        try:
-            activity = get_activity(trip, activity_id)
-        except TripError as exc:
-            return _trip_error_response(exc)
-
         try:
             body = json.loads(request.body) if request.body else {}
         except (json.JSONDecodeError, ValueError):
@@ -1140,13 +1132,16 @@ class TripActivityMoveView(LoginRequiredMixin, View):
         except ValueError:
             return HttpResponse("Invalid date format.", status=400)
 
-        if activity.scheduled_at:
-            # Preserve existing time component; only update date
-            activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(new_date, activity.scheduled_at.time()))
-        else:
-            activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(new_date, datetime.time(0, 0)))
-
-        activity.save(update_fields=["scheduled_at", "updated"])
+        # move_activity enforces trip.allow_edit_activities (the same
+        # permission every other date/position change on an activity
+        # requires) - a bare trip-membership check here previously let any
+        # joined member reschedule any activity, even on a trip restricted to
+        # organizer-only edits. See services.trips.trip_activities.set_activity_position's
+        # docstring for the same class of fix made there earlier.
+        try:
+            move_activity(trip, profile, activity_id, date=new_date)
+        except TripError as exc:
+            return _trip_error_response(exc)
 
         return _render_activities_panel(request, trip, profile)
 
