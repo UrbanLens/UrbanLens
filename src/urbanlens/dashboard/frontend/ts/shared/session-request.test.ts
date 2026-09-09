@@ -15,7 +15,7 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
-import { getJson, postForm } from "./session-request";
+import { getJson, postForm, postMultipart } from "./session-request";
 
 const toasted: string[] = [];
 
@@ -156,6 +156,70 @@ describe("session-request", () => {
 
         expect(result).toEqual({});
         expect(result.error).toBeUndefined();
+    });
+
+    test("postMultipart returns the parsed body on success", async () => {
+        respond(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+
+        const data = new FormData();
+        data.append("image", new Blob(["x"]), "photo.jpg");
+
+        expect(await postMultipart("/games/consensus/photo/", data)).toEqual({ ok: true });
+    });
+
+    test("postMultipart sends the FormData body with no explicit Content-Type", async () => {
+        // A FormData body must reach fetch() with no Content-Type header at
+        // all - the browser sets one itself (with the multipart boundary the
+        // server needs) only when the header is absent. Regression guard: the
+        // handwritten fetch() this replaced got this right by omission; a
+        // careless refactor could easily add one back.
+        const calls: [string, RequestInit][] = [];
+        globalThis.fetch = mock(async (url: string, init: RequestInit) => {
+            calls.push([url, init]);
+            return new Response("{}", { status: 200 });
+        }) as unknown as typeof fetch;
+        const data = new FormData();
+        data.append("image", new Blob(["x"]), "photo.jpg");
+
+        await postMultipart("/games/consensus/photo/", data);
+
+        const [url, init] = calls[0]!;
+        expect(url).toBe("/games/consensus/photo/");
+        expect(init.method).toBe("POST");
+        expect(init.body).toBe(data);
+        expect((init.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
+    });
+
+    test("a refused upload comes back as an error, in the shape the caller reads", async () => {
+        respond(JSON.stringify({ error: "That photo is too large." }), { status: 413, headers: { "Content-Type": "application/json" } });
+
+        const data = new FormData();
+        data.append("image", new Blob(["x"]), "photo.jpg");
+
+        expect((await postMultipart("/games/consensus/photo/", data)).error).toBe("That photo is too large.");
+    });
+
+    test("a non-JSON refusal does not throw an uncaught SyntaxError", async () => {
+        // The defect this replaces: `await response.json()` ran unconditionally,
+        // before the ok check, so any non-JSON error body (a session-expiry
+        // redirect to the login page, an nginx/proxy limit page) threw inside
+        // an un-awaited async function - no toast, nothing in the console.
+        respond("<!doctype html><title>413 Request Entity Too Large</title>", { status: 413 });
+
+        const data = new FormData();
+        data.append("image", new Blob(["x"]), "photo.jpg");
+
+        expect((await postMultipart("/games/consensus/photo/", data)).error).toBe("HTTP 413");
+    });
+
+    test("postMultipart does not toast, because its caller already does", async () => {
+        respond("Not your turn.", { status: 403 });
+        const data = new FormData();
+        data.append("image", new Blob(["x"]), "photo.jpg");
+
+        await postMultipart("/games/consensus/photo/", data);
+
+        expect(toasted).toEqual([]);
     });
 
     test("both helpers suppress the generic toast, because they report themselves", async () => {

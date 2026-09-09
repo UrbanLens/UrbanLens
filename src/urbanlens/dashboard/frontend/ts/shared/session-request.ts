@@ -84,6 +84,38 @@ export async function postForm(url: string, data: Record<string, string> | URLSe
 }
 
 /**
+ * POST multipart form data (a file upload) and return the parsed body.
+ *
+ * {@link postForm}'s multipart counterpart - not folded into it because a
+ * `FormData` body must never carry an explicit `Content-Type`: the browser
+ * sets one itself, with the multipart boundary the server needs to parse it,
+ * only when the header is absent.
+ *
+ * Args:
+ *     url: Always `urlFor(urls.<name>, ...)` - see {@link postForm}.
+ *     data: The multipart body (a file plus whatever other fields).
+ *
+ * Returns:
+ *     The parsed response body, or `{ error }` when the request was refused,
+ *     answered with a body that wasn't the expected JSON shape, or never
+ *     completed.
+ */
+export async function postMultipart(url: string, data: FormData): Promise<any> {
+    try {
+        return (await fetchJson(url, {
+            method: "POST",
+            headers: { "X-CSRFToken": getCsrfToken() },
+            body: data,
+            // Same reasoning as postForm: the caller checks `.error` and
+            // toasts it itself.
+            reportsItsOwnErrors: true,
+        })) ?? EMPTY_BODY;
+    } catch (error) {
+        return { error: describe(error) } satisfies RequestFailure;
+    }
+}
+
+/**
  * GET JSON and return the parsed body, reporting a failure to the user.
  *
  * Args:

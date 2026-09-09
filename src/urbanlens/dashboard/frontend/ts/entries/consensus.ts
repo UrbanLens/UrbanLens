@@ -14,8 +14,7 @@
  * spotguessr.ts/trivia.ts's shape, trimmed to Consensus's simpler loop (no
  * ratings, no distance/date scoring, no photo-feedback thumbs).
  */
-import { getCsrfToken } from "../shared/csrf";
-import { getJson, postForm } from "../shared/session-request";
+import { getJson, postForm, postMultipart } from "../shared/session-request";
 import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
@@ -849,17 +848,9 @@ async function uploadPhoto(): Promise<void> {
     }
     const formData = new FormData();
     formData.append("image", file);
-    // Multipart, so not postForm's business - and already ok-checked below,
-    // which is what postForm exists to add. Same-origin urlFor(...) path
-    // template, never an arbitrary url.
-    const response = await fetch(urlFor(urls.photo, state.sessionId, state.currentRoundId), {  // lgtm[js/request-forgery]
-        method: "POST",
-        headers: { "X-CSRFToken": getCsrfToken() },
-        body: formData,
-    });
-    const data = await response.json();
-    if (!response.ok || data.error) {
-        toast.error(data.error ?? "Couldn't upload that photo.");
+    const data = await postMultipart(urlFor(urls.photo, state.sessionId, state.currentRoundId), formData);
+    if (data.error) {
+        toast.error(data.error);
         return;
     }
     toast.success("Photo uploaded - thanks for helping out!");
