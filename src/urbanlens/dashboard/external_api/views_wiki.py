@@ -1159,8 +1159,12 @@ class _CommentListMixin(PaginatedListMixin):
             # confirmed its own existence *and* created a reply the author
             # could never retrieve, since visible_comment_tree omits a hidden
             # parent together with everything under it.
+            # parent__isnull=True: replies render one level deep
+            # (visible_comment_tree never walks a reply's own .replies), so a
+            # reply-to-a-reply would persist but never appear anywhere -
+            # refuse it the same way an unaddressable id already is.
             scope = {"pin": pin} if pin is not None else {"wiki": wiki}
-            parent = get_object_or_404(Comment.objects.select_related("profile"), id=data["parent_id"], **scope)
+            parent = get_object_or_404(Comment.objects.select_related("profile"), id=data["parent_id"], parent__isnull=True, **scope)
             if not comment_is_visible(parent, profile):
                 raise Http404
 

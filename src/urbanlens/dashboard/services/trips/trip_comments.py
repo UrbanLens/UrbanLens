@@ -42,6 +42,14 @@ class TripReplyData(TypedDict):
     rendered_text: str
     reactions: dict[str, _ReactionData]
     can_delete: bool
+    #: True when this is a reply whose own parent was deleted (UL-219) - such
+    #: a reply also has parent=None and so queries identically to a genuine
+    #: top-level comment; this distinguishes the two for the template. Always
+    #: False for a row still nested under its live parent's `replies` - by
+    #: the time this flips True the row is no longer found there at all (its
+    #: parent FK was just nulled), so it surfaces as a top-level row instead
+    #: on the next fetch.
+    parent_was_deleted: bool
 
 
 class TripCommentData(TripReplyData):
@@ -178,6 +186,7 @@ def build_comment_tree(trip: Trip, viewer: Profile) -> list[TripCommentData]:
                     "rendered_text": r_html,
                     "reactions": _aggregate_reactions(r.reactions.all()),
                     "can_delete": can_delete_comment(r, viewer, trip),
+                    "parent_was_deleted": r.parent_deleted,
                 },
             )
         rendered.append(
@@ -187,6 +196,7 @@ def build_comment_tree(trip: Trip, viewer: Profile) -> list[TripCommentData]:
                 "reactions": reactions,
                 "can_delete": can_delete_comment(c, viewer, trip),
                 "replies": replies_rendered,
+                "parent_was_deleted": c.parent_deleted,
             },
         )
     return rendered
@@ -240,7 +250,10 @@ def add_comment(
 
     parent = None
     if parent_id:
-        parent = TripComment.objects.filter(id=parent_id, trip=trip).select_related("author").first()
+        # parent__isnull=True: replies render one level deep, so a
+        # reply-to-a-reply would persist but never appear anywhere - refuse
+        # it the same way an unknown parent id already is.
+        parent = TripComment.objects.filter(id=parent_id, trip=trip, parent__isnull=True).select_related("author").first()
         if parent is None:
             raise TripNotFoundError(COMMENT_NOT_FOUND)
 

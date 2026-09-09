@@ -328,7 +328,10 @@ class PinCommentsView(LoginRequiredMixin, View):
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
-            parent = get_object_or_404(Comment, id=parent_id, pin=pin)
+            # parent__isnull=True: replies render one level deep
+            # (visible_comment_tree never walks a reply's own .replies), so a
+            # reply-to-a-reply would persist but never appear anywhere.
+            parent = get_object_or_404(Comment, id=parent_id, pin=pin, parent__isnull=True)
         comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data, context=pin))
         if image:
             comment.image = image
@@ -511,6 +514,12 @@ class WikiCommentsView(LoginRequiredMixin, View):
         parent = None
         if parent_id:
             parent = _wiki_comment_addressable_by(wiki, profile, parent_id)
+            if parent.parent_id is not None:
+                # Replies render one level deep (visible_comment_tree never
+                # walks a reply's own .replies) - a reply-to-a-reply would
+                # persist but never appear anywhere, so refuse it the same
+                # way an unaddressable id already is.
+                raise Http404
         comment = Comment.objects.create(
             wiki=wiki,
             profile=profile,

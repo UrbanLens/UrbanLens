@@ -2964,6 +2964,7 @@ class TripCommentSerializer(serializers.Serializer):
     has_map = serializers.SerializerMethodField()
     created = serializers.DateTimeField(source="comment.created", read_only=True)
     can_delete = serializers.BooleanField(read_only=True)
+    parent_was_deleted = serializers.BooleanField(read_only=True)
     reactions = serializers.SerializerMethodField()
     replies = serializers.SerializerMethodField()
 

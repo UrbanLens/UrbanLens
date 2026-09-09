@@ -12,11 +12,11 @@ from __future__ import annotations
 from typing import Any
 
 from django.db import transaction
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
-from urbanlens.dashboard.models.trips.model import Trip, TripActivity
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment
 
 
 def queue_calendar_push(trip_id: int | None) -> None:
@@ -65,3 +65,23 @@ def sync_trip_on_activity_save(sender: type[TripActivity], instance: TripActivit
         **kwargs: Remaining signal arguments (unused).
     """
     queue_calendar_push(instance.trip_id)
+
+
+@receiver(pre_delete, sender=TripComment, dispatch_uid="trip_comment_flag_parent_deleted_on_delete")
+def flag_replies_on_parent_delete(sender: type[TripComment], instance: TripComment, **kwargs: Any) -> None:
+    """Mark every reply of a trip comment about to be deleted as parent-deleted.
+
+    Mirrors ``models.comments.signals.flag_replies_on_parent_delete`` (UL-219)
+    for ``TripComment``, which has the identical ``parent =
+    ForeignKey("self", on_delete=SET_NULL)`` shape. Runs pre-delete so the
+    affected replies are flagged before Django's collector nulls their
+    ``parent`` FK - by post-delete time there is no reliable way to find them
+    again. Uses bulk ``.update()`` rather than per-row ``.save()`` so this
+    doesn't re-trigger any signal handlers on the reply rows themselves.
+
+    Args:
+        sender: The TripComment model class.
+        instance: The comment about to be deleted.
+        **kwargs: Remaining signal arguments (unused).
+    """
+    TripComment.objects.filter(parent=instance).update(parent_deleted=True)
