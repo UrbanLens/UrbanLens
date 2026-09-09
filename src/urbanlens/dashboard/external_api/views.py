@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, overload
 from uuid import UUID
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Model
 from django.db.models.functions import Coalesce
 from django.urls import reverse
@@ -56,7 +56,6 @@ from urbanlens.dashboard.external_api.serializers import (
     NotificationListQuerySerializer,
     NotificationListResponseSerializer,
     NotificationPreferenceSerializer,
-    NotificationSerializer,
     OnThisDayResponseSerializer,
     PhotoFileSerializer,
     PhotoLabelsSerializer,
@@ -163,10 +162,10 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
-from urbanlens.dashboard.models.images.model import Image, ImageSource
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.meta import DEFAULT_LABEL_COLOR
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.models.links.model import PinLink
+from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.note import PinNote
@@ -183,15 +182,30 @@ from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.core.colors import InvalidColorError, require_color
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
-from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
+from urbanlens.dashboard.services.labels.merge import (
+    LabelKindMismatchError,
+    NoSourceLabelsError,
+    ProtectedSourceLabelError,
+    SelfMergeError,
+    TargetLabelNotFoundError,
+    UnownedSourceLabelError,
+    merge_labels,
+)
 from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place, search_google_places, search_local
 from urbanlens.dashboard.services.media.images import delete_stored_file
-from urbanlens.dashboard.services.media.media_labels import MediaLabelError, set_media_labels
+from urbanlens.dashboard.services.media.media_labels import (
+    MAX_MEDIA_LABEL_NAME_LENGTH,
+    MAX_MEDIA_LABELS,
+    BlankMediaLabelNameError,
+    MediaLabelNameTooLongError,
+    TooManyMediaLabelsError,
+    set_media_labels,
+)
 from urbanlens.dashboard.services.media.media_relevance import toggle_media_vote
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
-from urbanlens.dashboard.services.memories.journal import get_journal_entries
+from urbanlens.dashboard.services.memories.journal import JournalFeed
 from urbanlens.dashboard.services.memories.photos import create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.notifications.notification_center import (
     DEFAULT_NOTIFICATION_PAGE_SIZE,
@@ -204,16 +218,38 @@ from urbanlens.dashboard.services.notifications.notification_center import (
     unread_count,
     update_preferences,
 )
-from urbanlens.dashboard.services.notifications.push import PushRegistrationError, register_device, unregister_device
+from urbanlens.dashboard.services.notifications.push import (
+    EndpointCredentialsError,
+    EndpointResolutionError,
+    EndpointUnreachableError,
+    InvalidEndpointUrlError,
+    MissingAddressError,
+    register_device,
+    unregister_device,
+)
 from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
-from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_creation import (
+    AddressResolutionError,
+    DuplicateCoordinatesError,
+    DuplicatePropertyError,
+    DuplicateUuidError,
+    NoLocationProvidedError,
+    PinCreationError,
+    PinCreationForbiddenError,
+    PinParentNotFoundError,
+    create_pin_for_profile,
+)
 from urbanlens.dashboard.services.pins.pin_detail import build_pin_detail
 from urbanlens.dashboard.services.pins.pin_edit import (
     ORGANIZE_LABEL_KINDS,
+    CircularParentChainError,
+    ConflictingVisitedFieldsError,
     PinEditError,
     PinHasChildrenError,
     PinMoveError,
     PinReparentError,
+    ReparentLocationConflictError,
+    UnknownPinFieldsError,
     apply_pin_edits,
     delete_pin,
     move_pin_to_coordinates,
@@ -229,8 +265,10 @@ from urbanlens.dashboard.services.pins.pin_list_membership import (
 from urbanlens.dashboard.services.pins.pin_subresources import (
     AliasExistsError,
     AliasIsCurrentNameError,
-    InvalidLinkError,
+    InvalidLinkUrlFormatError,
     LinkExistsError,
+    LinkUrlTooLongError,
+    MissingLinkUrlError,
     PinSubResourceError,
     create_pin_alias,
     create_pin_link,
@@ -245,14 +283,19 @@ from urbanlens.dashboard.services.pins.pin_sync import InvalidSyncCursorError, S
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities, resolve_visible_identity
 from urbanlens.dashboard.services.profile.profile_annotations import get_annotations
 from urbanlens.dashboard.services.profile.profile_settings import SettingsValidationError, apply_settings_patch, read_settings
-from urbanlens.dashboard.services.search.filter_criteria import CriteriaOwnershipError, validate_criteria_ownership
+from urbanlens.dashboard.services.search.filter_criteria import CustomFieldOwnershipError, LabelOwnershipError, validate_criteria_ownership
 from urbanlens.dashboard.services.social.friendship import (
     DEFAULT_FRIEND_PAGE_SIZE,
+    CommunityDisabledError,
     FriendLimitExceededError,
     FriendshipActionError,
     FriendshipNotFoundError,
+    InviteMessageTooLongError,
     InviteRateLimitedError,
     InviteValidationError,
+    MalformedCursorError,
+    MalformedEmailAddressError,
+    SelfInviteError,
     accept_friend_request,
     block_profile,
     ignore_friend_request,
@@ -294,7 +337,12 @@ from urbanlens.dashboard.services.trips.trip_membership import (
 from urbanlens.dashboard.services.undo.handlers.pin_list import MODEL_LABEL as PIN_LIST_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.visits.safety import (
-    CheckinArchivedError,
+    ActiveCheckinExistsError,
+    CannotInviteSelfError,
+    CheckinEditArchivedError,
+    MaxPartnersReachedError,
+    PartnerAlreadyInvitedError,
+    PartnerNotFoundError,
     SafetyValidationError,
     apply_checkin_edit,
     attach_draft_markup_map,
@@ -324,8 +372,6 @@ from urbanlens.dashboard.services.wiki.wiki_access import wikis_hidden_by_pin_mo
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from django.db.models import QuerySet
     from rest_framework.request import Request
     from rest_framework.serializers import Serializer
@@ -711,7 +757,8 @@ class PinsView(ExternalApiView):
                 include_total=params.get("include_total", False),
             )
         except InvalidSyncCursorError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API pin sync rejected: %s", exc)
+            return Response({"error": "That cursor is invalid or expired."}, status=400)
 
         return Response(
             {
@@ -748,9 +795,34 @@ class PinsView(ExternalApiView):
                 name_is_user_provided=data.get("name_is_user_provided", False),
             )
         except PinCreationForbiddenError as exc:
-            return Response({"error": exc.safe_message}, status=403)
+            logger.info("external API pin creation forbidden: %s", exc)
+            return Response({"error": "External lookups are turned off in your settings."}, status=403)
+        except DuplicateCoordinatesError as exc:
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "You already have a pin at these exact coordinates."}, status=400)
+        except DuplicatePropertyError as exc:
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "You already have a pin on this property."}, status=400)
+        except PinParentNotFoundError as exc:
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "No such pin to set as parent."}, status=400)
+        except NoLocationProvidedError as exc:
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "An address or coordinates are required."}, status=400)
+        except AddressResolutionError as exc:
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "That address couldn't be converted to coordinates."}, status=400)
+        except DuplicateUuidError as exc:
+            # 400, not 409: a distinct status here would tell an attacker probing
+            # uuids that this one belongs to *someone* (a Conflict, vs. plain
+            # Bad Request for one that doesn't exist at all) - the original code's
+            # single blanket 400 for every PinCreationError avoided that distinction
+            # entirely, and this is the case it matters for.
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "That pin couldn't be created."}, status=400)
         except PinCreationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API pin creation rejected: %s", exc)
+            return Response({"error": "That pin couldn't be created."}, status=400)
 
         pin = result.pin
         parent_pin = pin.parent_pin
@@ -909,8 +981,27 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
                     # Raises on failure - propagating out of the atomic block rolls
                     # back every change already applied above.
                     reparent_pin(pin, new_parent)
-        except (PinEditError, PinMoveError, PinReparentError) as exc:
-            return Response({"error": exc.safe_message}, status=400)
+        except UnknownPinFieldsError as exc:
+            logger.info("external API pin edit rejected: %s", exc)
+            return Response({"error": "One or more submitted fields can't be edited."}, status=400)
+        except ConflictingVisitedFieldsError as exc:
+            logger.info("external API pin edit rejected: %s", exc)
+            return Response({"error": "Send either 'visited' or 'last_visited', not both."}, status=400)
+        except PinEditError as exc:
+            logger.info("external API pin edit rejected: %s", exc)
+            return Response({"error": "That edit couldn't be applied."}, status=400)
+        except PinMoveError as exc:
+            logger.info("external API pin move rejected: %s", exc)
+            return Response({"error": "You already have a pin at these exact coordinates."}, status=400)
+        except ReparentLocationConflictError as exc:
+            logger.info("external API pin reparent rejected: %s", exc)
+            return Response({"error": "You already have a top-level pin at this exact location - move it before detaching."}, status=400)
+        except CircularParentChainError as exc:
+            logger.info("external API pin reparent rejected: %s", exc)
+            return Response({"error": "That parent change would create a circular parent chain."}, status=400)
+        except PinReparentError as exc:
+            logger.info("external API pin reparent rejected: %s", exc)
+            return Response({"error": "That parent change couldn't be applied."}, status=400)
 
         return Response(build_pin_detail(pin, request.user.profile))
 
@@ -925,6 +1016,7 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
         try:
             delete_pin(pin, children_mode=children_mode)
         except PinHasChildrenError as exc:
+            logger.info("external API pin delete rejected: %s", exc)
             return Response(
                 {"error": "This pin has child pins - resend with ?children=delete or ?children=keep.", "requires_children_decision": True, "children": exc.descendant_count},
                 status=409,
@@ -1037,13 +1129,18 @@ class PinTombstonesView(ExternalApiView):
                 limit=params.get("limit"),
             )
         except InvalidSyncCursorError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API tombstone sync rejected: %s", exc)
+            return Response({"error": "That cursor is invalid or expired."}, status=400)
         except StaleDeletedSinceError as exc:
             # 410 Gone: tombstones this old may already be pruned, so the
             # incremental deletions feed can no longer be trusted from that
             # point. The client must full-resync (walk pins/ without
             # modified_since and drop local pins absent from the result).
-            return Response({"error": exc.safe_message, "full_resync_required": True}, status=410)
+            logger.info("external API tombstone sync requires full resync: %s", exc)
+            return Response(
+                {"error": "That deletion range is too old to sync incrementally - do a full resync instead.", "full_resync_required": True},
+                status=410,
+            )
 
         return Response(
             {
@@ -1081,8 +1178,21 @@ class PushDevicesView(ExternalApiView):
                 address=data["address"],
                 name=data.get("name", ""),
             )
-        except PushRegistrationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+        except MissingAddressError as exc:
+            logger.info("push device registration rejected: %s", exc)
+            return Response({"error": "A device address is required."}, status=400)
+        except InvalidEndpointUrlError as exc:
+            logger.info("push device registration rejected: %s", exc)
+            return Response({"error": "That push endpoint must be an http:// or https:// URL."}, status=400)
+        except EndpointCredentialsError as exc:
+            logger.info("push device registration rejected: %s", exc)
+            return Response({"error": "That push endpoint must not include a username or password."}, status=400)
+        except EndpointResolutionError as exc:
+            logger.info("push device registration rejected: %s", exc)
+            return Response({"error": "That push endpoint's hostname couldn't be resolved."}, status=400)
+        except EndpointUnreachableError as exc:
+            logger.info("push device registration rejected: %s", exc)
+            return Response({"error": "That push endpoint isn't publicly reachable."}, status=400)
 
         return Response(PushDeviceResponseSerializer(device).data, status=201)
 
@@ -1339,7 +1449,8 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
         try:
             image = upload_photo(profile, data["file"], caption=data.get("caption") or None, pin=pin, visit=visit)
         except PhotoUploadError as exc:
-            return Response({"error": exc.message}, status=exc.status)
+            logger.info("external API photo upload rejected for profile %s: %s", profile.pk, exc.message)
+            return Response({"error": exc.generic_message}, status=exc.status)
 
         return Response(PhotoSerializer(build_photo_payload(image, profile)).data, status=201)
 
@@ -1435,8 +1546,15 @@ class PhotoLabelsView(_OwnedImageMixin, ExternalApiView):
 
         try:
             set_media_labels(image, serializer.validated_data["labels"], profile)
-        except MediaLabelError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+        except TooManyMediaLabelsError as exc:
+            logger.info("external API photo labels rejected: %s", exc)
+            return Response({"error": f"A photo may have at most {MAX_MEDIA_LABELS} labels."}, status=400)
+        except BlankMediaLabelNameError as exc:
+            logger.info("external API photo labels rejected: %s", exc)
+            return Response({"error": "Label names cannot be blank."}, status=400)
+        except MediaLabelNameTooLongError as exc:
+            logger.info("external API photo labels rejected: %s", exc)
+            return Response({"error": f"Label names cannot exceed {MAX_MEDIA_LABEL_NAME_LENGTH} characters."}, status=400)
 
         image.refresh_from_db()
         return Response(PhotoSerializer(build_photo_payload(image, profile)).data)
@@ -1821,14 +1939,16 @@ class MemoriesJournalView(PaginatedListMixin, ExternalApiView):
         """
         grants = filter_sources_by_grants(request.auth, self.JOURNAL_SOURCE_SCOPES)
 
-        # get_journal_entries materializes every selected source in full - that
-        # is the existing internal behavior (the Memories page renders the whole
-        # feed), so pagination is applied to the resulting list rather than
-        # pushed into the service, which would mean paginating four
-        # heterogeneous querysets and merging them.
-        entries = get_journal_entries(request.user.profile, sources=grants.granted)
+        # JournalFeed is a sequence, not a list: the paginator asks it only for
+        # its length and one slice, and it answers both without building the
+        # rest. Previously every selected source was materialized in full for
+        # every page - four unbounded querysets merged in Python to serve
+        # twenty rows.
+        #
+        # The envelope's `count` stays exact because the feed counts its
+        # sources rather than measuring the entries it built.
         paginator = self.pagination_class()
-        page = paginator.paginate_queryset(entries, request, view=self)
+        page = paginator.paginate_queryset(JournalFeed(request.user.profile, sources=grants.granted), request, view=self)
         response = paginator.get_paginated_response(JournalEntrySerializer(page, many=True).data)
         # Named so a client can tell "nothing happened yet" from "your
         # credential cannot see this kind of entry" and prompt for
@@ -1881,8 +2001,12 @@ class PinListsView(PaginatedListMixin, ExternalApiView):
         if smart_filter is not None:
             try:
                 validate_criteria_ownership(smart_filter, profile)
-            except CriteriaOwnershipError as exc:
-                return Response({"error": exc.safe_message}, status=400)
+            except LabelOwnershipError as exc:
+                logger.info("external API pin list save rejected (label ownership): %s", exc)
+                return Response({"error": "Filter criteria reference a label that does not exist."}, status=400)
+            except CustomFieldOwnershipError as exc:
+                logger.info("external API pin list save rejected (custom field ownership): %s", exc)
+                return Response({"error": "Filter criteria reference a custom field that does not exist."}, status=400)
 
         if PinList.objects.for_profile(profile).filter(name=data["name"]).exists():
             return Response({"error": "You already have a list with that name."}, status=400)
@@ -1896,7 +2020,16 @@ class PinListsView(PaginatedListMixin, ExternalApiView):
             smart_boundary=data.get("smart_boundary"),
             source_saved_filter=source_filter,
         )
-        pin_list.save()
+        try:
+            pin_list.save()
+        except IntegrityError:
+            # Two concurrent creates can both pass the .exists() check above
+            # before either commits - the loser's save() then hits
+            # uq_pin_list_profile_name directly. Same response as the
+            # pre-check, so a client can't tell the two racing outcomes apart.
+            # (PublicDashboardModel.save() already runs in its own atomic()
+            # savepoint, so this doesn't need one of its own.)
+            return Response({"error": "You already have a list with that name."}, status=400)
 
         # A list created with rules should show its matching pins immediately,
         # not only after the next pin edit triggers the signal.
@@ -1984,8 +2117,12 @@ class PinListDetailView(ExternalApiView):
         if pin_list.smart_filter is not None:
             try:
                 validate_criteria_ownership(pin_list.smart_filter, profile)
-            except CriteriaOwnershipError as exc:
-                return Response({"error": exc.safe_message}, status=400)
+            except LabelOwnershipError as exc:
+                logger.info("external API pin list update rejected (label ownership): %s", exc)
+                return Response({"error": "Filter criteria reference a label that does not exist."}, status=400)
+            except CustomFieldOwnershipError as exc:
+                logger.info("external API pin list update rejected (custom field ownership): %s", exc)
+                return Response({"error": "Filter criteria reference a custom field that does not exist."}, status=400)
 
         if changed_fields:
             pin_list.save(update_fields=[*changed_fields, "updated"])
@@ -2150,8 +2287,12 @@ class SavedFiltersView(PaginatedListMixin, ExternalApiView):
         criteria = data.get("criteria") or {}
         try:
             validate_criteria_ownership(criteria, profile)
-        except CriteriaOwnershipError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+        except LabelOwnershipError as exc:
+            logger.info("external API saved filter save rejected (label ownership): %s", exc)
+            return Response({"error": "Filter criteria reference a label that does not exist."}, status=400)
+        except CustomFieldOwnershipError as exc:
+            logger.info("external API saved filter save rejected (custom field ownership): %s", exc)
+            return Response({"error": "Filter criteria reference a custom field that does not exist."}, status=400)
 
         if SavedFilter.objects.name_taken_for(profile, data["name"]):
             return Response({"error": "You already have a saved filter with that name."}, status=400)
@@ -2211,8 +2352,12 @@ class SavedFilterDetailView(ExternalApiView):
         if "criteria" in data:
             try:
                 validate_criteria_ownership(data["criteria"], profile)
-            except CriteriaOwnershipError as exc:
-                return Response({"error": exc.safe_message}, status=400)
+            except LabelOwnershipError as exc:
+                logger.info("external API saved filter update rejected (label ownership): %s", exc)
+                return Response({"error": "Filter criteria reference a label that does not exist."}, status=400)
+            except CustomFieldOwnershipError as exc:
+                logger.info("external API saved filter update rejected (custom field ownership): %s", exc)
+                return Response({"error": "Filter criteria reference a custom field that does not exist."}, status=400)
 
         if "name" in data:
             if SavedFilter.objects.name_taken_for(profile, data["name"], exclude_pk=saved_filter.pk):
@@ -2562,8 +2707,24 @@ class LabelMergeView(ExternalApiView):
         merged_uuids = [str(source.uuid) for source in sources]
         try:
             result = merge_labels(target=target, sources=sources, profile=profile)
-        except LabelMergeError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+        except NoSourceLabelsError as exc:
+            logger.info("external API label merge rejected: %s", exc)
+            return Response({"error": "At least one source label is required."}, status=400)
+        except TargetLabelNotFoundError as exc:
+            logger.info("external API label merge rejected: %s", exc)
+            return Response({"error": "No such label to merge into."}, status=400)
+        except SelfMergeError as exc:
+            logger.info("external API label merge rejected: %s", exc)
+            return Response({"error": "A label can't be merged into itself."}, status=400)
+        except LabelKindMismatchError as exc:
+            logger.info("external API label merge rejected: %s", exc)
+            return Response({"error": "Source and target labels must be the same kind."}, status=400)
+        except UnownedSourceLabelError as exc:
+            logger.info("external API label merge rejected: %s", exc)
+            return Response({"error": "You can only merge labels you own."}, status=400)
+        except ProtectedSourceLabelError as exc:
+            logger.info("external API label merge rejected: %s", exc)
+            return Response({"error": "Protected labels can't be merged away."}, status=400)
 
         return Response(
             {
@@ -2579,8 +2740,22 @@ class LabelMergeView(ExternalApiView):
 _SUBRESOURCE_ERROR_STATUS: dict[type[PinSubResourceError], int] = {
     AliasExistsError: 409,
     AliasIsCurrentNameError: 400,
-    InvalidLinkError: 400,
+    MissingLinkUrlError: 400,
+    LinkUrlTooLongError: 400,
+    InvalidLinkUrlFormatError: 400,
     LinkExistsError: 409,
+}
+
+#: Hand-authored, user-facing text for each sub-resource failure. Dispatched by
+#: exception type, same as the status above - never derived from the raised
+#: exception's own (log-only) message. See PinSubResourceError's docstring.
+_SUBRESOURCE_ERROR_MESSAGE: dict[type[PinSubResourceError], str] = {
+    AliasExistsError: "That alias already exists.",
+    AliasIsCurrentNameError: "This alias is the current name - pick another name first.",
+    MissingLinkUrlError: "A url is required.",
+    LinkUrlTooLongError: f"That url is too long (max {MAX_LINK_URL_LENGTH:,} characters).",
+    InvalidLinkUrlFormatError: "That doesn't look like a valid http(s) url.",
+    LinkExistsError: "That link is already on this pin.",
 }
 
 
@@ -2594,6 +2769,18 @@ def _subresource_error_status(exc: PinSubResourceError) -> int:
         The status to answer with; 400 for anything unmapped.
     """
     return _SUBRESOURCE_ERROR_STATUS.get(type(exc), 400)
+
+
+def _subresource_error_message(exc: PinSubResourceError) -> str:
+    """The user-facing text describing one sub-resource failure.
+
+    Args:
+        exc: The raised failure.
+
+    Returns:
+        Hand-authored text; a generic fallback for anything unmapped.
+    """
+    return _SUBRESOURCE_ERROR_MESSAGE.get(type(exc), "That request couldn't be completed.")
 
 
 class PinSubResourceView[SubResourceT: Model](OwnedPinMixin, PaginatedListMixin, ExternalApiView):
@@ -2678,7 +2865,8 @@ class PinSubResourceView[SubResourceT: Model](OwnedPinMixin, PaginatedListMixin,
         try:
             created = self.create(pin, serializer.validated_data)
         except PinSubResourceError as exc:
-            return Response({"error": exc.safe_message}, status=_subresource_error_status(exc))
+            logger.info("external API pin sub-resource create rejected: %s", exc)
+            return Response({"error": _subresource_error_message(exc)}, status=_subresource_error_status(exc))
 
         return Response(self.output_serializer(created, context=self.serializer_context(pin)).data, status=201)
 
@@ -2721,7 +2909,8 @@ class PinSubResourceDetailView[SubResourceT: Model](OwnedPinMixin, ExternalApiVi
         try:
             self.perform_delete(pin, obj)
         except PinSubResourceError as exc:
-            return Response({"error": exc.safe_message}, status=_subresource_error_status(exc))
+            logger.info("external API pin sub-resource delete rejected: %s", exc)
+            return Response({"error": _subresource_error_message(exc)}, status=_subresource_error_status(exc))
         return Response(status=204)
 
 
@@ -2911,12 +3100,14 @@ class PinVisitsView(OwnedPinMixin, PaginatedListMixin, ExternalApiView):
         try:
             visit = create_manual_visit(pin, visited_at=data["visited_at"], notes=data.get("notes"))
         except VisitLoggingDisabledError as exc:
-            return Response({"error": exc.safe_message}, status=403)
+            logger.info("external API visit creation rejected: %s", exc)
+            return Response({"error": "Enable visit logging in your profile settings before logging a visit."}, status=403)
         except VisitInFutureError as exc:
             # Normally unreachable - PinVisitCreateSerializer rejects a future
             # time first, with field-level detail. Mapped anyway so the service
             # guard cannot surface as a 500 if the two ever disagree.
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API visit creation rejected: %s", exc)
+            return Response({"error": "A visit cannot be logged in the future."}, status=400)
 
         # Re-read through the same annotation the list path uses, so the created
         # row carries photo_count rather than the response shape depending on
@@ -3235,11 +3426,12 @@ class SafetyCheckinsView(SafetyCheckinScopedView, PaginatedListMixin):
                 contacts=allowed,
                 notify_community_wiki=data.get("notify_community_wiki", False),
             )
-        except SafetyValidationError as exc:
-            # An already-active check-in for this scope is a state conflict, not a
-            # malformed request - a mobile client must be able to tell the two
-            # apart to offer "open the existing one" instead of "fix your input".
-            return Response({"error": exc.safe_message}, status=409)
+        except ActiveCheckinExistsError as exc:
+            # A state conflict, not a malformed request - a mobile client must
+            # be able to tell the two apart to offer "open the existing one"
+            # instead of "fix your input".
+            logger.info("Safety check-in create rejected for profile %s: %s", profile.pk, exc)
+            return Response({"error": "You already have an active check-in in this scope."}, status=409)
 
         if data.get("markup_map"):
             attach_draft_markup_map(checkin, profile, str(data["markup_map"]))
@@ -3287,8 +3479,9 @@ class SafetyCheckinDetailApiView(SafetyCheckinScopedView):
 
         try:
             outcome = apply_checkin_edit(checkin, editor=request.user.profile, **kwargs)
-        except CheckinArchivedError as exc:
-            return Response({"error": exc.safe_message}, status=409)
+        except CheckinEditArchivedError as exc:
+            logger.info("external API check-in edit rejected on checkin %s: %s", checkin.pk, exc)
+            return Response({"error": "This check-in has been archived and can no longer be edited."}, status=409)
 
         # Warnings are not errors: a locked field is silently ignored, exactly as
         # the web autosave does. The client surfaces these as toasts and keeps the
@@ -3370,13 +3563,24 @@ class SafetyCheckinPartnersApiView(SafetyCheckinScopedView):
 
         serializer = SafetyPartnerInviteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        username = serializer.validated_data["username"].strip()
         try:
-            invite_checkin_partner(checkin, inviter=request.user.profile, username=serializer.validated_data["username"].strip())
+            invite_checkin_partner(checkin, inviter=request.user.profile, username=username)
+        except MaxPartnersReachedError as exc:
+            logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+            return Response({"error": "This check-in already has as many partners as it can hold."}, status=400)
+        except PartnerNotFoundError as exc:
+            logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+            return Response({"error": f'No user found with username "{username}".'}, status=400)
+        except CannotInviteSelfError as exc:
+            logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+            return Response({"error": "You can't add yourself as a partner on your own check-in."}, status=400)
+        except PartnerAlreadyInvitedError as exc:
+            logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+            return Response({"error": f"{username} has already been invited."}, status=400)
         except SafetyValidationError as exc:
-            # The service's messages are already user-facing and specific
-            # (unknown username, self-invite, blocked, already invited, cap
-            # reached); reused verbatim so the app and the web UI say the same thing.
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+            return Response({"error": "That invite couldn't be sent."}, status=400)
         return self._detail_response(checkin)
 
 
@@ -3722,8 +3926,12 @@ class FriendsView(ExternalApiView):
                 cursor=params.get("cursor") or None,
                 limit=params.get("limit") or DEFAULT_FRIEND_PAGE_SIZE,
             )
+        except MalformedCursorError as exc:
+            logger.info("friend list for %s rejected: %s", profile.pk, exc)
+            return Response({"error": "That cursor is invalid or expired."}, status=400)
         except FriendshipActionError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.warning("friend list for %s raised %s: %s", profile.pk, type(exc).__name__, exc)
+            return Response({"error": "That request could not be completed."}, status=400)
 
         # Resolved once for the page: _friend_identity masks a profile the caller
         # may not identify, and asking that per row re-derived the caller's own
@@ -3776,7 +3984,8 @@ class FriendDetailView(ExternalApiView):
         try:
             remove_friend(request.user.profile, target)
         except FriendshipNotFoundError as exc:
-            return Response({"error": exc.safe_message}, status=404)
+            logger.info("remove_friend(%s -> %s) rejected: %s", request.user.profile.pk, target.pk, exc)
+            return Response({"error": "No such profile."}, status=404)
         return Response(status=204)
 
 
@@ -3798,6 +4007,12 @@ class FriendActionView(ExternalApiView):
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "POST": frozenset({ApiKeyScope.SOCIAL_WRITE}),
     }
+
+    #: Body for a ``FriendshipNotFoundError`` 404. Overridden by
+    #: ``FriendUnblockView``, whose refusal must be byte-identical to an
+    #: unknown uuid's - a distinguishing message here would confirm a block
+    #: exists to the one person that must never learn it.
+    not_found_message: ClassVar[str] = "Friend request not found."
 
     def service_action(self, actor: Profile, target: Profile) -> Friendship:
         """Apply this view's ``services.social.friendship`` transition.
@@ -3836,11 +4051,17 @@ class FriendActionView(ExternalApiView):
         try:
             friendship = self.service_action(actor, target)
         except FriendshipNotFoundError as exc:
-            return Response({"error": exc.safe_message}, status=404)
+            logger.info("%s(%s -> %s) found no relationship: %s", type(self).__name__, actor.pk, target.pk, exc)
+            return Response({"error": self.not_found_message}, status=404)
         except FriendLimitExceededError as exc:
-            return Response({"error": exc.safe_message}, status=403)
+            logger.info("%s(%s -> %s) hit the friend limit: %s", type(self).__name__, actor.pk, target.pk, exc)
+            return Response({"error": "This would exceed the maximum number of friends allowed."}, status=403)
+        except CommunityDisabledError as exc:
+            logger.info("%s(%s -> %s) refused: %s", type(self).__name__, actor.pk, target.pk, exc)
+            return Response({"error": "Enable Community in Settings to accept friend requests."}, status=400)
         except FriendshipActionError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.warning("%s(%s -> %s) raised %s: %s", type(self).__name__, actor.pk, target.pk, type(exc).__name__, exc)
+            return Response({"error": "That request could not be completed."}, status=400)
 
         return Response(_serialize_friendship(actor, friendship))
 
@@ -3935,9 +4156,13 @@ class FriendMuteView(FriendActionView):
         try:
             friendship = action(actor, target)
         except FriendshipNotFoundError as exc:
-            return Response({"error": exc.safe_message}, status=404)
+            logger.info("%s(%s -> %s) found no relationship: %s", action.__name__, actor.pk, target.pk, exc)
+            # Same literal as the unknown-uuid branch above - see the docstring's
+            # indistinguishability note.
+            return Response({"error": "No such profile."}, status=404)
         except FriendshipActionError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.warning("%s(%s -> %s) raised %s: %s", action.__name__, actor.pk, target.pk, type(exc).__name__, exc)
+            return Response({"error": "That request could not be completed."}, status=400)
 
         return Response(_serialize_friendship(actor, friendship))
 
@@ -3973,10 +4198,21 @@ class FriendInvitesView(ExternalApiView):
                 data.get("message") or "",
                 signup_url_builder=lambda token: request.build_absolute_uri(f"/signup/?invite={token}"),
             )
+        except MalformedEmailAddressError as exc:
+            logger.info("invite by %s rejected: %s", request.user.profile.pk, exc)
+            return Response({"error": "Please enter a valid email address."}, status=400)
+        except SelfInviteError as exc:
+            logger.info("invite by %s rejected: %s", request.user.profile.pk, exc)
+            return Response({"error": "That's your own email address."}, status=400)
+        except InviteMessageTooLongError as exc:
+            logger.info("invite by %s rejected: %s", request.user.profile.pk, exc)
+            return Response({"error": "Your message is too long. Please shorten it and try again."}, status=400)
         except InviteValidationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("invite by %s rejected: %s", request.user.profile.pk, exc)
+            return Response({"error": "Please check the email address and message, then try again."}, status=400)
         except InviteRateLimitedError as exc:
-            return Response({"error": exc.safe_message}, status=429)
+            logger.info("invite by %s rate-limited: %s", request.user.profile.pk, exc)
+            return Response({"error": "You've sent too many invitations recently. Please try again later."}, status=429)
 
         return Response({"result": "sent"})
 
@@ -4235,7 +4471,8 @@ class NotificationsView(ExternalApiView):
                 limit=params.get("limit") or DEFAULT_NOTIFICATION_PAGE_SIZE,
             )
         except InvalidNotificationCursorError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("notification list for %s rejected: %s", profile.pk, exc)
+            return Response({"error": "That cursor is invalid or expired."}, status=400)
 
         results = [
             {

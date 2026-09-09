@@ -253,8 +253,6 @@ def albums_listing(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile],
     Returns:
         One :class:`AlbumListEntry` per album, in album order.
     """
-    from urbanlens.dashboard.models.images.model import Image
-
     owners: list[Pin | Wiki | Profile] = [owner] if isinstance(owner, (Pin, Wiki, Profile)) else list(owner)
     conceal = _owner_conceal(owners[0], viewer) if len(owners) == 1 else False
     albums_qs = albums_for_owners(owners)
@@ -262,7 +260,31 @@ def albums_listing(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile],
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
         albums_qs = conceal_rows(albums_qs, viewer)
-    albums = list(albums_qs)
+    return describe_albums(list(albums_qs), viewer, conceal=conceal)
+
+
+def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, conceal: bool = False) -> list[AlbumListEntry]:
+    """Cover, photo count and date range for each of *albums*.
+
+    Split out of :func:`albums_listing` so a caller that has already narrowed
+    the albums - a paginated panel, say - pays for a page of membership rows
+    rather than for every album the owner has.
+
+    Args:
+        albums: The albums to describe, in the order they should be rendered.
+        viewer: The browsing profile, for the photo-visibility gate.
+        conceal: Whether wiki concealment applies to *viewer*. Callers that
+            went through :func:`albums_listing` have this decided for them;
+            anyone narrowing albums themselves must decide it the same way
+            :func:`_owner_conceal` does, since it also gates which *photos*
+            count towards each album.
+
+    Returns:
+        One :class:`AlbumListEntry` per album, in the given order.
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    albums = list(albums)
     if not albums:
         return []
 
@@ -558,8 +580,16 @@ def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
 
     items_by_id = {item.pk: item for item in AlbumItem.objects.for_album(album)}
     updated: list[AlbumItem] = []
+    processed = 0
     for order, item_id in enumerate(ordered_ids):
-        item = items_by_id[item_id]
+        # *current* (and so *ordered_ids*) came from an earlier query, so a
+        # membership row removed in between (another tab, a concurrent
+        # remove-from-album request) is simply gone now. Skipping it drops the
+        # photo from the reorder instead of raising over one that's already gone.
+        item = items_by_id.get(item_id)
+        if item is None:
+            continue
+        processed += 1
         if item.order != order:
             item.order = order
             updated.append(item)
@@ -568,7 +598,7 @@ def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
     if album.sort != AlbumSort.CUSTOM:
         Album.objects.filter(pk=album.pk).update(sort=AlbumSort.CUSTOM)
         album.sort = AlbumSort.CUSTOM
-    return len(ordered_ids)
+    return processed
 
 
 def album_date_range(images: Sequence[Image]) -> tuple[datetime | None, datetime | None]:

@@ -223,6 +223,12 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
 
     Returns:
         The resolved ``(location, pin)`` pair - either or both may be None.
+
+    Raises:
+        TripValidationError: A ``pin_uuid``/``pin_slug`` was submitted but does
+            not resolve to one of *profile*'s own pins - either it does not
+            exist, or it belongs to someone else. Both cases answer identically
+            so the response can't be used to probe another account's pins.
     """
     import uuid as uuid_module
 
@@ -242,6 +248,12 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
                 pin = None
         if pin is not None:
             return pin.location, pin
+        # Unlike location_uuid below, this must not silently fall through to
+        # "no place given": a pin reference is only ever the caller's own (see
+        # the field's docstring on TripActivityCreateSerializer), so failing to
+        # resolve one is bad input, not an absent one - and staying quiet about
+        # it would attach nothing while telling the caller their pin was saved.
+        raise TripValidationError("That pin does not exist, or does not belong to you.")
 
     location_ref = (body.get("location_uuid") or body.get("location_slug") or "").strip()
     if location_ref:
@@ -545,7 +557,8 @@ def create_activity(
 
     Raises:
         TripPermissionError: The actor may not add activities to this trip.
-        TripValidationError: The notes exceed the shared text limit.
+        TripValidationError: The notes exceed the shared text limit, or
+            ``place`` names a pin that isn't the actor's own.
         TripQuotaError: The trip is already at ``max_trip_activities``.
     """
     require_perform(actor, trip, trip.allow_add_activities, ADD_ACTIVITY_DENIED)
@@ -594,6 +607,14 @@ def create_activity(
     from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares
 
     record_trip_activity_shares(activity)
+
+    # Mirrors update_activity/set_activity_status/complete_activity: a newly
+    # added confirmed activity outside the trip's current range must widen it
+    # too, or the header/hero date badge and the calendar's default month
+    # window stay stuck at the old range even though the itinerary now
+    # extends past it.
+    if activity.status == TripActivity.STATUS_CONFIRMED and activity.scheduled_at:
+        expand_trip_dates(trip, activity.scheduled_at.date())
     return activity
 
 
@@ -642,7 +663,8 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
     Raises:
         TripPermissionError: The actor may not edit activities on this trip.
         TripNotFoundError: No such activity on this trip.
-        TripValidationError: The notes exceed the shared text limit.
+        TripValidationError: The notes exceed the shared text limit, or
+            ``place`` names a pin that isn't the actor's own.
     """
     require_perform(actor, trip, trip.allow_edit_activities, EDIT_ACTIVITY_DENIED)
     activity = get_activity(trip, activity_id)
@@ -741,6 +763,38 @@ def set_activity_position(trip: Trip, actor: Profile, activity_id: int, *, lat: 
     activity.lng_override = lng_value
     activity.save(update_fields=["lat_override", "lng_override", "updated"])
     return lat_value, lng_value
+
+
+def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetime.date) -> TripActivity:
+    """Reschedule an activity to a new date (calendar drag-and-drop).
+
+    Only the date changes - an existing time-of-day component is preserved.
+
+    Args:
+        trip: The trip owning the activity.
+        actor: The profile dragging the activity.
+        activity_id: Primary key of the activity being moved.
+        date: The new date.
+
+    Returns:
+        The saved activity.
+
+    Raises:
+        TripPermissionError: The actor may not edit activities on this trip.
+        TripNotFoundError: No such activity on this trip.
+    """
+    require_perform(actor, trip, trip.allow_edit_activities, MOVE_ACTIVITY_DENIED)
+    activity = get_activity(trip, activity_id)
+
+    if activity.scheduled_at:
+        activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(date, activity.scheduled_at.time()))
+    else:
+        activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(date, datetime.time(0, 0)))
+    activity.save(update_fields=["scheduled_at", "updated"])
+
+    if activity.status == TripActivity.STATUS_CONFIRMED:
+        expand_trip_dates(trip, date)
+    return activity
 
 
 def set_activity_vote(trip: Trip, actor: Profile, activity_id: int, *, vote: str | None) -> None:

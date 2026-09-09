@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 import json
 import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.files.storage import default_storage
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.images.attachment import ImageAttachment
-from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExemption
+from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -25,6 +23,7 @@ from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.location.model import Location
@@ -236,28 +235,7 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
         images = Image.objects.filter(pk__in=image_ids, pin=pin, profile=profile)
 
         if action == "delete":
-            # Collect the stored file paths first, then delete the underlying
-            # storage files (Django has no bulk API for that) followed by a
-            # single bulk DB delete, instead of one DELETE per row.
-            # Same reference rule as delete_stored_file: a shared photo's file
-            # backs several rows, and the whole batch is going, so rows inside it
-            # must not count as references.
-            batch = list(images)
-            batch_pks = [image.pk for image in batch]
-            # A row also linked to a wiki (send_to_wiki below repoints rather than
-            # copies) must be unlinked from the pin, not destroyed - see
-            # detach_image_from_pin.
-            to_destroy = [image for image in batch if image.wiki_id is None]
-            to_unlink_ids = [image.pk for image in batch if image.wiki_id is not None]
-            for image in to_destroy:
-                delete_stored_file(image, also_deleting=batch_pks)
-            Image.objects.filter(pk__in=[image.pk for image in to_destroy]).delete()
-            if to_unlink_ids:
-                Image.objects.filter(pk__in=to_unlink_ids).update(pin=None)
-            # Row count, not file count - a row with no stored file (e.g. still
-            # processing) still gets deleted and must still be counted, or the
-            # response silently undercounts what the client asked it to delete.
-            return JsonResponse({"deleted": len(to_destroy), "unlinked": len(to_unlink_ids)})
+            return _delete_owned_images(images, unlink_from_pin_when_on_wiki=True)
 
         if action == "send_to_wiki":
             wiki = _wiki_for_location(pin.location)
@@ -267,15 +245,113 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
             # location's wiki, so this is the only way one gets there - and it is
             # recorded as an attachment as well as an FK, because the attachment is
             # what says a person chose to contribute this.
+            from urbanlens.dashboard.services.media.quota_rewards import refresh_community_quota_bonus
             from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
 
             sending = list(images.exclude(wiki=wiki))
             for image in sending:
                 attach_to_wiki(image, wiki, added_by=profile)
-            count = images.filter(pk__in=[image.pk for image in sending]).update(wiki=wiki)
+            sent_ids = [image.pk for image in sending]
+            count = images.filter(pk__in=sent_ids).update(wiki=wiki)
+            # Re-read: the bonus is judged on the FK the bulk update just wrote,
+            # which the in-memory rows do not have. A photo whose earlier
+            # contribution was withdrawn keeps its votes, so re-contributing it
+            # earns the bonus back here rather than needing fresh ones.
+            for image in Image.objects.filter(pk__in=sent_ids):
+                refresh_community_quota_bonus(image)
             return JsonResponse({"updated": count})
 
         return JsonResponse({"error": "Unknown action."}, status=400)
+
+
+def _delete_owned_images(images: QuerySet[Image], *, unlink_from_pin_when_on_wiki: bool) -> JsonResponse:
+    """Delete a batch of photos, and say how many were unlinked instead.
+
+    The batch mechanics are shared: storage files go first, because Django has
+    no bulk API for them, and the DB rows go in one delete rather than one per
+    row.
+
+    What is **not** shared is what a wiki-linked row means, which is why this
+    is a parameter rather than a rule. Deleting from a *pin* gallery unlinks
+    such a row from the pin instead of destroying it - the contribution belongs
+    to the wiki too, and taking it off the wiki is a separate act. Deleting
+    from the *Vault* is a different question with a different answer: the vault
+    is the account's own library, its per-photo delete
+    (``PhotoActionView.delete_photo``) destroys unconditionally, and the same
+    button one photo at a time must not mean something else in bulk. Reusing
+    the pin's rule there set ``pin=None`` on a photo the request never
+    mentioned, detaching it from a gallery the user was not looking at.
+
+    Args:
+        images: The queryset to delete, already scoped to the requester.
+        unlink_from_pin_when_on_wiki: Whether a row that is also on a wiki
+            should be detached from its pin rather than destroyed. True for a
+            pin gallery, false for the Vault.
+
+    Returns:
+        ``{"deleted": n, "unlinked": m}`` - row counts, not file counts. A row
+        with no stored file (still processing, say) is still deleted and still
+        counted, or the response undercounts what the client asked for.
+    """
+    batch = list(images)
+    batch_pks = [image.pk for image in batch]
+    # Same reference rule as delete_stored_file: a shared photo's file backs
+    # several rows, and the whole batch is going, so rows inside it must not
+    # count as references.
+    to_unlink_ids = [image.pk for image in batch if unlink_from_pin_when_on_wiki and image.wiki_id is not None]
+    to_destroy = [image for image in batch if image.pk not in set(to_unlink_ids)]
+    for image in to_destroy:
+        delete_stored_file(image, also_deleting=batch_pks)
+    Image.objects.filter(pk__in=[image.pk for image in to_destroy]).delete()
+    if to_unlink_ids:
+        Image.objects.filter(pk__in=to_unlink_ids).update(pin=None)
+    return JsonResponse({"deleted": len(to_destroy), "unlinked": len(to_unlink_ids)})
+
+
+class VaultGalleryBulkView(LoginRequiredMixin, View):
+    """Bulk actions over the profile's own Vault photos. Delete only.
+
+    P61: a Vault album had no bulk delete at all - the Delete and Send-to-wiki
+    buttons rendered ``hidden`` forever, because the album panel handed the
+    client a bulk URL only when the album's owner was a ``Pin``. You had to
+    leave the album and use the per-tile trash button one photo at a time.
+
+    Delete is the only one of the three that transfers. **Send to wiki** cannot:
+    the pin endpoint derives the wiki from ``pin.location``, and a vault album
+    has no location - the vault's own per-photo version takes a
+    ``location_slug`` from a picker the bulk bar has nowhere to put. **Bulk
+    share** cannot either: it opens the *pin* share dialog. Single-photo share
+    from the lightbox is unaffected, and is how a vault photo gets shared.
+
+    POST /vault/photos/bulk/
+    """
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        """Delete the requested photos, if they are this profile's.
+
+        Args:
+            request: JSON body with ``action`` and ``image_ids``.
+
+        Returns:
+            The delete counts, or a 400 naming what went wrong.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        try:
+            data = json.loads(request.body)
+            action = data["action"]
+            image_ids = [int(i) for i in data.get("image_ids", [])]
+        except (KeyError, ValueError, TypeError, json.JSONDecodeError):
+            return JsonResponse({"error": "Invalid request data."}, status=400)
+
+        if action == "send_to_wiki":
+            return JsonResponse({"error": "A Vault photo has no place to infer which wiki to send it to - send it from the photo's own lightbox instead."}, status=400)
+        if action != "delete":
+            return JsonResponse({"error": "Unknown action."}, status=400)
+
+        # Scoped by profile, which is what makes an id from someone else's
+        # library a no-op rather than an error - the toolbar only ever offers
+        # this on the viewer's own tiles.
+        return _delete_owned_images(Image.objects.filter(pk__in=image_ids, profile=profile), unlink_from_pin_when_on_wiki=False)
 
 
 class PinCoverPhotoView(LoginRequiredMixin, View):
@@ -532,5 +608,7 @@ class WikiImageView(LoginRequiredMixin, View):
         img, profile = self._get_image(request, image_id, location_slug)
         if img.profile != profile:
             raise Http404
-        detach_image_from_wiki(img)
+        # Owner-only, per the guard above, so this is always the contributor
+        # withdrawing their own photo.
+        detach_image_from_wiki(img, withdrawn_by_contributor=True)
         return HttpResponse(status=204)

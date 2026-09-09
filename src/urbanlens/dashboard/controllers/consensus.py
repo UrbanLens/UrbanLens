@@ -143,8 +143,12 @@ class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
             invitees = list(Profile.objects.filter(pk__in=invite_ids))
             try:
                 game_session = consensus_session.start_competitive_session(profile, invitees, total_rounds=total_rounds)
+            except consensus_session.NotFriendError as exc:
+                logger.info("consensus start rejected: %s", exc)
+                return JsonResponse({"error": "You can only invite friends to a session."}, status=400)
             except consensus_session.ConsensusError as exc:
-                return JsonResponse({"error": exc.safe_message}, status=400)
+                logger.info("consensus start rejected: %s", exc)
+                return JsonResponse({"error": "That session couldn't be started."}, status=400)
             return JsonResponse({"session_id": game_session.pk, "lobby": True, "session": serializers.serialize_session(game_session)})
 
         if not consensus_session.has_eligible_wikis([profile]):
@@ -153,7 +157,8 @@ class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         try:
             game_session = consensus_session.start_solo_session(profile, total_rounds=total_rounds)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus start rejected: %s", exc)
+            return JsonResponse({"error": "That session couldn't be started."}, status=400)
 
         round_ = consensus_session.get_or_create_round(game_session)
         if round_ is None:
@@ -192,8 +197,18 @@ class ConsensusInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             participant = consensus_session.invite_to_session(game_session, profile, invitee)
+        except consensus_session.NotHostError as exc:
+            logger.info("consensus invite rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can invite players."}, status=400)
+        except consensus_session.LobbyClosedError as exc:
+            logger.info("consensus invite rejected: %s", exc)
+            return JsonResponse({"error": "You can't invite once the game has started."}, status=400)
+        except consensus_session.NotFriendError as exc:
+            logger.info("consensus invite rejected: %s", exc)
+            return JsonResponse({"error": "You can only invite friends."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus invite rejected: %s", exc)
+            return JsonResponse({"error": "That invite couldn't be sent."}, status=400)
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -209,8 +224,15 @@ class ConsensusJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             participant = consensus_session.join_session(game_session, profile)
+        except consensus_session.NotInvitedError as exc:
+            logger.info("consensus join rejected: %s", exc)
+            return JsonResponse({"error": "You weren't invited to this session."}, status=400)
+        except consensus_session.LobbyClosedError as exc:
+            logger.info("consensus join rejected: %s", exc)
+            return JsonResponse({"error": "This game has already started - you can no longer join."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus join rejected: %s", exc)
+            return JsonResponse({"error": "You couldn't be added to this session."}, status=400)
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -226,8 +248,15 @@ class ConsensusBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             round_ = consensus_session.begin_session(game_session, profile)
+        except consensus_session.NotHostError as exc:
+            logger.info("consensus begin rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can start the game."}, status=400)
+        except consensus_session.LobbyClosedError as exc:
+            logger.info("consensus begin rejected: %s", exc)
+            return JsonResponse({"error": "This session has already started."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus begin rejected: %s", exc)
+            return JsonResponse({"error": "That session couldn't be started."}, status=400)
 
         if round_ is None:
             if consensus_session.rounds_played(game_session) == 0:
@@ -249,8 +278,15 @@ class ConsensusEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vie
 
         try:
             consensus_session.end_session_now(game_session, profile)
+        except consensus_session.NotHostError as exc:
+            logger.info("consensus end rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can end the game."}, status=400)
+        except consensus_session.SessionAlreadyEndedError as exc:
+            logger.info("consensus end rejected: %s", exc)
+            return JsonResponse({"error": "This game has already ended."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus end rejected: %s", exc)
+            return JsonResponse({"error": "That session couldn't be ended."}, status=400)
         return JsonResponse({"finished": True, "summary": consensus_session.session_summary(game_session)})
 
 
@@ -317,8 +353,18 @@ class ConsensusAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             answer = consensus_session.submit_answer(round_, profile, value)
+        except consensus_session.NotJoinedError as exc:
+            logger.info("consensus answer rejected: %s", exc)
+            return JsonResponse({"error": "Join this session before playing."}, status=400)
+        except consensus_session.RoundAlreadySettledError as exc:
+            logger.info("consensus answer rejected: %s", exc)
+            return JsonResponse({"error": "This round has already been resolved."}, status=400)
+        except consensus_session.DuplicateAnswerError as exc:
+            logger.info("consensus answer rejected: %s", exc)
+            return JsonResponse({"error": "You've already answered this round."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus answer rejected: %s", exc)
+            return JsonResponse({"error": "That answer couldn't be submitted."}, status=400)
 
         round_.refresh_from_db()
         return JsonResponse({"answer_id": answer.pk, "round": serializers.serialize_round(round_)})
@@ -340,8 +386,18 @@ class ConsensusSkipView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         round_ = get_object_or_404(ConsensusRound, pk=round_id, session=game_session)
         try:
             consensus_session.skip_round(round_, profile)
+        except consensus_session.NotJoinedError as exc:
+            logger.info("consensus skip rejected: %s", exc)
+            return JsonResponse({"error": "Join this session before playing."}, status=400)
+        except consensus_session.RoundAlreadySettledError as exc:
+            logger.info("consensus skip rejected: %s", exc)
+            return JsonResponse({"error": "This round has already been resolved."}, status=400)
+        except consensus_session.DuplicateAnswerError as exc:
+            logger.info("consensus skip rejected: %s", exc)
+            return JsonResponse({"error": "You've already answered this round."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus skip rejected: %s", exc)
+            return JsonResponse({"error": "That round couldn't be skipped."}, status=400)
 
         round_.refresh_from_db()
         return JsonResponse({"round": serializers.serialize_round(round_)})
@@ -367,8 +423,18 @@ class ConsensusVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         chosen_answer = get_object_or_404(ConsensusAnswer, pk=request.POST.get("answer_id"), round=round_)
         try:
             consensus_session.submit_vote(round_, profile, chosen_answer)
+        except consensus_session.NotJoinedError as exc:
+            logger.info("consensus vote rejected: %s", exc)
+            return JsonResponse({"error": "Join this session before voting."}, status=400)
+        except consensus_session.VotingClosedError as exc:
+            logger.info("consensus vote rejected: %s", exc)
+            return JsonResponse({"error": "This round isn't open for voting."}, status=400)
+        except consensus_session.VoteRejectedError as exc:
+            logger.info("consensus vote rejected: %s", exc)
+            return JsonResponse({"error": "That vote couldn't be recorded."}, status=400)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("consensus vote rejected: %s", exc)
+            return JsonResponse({"error": "That vote couldn't be submitted."}, status=400)
 
         round_.refresh_from_db()
         return JsonResponse({"round": serializers.serialize_round(round_)})

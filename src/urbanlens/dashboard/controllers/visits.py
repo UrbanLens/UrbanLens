@@ -16,14 +16,14 @@ from django.views import View
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
-from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.profile.avatar_colors import assign_avatar_colors
 from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.visits.visit_invites import resolve_suggest_participant_ids, sync_external_participants
 from urbanlens.dashboard.services.visits.visits import (
-    add_visited_status,
+    VisitInFutureError,
     create_manual_visit,
     create_visit_suggestion,
     delete_visit,
@@ -358,12 +358,16 @@ class VisitHistoryView(LoginRequiredMixin, View):
         # The tracking gate is re-checked inside create_manual_visit; the
         # explicit check above stays so a disabled-logging request is refused
         # before the date is even parsed (403 rather than a confusing 400).
-        visit = create_manual_visit(
-            pin,
-            visited_at=visited_at,
-            notes=notes,
-            markup_map=materialize_markup_map(pin.profile, map_data, context=pin),
-        )
+        try:
+            visit = create_manual_visit(
+                pin,
+                visited_at=visited_at,
+                notes=notes,
+                markup_map=materialize_markup_map(pin.profile, map_data, context=pin),
+            )
+        except VisitInFutureError as exc:
+            logger.info("manual visit rejected for pin %s: %s", pin.pk, exc)
+            return HttpResponse("That date is too far in the future.", status=400)
 
         uploaded_new = _sync_visit_photos(request, pin, visit)
 

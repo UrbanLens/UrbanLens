@@ -25,7 +25,9 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField, WikiStatVote
 from urbanlens.dashboard.services.pins.public_pins import (
     PublicPinConfig,
-    PublicVoteError,
+    UnrecognizedVoteChoiceError,
+    VoteNotOpenError,
+    VoterNotPinnedError,
     cast_public_vote,
     evaluate_public_pin_candidates,
     is_meaningful_name,
@@ -240,12 +242,16 @@ class VoteLifecycleTests(TestCase):
 
     def test_cast_requires_open_candidate_and_pin(self) -> None:
         outsider = Profile.objects.get(user=baker.make("auth.User"))
-        with pytest.raises(PublicVoteError):
+        with pytest.raises(VoterNotPinnedError):
             cast_public_vote(self.location, outsider, "public")
 
         PublicPinCandidate.objects.filter(pk=self.candidate.pk).update(status=PublicPinCandidateStatus.SUSPENDED)
-        with pytest.raises(PublicVoteError):
+        with pytest.raises(VoteNotOpenError):
             cast_public_vote(self.location, self.pinners[0], "public")
+
+    def test_cast_rejects_unrecognized_choice(self) -> None:
+        with pytest.raises(UnrecognizedVoteChoiceError):
+            cast_public_vote(self.location, self.pinners[0], "not-a-real-choice")
 
     def test_withdraw_removes_the_ballot(self) -> None:
         cast_public_vote(self.location, self.pinners[0], "public")

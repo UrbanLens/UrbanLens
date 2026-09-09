@@ -15,7 +15,9 @@
  * ratings, no distance/date scoring, no photo-feedback thumbs).
  */
 import { getCsrfToken } from "../shared/csrf";
+import { getJson, postForm } from "../shared/session-request";
 import { confirmAction, toast } from "../shared/dialogs";
+import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
 import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
 import { createMapLayers } from "../shared/map-layers";
@@ -246,23 +248,6 @@ function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number
     if (sessionIdValue !== undefined) resolved = resolved.replace(urls.session_id_sentinel, String(sessionIdValue));
     if (roundIdValue !== undefined) resolved = resolved.replace(urls.round_id_sentinel, String(roundIdValue));
     return resolved;
-}
-
-async function postForm(url: string, data: Record<string, string> | URLSearchParams): Promise<any> {
-    const body = data instanceof URLSearchParams ? data : new URLSearchParams(data);
-    // url is always urlFor(urls.<name>, ...) - a same-origin, server-rendered path
-    // template with only numeric ids substituted, never an arbitrary/external url.
-    const response = await fetch(url, {  // lgtm[js/request-forgery]
-        method: "POST",
-        headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-    });
-    return response.json();
-}
-
-async function getJson(url: string): Promise<any> {
-    const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-    return response.json();
 }
 
 /** Runs `action` with `button` disabled and spinning, so no round-trip is silent. */
@@ -864,7 +849,9 @@ async function uploadPhoto(): Promise<void> {
     }
     const formData = new FormData();
     formData.append("image", file);
-    // Same-origin urlFor(...) path template - see postForm's note above.
+    // Multipart, so not postForm's business - and already ok-checked below,
+    // which is what postForm exists to add. Same-origin urlFor(...) path
+    // template, never an arbitrary url.
     const response = await fetch(urlFor(urls.photo, state.sessionId, state.currentRoundId), {  // lgtm[js/request-forgery]
         method: "POST",
         headers: { "X-CSRFToken": getCsrfToken() },
@@ -1169,6 +1156,10 @@ function connectSessionSocket(): void {
     state.ws = openLiveSocket({
         path: `/ws/consensus/session/${state.sessionId}/`,
         onMessage: handleSocketMessage,
+        // Every open, reconnects included: a dropped connection takes the
+        // acknowledgement with it, and an entry left in the composer's queue
+        // would retire the wrong message later (see shared/chat-composer.ts).
+        onOpen: () => chatComposer?.reset(),
         // 4404 here means the host removed this player, or the entitlement went
         // away - nothing more is coming, so drop the handle rather than leave a
         // dead one blocking a later join.
@@ -1206,6 +1197,14 @@ function handleSocketMessage(data: any): void {
         case "chat.message":
             appendChatMessage(data.message as ChatMessagePayload);
             break;
+        case "error":
+            // The consumer refuses a frame with an error rather than a close -
+            // an out-of-scope credential, a failed write, or a volume limit.
+            // Dropping these silently is what made a throttle unsafe to add
+            // (P31); reportRefusal also gives the composer's text back.
+            if (chatComposer) chatComposer.reportRefusal(data.detail);
+            else toastRefusal(data.detail);
+            break;
         default:
             break;
     }
@@ -1216,6 +1215,9 @@ function handleSocketMessage(data: any): void {
 // ---------------------------------------------------------------------------
 
 function appendChatMessage(message: ChatMessagePayload): void {
+    // Our own message coming back on the broadcast is the acknowledgement, so
+    // it stops being a candidate for a later refusal to hand back.
+    if (message.profile_id === myProfileId) chatComposer?.confirm(message.body);
     const log = el("cs-chat-log");
     const line = document.createElement("div");
     const nameSpan = document.createElement("span");
@@ -1234,15 +1236,16 @@ async function loadChatHistory(): Promise<void> {
     for (const message of (data.messages ?? []) as ChatMessagePayload[]) appendChatMessage(message);
 }
 
+/** Holds what has been sent and not yet acknowledged - see shared/chat-composer.ts. */
+let chatComposer: ChatComposer | null = null;
+
 function initChat(): void {
+    // Resolved on each send rather than captured: the socket is replaced on
+    // every reconnect, and send() returns false while there isn't one.
+    chatComposer = new ChatComposer(el<HTMLInputElement>("cs-chat-input"), (payload) => state.ws?.send(payload) ?? false);
     el("cs-chat-form").addEventListener("submit", (event) => {
         event.preventDefault();
-        const input = el<HTMLInputElement>("cs-chat-input");
-        const body = input.value.trim();
-        // send() is false while the socket is reconnecting - leave what they
-        // typed in the box rather than clearing it for a message that never left.
-        if (!body || !state.ws?.send({ body })) return;
-        input.value = "";
+        chatComposer?.submit();
     });
 }
 

@@ -1,0 +1,11 @@
+{% load dashboard_tags %}{% comment %}
+The icon catalogue, with no picker id anywhere in it: one response serves every
+picker on the page. Handlers read the id from the enclosing
+.icon-picker-dropdown, and the "selected" state is applied by the picker after
+injection rather than rendered here, because the same bytes are cached and
+reused across pickers holding different values (P68).
+
+Two fragments in one response - the tab strip scales with the catalogue's
+categories the same way the grid scales with its icons, and a second request for
+28 buttons would not be worth its round trip.
+{% endcomment %}<div data-icon-picker-tabs>{% for cat_id, cat_data in icon_categories.items %}<button type="button" class="icon-tab" data-cat="{{ cat_id }}" onclick="IconPicker.setTab(this.closest('.icon-picker-dropdown').dataset.picker, this.dataset.cat, this)">{{ cat_data.0 }}</button>{% endfor %}</div><div data-icon-picker-items>{% for cat_id, cat_data in icon_categories.items %}{% for icon, label in cat_data.1 %}<button type="button" class="icon-picker-item" data-icon="{{ icon }}" data-cat="{{ cat_id }}" data-label="{{ label|lower }}" data-keywords="{{ icon|icon_keywords }}" title="{{ label }}" onclick="IconPicker.pick(this.closest('.icon-picker-dropdown').dataset.picker, this.dataset.icon, this)"><span class="icon-picker-glyph">{{ icon }}</span><span class="icon-picker-item-label">{{ label }}</span></button>{% endfor %}{% endfor %}</div>

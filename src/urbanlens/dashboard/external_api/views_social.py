@@ -19,9 +19,10 @@ which is why these routes are gated on ``social:write`` rather than
 ``photos:write``. Reusing the photo scope would over-grant: ``photos:write``
 also authorizes deleting a user's actual photographs. The upload itself goes
 through ``services.profile.avatar.set_profile_avatar``, so the size/sniffing/antivirus
-checks are the same ones the site's own form runs, and the refusal messages are
-verbatim the shared ``image_upload_error`` vocabulary so an app needs one
-mapping rather than two.
+checks are the same ones the site's own form runs. The refusal messages here are
+this route's own hand-authored text, one per ``AvatarUploadError`` subclass -
+``image_upload_error``'s own message is log-only, per the same convention every
+other catch site in this app follows.
 
 The gravatar path is deliberately not exposed. It performs an outbound fetch
 keyed on the account's email address; that is acceptable as a button its owner
@@ -38,13 +39,14 @@ never the value.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from drf_spectacular.utils import extend_schema
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
-from urbanlens.dashboard.external_api.serializers import ErrorSerializer, FriendshipSerializer, ProfileDetailSerializer
+from urbanlens.dashboard.external_api.serializers import ErrorSerializer, ProfileDetailSerializer
 from urbanlens.dashboard.external_api.serializers_social import (
     AvatarEmojiSerializer,
     ProfileAnnotationsSerializer,
@@ -66,9 +68,21 @@ from urbanlens.dashboard.external_api.serializers_social import (
 from urbanlens.dashboard.external_api.views import ExternalApiView, FriendActionView, ProfileDetailView, _resolve_profile
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.social_link.model import SocialLink
-from urbanlens.dashboard.services.profile.avatar import AvatarUploadError, clear_profile_avatar, set_profile_avatar, set_profile_avatar_from_emoji
+from urbanlens.dashboard.services.profile.avatar import (
+    AvatarMalwareDetectedError,
+    AvatarScanUnavailableError,
+    AvatarTooLargeError,
+    AvatarUnsupportedFormatError,
+    AvatarUploadError,
+    clear_profile_avatar,
+    set_profile_avatar,
+    set_profile_avatar_from_emoji,
+)
 from urbanlens.dashboard.services.profile.profile_annotations import (
+    MAX_PROFILE_NICKNAME_LENGTH,
     AnnotationError,
+    NicknameTooLongError,
+    SelfAnnotationError,
     clear_nickname,
     clear_trust,
     get_annotations,
@@ -83,6 +97,8 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.friendship.model import Friendship
     from urbanlens.dashboard.models.profile.model import Profile
+
+logger = logging.getLogger(__name__)
 
 #: The single body every "you may not see this profile" refusal carries, on
 #: every route in this module. One string, so a caller cannot separate "no such
@@ -104,6 +120,8 @@ class FriendUnblockView(FriendActionView):
     produces, whether or not a block exists. That is the whole point: the
     blocked party learns nothing, including whether there is anything to learn.
     """
+
+    not_found_message: ClassVar[str] = _NO_SUCH_PROFILE
 
     def service_action(self, actor: Profile, target: Profile) -> Friendship:
         """Lift the caller's own block on the target.
@@ -215,11 +233,21 @@ class ProfileAvatarView(_OwnProfileApiView):
 
         try:
             set_profile_avatar(profile, uploaded)
+        except AvatarTooLargeError as exc:
+            logger.info("external API avatar upload rejected for %s: %s", profile.pk, exc)
+            return Response({"error": "That file is too large. Please upload a smaller image."}, status=413)
+        except AvatarUnsupportedFormatError as exc:
+            logger.info("external API avatar upload rejected for %s: %s", profile.pk, exc)
+            return Response({"error": "That file isn't a supported image format. Please upload a JPEG, PNG, GIF, WebP, HEIC, BMP, TIFF, or AVIF file."}, status=400)
+        except AvatarMalwareDetectedError as exc:
+            logger.info("external API avatar upload rejected for %s: %s", profile.pk, exc)
+            return Response({"error": "That file failed a security scan and wasn't uploaded."}, status=422)
+        except AvatarScanUnavailableError as exc:
+            logger.warning("external API avatar upload scan unavailable for %s: %s", profile.pk, exc)
+            return Response({"error": "Our antivirus scanner is temporarily unavailable. Please try again shortly."}, status=503)
         except AvatarUploadError as exc:
-            # Message and status both come straight from ``image_upload_error``,
-            # so this endpoint speaks the same refusal vocabulary as every
-            # other upload on the surface.
-            return Response({"error": exc.safe_message}, status=exc.status_code)
+            logger.info("external API avatar upload rejected for %s: %s", profile.pk, exc)
+            return Response({"error": "That avatar couldn't be uploaded."}, status=400)
 
         return self.profile_detail(request, profile_slug)
 
@@ -409,8 +437,15 @@ class ProfileNicknameView(_AnnotationApiView):
         viewer = request.user.profile
         try:
             set_nickname(viewer, subject, serializer.validated_data["nickname"])
+        except SelfAnnotationError as exc:
+            logger.info("external API nickname rejected for %s: %s", viewer.pk, exc)
+            return Response({"error": "You cannot set a nickname for your own profile."}, status=400)
+        except NicknameTooLongError as exc:
+            logger.info("external API nickname rejected for %s: %s", viewer.pk, exc)
+            return Response({"error": f"Nickname must be {MAX_PROFILE_NICKNAME_LENGTH} characters or fewer."}, status=400)
         except AnnotationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API nickname rejected for %s: %s", viewer.pk, exc)
+            return Response({"error": "That nickname is invalid."}, status=400)
         return self.annotations_response(viewer, subject)
 
     @extend_schema(responses={200: ProfileAnnotationsSerializer, 404: ErrorSerializer})
@@ -466,8 +501,12 @@ class ProfileTrustView(_AnnotationApiView):
         viewer = request.user.profile
         try:
             set_trust(viewer, subject, serializer.validated_data["rating"])
+        except SelfAnnotationError as exc:
+            logger.info("external API trust rating rejected for %s: %s", viewer.pk, exc)
+            return Response({"error": "You cannot rate your own profile."}, status=400)
         except AnnotationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API trust rating rejected for %s: %s", viewer.pk, exc)
+            return Response({"error": "That rating is invalid."}, status=400)
         return self.annotations_response(viewer, subject)
 
     @extend_schema(responses={200: ProfileAnnotationsSerializer, 404: ErrorSerializer})

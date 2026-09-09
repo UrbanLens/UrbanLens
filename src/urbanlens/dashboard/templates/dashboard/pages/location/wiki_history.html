@@ -1,3 +1,10 @@
+{% comment %}
+The wiki's field-edit history, one page at a time.
+
+Revert and Expunge re-render this same list through `_render_history`, so each
+sends the page it was fired from - without it, acting on a row would drop the
+user back to page one.
+{% endcomment %}
 {% if edits %}
 <ul class="wiki-history-list">
     {% for edit in edits %}
@@ -34,6 +41,7 @@
                     hx-post="{% url 'location.wiki.revert' location.slug edit.id %}"
                     hx-target="#wiki-tab-content"
                     hx-swap="innerHTML"
+                    hx-vals='{"page": "{{ page_obj.number }}"}'
                     hx-confirm="Revert this edit? The location will be restored to the values shown on the left.">
                 <i class="material-symbols-outlined">undo</i> Revert
             </button>
@@ -44,6 +52,7 @@
                     hx-post="{% url 'location.wiki.history.delete' location.slug edit.id %}"
                     hx-target="#wiki-tab-content"
                     hx-swap="innerHTML"
+                    hx-vals='{"page": "{{ page_obj.number }}"}'
                     hx-confirm="Permanently delete this edit? This reverts your edit and erases it from the history forever - use this if you accidentally posted private information. This cannot be undone.">
                 <i class="material-symbols-outlined">delete_forever</i> Expunge
             </button>
@@ -53,6 +62,8 @@
     </li>
     {% endfor %}
 </ul>
+{% url 'location.wiki.history' location.slug as wiki_history_url %}
+{% include "dashboard/partials/ui/_pagination_controls.html" with page_url=wiki_history_url page_target="#wiki-tab-content" page_swap="innerHTML" page_noun="wiki edits" %}
 {% else %}
 <p class="wiki-history-empty">No edits have been recorded yet. Be the first to improve this location!</p>
 {% endif %}

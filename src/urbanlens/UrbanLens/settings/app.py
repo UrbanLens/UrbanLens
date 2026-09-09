@@ -191,6 +191,55 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "when the two hosts are not related that way, and never to a public suffix."
         ),
     )
+    max_request_body_mb: int = Field(
+        default=0,
+        description=(
+            "Largest request body this deployment's ingress will pass, in MB, or 0 when nothing in front of the "
+            "app imposes one. A CDN or proxy that rejects an oversized body answers the browser itself, so the "
+            "app never sees the request and cannot explain it - setting this caps the upload size the app "
+            "advertises and enforces, so the user is told before the bytes are sent. Cloudflare's free and pro "
+            "plans cap it at 100."
+        ),
+    )
+    media_storage_backend: str = Field(
+        default="filesystem",
+        description=(
+            "Where user uploads are stored: 'filesystem' (the default, and the only thing a single-machine "
+            "self-host needs) or 's3' for any S3-compatible object store, including Garage. Switching to 's3' "
+            "changes nothing about who may read a file: uploads stay behind the media gate either way, and "
+            "FileField.url keeps returning a /media/ path rather than a presigned bucket URL."
+        ),
+    )
+    s3_endpoint_url: str = Field(
+        default="",
+        description=(
+            "Base URL of the S3-compatible API, e.g. http://garage-s3.garage.svc.cluster.local:3900. Required "
+            "when UL_MEDIA_STORAGE_BACKEND is 's3'. Leave empty for real AWS S3, which boto3 derives from the region."
+        ),
+    )
+    s3_bucket_name: str = Field(default="", description="Bucket holding user uploads. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
+    s3_access_key_id: str | None = Field(default=None, description="Access key for the object store. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
+    s3_secret_access_key: str | None = Field(default=None, description="Secret key for the object store. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
+    s3_region_name: str = Field(
+        default="garage",
+        description="Region the object store advertises. Garage uses whatever its cluster was initialised with; SigV4 needs it to match.",
+    )
+    s3_addressing_style: str = Field(
+        default="path",
+        description=(
+            "'path' (endpoint/bucket/key) or 'virtual' (bucket.endpoint/key). Garage and most self-hosted stores "
+            "need 'path', because virtual-host style needs a wildcard DNS record and a wildcard certificate."
+        ),
+    )
+    media_x_accel_object_prefix: str = Field(
+        default="",
+        description=(
+            "Internal nginx location that proxies the object store, e.g. '/_object_media/'. When set alongside "
+            "UL_MEDIA_STORAGE_BACKEND=s3, the gate authorizes the request and then hands nginx a URL it signed "
+            "itself, so the bytes never pass through Django and the client never receives a signed URL. Leave "
+            "empty and the gate streams the object itself, which is what a deployment with no nginx must do."
+        ),
+    )
     process_role: str = Field(
         default="unspecified",
         description=(
@@ -260,6 +309,47 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "Set 0 when nothing fronts the app, so REMOTE_ADDR is used and X-Forwarded-For ignored - "
             "but never leave it at 0 behind a proxy, or every request keys to the proxy's own address "
             "and one attacker throttles the whole site."
+        ),
+    )
+
+    websocket_max_frame_chars: int = Field(
+        default=65_536,
+        ge=1,
+        description=(
+            "Largest inbound WebSocket frame, in characters, a chat consumer will parse. Compared "
+            "against the raw frame before it is JSON-decoded, so an oversized frame costs a length "
+            "check rather than a full parse. Has to stay above the largest legitimate frame: a "
+            "direct message carries up to a 40,000-character ciphertext, and a 4,000-character "
+            "safety message escapes to roughly 24,000 characters when a client sends ASCII-safe "
+            "JSON. Cannot be disabled - a size cap with an off switch is a size cap somebody turns off."
+        ),
+    )
+    websocket_frames_per_minute: int = Field(
+        default=120,
+        description=(
+            "Inbound frames one sender may send per minute on one socket family, counting every "
+            "frame - keep-alives, typing indicators and messages alike - because each one costs "
+            "parsing and dispatch whether or not it writes. The web client throttles typing to one "
+            "frame per 3s and pings every 45s, so a fast typist sits near 25/minute. 0 disables it."
+        ),
+    )
+    websocket_fanout_frames_per_minute: int = Field(
+        default=20,
+        description=(
+            "Inbound frames per minute that fan out to other people without writing a row - today "
+            "just the direct-message typing indicator, which is delivered into the recipient's "
+            "group. Charged on top of UL_WEBSOCKET_FRAMES_PER_MINUTE. 0 disables it."
+        ),
+    )
+    messages_per_minute: int = Field(
+        default=20,
+        description=(
+            "Chat messages one sender may create per minute, counted at the service layer so the "
+            "WebSocket and the HTTP fallback share one budget rather than one each - every socket "
+            "write here is also reachable as a plain POST. Direct and group messages share a "
+            "per-sender budget; safety check-in and game session chat are scoped per conversation, "
+            "so handling two at once does not throttle either. One every three seconds sustained "
+            "is already faster than people type. 0 disables it."
         ),
     )
 

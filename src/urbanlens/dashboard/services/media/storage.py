@@ -16,7 +16,6 @@ from contextlib import contextmanager
 import logging
 from typing import TYPE_CHECKING
 
-from django.core.cache import cache
 from django.db.models import Q, Sum
 from django.template.defaultfilters import filesizeformat
 
@@ -24,9 +23,10 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import active_subscription_roles
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Sequence
 
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ _ORIGINAL_ASSUMED_DIMENSION = 4032
 _ASSUMED_ASPECT = 0.75
 
 
-def get_quota_bytes(profile: Profile) -> int | None:
+def get_quota_bytes(profile: Profile, *, roles: Sequence[SubscriptionRole] | None = None) -> int | None:
     """Resolve the storage quota for a profile, in bytes.
 
     The site-wide default applies to everyone; active subscription roles with
@@ -78,13 +78,18 @@ def get_quota_bytes(profile: Profile) -> int | None:
 
     Args:
         profile: The profile whose quota to resolve.
+        roles: The profile's active subscription roles, when the caller has
+            already resolved them. A page rendering a row per user needs the
+            same roles for its own display, and looking them up here as well
+            costs a second query per row - see ``SiteAdminUsersView``. Omit it
+            and they are fetched.
 
     Returns:
         The quota in bytes, or None when the user's storage is unlimited.
     """
     settings = SiteSettings.get_current()
     quotas_gb = [settings.storage_quota_gb]
-    for role in active_subscription_roles(profile.user):
+    for role in active_subscription_roles(profile.user) if roles is None else roles:
         if role.storage_quota_gb is not None:
             quotas_gb.append(role.storage_quota_gb)
     if any(quota == 0 for quota in quotas_gb):
@@ -230,9 +235,49 @@ def per_profile_upload_lock(profile: Profile, timeout: int = _UPLOAD_LOCK_TIMEOU
         release_lock(key, token)
 
 
+def ingress_body_limit_bytes() -> int:
+    """The largest request body the ingress in front of this deployment will pass.
+
+    Returns:
+        The cap in bytes, or 0 when nothing in front of the app imposes one.
+    """
+    from django.conf import settings
+
+    return max(0, int(getattr(settings, "MAX_REQUEST_BODY_BYTES", 0) or 0))
+
+
+def cap_to_ingress(limit_bytes: int) -> int:
+    """Lower *limit_bytes* to what the ingress will actually carry.
+
+    An upload larger than the ingress cap is rejected by the proxy, which
+    answers the browser itself - so the application never sees the request, no
+    view runs, and the user is left with somebody else's error page after
+    uploading as much as the cap allowed. Advertising the smaller number instead
+    turns that into a refusal before any bytes are sent.
+
+    Args:
+        limit_bytes: The limit this deployment would otherwise apply.
+
+    Returns:
+        The smaller of *limit_bytes* and the ingress cap, or *limit_bytes*
+        unchanged when no cap is configured.
+    """
+    ingress = ingress_body_limit_bytes()
+    return min(limit_bytes, ingress) if ingress else limit_bytes
+
+
 def max_upload_file_size_bytes() -> int:
-    """Site-wide max size for a single photo/video/document upload, in bytes."""
-    return SiteSettings.get_current().max_upload_file_size_mb * 1_000_000
+    """Site-wide max size for a single photo/video/document upload, in bytes.
+
+    Read by both halves of the size check - ``file_size_error_for_upload`` on
+    the server and the ``data-max-file-size`` the vault pages hand their upload
+    widget - so clamping here refuses an oversized file in the browser rather
+    than after it has been sent.
+
+    Returns:
+        The admin's configured limit, lowered to the ingress cap when there is one.
+    """
+    return cap_to_ingress(SiteSettings.get_current().max_upload_file_size_mb * 1_000_000)
 
 
 def file_size_error_for_upload(upload_size: int | None) -> str | None:

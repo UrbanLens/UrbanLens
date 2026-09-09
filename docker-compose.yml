@@ -26,7 +26,13 @@ x-app-env: &app-env
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_APP_PORT: ${UL_APP_PORT:-21800}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
-  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:21080}
+  # Defaulted from UL_APP_PORT, not written out: as a literal it named 21080
+  # while the app publishes on 21800, and nothing about the symptoms says
+  # "port typo" - a browser's every POST is rejected on CSRF origin checking
+  # (ALLOWED_HOSTS never carries a port, so this is the only place one can come
+  # from), every URL the app builds for itself points nowhere, and the media
+  # host's frame-ancestors names an origin that does not exist.
+  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:${UL_APP_PORT:-21800}}
   UL_GOOGLE_CLIENT_ID: ${UL_GOOGLE_CLIENT_ID}
   UL_GOOGLE_CLIENT_SECRET: ${UL_GOOGLE_CLIENT_SECRET}
   UL_DISCORD_CLIENT_ID: ${UL_DISCORD_CLIENT_ID}
@@ -104,7 +110,8 @@ x-sandbox-env: &sandbox-env
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
-  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:21080}
+  # Defaulted from UL_APP_PORT - see the note on the first of these.
+  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:${UL_APP_PORT:-21800}}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
@@ -185,7 +192,8 @@ x-ai-env: &ai-env
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
-  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:21080}
+  # Defaulted from UL_APP_PORT - see the note on the first of these.
+  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:${UL_APP_PORT:-21800}}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
@@ -332,6 +340,11 @@ services:
     # in `docker logs`. Route it to the shared log volume instead so it's still on
     # disk for debugging WS issues (see channels_redis timeout tuning) without
     # flooding the console.
+    # The inbound frame-size flags are deliberately absent here and appended by
+    # docker-entrypoint.sh instead: compose substitutes ${...} from the shell
+    # before any container starts, so it cannot read a cap Django derives at
+    # import time, and spelling the number in both places is how the two drift.
+    # Passing --websocket-max-message-size explicitly here overrides that.
     command:
       [
         "-b",

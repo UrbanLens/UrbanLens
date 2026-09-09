@@ -29,9 +29,14 @@ interface Page<T> {
     results?: T[];
 }
 
-async function createList(api: ApiClient): Promise<{ slug: string; name: string }> {
+async function createList(api: ApiClient, label = "sec list"): Promise<{ slug: string; name: string }> {
+    // Every call site needs its own name - PinList enforces one unique name per
+    // profile, and every caller here shares the `primary` account. A literal
+    // label alone still collides with itself under `--repeat-each` (same runId,
+    // same label, concurrent workers), so a short random suffix disambiguates
+    // repeats of the same call site too, not just the four distinct sites.
     const created = await api.json<{ slug: string; name: string }>("post", "lists/", {
-        name: resourceName("sec list"),
+        name: `${resourceName(label)} ${crypto.randomUUID().slice(0, 8)}`,
         description: "Owned by the security suite; not for sharing.",
     });
     expect(created.slug, `list create carried no slug: ${JSON.stringify(created)}`).toBeTruthy();
@@ -50,8 +55,11 @@ async function createTrip(api: ApiClient): Promise<{ slug: string; name: string 
 }
 
 async function createLabel(api: ApiClient): Promise<{ uuid: string; name: string }> {
+    // Label enforces one unique name per profile - same reasoning as createList's
+    // suffix above, and needed for the same reason: multiple call sites share
+    // this account, and `--repeat-each` reruns the same call site too.
     const created = await api.json<{ uuid: string; name: string }>("post", "labels/", {
-        name: resourceName("sec label"),
+        name: `${resourceName("sec label")} ${crypto.randomUUID().slice(0, 8)}`,
         kind: "tag",
     });
     expect(created.uuid).toBeTruthy();
@@ -60,8 +68,9 @@ async function createLabel(api: ApiClient): Promise<{ uuid: string; name: string
 }
 
 async function createFilter(api: ApiClient): Promise<{ uuid: string; name: string }> {
+    // SavedFilter enforces one unique name per profile - see createLabel above.
     const created = await api.json<{ uuid: string; name: string }>("post", "saved-filters/", {
-        name: resourceName("sec filter"),
+        name: `${resourceName("sec filter")} ${crypto.randomUUID().slice(0, 8)}`,
         criteria: { security: { max: 1 } },
     });
     expect(created.uuid).toBeTruthy();
@@ -70,8 +79,9 @@ async function createFilter(api: ApiClient): Promise<{ uuid: string; name: strin
 }
 
 async function createCustomField(api: ApiClient): Promise<{ id: string | number; name: string }> {
+    // CustomField enforces one unique name per (profile, entity_type) - see createLabel above.
     const created = await api.json<{ id?: number; field_id?: number; uuid?: string; name: string }>("post", "custom-fields/", {
-        name: resourceName("sec field"),
+        name: `${resourceName("sec field")} ${crypto.randomUUID().slice(0, 8)}`,
         entity_type: "pin",
         field_type: "text",
     });
@@ -97,7 +107,7 @@ test.describe("cross-account reads look like absence", () => {
     });
 
     ifSecondaryAccount()("another account's list", async ({ api, secondaryApi }) => {
-        const list = await createList(api);
+        const list = await createList(api, "sec list read");
         expect((await api.get(`lists/${list.slug}/`)).status()).toBe(200);
         await expectIndistinguishableFromMissing(
             await secondaryApi.get(`lists/${list.slug}/`),
@@ -171,7 +181,7 @@ test.describe("cross-account writes do not land", () => {
     });
 
     ifSecondaryAccount()("another account cannot rename a list, trip, label or filter", async ({ api, secondaryApi }) => {
-        const list = await createList(api);
+        const list = await createList(api, "sec list rename");
         const trip = await createTrip(api);
         const label = await createLabel(api);
         const filter = await createFilter(api);
@@ -238,7 +248,7 @@ test.describe("cross-account writes do not land", () => {
 test.describe("collections do not accept another user's objects", () => {
     ifSecondaryAccount()("a list will not take a pin uuid the caller does not own", async ({ api, secondaryApi }) => {
         const theirs = await secondaryApi.createPin({ name: resourceName("foreign list member") });
-        const list = await createList(api);
+        const list = await createList(api, "sec list foreign member");
 
         const added = await api.post(`lists/${list.slug}/items/`, { pin_uuids: [theirs.uuid] });
         await expectNotServerError(added, "adding another account's pin to a list");
@@ -277,7 +287,7 @@ test.describe("collections do not accept another user's objects", () => {
 test.describe("indexes never include another account's rows", () => {
     ifSecondaryAccount()("pin sync, lists, trips, labels and filters are each scoped to the caller", async ({ api, secondaryApi }) => {
         const pin = await api.createPin({ name: resourceName("index isolation pin") });
-        const list = await createList(api);
+        const list = await createList(api, "sec list isolation");
         const trip = await createTrip(api);
         const label = await createLabel(api);
         const filter = await createFilter(api);

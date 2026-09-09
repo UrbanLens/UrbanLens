@@ -8,7 +8,15 @@ default_install_hook_types: [pre-commit]
 # - not check-yaml, not mixed-line-ending. That is how it was silently committed
 # with CRLF endings. Note `exclude` below still drops .github/ and .devcontainer/
 # (anything starting with `.` or `_`), so the workflow files remain unchecked.
-files: '^(.+\.(py|ts|js|tsx|jsx|yaml|yml|toml|html|txt))$'
+#
+# `json` for the same reason, found the same way: check-json was registered
+# below and this list did not admit a single file it could read, so it had never
+# run. Its first live run failed on a file that had been malformed the whole
+# time. `sh` for the 13 shell scripts under bin/, which reach the case-conflict,
+# merge-conflict, private-key and LF hooks - but *not* the autofix hook, whose
+# own TEXT_SUFFIXES set (bin/precommit_autofix.py:72) does not list `.sh`, so
+# trailing whitespace in a shell script is still nobody's business.
+files: '^(.+\.(py|ts|js|tsx|jsx|json|sh|yaml|yml|toml|html|txt))$'
 exclude: '(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)'
 
 # AUTO-FIX
@@ -40,6 +48,9 @@ repos:
     -   id: check-added-large-files
     -   id: check-ast
     -   id: check-json
+        # pyright's config format is JSONC - the `//` comments in this one are
+        # deliberate and pyright reads them. check-json only parses strict JSON.
+        exclude: '^pyrightconfig\.json$'
     -   id: check-case-conflict
     -   id: check-merge-conflict
     -   id: check-toml
@@ -156,6 +167,38 @@ repos:
         entry: python3 bin/check_migration_graph.py
         language: system
         pass_filenames: false
+        always_run: true
+        stages: [manual]
+      - id: image-file-reads
+        name: no template reads a photo's file without checking it is there
+        entry: python3 bin/check_image_file_reads.py
+        language: system
+        pass_filenames: false
+        # always_run, and manual: the guard that makes a read safe can sit any
+        # distance above it, and can be in a `{% with %}` a `files:` pattern
+        # would not connect to the read it protects.
+        always_run: true
+        stages: [manual]
+
+      - id: static-url-literals
+        name: every /static/ URL a template writes goes through {% static %}
+        entry: python3 bin/check_static_url_literals.py
+        language: system
+        pass_filenames: false
+        # always_run, and manual: it reads every template, and a literal is
+        # equally wrong before and after any single edit.
+        always_run: true
+        stages: [manual]
+
+      - id: bem-modifiers
+        name: every BEM modifier a template applies has a rule that styles it
+        entry: python3 bin/check_bem_modifiers.py
+        language: system
+        pass_filenames: false
+        # always_run, and manual: it compiles the Sass sources (~2.5s) because
+        # the checked-in style.css is a build artifact that is routinely behind
+        # them, and the answer depends on every template and every stylesheet at
+        # once - a `files:` pattern would miss the edit that deleted the rule.
         always_run: true
         stages: [manual]
       - id: doc-line-refs

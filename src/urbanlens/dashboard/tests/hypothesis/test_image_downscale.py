@@ -21,7 +21,12 @@ from PIL.TiffImagePlugin import IFDRational
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.media.images import _json_safe, downscale_stored_image, extract_exif_data
+from urbanlens.dashboard.services.media.images import (
+    _json_safe,
+    discard_superseded_file,
+    downscale_stored_image,
+    extract_exif_data,
+)
 
 _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 
@@ -129,10 +134,10 @@ class DownscaleStoredImageTests(TestCase):
     def test_oversized_jpeg_is_resized_and_drops_exif(self):
         row = _make_image_row(_jpeg_bytes(1600, 1200))
         old_size = row.image.size
-        new_size = downscale_stored_image(row, max_dimension=800, convert_webp=False)
+        replacement = downscale_stored_image(row, max_dimension=800, convert_webp=False)
 
-        self.assertIsNotNone(new_size)
-        self.assertLess(new_size, old_size)
+        self.assertIsNotNone(replacement)
+        self.assertLess(replacement.size, old_size)
         with row.image.open("rb") as fh:
             stored = PILImage.open(fh)
             stored.load()
@@ -157,17 +162,22 @@ class DownscaleStoredImageTests(TestCase):
         sibling.image.name = shared_name
         sibling.save(update_fields=["image"])
 
-        self.assertIsNotNone(downscale_stored_image(row, max_dimension=800, convert_webp=False))
+        replacement = downscale_stored_image(row, max_dimension=800, convert_webp=False)
+        self.assertIsNotNone(replacement)
         self.assertNotEqual(row.image.name, shared_name)
+        row.save(update_fields=["image"])
+        discard_superseded_file(row, replacement.superseded_name)
         self.assertTrue(storage.exists(shared_name), "the row that still points at this file lost it")
 
-        # Once nothing else references the old name, replacing it does clean up -
+        # Once nothing else references the old name, discarding it does clean up -
         # the guard must not turn every re-encode into a leaked file.
         sibling.delete()
-        row.save(update_fields=["image"])
         stale = row.image.name
-        self.assertIsNotNone(downscale_stored_image(row, max_dimension=400, convert_webp=False))
+        replacement = downscale_stored_image(row, max_dimension=400, convert_webp=False)
+        self.assertIsNotNone(replacement)
         self.assertNotEqual(row.image.name, stale)
+        row.save(update_fields=["image"])
+        discard_superseded_file(row, replacement.superseded_name)
         self.assertFalse(storage.exists(stale), "an unshared replaced file should not be left behind")
 
     def test_small_file_without_exif_is_left_untouched(self):
@@ -190,22 +200,26 @@ class DownscaleStoredImageTests(TestCase):
     def test_webp_conversion_replaces_file_and_drops_exif(self):
         row = _make_image_row(_jpeg_bytes(400, 300))
         old_name = row.image.name
-        new_size = downscale_stored_image(row, max_dimension=None, convert_webp=True)
+        replacement = downscale_stored_image(row, max_dimension=None, convert_webp=True)
 
-        self.assertIsNotNone(new_size)
+        self.assertIsNotNone(replacement)
         self.assertTrue(row.image.name.endswith(".webp"))
         with row.image.open("rb") as fh:
             stored = PILImage.open(fh)
             stored.load()
             self.assertEqual(stored.format, "WEBP")
             self.assertIsNone(stored.getexif().get(0x010F), "the camera make survived the WebP conversion")
-        # The original file is removed from storage.
+        # The original file is named for removal, and removed once the row has
+        # been persisted - the ordering, not the lifetime, is what matters here;
+        # see test_replaced_file_is_deleted_last.py.
+        self.assertEqual(replacement.superseded_name, old_name)
+        row.save(update_fields=["image"])
+        discard_superseded_file(row, replacement.superseded_name)
         self.assertFalse(row.image.storage.exists(old_name))
 
     def test_resize_and_convert_together(self):
         row = _make_image_row(_jpeg_bytes(1600, 1200))
-        new_size = downscale_stored_image(row, max_dimension=640, convert_webp=True)
-        self.assertIsNotNone(new_size)
+        self.assertIsNotNone(downscale_stored_image(row, max_dimension=640, convert_webp=True))
         with row.image.open("rb") as fh:
             stored = PILImage.open(fh)
             stored.load()

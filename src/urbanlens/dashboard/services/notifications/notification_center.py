@@ -48,14 +48,12 @@ MAX_NOTIFICATION_PAGE_SIZE = 100
 
 
 class InvalidNotificationCursorError(InvalidCursorError):
-    """The supplied notification cursor is not one this service issued.
+    """A :func:`list_notifications` pagination cursor didn't decode, or wasn't ours.
 
-    The message is safe to surface to the caller.
+    Kept distinct from the base :class:`InvalidCursorError` so a catch site
+    here can dispatch on this feed specifically. ``message`` is for logs only -
+    see :class:`InvalidCursorError`.
     """
-
-    def __init__(self) -> None:
-        """Initialize with the caller-safe default message."""
-        super().__init__("Invalid notification cursor.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +101,7 @@ def list_notifications(
         try:
             stamp, pk = decode_cursor(cursor)
         except InvalidCursorError as exc:
-            raise InvalidNotificationCursorError from exc
+            raise InvalidNotificationCursorError(f"cursor {cursor!r} for profile {profile.pk} failed to decode: {exc}") from exc
         # Descending keyset: strictly "older than" the last row of the prior page.
         query = query.filter(Q(created__lt=stamp) | Q(created=stamp, pk__lt=pk))
 

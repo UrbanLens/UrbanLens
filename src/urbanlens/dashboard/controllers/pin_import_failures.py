@@ -22,12 +22,14 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.pins.pin_creation import PinCreationError
+from urbanlens.dashboard.services.pins.pin_creation import AddressResolutionError, NoLocationProvidedError, PinCreationError, PinCreationForbiddenError
 from urbanlens.dashboard.services.pins.pin_import_failures import dismiss_pin_import_failure, resolve_pin_import_failure
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
     from django.http import HttpRequest
+
+from urbanlens.dashboard.services.core.pagination import get_page
 
 logger = logging.getLogger(__name__)
 
@@ -116,13 +118,27 @@ class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
 
     GET /memories/locations/import-failures/queue/
 
-    Unpaginated, like ``pin_merge_suggestions`` - these are expected to be
-    rare (one per cid Google genuinely couldn't place), not a routine volume
-    like photo-scan suggestions.
+    Paginated at the same 12 as ``PinSuggestionQueueView``. It was unpaginated
+    on the stated grounds that these are "rare (one per cid Google genuinely
+    couldn't place)" - which ``PinImportFailureGuessView``'s docstring, in this
+    same file, contradicts: "a single import can leave hundreds of failures."
+    The second is the one borne out by how imports actually work, and each card
+    fetches its own geocoder guess on reveal, so an unpaginated queue of
+    hundreds is also hundreds of pending lookups (P69).
+
+    Its page parameter is its own. This partial also renders inside the full
+    ``memories.locations`` page beside the suggestions queue, and a shared
+    ``?page=`` would page both sections with one click.
     """
 
+    #: Matches the sibling queues on the same page.
+    PAGE_SIZE = 12
+
+    #: Its own, so two paginated sections on one page do not move together.
+    PAGE_PARAM = "failures_page"
+
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the current queue of pending import failures for this profile.
+        """Render the current page of pending import failures for this profile.
 
         Args:
             request: The incoming GET request.
@@ -131,7 +147,12 @@ class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
             The rendered queue partial.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        return render(request, _QUEUE_PARTIAL, {"pin_import_failures": list(pending_pin_import_failures(profile))})
+        page = get_page(request, pending_pin_import_failures(profile), self.PAGE_SIZE, param=self.PAGE_PARAM)
+        return render(
+            request,
+            _QUEUE_PARTIAL,
+            {"pin_import_failures": list(page.object_list), "failures_page_obj": page},
+        )
 
 
 class PinImportFailureGuessView(LoginRequiredMixin, View):
@@ -211,13 +232,25 @@ class PinImportFailureResolveView(LoginRequiredMixin, View):
 
         try:
             pin = resolve_pin_import_failure(failure, profile, address=address, latitude=latitude, longitude=longitude)
+        except PinCreationForbiddenError as exc:
+            logger.info("pin import failure %s resolve forbidden: %s", failure.pk, exc)
+            message = "External lookups are turned off in your settings."
+        except NoLocationProvidedError as exc:
+            logger.info("pin import failure %s resolve rejected: %s", failure.pk, exc)
+            message = "An address or coordinates are required."
+        except AddressResolutionError as exc:
+            logger.info("pin import failure %s resolve rejected: %s", failure.pk, exc)
+            message = "That address couldn't be converted to coordinates."
         except PinCreationError as exc:
-            response = render(request, _CARD_PARTIAL, {"failure": failure})
-            response["HX-Trigger"] = json.dumps({"showToast": {"message": exc.safe_message, "level": "error"}})
-            return response
+            logger.info("pin import failure %s resolve rejected: %s", failure.pk, exc)
+            message = "That pin couldn't be placed."
+        else:
+            view_pin_url = reverse("pin.details", args=[pin.slug or pin.uuid])
+            return _toast(f"Pin placed for {pin.effective_name}.", refresh_queue=True, view_pin_url=view_pin_url)
 
-        view_pin_url = reverse("pin.details", args=[pin.slug or pin.uuid])
-        return _toast(f"Pin placed for {pin.effective_name}.", refresh_queue=True, view_pin_url=view_pin_url)
+        response = render(request, _CARD_PARTIAL, {"failure": failure})
+        response["HX-Trigger"] = json.dumps({"showToast": {"message": message, "level": "error"}})
+        return response
 
 
 class PinImportFailureDismissView(LoginRequiredMixin, View):

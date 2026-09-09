@@ -202,7 +202,7 @@ class EmailNormalizedBackfillMigrationTests(TestCase):
 
         from django.apps import apps as live_apps
 
-        migration = importlib.import_module("urbanlens.dashboard.migrations.0049_friendinvitation_email_normalized")
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
 
         inviter = baker.make(User).profile
         invitation = FriendInvitation.objects.create(inviter=inviter, email="Jake.Smith+x@gmail.com")
@@ -211,7 +211,7 @@ class EmailNormalizedBackfillMigrationTests(TestCase):
         # default.
         FriendInvitation.objects.filter(pk=invitation.pk).update(email_normalized="")
 
-        migration.backfill_friendinvitation_email_normalized(live_apps, None)
+        migration._0049_backfill_friendinvitation_email_normalized(live_apps, None)
 
         invitation.refresh_from_db()
         self.assertEqual(invitation.email_normalized, "jakesmith@gmail.com")

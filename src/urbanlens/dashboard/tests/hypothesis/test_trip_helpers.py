@@ -26,13 +26,19 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.trip import (
     _build_activity_forecasts,
     _can_perform,
-    _compute_activity_index_map,
-    _expand_trip_dates,
     _is_organizer,
     _parse_scheduled_at,
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+
+# Imported from the service that defines them, not through the controller. The
+# controller re-exported both under a `_`-prefixed alias it never called, which
+# made this file's import the only thing keeping those lines alive.
+from urbanlens.dashboard.services.trips.trip_activities import (
+    compute_activity_index_map as _compute_activity_index_map,
+    expand_trip_dates as _expand_trip_dates,
+)
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords as _activity_coords
 
 if TYPE_CHECKING:

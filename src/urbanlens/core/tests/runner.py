@@ -4,7 +4,6 @@ import logging
 import os
 from typing import Any
 import unittest
-from unittest.mock import patch
 
 from django import conf
 from django.db import connections
@@ -15,6 +14,7 @@ from urbanlens.core.testing_network import (
     LocalhostOnlyNetwork,
     verify_external_network_blocked,
 )
+from urbanlens.core.tests.ai_guard import patched_ai_gateway
 from urbanlens.core.tests.result import MessageResult
 
 
@@ -91,24 +91,11 @@ class TestRunner(DiscoverRunner):
         conf.settings.SECURE_SSL_REDIRECT = False
 
         # Patch the AI gateway so no test ever makes a real external API call.
-        #
-        # There are TWO chokepoints, not one. send_prompt is the <ANSWER>-protocol
-        # path every older LLMGateway feature uses; send_with_tools is the
-        # provider-native tool-calling path the assistant's loop uses
-        # (services/ai/assistant.py), and it was added after this patch was
-        # written, so for a while the comment here said "the single chokepoint"
-        # while the assistant's entire turn ran unpatched under `manage.py test` -
-        # which is what CI runs. Both are patched now; a new chokepoint on
-        # LLMGateway needs adding here too.
-        #
-        # settings/test.py separately pins every provider credential to a
-        # placeholder, so this is defense in depth rather than the only guard.
-        self._ai_patchers = [
-            patch("urbanlens.dashboard.services.ai.gateway.LLMGateway.send_prompt", return_value=None),
-            patch("urbanlens.dashboard.services.ai.gateway.LLMGateway.send_with_tools", return_value=None),
-        ]
-        for patcher in self._ai_patchers:
-            patcher.start()
+        # The chokepoint list lives in core/tests/ai_guard.py because conftest.py
+        # needs the same one: this hook runs under `manage.py test` and never
+        # under pytest, so a list kept here protects only the runner nobody uses.
+        self._ai_guard = patched_ai_gateway()
+        self._ai_guard.__enter__()
 
         if os.getenv("UL_ALLOW_TEST_INTERNET", "False").lower() not in {"true", "1", "yes"}:
             self._network_guard = LocalhostOnlyNetwork().start()
@@ -123,8 +110,9 @@ class TestRunner(DiscoverRunner):
         network_guard = getattr(self, "_network_guard", None)
         if network_guard:
             network_guard.stop()
-        for patcher in getattr(self, "_ai_patchers", []):
-            patcher.stop()
+        ai_guard = getattr(self, "_ai_guard", None)
+        if ai_guard:
+            ai_guard.__exit__(None, None, None)
         super().teardown_test_environment(**kwargs)
 
     def run_suite(self, suite, **kwargs):

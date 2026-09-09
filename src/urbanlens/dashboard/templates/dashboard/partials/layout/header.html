@@ -1,9 +1,10 @@
+{% load static %}
 <nav class="app-nav">
     <div class="app-nav-inner">
 
         {# -- Brand ------------------------------------------------------------ #}
         <a href="{% url 'home' %}" class="app-nav-brand">
-            <img src="/static/logo.png" alt="UrbanLens logo" class="app-nav-logo">
+            <img src="{% static 'logo.png' %}" alt="UrbanLens logo" class="app-nav-logo">
             <span class="app-nav-brand-name">UrbanLens</span>
         </a>
 
@@ -81,7 +82,13 @@
             </div>
 
             <div class="nav-user" id="nav-user">
+                {% comment %}The label is on the button rather than left to its
+                contents: the username span is display:none below $breakpoint-xs,
+                which takes it out of the accessible name too, and a screen-reader
+                user at phone width was left with the avatar's initial and the
+                literal text "expand_more".{% endcomment %}
                 <button class="nav-user-btn" id="nav-user-btn" type="button"
+                        aria-label="Account menu for {{ user.username }}"
                         aria-haspopup="menu" aria-expanded="false" aria-controls="nav-dropdown">
                     <div class="nav-avatar">
                         {% if user.profile.avatar %}

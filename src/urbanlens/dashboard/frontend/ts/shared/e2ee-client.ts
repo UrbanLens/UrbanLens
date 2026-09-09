@@ -457,7 +457,8 @@ function reportPolicyErrors(input: HTMLInputElement, errors: string[]): void {
  * stops an *accidental* read and not a deliberate one.
  *
  * The cost is deliberate and one-sided: signing back in on your own machine now
- * needs a password or recovery key again. See P48 in `docs/PROBLEMS.md`.
+ * needs a password or recovery key again. See P48 in
+ * `docs/archive/PROBLEMS-ARCHIVE.md` (resolved 2026-09-05).
  *
  * Sign-out is never blocked by this. A storage error, a browser with IndexedDB
  * disabled, or a slow delete all fall through to submitting the form - being

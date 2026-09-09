@@ -20,14 +20,12 @@ from django.db.models import (
     ImageField,
     Index,
     IntegerField,
-    JSONField,
     ManyToManyField,
     PositiveIntegerField,
     PositiveSmallIntegerField,
     Q,
     TextField,
     URLField,
-    UUIDField,
 )
 
 from urbanlens.dashboard.models import abstract

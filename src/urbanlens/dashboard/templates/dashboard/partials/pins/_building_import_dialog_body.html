@@ -1,14 +1,9 @@
 {% comment %}
 The swappable half of the building-import dialog - everything but the header.
-Re-rendered by itself (never re-including the header) whenever the dialog
-stays open after a submit: an unresolved merge conflict re-renders this same
-partial scoped to just the candidates still needing a choice (see
-controllers.pin_restructure._render_building_dialog_body).
 
 Context: see _building_import_dialog.html plus:
-    nestable_rows: list of {pin, conflicts, default_merge} - see
-        controllers.pin_restructure._nestable_rows. Buildings-only dialogs
-        (restructure=False) never set this.
+    nestable_rows: list of {pin} - see controllers.pin_restructure._nestable_rows.
+        Buildings-only dialogs (restructure=False) never set this.
 {% endcomment %}
 {% load map_components %}
 <div id="building-import-dialog-body">
@@ -18,7 +13,7 @@ Context: see _building_import_dialog.html plus:
       hx-target="#building-import-dialog-body" hx-swap="outerHTML"
       hx-disabled-elt="find button[type='submit']"
       hx-indicator="find .building-import-submit-spinner"
-      hx-on::after-request="if(event.detail.successful && !event.detail.xhr.getResponseHeader('HX-Keep-Open')){this.closest('dialog').close()}">
+      hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}">
     {% csrf_token %}
     <input type="hidden" name="building_selection" value="1">
     {% if nestable_rows %}
@@ -26,7 +21,7 @@ Context: see _building_import_dialog.html plus:
     {# older cached page) must still nest every candidate as before, so #}
     {# "explicitly chose per pin" needs its own marker rather than reusing #}
     {# the buildings one - an all-unchecked *pins* selection is a real state #}
-    {# (every candidate is really a duplicate, merge them all), not "absent". #}
+    {# (exclude every candidate from nesting), not "absent". #}
     <input type="hidden" name="nest_selection" value="1">
     {% endif %}
 
@@ -63,8 +58,8 @@ Context: see _building_import_dialog.html plus:
             {% if nestable_rows %}
             <h4 class="building-import-section-title">Pins on this property</h4>
             <p class="building-import-section-hint">
-                Each one can become a child pin under this property, or - if it's really the same
-                place - merge into this pin instead.
+                Each one becomes a child pin under this property - its own article, photos, and
+                other data stay exactly as they are, only its parent changes.
             </p>
             <ul class="building-import-list building-import-pins">
                 {% for entry in nestable_rows %}
@@ -76,42 +71,6 @@ Context: see _building_import_dialog.html plus:
                             <strong>{{ entry.pin.effective_name }}</strong>
                         </span>
                     </label>
-                    <div class="nest-mode-toggle" role="radiogroup" aria-label="How to include {{ entry.pin.effective_name }}">
-                        <label class="nest-mode-option">
-                            <input type="radio" name="nest_mode__{{ entry.pin.pk }}" value="child" {% if not entry.default_merge %}checked{% endif %}>
-                            Child pin
-                        </label>
-                        <label class="nest-mode-option">
-                            <input type="radio" name="nest_mode__{{ entry.pin.pk }}" value="merge" {% if entry.default_merge %}checked{% endif %}>
-                            Merge into this pin
-                        </label>
-                    </div>
-                    {% if entry.conflicts %}
-                    <div class="building-import-merge-conflicts"{% if not entry.default_merge %} hidden{% endif %}>
-                        <p class="building-import-merge-warning">
-                            <i class="material-symbols-outlined" aria-hidden="true">warning</i>
-                            This pin has its own data that differs from this property's - choose which to keep:
-                        </p>
-                        {% for conflict in entry.conflicts %}
-                        <div class="pin-merge-suggestion-conflict">
-                            <p class="pin-merge-suggestion-conflict-label">{{ conflict.label }} - keep which one?</p>
-                            <label class="pin-merge-suggestion-conflict-option">
-                                <input type="radio" name="resolution__{{ entry.pin.pk }}__{{ conflict.key }}" value="{{ pin.pk }}" required>
-                                This pin's ({{ conflict.pin_a_summary }})
-                            </label>
-                            <label class="pin-merge-suggestion-conflict-option">
-                                <input type="radio" name="resolution__{{ entry.pin.pk }}__{{ conflict.key }}" value="{{ entry.pin.pk }}" required>
-                                {{ entry.pin.effective_name }}'s ({{ conflict.pin_b_summary }})
-                            </label>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    <p class="building-import-merge-note"{% if not entry.default_merge %} hidden{% endif %}>
-                        <i class="material-symbols-outlined" aria-hidden="true">warning</i>
-                        Combines this pin's data into this property and deletes it - can't be undone.
-                    </p>
-                    {% endif %}
                 </li>
                 {% endfor %}
             </ul>

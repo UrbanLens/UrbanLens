@@ -37,6 +37,21 @@ from urbanlens.dashboard.services.trivia.wiki_incorporation import incorporate_q
 # depending on which process happens to trigger this package's import
 # first - see "Package __init__ import ordering" in docs/NOTES.md.
 from urbanlens.dashboard.services.trivia.session import (
+    BeginNotHostError,
+    CannotKickHostError,
+    DuplicateAnswerError,
+    EndSessionNotHostError,
+    InviteAfterLobbyClosedError,
+    InviteeNotFriendError,
+    InviteNotHostError,
+    JoinAfterLobbyClosedError,
+    KickNotHostError,
+    NotASessionParticipantError,
+    NotInvitedError,
+    NotJoinedParticipantError,
+    SessionAlreadyBegunError,
+    SessionAlreadyEndedError,
+    TargetNotAParticipantError,
     TriviaConfig,
     TriviaError,
     begin_session,

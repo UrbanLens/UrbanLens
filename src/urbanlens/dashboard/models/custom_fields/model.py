@@ -359,14 +359,53 @@ def _at_most_one_of(columns: tuple[str, ...]) -> Q:
 class CustomFieldValueError(ValueError):
     """A raw value could not be parsed/stored for a custom field.
 
-    ``safe_message`` is safe to surface directly to the caller - every raise
-    site either uses a static string or echoes back the value the caller
-    itself submitted.
+    The message here is for logs, not a response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying the message -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class EmptyValueError(CustomFieldValueError):
+    """The submitted value was blank; the row should be deleted, not stored empty."""
+
+
+class InvalidNumberError(CustomFieldValueError):
+    """The submitted value doesn't parse as a NUMBER field's value."""
+
+
+class InvalidDateError(CustomFieldValueError):
+    """The submitted value doesn't parse as a DATE field's value (YYYY-MM-DD)."""
+
+
+class InvalidTimeError(CustomFieldValueError):
+    """The submitted value doesn't parse as a TIME field's value (HH:MM)."""
+
+
+class InvalidCheckboxValueError(CustomFieldValueError):
+    """The submitted value isn't a recognized checkbox truthy/falsy token."""
+
+
+class InvalidSelectOptionError(CustomFieldValueError):
+    """The submitted value isn't one of this SELECT field's configured choices."""
+
+
+class InvalidUrlError(CustomFieldValueError):
+    """The submitted value doesn't parse as a valid http(s) link."""
+
+
+class ReferenceKindNotConfiguredError(CustomFieldValueError):
+    """This REFERENCE field's ``config["ref_type"]`` is missing or invalid.
+
+    A configuration bug on the field definition, not a bad submission - every
+    reference field is supposed to have a valid ``ref_type`` from the moment
+    it's created as one.
+    """
+
+
+class ReferenceTargetNotFoundError(CustomFieldValueError):
+    """``resolve_reference`` found no match - the target doesn't exist, or isn't visible to this field's owner."""
 
 
 class CustomFieldValue(abstract.DashboardModel):
@@ -585,7 +624,7 @@ class CustomFieldValue(abstract.DashboardModel):
         """
         raw = (raw or "").strip()
         if not raw:
-            raise CustomFieldValueError("Empty value - delete the row instead of storing a blank.")
+            raise EmptyValueError(f"custom field {self.field_id}: empty value submitted; delete the row instead of storing blank on it")
 
         field_type = self.field.field_type
         self.value_text = ""
@@ -600,17 +639,17 @@ class CustomFieldValue(abstract.DashboardModel):
             try:
                 self.value_number = Decimal(raw)
             except InvalidOperation as e:
-                raise CustomFieldValueError(f"{raw!r} is not a valid number.") from e
+                raise InvalidNumberError(f"custom field {self.field_id}: {raw!r} failed Decimal parsing for a NUMBER field") from e
         elif field_type == CustomFieldType.DATE:
             try:
                 self.value_date = datetime.strptime(raw, "%Y-%m-%d").date()  # noqa: DTZ007  # .date() discards the time; value_date is a DateField
             except ValueError as e:
-                raise CustomFieldValueError(f"{raw!r} is not a valid date (expected YYYY-MM-DD).") from e
+                raise InvalidDateError(f"custom field {self.field_id}: {raw!r} failed strptime('%Y-%m-%d') for a DATE field") from e
         elif field_type == CustomFieldType.TIME:
             try:
                 self.value_time = time.fromisoformat(raw)
             except ValueError as e:
-                raise CustomFieldValueError(f"{raw!r} is not a valid time (expected HH:MM).") from e
+                raise InvalidTimeError(f"custom field {self.field_id}: {raw!r} failed time.fromisoformat for a TIME field") from e
         elif field_type == CustomFieldType.CHECKBOX:
             lowered = raw.lower()
             if lowered in ("1", "true", "on", "yes", "checked"):
@@ -618,18 +657,18 @@ class CustomFieldValue(abstract.DashboardModel):
             elif lowered in ("0", "false", "off", "no", "unchecked"):
                 self.value_boolean = False
             else:
-                raise CustomFieldValueError(f"{raw!r} is not a valid checkbox value.")
+                raise InvalidCheckboxValueError(f"custom field {self.field_id}: {raw!r} is not a recognized checkbox token for a CHECKBOX field")
         elif field_type == CustomFieldType.SELECT:
             choices = self.field.select_choices
             if raw not in choices:
-                raise CustomFieldValueError(f"{raw!r} is not one of this field's options.")
+                raise InvalidSelectOptionError(f"custom field {self.field_id}: {raw!r} not in configured choices {choices!r} for a SELECT field")
             self.value_text = raw
         elif field_type == CustomFieldType.URL:
             candidate = raw if "://" in raw else f"https://{raw}"
             try:
                 URLValidator(schemes=["http", "https"])(candidate)
             except ValidationError as e:
-                raise CustomFieldValueError(f"{raw!r} is not a valid link.") from e
+                raise InvalidUrlError(f"custom field {self.field_id}: {raw!r} failed URLValidator for a URL field") from e
             self.value_text = candidate
         elif field_type == CustomFieldType.REFERENCE:
             from urbanlens.dashboard.services.custom_fields.custom_field_references import resolve_reference
@@ -637,10 +676,10 @@ class CustomFieldValue(abstract.DashboardModel):
             kind = self.field.reference_kind
             ref_field = self.REF_FIELD_BY_KIND.get(kind)
             if ref_field is None:
-                raise CustomFieldValueError("This reference field has no target kind configured.")
+                raise ReferenceKindNotConfiguredError(f"custom field {self.field_id}: reference_kind resolved to {kind!r}, no matching REF_FIELD_BY_KIND entry")
             target = resolve_reference(kind, raw, self.field.profile)
             if target is None:
-                raise CustomFieldValueError("That item wasn't found (or you can't reference it).")
+                raise ReferenceTargetNotFoundError(f"custom field {self.field_id}: resolve_reference(kind={kind!r}, raw={raw!r}, profile={self.field.profile_id}) found no match")
             setattr(self, ref_field, target)
         else:
             self.value_text = raw

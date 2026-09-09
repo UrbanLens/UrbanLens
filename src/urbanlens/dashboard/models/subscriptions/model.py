@@ -49,6 +49,13 @@ class SiteFeature(TextChoices):
     # not every panel that could plausibly use it - check each
     # PanelSource.required_feature, don't assume from this comment.
     NEARBY_RESEARCH = "nearby_research", "Nearby research data"
+    # Full REData incident history for a pin's block (up to 25 years back) - a
+    # deeper pull than the free "Reported Incidents" card everyone gets (last
+    # 3 years, top few rows only). Kept as its own flag rather than folded
+    # into NEARBY_RESEARCH: unlike a nearby-facility list, a block's
+    # multi-year crime-report history is sensitive enough that a site may
+    # want to manage access to it on its own terms.
+    INCIDENT_HISTORY = "incident_history", "Historical incident data"
     # Owner identity/contact details UrbanLens looked up *for* the user from
     # county assessor records (via REData) - the paid data feed, and the part
     # of a property record that names a private individual. Deliberately scoped
@@ -180,6 +187,8 @@ class SubscriptionRole(abstract.DashboardModel):
         errors: dict[str, str] = {}
         if self.pwyw_dynamic_threshold and not self.pay_what_you_want:
             errors["pwyw_dynamic_threshold"] = "Requires pay_what_you_want to be enabled."
+        if self.pwyw_minimum_cents and not self.pay_what_you_want:
+            errors["pwyw_minimum_cents"] = "Requires pay_what_you_want to be enabled."
         if self.pwyw_dynamic_threshold and self.pwyw_minimum_cents:
             errors["pwyw_minimum_cents"] = "Cannot be set together with pwyw_dynamic_threshold - the dynamic cost-per-user figure is used instead."
         if errors:

@@ -373,6 +373,14 @@ direct-only because REData's contract can't reproduce what they show:
   and any `WikiOwner` the community typed in themselves
 - **USGS Historical Topo Maps** (USA) — historical topographic maps, direct-only (a gallery of
   individually-dated scans, a shape REData's imagery contract doesn't offer)
+- **Historical Features** — retrospectively-mapped buildings, roads, water features, railways, land
+  use, places and venues that once stood near the pin (mostly demolished, mostly never formally
+  designated), via REData's `/historical-features/` (self-hosted OpenHistoricalMap/Overpass-backed,
+  worldwide but volunteer-traced/city-scale coverage) (`plugins.builtin.redata_historical_features`).
+  Distinct from Historic Registers (a body's own designation) and USGS Historical Topo Maps (a
+  scanned page) — this is per-feature data with its own validity interval. `start_year` is
+  frequently the date of the *source map* a feature was traced from, not a construction year, and
+  the panel never presents it as an age
 - **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim
   structured data, kept direct-only for its OSM extratags REData doesn't normalize; Photon
   nearest-feature lookup, via REData)
@@ -402,7 +410,12 @@ direct-only because REData's contract can't reproduce what they show:
   (`plugins.builtin.redata_permits`); flags when a dense block capped the result
 - **Reported Incidents** (US cities) — block-scale police-incident reports from city open-data
   portals as visit-safety context, via REData (`plugins.builtin.redata_incidents`); traffic
-  collisions excluded, block-scale location precision stated on the panel
+  collisions excluded, block-scale location precision stated on the panel. **Incident History is
+  subscriber-only** (`SiteFeature.INCIDENT_HISTORY`) — a deeper, separately-gated sibling panel
+  pulling REData's full 25-year window as a year-by-year trend, instead of the free panel's last 3
+  years/top 6 rows; the free panel is unaffected and stays free (see D10,
+  `docs/designs/incident-history-feature-gate.md`, for why it isn't folded into
+  `SiteFeature.NEARBY_RESEARCH`)
 - **Water & Hydrology** (USA) — streams, waterbodies, wetlands (USFWS NWI decoded) within 1 km and
   the containing HUC12 watershed, via REData (`plugins.builtin.redata_hydrology`)
 - **Site Conditions** (USA) — NLCD land cover, EPA walkability index (incl. transit distance), and
@@ -466,7 +479,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   personal (pin/wiki-independent) album space, and a landing page, none of which existed before.
 - **Vault home** (`/vault/`) — quick-link tiles into Photos/Documents/Albums with live counts, a
   storage usage summary (used/quota/remaining, shared with the Settings → Storage section), and a
-  recent-uploads strip mixing the most recently added photos and documents.
+  recent-uploads strip mixing the most recently added photos, videos and documents, and a
+  listed Videos section (videos have no page of their own - this is where they are reachable).
 - **Vault → Photos** (`/vault/photos/`) — the site-wide photo library: matches unfiled photos (by
   GPS + timestamp) to existing pins and proposes **visit suggestions** for confirmation; an
   organize queue surfaces photos that still need a pin, a location, or suggestion review, plus
@@ -850,6 +864,36 @@ webhooks (`/billing/webhooks/stripe/`) keep `RoleSubscription` status/pledge/thr
 a daily `sync_stripe_subscriptions` task re-syncs from Stripe as a safety net for missed
 deliveries. `user_has_feature()`/`active_subscription_roles()` treat an active, threshold-met
 paid subscription the same as an admin-issued grant. Service layer lives in `services/billing/`.
+
+What a role's `features` field can gate is any individual `SiteFeature`, not only broad tiers -
+a site admin can bundle a single Private Pin panel behind its own paid role rather than an
+all-or-nothing "premium" tier. Two examples: `SiteFeature.PROPERTY_OWNERS` restricts owner
+names/contact info on the Property Records card (see above; the parcel/tax/assessment facts stay
+free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Incident History panel
+(see "Reported Incidents" above) while its sibling free panel is untouched.
+
+## Media Storage & Serving
+
+- **Every `/media/...` request is authenticated and authorized** by
+  `dashboard.controllers.media.MediaGateView`, against a default-deny table keyed by the file's
+  `upload_to` prefix (`services/media/access.py`). A family with no registered authorizer is
+  refused, and `manage.py check` turns that into a startup error - so a new media field cannot
+  ship without a read policy. See `docs/MEDIA_PIPELINE.md`.
+- **Filesystem or object store**, chosen by `UL_MEDIA_STORAGE_BACKEND` (`filesystem` default,
+  `s3` for Garage/MinIO/AWS). The switch changes nothing about who may read a file: `FileField.url`
+  still returns `/media/...` and every read still passes the gate. `exports/`, `imports/` and
+  `preview_sources/` stay on local disk either way.
+- **Four delivery paths, one authorization path** — `X-Accel-Redirect` to nginx off the media
+  volume, `FileResponse` off disk, `X-Accel-Redirect` to an internal nginx proxy carrying a URL
+  Django signed, or a stream from the object store through Django. Adding a fifth is a
+  `MediaByteSource` subclass. See `docs/designs/media-object-storage.md`.
+- **Uploads from their own origin** — `UL_MEDIA_BASE_URL` moves every media URL onto a separate
+  hostname authenticated by a media-only signed cookie, so anything that slips past validation
+  executes where there is no session cookie and no app data.
+- **Upload size is capped to what the ingress will carry** — `UL_MAX_REQUEST_BODY_MB` lowers the
+  site-wide limit, the import form's and the export-import view's, and feeds the browser's own
+  pre-check, so an oversized file is refused before it is sent rather than by a proxy the app
+  never hears from.
 
 ## Site Administration
 

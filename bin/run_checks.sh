@@ -34,6 +34,9 @@ HOOKS=(
     concealed-writes
     pin-not-published-to-wiki
     migration-graph
+    static-url-literals
+    bem-modifiers
+    image-file-reads
     doc-line-refs
     docs-refs
     docs-index

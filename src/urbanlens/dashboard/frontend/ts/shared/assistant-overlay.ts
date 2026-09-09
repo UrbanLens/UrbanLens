@@ -25,13 +25,13 @@ const FAB_COLLIDERS = [
     ".floorplan-toolbar-stack",
     ".floorplan-canvas-controls",
     ".map-bottom-controls",
-    ".article-floating-toolbar",
     ".ul-bulk-bar.visible",
     ".page-footer",
     "#toast-container",
 ];
 
 let bodyLoaded = false;
+let bodyLoading = false;
 let installed = false;
 
 function dialog(): HTMLDialogElement | null {
@@ -56,18 +56,41 @@ function focusComposer(dlg: HTMLDialogElement): void {
 
 /** Fetch the overlay's body exactly once. Focuses the composer once it lands - on a first
  * open the composer doesn't exist yet at showModal() time, so openAssistantOverlay's own
- * focus attempt would silently find nothing without this. */
+ * focus attempt would silently find nothing without this.
+ *
+ * bodyLoaded only ever becomes true once the swap actually happens - a failed
+ * first load (network error, non-2xx) must not permanently wedge the dialog on
+ * its loading skeleton with every later open() silently doing nothing. bodyLoading
+ * is the separate in-flight guard that still de-dupes a second open() while the
+ * first request is outstanding. */
 function loadBodyOnce(dlg: HTMLDialogElement): void {
-    if (bodyLoaded) return;
+    if (bodyLoaded || bodyLoading) return;
     const url = dlg.dataset.overlayUrl;
     if (!url || !window.htmx) return;
-    bodyLoaded = true;
+    bodyLoading = true;
+    const cleanup = (): void => {
+        bodyLoading = false;
+        document.body.removeEventListener("htmx:afterSwap", onSwap);
+        document.body.removeEventListener("htmx:responseError", onFailure);
+        document.body.removeEventListener("htmx:sendError", onFailure);
+        document.body.removeEventListener("htmx:timeout", onFailure);
+    };
     const onSwap = (event: Event): void => {
         if ((event.target as HTMLElement | null)?.id !== "assistant-overlay-body") return;
-        document.body.removeEventListener("htmx:afterSwap", onSwap);
+        bodyLoaded = true;
+        cleanup();
         focusComposer(dlg);
     };
+    // These events don't reliably identify which in-flight request they belong
+    // to the way afterSwap's event.target does, so any failure while this load
+    // is outstanding is treated as this one failing. Worst case a stray
+    // unrelated failure just makes the next open() retry a request that would
+    // have succeeded anyway - harmless, and far better than never retrying.
+    const onFailure = (): void => cleanup();
     document.body.addEventListener("htmx:afterSwap", onSwap);
+    document.body.addEventListener("htmx:responseError", onFailure);
+    document.body.addEventListener("htmx:sendError", onFailure);
+    document.body.addEventListener("htmx:timeout", onFailure);
     window.htmx.ajax("GET", url, { target: "#assistant-overlay-body", swap: "innerHTML" });
 }
 
@@ -133,11 +156,18 @@ function onAssistantAction(event: Event): void {
 /** Reset module state. Test-only. */
 export function resetAssistantOverlayForTests(): void {
     bodyLoaded = false;
+    bodyLoading = false;
     installed = false;
     document.removeEventListener("keydown", onKeydown);
     document.removeEventListener("click", onClick);
     window.removeEventListener("resize", placeFab);
-    document.body.removeEventListener("ulAssistantAction", onAssistantAction);
+    document.body?.removeEventListener("ulAssistantAction", onAssistantAction);
+}
+
+/** Run `bind` now if `<body>` is parsed, else as soon as it is. */
+function whenBodyExists(bind: () => void): void {
+    if (document.body) bind();
+    else document.addEventListener("DOMContentLoaded", bind, { once: true });
 }
 
 export function installGlobalAssistantOverlay(): void {
@@ -146,6 +176,12 @@ export function installGlobalAssistantOverlay(): void {
     document.addEventListener("keydown", onKeydown);
     document.addEventListener("click", onClick);
     window.addEventListener("resize", placeFab);
-    document.body.addEventListener("ulAssistantAction", onAssistantAction);
-    placeFab();
+    // This ships in the classic `core.js` bundle, which `themes/base.html` loads
+    // from `<head>` - `document.body` is null there, and `placeFab` has nothing
+    // to measure against yet. The same wait is written out in autosave-guard.ts,
+    // collapsible-sections.ts and undo-map-refresh.ts.
+    whenBodyExists(() => {
+        document.body.addEventListener("ulAssistantAction", onAssistantAction);
+        placeFab();
+    });
 }

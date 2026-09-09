@@ -1,8 +1,8 @@
 """Posting to an archived check-in through the no-JS fallback must not 500.
 
 `post_chat_message` raises two failures, and they are **siblings** rather than
-parent and child - `SafetyValidationError` and `CheckinArchivedError` both
-derive from `ValueError` directly. The external API catches both, deliberately
+parent and child - `SafetyValidationError` and `CheckinMessagingArchivedError`
+both derive from `ValueError` directly. The external API catches both, deliberately
 distinguishing them (409 vs 400: the body was fine, the check-in's plaintext is
 already sealed into its encrypted archive, so a client should retire the
 conversation rather than ask the user to retype). The HTML fallback caught only
@@ -28,7 +28,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinStatus
-from urbanlens.dashboard.services.visits.safety import CheckinArchivedError, SafetyValidationError
+from urbanlens.dashboard.services.visits.safety import CheckinMessagingArchivedError, SafetyValidationError
 
 
 class ArchivedCheckinChatFallbackTests(TestCase):
@@ -51,8 +51,8 @@ class ArchivedCheckinChatFallbackTests(TestCase):
 
     def test_the_two_failures_are_siblings_not_parent_and_child(self) -> None:
         """The whole reason one handler could not cover both."""
-        self.assertFalse(issubclass(CheckinArchivedError, SafetyValidationError))
-        self.assertTrue(issubclass(CheckinArchivedError, ValueError))
+        self.assertFalse(issubclass(CheckinMessagingArchivedError, SafetyValidationError))
+        self.assertTrue(issubclass(CheckinMessagingArchivedError, ValueError))
         self.assertTrue(issubclass(SafetyValidationError, ValueError))
 
     def _archive(self) -> None:

@@ -52,14 +52,39 @@ DISPATCH_TIMEOUT_SECONDS = 5
 
 
 class PushRegistrationError(ValueError):
-    """The submitted device registration is invalid.
+    """Raised when a submitted device registration can't be accepted.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    The message is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying the message -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class MissingAddressError(PushRegistrationError):
+    """No device address was submitted at all."""
+
+
+class InvalidEndpointUrlError(PushRegistrationError):
+    """The UnifiedPush endpoint isn't a well-formed http(s) URL."""
+
+
+class EndpointCredentialsError(PushRegistrationError):
+    """The UnifiedPush endpoint URL embeds a username/password."""
+
+
+class EndpointResolutionError(PushRegistrationError):
+    """The UnifiedPush endpoint's hostname couldn't be resolved."""
+
+
+class EndpointUnreachableError(PushRegistrationError):
+    """The UnifiedPush endpoint resolves to a private/loopback/link-local/CGNAT address.
+
+    Distinct from :class:`EndpointResolutionError` so callers can tell "we
+    don't know where this points" apart from "we know exactly where this
+    points, and it's the SSRF guard's job to refuse it".
+    """
 
 
 def _validate_unifiedpush_endpoint(address: str) -> None:
@@ -69,18 +94,21 @@ def _validate_unifiedpush_endpoint(address: str) -> None:
         address: The submitted endpoint URL.
 
     Raises:
-        PushRegistrationError: The URL is malformed, carries credentials, uses
-            a non-HTTP scheme, or resolves to a private/loopback address.
+        InvalidEndpointUrlError: The URL is malformed or uses a non-HTTP scheme.
+        EndpointCredentialsError: The URL carries a username/password.
+        EndpointResolutionError: The hostname doesn't resolve.
+        EndpointUnreachableError: The hostname resolves to a private/loopback/
+            link-local/CGNAT address.
     """
     parts = urlsplit(address)
     if parts.scheme not in ("https", "http") or not parts.hostname:
-        raise PushRegistrationError("UnifiedPush endpoint must be an http(s) URL.")
+        raise InvalidEndpointUrlError(f"UnifiedPush endpoint scheme/hostname invalid: scheme={parts.scheme!r} hostname={parts.hostname!r}")
     if parts.username or parts.password:
-        raise PushRegistrationError("UnifiedPush endpoint must not embed credentials.")
+        raise EndpointCredentialsError(f"UnifiedPush endpoint embeds credentials: host={parts.hostname!r}")
     try:
         infos = socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
     except OSError as exc:
-        raise PushRegistrationError("UnifiedPush endpoint hostname does not resolve.") from exc
+        raise EndpointResolutionError(f"UnifiedPush endpoint hostname failed to resolve: host={parts.hostname!r}") from exc
     # is_blocked_address rather than an inline copy of the same five checks: this
     # used to duplicate them, and so missed the RFC 6598 CGNAT range (100.64/10)
     # that the shared helper blocks. Python's ipaddress does not classify CGNAT as
@@ -88,7 +116,7 @@ def _validate_unifiedpush_endpoint(address: str) -> None:
     # so a divergent copy of this check is a divergent SSRF guard.
     for info in infos:
         if is_blocked_address(ipaddress.ip_address(info[4][0])):
-            raise PushRegistrationError("UnifiedPush endpoint must be publicly reachable.")
+            raise EndpointUnreachableError(f"UnifiedPush endpoint host={parts.hostname!r} resolved to blocked address {info[4][0]}")
 
 
 def register_device(profile: Profile, *, transport: str, address: str, name: str = "") -> PushDevice:
@@ -109,11 +137,15 @@ def register_device(profile: Profile, *, transport: str, address: str, name: str
         The active device row.
 
     Raises:
-        PushRegistrationError: The address fails transport-specific validation.
+        MissingAddressError: ``address`` is blank.
+        InvalidEndpointUrlError: A UnifiedPush endpoint isn't a well-formed http(s) URL.
+        EndpointCredentialsError: A UnifiedPush endpoint URL embeds credentials.
+        EndpointResolutionError: A UnifiedPush endpoint's hostname doesn't resolve.
+        EndpointUnreachableError: A UnifiedPush endpoint resolves to a blocked address.
     """
     address = (address or "").strip()
     if not address:
-        raise PushRegistrationError("A device address is required.")
+        raise MissingAddressError("register_device called with an empty device address.")
     if transport == PushTransport.UNIFIEDPUSH:
         _validate_unifiedpush_endpoint(address)
 

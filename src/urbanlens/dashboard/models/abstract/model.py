@@ -9,8 +9,6 @@ from django.core.exceptions import FieldDoesNotExist
 
 # Django Imports
 from django.db import IntegrityError, models as django_models, transaction
-from django.db.models import UUIDField
-from django.db.models.fields import SlugField
 
 # App Imports
 from urbanlens.dashboard.models.abstract.queryset import DashboardManager, FrontendDashboardManager, PublicDashboardManager

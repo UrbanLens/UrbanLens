@@ -8,11 +8,10 @@ The domain extraction helper is tested directly with Hypothesis.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from urllib.parse import urlparse
 
 from model_bakery import baker
-import pytest
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase

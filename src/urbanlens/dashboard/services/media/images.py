@@ -866,8 +866,52 @@ def file_still_referenced(field: str, name: str, *, exclude_pks: Collection[int]
     return ImageModel.objects.filter(**{field: name}).exclude(pk__in=list(exclude_pks)).exists()
 
 
+@dataclass(frozen=True)
+class StoredFileReplacement:
+    """A stored file rewritten under a new name, and the old one still on disk.
+
+    Returned by every in-place rewrite of an ``Image``'s stored file
+    (:func:`downscale_stored_image`, ``media.videos.process_uploaded_video``,
+    ``media.documents.convert_to_pdf``). The superseded file is deliberately
+    *not* deleted by them: ``services.media.access`` authorizes a media request
+    from the row, so between the delete and the row naming its successor every
+    request for the old path is authorized and then fails to open. The caller
+    persists the new name and then calls :func:`discard_superseded_file`.
+
+    Attributes:
+        size: The new stored size in bytes - what the caller writes to
+            ``Image.file_size``.
+        superseded_name: The stored name the rewrite replaced, or None when it
+            reused the name (same extension, overwritten in place).
+    """
+
+    size: int
+    superseded_name: str | None
+
+
+def discard_superseded_file(image: Image, superseded_name: str | None) -> None:
+    """Delete the file a rewrite replaced, now that the row names its successor.
+
+    Call this *after* persisting ``image.image.name``, never before - the
+    ordering is the point, see :class:`StoredFileReplacement`. Deleting late
+    costs one orphaned file if the process dies in between; deleting early costs
+    a row that permanently names a file which no longer exists.
+
+    Args:
+        image: The row whose file was rewritten, used for its storage backend
+            and to exclude itself from the reference check.
+        superseded_name: The name to delete, or None for nothing to do.
+    """
+    if not superseded_name or superseded_name == image.image.name:
+        return
+    if file_still_referenced("image", superseded_name, exclude_pks=[image.pk]):
+        return
+    with contextlib.suppress(OSError):
+        image.image.storage.delete(superseded_name)
+
+
 @untrusted_parse("image.decode")
-def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> int | None:
+def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> StoredFileReplacement | None:
     """Downscale, re-encode, and strip EXIF from an Image's stored file in place.
 
     The stored file is replaced when processing shrinks it, when a WebP
@@ -888,7 +932,9 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
         convert_webp: Whether to re-encode the file as WebP.
 
     Returns:
-        The new stored size in bytes when the file was replaced, else None.
+        The replacement when the file was rewritten, else None. Its
+        ``superseded_name`` is still on disk - see
+        :func:`discard_superseded_file` for why, and when to delete it.
 
     Raises:
         OSError: When the file cannot be read from or written to storage.
@@ -969,11 +1015,8 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
 
     stem = posixpath.splitext(posixpath.basename(old_name))[0]
     image.image.save(f"{stem}{_FORMAT_EXTENSIONS[target_format]}", ContentFile(buffer.getvalue()), save=False)
-    if image.image.name != old_name and not file_still_referenced("image", old_name, exclude_pks=[image.pk]):
-        with contextlib.suppress(OSError):
-            image.image.storage.delete(old_name)
     logger.info("Downscaled image %s: %s -> %s bytes (%s)", image.pk, old_size, new_size, target_format)
-    return new_size
+    return StoredFileReplacement(new_size, old_name if image.image.name != old_name else None)
 
 
 #: Longest edge of the grid thumbnail written by :func:`write_image_thumbnail`.
@@ -1406,7 +1449,7 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         attribution fields (author/source_url/copyright/taken_at) shown in the
         lightbox, and the two flags the pin gallery's delete prompt reads.
     """
-    from urbanlens.dashboard.models.images.model import ImageSource, MediaKind
+    from urbanlens.dashboard.models.images.model import MediaKind
 
     thumb = img.thumb_url
     marker_thumb = img.marker_thumb_url
@@ -1589,13 +1632,39 @@ def detach_image_from_pin(image: Any) -> None:
     image.delete()
 
 
-def detach_image_from_wiki(image: Any) -> None:
+def detach_image_from_wiki(image: Image, *, withdrawn_by_contributor: bool) -> None:
     """The wiki-side mirror of ``detach_image_from_pin``.
 
     Args:
         image: The ``Image`` to remove from its wiki.
+        withdrawn_by_contributor: Whether the photo's own owner asked for this.
+            Required rather than defaulted, because the community quota bonus
+            *and* the reputation the photo earned both survive every other way a
+            photo can leave a wiki, and neither the exemption column nor the
+            ledger row can tell them apart afterwards - so a second unlink path
+            added later has to answer the question rather than inherit an answer.
     """
+    from urbanlens.dashboard.models.images.attachment import ImageAttachment
+    from urbanlens.dashboard.services.media.quota_rewards import revoke_community_quota_bonus
+    from urbanlens.dashboard.services.reputation.scoring import retract_events_for_target
+
+    if withdrawn_by_contributor:
+        # The ledger half of the same withdrawal the quota bonus covers below.
+        # Done before either branch because both are withdrawals - the photo is
+        # kept when it is still on a pin and deleted when it is not, and the
+        # contribution has ended either way.
+        retract_events_for_target(image, reason="contribution_withdrawn")
+
+    if image.wiki_id is not None:
+        # The pin side already does this (``PinImageView.delete``).
+        # Leaving the row behind keeps the photo eligible to be made the
+        # wiki's cover, since ``WikiCoverPhotoView`` accepts an attachment as
+        # proof the photo is on the wiki, and keeps it counted by
+        # ``reference_count``.
+        ImageAttachment.objects.filter(image=image, wiki_id=image.wiki_id).delete()
     if image.pin_id is not None:
+        if withdrawn_by_contributor:
+            revoke_community_quota_bonus(image)
         image.wiki = None
         image.save(update_fields=["wiki", "updated"])
         return

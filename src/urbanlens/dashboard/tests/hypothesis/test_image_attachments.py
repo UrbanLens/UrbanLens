@@ -24,7 +24,6 @@ from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.photos.attachment import (
     attach_to_pin,
-    attach_to_wiki,
     collect_if_unreferenced,
     reference_count,
 )

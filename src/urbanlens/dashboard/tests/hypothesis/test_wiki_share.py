@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatVote
 from urbanlens.dashboard.services.wiki.wiki_share import (
+    SEEDABLE_PHOTO_LIMIT,
     WikiShareService,
     seedable_aliases,
     seedable_field_values,
@@ -202,3 +203,27 @@ class SeedableAliasesAndPhotosTests(TestCase):
 
     def test_seedable_photos_empty_when_none(self) -> None:
         self.assertEqual(seedable_photos(self.pin), [])
+
+    def test_seedable_photos_is_capped(self) -> None:
+        """A pin with years of photos must not render every one into the dialog.
+
+        The wiki's own Media gallery and the visit dialog's picker both already
+        cap at the same number; this picker was the one that did not.
+        """
+        baker.make("dashboard.Image", pin=self.pin, _quantity=SEEDABLE_PHOTO_LIMIT + 5)
+
+        self.assertEqual(len(seedable_photos(self.pin)), SEEDABLE_PHOTO_LIMIT)
+
+    def test_seedable_photos_offers_the_newest_first(self) -> None:
+        """The cap has to drop the oldest photos, and drop the same ones every time.
+
+        A LIMIT over an unordered queryset is free to return a different slice
+        per call, so which photos are offerable would depend on the plan
+        Postgres happened to pick.
+        """
+        images = baker.make("dashboard.Image", pin=self.pin, _quantity=3)
+        newest = images[-1]
+
+        offered = seedable_photos(self.pin)
+        self.assertEqual(offered[0].pk, newest.pk)
+        self.assertEqual([image.pk for image in offered], [image.pk for image in seedable_photos(self.pin)])

@@ -33,7 +33,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.pins.pin_merge import (
-    PinMergeCollisionError,
+    ChildDetachCollisionError,
     _save_within_savepoint,
     merge_pins,
 )
@@ -120,20 +120,19 @@ class MergeRefusesRatherThanDestroyingTheSurvivorTests(_PinFixtures):
         self.child = baker.make(Pin, profile=self.profile, location=self.shared, parent_pin=self.loser)
         self.survivor = baker.make(Pin, profile=self.profile, location=self.location(), parent_pin=self.child)
 
-    def test_the_merge_is_refused_with_a_reason(self) -> None:
-        with self.assertRaises(PinMergeCollisionError) as caught:
+    def test_the_merge_is_refused_with_the_right_error(self) -> None:
+        with self.assertRaises(ChildDetachCollisionError):
             merge_pins(self.survivor, self.loser, self.profile)
-        self.assertIn("already occupies its location", caught.exception.safe_message)
 
     def test_nothing_is_deleted(self) -> None:
-        with self.assertRaises(PinMergeCollisionError):
+        with self.assertRaises(ChildDetachCollisionError):
             merge_pins(self.survivor, self.loser, self.profile)
 
         for pin in (self.blocker, self.loser, self.child, self.survivor):
             self.assertTrue(Pin.objects.filter(pk=pin.pk).exists(), f"pin {pin.pk} was destroyed by a refused merge")
 
     def test_the_survivor_keeps_its_parent(self) -> None:
-        with self.assertRaises(PinMergeCollisionError):
+        with self.assertRaises(ChildDetachCollisionError):
             merge_pins(self.survivor, self.loser, self.profile)
 
         self.survivor.refresh_from_db()

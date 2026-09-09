@@ -6,14 +6,20 @@ client-side page-tabs.js pattern; these are separate pages), reusing the same
 Context:
   active_tab - "home", "photos", or "documents"
 {% endcomment %}
-<nav class="ul-subnav-tabs vault-subnav" aria-label="Vault sections">
-    <a class="ul-subnav-tab{% if active_tab == 'home' %} is-active{% endif %}" href="{% url 'vault.home' %}">
-        <i class="material-symbols-outlined">home_storage</i> Vault
+<nav class="ul-subnav-tabs" aria-label="Vault sections">
+    <a class="ul-subnav-tab{% if active_tab == 'home' %} is-active{% endif %}" href="{% url 'vault.home' %}"
+       {% if active_tab == 'home' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">home_storage</i>
+        <span>Vault</span>
     </a>
-    <a class="ul-subnav-tab{% if active_tab == 'photos' %} is-active{% endif %}" href="{% url 'vault.photos' %}">
-        <i class="material-symbols-outlined">photo_library</i> Photos
+    <a class="ul-subnav-tab{% if active_tab == 'photos' %} is-active{% endif %}" href="{% url 'vault.photos' %}"
+       {% if active_tab == 'photos' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">photo_library</i>
+        <span>Photos</span>
     </a>
-    <a class="ul-subnav-tab{% if active_tab == 'documents' %} is-active{% endif %}" href="{% url 'vault.documents' %}">
-        <i class="material-symbols-outlined">folder_copy</i> Documents
+    <a class="ul-subnav-tab{% if active_tab == 'documents' %} is-active{% endif %}" href="{% url 'vault.documents' %}"
+       {% if active_tab == 'documents' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">folder_copy</i>
+        <span>Documents</span>
     </a>
 </nav>

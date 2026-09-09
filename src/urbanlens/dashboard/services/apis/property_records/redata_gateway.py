@@ -223,6 +223,86 @@ class RedataGateway(Gateway):
         body = self._lookup_parcel_body(latitude, longitude, situs_address=situs_address, apn=apn)
         return body.get("uuid") or None
 
+    def lookup_coverage(self, parcel_uuid: str) -> dict[str, dict[str, Any]]:
+        """Return which of REData's supplementary endpoints are worth calling for a parcel.
+
+        See REData's ``../REData/docs/api-reference.md``, "GET /parcels/{uuid}/coverage/":
+        every check here is a cheap geographic-bounds or already-known-field test -
+        never a live external fetch - so this is safe to call before deciding
+        whether e.g. :meth:`lookup_assessments` or :meth:`lookup_sale_records`
+        are worth the round trip. Not every supplementary endpoint has a
+        coverage key (``liens``/``tax-payments`` do not - there is no cheap way
+        to know in advance whether a parcel has either), so callers must not
+        assume every domain they care about appears here.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            ``{"<domain>": {"available": bool, "reason": "..."}, ...}`` - keys
+            are always present regardless of value. ``available: true`` means
+            the endpoint is worth calling, not that it is guaranteed to return
+            anything.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/coverage/")
+        return dict(body) if isinstance(body, dict) else {}
+
+    def lookup_demographics(self, parcel_uuid: str) -> dict[str, Any] | None:
+        """Return neighbourhood demographics for the census tract containing a parcel.
+
+        See REData's ``../REData/docs/api-reference.md``, "GET /parcels/{uuid}/demographics/":
+        ACS 5-Year Data Profile figures (population, median household income,
+        median home value, median rent, owner/renter split, ...) for the
+        Census geography containing the parcel's coordinate. Deliberately
+        omits ``?level=`` - ``census_tract`` is REData's own default and the
+        right one for a single parcel (its own docs: "a county spans hundreds
+        of thousands of people and says almost nothing about one parcel").
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            The demographics dict, or None when the parcel has no known
+            coordinate or its coordinate is outside the USA.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed, or
+                REData 503s the whole endpoint (e.g. ``RD_US_CENSUS_API_KEY``
+                not configured server-side, or the Census API is rate-limited).
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/demographics/") or {}
+        demographics = body.get("demographics") if isinstance(body, dict) else None
+        return dict(demographics) if isinstance(demographics, dict) else None
+
+    def lookup_national_parks(self, parcel_uuid: str) -> dict[str, Any]:
+        """Return the NPS park unit containing a parcel (if any), plus nearby ones.
+
+        See REData's ``../REData/docs/api-reference.md``, "GET /parcels/{uuid}/national-parks/".
+        Unlike ``plugins.builtin.nps`` (nearest-by-coordinate only, by this
+        project's own design - see that plugin's module docstring), this
+        endpoint's ``containing_park`` is a real point-in-boundary check: the
+        parcel is genuinely inside that park unit, not merely near it.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            ``{"containing_park": <National Park Unit dict, or None>,
+            "nearby_parks": [...]}`` - both null/empty when the parcel has no
+            known coordinate.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed, or
+                REData reported a transient failure on the containing-park
+                check (a cache hit never reaches this - see the endpoint's own
+                docs).
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/national-parks/")
+        return dict(body) if isinstance(body, dict) else {}
+
     def lookup_assessments(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return annual assessor valuations near a parcel.
 

@@ -27,6 +27,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
+from urbanlens.dashboard.services.core.message_limits import charge_message, refund_message, sender_identity
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message, direct_message_group_name, reaction_summary
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_identity_for_viewers, resolve_visible_identity
@@ -43,23 +44,92 @@ logger = logging.getLogger(__name__)
 class GroupChatValidationError(ValueError):
     """A group chat action or message could not be applied as submitted.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class GroupNameRequiredError(GroupChatValidationError):
+    """The group name was blank after stripping whitespace."""
+
+
+class GroupNameTooLongError(GroupChatValidationError):
+    """The group name exceeds ``MAX_GROUP_NAME_LENGTH``."""
+
+
+class GroupNeedsMembersError(GroupChatValidationError):
+    """A new group was given no members besides its creator."""
+
+
+class TooManyGroupMembersError(GroupChatValidationError):
+    """The group already has, or would gain, more than ``MAX_GROUP_MEMBERS`` members."""
+
+
+class TargetNotAMemberError(GroupChatValidationError):
+    """The profile named for removal has no active membership in this group."""
+
+
+class ClientUuidReusedAcrossGroupsError(GroupChatValidationError):
+    """The given ``client_uuid`` already names a message sent into a different group."""
+
+
+class MessageTooLongError(GroupChatValidationError):
+    """The message body exceeds ``MAX_DIRECT_MESSAGE_LENGTH``."""
+
+
+class ConflictingMessageContentError(GroupChatValidationError):
+    """Both plaintext ``body`` and ``ciphertext`` were given for one message."""
+
+
+class MalformedEncryptedMessageError(GroupChatValidationError):
+    """The encrypted message's ciphertext/nonce/key_version are missing, invalid, or inconsistent."""
+
+
+class UnknownKeyVersionError(GroupChatValidationError):
+    """``key_version`` doesn't name a ``GroupKey`` this group actually has."""
+
+
+class EmptyMessageError(GroupChatValidationError):
+    """Neither ``body`` nor ``ciphertext`` was given."""
 
 
 class GroupChatPermissionError(PermissionError):
     """A group chat action was refused because of who is involved.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class MemberNotAcceptingMessagesError(GroupChatPermissionError):
+    """A profile being added has privacy settings that reject the actor.
+
+    Same rule ``direct_messages.can_direct_message`` enforces for a 1:1 message,
+    evaluated for the profile doing the adding (the group's creator, whether
+    creating the group or extending it later).
+    """
+
+
+class NotAGroupMemberError(GroupChatPermissionError):
+    """The acting profile has no active membership in this group."""
+
+
+class AddMembersRequiresCreatorError(GroupChatPermissionError):
+    """Only the group's creator may add members, and the actor isn't it."""
+
+
+class RemoveMemberRequiresCreatorError(GroupChatPermissionError):
+    """Only the group's creator may remove someone else, and the actor isn't it."""
+
+
+class NotMessageSenderError(GroupChatPermissionError):
+    """Only a message's own sender may delete it, and the actor isn't them."""
 
 
 #: Maximum number of members (including the creator) a group chat may have.
@@ -128,24 +198,27 @@ def create_group_chat(creator: Profile, name: str, members: list[Profile]) -> Gr
         The newly created GroupChat.
 
     Raises:
-        ValueError: Blank/too-long name, no members, too many members, or
-            duplicate members.
-        PermissionError: When any member's privacy settings reject the creator.
+        GroupNameRequiredError: `name` was blank after stripping whitespace.
+        GroupNameTooLongError: `name` exceeds `MAX_GROUP_NAME_LENGTH`.
+        GroupNeedsMembersError: `members` named nobody besides `creator`.
+        TooManyGroupMembersError: The group would exceed `MAX_GROUP_MEMBERS`.
+        MemberNotAcceptingMessagesError: A named member's privacy settings
+            reject the creator.
     """
     name = name.strip()
     if not name:
-        raise GroupChatValidationError("A group name is required.")
+        raise GroupNameRequiredError("Group name was blank after stripping whitespace.")
     if len(name) > MAX_GROUP_NAME_LENGTH:
-        raise GroupChatValidationError(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
+        raise GroupNameTooLongError(f"Group name length {len(name)} exceeds MAX_GROUP_NAME_LENGTH={MAX_GROUP_NAME_LENGTH}.")
 
     unique_members = {member.pk: member for member in members if member.pk != creator.pk}
     if not unique_members:
-        raise GroupChatValidationError("Add at least one other person to start a group.")
+        raise GroupNeedsMembersError(f"create_group_chat called by profile {creator.pk} with no members besides itself.")
     if len(unique_members) + 1 > MAX_GROUP_MEMBERS:
-        raise GroupChatValidationError(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
+        raise TooManyGroupMembersError(f"{len(unique_members) + 1} members requested, exceeding MAX_GROUP_MEMBERS={MAX_GROUP_MEMBERS}.")
     for member in unique_members.values():
         if not can_direct_message(creator, member):
-            raise GroupChatPermissionError(f"{member.username} isn't accepting messages from you.")
+            raise MemberNotAcceptingMessagesError(f"Profile {creator.pk} attempted to create a group including profile {member.pk} ({member.username}), whose privacy settings reject the creator.")
 
     with transaction.atomic():
         group = GroupChat.objects.create(name=name, creator=creator)
@@ -217,16 +290,17 @@ def rename_group_chat(group: GroupChat, actor: Profile, name: str) -> GroupChat:
         The updated group.
 
     Raises:
-        ValueError: Blank or over-long name.
-        PermissionError: When `actor` isn't an active member.
+        GroupNameRequiredError: `name` was blank after stripping whitespace.
+        GroupNameTooLongError: `name` exceeds `MAX_GROUP_NAME_LENGTH`.
+        NotAGroupMemberError: `actor` isn't an active member.
     """
     name = name.strip()
     if not name:
-        raise GroupChatValidationError("A group name is required.")
+        raise GroupNameRequiredError("Group name was blank after stripping whitespace.")
     if len(name) > MAX_GROUP_NAME_LENGTH:
-        raise GroupChatValidationError(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
+        raise GroupNameTooLongError(f"Group name length {len(name)} exceeds MAX_GROUP_NAME_LENGTH={MAX_GROUP_NAME_LENGTH}.")
     if group.membership_for(actor) is None:
-        raise GroupChatPermissionError("You aren't a member of this group.")
+        raise NotAGroupMemberError(f"Profile {actor.pk} attempted to rename group {group.pk} without an active membership.")
 
     group.name = name
     group.save(update_fields=["name", "updated"])
@@ -251,22 +325,23 @@ def add_group_members(group: GroupChat, actor: Profile, members: list[Profile]) 
         The newly created membership rows.
 
     Raises:
-        ValueError: When adding would exceed ``MAX_GROUP_MEMBERS``.
-        PermissionError: When `actor` isn't the creator, or a member's privacy
-            settings reject them.
+        TooManyGroupMembersError: Adding would exceed ``MAX_GROUP_MEMBERS``.
+        AddMembersRequiresCreatorError: `actor` isn't the group's creator.
+        MemberNotAcceptingMessagesError: A named member's privacy settings
+            reject `actor`.
     """
     if not group.is_manager(actor):
-        raise GroupChatPermissionError("Only the group's creator can add members.")
+        raise AddMembersRequiresCreatorError(f"Profile {actor.pk} attempted to add members to group {group.pk}, but only its creator (profile {group.creator_id}) may do that.")
 
     active_ids = set(group.active_memberships().values_list("profile_id", flat=True))
     to_add = {member.pk: member for member in members if member.pk not in active_ids}
     if not to_add:
         return []
     if len(active_ids) + len(to_add) > MAX_GROUP_MEMBERS:
-        raise GroupChatValidationError(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
+        raise TooManyGroupMembersError(f"Adding {len(to_add)} member(s) to group {group.pk}'s {len(active_ids)} active would exceed MAX_GROUP_MEMBERS={MAX_GROUP_MEMBERS}.")
     for member in to_add.values():
         if not can_direct_message(actor, member):
-            raise GroupChatPermissionError(f"{member.username} isn't accepting messages from you.")
+            raise MemberNotAcceptingMessagesError(f"Profile {actor.pk} attempted to add profile {member.pk} ({member.username}) to group {group.pk}, but their privacy settings reject the actor.")
 
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
@@ -298,14 +373,15 @@ def remove_group_member(group: GroupChat, actor: Profile, target: Profile) -> No
         target: The member being removed.
 
     Raises:
-        PermissionError: When `actor` is neither `target` nor the creator.
-        ValueError: When `target` has no active membership.
+        RemoveMemberRequiresCreatorError: `actor` is neither `target` nor the
+            group's creator.
+        TargetNotAMemberError: `target` has no active membership.
     """
     membership = group.membership_for(target)
     if membership is None:
-        raise GroupChatValidationError("They aren't a member of this group.")
+        raise TargetNotAMemberError(f"Profile {target.pk} has no active membership in group {group.pk}.")
     if actor.pk != target.pk and not group.is_manager(actor):
-        raise GroupChatPermissionError("Only the group's creator can remove other members.")
+        raise RemoveMemberRequiresCreatorError(f"Profile {actor.pk} attempted to remove profile {target.pk} from group {group.pk}, but only its creator (profile {group.creator_id}) may remove someone other than themselves.")
 
     membership.end(removed_by=actor if actor.pk != target.pk else None)
     if actor.pk != target.pk:
@@ -574,9 +650,18 @@ def create_group_message(
         The newly created GroupMessage.
 
     Raises:
-        ValueError: Empty/too-long/malformed content.
-        PermissionError: When `sender` isn't an active member.
+        ClientUuidReusedAcrossGroupsError: `client_uuid` already names a
+            message sent into a different group.
+        MessageTooLongError: `body` exceeds `MAX_DIRECT_MESSAGE_LENGTH`.
+        ConflictingMessageContentError: Both `body` and `ciphertext` were given.
+        MalformedEncryptedMessageError: The ciphertext/nonce/key_version triple
+            is missing, invalid, or inconsistent.
+        UnknownKeyVersionError: `key_version` doesn't name a `GroupKey` this
+            group has.
+        EmptyMessageError: Neither `body` nor `ciphertext` was given.
+        NotAGroupMemberError: `sender` isn't an active member.
     """
+    from urbanlens.dashboard.models.e2ee import GroupKey
     from urbanlens.dashboard.services.security.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
 
     # Idempotent replay - see create_direct_message for why this precedes both
@@ -593,25 +678,48 @@ def create_group_message(
         replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first()
         if replayed is not None:
             if replayed.group_id != group.pk:
-                raise GroupChatValidationError("This client_uuid was already used for a message in a different group.")
+                raise ClientUuidReusedAcrossGroupsError(
+                    f"client_uuid {client_uuid} from sender {sender.pk} already names a message in group {replayed.group_id}, not the requested group {group.pk}.",
+                )
             return replayed
 
     membership = group.membership_for(sender)
     if membership is None:
-        raise GroupChatPermissionError("You aren't a member of this group.")
+        raise NotAGroupMemberError(f"Profile {sender.pk} attempted to send a message to group {group.pk} without an active membership.")
 
     body = body.strip()
     if len(body) > MAX_DIRECT_MESSAGE_LENGTH:
-        raise GroupChatValidationError(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
+        raise MessageTooLongError(f"Message length {len(body)} exceeds MAX_DIRECT_MESSAGE_LENGTH={MAX_DIRECT_MESSAGE_LENGTH}.")
     if ciphertext:
         if body:
-            raise GroupChatValidationError("A message is either plaintext or encrypted, never both.")
+            raise ConflictingMessageContentError(f"Sender {sender.pk} supplied both body and ciphertext for one message.")
         if not valid_blob(ciphertext, MAX_CIPHERTEXT_LENGTH) or not valid_blob(nonce, MAX_NONCE_LENGTH) or key_version < 1:
-            raise GroupChatValidationError("Malformed encrypted message.")
+            raise MalformedEncryptedMessageError("ciphertext/nonce failed valid_blob() validation, or key_version < 1.")
+        # The version has to name a key this group actually has. Without this the
+        # only check was `< 1`, so any positive integer was stored verbatim -
+        # including a version this group never had, or one belonging to a
+        # different group - which makes "versioning enforces membership
+        # boundaries cryptographically" (models/e2ee/group_key.py) a claim about
+        # a number the server never looked at. One indexed lookup: the
+        # (group, version) unique constraint covers it.
+        #
+        # A *stale but real* version is still accepted, deliberately. Refusing
+        # one means a client that has not rotated cannot send, and rotation
+        # requires every member enrolled (409 otherwise) - so one un-enrolled
+        # member would stop the whole group, trading a confidentiality gap for an
+        # availability one. That trade is a product decision; see P26/P46.
+        if not GroupKey.objects.filter(group=group, version=key_version).exists():
+            raise UnknownKeyVersionError(f"No GroupKey with version={key_version} exists for group {group.pk}.")
     elif nonce or key_version:
-        raise GroupChatValidationError("Malformed encrypted message.")
+        raise MalformedEncryptedMessageError(f"nonce/key_version given without ciphertext (sender {sender.pk}, group {group.pk}).")
     if not body and not ciphertext:
-        raise GroupChatValidationError("Message cannot be empty.")
+        raise EmptyMessageError(f"Sender {sender.pk} submitted neither body nor ciphertext for group {group.pk}.")
+
+    # The same budget a direct message spends, for the reason create_direct_message
+    # gives: this is the sending path for both the socket and GroupSendView, and
+    # one budget per sender rather than per conversation is what stops someone
+    # multiplying their allowance by opening another group (P31).
+    charge_message(sender_identity(sender.pk))
 
     try:
         # Nested atomic: see create_direct_message for why the idempotency
@@ -631,10 +739,15 @@ def create_group_message(
         # race - same cross-group check as the pre-check above, since that
         # race could equally be against a message in a different group.
         replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
+        if replayed is not None:
+            # See create_direct_message: both retries charged for one message.
+            refund_message(sender_identity(sender.pk))
         if replayed is None:
             raise
         if replayed.group_id != group.pk:
-            raise GroupChatValidationError("This client_uuid was already used for a message in a different group.") from None
+            raise ClientUuidReusedAcrossGroupsError(
+                f"client_uuid {client_uuid} from sender {sender.pk} raced onto group {replayed.group_id}, not the requested group {group.pk}.",
+            ) from None
         return replayed
     # Sending is reading: the sender's own read mark advances with their message.
     GroupMessage.objects.mark_read(membership)
@@ -695,10 +808,10 @@ def delete_group_message(message: GroupMessage, actor: Profile) -> GroupMessage:
         The updated message.
 
     Raises:
-        PermissionError: If `actor` isn't the message's sender.
+        NotMessageSenderError: `actor` isn't the message's sender.
     """
     if actor.pk != message.sender_id:
-        raise GroupChatPermissionError("Only the sender can delete this message.")
+        raise NotMessageSenderError(f"Profile {actor.pk} attempted to delete message {message.pk} sent by profile {message.sender_id}.")
     if message.deleted_at is None:
         message.deleted_at = timezone.now()
         message.save(update_fields=["deleted_at", "updated"])
@@ -740,13 +853,13 @@ def toggle_group_reaction(profile: Profile, message: GroupMessage, emoji: str) -
         ``"added"`` or ``"removed"``.
 
     Raises:
-        PermissionError: When `profile` has no active membership in the
+        NotAGroupMemberError: `profile` has no active membership in the
             message's group.
     """
     from urbanlens.dashboard.models.reactions.model import Reaction
 
     if message.group.membership_for(profile) is None:
-        raise GroupChatPermissionError("You aren't a member of this group.")
+        raise NotAGroupMemberError(f"Profile {profile.pk} attempted to react to message {message.pk} in group {message.group_id} without an active membership.")
 
     existing = Reaction.objects.existing(profile, emoji, group_message=message)
     if existing is not None:
@@ -856,10 +969,10 @@ def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body
         The newly created GroupMessage, or the existing one on replay.
 
     Raises:
-        PermissionError: When `sender` isn't an active member.
+        NotAGroupMemberError: `sender` isn't an active member.
         ValueError: Propagated from `create_group_message` for bad input.
     """
-    from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_share
+    from urbanlens.dashboard.services.sharing.pin_sharing import PinSharePermissionError, create_pin_share
 
     if client_uuid is not None:
         # Checked before any fan-out: create_group_message would itself replay,
@@ -872,9 +985,10 @@ def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body
     for membership in group.active_memberships().exclude(profile_id=sender.pk).select_related("profile", "profile__user"):
         try:
             pin_share = create_pin_share(sender, membership.profile, pin)
-        except PermissionError:
+        except PinSharePermissionError as exc:
             # Not connected to this member - the friends-only sharing rule
             # applies per recipient; they see the card without an action.
+            logger.info("Skipping pin share to group member %s: %s", membership.profile_id, exc)
             continue
         GroupMessageShare.objects.create(message=message, recipient=membership.profile, pin_share=pin_share)
     broadcast_group_message(message)

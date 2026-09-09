@@ -66,26 +66,6 @@ class PlaceQuerySet(abstract.DashboardQuerySet):
         """
         return self.resolvable().filter(geometry__contains=point).order_by("area_sqm", "pk")
 
-    def in_domain(self, domain_root_id: int) -> Self:
-        """Every place sharing one access domain."""
-        return self.filter(domain_root_id=domain_root_id)
-
-    def in_domains(self, domain_root_ids: Iterable[int]) -> Self:
-        """Every place in any of the given access domains."""
-        return self.filter(domain_root_id__in=list(domain_root_ids))
-
-    def part_of_children(self) -> Self:
-        """Restrict to places attached to their parent by a ``PART_OF`` edge."""
-        from urbanlens.dashboard.models.place.model import PlaceRelation
-
-        return self.filter(parent__isnull=False, parent_relation=PlaceRelation.PART_OF)
-
-    def member_of_children(self) -> Self:
-        """Restrict to places attached to their parent by a ``MEMBER_OF`` edge."""
-        from urbanlens.dashboard.models.place.model import PlaceRelation
-
-        return self.filter(parent__isnull=False, parent_relation=PlaceRelation.MEMBER_OF)
-
 
 class PlaceManager(abstract.DashboardManager.from_queryset(PlaceQuerySet)):
     """Manager for Place.
@@ -240,10 +220,6 @@ class PlaceExternalTagQuerySet(abstract.DashboardQuerySet):
         """Tags belonging to one place."""
         return self.filter(place=place)
 
-    def for_source(self, source: str) -> Self:
-        """Tags reported by one provider."""
-        return self.filter(source=source)
-
     def matching(self, key: str, value: str | None = None) -> Self:
         """Tags with a given key, optionally narrowed to one value."""
         qs = self.filter(key=key)
@@ -272,10 +248,6 @@ class ExternalTagVocabularyEntryQuerySet(abstract.DashboardQuerySet):
     def ungrouped(self) -> Self:
         """Entries with no explicit group - eligible for default same-text matching."""
         return self.filter(group__isnull=True)
-
-    def in_group(self, group) -> Self:
-        """Entries belonging to one explicit group."""
-        return self.filter(group=group)
 
     def for_tag(self, source: str, key: str, value: str) -> Self:
         """The (at most one) entry for one exact tag tuple."""

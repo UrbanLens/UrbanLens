@@ -273,12 +273,19 @@ def on_user_logged_in(sender: object, user: Any, **kwargs: Any) -> None:
 
 
 def on_achievement_saved(sender: type[Model], instance: Any, created: bool, raw: bool = False, **kwargs: Any) -> None:
-    """Backfill a newly defined or re-activated award across every profile.
+    """Backfill a newly defined, re-activated, or re-scoped award across every profile.
 
     This is what lets an admin add an award at any time and have users who
     already qualify receive it, rather than only rewarding future activity.
+
+    It fires only when the set of qualifying profiles can actually have changed
+    - creation, activation, or an edit to ``metric``/``threshold``. It used to
+    fire on *every* save of an active award, so renaming one or dragging it up
+    the list re-ran an evaluation across every profile on the site.
     """
     if raw or not instance.is_active:
+        return
+    if not created and not instance.qualifying_change():
         return
 
     def _enqueue() -> None:

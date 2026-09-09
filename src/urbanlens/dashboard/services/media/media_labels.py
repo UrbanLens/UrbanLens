@@ -18,7 +18,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.models.labels.model import KIND_MEDIA, Label
+from urbanlens.dashboard.models.labels.meta import KIND_MEDIA
+from urbanlens.dashboard.models.labels.model import Label
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -38,14 +39,26 @@ MAX_MEDIA_LABEL_NAME_LENGTH = 255
 
 
 class MediaLabelError(ValueError):
-    """A media-label submission that cannot be applied (too many, blank, or over-long).
+    """A media-label submission that cannot be applied.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    The message is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below and author its own user-facing
+    text, rather than relaying the message - that keeps a future raise site
+    here from being able to smuggle unreviewed text into a response just by
+    adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class TooManyMediaLabelsError(MediaLabelError):
+    """More than :data:`MAX_MEDIA_LABELS` names were given for one item."""
+
+
+class BlankMediaLabelNameError(MediaLabelError):
+    """One of the submitted names was empty (or all whitespace)."""
+
+
+class MediaLabelNameTooLongError(MediaLabelError):
+    """One of the submitted names exceeds :data:`MAX_MEDIA_LABEL_NAME_LENGTH`."""
 
 
 def set_media_labels(image: Image, names: Sequence[str], profile: Profile) -> list[Label]:
@@ -67,21 +80,22 @@ def set_media_labels(image: Image, names: Sequence[str], profile: Profile) -> li
         The labels now attached to *image*, in submission order.
 
     Raises:
-        MediaLabelError: More than :data:`MAX_MEDIA_LABELS` names were given,
-            or a name was blank or longer than
+        TooManyMediaLabelsError: More than :data:`MAX_MEDIA_LABELS` names were given.
+        BlankMediaLabelNameError: One of the names was blank.
+        MediaLabelNameTooLongError: One of the names exceeded
             :data:`MAX_MEDIA_LABEL_NAME_LENGTH`.
     """
     if len(names) > MAX_MEDIA_LABELS:
-        raise MediaLabelError(f"A photo may have at most {MAX_MEDIA_LABELS} labels.")
+        raise TooManyMediaLabelsError(f"Submission had {len(names)} labels, exceeding the cap of {MAX_MEDIA_LABELS}.")
 
     cleaned: list[str] = []
     seen: set[str] = set()
     for raw in names:
         name = (raw or "").strip()
         if not name:
-            raise MediaLabelError("Label names cannot be blank.")
+            raise BlankMediaLabelNameError(f"Blank label name in submission: {names!r}.")
         if len(name) > MAX_MEDIA_LABEL_NAME_LENGTH:
-            raise MediaLabelError(f"Label names cannot exceed {MAX_MEDIA_LABEL_NAME_LENGTH} characters.")
+            raise MediaLabelNameTooLongError(f"Label name {len(name)} chars long, exceeding the cap of {MAX_MEDIA_LABEL_NAME_LENGTH}: {name!r}.")
         key = name.casefold()
         if key in seen:
             continue

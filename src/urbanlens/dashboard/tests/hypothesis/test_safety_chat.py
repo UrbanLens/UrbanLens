@@ -173,6 +173,6 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
         await comm.send_to(text_data=json.dumps({"body": "x" * 5000}))
         reply = json.loads(await comm.receive_from())
         self.assertEqual(reply["type"], "error")
-        self.assertIn("too long", reply["detail"])
+        self.assertIn("couldn't be sent", reply["detail"])
 
         await comm.disconnect()

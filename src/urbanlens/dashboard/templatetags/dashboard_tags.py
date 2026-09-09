@@ -404,6 +404,24 @@ def icon_keywords(value: str | None) -> str:
     return ICON_KEYWORDS.get(str(value), "")
 
 
+@register.simple_tag
+def icon_picker_grid_url() -> str:
+    """Return the versioned URL of the shared icon-picker grid.
+
+    The ``?v=`` is a content hash of the catalogue, so the URL changes exactly
+    when the icons do - which is what lets the response be cached immutably
+    without a deploy serving the previous catalogue. See
+    ``services.core.icon_grid``.
+
+    Usage: data-grid-url="{% icon_picker_grid_url %}"
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.services.core.icon_grid import icon_grid_version
+
+    return f"{reverse('ui.icon_picker_grid')}?v={icon_grid_version()}"
+
+
 @register.filter
 def contact_picker_options(connections: Iterable[Profile]) -> list[dict[str, Any]]:
     """Return friend connections as JSON-serializable dicts for the contact picker's autocomplete/avatar data.
@@ -499,8 +517,22 @@ def assistant_enabled_flag(user) -> bool:
     ``tooltip_attrs``/``subscription_role_choices`` above.
 
     Usage: {% assistant_enabled_flag request.user as assistant_enabled %}
+
+    ``getattr``, not ``user.is_authenticated``. This is called from
+    ``themes/base.html:4``, so it runs for every page - including a
+    ``render_to_string`` with no ``request`` in the context, where Django
+    resolves ``request.user`` to ``string_if_invalid`` (``""``) rather than
+    raising, and ``"".is_authenticated`` is an ``AttributeError`` that surfaces
+    as a 500 on the whole page. Rendering a page template without a request is a
+    legitimate thing to do; answering False for it is the honest result.
+
+    Args:
+        user: The viewer, or whatever the template resolved in its place.
+
+    Returns:
+        True when the assistant surface should be wired up for *user*.
     """
-    if not user.is_authenticated:
+    if not getattr(user, "is_authenticated", False):
         return False
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.ai.access import assistant_available

@@ -17,8 +17,15 @@
 {% include "dashboard/partials/ui/_page_hero.html" with icon="photo_library" title="Photos" subtitle="Every photo you've added, and a quick way to turn them into visits." modifier="top" %}
 {% endblock %}
 
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/vault/_vault_subnav.html" with active_tab="photos" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/vault/_vault_subnav.html" with active_tab="photos" %}
 <div id="photos-page" class="memories-tab-page"
      data-upload-url="{% url 'vault.photos.upload' %}"
      data-action-base="{% url 'vault.photos' %}"
@@ -30,11 +37,12 @@
         <input type="file" id="photos-file-input" accept="image/*" multiple hidden
                onchange="photosHandleFiles(this.files); this.value='';">
 
-        {# -- Upload dropzone ------------------------------------------------- #}
-        <label for="photos-file-input" class="photos-dropzone" id="photos-dropzone">
+        {# -- Upload dropzone (compact - the whole page is still a drop target, #}
+        {# see the page-wide dragenter/drop listeners below) ------------------ #}
+        <label for="photos-file-input" class="photos-dropzone" id="photos-dropzone"
+               title="Drag &amp; drop anywhere on this page, or click to upload. We'll sort photos by where and when they were taken.">
             <i class="material-symbols-outlined">cloud_upload</i>
-            <span class="photos-dropzone-title">Drag photos here, or click to upload</span>
-            <span class="photos-dropzone-sub">We'll sort them by where and when they were taken.</span>
+            <span class="photos-dropzone-title">Add photos</span>
             <div class="photos-upload-progress" id="photos-upload-progress" hidden>
                 <div class="photos-upload-bar" id="photos-upload-bar"></div>
             </div>
@@ -52,6 +60,25 @@
         {# ?album= is carried through so a deep link (or a Back navigation) loads #}
         {# that album directly instead of the list. See controllers.albums.       #}
         <section id="albums" class="photos-albums-section" aria-label="Albums">
+            <div class="photos-gallery-head">
+                <h2><i class="material-symbols-outlined">photo_album</i> Albums</h2>
+                {# Overflow menu for secondary options - reuses the same #}
+                {# overflow-menu component/classes as pin_lists/detail.html. #}
+                <div class="pin-list-more-menu">
+                    <button type="button" class="btn btn--icon pin-list-more-btn" id="vault-albums-more-btn"
+                            aria-haspopup="true" aria-expanded="false" aria-label="More album options" title="More options"
+                            onclick="vaultAlbumsToggleMoreMenu()">
+                        <i class="material-symbols-outlined">more_vert</i>
+                    </button>
+                    <div class="pin-list-more-menu-panel" id="vault-albums-more-menu-panel" hidden>
+                        <button type="button" id="vault-pin-albums-toggle-btn" onclick="vaultAlbumsShowPinAlbums()">
+                            <i class="material-symbols-outlined">photo_library</i>
+                            <span>Show your pin albums</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div id="vault-albums-panel"
                  hx-get="{% url 'vault.photos.albums' %}{% if request.GET.album %}?album={{ request.GET.album|urlencode }}{% endif %}"
                  hx-trigger="load"
@@ -63,22 +90,13 @@
                 </div>
             </div>
 
-            <details class="vault-pin-albums-toggle-wrap"
-                      hx-get="{% url 'vault.photos.pin_albums' %}"
-                      hx-trigger="toggle once"
-                      hx-target="#vault-pin-albums-panel"
-                      hx-swap="innerHTML">
-                <summary class="btn btn--ghost vault-pin-albums-toggle">
-                    <i class="material-symbols-outlined">photo_library</i>
-                    <span>Show your pin albums</span>
-                </summary>
-                <div id="vault-pin-albums-panel" class="vault-pin-albums-panel">
-                    <div class="albums-panel-skeleton" aria-hidden="true">
-                        <div class="album-card album-card--skeleton"></div>
-                        <div class="album-card album-card--skeleton"></div>
-                    </div>
+            <div id="vault-pin-albums-panel" class="vault-pin-albums-panel"
+                 data-url="{% url 'vault.photos.pin_albums' %}" hidden>
+                <div class="albums-panel-skeleton" aria-hidden="true">
+                    <div class="album-card album-card--skeleton"></div>
+                    <div class="album-card album-card--skeleton"></div>
                 </div>
-            </details>
+            </div>
         </section>
 
         {# -- Full gallery ---------------------------------------------------- #}
@@ -288,6 +306,41 @@
     var UPLOAD_URL = root.dataset.uploadUrl;
     var ACTION_BASE = root.dataset.actionBase;
     var CSRF = window.csrftoken || '{{ csrf_token }}';
+
+    // -- Albums section overflow menu -------------------------------------------
+    window.vaultAlbumsToggleMoreMenu = function () {
+        var panel = document.getElementById('vault-albums-more-menu-panel');
+        var btn = document.getElementById('vault-albums-more-btn');
+        if (!panel || !btn) return;
+        var opening = panel.hidden;
+        panel.hidden = !opening;
+        btn.setAttribute('aria-expanded', String(opening));
+    };
+    window.vaultAlbumsCloseMoreMenu = function () {
+        var panel = document.getElementById('vault-albums-more-menu-panel');
+        var btn = document.getElementById('vault-albums-more-btn');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+        if (panel) panel.hidden = true;
+    };
+    document.addEventListener('click', function (e) {
+        var menu = document.getElementById('vault-albums-more-btn');
+        menu = menu ? menu.closest('.pin-list-more-menu') : null;
+        if (menu && !menu.contains(e.target)) window.vaultAlbumsCloseMoreMenu();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') window.vaultAlbumsCloseMoreMenu(); });
+
+    var _pinAlbumsLoaded = false;
+    window.vaultAlbumsShowPinAlbums = function () {
+        window.vaultAlbumsCloseMoreMenu();
+        var panel = document.getElementById('vault-pin-albums-panel');
+        if (!panel) return;
+        panel.hidden = false;
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (!_pinAlbumsLoaded && typeof htmx !== 'undefined') {
+            _pinAlbumsLoaded = true;
+            htmx.ajax('GET', panel.dataset.url, { target: '#vault-pin-albums-panel', swap: 'innerHTML' });
+        }
+    };
 
     // -- Client-side size/quota pre-check ---------------------------------------
     // Mirrors the server's file_size_error_for_upload/quota_error_for_upload

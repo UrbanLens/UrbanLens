@@ -22,7 +22,7 @@ from celery import shared_task
 from channels.layers import get_channel_layer
 from django.utils import timezone
 
-from urbanlens.dashboard.services.ai.tasks import (
+from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's autodiscover_tasks() only imports <app>/tasks.py, so this is what registers the task on the worker
     run_assistant_turn_task,
 )
 from urbanlens.dashboard.services.core.celery import update_task_progress
@@ -662,6 +662,9 @@ class _UploadProcessResult:
     update_fields: dict[str, object]
     coords: tuple[float, float] | None = None
     new_stored_size: int | None = None
+    #: Stored name a rewrite replaced, still on disk. Deleted only once the row
+    #: names its successor - see ``media.images.discard_superseded_file``.
+    superseded_name: str | None = None
 
 
 def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max_dimension_override: int | None = None) -> _UploadProcessResult | None:
@@ -816,6 +819,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
             update_fields["author"] = uploader_name
 
     new_stored_size: int | None = None
+    superseded_name: str | None = None
     if image.profile is not None:
         downscale_policy: tuple[int | None, bool] | None = get_downscale_policy(image.profile)
     else:
@@ -839,7 +843,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
         # including the HEIC case (`stored_file_needs_transcode`), where the stored
         # bytes are what a plain <img src> gets and most browsers cannot render them.
         try:
-            new_size = downscale_stored_image(image, max_dimension, convert_webp)
+            replacement = downscale_stored_image(image, max_dimension, convert_webp)
         except (OSError, ValueError, PILDecompressionBombError) as exc:
             # DecompressionBombError inherits straight from Exception, not from
             # OSError/ValueError like the rest of Pillow's failures (Unidentified-
@@ -850,9 +854,10 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
             # upload stored and the rest of the pipeline intact.
             logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
         else:
-            if new_size is not None:
+            if replacement is not None:
                 update_fields["image"] = image.image.name
-                new_stored_size = new_size
+                new_stored_size = replacement.size
+                superseded_name = replacement.superseded_name
 
     try:
         if write_image_thumbnail(image):
@@ -877,7 +882,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
         # decoding one itself - see services.photos.photo_keywords.
         logger.warning("Analysis thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
 
-    return _UploadProcessResult(update_fields, coords, new_stored_size)
+    return _UploadProcessResult(update_fields, coords, new_stored_size, superseded_name)
 
 
 def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessResult:
@@ -889,7 +894,7 @@ def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessR
     # The container's own location tags are always removed from the stored file;
     # strip_location decides only whether the coordinates are recorded on the
     # row, where the app's visibility rules govern them.
-    metadata, new_size = process_uploaded_video(image, max_height)
+    metadata, replacement = process_uploaded_video(image, max_height)
 
     update_fields: dict[str, object] = {}
     coords: tuple[float, float] | None = None
@@ -899,9 +904,14 @@ def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessR
             update_fields["taken_at"] = image.taken_at
         if "latitude" in metadata and "longitude" in metadata:
             coords = (metadata["latitude"], metadata["longitude"])
-    if new_size is not None:
+    if replacement is not None:
         update_fields["image"] = image.image.name
-    return _UploadProcessResult(update_fields, coords, new_size)
+    return _UploadProcessResult(
+        update_fields,
+        coords,
+        replacement.size if replacement else None,
+        replacement.superseded_name if replacement else None,
+    )
 
 
 def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResult:
@@ -910,18 +920,23 @@ def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResul
 
     update_fields: dict[str, object] = {}
     try:
-        new_size = convert_to_pdf(image)
+        replacement = convert_to_pdf(image)
     except (OSError, ValueError) as exc:
         logger.warning("Document conversion failed for image %s: %s", image_id, exc, exc_info=True)
-        new_size = None
-    if new_size is not None:
+        replacement = None
+    if replacement is not None:
         update_fields["image"] = image.image.name
 
     ocr_text = extract_pdf_text(image)
     if ocr_text:
         image.ocr_text = ocr_text
         update_fields["ocr_text"] = ocr_text
-    return _UploadProcessResult(update_fields, None, new_size)
+    return _UploadProcessResult(
+        update_fields,
+        None,
+        replacement.size if replacement else None,
+        replacement.superseded_name if replacement else None,
+    )
 
 
 def _sync_deduped_siblings(image: Image) -> None:
@@ -1158,6 +1173,7 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
     from decimal import Decimal
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.media.images import discard_superseded_file
     from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
     from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
@@ -1264,6 +1280,12 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
 
     if update_fields:
         Image.objects.filter(pk=image_id).update(**update_fields)
+
+    # Only now, with the row naming the processed file. Before this line a
+    # request for the old path is authorized (authorize_media reads the row) and
+    # then finds nothing; after it, the same request is refused, which is the
+    # answer it should have had all along. See P58 in docs/PROBLEMS.md.
+    discard_superseded_file(image, result.superseded_name)
 
     _sync_deduped_siblings(image)
 
@@ -3001,7 +3023,6 @@ def run_scheduled_enrichment(self) -> dict:
         skip marker when another run holds the single-flight lock.
     """
     from celery.exceptions import SoftTimeLimitExceeded
-    from django.core.cache import cache
 
     from urbanlens.dashboard.services.locations.enrichment import RUN_LOCK_CACHE_KEY, run_enrichment_cycle
 
@@ -3062,7 +3083,6 @@ _CHECKIN_LOCK_TIMEOUT_SECONDS = 270  # just under the 5-minute beat interval
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_due_checkin_reminders() -> int:
     """Send the check-in-due reminder for every safety check-in whose time has arrived."""
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import send_checkin_reminder
@@ -3093,7 +3113,6 @@ def send_due_checkin_reminders() -> int:
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_final_checkin_warnings() -> int:
     """Send a final "check in now" warning for every safety check-in about to escalate."""
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import send_final_warning
@@ -3120,7 +3139,6 @@ def send_final_checkin_warnings() -> int:
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def escalate_overdue_checkins() -> int:
     """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import escalate_checkin
@@ -3175,7 +3193,6 @@ def sweep_due_safety_checkin_archival() -> int:
     getting lost - the same trade-off the other checkin beat tasks above already make
     for their own timing precision vs. this file's 5-minute cadence.
     """
-    from django.core.cache import cache
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import archive_checkin
@@ -3338,6 +3355,15 @@ def hard_delete_expired_direct_messages(batch_size: int = 2000, max_per_run: int
 _DELETION_REMINDER_LOCK_CACHE_KEY = "urbanlens:account:deletion-reminder-lock"
 _DELETION_REMINDER_LOCK_TIMEOUT_SECONDS = 3300  # just under the hourly beat interval
 
+#: The hard-delete sweep has the same hazard for the same reason: it selects on
+#: `deletion_requested_at`, which `hard_delete_profile` does not clear until it
+#: has already sent the final "your account has been deleted" email. Two
+#: overlapping runs both select the same profile and both send it; the second
+#: `User.delete()` affects zero rows rather than raising, so a duplicate email is
+#: the only symptom.
+_HARD_DELETE_LOCK_CACHE_KEY = "urbanlens:account:hard-delete-lock"
+_HARD_DELETE_LOCK_TIMEOUT_SECONDS = 3300  # just under the hourly beat interval
+
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_account_deletion_reminders() -> int:
@@ -3367,13 +3393,20 @@ def hard_delete_expired_accounts() -> int:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.profile.account_deletion import hard_delete_profile
 
-    count = 0
-    for profile in Profile.objects.due_for_hard_delete():
-        hard_delete_profile(profile)
-        count += 1
-    if count:
-        logger.info("Hard-deleted %s expired account(s)", count)
-    return count
+    _lock_token = acquire_lock(_HARD_DELETE_LOCK_CACHE_KEY, _HARD_DELETE_LOCK_TIMEOUT_SECONDS)
+    if _lock_token is None:
+        logger.info("hard_delete_expired_accounts: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for profile in Profile.objects.due_for_hard_delete():
+            hard_delete_profile(profile)
+            count += 1
+        if count:
+            logger.info("Hard-deleted %s expired account(s)", count)
+        return count
+    finally:
+        release_lock(_HARD_DELETE_LOCK_CACHE_KEY, _lock_token)
 
 
 # No autoretry here, deliberately: run_panel_fetch owns the failure policy
@@ -3682,7 +3715,6 @@ def run_scheduled_trivia_generation() -> dict:
         The sweep summary dict, or a skip marker when another run holds the
         single-flight lock.
     """
-    from django.core.cache import cache
 
     from urbanlens.dashboard.services.trivia.generation import sweep_wikis_for_generation
 
@@ -3712,7 +3744,6 @@ def run_scheduled_trivia_wiki_incorporation() -> dict:
         The sweep summary dict, or a skip marker when another run holds the
         single-flight lock.
     """
-    from django.core.cache import cache
 
     from urbanlens.dashboard.services.trivia.wiki_incorporation import sweep_questions_for_wiki_incorporation
 
@@ -3860,7 +3891,6 @@ def sweep_stalled_spotguessr_sessions() -> int:
     """
     from datetime import timedelta
 
-    from django.core.cache import cache
     from django.utils import timezone
 
     from urbanlens.dashboard.models.spotguessr.model import GameSession
@@ -4011,7 +4041,6 @@ def sweep_stalled_trivia_sessions() -> int:
     """
     from datetime import timedelta
 
-    from django.core.cache import cache
     from django.utils import timezone
 
     from urbanlens.dashboard.models.trivia.model import TriviaSession
@@ -4058,7 +4087,6 @@ def sweep_stalled_consensus_sessions() -> int:
     """
     from datetime import timedelta
 
-    from django.core.cache import cache
     from django.utils import timezone
 
     from urbanlens.dashboard.models.consensus.model import ConsensusRoundResolution, ConsensusSession

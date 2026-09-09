@@ -28,7 +28,10 @@ must not be confused with each other:
   ``wiki_access.resolve_visible_wiki`` and
   ``wiki_share.WikiShareService.share_from_pin``). A profile who never
   engaged with a wiki loses it the moment their last qualifying pin is gone,
-  exactly as before this existed.
+  exactly as before this existed. Confirmed with Jess 2026-09-08 (P88):
+  permanent-on-view is intended, the same as split-family permanence above -
+  viewing a wiki once while access is legitimately held is enough to keep it
+  forever, even after the qualifying pin is later moved or deleted.
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 # Django Imports
 from django.core.exceptions import ValidationError
@@ -34,11 +34,12 @@ from urbanlens.dashboard.models.achievements.queryset import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     import datetime
 
     from django.db.models import Manager as DjangoManager
+    from django.db.models.fetch_modes import FetchMode
 
-    from urbanlens.dashboard.models.profile import Profile
     from urbanlens.dashboard.services.achievements.metrics import Metric
 
 logger = logging.getLogger(__name__)
@@ -121,6 +122,68 @@ class Achievement(abstract.PublicDashboardModel):
             Index(fields=["metric", "threshold"], name="idxdb_achv_metric_thresh"),
             Index(fields=["is_active"], name="idxdb_achv_active"),
         ]
+
+    #: The fields that decide *who qualifies*. A change to any of them has to
+    #: reach the users it newly covers; a change to anything else (name, colour,
+    #: icon, order, secrecy) does not. `models.achievements.signals` reads the
+    #: loaded values below to tell the two apart.
+    QUALIFYING_FIELDS = ("metric", "threshold", "is_active")
+
+    @classmethod
+    def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Achievement:  # noqa: ARG003
+        """Track the persisted qualifying fields so a save can tell what changed.
+
+        Args:
+            db: Database alias the row was loaded from.
+            field_names: Names of the loaded fields.
+            values: Loaded field values.
+            fetch_mode: Unused - django-stubs 6.1 types this ahead of the
+                pinned Django 6.0, which has no such parameter at runtime.
+                Accepted only so this override stays substitutable for the
+                declared base signature; never forwarded to ``super()``.
+
+        Returns:
+            The loaded Achievement instance.
+        """
+        instance = super().from_db(db, field_names, values)
+        for field in cls.QUALIFYING_FIELDS:
+            if field in field_names:
+                setattr(instance, f"_loaded_{field}", getattr(instance, field))
+        return instance
+
+    def save(self, *args, **kwargs) -> None:
+        """Save, then re-baseline the qualifying markers to what was just persisted.
+
+        ``post_save`` fires inside ``super().save()``, so the signal still sees
+        the pre-save values and can tell what changed; re-baselining afterwards
+        is what stops a *second* save of the same in-memory instance looking
+        like another change. Same shape as ``Pin.save``'s ``_loaded_name``.
+
+        Args:
+            *args: Passed through to ``Model.save``.
+            **kwargs: Passed through to ``Model.save``.
+        """
+        super().save(*args, **kwargs)
+        # Only re-baseline what was actually written. A caller that changes a
+        # qualifying field but excludes it from `update_fields` has not
+        # persisted it, and recording the unsaved value here would make the
+        # *next* save of it look like no change - a missed backfill, silently.
+        # Erring the other way only costs a redundant one. `update_fields` is
+        # save()'s fourth positional parameter as well as a keyword.
+        written = kwargs.get("update_fields", args[3] if len(args) > 3 else None)
+        for field in self.QUALIFYING_FIELDS:
+            if written is None or field in written:
+                setattr(self, f"_loaded_{field}", getattr(self, field))
+
+    def qualifying_change(self) -> bool:
+        """Whether this instance's qualifying fields differ from the loaded row.
+
+        Returns:
+            True when the award now covers a different set of profiles than the
+            persisted version did - including a fresh instance, which has no
+            loaded values to compare against and so is treated as a change.
+        """
+        return any(getattr(self, f"_loaded_{field}", None) != getattr(self, field) for field in self.QUALIFYING_FIELDS)
 
     def __str__(self) -> str:
         return f"{self.name} ({self.metric} >= {self.threshold})"

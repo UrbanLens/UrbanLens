@@ -35,6 +35,7 @@ one indistinguishable 404.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from django.db.models import Count
@@ -59,7 +60,10 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin
 from urbanlens.dashboard.services.visits.safety import (
-    CheckinArchivedError,
+    MAX_CHAT_MESSAGE_LENGTH,
+    CheckinMessagingArchivedError,
+    EmptyMessageError,
+    MessageTooLongError,
     SafetyValidationError,
     accept_checkin_partner_invite,
     decline_checkin_partner_invite,
@@ -75,6 +79,8 @@ if TYPE_CHECKING:
     import uuid as uuid_module
 
     from rest_framework.request import Request
+
+logger = logging.getLogger(__name__)
 
 
 class SafetyCheckinMessagesView(SafetyCheckinViewerScopedView, PaginatedListMixin):
@@ -164,15 +170,23 @@ class SafetyCheckinMessagesView(SafetyCheckinViewerScopedView, PaginatedListMixi
             # portal token, so the sender is resolved to the caller's own
             # profile by resolve_message_sender.
             message = post_chat_message(checkin, user=request.user, contact=None, body=serializer.validated_data["body"])
-        except CheckinArchivedError as exc:
+        except CheckinMessagingArchivedError as exc:
             # A state conflict, not a malformed request: the body was fine, the
             # check-in's plaintext is simply already sealed into its encrypted
             # archive. A client must be able to tell this from a 400 so it can
             # retire the conversation instead of asking the user to retype.
-            return Response({"error": exc.safe_message}, status=409)
+            logger.info("external API safety chat message rejected on checkin %s: %s", checkin.pk, exc)
+            return Response({"error": "This check-in has concluded and can no longer receive messages."}, status=409)
+        except EmptyMessageError as exc:
+            logger.info("external API safety chat message rejected on checkin %s: %s", checkin.pk, exc)
+            return Response({"error": "Message cannot be empty."}, status=400)
+        except MessageTooLongError as exc:
+            logger.info("external API safety chat message rejected on checkin %s: %s", checkin.pk, exc)
+            return Response({"error": f"Message is too long (max {MAX_CHAT_MESSAGE_LENGTH} characters)."}, status=400)
         except SafetyValidationError as exc:
             # Anything the serializer's bounds did not already catch.
-            return Response({"error": exc.safe_message}, status=400)
+            logger.info("external API safety chat message rejected on checkin %s: %s", checkin.pk, exc)
+            return Response({"error": "Your message couldn't be sent."}, status=400)
 
         return Response(SafetyCheckinMessageSerializer(message, context={"viewer": viewer}).data, status=201)
 

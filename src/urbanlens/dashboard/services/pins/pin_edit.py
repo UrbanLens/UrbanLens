@@ -82,34 +82,60 @@ ORGANIZE_LABEL_KINDS: tuple[str, ...] = (KIND_TAG, KIND_CATEGORY, KIND_STATUS)
 class PinEditError(ValueError):
     """A submitted pin edit is self-contradictory or names a field we don't write.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class UnknownPinFieldsError(PinEditError):
+    """One or more submitted field names aren't in :data:`EDITABLE_PIN_FIELDS`."""
+
+
+class ConflictingVisitedFieldsError(PinEditError):
+    """``visited`` and an explicit ``last_visited`` were submitted together.
+
+    The two make contradictory claims about the same fact, so neither may be
+    allowed to silently win.
+    """
 
 
 class PinReparentError(ValueError):
     """The requested parent change is invalid.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class ReparentLocationConflictError(PinReparentError):
+    """Detaching would leave two top-level pins sharing one Location.
+
+    Raised only when detaching (``new_parent=None``): the pin's own Location
+    already has another top-level pin for this profile, and two root pins may
+    never share one Location per profile.
+    """
+
+
+class CircularParentChainError(PinReparentError):
+    """The requested parent is *pin* itself or one of its own descendants."""
 
 
 class PinMoveError(ValueError):
     """The requested move can't be applied.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch this and author its own user-facing text, rather than
+    relaying ``message`` - that keeps a future raise site here from being
+    able to smuggle unreviewed text into a response just by adding a new
+    ``raise``. Only one condition ever raises this today, so there is no
+    subclass to dispatch on.
     """
-
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
 
 
 class PinHasChildrenError(ValueError):
@@ -117,13 +143,20 @@ class PinHasChildrenError(ValueError):
 
     Callers should ask the user, then retry with an explicit ``children_mode``.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``. Only one condition
+    ever raises this today, so there is no subclass to dispatch on.
+
+    Attributes:
+        descendant_count: Size of the pin's subtree below it. Not log-only -
+            callers read this to tell the user how many pins are at stake.
     """
 
-    def __init__(self, descendant_count: int) -> None:
+    def __init__(self, pin: Pin, descendant_count: int, children_mode: str) -> None:
         self.descendant_count = descendant_count
-        self.safe_message = "This pin has child pins - specify children_mode='delete' or 'keep'."
-        super().__init__(self.safe_message)
+        super().__init__(f"Pin {pin.pk} delete refused: {descendant_count} descendant(s) exist and children_mode={children_mode!r} is neither 'delete' nor 'keep'.")
 
 
 def _normalize_text(value: Any) -> str | None:
@@ -219,17 +252,18 @@ def apply_pin_edits(
         implicit companion flags included). Empty when *fields* was empty.
 
     Raises:
-        PinEditError: *fields* names something outside
-            :data:`EDITABLE_PIN_FIELDS`, or combines *visited* with an explicit
-            ``last_visited`` - the two make contradictory claims about the same
-            fact and silently letting one win is how a client ends up showing a
-            visit date the server does not have.
+        UnknownPinFieldsError: *fields* names something outside
+            :data:`EDITABLE_PIN_FIELDS`.
+        ConflictingVisitedFieldsError: *visited* was combined with an explicit
+            ``last_visited`` in the same call - silently letting one win is
+            how a client ends up showing a visit date the server does not
+            have.
     """
     unknown = sorted(set(fields) - EDITABLE_PIN_FIELDS)
     if unknown:
-        raise PinEditError(f"These pin fields are not editable: {', '.join(unknown)}.")
+        raise UnknownPinFieldsError(f"apply_pin_edits received non-editable field(s): {', '.join(unknown)}.")
     if visited is not None and "last_visited" in fields:
-        raise PinEditError("Send either 'visited' or 'last_visited', not both - they disagree about the same fact.")
+        raise ConflictingVisitedFieldsError("apply_pin_edits received both `visited` and `last_visited` in one call.")
 
     update_fields: list[str] = []
     with transaction.atomic():
@@ -297,7 +331,7 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
     # Only root pins are constrained - child pins are free to share a Location
     # with their parent and siblings, which is the whole point of detail pins.
     if pin.parent_pin_id is None and Pin.objects.filter(profile_id=pin.profile_id, location=location, parent_pin__isnull=True).exclude(pk=pin.pk).exists():
-        raise PinMoveError("You already have a pin at these exact coordinates.")
+        raise PinMoveError(f"Pin {pin.pk} (profile {pin.profile_id}) already has a top-level pin at location {location.pk} ({latitude}, {longitude}).")
 
     before_lat, before_lng = float(pin.effective_latitude), float(pin.effective_longitude)
     pin.location = location
@@ -316,20 +350,21 @@ def reparent_pin(pin: Pin, new_parent: Pin | None) -> None:
             to a top-level pin of its own.
 
     Raises:
-        PinReparentError: The change would create a cycle, or (when detaching)
-            *pin*'s own Location already has another top-level pin for this
-            profile - two root pins can't share one Location per profile.
+        ReparentLocationConflictError: Detaching *pin* would leave it sharing
+            its Location with another of this profile's top-level pins.
+        CircularParentChainError: *new_parent* is *pin* itself or one of its
+            own descendants.
     """
     if new_parent is None:
         if pin.parent_pin_id is None:
             return
         conflict = Pin.objects.filter(profile=pin.profile, location_id=pin.location_id, parent_pin__isnull=True).exclude(pk=pin.pk).exists()
         if conflict:
-            raise PinReparentError("You already have a top-level pin at this exact location. Move this pin before detaching it.")
+            raise ReparentLocationConflictError(f"Pin {pin.pk} (location {pin.location_id}) already shares that location with another top-level pin of profile {pin.profile_id}; refusing detach.")
         pin.parent_pin = None
     else:
         if pin.would_create_cycle(new_parent):
-            raise PinReparentError("That would create a circular parent chain.")
+            raise CircularParentChainError(f"Reparenting pin {pin.pk} under pin {new_parent.pk} would create a cycle.")
         pin.parent_pin = new_parent
     pin.save(update_fields=["parent_pin", "updated"])
 
@@ -426,7 +461,7 @@ def delete_pin(pin: Pin, *, children_mode: str = "") -> PinDeletion:
     descendant_count = len(subtree) - 1
 
     if descendant_count and children_mode not in {"delete", "keep"}:
-        raise PinHasChildrenError(descendant_count)
+        raise PinHasChildrenError(pin, descendant_count, children_mode)
 
     with transaction.atomic():
         if descendant_count and children_mode == "keep":

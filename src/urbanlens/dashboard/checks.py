@@ -6,6 +6,8 @@ run on every ``manage.py check``, ``migrate``, ``runserver``, and test session.
 
 from __future__ import annotations
 
+import os
+import sys
 from typing import TYPE_CHECKING
 
 from django.apps import apps
@@ -182,6 +184,119 @@ def check_media_origin_cookie_domain(app_configs: Sequence[AppConfig] | None = N
     return []
 
 
+#: Subsystems that write into ``MEDIA_ROOT`` with ``os.path``/``pathlib``
+#: directly rather than through ``STORAGES["default"]``, so an object-store
+#: deployment keeps them on the local disk. Each is a shared scratch area
+#: between containers rather than user-facing media, and none is served through
+#: the media gate - but a deployment that expects "no local media volume" after
+#: switching backends would lose all three, so the switch says so out loud.
+_LOCAL_ONLY_MEDIA_SUBTREES = (
+    ("exports/", "services.import_export.export.export_dir"),
+    ("imports/", "services.import_export.import_data"),
+    ("preview_sources/", "services.media.previews"),
+)
+
+
+@register()
+def check_object_storage_is_configured(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """Verify an object-store media backend has everything it needs, before a request finds out.
+
+    ``UL_MEDIA_STORAGE_BACKEND=s3`` with a missing bucket or credential does not
+    fail at startup - django-storages builds the client lazily, so the first
+    symptom is a 500 on one photo, in one request, long after deploy. This turns
+    that into a refusal to start.
+
+    The URL check is the load-bearing one. ``FileField.url`` is what every
+    template, serializer and API response renders, and ``S3Storage.url`` returns
+    a *presigned bucket URL* - a bearer token for one object, valid until it
+    expires, that takes the read out from behind
+    :class:`~urbanlens.dashboard.controllers.media.MediaGateView` entirely.
+    :class:`~urbanlens.dashboard.services.media.object_storage.GatedS3Storage`
+    overrides it back to a ``/media/`` path. A deployment that configured the
+    upstream backend directly would look identical and leak every upload, so the
+    class is checked rather than assumed.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        Errors for an unusable configuration, and one warning naming what stays
+        on local disk regardless.
+    """
+    if getattr(settings, "UL_MEDIA_STORAGE_BACKEND", "filesystem") != "s3":
+        if getattr(settings, "MEDIA_X_ACCEL_OBJECT_PREFIX", ""):
+            return [
+                Error(
+                    "UL_MEDIA_X_ACCEL_OBJECT_PREFIX is set but UL_MEDIA_STORAGE_BACKEND is not 's3', so nothing would ever use it. Either switch the backend or unset the prefix.",
+                    id="dashboard.E009",
+                ),
+            ]
+        return []
+
+    # Imported here rather than at module scope: this pulls in django-storages
+    # and boto3, and a filesystem deployment - which is every self-host - should
+    # not pay that import to run `manage.py check`.
+    from django.core.files.storage import default_storage
+
+    from urbanlens.dashboard.services.media.object_storage import GatedS3Storage
+
+    if not isinstance(default_storage, GatedS3Storage):
+        return [
+            Error(
+                f"UL_MEDIA_STORAGE_BACKEND is 's3' but STORAGES['default'] resolves to "
+                # __class__, not type(): default_storage is a LazyObject, and type() names the
+                # wrapper rather than the backend it is standing in for.
+                f"{default_storage.__class__.__name__}, not GatedS3Storage. Only GatedS3Storage keeps FileField.url "
+                f"pointing at /media/; the upstream backend returns a presigned bucket URL instead, which serves "
+                f"every upload to anyone holding the link and bypasses the media gate.",
+                id="dashboard.E010",
+            ),
+        ]
+
+    messages: list[CheckMessage] = []
+
+    # Read off the constructed backend rather than out of the settings dict:
+    # django-storages resolves each option from OPTIONS, then from an AWS_*
+    # setting, then from its own default, so the dict is what was asked for and
+    # these attributes are what the deployment actually got.
+    missing: list[str] = []
+    if not default_storage.bucket_name:
+        missing.append("UL_S3_BUCKET_NAME")
+    # boto3 has its own credential chain (environment, instance role, web
+    # identity), and a deployment on real AWS may legitimately use it - so the
+    # ambient key counts, and only the case where nothing at all supplies one is
+    # an error. Garage issues static keys, so this is the branch that fires here.
+    if not (default_storage.access_key and default_storage.secret_key) and not os.environ.get("AWS_ACCESS_KEY_ID"):
+        missing.append("UL_S3_ACCESS_KEY_ID/UL_S3_SECRET_ACCESS_KEY")
+    if missing:
+        messages.append(
+            Error(
+                f"UL_MEDIA_STORAGE_BACKEND is 's3' but {', '.join(missing)} {'is' if len(missing) == 1 else 'are'} unset. Every media read and write would fail.",
+                id="dashboard.E011",
+            ),
+        )
+
+    if default_storage.default_acl is not None:
+        messages.append(
+            Error(
+                f"The media storage sets default_acl={default_storage.default_acl!r}. Uploads must carry no ACL of their own: a bucket-level grant is the one way to reach a file without passing the media gate.",
+                id="dashboard.E012",
+            ),
+        )
+
+    messages.append(
+        CheckWarning(
+            "UL_MEDIA_STORAGE_BACKEND is 's3', but " + ", ".join(f"MEDIA_ROOT/{subtree} ({owner})" for subtree, owner in _LOCAL_ONLY_MEDIA_SUBTREES) + " still read and write the local filesystem directly. They are shared scratch between containers "
+            "rather than user media, and none is served through the media gate - but the media volume cannot be "
+            "removed while they exist.",
+            id="dashboard.W002",
+        ),
+    )
+
+    return messages
+
+
 #: The credentials that must exist only in the ai-inference container. Named
 #: here rather than imported from ``AppSettings`` so this check keeps working
 #: if a field is renamed there - a rename that silently emptied this tuple
@@ -341,3 +456,41 @@ def check_celery_failures_cannot_requeue_forever(app_configs: Sequence[AppConfig
             ),
         )
     return errors
+
+
+def websocket_frame_cap_conflict() -> str | None:
+    """Report a transport frame cap below the one the application enforces.
+
+    Not a registered system check, and that is the point. Django's checks run
+    from ``manage.py``; the process that carries daphne's flags never calls
+    them, so a registered version of this reads an argv that can only ever be a
+    management command's and passes vacuously forever. It is called
+    from ``asgi.py`` instead, which daphne imports in its own process after
+    argv is set.
+
+    ``docker-entrypoint.sh`` derives the flags from the same setting, so the
+    two agree by construction on the shipped path. This exists for the
+    deployment that overrides them by hand.
+
+    Returns:
+        A description of the conflict, or None when there is none - including
+        when this process was not started with the flags at all.
+    """
+    required = int(getattr(settings, "UL_WEBSOCKET_MAX_MESSAGE_BYTES", 0) or 0)
+    for flag in ("--websocket-max-message-size", "--websocket-max-frame-size"):
+        if flag not in sys.argv:
+            continue
+        index = sys.argv.index(flag) + 1
+        try:
+            deployed = int(sys.argv[index]) if index < len(sys.argv) else 0
+        except ValueError:
+            continue
+        if deployed < required:
+            return (
+                f"daphne was started with {flag}={deployed}, below the {required} bytes "
+                "UL_WEBSOCKET_MAX_FRAME_CHARS implies. A frame the consumers would accept is refused by "
+                "autobahn instead, which closes the socket without sending anything - the user sees an "
+                f"unexplained disconnect. Raise {flag} to at least {required}, or lower "
+                "UL_WEBSOCKET_MAX_FRAME_CHARS."
+            )
+    return None

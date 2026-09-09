@@ -11,7 +11,6 @@ from model_bakery import baker
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
-from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 

@@ -17,17 +17,6 @@ if TYPE_CHECKING:
 class GroupChatQuerySet(abstract.DashboardQuerySet):
     """QuerySet for GroupChat."""
 
-    def for_member(self, profile: Profile) -> Self:
-        """Return groups where `profile` is currently an active member.
-
-        Args:
-            profile: The member profile.
-
-        Returns:
-            Groups with an active (not left/removed) membership for the profile.
-        """
-        return self.filter(memberships__profile=profile, memberships__left_at__isnull=True).distinct()
-
 
 class GroupChatManager(abstract.DashboardManager.from_queryset(GroupChatQuerySet)):
     """Manager for GroupChat."""

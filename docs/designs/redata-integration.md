@@ -32,6 +32,23 @@ The newest additions:
 | `/parcels/{uuid}/assessments/` | Assessment history on the Property Records card |
 | `/capabilities/` | REData-capabilities card on `/site-admin/api-limits/` |
 | `/parcels/{uuid}/sale-records/` | Supplementary sales merged into `sales_history` → `OFFICIAL` `WikiPropertySale` rows. Rows are near-parcel with no parcel link, so attribution is by normalized situs-address (or raw Cook County PIN) match - unmatched rows are dropped rather than misattributed - and explicitly non-arms-length rows (bundle sales, nominal transfers) are excluded because the pipeline can't carry the price caveat |
+| `/historical-features/` | Historical Features panel (`plugins.builtin.redata_historical_features.HistoricalFeaturesPanelSource`), free/ungated |
+
+**Added 2026-09-08, after this document's 2026-08-15 scope: `/historical-features/`.** This
+endpoint did not exist as of the 2026-08-19 route-diff sweep that produced the row above it and the
+gap list in `docs/PROBLEMS.md` P9 - it is REData's single newest surface at the time it was wired
+up (`parcels/migrations/0094_historicalfeature.py`, the top commit in REData's `git log`). It was
+therefore never counted among P9's 45-unconsumed/15-worth-wiring figures either; see P9's own
+2026-09-08 addendum for why that makes the route list stale in a second direction (missing a route
+that appeared after the sweep, not only failing to close one that was already open). REData's
+contract point worth repeating for any future consumer: `start_year` is frequently the date of the
+*source map* a feature was traced from, not a construction year - never render it as an age.
+
+Also added the same day, and not a new route: `IncidentHistoryPanelSource`
+(`plugins.builtin.redata_incidents`) is a second, subscriber-gated consumer of the already-listed
+`/incidents/` row above, pulling REData's full 25-year window instead of the free panel's 3. See
+`docs/designs/incident-history-feature-gate.md` (D10) for why it got its own `SiteFeature` rather
+than reusing `NEARBY_RESEARCH`.
 
 ## Designed follow-ups
 

@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 import stripe
 
 from urbanlens.dashboard.services.billing import banking, pricing
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -146,8 +147,8 @@ def _recover_role_subscription_from_metadata(subscription_id: str) -> RoleSubscr
 
     stripe_subscription = stripe.Subscription.retrieve(subscription_id).to_dict()
     metadata = stripe_subscription.get("metadata") or {}
-    user = User.objects.filter(pk=metadata.get("user_id")).first()
-    role = SubscriptionRole.objects.filter(pk=metadata.get("role_id")).first()
+    user = User.objects.filter(pk=safe_int_or_none(metadata.get("user_id"))).first()
+    role = SubscriptionRole.objects.filter(pk=safe_int_or_none(metadata.get("role_id"))).first()
     if user is None or role is None:
         logger.error(
             "Cannot recover subscription %s: user_id=%s role_id=%s did not resolve",

@@ -70,8 +70,7 @@ Prefer OOP, inheritance, and generics for abstraction and extensibility.
 
 - Type hints throughout; MyPy with Django stubs
 - Modern Python (3.12+); prefer actively maintained libraries over dated equivalents
-- Google docstrings, complete enough to generate reference documentation from (nothing
-  currently does - see P71)
+- Google docstrings, complete enough to generate reference documentation from 
 
 Comments should be concise, and only included when not obvious. Assume someone competent will work
 on this after you; unnecessary explanation is a burden. If an explanation is necessary, say why the

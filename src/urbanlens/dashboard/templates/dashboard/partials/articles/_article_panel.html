@@ -148,18 +148,9 @@
             </div>
         </div>
 
-        {# Floating bottom-right toolbar - replaces the old top-right Source #}
-        {# toggle (moved here) and adds a Clear button. Always visible in both #}
-        {# modes, same as the toggle it replaces; sits below the save/cancel #}
-        {# footer's own fixed position (see .article-editor-footer's #}
-        {# bottom: 4rem in _article.scss) so the two never overlap. #}
-        <div class="article-floating-toolbar">
-            <button type="button" class="article-tool article-mode-toggle" data-article-mode-toggle title="View/edit Markdown source">
-                <i class="material-symbols-outlined">code_blocks</i><span>Source</span>
-            </button>
-            <button type="button" class="article-tool" data-article-clear title="Clear all content and start over">
-                <i class="material-symbols-outlined">delete_sweep</i><span>Clear</span>
-            </button>
-        </div>
+        {# Source/Clear live in the pin-detail actions menu now, not a #}
+        {# floating toolbar of their own - see _hierarchy_actions_fab.html. #}
+        {# article-wysiwyg.ts's click handler resolves this panel as the #}
+        {# page's one mounted editor regardless of where those buttons live. #}
     </form>
 </div>

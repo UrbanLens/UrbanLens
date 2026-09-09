@@ -1,20 +1,39 @@
 {% comment %}
 Floating Actions menu for pin/wiki hierarchy: the page-wide "child pin
-details" toggle, jump-to-parent, and (pins only) detach.
+details" toggle, jump-to-parent, (pins only) detach, and the article
+editor's Source/Clear controls.
 
 The whole button is omitted when there is nothing to show.
 
 Expects:
-  has_children       - show the child-details toggle
-  include_children   - current toggle state
-  parent_url         - optional; parent pin/wiki detail URL
-  parent_name        - optional; used in detach confirm
-  parent_item_label  - optional; defaults to "Open parent pin"
-  detach_url         - optional; pin.detach_parent POST URL
+  has_children         - show the child-details toggle
+  include_children     - current toggle state
+  parent_url           - optional; parent pin/wiki detail URL
+  parent_name          - optional; used in detach confirm
+  parent_item_label    - optional; defaults to "Open parent pin"
+  detach_url           - optional; pin.detach_parent POST URL
+  show_article_actions - show the Source/Clear article-editor items; both
+                          callers (pin and wiki detail pages) always have an
+                          Article tab, so both pass this True
 {% endcomment %}
-{% if has_children or parent_url %}
+{% if has_children or parent_url or show_article_actions %}
 <div class="pin-actions-fab" id="pin-actions-fab">
     <div class="pin-actions-menu" id="pin-actions-menu" hidden>
+        {% if show_article_actions %}
+        {# Picked up by article-wysiwyg.ts's document-level delegated click #}
+        {# handler (data-article-mode-toggle/data-article-clear), the same #}
+        {# way as when these lived inside the article panel itself - see #}
+        {# editorRootForControl() there for how it resolves the editor from #}
+        {# outside its own DOM subtree. #}
+        <button type="button" class="pin-actions-item" data-article-mode-toggle>
+            <i class="material-symbols-outlined">code_blocks</i>
+            <span>Source</span>
+        </button>
+        <button type="button" class="pin-actions-item" data-article-clear>
+            <i class="material-symbols-outlined">delete_sweep</i>
+            <span>Clear article</span>
+        </button>
+        {% endif %}
         {% if has_children %}
         {# Both directions are explicit: a parcel pin defaults the toggle ON #}
         {# (its children are the content), so a bare URL would no longer mean #}

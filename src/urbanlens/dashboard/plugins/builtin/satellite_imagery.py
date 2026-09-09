@@ -23,6 +23,7 @@ this migration.
 from __future__ import annotations
 
 import base64
+import datetime
 import logging
 import math
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -120,8 +121,19 @@ _KEYED_PROVIDERS = frozenset({"mapbox", "bing_maps", "azure_maps"})
 
 #: Representative zoom for a ``tile_template`` delivery (only ``opentopomap`
 #: uses one today) - matches the retired direct ``OpenTopoMapGateway``'s own
-#: default; trail/terrain context doesn't need a sharper zoom than this.
+#: default; trail/terrain context doesn't need a sharper zoom than this. Used
+#: only as the fallback when REData's own composed copy (below) is
+#: unavailable - a raw tile substituted at this zoom is still better framed
+#: than one at the wrong scale.
 _TILE_TEMPLATE_ZOOM = 15
+
+#: Size for the composed images this module asks REData to render - both a
+#: ``tile_template`` provider's stitched-from-tiles photo and a materialized
+#: ``time_series`` date. Matches the ``/imagery/capture/`` example in
+#: REData's docs; big enough to read as a real photo of the place rather than
+#: a single tile-sized crop.
+_COMPOSED_IMAGE_WIDTH = 1024
+_COMPOSED_IMAGE_HEIGHT = 1024
 
 
 def _lonlat_to_tile(longitude: float, latitude: float, zoom: int) -> tuple[int, int]:
@@ -149,6 +161,41 @@ def _resolve_tile_template(url: str, latitude: float, longitude: float, attribut
     x, y = _lonlat_to_tile(longitude, latitude, _TILE_TEMPLATE_ZOOM)
     subdomains = attributes.get("subdomains") or ["a"]
     return url.format(z=_TILE_TEMPLATE_ZOOM, x=x, y=y, s=subdomains[0])
+
+
+def _most_recent_interval_end(attributes: dict[str, Any]) -> datetime.date | None:
+    """The latest date covered by a ``time_series`` result's own ``attributes.intervals``.
+
+    A ``time_series`` result describes a *range*, not a picture - REData
+    documents ``attributes.intervals`` as ``[{"start", "end", "step"}, ...]``
+    (see ``flatten_timeline``'s identically-shaped ``"range"`` offerings).
+    The most recent end is picked as the one date to materialize: it matches
+    the "current conditions" framing every other slide in this carousel
+    already uses (today's Esri/Sentinel-2 mosaic, today's OpenTopoMap tile),
+    rather than surfacing the whole history here - a date picker over the
+    full range belongs to the timeline UI, not one carousel slide.
+
+    Args:
+        attributes: The result's ``attributes`` blob.
+
+    Returns:
+        The latest parseable ``end`` across every interval, or None when
+        ``intervals`` is missing or none of it parses as a date.
+    """
+    latest: datetime.date | None = None
+    for interval in attributes.get("intervals") or []:
+        if not isinstance(interval, dict):
+            continue
+        end = interval.get("end")
+        if not isinstance(end, str):
+            continue
+        try:
+            parsed = datetime.date.fromisoformat(end[:10])
+        except ValueError:
+            continue
+        if latest is None or parsed > latest:
+            latest = parsed
+    return latest
 
 
 class EsriPlugin(UrbanLensPlugin):
@@ -237,10 +284,12 @@ class RedataSatelliteProvider(SatelliteViewProvider):
     ) -> Generator[SatelliteSlide]:
         """Slides for dated captures from the imagery timeline.
 
-        Continuous ``time_series`` ranges are deliberately skipped: they are a
-        date *range* to be materialised one date at a time
-        (``POST /imagery/capture/``), not images that already exist, so putting
-        them in a carousel would mean inventing dates to show.
+        Continuous ``time_series`` *ranges* (this timeline's own ``"range"``
+        offerings) are skipped here - unlike a dated capture, a range has no
+        single acquisition date to caption a slide with. ``_slide_from_result``
+        already materializes one representative date per ``time_series``
+        provider from the plain ``/imagery/`` call above, so nothing is lost;
+        this loop only ever sees ``"capture"`` offerings.
 
         Args:
             gateway: The imagery gateway to reuse.
@@ -301,15 +350,14 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         delivery = result.get("delivery")
         if delivery == "time_series":
             # Not a picture: `url` is a template carrying a literal `{time}`
-            # and the row describes a date *range*, one date of which has to be
-            # materialised first (`POST /imagery/capture/`). Putting it in an
-            # <img src> guarantees a broken slide - which is what every pin got
-            # for each registered NASA GIBS layer, captioned with the range.
-            # `_historical_slides` already skips these for the same reason.
-            return None
+            # and the row describes a date *range*. Materialize the most
+            # recent date in it (see `_time_series_slide`) rather than
+            # skipping the provider outright, which is what left NASA GIBS's
+            # daily-since-2000 imagery permanently absent from this carousel.
+            return self._time_series_slide(gateway, result, name)
 
         if delivery == "tile_template":
-            img_src = _resolve_tile_template(url, latitude, longitude, result.get("attributes") or {})
+            img_src = self._composed_tile_image(gateway, result, url, latitude, longitude)
         elif provider in _KEYED_PROVIDERS:
             try:
                 image_bytes = gateway.download_bytes(url)
@@ -322,6 +370,88 @@ class RedataSatelliteProvider(SatelliteViewProvider):
 
         date = result.get("captured_label") or result.get("captured_on") or "Current"
         return SatelliteSlide(img_src=img_src, source=name, date=str(date), detail=result.get("attribution") or "")
+
+    def _composed_tile_image(self, gateway: RedataImageryGateway, result: dict[str, Any], url: str, latitude: float, longitude: float) -> str:
+        """``img_src`` for a ``tile_template`` result: REData's composed photo, or a raw tile as a fallback.
+
+        A raw tile substitution can land the pin anywhere within one 256px
+        tile, including its corner - REData already solves this server-side
+        by compositing a real image from the covering tiles
+        (``GET /imagery/{uuid}/download/``), so that is preferred whenever
+        the result carries a ``uuid`` to ask for.
+
+        Args:
+            gateway: The imagery gateway to reuse.
+            result: The ``tile_template`` result.
+            url: The result's own tile-template ``url``, for the fallback.
+            latitude: WGS-84 latitude, for the fallback.
+            longitude: WGS-84 longitude, for the fallback.
+
+        Returns:
+            A ``data:`` URI with REData's composed image, or a concrete
+            (still directly-fetchable) tile URL when there is no ``uuid`` to
+            ask for or the composed download fails.
+        """
+        asset_uuid = result.get("uuid")
+        if isinstance(asset_uuid, str) and asset_uuid:
+            try:
+                image_bytes = gateway.download_archived_copy(asset_uuid, width=_COMPOSED_IMAGE_WIDTH, height=_COMPOSED_IMAGE_HEIGHT)
+            except LocationContextUnavailableError as exc:
+                logger.debug("REData composed-imagery download failed for asset %s, falling back to a raw tile: %s", asset_uuid, exc)
+            else:
+                return f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode('ascii')}"
+        else:
+            logger.debug("tile_template imagery result for provider %s carries no uuid; falling back to a raw tile.", result.get("provider"))
+        return _resolve_tile_template(url, latitude, longitude, result.get("attributes") or {})
+
+    def _time_series_slide(self, gateway: RedataImageryGateway, result: dict[str, Any], name: str) -> SatelliteSlide | None:
+        """Materialize and embed one date from a continuous (``time_series``) source.
+
+        `/imagery/` describes a `time_series` row as a date *range*, not a
+        picture - `POST /imagery/capture/` is what turns one date in that
+        range into a real image. This shows exactly one: the range's most
+        recent date (see ``_most_recent_interval_end``), so this provider
+        gets one carousel slide framed the same "current conditions" way
+        every other slide here is, rather than being skipped outright.
+
+        Args:
+            gateway: The imagery gateway to reuse.
+            result: The ``time_series`` result.
+            name: The already-resolved display name for this provider.
+
+        Returns:
+            A slide for the materialized date, or None when there is no
+            interval to pick a date from, or REData can't produce an image
+            for it - a documented "nothing here" answer or a transient
+            failure are both treated as an ordinary provider gap here, same
+            as any other source failing to answer.
+        """
+        asset_uuid = result.get("uuid")
+        end_date = _most_recent_interval_end(result.get("attributes") or {})
+        if not isinstance(asset_uuid, str) or not asset_uuid or end_date is None:
+            logger.debug("time_series imagery result for provider %s has no usable uuid/interval; skipping.", result.get("provider"))
+            return None
+
+        try:
+            captured = gateway.capture_time_series(asset_uuid, end_date, width=_COMPOSED_IMAGE_WIDTH, height=_COMPOSED_IMAGE_HEIGHT)
+        except LocationContextUnavailableError as exc:
+            logger.debug("REData imagery capture failed for asset %s on %s: %s", asset_uuid, end_date, exc)
+            return None
+        if captured is None:
+            return None
+
+        captured_uuid = captured.get("uuid")
+        if not isinstance(captured_uuid, str) or not captured_uuid:
+            logger.debug("REData imagery capture for asset %s returned no uuid; skipping.", asset_uuid)
+            return None
+        try:
+            image_bytes = gateway.download_archived_copy(captured_uuid, width=_COMPOSED_IMAGE_WIDTH, height=_COMPOSED_IMAGE_HEIGHT)
+        except LocationContextUnavailableError as exc:
+            logger.debug("REData imagery download failed for materialized asset %s: %s", captured_uuid, exc)
+            return None
+
+        img_src = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode('ascii')}"
+        return SatelliteSlide(img_src=img_src, source=name, date=end_date.isoformat(), detail=result.get("attribution") or "")
 
 
 class RedataImageryPlugin(UrbanLensPlugin):

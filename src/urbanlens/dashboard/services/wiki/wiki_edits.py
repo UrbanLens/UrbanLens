@@ -6,8 +6,9 @@ trail (``WikiEdit.changes``) and the conflict-aware revert rules are exactly
 the kind of thing that silently diverges when two callers each grow their own
 copy.
 
-The one deliberate behavioral difference between the two callers is the
-``strict`` flag on :func:`apply_wiki_edit`; see its docstring.
+Both callers are told when a value is rejected. The internal view used to skip
+an invalid field and answer ``{"ok": true}``, which reported a write it had not
+made; it now gets the same 400 the external API always did.
 """
 
 from __future__ import annotations
@@ -76,7 +77,22 @@ def save_edited_fields(wiki: Wiki, changed_fields: Iterable[str]) -> None:
     wiki.save(update_fields=[*columns, "updated"])
 
 
-def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, strict: bool, baseline: Wiki | None = None) -> WikiEdit | None:
+def _is_unchanged(new_val: object, shown_val: object) -> bool:
+    """Whether a normalised value is what the submitter was already looking at.
+
+    Args:
+        new_val: The value about to be written.
+        shown_val: The value on the row the submitter's form was filled from.
+
+    Returns:
+        True when writing it would change nothing they can see. An empty string
+        and ``None`` count as the same, because a nullable field renders as an
+        empty input either way.
+    """
+    return new_val == shown_val or (new_val or "") == (shown_val or "")
+
+
+def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, baseline: Wiki | None = None) -> WikiEdit | None:
     """Apply a community edit to *wiki* and record it in the audit trail.
 
     Only keys in :data:`WIKI_EDITABLE_FIELDS` are considered; anything else in
@@ -93,29 +109,14 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, st
             against this; the audit record still keeps the stored value. Leave
             unset and both come from *wiki*, which is what every caller outside
             the two edit views wants.
-        strict: How to treat a value that fails validation - an unrecognized
-            security level, or a date that isn't ``YYYY-MM-DD``.
-
-            ``True`` (the external API) raises
-            :class:`WikiEditValidationError`, so a client is told its write was
-            rejected instead of being handed a success it didn't get.
-
-            ``False`` (the internal HTMX view) skips the offending field and
-            continues, preserving that view's long-standing behavior. This is a
-            real defect - the user sees ``{"ok": true}`` and the field silently
-            never changes - recorded under "Messaging / external API (noted
-            2026-07-26)" in ``docs/PROBLEMS.md`` (the strict-vs-lenient wiki
-            edit item) rather than
-            being changed blind here, because fixing it properly needs
-            field-level error rendering in the About card.
 
     Returns:
         The recorded :class:`WikiEdit`, or ``None`` when nothing changed.
 
     Raises:
         WikiEditValidationError: A description over
-            :data:`MAX_WIKI_DESCRIPTION_LENGTH` (in both modes), or - when
-            *strict* - an invalid security value or unparseable date.
+            :data:`MAX_WIKI_DESCRIPTION_LENGTH`, an unrecognized security level,
+            or a date that isn't ``YYYY-MM-DD``.
     """
     valid_security = {value for value, _label in SecurityLevel.choices}
     # new_vals holds the actual Python values to set on the wiki.
@@ -150,9 +151,7 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, st
 
         if field in WIKI_SECURITY_FIELDS:
             if raw not in valid_security:
-                if strict:
-                    raise WikiEditValidationError(f"'{raw}' is not a valid value for {field}.", field)
-                continue
+                raise WikiEditValidationError(f"'{raw}' is not a valid value for {field}.", field)
             new_val: object = raw
         elif field in WIKI_DATE_FIELDS:
             if not raw:
@@ -163,19 +162,22 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, st
                 try:
                     new_val = datetime.strptime(str(raw), "%Y-%m-%d").date()  # noqa: DTZ007  # .date() discards the time; the wiki field is a date
                 except ValueError:
-                    if strict:
-                        raise WikiEditValidationError(f"{field} must be a date in YYYY-MM-DD format.", field) from None
-                    continue
+                    raise WikiEditValidationError(f"{field} must be a date in YYYY-MM-DD format.", field) from None
         elif field == "description":
             length_error = text_length_error(raw, MAX_WIKI_DESCRIPTION_LENGTH, "Description")
             if length_error:
-                # Rejected in both modes: the internal view already returned a
-                # 400 here rather than skipping, so this is not the silent-skip
-                # behavior the strict flag governs.
                 raise WikiEditValidationError(length_error, field)
             new_val = raw
         else:
             new_val = raw
+
+        # Re-checked after normalisation, not only as raw strings above. A
+        # nullable field renders as an empty input, so an untouched form posts
+        # "" where None is stored - which differs textually and normalises back
+        # to the same None. Recorded as a change it would write a WikiEdit
+        # saying None -> None, bump `updated`, and pay reputation for it.
+        if _is_unchanged(new_val, getattr(shown, field, None)):
+            continue
 
         new_vals[field] = new_val
         audit[field] = {"from": str(old_val), "to": str(new_val)}
@@ -322,7 +324,7 @@ def revert_wiki_edit(location: Location, wiki: Wiki, profile: Profile, target_ed
 
 
 def _restore_reputation_for(edit_ids: list[int]) -> None:
-    """Un-retract the ledger rows for edits whose revert was itself reverted.
+    """Undo whichever reputation adjustment a now-undone revert had applied.
 
     Called here rather than left to the reputation signal, because the line
     above is a queryset ``update()`` and emits no ``post_save`` - so the
@@ -331,18 +333,34 @@ def _restore_reputation_for(edit_ids: list[int]) -> None:
     puts the original edit back in force; without this the reversal half never
     ran, and the design's justification for the flag was untrue.
 
+    Covers both adjustments ``on_wiki_edit_reverted`` can apply going the
+    other way (self-revert retracts in full; anyone else's revert weights at
+    ``MODERATED_REMOVAL_WEIGHT`` instead, per D9) - a row can be in either
+    state, never both, so restoring both is safe regardless of which fired.
+
     Args:
         edit_ids: WikiEdit pks whose reverts have just been undone.
     """
+    from decimal import Decimal
+
+    from django.db.models import Q
+
     from urbanlens.dashboard.models.reputation.meta import TargetKind
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
-    from urbanlens.dashboard.services.reputation.scoring import restore_event
+    from urbanlens.dashboard.services.reputation.scoring import restore_event, weight_events_for_target
 
     rows = ReputationEvent.objects.filter(
         rule_key="wiki_field_edit",
         target_kind=TargetKind.WIKI_EDIT,
         target_id__in=edit_ids,
-        retracted=True,
-    )
+    ).filter(Q(retracted=True) | ~Q(weight=Decimal(1)))
+    weighted_edit_ids: list[int] = []
     for event in rows:
-        restore_event(event)
+        if event.retracted:
+            restore_event(event)
+        else:
+            weighted_edit_ids.append(event.target_id)
+    # weight_events_for_target resolves its own target_kind from the instance
+    # it's given, so it needs the WikiEdit rows themselves, not the ledger rows.
+    for wiki_edit in WikiEdit.objects.filter(pk__in=weighted_edit_ids):
+        weight_events_for_target(wiki_edit, weight=Decimal(1), reason="")

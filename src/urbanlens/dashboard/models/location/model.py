@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError
 from django.db.models import SET_NULL, ForeignKey, Index
 from django.db.models.fields import CharField, DateTimeField, DecimalField, SlugField
 
@@ -17,9 +16,11 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.location.queryset import LocationManager
 
 if TYPE_CHECKING:
-    from django.db.models import Manager as DjangoManager
+    from collections.abc import Collection
 
-    from urbanlens.dashboard.models.google_place.model import GooglePlace
+    from django.db.models import Manager as DjangoManager
+    from django.db.models.fetch_modes import FetchMode
+
     from urbanlens.dashboard.models.markup.model import PinMarkup
     from urbanlens.dashboard.models.trips.model import TripActivity
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -368,7 +369,7 @@ class Location(abstract.PublicDashboardModel):
         return self.official_name or str(self.uuid)
 
     @classmethod
-    def from_db(cls, db, field_names, values):
+    def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Location:  # noqa: ARG003
         """Stash the loaded identity-field values so ``save()`` can detect mutation.
 
         Capturing the originals here means the immutability check normally costs
@@ -379,12 +380,18 @@ class Location(abstract.PublicDashboardModel):
             db: The database alias the row was loaded from.
             field_names: The field names present in ``values``.
             values: The row values, positionally aligned with ``field_names``.
+            fetch_mode: Unused - django-stubs 6.1 types this ahead of the
+                pinned Django 6.0, which has no such parameter at runtime.
+                Accepted only so this override stays substitutable for the
+                declared base signature; never forwarded to ``super()``.
 
         Returns:
             The reconstructed Location instance.
         """
         instance = super().from_db(db, field_names, values)
-        instance._immutable_originals = {name: values[field_names.index(name)] for name in cls.IMMUTABLE_FIELDS if name in field_names}  # noqa: SLF001
+        ordered_names = list(field_names)
+        ordered_values = list(values)
+        instance._immutable_originals = {name: ordered_values[ordered_names.index(name)] for name in cls.IMMUTABLE_FIELDS if name in ordered_names}  # noqa: SLF001
         return instance
 
     @staticmethod

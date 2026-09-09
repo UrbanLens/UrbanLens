@@ -380,22 +380,6 @@ function init(): void {
             return checked ? selectedStyle : unselectedStyle;
         };
 
-        // Mode toggle ("Child pin" vs "Merge into this pin") shows/hides that
-        // row's conflict picker (or plain merge warning) - both start hidden
-        // server-side unless this candidate was resubmitted with "Merge"
-        // already chosen (see _nestable_rows' default_merge).
-        form.querySelectorAll<HTMLElement>(".building-import-pin-row").forEach((row) => {
-            const modeInputs = Array.from(row.querySelectorAll<HTMLInputElement>('input[type="radio"][name^="nest_mode__"]'));
-            const detail = row.querySelector<HTMLElement>(".building-import-merge-conflicts, .building-import-merge-note");
-            if (!detail) return;
-            const sync = (): void => {
-                const merging = modeInputs.some((input) => input.checked && input.value === "merge");
-                detail.hidden = !merging;
-            };
-            modeInputs.forEach((input) => input.addEventListener("change", sync));
-            sync();
-        });
-
         // Bidirectional hover sync between the row list and the map preview -
         // row/shape pairs share `selection_key` via rowByKey/pathsByKey.
         let hoveredKey: string | null = null;
@@ -550,19 +534,6 @@ function init(): void {
         dialog.showModal();
         requestAnimationFrame(initBuildingImportDialog);
     };
-
-    // A merge conflict keeps the dialog open and re-renders just its body
-    // (#building-import-dialog-body, outerHTML) with fresh checkboxes/radios
-    // and a fresh #building-import-map placeholder - none of it wired up yet.
-    // Scanning the document on every swap (rather than trying to single out
-    // that one target) mirrors initAdaptivePagination's own afterSwap handler
-    // above; initBuildingImportDialog() already no-ops when its elements
-    // aren't present, so this is a safe, idempotent rebuild either way -
-    // including the redundant call this causes on the dialog's initial open,
-    // which openBuildingImportDialog() above also triggers directly.
-    document.body.addEventListener("htmx:afterSwap", () => {
-        if (document.getElementById("building-import-map")) initBuildingImportDialog();
-    });
 
     // Dedicated panes keep markup shapes clickable even when a boundary
     // polygon visually overlaps them - without this, both layer groups share

@@ -14,17 +14,26 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
-from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import (
     REACTION_PICKER_EMOJIS,
-    DirectMessagePermissionError,
+    DirectMessageTooLongError,
     DirectMessageValidationError,
+    EmptyDirectMessageError,
+    MalformedCiphertextError,
+    MixedPlaintextAndCiphertextError,
+    NoEligibleAttachmentsError,
+    NotConversationParticipantError,
+    NotDirectMessageRecipientError,
+    NotDirectMessageSenderError,
+    RecipientNotAcceptingMessagesError,
     all_conversations_for,
     build_thread_timeline,
     can_direct_message,
@@ -48,7 +57,7 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
 )
 
 if TYPE_CHECKING:
-    from django.http import HttpRequest, HttpResponse
+    from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
@@ -351,10 +360,34 @@ class ConversationSendView(LoginRequiredMixin, View):
                 markup_map_uuid=request.POST.get("markup_map_uuid") or None,
                 reply_to_id=int(reply_to_raw) if reply_to_raw.isdigit() else None,
             )
+        except MessageRateLimitedError as exc:
+            # Caught before DirectMessageValidationError: both are ValueErrors,
+            # and this is a 429 rather than a 400 - the message was fine, the
+            # sender is simply ahead of their budget, and a client that reads a
+            # 400 as "malformed" would tell them to edit it.
+            logger.info("Direct message rate-limited for profile %s: %s", profile.pk, exc)
+            return HttpResponse("You're sending messages too quickly. Wait a moment and try again.", status=429, content_type="text/plain; charset=utf-8")
+        except DirectMessageTooLongError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
+        except MixedPlaintextAndCiphertextError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("A message can't be both plaintext and encrypted.")
+        except MalformedCiphertextError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That encrypted message is malformed.")
+        except NoEligibleAttachmentsError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("None of those attachments could be sent.")
+        except EmptyDirectMessageError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Message cannot be empty.")
         except DirectMessageValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
-        except DirectMessagePermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("That message couldn't be sent.")
+        except RecipientNotAcceptingMessagesError as exc:
+            logger.info("Direct message rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("This user isn't accepting messages from you.")
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)
 
@@ -527,8 +560,9 @@ class MessageReactionToggleView(LoginRequiredMixin, View):
 
         try:
             toggle_reaction(profile, message, emoji)
-        except DirectMessagePermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+        except NotConversationParticipantError as exc:
+            logger.info("Reaction toggle rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You aren't part of this conversation.")
 
         return render(
             request,
@@ -576,8 +610,9 @@ class MessageDeleteView(LoginRequiredMixin, View):
                 delete_message_for_self(message, profile)
             else:
                 return HttpResponseBadRequest("Unknown delete scope.")
-        except DirectMessagePermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+        except (NotDirectMessageSenderError, NotDirectMessageRecipientError) as exc:
+            logger.info("Message delete rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseForbidden("You don't have permission to delete this message.")
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)

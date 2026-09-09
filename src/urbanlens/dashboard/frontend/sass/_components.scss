@@ -736,7 +736,11 @@
 .pagination-btn {
 	@include icon-btn(28px);
 
-	&:disabled {
+	// `--disabled` as well as `:disabled`: the plain-link variant of the bar
+	// (a full-page view, where an hx-get would swap a whole document into one
+	// div) renders its dead end as a <span>, which cannot be disabled.
+	&:disabled,
+	&--disabled {
 		opacity: .35;
 		cursor: default;
 		pointer-events: none;

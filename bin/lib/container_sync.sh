@@ -72,9 +72,10 @@ sync_tree_into() {
 
     # Deployment files, for the same reason bin/ is here: a growing set of tests
     # asserts on the topology rather than on Python (test_ai_isolation,
-    # test_sandbox_isolation, test_metrics_endpoint), resolving these by path off
-    # the repo root. They are baked into the image, not bind-mounted, so without
-    # this they are read at whatever the image was last built with.
+    # test_sandbox_isolation, test_metrics_endpoint, test_static_asset_serving),
+    # resolving these by path off the repo root. They are baked into the image,
+    # not bind-mounted, so without this they are read at whatever the image was
+    # last built with.
     #
     # That failure is worse than a plain stale-code one, because the sync still
     # prints "tree matches" and the run still looks verified: on 2026-09-03 a
@@ -83,13 +84,26 @@ sync_tree_into() {
     # which reads as "the branch broke the sandbox topology" rather than as
     # "this file was never synced".
     #
-    # Dotfiles are listed individually because `docker cp` on a directory does
-    # not glob them, and .gitignore/.env*-sample are read by those same tests.
-    local f
-    for f in docker-compose.yml docker-compose.hot-reload.yml docker-entrypoint.sh gunicorn.conf.py \
-        pyproject.toml uv.lock .gitignore .env-sample .env.ai-sample; do
-        [ -e "$f" ] && docker cp "$f" "$container":/app/"$f"
-    done
+    # Every tracked file at the repo root, rather than a list: the list is what
+    # failed. It named nine files and not `Dockerfile`, so when
+    # test_static_asset_serving.py started reading that on 2026-09-05 it asserted
+    # against an image-baked copy predating the change it was written for, and
+    # reported the branch as broken. There are 27 such files totalling ~1.2MB;
+    # deciding which of them a future test might read is the judgement that keeps
+    # being got wrong, and it buys nothing.
+    local root_files
+    root_files=$(git ls-files 2>/dev/null | grep -v "/" || true)
+    if [ -n "$root_files" ]; then
+        printf '%s\n' "$root_files" | tar -C . -T - -cf - | docker exec -i "$container" tar -xf - -C /app/
+    else
+        # No git (a tarball checkout, a stripped image): fall back to the files
+        # tests are known to read today.
+        local f
+        for f in Dockerfile docker-compose.yml docker-compose.hot-reload.yml docker-entrypoint.sh \
+            gunicorn.conf.py pyproject.toml uv.lock .gitignore .env-sample .env.ai-sample; do
+            [ -e "$f" ] && docker cp "$f" "$container":/app/"$f"
+        done
+    fi
     docker cp sample_data/. "$container":/app/sample_data/ 2>/dev/null || true
 
     # Not optional - see the header. /app/src recursively, which is what covers

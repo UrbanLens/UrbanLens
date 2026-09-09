@@ -52,14 +52,26 @@ ALLOWED_EMOJIS = {"👍", "👎", "❤️", "😂", "😮", "😢", "🔥", "�
 
 
 class CommentValidationError(ValueError):
-    """A comment could not be created as submitted.
+    """A comment or reaction could not be validated as submitted.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class InvalidCommentHostError(CommentValidationError):
+    """``create_comment`` was called with both or neither of pin/wiki set."""
+
+
+class EmptyCommentTextError(CommentValidationError):
+    """``create_comment`` was called with text that is empty after stripping."""
+
+
+class UnsupportedReactionEmojiError(CommentValidationError):
+    """``toggle_reaction`` was called with an emoji outside :data:`ALLOWED_EMOJIS`."""
 
 
 @dataclass(slots=True)
@@ -352,15 +364,15 @@ def create_comment(*, profile: Profile, pin: Pin | None = None, wiki: Wiki | Non
         The created comment.
 
     Raises:
-        CommentValidationError: Neither or both of *pin*/*wiki* were given, or
-            *text* is empty after stripping.
+        InvalidCommentHostError: Neither or both of *pin*/*wiki* were given.
+        EmptyCommentTextError: *text* is empty after stripping.
     """
     if (pin is None) == (wiki is None):
-        raise CommentValidationError("A comment must belong to exactly one of a pin or a wiki.")
+        raise InvalidCommentHostError(f"create_comment called with pin={pin!r} wiki={wiki!r}; exactly one is required.")
 
     body = (text or "").strip()
     if not body:
-        raise CommentValidationError("Comment text cannot be empty.")
+        raise EmptyCommentTextError("create_comment called with text that was empty (or all whitespace) after stripping.")
 
     return Comment.objects.create(pin=pin, wiki=wiki, profile=profile, text=body, parent=parent)
 
@@ -384,10 +396,10 @@ def toggle_reaction(profile: Profile, comment: Comment, emoji: str) -> bool:
         removed.
 
     Raises:
-        CommentValidationError: *emoji* is not in :data:`ALLOWED_EMOJIS`.
+        UnsupportedReactionEmojiError: *emoji* is not in :data:`ALLOWED_EMOJIS`.
     """
     if emoji not in ALLOWED_EMOJIS:
-        raise CommentValidationError("That is not a supported reaction.")
+        raise UnsupportedReactionEmojiError(f"toggle_reaction called with emoji {emoji!r}, which is not in ALLOWED_EMOJIS.")
 
     existing = Reaction.objects.existing(profile, emoji, comment=comment)
     if existing:

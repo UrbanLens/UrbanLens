@@ -57,7 +57,7 @@
     {% if show_wiki_cover_photo %}
     {# -- Cover photo hero banner --------------------------------------------- #}
     {{ wiki_cover_candidates|json_script:"wiki-cover-candidates" }}
-    <div class="cover-hero" id="wiki-cover-hero" style="background-image:url('{{ wiki.cover_photo.image.url }}')">
+    <div class="cover-hero" id="wiki-cover-hero" style="background-image:url('{{ wiki.cover_photo.display_url }}')">
         {% if wiki_cover_candidates %}
         <button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav('wiki', -1)" title="Previous photo">
             <i class="material-symbols-outlined">chevron_left</i>
@@ -487,7 +487,7 @@
     {# Floating actions: child-pin-details toggle and jump-to-parent wiki.    #}
     {# Hidden entirely when this wiki has no children and no visible parent.  #}
     {% if parent_wiki %}{% url 'location.wiki' parent_wiki.location.slug as wiki_parent_url %}{% endif %}
-    {% include "dashboard/partials/ui/_hierarchy_actions_fab.html" with has_children=has_child_wikis include_children=include_children parent_url=wiki_parent_url parent_name=parent_wiki.name parent_item_label="Open parent wiki" csrf_token=csrf_token request=request only %}
+    {% include "dashboard/partials/ui/_hierarchy_actions_fab.html" with has_children=has_child_wikis include_children=include_children parent_url=wiki_parent_url parent_name=parent_wiki.name parent_item_label="Open parent wiki" csrf_token=csrf_token request=request show_article_actions=True only %}
 
 </div>
 

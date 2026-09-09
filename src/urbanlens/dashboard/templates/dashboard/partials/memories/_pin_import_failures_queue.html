@@ -8,8 +8,15 @@ Shares the `.pin-suggestions-grid`/`.pin-suggestion-card` classes so these
 cards blend into the same visual flow as regular pin suggestions rather than
 reading as a separate section - see locations.html.
 
+Pagination targets this section's own URL and its own `failures_page`
+parameter, for the same two reasons `_pin_suggestions_queue.html` gives plus
+one more: this template also renders inside the full `memories.locations`
+page, beside that queue, and a shared `?page=` would move both sections with
+one click.
+
 Context:
-  pin_import_failures - the profile's pending PinImportFailure rows, newest first
+  pin_import_failures - the current page's pending PinImportFailure rows, newest first
+  failures_page_obj   - the Django Page for this slice
 {% endcomment %}
 {% if pin_import_failures %}
 <div class="pin-suggestions-grid" id="pin-import-failures-grid">
@@ -17,4 +24,6 @@ Context:
     {% include "dashboard/partials/memories/_pin_import_failure_card.html" %}
     {% endfor %}
 </div>
+{% url 'memories.locations.import_failures.queue' as failures_url %}
+{% include "dashboard/partials/ui/_pagination_controls.html" with page_obj=failures_page_obj page_url=failures_url page_param="failures_page" page_target="#pin-import-failures-wrap" page_swap="innerHTML" page_noun="import failures" page_bar_class="pin-suggestions-pagination" %}
 {% endif %}

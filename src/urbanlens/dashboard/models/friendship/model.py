@@ -8,7 +8,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import CASCADE, BooleanField, CharField, ForeignKey, TextField, UniqueConstraint
 from django.db.models.functions import Greatest, Least
 
-from urbanlens.dashboard.models.abstract import DashboardModel, TextChoices
+from urbanlens.dashboard.models.abstract import DashboardModel
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.queryset import Manager
 from urbanlens.dashboard.models.profile import Profile

@@ -22,7 +22,6 @@ from model_bakery import baker
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter

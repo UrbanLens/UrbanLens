@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+    from urbanlens.dashboard.models.profile.model import Profile
 
 
 def _own_contribution_q() -> Q:
@@ -237,7 +237,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         Takes into account both the viewer's filter preference and each
         uploader's own upload-visibility setting.
         """
-        from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+        from urbanlens.dashboard.models.profile.model import Profile
 
         # Scope candidate uploaders to those who actually have an image in
         # *this* queryset (the gallery being rendered), not every uploader on
@@ -456,6 +456,12 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         from urbanlens.dashboard.models.images.model import MediaKind
 
         return self.filter(media_type=MediaKind.DOCUMENT)
+
+    def videos(self) -> Self:
+        """Filter to videos only - the Vault home's video accounting."""
+        from urbanlens.dashboard.models.images.model import MediaKind
+
+        return self.filter(media_type=MediaKind.VIDEO)
 
     def needs_attention(self, profile: Profile) -> Self:
         """Filter to a profile's unfiled photos awaiting organization.

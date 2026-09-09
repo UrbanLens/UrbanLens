@@ -56,15 +56,74 @@ POINTS_FOR_CORRECT_ANSWER = 1000
 
 
 class TriviaError(Exception):
-    """Raised for invalid session/round/answer operations.
+    """Raised for an invalid Trivia session/round/answer operation.
 
-    ``safe_message`` is always safe to surface to the caller verbatim - every
-    raise site in this module passes a developer-authored string.
+    The message is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a
+    fallback) and author its own user-facing text, rather than relaying the
+    message - that keeps a future raise site here from being able to
+    smuggle unreviewed text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class InviteNotHostError(TriviaError):
+    """The caller isn't this session's host, and only the host may invite players."""
+
+
+class InviteAfterLobbyClosedError(TriviaError):
+    """The session has left LOBBY, so no more invites can go out."""
+
+
+class InviteeNotFriendError(TriviaError):
+    """The invitee isn't a connection of the host - only friends may be invited."""
+
+
+class NotInvitedError(TriviaError):
+    """The profile has no participant row for this session - it was never invited."""
+
+
+class JoinAfterLobbyClosedError(TriviaError):
+    """The roster locked (the session left LOBBY) before this profile joined."""
+
+
+class BeginNotHostError(TriviaError):
+    """The caller isn't this session's host, and only the host may begin the game."""
+
+
+class SessionAlreadyBegunError(TriviaError):
+    """The session has already left LOBBY, so it can't be begun a second time."""
+
+
+class NotJoinedParticipantError(TriviaError):
+    """The profile isn't a JOINED participant of this round's session."""
+
+
+class DuplicateAnswerError(TriviaError):
+    """This profile already submitted an answer for this round."""
+
+
+class EndSessionNotHostError(TriviaError):
+    """The caller isn't this session's host, and only the host may end the game."""
+
+
+class SessionAlreadyEndedError(TriviaError):
+    """The session is neither LOBBY nor ACTIVE - it has already ended."""
+
+
+class NotASessionParticipantError(TriviaError):
+    """The calling profile has no participant row for this session."""
+
+
+class KickNotHostError(TriviaError):
+    """The caller isn't this session's host, and only the host may remove a player."""
+
+
+class CannotKickHostError(TriviaError):
+    """The kick target is the host themselves - use ``end_session_now`` instead."""
+
+
+class TargetNotAParticipantError(TriviaError):
+    """The kick target has no participant row for this session."""
 
 
 @dataclass(frozen=True)
@@ -154,15 +213,16 @@ def invite_to_session(session: TriviaSession, host: Profile, invitee: Profile) -
     non-friend is rejected server-side, not just hidden in a picker UI.
 
     Raises:
-        TriviaError: if the caller isn't the host, the session has already
-            started, or ``invitee`` isn't a friend of the host.
+        InviteNotHostError: ``host`` isn't this session's host.
+        InviteAfterLobbyClosedError: The session has already left LOBBY.
+        InviteeNotFriendError: ``invitee`` isn't a connection of ``host``.
     """
     if session.host_profile_id != host.pk:
-        raise TriviaError("Only the host can invite players.")
+        raise InviteNotHostError("Caller is not the session host; only the host may invite players.")
     if session.status != TriviaSessionStatus.LOBBY:
-        raise TriviaError("Can't invite once the game has started.")
+        raise InviteAfterLobbyClosedError("Session is no longer in LOBBY status; invites are closed once play begins.")
     if not are_connections(host, invitee):
-        raise TriviaError("You can only invite friends.")
+        raise InviteeNotFriendError("Invitee is not a connection (friend) of the host; only friends may be invited.")
 
     participant, created = TriviaSessionParticipant.objects.get_or_create(
         session=session,
@@ -212,20 +272,21 @@ def join_session(session: TriviaSession, profile: Profile) -> TriviaSessionParti
     roster is locked.
 
     Raises:
-        TriviaError: if ``profile`` was never invited to this session, or
-            the roster is already locked (the session isn't in LOBBY) and
-            they hadn't joined before that happened.
+        NotInvitedError: ``profile`` was never invited to this session.
+        JoinAfterLobbyClosedError: The roster is already locked (the
+            session isn't in LOBBY) and ``profile`` hadn't joined before
+            that happened.
     """
     try:
         participant = TriviaSessionParticipant.objects.get(session=session, profile=profile)
     except TriviaSessionParticipant.DoesNotExist:
-        raise TriviaError("You were not invited to this session.") from None
+        raise NotInvitedError("No TriviaSessionParticipant row exists for this profile on this session; it was never invited.") from None
 
     if participant.status == TriviaSessionParticipantStatus.JOINED:
         return participant
 
     if session.status != TriviaSessionStatus.LOBBY:
-        raise TriviaError("This game has already started - you can no longer join.")
+        raise JoinAfterLobbyClosedError("Session left LOBBY before this profile joined; the roster is locked.")
 
     participant.status = TriviaSessionParticipantStatus.JOINED
     participant.save(update_fields=["status", "updated"])
@@ -244,13 +305,13 @@ def begin_session(session: TriviaSession, host: Profile) -> TriviaRound | None:
     "no_eligible_questions": true}``, mirroring ``SpotGuessrBeginView``.
 
     Raises:
-        TriviaError: if the caller isn't the host or the session isn't
-            still in its lobby.
+        BeginNotHostError: The caller isn't this session's host.
+        SessionAlreadyBegunError: The session isn't still in its lobby.
     """
     if session.host_profile_id != host.pk:
-        raise TriviaError("Only the host can start the game.")
+        raise BeginNotHostError("Caller is not the session host; only the host may begin the game.")
     if session.status != TriviaSessionStatus.LOBBY:
-        raise TriviaError("This session has already started.")
+        raise SessionAlreadyBegunError("Session is not in LOBBY status; it has already begun.")
 
     session.status = TriviaSessionStatus.ACTIVE
     session.save(update_fields=["status", "updated"])
@@ -331,16 +392,16 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
     never blocked from playing).
 
     Raises:
-        TriviaError: if ``profile`` isn't a JOINED participant of this
-            round's session (e.g. still INVITED, never joined), or if
-            ``profile`` already answered this round.
+        NotJoinedParticipantError: ``profile`` isn't a JOINED participant
+            of this round's session (e.g. still INVITED, never joined).
+        DuplicateAnswerError: ``profile`` already answered this round.
     """
     try:
         participant = TriviaSessionParticipant.objects.get(session=round_.session, profile=profile)
     except TriviaSessionParticipant.DoesNotExist:
-        raise TriviaError("You must join this session before submitting an answer.") from None
+        raise NotJoinedParticipantError("Profile is not a JOINED participant of this round's session.") from None
     if participant.status != TriviaSessionParticipantStatus.JOINED:
-        raise TriviaError("You must join this session before submitting an answer.")
+        raise NotJoinedParticipantError("Profile is not a JOINED participant of this round's session.")
 
     question = round_.question
     is_correct = TriviaQuestion.normalize_answer(raw_answer) == question.answer_normalized
@@ -368,7 +429,7 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
                 points=points,
             )
         except IntegrityError:
-            raise TriviaError("This profile has already answered this round.") from None
+            raise DuplicateAnswerError("Profile has already submitted an answer for this round (unique constraint violation).") from None
 
         TriviaSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points)
 
@@ -473,13 +534,13 @@ def end_session_now(session: TriviaSession, host: Profile) -> TriviaSession:
     ``services.spotguessr.session.end_session_now``.
 
     Raises:
-        TriviaError: if the caller isn't the host, or the session has
-            already ended.
+        EndSessionNotHostError: The caller isn't this session's host.
+        SessionAlreadyEndedError: The session has already ended.
     """
     if session.host_profile_id != host.pk:
-        raise TriviaError("Only the host can end the game.")
+        raise EndSessionNotHostError("Caller is not the session host; only the host may end the game.")
     if session.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
-        raise TriviaError("This game has already ended.")
+        raise SessionAlreadyEndedError("Session status is neither LOBBY nor ACTIVE; it has already ended.")
 
     current_round = TriviaRound.objects.for_session(session).filter(revealed_at__isnull=True).first()
     if current_round is not None:
@@ -578,15 +639,16 @@ def leave_session(session: TriviaSession, profile: Profile) -> None:
     completion).
 
     Raises:
-        TriviaError: if ``profile`` isn't a participant of this session, or
-            the session has already ended.
+        SessionAlreadyEndedError: The session has already ended.
+        NotASessionParticipantError: ``profile`` isn't a participant of
+            this session.
     """
     if session.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
-        raise TriviaError("This game has already ended.")
+        raise SessionAlreadyEndedError("Session status is neither LOBBY nor ACTIVE; it has already ended.")
     try:
         participant = TriviaSessionParticipant.objects.get(session=session, profile=profile)
     except TriviaSessionParticipant.DoesNotExist:
-        raise TriviaError("You are not part of this session.") from None
+        raise NotASessionParticipantError("No TriviaSessionParticipant row exists for this profile on this session.") from None
     if participant.status == TriviaSessionParticipantStatus.LEFT:
         return
     _remove_participant(session, participant, reason="left")
@@ -601,20 +663,22 @@ def kick_participant(session: TriviaSession, host: Profile, target_profile: Prof
     ``target_profile`` already left.
 
     Raises:
-        TriviaError: if the caller isn't the host, the target is the host
-            themselves, the target isn't a participant, or the session has
-            already ended.
+        KickNotHostError: The caller isn't this session's host.
+        CannotKickHostError: ``target_profile`` is the host themselves.
+        SessionAlreadyEndedError: The session has already ended.
+        TargetNotAParticipantError: ``target_profile`` isn't a participant
+            of this session.
     """
     if session.host_profile_id != host.pk:
-        raise TriviaError("Only the host can remove a player.")
+        raise KickNotHostError("Caller is not the session host; only the host may remove a player.")
     if target_profile.pk == host.pk:
-        raise TriviaError("The host can't remove themselves - use End game instead.")
+        raise CannotKickHostError("Kick target is the session host; use end_session_now to end the game instead.")
     if session.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
-        raise TriviaError("This game has already ended.")
+        raise SessionAlreadyEndedError("Session status is neither LOBBY nor ACTIVE; it has already ended.")
     try:
         participant = TriviaSessionParticipant.objects.get(session=session, profile=target_profile)
     except TriviaSessionParticipant.DoesNotExist:
-        raise TriviaError("That profile is not part of this session.") from None
+        raise TargetNotAParticipantError("No TriviaSessionParticipant row exists for the target profile on this session.") from None
     if participant.status == TriviaSessionParticipantStatus.LEFT:
         return
     _remove_participant(session, participant, reason="kicked")

@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import DateField, Min
+from django.db.models import Case, DateField, F, IntegerField, Max, Min, Prefetch, Q, Value, When
 from django.db.models.functions import Cast, Coalesce
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -22,24 +22,27 @@ from urbanlens.dashboard.controllers.visits import (
     _sync_visit_photos,
     _visit_dialog_context,
 )
+from urbanlens.dashboard.models.comments.model import Comment
+from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import Route
-from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.units import km_to_display, unit_label
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
 from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
-from urbanlens.dashboard.services.memories.journal import get_journal_entries
+from urbanlens.dashboard.services.memories.journal import JournalFeed
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.visits.visit_invites import resolve_suggest_participant_ids, sync_external_participants
 from urbanlens.dashboard.services.visits.visits import add_visited_status, create_visit_suggestion, remove_visited_status, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
+    from django.core.paginator import Page
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.markup.share import MarkupMapShare
@@ -341,7 +344,12 @@ def _compute_hero_stats(profile: Profile) -> tuple[dict[str, object], bool]:
     route_count = Route.objects.for_profile(profile).count()
     total_distance_km = total_travel_distance_km(profile)
     units = profile.effective_distance_units
-    places_visited = PinVisit.objects.filter(pin__profile=profile).values("pin_id").distinct().count()
+    # Pin.objects.visited() ORs in the "Visited" status label alongside a
+    # dated PinVisit record - a pin marked visited by label alone (no PinVisit
+    # row yet) must still count here, both for the stat itself and so
+    # has_memory_data (below) doesn't read a profile with only label-only
+    # visits as having no memory data at all.
+    places_visited = Pin.objects.filter(profile=profile).visited().count()
     photo_count = Image.objects.filter(profile=profile).photos().count()
     trip_count = TripMembership.objects.trip_ids_for(profile).distinct().count()
     has_memory_data = any((route_count, places_visited, photo_count, trip_count))
@@ -777,6 +785,173 @@ class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "processed": processed, "requested": len(raw_slugs)})
 
 
+#: Places (or maps) per page in each of the Sharing page's four lists.
+_SHARE_GROUPS_PER_PAGE = 20
+
+#: Journal entries per page.
+_JOURNAL_PAGE_SIZE = 25
+
+
+def _place_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tuple[list[list[PinShare]], Page]:
+    """One page of pin shares, grouped by the place each is about.
+
+    Grouping happens in the database rather than after fetching everything, so
+    the page pays for its own twenty places instead of for every share the
+    account has ever made or received.
+
+    Shares of a pin group by that pin. A share with no pin - coordinates typed
+    into a DM that the sender never pinned - groups by the shared Location
+    instead, so they do not all collapse into one bucket.
+
+    Args:
+        request: The current request; carries the page number.
+        shares: The share queryset to group, already scoped to one direction.
+        param: Which request parameter carries this list's page number. Four
+            lists render on one page, so a shared ``page`` would move all of
+            them at once.
+
+    Returns:
+        The page's groups, newest-share-first, and the ``Page`` of group keys.
+    """
+    grouped = shares.annotate(group_location=Case(When(pin_id__isnull=True, then=F("location_id")), default=Value(None), output_field=IntegerField())).values("pin_id", "group_location").annotate(latest=Max("created")).order_by("-latest")
+    page = get_page(request, grouped, _SHARE_GROUPS_PER_PAGE, param=param)
+    keys = list(page.object_list)
+    if not keys:
+        return [], page
+
+    pin_ids = [key["pin_id"] for key in keys if key["pin_id"] is not None]
+    location_ids = [key["group_location"] for key in keys if key["pin_id"] is None]
+    rows = shares.filter(Q(pin_id__in=pin_ids) | Q(pin_id__isnull=True, location_id__in=location_ids)).order_by("-created")
+
+    by_key: dict[tuple[str, int | None], list[PinShare]] = {}
+    for share in rows:
+        by_key.setdefault(("pin", share.pin_id) if share.pin_id is not None else ("location", share.location_id), []).append(share)
+    # Returned in the page's own order rather than the dict's: the page is
+    # ordered by each place's most recent share, which is what the list claims.
+    ordered = [("pin", key["pin_id"]) if key["pin_id"] is not None else ("location", key["group_location"]) for key in keys]
+    return [by_key[key] for key in ordered if key in by_key], page
+
+
+def _map_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tuple[list[list[MarkupMapShare]], Page]:
+    """One page of map shares, grouped by the map each is about.
+
+    The map-share sibling of :func:`_place_grouped_page`; simpler only because
+    a map share always names a map.
+
+    Args:
+        request: The current request; carries the page number.
+        shares: The map-share queryset, already scoped to one direction.
+        param: Which request parameter carries this list's page number.
+
+    Returns:
+        The page's groups, newest-share-first, and the ``Page`` of map ids.
+    """
+    grouped = shares.values("markup_map_id").annotate(latest=Max("created")).order_by("-latest")
+    page = get_page(request, grouped, _SHARE_GROUPS_PER_PAGE, param=param)
+    map_ids = [key["markup_map_id"] for key in page.object_list]
+    if not map_ids:
+        return [], page
+
+    by_map: dict[int, list[MarkupMapShare]] = {}
+    for share in shares.filter(markup_map_id__in=map_ids).order_by("-created"):
+        by_map.setdefault(share.markup_map_id, []).append(share)
+    return [by_map[map_id] for map_id in map_ids if map_id in by_map], page
+
+
+def _sent_share_context(request: HttpRequest, profile: Profile) -> dict[str, Any]:
+    """The "Shared by you" half of the Sharing page, one page of each list.
+
+    Args:
+        request: The current request; carries both page numbers.
+        profile: Whose sent shares to describe.
+
+    Returns:
+        Context for ``_sharing_sent.html``.
+    """
+    from urbanlens.dashboard.models.markup.share import MarkupMapShare
+    from urbanlens.dashboard.models.pin_share.model import PinShare
+
+    shares = PinShare.objects.sent_by(profile).select_related("pin__location__wiki", "location__wiki", "to_profile__user")
+    groups, page = _place_grouped_page(request, shares, param="sent_pins_page")
+    share_groups: list[_ShareGroup] = []
+    for pin_shares in groups:
+        own_ids = [share.pk for share in pin_shares]
+        chain_total = PinShare.chain_share_count(own_ids)
+        share_groups.append(
+            {
+                "pin": pin_shares[0].pin,
+                "place_label": pin_shares[0].place_label,
+                "shares": pin_shares,
+                "chain_total": chain_total,
+                # Shares made further down the chain by other users.
+                "reshare_count": chain_total - len(own_ids),
+            },
+        )
+
+    map_shares = MarkupMapShare.objects.filter(from_profile=profile).select_related("markup_map", "to_profile__user")
+    map_groups, map_page = _map_grouped_page(request, map_shares, param="sent_maps_page")
+    map_share_groups: list[_MapShareGroup] = []
+    for map_shares_for_map in map_groups:
+        markup_map = map_shares_for_map[0].markup_map
+        label, url = _map_attachment_info(markup_map)
+        map_share_groups.append({"map": markup_map, "shares": map_shares_for_map, "attachment_label": label, "attachment_url": url})
+
+    return {"share_groups": share_groups, "sent_pins_page_obj": page, "map_share_groups": map_share_groups, "sent_maps_page_obj": map_page}
+
+
+def _received_share_context(request: HttpRequest, profile: Profile) -> dict[str, Any]:
+    """The "Shared with you" half, one page of each list.
+
+    Args:
+        request: The current request; carries both page numbers.
+        profile: Whose received shares to describe.
+
+    Returns:
+        Context for ``_sharing_received.html``.
+    """
+    from urbanlens.dashboard.models.markup.share import MarkupMapShare
+    from urbanlens.dashboard.models.pin_share.model import PinShare
+
+    shares = PinShare.objects.received_by(profile).select_related("pin__location__wiki", "location__wiki", "from_profile__user")
+    groups, page = _place_grouped_page(request, shares, param="received_pins_page")
+    incoming_share_groups: list[_IncomingShareGroup] = []
+    for pin_shares in groups:
+        pin, place_label = _safe_incoming_place_label(pin_shares)
+        incoming_share_groups.append({"pin": pin, "place_label": place_label, "shares": pin_shares})
+
+    map_shares = MarkupMapShare.objects.filter(to_profile=profile).select_related("markup_map", "from_profile__user")
+    map_groups, map_page = _map_grouped_page(request, map_shares, param="received_maps_page")
+    incoming_map_share_groups: list[_IncomingMapShareGroup] = [{"map": group[0].markup_map, "shares": group} for group in map_groups]
+
+    return {
+        "incoming_share_groups": incoming_share_groups,
+        "received_pins_page_obj": page,
+        "incoming_map_share_groups": incoming_map_share_groups,
+        "received_maps_page_obj": map_page,
+    }
+
+
+def _share_counts(profile: Profile) -> dict[str, int]:
+    """How many shares each toggle button reports.
+
+    Counted rather than measured off the rendered lists: those are one page
+    each now, and the buttons name the totals.
+
+    Args:
+        profile: Whose shares to count.
+
+    Returns:
+        ``sent_count``, ``received_count``, and ``has_any_shares`` for the
+        empty state.
+    """
+    from urbanlens.dashboard.models.markup.share import MarkupMapShare
+    from urbanlens.dashboard.models.pin_share.model import PinShare
+
+    sent = PinShare.objects.sent_by(profile).count() + MarkupMapShare.objects.filter(from_profile=profile).count()
+    received = PinShare.objects.received_by(profile).count() + MarkupMapShare.objects.filter(to_profile=profile).count()
+    return {"sent_count": sent, "received_count": received, "has_any_shares": bool(sent or received)}
+
+
 class MemoriesSharingView(LoginRequiredMixin, View):
     """The "Sharing" subpage of Memories - every pin and map shared to/from the user.
 
@@ -792,6 +967,11 @@ class MemoriesSharingView(LoginRequiredMixin, View):
     recipient-scoped share-detail routes rather than the sender's own
     pin/map pages, which the recipient has no access to.
 
+    Only the sent half is rendered here: the two halves are a client-side
+    toggle, so the received half was being queried, grouped and rendered on
+    every load for a panel nobody had asked to see. It fetches itself the
+    first time that button is clicked.
+
     GET /memories/sharing/
     """
 
@@ -802,92 +982,61 @@ class MemoriesSharingView(LoginRequiredMixin, View):
             request: The HTTP request.
 
         Returns:
-            Rendered Sharing page listing every shared pin and map with
-            their recipients (and, for pins, chain-wide reshare counts).
+            The Sharing page, showing one page of each sent list.
         """
-        from urbanlens.dashboard.models.markup.share import MarkupMapShare
-        from urbanlens.dashboard.models.pin_share.model import PinShare
-
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        shares = PinShare.objects.sent_by(profile).select_related("pin__location__wiki", "location__wiki", "to_profile__user").order_by("-created")
-
-        # Group by pin when there is one; location-only shares (e.g.
-        # coordinates typed into a DM the sender never pinned) group by the
-        # shared Location instead so they don't all collapse into one bucket.
-        shares_by_pin: dict[tuple[str, int | None], list[PinShare]] = {}
-        for share in shares:
-            key = ("pin", share.pin_id) if share.pin_id is not None else ("location", share.location_id)
-            shares_by_pin.setdefault(key, []).append(share)
-
-        share_groups: list[_ShareGroup] = []
-        for pin_shares in shares_by_pin.values():
-            own_ids = [share.pk for share in pin_shares]
-            chain_total = PinShare.chain_share_count(own_ids)
-            share_groups.append(
-                {
-                    "pin": pin_shares[0].pin,
-                    "place_label": pin_shares[0].place_label,
-                    "shares": pin_shares,
-                    "chain_total": chain_total,
-                    # Shares made further down the chain by other users.
-                    "reshare_count": chain_total - len(own_ids),
-                },
-            )
-
-        map_shares = MarkupMapShare.objects.filter(from_profile=profile).select_related("markup_map", "to_profile__user").order_by("-created")
-
-        map_shares_by_map: dict[int, list[MarkupMapShare]] = {}
-        for map_share in map_shares:
-            map_shares_by_map.setdefault(map_share.markup_map_id, []).append(map_share)
-
-        map_share_groups: list[_MapShareGroup] = []
-        for map_shares_for_map in map_shares_by_map.values():
-            markup_map = map_shares_for_map[0].markup_map
-            label, url = _map_attachment_info(markup_map)
-            map_share_groups.append(
-                {
-                    "map": markup_map,
-                    "shares": map_shares_for_map,
-                    "attachment_label": label,
-                    "attachment_url": url,
-                },
-            )
-
-        incoming_shares = PinShare.objects.received_by(profile).select_related("pin__location__wiki", "location__wiki", "from_profile__user").order_by("-created")
-
-        incoming_shares_by_pin: dict[tuple[str, int | None], list[PinShare]] = {}
-        for share in incoming_shares:
-            key = ("pin", share.pin_id) if share.pin_id is not None else ("location", share.location_id)
-            incoming_shares_by_pin.setdefault(key, []).append(share)
-
-        incoming_share_groups: list[_IncomingShareGroup] = []
-        for pin_shares in incoming_shares_by_pin.values():
-            pin, place_label = _safe_incoming_place_label(pin_shares)
-            incoming_share_groups.append({"pin": pin, "place_label": place_label, "shares": pin_shares})
-
-        incoming_map_shares = MarkupMapShare.objects.filter(to_profile=profile).select_related("markup_map", "from_profile__user").order_by("-created")
-
-        incoming_map_shares_by_map: dict[int, list[MarkupMapShare]] = {}
-        for map_share in incoming_map_shares:
-            incoming_map_shares_by_map.setdefault(map_share.markup_map_id, []).append(map_share)
-
-        incoming_map_share_groups: list[_IncomingMapShareGroup] = [{"map": map_shares_for_map[0].markup_map, "shares": map_shares_for_map} for map_shares_for_map in incoming_map_shares_by_map.values()]
-
         return render(
             request,
             "dashboard/pages/memories/sharing.html",
             {
                 "profile": profile,
                 "page_name": "memories",
-                "share_groups": share_groups,
-                "map_share_groups": map_share_groups,
-                "sent_count": len(shares) + len(map_shares),
-                "incoming_share_groups": incoming_share_groups,
-                "incoming_map_share_groups": incoming_map_share_groups,
-                "received_count": len(incoming_shares) + len(incoming_map_shares),
+                **_share_counts(profile),
+                **_sent_share_context(request, profile),
                 **_unlogged_band_context(profile),
             },
         )
+
+
+class MemoriesSharingSentView(LoginRequiredMixin, View):
+    """HTMX partial: one page of the "Shared by you" lists.
+
+    GET /memories/sharing/sent/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the sent half on its own, for a pagination click.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            The sent-shares partial.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return render(request, "dashboard/partials/memories/_sharing_sent.html", {"profile": profile, **_sent_share_context(request, profile)})
+
+
+class MemoriesSharingReceivedView(LoginRequiredMixin, View):
+    """HTMX partial: one page of the "Shared with you" lists.
+
+    Fetched the first time that toggle is clicked, and again on each of its
+    pagination clicks.
+
+    GET /memories/sharing/received/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the received half on its own.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            The received-shares partial.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return render(request, "dashboard/partials/memories/_sharing_received.html", {"profile": profile, **_received_share_context(request, profile)})
 
 
 class MemoriesMapsView(LoginRequiredMixin, View):
@@ -910,7 +1059,25 @@ class MemoriesMapsView(LoginRequiredMixin, View):
             Rendered Maps page listing every markup map the user created.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        maps = MarkupMap.objects.for_profile(profile).select_related("shared_by__user").prefetch_related("items").order_by("-updated")
+        # Every reverse relation `MarkupMap.attachments` walks, prefetched with
+        # the same select_related the property applies per row - otherwise each
+        # card costs up to ~11 queries on an unsliced queryset, and the page's
+        # own advertised workflow (draw a route on a check-in, a comment, a
+        # visit) is what makes a profile have many of them (P68).
+        maps = (
+            MarkupMap.objects.for_profile(profile)
+            .select_related("shared_by__user")
+            .prefetch_related(
+                "items",
+                "safety_checkins",
+                "attached_safety_checkins",
+                Prefetch("comments", queryset=Comment.objects.select_related("pin__location__wiki", "wiki__location")),
+                Prefetch("trip_comments", queryset=TripComment.objects.select_related("trip")),
+                Prefetch("visits", queryset=PinVisit.objects.select_related("pin__location__wiki")),
+                Prefetch("direct_messages", queryset=DirectMessage.objects.select_related("sender__user", "recipient__user")),
+            )
+            .order_by("-updated")
+        )
         return render(
             request,
             "dashboard/pages/memories/maps.html",
@@ -967,13 +1134,18 @@ class MemoriesJournalView(LoginRequiredMixin, View):
             and comments, newest first.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        # JournalFeed rather than a list: the page wants one day's worth of a
+        # merged feed plus its total, and building every entry from four
+        # unbounded querysets to get either is what this page used to do.
+        page_obj = get_page(request, JournalFeed(profile), _JOURNAL_PAGE_SIZE)
         return render(
             request,
             "dashboard/pages/memories/journal.html",
             {
                 "profile": profile,
                 "page_name": "memories",
-                "journal_entries": get_journal_entries(profile),
+                "journal_entries": page_obj.object_list,
+                "page_obj": page_obj,
                 **_unlogged_band_context(profile),
             },
         )

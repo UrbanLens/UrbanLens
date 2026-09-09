@@ -19,6 +19,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.external_api import views as external_api_views
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
+from urbanlens.dashboard.models.pin_list.queryset import PinListQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
@@ -108,6 +109,26 @@ class PinListsCollectionTests(ListsApiTestCase):
         response = self.client.post(_BASE, {"name": "Dupe"}, content_type="application/json", **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 400)
         self.assertIn("error", response.json())
+
+    def test_a_racing_create_is_a_clean_400_not_a_500(self) -> None:
+        """The loser of the exists()-then-save race gets the same 400, not an IntegrityError 500.
+
+        A concurrent POST can insert its row between this request's ``exists()``
+        pre-check and its ``save()`` - neutering the check reproduces that
+        ordering deterministically. ``save()`` then hits
+        ``uq_pin_list_profile_name`` directly, which the view must absorb into
+        the same response the pre-check already returns.
+        """
+        self._make_list("Dupe")
+
+        with mock.patch.object(PinListQuerySet, "exists", return_value=False):
+            response = self.client.post(
+                _BASE, {"name": "Dupe"}, content_type="application/json", **_bearer(self.raw_key)
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+        self.assertEqual(PinList.objects.filter(profile=self.profile, name="Dupe").count(), 1)
 
     def test_create_rejects_a_non_polygon_boundary(self) -> None:
         response = self.client.post(

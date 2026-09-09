@@ -23,7 +23,9 @@ from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.notifications.push import (
     MAX_CONSECUTIVE_FAILURES,
-    PushRegistrationError,
+    EndpointCredentialsError,
+    EndpointUnreachableError,
+    InvalidEndpointUrlError,
     register_device,
     send_push_to_profile,
     unregister_device,
@@ -83,11 +85,11 @@ class PushDeviceRegistrationServiceTests(TestCase):
         self.assertEqual(second.name, "Renamed")
 
     def test_non_http_scheme_is_rejected(self) -> None:
-        with self.assertRaises(PushRegistrationError):
+        with self.assertRaises(InvalidEndpointUrlError):
             register_device(self.profile, transport=PushTransport.UNIFIEDPUSH, address="ftp://ntfy.example.com/up")
 
     def test_credentials_in_url_are_rejected(self) -> None:
-        with self.assertRaises(PushRegistrationError):
+        with self.assertRaises(EndpointCredentialsError):
             register_device(
                 self.profile, transport=PushTransport.UNIFIEDPUSH, address="https://user:pass@ntfy.example.com/up"
             )
@@ -95,7 +97,7 @@ class PushDeviceRegistrationServiceTests(TestCase):
     def test_endpoint_resolving_to_private_address_is_rejected(self) -> None:
         """The server must never be tricked into POSTing at its own internal network."""
         for private_ip in ("127.0.0.1", "10.0.0.5", "192.168.1.20", "169.254.1.1"):
-            with _fake_resolution(private_ip), self.assertRaises(PushRegistrationError):
+            with _fake_resolution(private_ip), self.assertRaises(EndpointUnreachableError):
                 register_device(
                     self.profile, transport=PushTransport.UNIFIEDPUSH, address="https://sneaky.example.com/up"
                 )

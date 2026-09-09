@@ -18,7 +18,6 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.consensus.model import (
     ConsensusAnswer,
     ConsensusFieldKind,
-    ConsensusProfile,
     ConsensusRound,
     ConsensusSession,
 )

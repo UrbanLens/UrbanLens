@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -25,14 +25,17 @@ from urbanlens.dashboard.forms.immich_form import ImmichAccountForm
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import Profile, _haversine_km
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
+from urbanlens.dashboard.services.apis.immich.nearby import NEARBY_ASSET_LIMIT, nearby_assets, within_radius
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
@@ -54,6 +57,19 @@ _EMPTY_MESSAGES: dict[str, str] = {
     PhotoImportMode.VISITS: "No photos found on your recorded visit dates.",
     PhotoImportMode.ALL: "No photos found in your library.",
 }
+
+
+class _HasAssetId(Protocol):
+    """The only thing this view needs from whichever endpoint answered.
+
+    A read-only property rather than ``id: str``: both result types are frozen
+    dataclasses, and a protocol declaring a settable attribute is not satisfied
+    by one that cannot be set.
+    """
+
+    @property
+    def id(self) -> str:
+        """The Immich asset id."""
 
 
 def _request_profile(request: HttpRequest) -> Profile:
@@ -219,6 +235,11 @@ class PinImmichSearchView(LoginRequiredMixin, View):
             return render(request, _PICKER_PARTIAL, {**context, "error": "External lookups are turned off in your settings."})
 
         gateway = ImmichGateway(account=account)
+        # The three modes answer from two different Immich endpoints, so they
+        # return two different shapes - a MapMarker carries coordinates, a
+        # SearchAsset does not. All this view needs from either is the id it
+        # renders and de-dupes on, which is what the annotation says.
+        results: Sequence[_HasAssetId]
         try:
             if mode == PhotoImportMode.VISITS:
                 dates = visit_dates_for_pin(pin)
@@ -231,10 +252,17 @@ class PinImmichSearchView(LoginRequiredMixin, View):
                 if pin.location is None or pin.location.latitude is None or pin.location.longitude is None:
                     return render(request, _PICKER_PARTIAL, {**context, "error": "This pin has no location to search near."})
                 pin_point = (float(pin.location.latitude), float(pin.location.longitude))
-                markers = gateway.get_map_markers()
-                results = [marker for marker in markers if _haversine_km(pin_point, (marker.lat, marker.lon)) * 1000 <= radius_m]
+                # Measured and cached per pin, so the radius <select>'s six
+                # options share one library download instead of one each.
+                neighbourhood = nearby_assets(gateway, account, pin_point)
+                results = within_radius(neighbourhood, radius_m)
+                context["nearby_limit"] = NEARBY_ASSET_LIMIT
+                # Reported by the cap, not inferred from the result's length: a
+                # library of exactly the cap size shows everything it has.
+                context["nearby_truncated"] = neighbourhood.truncated
         except GatewayRequestError as exc:
-            return render(request, _PICKER_PARTIAL, {**context, "error": str(exc)})
+            logger.warning("Immich picker request failed: %s", exc)
+            return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Immich library right now."})
 
         already_imported = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
         assets = [{"id": result.id, "already_imported": account.asset_web_url(result.id) in already_imported} for result in results]

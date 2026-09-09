@@ -490,7 +490,8 @@ def _validate_extraction_url(url: str) -> str:
     try:
         return ensure_public_http_url(url, max_length=MAX_EXTRACTION_URL_LENGTH)
     except UnsafeUrlError as exc:
-        raise LinkExtractionError(str(exc)) from exc
+        logger.info("Rejected extraction url %s: %s", redact_text(url), exc)
+        raise LinkExtractionError("That link can't be used for AI extraction.") from exc
 
 
 def start_link_extraction(user, profile: Profile, pin: Pin, url: str) -> LinkExtraction:
@@ -613,7 +614,7 @@ def fetch_page_text(url: str) -> str:
                 break
     except UnsafeUrlError as exc:
         logger.info("Link extraction fetch failed for %s: %s", redact_text(url), exc)
-        raise LinkExtractionError(str(exc)) from exc
+        raise LinkExtractionError("That link isn't safe to fetch.") from exc
     except requests.RequestException as exc:
         logger.info("Link extraction fetch failed for %s: %s", redact_text(url), exc)
         raise LinkExtractionError("The page couldn't be fetched.") from exc
@@ -697,7 +698,8 @@ def apply_extracted_fields(pin: Pin, payload: dict[str, Any]) -> list[dict[str, 
         try:
             value = field.parse(raw)
         except ValueError as exc:
-            results.append({"key": field.key, "label": field.label, "value": _clean_text(str(raw), 100), "applied": False, "note": f"Rejected: {exc}"})
+            logger.info("Extraction field %s rejected value %r: %s", field.key, raw, exc)
+            results.append({"key": field.key, "label": field.label, "value": _clean_text(str(raw), 100), "applied": False, "note": f"Rejected: {field.label} couldn't be read."})
             continue
         if value in ("", []):
             continue
@@ -729,7 +731,8 @@ def run_extraction(extraction: LinkExtraction) -> None:
     try:
         page_text = fetch_page_text(extraction.url)
     except LinkExtractionError as exc:
-        _fail(str(exc))
+        logger.info("Extraction %s failed fetching %s: %s", extraction.pk, redact_text(extraction.url), exc)
+        _fail("This link couldn't be read.")
         _notify_extraction_complete(extraction)
         return
 

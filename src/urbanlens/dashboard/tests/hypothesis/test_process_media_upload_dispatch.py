@@ -31,6 +31,7 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
+from urbanlens.dashboard.services.media.images import StoredFileReplacement
 from urbanlens.dashboard.tasks import generate_image_keywords, process_image_upload
 
 
@@ -73,7 +74,10 @@ class VideoUploadDispatchTests(TestCase):
     def test_video_downscale_updates_file_size(self) -> None:
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.media.videos.process_uploaded_video", return_value=({}, 12345)),
+            patch(
+                "urbanlens.dashboard.services.media.videos.process_uploaded_video",
+                return_value=({}, StoredFileReplacement(12345, None)),
+            ),
         ):
             process_image_upload(self.image.pk)
         self.image.refresh_from_db()
@@ -121,7 +125,10 @@ class DocumentUploadDispatchTests(TestCase):
     def test_conversion_and_ocr_are_invoked_and_persisted(self) -> None:
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.media.documents.convert_to_pdf", return_value=999) as mock_convert,
+            patch(
+                "urbanlens.dashboard.services.media.documents.convert_to_pdf",
+                return_value=StoredFileReplacement(999, None),
+            ) as mock_convert,
             patch(
                 "urbanlens.dashboard.services.media.documents.extract_pdf_text", return_value="Extracted document text"
             ) as mock_ocr,

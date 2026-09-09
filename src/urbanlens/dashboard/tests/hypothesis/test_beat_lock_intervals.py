@@ -76,6 +76,7 @@ _LOCKED_BEAT_TASKS: dict[str, int] = {
     "trivia-stall-sweep": tasks_module._TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS,
     "consensus-stall-sweep": tasks_module._CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS,
     "account-deletion-reminders": tasks_module._DELETION_REMINDER_LOCK_TIMEOUT_SECONDS,
+    "account-deletion-hard-delete": tasks_module._HARD_DELETE_LOCK_TIMEOUT_SECONDS,
 }
 
 

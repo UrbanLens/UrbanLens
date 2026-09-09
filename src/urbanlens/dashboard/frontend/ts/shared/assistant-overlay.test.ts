@@ -105,6 +105,34 @@ describe("the global assistant overlay", () => {
         expect(document.activeElement).toBe(document.querySelector('input[name="message"]'));
     });
 
+    test("a failed first load does not permanently disable later opens", async () => {
+        // Regression guard: bodyLoaded used to be set true synchronously right
+        // before the (fire-and-forget) ajax call, so a failed first load left
+        // it stuck true forever - every later open() silently no-opped on the
+        // loading skeleton with no retry. It must only become true once a real
+        // swap happens.
+        document.body.innerHTML = OVERLAY_MARKUP;
+        let ajaxCallCount = 0;
+        window.htmx = {
+            process: () => undefined,
+            trigger: () => undefined,
+            ajax: () => {
+                ajaxCallCount += 1;
+                // Simulate the request failing - no afterSwap ever fires.
+                document.body.dispatchEvent(new Event("htmx:responseError", { bubbles: true }));
+            },
+        };
+        installGlobalAssistantOverlay();
+
+        openAssistantOverlay();
+        expect(ajaxCallCount).toBe(1);
+
+        (document.getElementById("assistant-overlay") as HTMLDialogElement).close();
+        openAssistantOverlay();
+
+        expect(ajaxCallCount).toBe(2);
+    });
+
     test("installing twice does not double-register listeners", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
         window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };

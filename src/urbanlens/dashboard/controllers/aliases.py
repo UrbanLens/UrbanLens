@@ -188,7 +188,8 @@ class PinAliasView(LoginRequiredMixin, View):
         try:
             create_pin_alias(pin, name=name, kind=kind)
         except AliasExistsError as exc:
-            return HttpResponse(exc.safe_message, status=409)
+            logger.info("pin alias creation rejected: %s", exc)
+            return HttpResponse("That alias already exists.", status=409)
         return _render_pin_panel(request, pin)
 
 
@@ -199,7 +200,8 @@ class PinAliasDeleteView(LoginRequiredMixin, View):
         try:
             delete_pin_alias(pin, alias)
         except AliasIsCurrentNameError as exc:
-            return HttpResponse(exc.safe_message, status=400)
+            logger.info("pin alias delete rejected: %s", exc)
+            return HttpResponse("This alias is the current name - pick another name first.", status=400)
         return _render_pin_panel(request, pin)
 
 

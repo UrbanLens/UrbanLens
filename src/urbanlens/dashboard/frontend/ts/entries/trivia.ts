@@ -12,8 +12,9 @@
  * Chrome (panel swapping, focus mode, fullscreen, the players/chat drawer)
  * belongs to the shared game shell - see ts/shared/game-shell.ts.
  */
-import { getCsrfToken } from "../shared/csrf";
+import { getJson, postForm } from "../shared/session-request";
 import { confirmAction, toast } from "../shared/dialogs";
+import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
 import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
 
@@ -159,23 +160,6 @@ function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number
     if (roundIdValue !== undefined) resolved = resolved.replace(urls.round_id_sentinel, String(roundIdValue));
     if (questionIdValue !== undefined) resolved = resolved.replace(urls.question_id_sentinel, String(questionIdValue));
     return resolved;
-}
-
-async function postForm(url: string, data: Record<string, string>): Promise<any> {
-    // url is always urlFor(urls.<name>, ...) - a same-origin, server-rendered path
-    // template with only numeric ids substituted, never an arbitrary/external url.
-    const response = await fetch(url, {  // lgtm[js/request-forgery]
-        method: "POST",
-        headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(data),
-    });
-    return response.json();
-}
-
-async function getJson(url: string): Promise<any> {
-    // Same-origin urlFor(...) path template - see postForm's note above.
-    const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });  // lgtm[js/request-forgery]
-    return response.json();
 }
 
 function el<T extends HTMLElement>(id: string): T {
@@ -421,6 +405,10 @@ function connectSessionSocket(): void {
     ws = openLiveSocket({
         path: `/ws/trivia/session/${sessionId}/`,
         onMessage: handleSocketMessage,
+        // Every open, reconnects included: a dropped connection takes the
+        // acknowledgement with it, and an entry left in the composer's queue
+        // would retire the wrong message later (see shared/chat-composer.ts).
+        onOpen: () => chatComposer?.reset(),
         // 4404 here means the host removed this player, or the entitlement went
         // away - nothing more is coming, so drop the handle rather than leave a
         // dead one blocking a later join.
@@ -466,6 +454,14 @@ function handleSocketMessage(data: any): void {
         case "chat.message":
             appendChatMessage(data.message as ChatMessagePayload);
             break;
+        case "error":
+            // The consumer refuses a frame with an error rather than a close -
+            // an out-of-scope credential, a failed write, or a volume limit.
+            // Dropping these silently is what made a throttle unsafe to add
+            // (P31); reportRefusal also gives the composer's text back.
+            if (chatComposer) chatComposer.reportRefusal(data.detail);
+            else toastRefusal(data.detail);
+            break;
         default:
             break;
     }
@@ -476,6 +472,9 @@ function handleSocketMessage(data: any): void {
 // ---------------------------------------------------------------------------
 
 function appendChatMessage(message: ChatMessagePayload): void {
+    // Our own message coming back on the broadcast is the acknowledgement, so
+    // it stops being a candidate for a later refusal to hand back.
+    if (message.profile_id === myProfileId) chatComposer?.confirm(message.body);
     const log = el("trivia-chat-log");
     const line = document.createElement("div");
     const nameSpan = document.createElement("span");
@@ -494,15 +493,16 @@ async function loadChatHistory(): Promise<void> {
     for (const message of (data.messages ?? []) as ChatMessagePayload[]) appendChatMessage(message);
 }
 
+/** Holds what has been sent and not yet acknowledged - see shared/chat-composer.ts. */
+let chatComposer: ChatComposer | null = null;
+
 function initChat(): void {
+    // Resolved on each send rather than captured: the socket is replaced on
+    // every reconnect, and send() returns false while there isn't one.
+    chatComposer = new ChatComposer(el<HTMLInputElement>("trivia-chat-input"), (payload) => ws?.send(payload) ?? false);
     el("trivia-chat-form").addEventListener("submit", (event) => {
         event.preventDefault();
-        const input = el<HTMLInputElement>("trivia-chat-input");
-        const body = input.value.trim();
-        // send() is false while the socket is reconnecting - leave what they
-        // typed in the box rather than clearing it for a message that never left.
-        if (!body || !ws?.send({ body })) return;
-        input.value = "";
+        chatComposer?.submit();
     });
 }
 
@@ -831,14 +831,7 @@ async function startGame(): Promise<void> {
     totalRounds = Number(requestedRounds) || 0;
     sessionPoints = 0;
 
-    const payload = await withBusy(el<HTMLButtonElement>("trivia-start-btn"), async () => {
-        const response = await fetch(urls.start, {
-            method: "POST",
-            headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
-            body: params,
-        });
-        return response.json();
-    });
+    const payload = await withBusy(el<HTMLButtonElement>("trivia-start-btn"), () => postForm(urls.start, params));
     await handleStartOrRoundResponse(payload);
 }
 

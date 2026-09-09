@@ -21,7 +21,6 @@ by that known limitation.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 from model_bakery import baker
 

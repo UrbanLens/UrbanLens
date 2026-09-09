@@ -17,12 +17,8 @@ from model_bakery import baker
 from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.labels.model import (
-    KIND_CATEGORY,
-    KIND_STATUS,
-    KIND_TAG,
-    Label,
-)
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 
 _hyp = settings(max_examples=50, deadline=None)
 _text = st.text(min_size=1, max_size=30, alphabet=st.characters(whitelist_categories=("L", "N")))

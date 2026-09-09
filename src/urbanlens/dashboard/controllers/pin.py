@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import base64
-from datetime import datetime, timedelta
+from datetime import timedelta
 import json
 import logging
 from typing import TYPE_CHECKING, TypeVar
@@ -42,7 +41,7 @@ if TYPE_CHECKING:
 
     from rest_framework.request import Request
 
-    from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelSource, ProviderFetchResult
+    from urbanlens.dashboard.services.pins.external_data import PanelSource, ProviderFetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -171,9 +170,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from django.db.models import Case, When
 
         from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
-        from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, Label
-        from urbanlens.dashboard.models.location.model import Location
-        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
+        from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.comments.comments import visible_comment_count
 
         try:
@@ -524,10 +522,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source, panel_visible_to
 
         panel = get_panel_source(source)
         if not isinstance(panel, GalleryMediaSource):
+            return HttpResponse(status=404)
+
+        # Same gate the generic info-panel dispatch applies (_viewer_may_see_panel) -
+        # a feature-gated source's photos must not leak through this separate gallery
+        # route just because it has no required_feature check of its own. 404, not
+        # 204: matches the info-panel route's anti-enumeration policy for the same fact.
+        if not panel_visible_to(request.user, panel):
             return HttpResponse(status=404)
 
         try:
@@ -708,6 +713,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 # coerce_coordinates() raises one of a fixed set of
                 # developer-authored literals; match rather than echo exc so a
                 # future raise site added there can't leak unsafe text here.
+                logger.info("coerce_coordinates rejected input: %s", exc)
                 if str(exc) == "Coordinates must be finite numbers.":
                     return JsonResponse({"error": "Coordinates must be finite numbers."}, status=400)
                 if str(exc) == "Coordinates out of range.":
@@ -1174,7 +1180,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
     @action(detail=False, methods=["post"])
     def parse_for_preview(self, request: HttpRequest):
         """Parse uploaded files and return pin preview data as JSON without importing."""
-        import json as _json
 
         from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
@@ -1475,13 +1480,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nps_info: pin %s is not within any NPS unit", pin_slug)
             return HttpResponse(status=204)
 
-        from urbanlens.dashboard.plugins.builtin.nps import park_facts
+        from urbanlens.dashboard.plugins.builtin.nps import alert_facts, facility_facets_visible, park_facts
 
-        # The same rows the API serves, from the same helper - the two rendered
+        # The same rows the API serves, from the same helpers - the two rendered
         # different subsets of this payload by hand before, and the hours the
         # template did have it declined to read ("Standard hours vary - check
-        # NPS.gov", printed over the cached hours).
-        context = {"park": data, "facts": park_facts(data), "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1)}
+        # NPS.gov", printed over the cached hours). Alerts are kept out of
+        # `facts` here too, same reasoning as `NpsPanelSource.api_payload`: a
+        # closure or hazard is safety-critical and belongs ahead of routine
+        # facts like hours, not mixed into the same list. Both are also gated
+        # by facility_facets_visible - see the plugin's module docstring.
+        show_facility_facets = facility_facets_visible(data, pin)
+        context = {
+            "park": data,
+            "alerts": alert_facts(data, show_facility_facets=show_facility_facets),
+            "facts": park_facts(data, show_facility_facets=show_facility_facets),
+            "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1),
+        }
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
 
     def _location_data_overview_fields(self, source_key: str, data: dict) -> dict | None:
@@ -2035,7 +2050,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
     @action(detail=False, methods=["post"])
     def import_confirmed(self, request: Request):
         """Stream SSE import progress for user-confirmed pin selections from the preview step."""
-        import json as _json
 
         if not isinstance(request.user, User):
             return JsonResponse({"error": "Authentication required."}, status=401)
@@ -2116,7 +2130,7 @@ class RedataMediaProxyMixin:
     already has.
     """
 
-    def serve_media(self, request: HttpRequest, cache_key: str, download) -> HttpResponse:
+    def serve_media(self, request: HttpRequest, cache_key: str, download: Callable[[], tuple[bytes, str]], *, unavailable_errors: tuple[type[Exception], ...] | None = None) -> HttpResponse:
         """Serve one REData file, converting it to a preview image when asked.
 
         Args:
@@ -2125,9 +2139,15 @@ class RedataMediaProxyMixin:
             cache_key: Django cache key for the *original* bytes. The preview
                 is cached under a suffix of it, so both forms of the same file
                 are cached independently and neither invalidates the other.
-            download: Zero-argument callable returning ``(content, content_type)``,
-                raising ``PropertyRecordsUnavailableError``/``ValueError`` when
-                the file isn't available.
+            download: Zero-argument callable returning ``(content, content_type)``.
+            unavailable_errors: Exception types ``download`` raises to mean
+                "not available" (a 404, an unconfigured gateway, ...), each
+                turned into a 404 response rather than propagating. Defaults
+                to ``(PropertyRecordsUnavailableError, ValueError)`` - the
+                property-records ``RedataGateway``'s own exceptions, which
+                ``PinLoopnetPhotoView``/``PinCrisAttachmentView`` raise; a
+                proxy backed by a different gateway (e.g. ``RedataCidGateway``,
+                whose failures are ``GatewayRequestError``) passes its own.
 
         Returns:
             The file (or its preview), or a 404 when REData couldn't supply it
@@ -2135,6 +2155,9 @@ class RedataMediaProxyMixin:
         """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
         from urbanlens.dashboard.services.media.previews import cached_preview, is_web_safe, request_sandbox_render
+
+        if unavailable_errors is None:
+            unavailable_errors = (PropertyRecordsUnavailableError, ValueError)
 
         wants_preview = request.GET.get("preview") == "1"
         serve_key = f"{cache_key}_preview" if wants_preview else cache_key
@@ -2147,7 +2170,7 @@ class RedataMediaProxyMixin:
         if original is None:
             try:
                 original = download()
-            except (PropertyRecordsUnavailableError, ValueError):
+            except unavailable_errors:
                 return HttpResponse(status=404)
             cache.set(cache_key, original, _REDATA_MEDIA_CACHE_TTL)
 
@@ -2224,4 +2247,34 @@ class PinCrisExtractedImageView(RedataMediaProxyMixin, View):
             request,
             f"ul_cris_extracted_image_{resource_uuid}_{attachment_id}_{image_id}",
             lambda: RedataGateway().download_extracted_image(resource_uuid, attachment_id, image_id),
+        )
+
+
+class PinPlaceCidMediaView(RedataMediaProxyMixin, View):
+    """GET pin/place-cid/media/<cid>/<media_id>/ - proxies one REData deep-scrape media item.
+
+    Same reasoning as ``PinLoopnetPhotoView``/``PinCrisAttachmentView`` -
+    REData's API key must never reach the browser - and the same "no login
+    required" call: this is REData's ``../REData/docs/api-reference.md``
+    "GET /places/cid/{cid}/media/{id}/download/" (photos, videos, 360s,
+    Street View captured for a resolved Google Maps CID), public Google Maps
+    listing media rather than anything private to a user, and
+    ``materialize_media_item`` needs an unauthenticated URL to re-download it.
+
+    Diverges from those two on the exception it hands ``serve_media``:
+    ``RedataCidGateway`` (this view's gateway) raises ``GatewayRequestError``
+    on failure, not the property-records ``RedataGateway``'s
+    ``PropertyRecordsUnavailableError`` - see ``serve_media``'s
+    ``unavailable_errors`` parameter.
+    """
+
+    def get(self, request: HttpRequest, cid: int, media_id: int) -> HttpResponse:
+        from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
+        from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+
+        return self.serve_media(
+            request,
+            f"ul_place_cid_media_{cid}_{media_id}",
+            lambda: RedataCidGateway().download_media(cid, media_id),
+            unavailable_errors=(GatewayRequestError, ValueError),
         )

@@ -106,7 +106,8 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
     """
     if not created:
         return
-    from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER, Label
+    from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
+    from urbanlens.dashboard.models.labels.model import Label
 
     status_defaults = [
         {"name": "Visited", "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
@@ -206,7 +207,8 @@ def create_default_saved_filters(profile: Profile) -> int:
     Returns:
         How many filters were created.
     """
-    from urbanlens.dashboard.models.labels.model import KIND_STATUS, Label
+    from urbanlens.dashboard.models.labels.meta import KIND_STATUS
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
     status_ids = dict(Label.objects.filter(profile=profile, kind=KIND_STATUS).values_list("name", "id"))

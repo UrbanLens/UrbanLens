@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
+from urbanlens.dashboard.services.media.images import StoredFileReplacement
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
@@ -220,7 +221,7 @@ def _remux_without_location(src_path: str, out_path: str) -> bool:
     return _run_ffmpeg(["-c", "copy", *_clear_location_args(), "-movflags", "+faststart", out_path], src_path, "location strip")
 
 
-def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[str, Any], int | None]:
+def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[str, Any], StoredFileReplacement | None]:
     """Extract metadata from an uploaded video, downscale it if oversized, and scrub its location.
 
     Copies the stored file to a local temp path once (ffmpeg/ffprobe need a
@@ -248,9 +249,11 @@ def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[s
             either way.
 
     Returns:
-        (metadata, new_size): metadata is as :func:`extract_video_metadata`;
-        new_size is the new stored size in bytes if the file was replaced,
-        else None.
+        (metadata, replacement): metadata is as :func:`extract_video_metadata`;
+        replacement is None when the file was left alone, and otherwise carries
+        the new size plus the superseded name - still on disk, for the caller to
+        discard once the row names its successor (see
+        :func:`~urbanlens.dashboard.services.media.images.discard_superseded_file`).
     """
     old_name = image.image.name
     if not old_name or not ffmpeg_available():
@@ -295,8 +298,5 @@ def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[s
 
     stem = posixpath.splitext(posixpath.basename(old_name))[0]
     image.image.save(f"{stem}.mp4", ContentFile(new_bytes), save=False)
-    if image.image.name != old_name:
-        with contextlib.suppress(OSError):
-            image.image.storage.delete(old_name)
     logger.info("Rewrote video %s: %s -> %s bytes (downscale=%s, location strip=%s)", image.pk, old_size, len(new_bytes), needs_downscale, needs_strip)
-    return metadata, len(new_bytes)
+    return metadata, StoredFileReplacement(len(new_bytes), old_name if image.image.name != old_name else None)

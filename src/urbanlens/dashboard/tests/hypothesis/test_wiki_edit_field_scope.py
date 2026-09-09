@@ -52,8 +52,8 @@ class WikiEditFieldScopeTests(TestCase):
     def test_editing_one_field_does_not_revert_a_concurrent_edit_to_another(self) -> None:
         stale = self._snapshot()
 
-        apply_wiki_edit(self._snapshot(), self.other, {"description": "Someone else's research"}, strict=True)
-        apply_wiki_edit(stale, self.editor, {"name": "Mill Complex"}, strict=True)
+        apply_wiki_edit(self._snapshot(), self.other, {"description": "Someone else's research"})
+        apply_wiki_edit(stale, self.editor, {"name": "Mill Complex"})
 
         self.wiki.refresh_from_db()
         self.assertEqual(
@@ -67,7 +67,7 @@ class WikiEditFieldScopeTests(TestCase):
         photo = baker.make("dashboard.Image", wiki=self.wiki)
         Wiki.objects.filter(pk=self.wiki.pk).update(cover_photo=photo)
 
-        apply_wiki_edit(stale, self.editor, {"name": "Mill Complex"}, strict=True)
+        apply_wiki_edit(stale, self.editor, {"name": "Mill Complex"})
 
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.cover_photo_id, photo.pk, "an edit reset a field owned by a different writer")
@@ -79,10 +79,10 @@ class WikiEditFieldScopeTests(TestCase):
         defeated if the save then writes the whole row from a snapshot that
         predates the change.
         """
-        target = apply_wiki_edit(self._snapshot(), self.editor, {"name": "Mill Complex"}, strict=True)
+        target = apply_wiki_edit(self._snapshot(), self.editor, {"name": "Mill Complex"})
         stale = self._snapshot()
 
-        apply_wiki_edit(self._snapshot(), self.other, {"description": "Later research"}, strict=True)
+        apply_wiki_edit(self._snapshot(), self.other, {"description": "Later research"})
         revert_wiki_edit(self.location, stale, self.editor, target)
 
         self.wiki.refresh_from_db()
@@ -97,7 +97,6 @@ class WikiEditFieldScopeTests(TestCase):
             wiki,
             self.editor,
             {"name": "Mill Complex", "description": "Rewritten", "date_abandoned": "1974-03-02"},
-            strict=True,
         )
 
         self.wiki.refresh_from_db()

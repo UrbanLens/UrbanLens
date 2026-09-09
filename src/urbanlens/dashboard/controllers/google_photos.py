@@ -158,7 +158,7 @@ class GooglePhotosCallbackView(LoginRequiredMixin, View):
             account.refresh_token = tokens["refresh_token"]
             account.save(update_fields=["refresh_token", "updated"])
         messages.success(request, "Google Photos connected.")
-        return redirect("settings.view")
+        return redirect(f"{reverse('settings.view')}#google-photos-settings-section")
 
 
 class GooglePhotosDisconnectView(LoginRequiredMixin, View):
@@ -205,7 +205,8 @@ class PinGooglePhotosSessionCreateView(LoginRequiredMixin, View):
         try:
             picker_session = GooglePhotosGateway(account=account).create_session()
         except GatewayRequestError as exc:
-            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": str(exc)})
+            logger.warning("Google Photos session create failed for pin %s: %s", pin.slug, exc)
+            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": "Couldn't start a Google Photos picker session right now."})
 
         cache.set(_session_owner_cache_key(picker_session.id), profile.id, picker_session.timeout_s + 60)
         return render(
@@ -230,7 +231,8 @@ class PinGooglePhotosSessionStatusView(LoginRequiredMixin, View):
         try:
             picker_session = gateway.get_session(session_id)
         except GatewayRequestError as exc:
-            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": str(exc)})
+            logger.warning("Google Photos session status failed for pin %s: %s", pin.slug, exc)
+            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": "Couldn't check your Google Photos picker session right now."})
 
         if not picker_session.media_items_set:
             return render(
@@ -242,7 +244,8 @@ class PinGooglePhotosSessionStatusView(LoginRequiredMixin, View):
         try:
             items = gateway.list_session_media_items(session_id)
         except GatewayRequestError as exc:
-            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": str(exc)})
+            logger.warning("Google Photos session media list failed for pin %s: %s", pin.slug, exc)
+            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": "Couldn't load the items you picked."})
 
         cache.set(
             session_items_cache_key(session_id),

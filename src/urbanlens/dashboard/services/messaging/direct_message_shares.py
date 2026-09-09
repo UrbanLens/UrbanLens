@@ -40,34 +40,72 @@ class ShareTargetNotFoundError(LookupError):
     Carried as its own type rather than a bare `LookupError` so an API layer
     can map it to 404 without also swallowing genuine lookup bugs.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below and author its own user-facing
+    text, rather than relaying ``message`` - that keeps a future raise site
+    here from being able to smuggle unreviewed text into a response just by
+    adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class SharedPinNotFoundError(ShareTargetNotFoundError):
+    """The referenced pin doesn't exist, or isn't one of the sender's own."""
+
+
+class SharedTripNotFoundError(ShareTargetNotFoundError):
+    """The referenced trip doesn't exist."""
+
+
+class SharedProfileNotFoundError(ShareTargetNotFoundError):
+    """The referenced profile doesn't exist."""
 
 
 class ShareTargetPermissionError(PermissionError):
     """A share was refused because of who the sender or target is.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below and author its own user-facing
+    text, rather than relaying ``message`` - that keeps a future raise site
+    here from being able to smuggle unreviewed text into a response just by
+    adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class TripInviteNotConnectedError(ShareTargetPermissionError):
+    """The trip-invite sender and recipient aren't connected friends."""
+
+
+class NotATripMemberError(ShareTargetPermissionError):
+    """The sender tried to invite someone to a trip they aren't a member of."""
+
+
+class CannotRecommendSelfError(ShareTargetPermissionError):
+    """The profile "recommended" is the sender or the recipient themselves."""
+
+
+class RecommendedProfileNotConnectedError(ShareTargetPermissionError):
+    """The recommended profile isn't one of the sender's own connections."""
+
+
+class FriendRecommendationUnavailableError(ShareTargetPermissionError):
+    """The recommendation can't go through: opted out, or a block exists.
+
+    Deliberately raised for both conditions - ``allow_friend_recommendations``
+    is off, or a block exists in either direction between the recommended
+    profile and the recipient - so a catch site that maps this one type to
+    one response can never let the sender learn which of the two it was.
+    """
 
 
 class ShareValidationError(ValueError):
     """A share request itself was malformed.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch this and author its own user-facing text, rather than
+    relaying ``message`` - that keeps a future raise site here from being
+    able to smuggle unreviewed text into a response just by adding a new
+    ``raise``.
     """
-
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
 
 
 def send_message_with_share(
@@ -130,8 +168,11 @@ def send_message_with_share(
         The created (or, on an idempotent replay, the pre-existing) DirectMessage.
 
     Raises:
-        ShareTargetNotFoundError: The referenced pin/trip/profile doesn't
-            exist or isn't one the sender may share.
+        SharedPinNotFoundError: `shared_pin_slug` doesn't resolve to one of
+            the sender's own pins.
+        SharedTripNotFoundError: `shared_trip_slug` doesn't resolve to a trip.
+        SharedProfileNotFoundError: `shared_profile_slug` doesn't resolve to
+            a profile.
         ValueError: More than one share field was given, or `create_direct_message`
             rejected the content.
         PermissionError: Propagated from the underlying share service (not
@@ -141,7 +182,7 @@ def send_message_with_share(
 
     provided = [field for field in (shared_pin_slug, shared_trip_slug, shared_profile_slug) if field]
     if len(provided) > 1:
-        raise ShareValidationError("A message can carry only one share.")
+        raise ShareValidationError(f"Profile {sender.pk} tried to send a message with {len(provided)} shares at once (pin/trip/profile are mutually exclusive).")
 
     # Before anything is resolved or created: a replay must not re-run the
     # share side effects, which are not themselves idempotent.
@@ -155,7 +196,7 @@ def send_message_with_share(
 
         pin = PinModel.objects.slug_or_uuid(shared_pin_slug).filter(profile=sender).first()
         if pin is None:
-            raise ShareTargetNotFoundError("No such pin.")
+            raise SharedPinNotFoundError(f"No pin matching {shared_pin_slug!r} owned by profile {sender.pk}.")
         return share_pin_in_message(
             sender,
             recipient,
@@ -179,7 +220,7 @@ def send_message_with_share(
         # flattened into a 404.
         trip = TripModel.objects.filter(slug=shared_trip_slug).first()
         if trip is None:
-            raise ShareTargetNotFoundError("No such trip.")
+            raise SharedTripNotFoundError(f"No trip with slug {shared_trip_slug!r}.")
         return invite_to_trip_in_message(
             sender,
             recipient,
@@ -197,7 +238,7 @@ def send_message_with_share(
 
         recommended = ProfileModel.objects.filter(slug=shared_profile_slug).first()
         if recommended is None:
-            raise ShareTargetNotFoundError("No such profile.")
+            raise SharedProfileNotFoundError(f"No profile with slug {shared_profile_slug!r}.")
         return recommend_friend_in_message(
             sender,
             recipient,
@@ -210,11 +251,12 @@ def send_message_with_share(
             client_uuid=client_uuid,
         )
 
-    # No share - a plain message, possibly with a map attached. Note that a
-    # MarkupMap attached without a pin records no LocationExposure even though
-    # it can depict pin locations; that gap predates this function and exists
-    # in the web composer too (docs/PROBLEMS.md: "markup-map attachments
-    # bypass share provenance").
+    # No share - a plain message, possibly with a map attached. An attached
+    # MarkupMap does stamp the provenance chain now (`create_direct_message` ->
+    # `share_markup_map_with_profile`), but only for places the *sender* has a
+    # pin at: detection matches the map against their own pins. A marker drawn
+    # on somewhere they have never pinned still discloses it and still records
+    # nothing - see P21.
     return create_direct_message(
         sender,
         recipient,
@@ -354,8 +396,8 @@ def invite_to_trip_in_message(
         The newly created DirectMessage.
 
     Raises:
-        PermissionError: If sender/recipient aren't connected, or sender isn't
-            a member of `trip`.
+        TripInviteNotConnectedError: `sender`/`recipient` aren't connected.
+        NotATripMemberError: `sender` isn't a member of `trip`.
         ValueError: Propagated from `create_direct_message` for bad input.
     """
     from django.db import transaction
@@ -365,9 +407,9 @@ def invite_to_trip_in_message(
     from urbanlens.dashboard.models.trips.model import TripMembership
 
     if not are_connections(sender, recipient):
-        raise ShareTargetPermissionError("You can only invite connected friends to a trip.")
+        raise TripInviteNotConnectedError(f"Profile {sender.pk} tried to invite non-connected profile {recipient.pk} to trip {trip.pk}.")
     if not trip.memberships.filter(profile=sender).exists():
-        raise ShareTargetPermissionError("You aren't a member of that trip.")
+        raise NotATripMemberError(f"Profile {sender.pk} tried to invite {recipient.pk} to trip {trip.pk} without being a member of it.")
 
     # One transaction: if the message itself is refused (e.g. the recipient's
     # DM visibility rejects this sender despite the friendship), the invited
@@ -452,25 +494,29 @@ def recommend_friend_in_message(
         The newly created DirectMessage.
 
     Raises:
-        PermissionError: If `recommended` isn't one of sender's connections,
-            or has turned off friend recommendations.
+        CannotRecommendSelfError: `recommended` is `sender` or `recipient`.
+        RecommendedProfileNotConnectedError: `recommended` isn't one of
+            sender's connections.
+        FriendRecommendationUnavailableError: `recommended` has turned off
+            friend recommendations, or has a block with `recipient`.
         ValueError: Propagated from `create_direct_message` for bad input.
     """
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
     if recommended.pk in (recipient.pk, sender.pk):
-        raise ShareTargetPermissionError("Choose a different friend to recommend.")
+        raise CannotRecommendSelfError(f"Profile {sender.pk} tried to recommend {recommended.pk}, which is the sender or the recipient.")
     if recommended not in get_connections(sender):
-        raise ShareTargetPermissionError("You can only recommend your own connected friends.")
+        raise RecommendedProfileNotConnectedError(f"Profile {sender.pk} tried to recommend {recommended.pk}, not one of their own connections.")
     if not recommended.allow_friend_recommendations:
-        raise ShareTargetPermissionError(f"{recommended.username} doesn't allow friend recommendations.")
+        raise FriendRecommendationUnavailableError(f"Profile {recommended.pk} has allow_friend_recommendations=False.")
     if ProfileModel.are_blocked(recommended, recipient):
         # A block in either direction vetoes the recommendation - it would
         # otherwise grant the recipient temporary profile access the block
-        # exists to prevent. Deliberately the same message as the opt-out
-        # above, so the sender cannot distinguish "blocked" from
+        # exists to prevent. Deliberately the same exception *type* as the
+        # opt-out branch above (never a distinguishable subclass), so a catch
+        # site's response can't let the sender tell "blocked" apart from
         # "recommendations disabled".
-        raise ShareTargetPermissionError(f"{recommended.username} doesn't allow friend recommendations.")
+        raise FriendRecommendationUnavailableError(f"Profile {recommended.pk} and recipient {recipient.pk} have a block between them.")
 
     from django.db import transaction
 

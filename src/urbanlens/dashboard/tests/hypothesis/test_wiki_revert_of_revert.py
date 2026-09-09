@@ -28,7 +28,7 @@ class RevertOfRevertTests(TestCase):
         self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Mill")
 
     def test_a_full_revert_of_a_revert_unmarks_the_original(self) -> None:
-        original = apply_wiki_edit(self.wiki, self.author, {"name": "New Mill Name"}, strict=True)
+        original = apply_wiki_edit(self.wiki, self.author, {"name": "New Mill Name"})
         assert original is not None
 
         revert_edit, skipped = revert_wiki_edit(self.location, self.wiki, self.reverter, original)
@@ -48,12 +48,12 @@ class RevertOfRevertTests(TestCase):
         self.assertEqual(self.wiki.name, "New Mill Name")
 
     def test_reverting_an_ordinary_edit_does_not_touch_other_flags(self) -> None:
-        first = apply_wiki_edit(self.wiki, self.author, {"name": "First"}, strict=True)
+        first = apply_wiki_edit(self.wiki, self.author, {"name": "First"})
         assert first is not None
         revert_edit, _ = revert_wiki_edit(self.location, self.wiki, self.reverter, first)
         assert revert_edit is not None
 
-        second = apply_wiki_edit(self.wiki, self.author, {"name": "Second"}, strict=True)
+        second = apply_wiki_edit(self.wiki, self.author, {"name": "Second"})
         assert second is not None
         revert_second, _ = revert_wiki_edit(self.location, self.wiki, self.reverter, second)
         assert revert_second is not None

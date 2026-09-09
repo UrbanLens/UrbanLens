@@ -492,8 +492,9 @@ class SpotGuessrSessionsView(PaginatedListMixin, ExternalApiView):
         total_rounds = data.get("total_rounds", spotguessr_session.DEFAULT_ROUNDS_PER_SESSION)
         try:
             result = spotguessr_session.start_solo_playthrough(profile, data["mode"], config, total_rounds=total_rounds)
-        except spotguessr_session.SpotGuessrError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+        except spotguessr_session.RoundGenerationUnavailableError as exc:
+            logger.warning("external API spotguessr solo start by %s hit a round-generation bug: %s", profile.pk, exc)
+            return Response({"error": "This game mode isn't available right now."}, status=400)
 
         if result.round is None or result.session is None:
             return Response(
@@ -588,8 +589,9 @@ class SpotGuessrRoundView(SpotGuessrSessionScopedView):
 
         try:
             round_ = spotguessr_session.get_or_create_round(session)
-        except spotguessr_session.SpotGuessrError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+        except spotguessr_session.RoundGenerationUnavailableError as exc:
+            logger.warning("external API round fetch for session %s hit a round-generation bug: %s", session_id, exc)
+            return Response({"error": "This game mode isn't available right now."}, status=400)
 
         if round_ is None:
             if spotguessr_session.rounds_played(session) == 0:
@@ -644,10 +646,13 @@ class SpotGuessrGuessView(SpotGuessrSessionScopedView):
 
         try:
             guess, bonus_tiers, rating_change = spotguessr_session.submit_guess(round_, request.user.profile, guess_point, data.get("guessed_date"))
-        except spotguessr_session.SpotGuessrError as exc:
-            # Covers the duplicate guess (the unique constraint, caught under
-            # the row lock) and "you never joined this session".
-            return Response({"error": exc.safe_message}, status=400)
+        except spotguessr_session.ParticipantNotJoinedError as exc:
+            logger.info("external API guess in session %s round %s by %s rejected: %s", session_id, round_id, request.user.profile.pk, exc)
+            return Response({"error": "You must join this session before submitting a guess."}, status=400)
+        except spotguessr_session.DuplicateGuessError as exc:
+            # The unique constraint, caught under the row lock.
+            logger.info("external API guess in session %s round %s by %s rejected: %s", session_id, round_id, request.user.profile.pk, exc)
+            return Response({"error": "This profile has already guessed this round."}, status=400)
 
         round_.refresh_from_db()
         return Response(build_reveal_payload(round_, guess, list(bonus_tiers), rating_change))

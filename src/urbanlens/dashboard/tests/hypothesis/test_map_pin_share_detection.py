@@ -22,7 +22,6 @@ from urbanlens.dashboard.services.sharing.map_pin_share_detection import (
     viewport_bounds,
 )
 from urbanlens.dashboard.tests.hypothesis.strategies import (
-    coord_pair_float,
     lat_float,
     lon_float,
     two_distant_coord_pairs,

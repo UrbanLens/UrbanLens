@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 
-from django.db.models import CASCADE, CharField, ForeignKey, Index, IntegerField, JSONField
+from django.db.models import CASCADE, CharField, ForeignKey, IntegerField, JSONField
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract

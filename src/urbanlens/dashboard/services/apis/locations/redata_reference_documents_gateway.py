@@ -1,10 +1,11 @@
-"""REData-backed archival/reference-document media providers for the pin detail
-page's Media gallery (Smithsonian Open Access, Library of Congress, Internet
-Archive).
+"""REData-backed archival/reference-document clients: the Media gallery's four
+name-searched archives (Smithsonian Open Access, Library of Congress, Internet
+Archive, Digital Commonwealth) and the two geosearchable providers
+(Wikipedia, Wikidata) behind a pin-detail info panel.
 
 REData's ``GET /api/v1/reference-documents/search/`` (``../REData/docs/api-reference.md``,
-"GET /reference-documents/search/ - archival material by name") now fronts all
-three archives by name search - ``internet_archive`` (worldwide),
+"GET /reference-documents/search/ - archival material by name") fronts the
+four name-only archives - ``internet_archive`` (worldwide),
 ``library_of_congress`` (USA, keyless) and ``smithsonian`` (USA, needs
 ``RD_SMITHSONIAN_API_KEY`` - on REData's side now, not this project's) and
 ``digital_commonwealth`` (Massachusetts, keyless).
@@ -33,6 +34,14 @@ generic street-type word or a bare "United States" coincidentally matched
 unrelated nationwide records under that archive's word-independent relevance
 ranking, a problem REData's own quoting can't fix since it never sees the
 address/name split.
+
+``GET /api/v1/reference-documents/`` (``api-reference.md``, "GET /reference-documents/ -
+archival material about a coordinate") is the other half: Wikipedia and Wikidata both
+maintain a real geosearch index, so unlike the four archives above they answer a coordinate
+directly, no name needed, through the shared near-a-coordinate contract
+(:meth:`~RedataReferenceDocumentsGateway.get_reference_documents`). Wikipedia carries prose
+(an intro extract); Wikidata carries structured claims (what a thing *is*, when it was built,
+who designed it, its heritage status) - see that method's own docstring for the field mapping.
 """
 
 from __future__ import annotations
@@ -41,7 +50,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope, RedataLocationContextGateway
 from urbanlens.dashboard.services.geo.geo_boundary import USA, state_boundary
 
 if TYPE_CHECKING:
@@ -50,17 +59,21 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 
 _SEARCH_PATH = "/api/v1/reference-documents/search/"
+_NEAR_PATH = "/api/v1/reference-documents/"
 
 
 @dataclass(slots=True, kw_only=True)
 class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
-    """REST client for REData's ``/api/v1/reference-documents/search/`` endpoint.
+    """REST client for REData's two ``/api/v1/reference-documents/`` endpoints.
 
-    Not a near-a-coordinate lookup - ``lat``/``lng`` are optional region hints,
-    there's no ``radius_meters``, and the required parameter is ``q`` - so this
-    builds its own params dict and calls :meth:`_get_envelope` directly rather
-    than going through :meth:`~RedataLocationContextGateway.near_point`, whose
-    signature assumes a required coordinate.
+    :meth:`search` (``.../search/``) is not a near-a-coordinate lookup - ``lat``/``lng``
+    are optional region hints, there's no ``radius_meters``, and the required parameter is
+    ``q`` - so it builds its own params dict and calls :meth:`_get_envelope` directly.
+    :meth:`get_reference_documents` (the bare path) fits the shared near-a-coordinate
+    contract exactly and is a thin wrapper over
+    :meth:`~RedataLocationContextGateway.near_point`. Both share this class's
+    ``service_key`` (and so its rate-limit budget) since they're the same REData endpoint
+    family with the same outbound cost profile.
     """
 
     service_key: ClassVar[str] = "redata_reference_documents"
@@ -108,6 +121,65 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
             params["force_refresh"] = "true"
         envelope = self._get_envelope(_SEARCH_PATH, params)
         return envelope.results
+
+    def get_reference_documents(
+        self,
+        latitude: float,
+        longitude: float,
+        *,
+        radius_meters: float | None = None,
+        provider: str | list[str] | None = None,
+        force_refresh: bool = False,
+    ) -> LocationContextEnvelope:
+        """Archival/encyclopaedic material about a coordinate.
+
+        Two providers, both with a real geosearch index (unlike :meth:`search`'s four
+        name-only archives) - see ``../REData/docs/api-reference.md``, "GET
+        /reference-documents/ - archival material about a coordinate":
+
+        - ``wikipedia`` - articles, each with an intro extract (prose someone chose to
+          write).
+        - ``wikidata`` - structured claims about the same kind of entities: what a thing
+          *is* (``attributes.instance_of``), when it was built (``date_text``), who
+          designed it (``creator``), its architectural style
+          (``attributes.architectural_style``) and heritage designation
+          (``attributes.heritage_designation``). Frequently the more useful half for
+          property research, per REData's own docs.
+
+        Wikidata's public query service throttles hard during its own incidents - that
+        comes back as REData's own ``rate_limited`` (503), surfaced the same way any other
+        provider outage in this shared contract is: a ``providers`` entry plus
+        ``complete=False``, never a silent empty result. Its claim enrichment is a second,
+        separate query that can degrade on its own: a Wikidata row can come back
+        labelled (``title``/``description``/``url``) but with blank ``date_text``/
+        ``creator`` and no matching ``attributes`` keys - a normal 200 from REData's point
+        of view, not something this method detects or needs to. Callers render whatever
+        claim fields are present and skip the rest, rather than treating a partial claim
+        set as a failure.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_meters: Search radius in meters. REData defaults to 1 km and caps at
+                10 km.
+            provider: Restrict to ``"wikipedia"``, ``"wikidata"``, or both (a list) -
+                omit to ask both.
+            force_refresh: Bypass REData's cache and re-query live.
+
+        Returns:
+            The parsed envelope. Each ``results`` entry is one of REData's
+            ``ReferenceDocumentSerializer`` rows: ``provider``, ``kind``, ``title``,
+            ``description`` (Wikipedia's intro extract; a short gloss for Wikidata),
+            ``url``, ``thumbnail_url``, ``date_text``, ``creator``, ``license``,
+            ``latitude``/``longitude``, ``distance_meters`` and ``attributes``
+            (provider-specific - a Wikidata row's carries its raw claims).
+
+        Raises:
+            LocationContextUnavailableError: A total blackout (every source covering the
+                coordinate failed), a REData-side validation error, or the request itself
+                failed outright.
+        """
+        return self.near_point(_NEAR_PATH, latitude, longitude, radius_meters=radius_meters, provider=provider, force_refresh=force_refresh)
 
 
 @dataclass(slots=True, kw_only=True)

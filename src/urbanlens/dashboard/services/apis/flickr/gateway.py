@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from requests_oauthlib import OAuth1
 
-from urbanlens.dashboard.services.apis.flickr.oauth import FlickrNotConfiguredError, _consumer_credentials
+from urbanlens.dashboard.services.apis.flickr.oauth import _consumer_credentials
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 
 if TYPE_CHECKING:

@@ -230,6 +230,38 @@ class WikiEditDescriptionLengthTests(TestCase):
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.description, text)
 
+    def test_an_invalid_security_value_is_rejected_rather_than_dropped(self) -> None:
+        """This view used to skip the field and answer `{"ok": true}`.
+
+        The dialog already renders `resp.error` on a non-ok response and keeps
+        the user's values in place, so there was never a UI cost to telling
+        them - only a report of a write that had not happened.
+        """
+        before = self.wiki.cameras
+
+        resp = self.client.post(
+            reverse("location.wiki.edit", args=[self.location.slug]),
+            data=json.dumps({"cameras": "not-a-level"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["error"], "That edit couldn't be saved.")
+        self.wiki.refresh_from_db()
+        self.assertEqual(self.wiki.cameras, before)
+
+    def test_an_unparseable_date_is_rejected_rather_than_dropped(self) -> None:
+        resp = self.client.post(
+            reverse("location.wiki.edit", args=[self.location.slug]),
+            data=json.dumps({"date_abandoned": "last tuesday"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["error"], "That edit couldn't be saved.")
+        self.wiki.refresh_from_db()
+        self.assertIsNone(self.wiki.date_abandoned)
+
 
 class PinCommentTextLengthTests(TestCase):
     """POST /map/pin/<slug>/comments/ - must reject oversized comment text."""

@@ -22,7 +22,8 @@ from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import safe_int
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
-from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
+from urbanlens.dashboard.services.media.quota_rewards import revoke_community_bonuses_on_wiki_delete
+from urbanlens.dashboard.services.pins.pin_creation import DuplicateCoordinatesError, resolve_child_pin_location
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -66,14 +67,12 @@ def _schedule_classification(kind: str, pk: int) -> None:
 
 
 class ChildWikiLocationError(ValueError):
-    """A child wiki can't be placed at the requested point.
+    """A child wiki can't be placed at the requested point - it's already taken.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a catch site should author its
+    own user-facing text rather than relaying it, so a future raise here can't
+    smuggle unreviewed text into a response.
     """
-
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
 
 
 def _location_for_child_wiki(latitude, longitude, *, exclude_wiki: Wiki | None = None) -> Location:
@@ -111,7 +110,7 @@ def _location_for_child_wiki(latitude, longitude, *, exclude_wiki: Wiki | None =
         return location
     if exclude_wiki is not None and existing_wiki.pk == exclude_wiki.pk:
         return location
-    raise ChildWikiLocationError("There is already a wiki marker at these exact coordinates. Place this one slightly apart.")
+    raise ChildWikiLocationError(f"wiki {existing_wiki.pk} already occupies location {location.pk} ({latitude}, {longitude})")
 
 
 class DetailPinPanelView(LoginRequiredMixin, View):
@@ -158,8 +157,9 @@ class DetailPinPanelView(LoginRequiredMixin, View):
 
         try:
             location = resolve_child_pin_location(parent.profile, lat, lon)
-        except PinCreationError as exc:
-            return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
+        except DuplicateCoordinatesError as exc:
+            logger.info("detail pin location rejected: %s", exc)
+            return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
 
         detail_name = body.get("name") or None
         name_error = column_length_error(Pin, "name", detail_name, "Name")
@@ -214,8 +214,9 @@ class DetailPinEditView(LoginRequiredMixin, View):
         if moved := bool(new_latitude and new_longitude):
             try:
                 new_location = resolve_child_pin_location(detail_pin.profile, new_latitude, new_longitude, exclude_pin=detail_pin)
-            except PinCreationError as exc:
-                return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
+            except DuplicateCoordinatesError as exc:
+                logger.info("detail pin move rejected: %s", exc)
+                return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
 
         for field, value in {
             "name": body.get("name") or None,
@@ -402,7 +403,8 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         try:
             child_location = _location_for_child_wiki(lat, lon)
         except ChildWikiLocationError as exc:
-            return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
+            logger.info("child wiki location rejected: %s", exc)
+            return JsonResponse({"ok": False, "error": "There is already a wiki marker at these exact coordinates. Place this one slightly apart."}, status=400)
 
         # The real row's name for the fallback: `wiki` may be a concealed
         # projection, and its name is the automatic placeholder this viewer was
@@ -476,7 +478,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             try:
                 new_location = _location_for_child_wiki(new_latitude, new_longitude, exclude_wiki=child_wiki)
             except ChildWikiLocationError as exc:
-                return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
+                logger.info("child wiki move rejected: %s", exc)
+                return JsonResponse({"ok": False, "error": "There is already a wiki marker at these exact coordinates. Move it slightly apart."}, status=400)
 
         # Style/content fields update silently (no WikiEdit) - same reasoning
         # as personal detail pins: these autosave on every panel change, and a
@@ -555,6 +558,11 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             # child wiki itself already cascades to every descendant captured in `subtree`
             # above in one bulk operation - no need to delete each subtree member individually.
             stash_for_undo(WIKI_MODEL_LABEL, subtree, profile)
+            # After the stash (which records what to hand back on undo) and
+            # before the delete (which nulls the FK this reads). Only the
+            # deleter's own bonuses go - the function's docstring has why
+            # nobody else's may.
+            revoke_community_bonuses_on_wiki_delete([w.pk for w in subtree], deleted_by=profile)
             Wiki.objects.filter(pk=child_wiki.pk).delete()
 
         WikiEdit.objects.create(

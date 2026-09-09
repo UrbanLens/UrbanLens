@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from itertools import chain
+from datetime import datetime
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -14,7 +13,6 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import validate_email
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.forms.profile_form import (
@@ -35,9 +33,10 @@ from urbanlens.dashboard.models.profile.meta import (
     PhotoTakingPreference,
     PhotoUsagePreference,
 )
-from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -90,12 +89,15 @@ class ViewProfileView(LoginRequiredMixin, View):
         else:
             profile_photos = Image.objects.none()
 
+        from urbanlens.dashboard.models.achievements.model import UserAchievement
+
         context = {
             "profile": profile,
             "social_links": get_profile_links(profile),
             "contact_info": contact_info,
             "can_view_contact": can_view_contact,
             "profile_photos": profile_photos,
+            "has_achievements": UserAchievement.objects.for_profile(profile).exists(),
         }
         if request.user == profile.user:
             from urbanlens.dashboard.services.profile.profile_preview import preview_modes
@@ -111,12 +113,32 @@ class ViewProfileView(LoginRequiredMixin, View):
         if avatar_file:
             from django.contrib import messages
 
-            from urbanlens.dashboard.services.profile.avatar import AvatarUploadError, set_profile_avatar
+            from urbanlens.dashboard.services.profile.avatar import (
+                AvatarMalwareDetectedError,
+                AvatarScanUnavailableError,
+                AvatarTooLargeError,
+                AvatarUnsupportedFormatError,
+                AvatarUploadError,
+                set_profile_avatar,
+            )
 
             try:
                 set_profile_avatar(profile, avatar_file)
+            except AvatarTooLargeError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That file is too large. Please upload a smaller image.")
+            except AvatarUnsupportedFormatError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That file isn't a supported image format. Please upload a JPEG, PNG, GIF, WebP, HEIC, BMP, TIFF, or AVIF file.")
+            except AvatarMalwareDetectedError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That file failed a security scan and wasn't uploaded.")
+            except AvatarScanUnavailableError as exc:
+                logger.warning("avatar upload scan unavailable for %s: %s", profile.pk, exc)
+                messages.error(request, "Our antivirus scanner is temporarily unavailable. Please try again shortly.")
             except AvatarUploadError as exc:
-                messages.error(request, exc.safe_message)
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                messages.error(request, "That avatar couldn't be uploaded.")
         return redirect("profile.view")
 
     def _can_view_profile(self, request: HttpRequest, profile: Profile) -> bool:
@@ -451,7 +473,14 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if field == "avatar":
-            from urbanlens.dashboard.services.profile.avatar import AvatarUploadError, set_profile_avatar
+            from urbanlens.dashboard.services.profile.avatar import (
+                AvatarMalwareDetectedError,
+                AvatarScanUnavailableError,
+                AvatarTooLargeError,
+                AvatarUnsupportedFormatError,
+                AvatarUploadError,
+                set_profile_avatar,
+            )
 
             file = request.FILES.get("file_value")
             if not file:
@@ -462,8 +491,21 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             # the hero card's form takes.
             try:
                 set_profile_avatar(profile, file)
+            except AvatarTooLargeError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That file is too large. Please upload a smaller image."}, status=413)
+            except AvatarUnsupportedFormatError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That file isn't a supported image format. Please upload a JPEG, PNG, GIF, WebP, HEIC, BMP, TIFF, or AVIF file."}, status=400)
+            except AvatarMalwareDetectedError as exc:
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That file failed a security scan and wasn't uploaded."}, status=422)
+            except AvatarScanUnavailableError as exc:
+                logger.warning("avatar upload scan unavailable for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "Our antivirus scanner is temporarily unavailable. Please try again shortly."}, status=503)
             except AvatarUploadError as exc:
-                return JsonResponse({"error": exc.safe_message}, status=exc.status_code)
+                logger.info("avatar upload rejected for %s: %s", profile.pk, exc)
+                return JsonResponse({"error": "That avatar couldn't be uploaded."}, status=400)
             return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
 
         if field == "avatar_gravatar":
@@ -586,6 +628,7 @@ class EditProfileView(LoginRequiredMixin, View):
     ) -> dict:
         import hashlib
 
+        from urbanlens.dashboard.models.achievements.model import UserAchievement
         from urbanlens.dashboard.services.profile.avatar import AvatarService
         from urbanlens.dashboard.services.profile.profile_preview import preview_modes
         from urbanlens.dashboard.services.profile.social_links import URL_INPUT_PLATFORM_LABELS, get_profile_links
@@ -624,6 +667,7 @@ class EditProfileView(LoginRequiredMixin, View):
             "gravatar_preview_url": gravatar_preview_url,
             "emoji_options": AvatarService.random_options(4),
             "secondary_emails": profile.secondary_emails.all(),
+            "has_achievements": UserAchievement.objects.for_profile(profile).exists(),
         }
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -788,13 +832,12 @@ class EditProfileView(LoginRequiredMixin, View):
         return self._emails_response(request, profile, email_error=email_error)
 
     def _remove_email(self, request: HttpRequest, profile: Profile) -> HttpResponse:
-        email_id = request.POST.get("email_id", "")
-        profile.secondary_emails.filter(pk=email_id).delete()
+        profile.secondary_emails.filter(pk=safe_int_or_none(request.POST.get("email_id"))).delete()
         return self._emails_response(request, profile)
 
     def _resend_email_verification(self, request: HttpRequest, profile: Profile) -> HttpResponse:
         email_status = ""
-        secondary_email = profile.secondary_emails.filter(pk=request.POST.get("email_id", ""), is_verified=False).first()
+        secondary_email = profile.secondary_emails.filter(pk=safe_int_or_none(request.POST.get("email_id")), is_verified=False).first()
         if secondary_email:
             from urbanlens.dashboard.models.email_log.model import EmailType
             from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, verification_recently_sent
@@ -1045,7 +1088,8 @@ class ProfileLabelToggleView(LoginRequiredMixin, View):
     """Toggle a user-type label on another profile (HTMX - re-renders the label chips)."""
 
     def post(self, request: HttpRequest, profile_slug: UUID, label_id: int) -> HttpResponse:
-        from urbanlens.dashboard.models.labels.model import KIND_USER, Label
+        from urbanlens.dashboard.models.labels.meta import KIND_USER
+        from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
 
         subject = get_object_or_404(Profile, slug=profile_slug)
@@ -1099,9 +1143,10 @@ class ProfileTrustView(LoginRequiredMixin, View):
         author = _authenticated_profile(request)
 
         try:
-            require_distinct(author, subject, "Cannot rate your own profile.")
+            require_distinct(author, subject, "self-rating attempt")
         except SelfAnnotationError as exc:
-            return HttpResponse(exc.safe_message, status=400)
+            logger.info("trust rating rejected: %s", exc)
+            return HttpResponse("You cannot rate your own profile.", status=400)
 
         try:
             rating = int(request.POST.get("rating", 0))
@@ -1135,15 +1180,24 @@ class ProfileNicknameView(LoginRequiredMixin, View):
         Returns:
             The re-rendered annotation partial, or 400 for a self-nickname.
         """
-        from urbanlens.dashboard.services.profile.profile_annotations import AnnotationError, SelfAnnotationError, clear_nickname, require_distinct, set_nickname
+        from urbanlens.dashboard.services.profile.profile_annotations import (
+            MAX_PROFILE_NICKNAME_LENGTH,
+            AnnotationError,
+            NicknameTooLongError,
+            SelfAnnotationError,
+            clear_nickname,
+            require_distinct,
+            set_nickname,
+        )
 
         subject = get_object_or_404(Profile, slug=profile_slug)
         author = _authenticated_profile(request)
 
         try:
-            require_distinct(author, subject, "Cannot nickname your own profile.")
+            require_distinct(author, subject, "self-nickname attempt")
         except SelfAnnotationError as exc:
-            return HttpResponse(exc.safe_message, status=400)
+            logger.info("nickname rejected: %s", exc)
+            return HttpResponse("You cannot set a nickname for your own profile.", status=400)
 
         nickname = request.POST.get("nickname", "").strip()
         if not nickname:
@@ -1152,8 +1206,12 @@ class ProfileNicknameView(LoginRequiredMixin, View):
         else:
             try:
                 set_nickname(author, subject, nickname)
+            except NicknameTooLongError as exc:
+                logger.info("nickname rejected: %s", exc)
+                return HttpResponse(f"Nickname must be {MAX_PROFILE_NICKNAME_LENGTH} characters or fewer.", status=400)
             except AnnotationError as exc:
-                return HttpResponse(exc.safe_message, status=400)
+                logger.info("nickname rejected: %s", exc)
+                return HttpResponse("That nickname is invalid.", status=400)
 
         return _render_profile_annotation_partial(request, author, subject)
 
@@ -1175,7 +1233,7 @@ def _render_profile_annotation_partial(
     """
     from urbanlens.dashboard.controllers.custom_fields import rows_for_target
     from urbanlens.dashboard.models.custom_fields.model import CustomFieldEntity
-    from urbanlens.dashboard.models.labels.model import KIND_USER, Label
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
     from urbanlens.dashboard.models.profile.nickname import ProfileNickname
     from urbanlens.dashboard.models.profile.note import ProfileNote

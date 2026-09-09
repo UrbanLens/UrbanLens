@@ -4,19 +4,18 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import TYPE_CHECKING, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q, QuerySet
-from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, CommentValidationError, comment_is_visible, toggle_reaction, top_level_comment_queryset, visible_comment_count, visible_comment_tree
+from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, UnsupportedReactionEmojiError, comment_is_visible, toggle_reaction, top_level_comment_queryset, visible_comment_count, visible_comment_tree
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import (
@@ -27,7 +26,6 @@ from urbanlens.dashboard.services.map.map_snapshot import (
     parse_map_data as _parse_map_data,
 )
 from urbanlens.dashboard.services.notifications.comment_notifications import notify_reply
-from urbanlens.dashboard.services.notifications.mentions import render_comment_text, viewer_pinned_uuids
 from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
 from urbanlens.dashboard.services.undo.handlers.markup_map import MODEL_LABEL as MARKUP_MAP_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -548,6 +546,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
     """DELETE /location/<slug>/wiki/comments/<int>/delete/"""
 
     def delete(self, request, location_slug, comment_id):
+        from urbanlens.dashboard.services.reputation.scoring import retract_events_for_target
         from urbanlens.dashboard.services.wiki.concealment import concealment_active
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
@@ -555,6 +554,12 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
+        # Owner-only, per the guard above, so this is always the contributor
+        # ending their own contribution - the same case, and the same treatment,
+        # as withdrawing a photo from a wiki (see detach_image_from_wiki). A
+        # removal by anyone else would be the weighted case instead; there is no
+        # such path here today, which is why this retracts outright.
+        retract_events_for_target(comment, reason="contribution_withdrawn")
         comment.delete()
         _discard_comment_image(comment)
         if markup_map is not None:
@@ -616,7 +621,8 @@ class CommentReactionView(LoginRequiredMixin, View):
         # untouched, and only the panel's copy happened to already be correct.
         try:
             toggle_reaction(profile, comment, request.POST.get("emoji", ""))
-        except CommentValidationError:
+        except UnsupportedReactionEmojiError as exc:
+            logger.info("comment reaction rejected: %s", exc)
             return HttpResponse("Invalid emoji.", status=400)
         return _render_reaction_row(request, comment, profile)
 
@@ -639,9 +645,13 @@ class TripCommentReactionView(LoginRequiredMixin, View):
             already = Reaction.objects.existing(profile, emoji, trip_comment=comment) is not None if emoji in ALLOWED_COMMENT_EMOJIS else False
             set_comment_reaction(comment, profile, emoji, reacted=not already)
         except TripNotFoundError as exc:
-            raise Http404(exc.message) from exc
+            logger.info("trip comment reaction: not found: %s", exc)
+            raise Http404("Comment not found.") from exc
         except TripError as exc:
-            return HttpResponse(exc.message, status=403 if isinstance(exc, TripPermissionError) else 400)
+            logger.info("trip comment reaction rejected: %s", exc)
+            if isinstance(exc, TripPermissionError):
+                return HttpResponse("You don't have permission to react to that comment.", status=403)
+            return HttpResponse("Couldn't react to that comment.", status=400)
         return _render_trip_reaction_row(request, comment, profile)
 
 

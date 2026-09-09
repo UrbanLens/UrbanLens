@@ -10,9 +10,8 @@ filter methods, verifying inclusion/exclusion semantics.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-import unittest
 
 from django.contrib.auth.models import User
 from model_bakery import baker
@@ -23,13 +22,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.comments.queryset import CommentQuerySet
-from urbanlens.dashboard.models.markup.queryset import PinMarkupQuerySet
 from urbanlens.dashboard.models.notifications.meta.status import Status
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.social_link.queryset import SocialLinkQuerySet as SocialLinkQuerySet
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.models.visits.queryset import VisitQuerySet
 from urbanlens.dashboard.tests.hypothesis.strategies import friendship_status, nonempty_name
 
 # DB-backed @given tests below never touch self.client - only ORM/queryset

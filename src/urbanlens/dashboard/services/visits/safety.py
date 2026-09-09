@@ -58,12 +58,69 @@ logger = logging.getLogger(__name__)
 class SafetyValidationError(ValueError):
     """A check-in action could not be applied as submitted.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    The message is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying it - that keeps
+    a future raise site here from being able to smuggle unreviewed text into
+    a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class MaxPartnersReachedError(SafetyValidationError):
+    """The site's ``max_safety_checkin_partners`` cap is already reached for this check-in."""
+
+
+class PartnerNotFoundError(SafetyValidationError):
+    """No account matches the given username, or the inviter is blocked by that account.
+
+    Deliberately one condition covering two causes, not two: whether the
+    invitee doesn't exist or has blocked the inviter must answer identically
+    everywhere this is shown, or confirming "blocked" would itself be the
+    enumeration leak (see ``invite_checkin_partner``).
+    """
+
+
+class CannotInviteSelfError(SafetyValidationError):
+    """The inviter tried to add themselves as a partner on their own check-in."""
+
+
+class PartnerAlreadyInvitedError(SafetyValidationError):
+    """The named profile already holds an invited or accepted partner row on this check-in.
+
+    Raised both from the upfront ``.exists()`` check and from the
+    ``IntegrityError`` fallback that catches the same condition losing a race
+    against a duplicate submission - one condition, reached two ways.
+    """
+
+
+class LiveLocationUnavailableError(SafetyValidationError):
+    """Live location sharing is off for this check-in, or it has already concluded.
+
+    One message deliberately covers both underlying states: there is no
+    caller-facing distinction between them, since either way there is no live
+    position to accept right now.
+    """
+
+
+class ArchivalNotResolvedError(SafetyValidationError):
+    """``schedule_checkin_archival`` was called before ``checkin.resolved_at`` was set.
+
+    Every real caller sets ``resolved_at`` immediately beforehand, so reaching
+    this is a bug in the caller, not a normal "not resolved yet" state - see
+    ``schedule_checkin_archival``.
+    """
+
+
+class ActiveCheckinExistsError(SafetyValidationError):
+    """The profile already has an active (unresolved) check-in in this scope."""
+
+
+class EmptyMessageError(SafetyValidationError):
+    """A chat message body was blank after stripping whitespace."""
+
+
+class MessageTooLongError(SafetyValidationError):
+    """A chat message body exceeded ``MAX_CHAT_MESSAGE_LENGTH``."""
 
 
 # (contact_profile, email, name) - contact_profile wins when both are given.
@@ -679,13 +736,16 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
         The newly created (INVITED) SafetyCheckinPartner row.
 
     Raises:
-        ValueError: The site's ``max_safety_checkin_partners`` cap is already
-            reached (checked before the username is resolved, so check-in
-            capacity can never be used to infer whether an arbitrary username
-            exists); or, once resolved: an unknown username, a block between
-            the two profiles (answers identically to an unknown username -
-            see below), inviting yourself, or an existing invite/acceptance
-            for that profile.
+        MaxPartnersReachedError: The site's ``max_safety_checkin_partners`` cap
+            is already reached (checked before the username is resolved, so
+            check-in capacity can never be used to infer whether an arbitrary
+            username exists).
+        PartnerNotFoundError: The username doesn't resolve to an account, or
+            the inviter is blocked by that account (answers identically to an
+            unknown username - see below).
+        CannotInviteSelfError: The invitee is the check-in's own owner.
+        PartnerAlreadyInvitedError: The named profile already has an
+            invited or accepted partner row on this check-in.
     """
     from django.contrib.auth.models import User
 
@@ -698,24 +758,24 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
     # with known accounts once.
     max_partners = SiteSettings.get_current().max_safety_checkin_partners
     if max_partners > 0 and checkin.partners.count() >= max_partners:
-        raise SafetyValidationError(f"A check-in can have at most {max_partners} partners.")
+        raise MaxPartnersReachedError(f"invite_checkin_partner: checkin {checkin.pk} is at its max_safety_checkin_partners cap ({max_partners}); inviter {inviter.pk}.")
 
     try:
         user = User.objects.get(username__iexact=username)
     except User.DoesNotExist:
-        raise SafetyValidationError(f'No user found with username "{username}".') from None
+        raise PartnerNotFoundError(f'invite_checkin_partner: no user found with username "{username}" (checkin {checkin.pk}, inviter {inviter.pk}).') from None
     invitee, _ = Profile.objects.get_or_create(user=user)
 
     if invitee.pk == checkin.profile_id:
-        raise SafetyValidationError("You can't add yourself as a partner on your own check-in.")
+        raise CannotInviteSelfError(f"invite_checkin_partner: profile {inviter.pk} tried to invite themselves on checkin {checkin.pk}.")
     # Answers exactly like an unknown username (above) rather than a
     # block-specific message: confirming "this account exists and is
     # blocking you" is itself the same enumeration leak as confirming any
     # other account's existence.
     if Profile.are_blocked(inviter, invitee):
-        raise SafetyValidationError(f'No user found with username "{username}".')
+        raise PartnerNotFoundError(f"invite_checkin_partner: inviter {inviter.pk} is blocked by would-be invitee {invitee.pk} (checkin {checkin.pk}); answering as unknown-username to avoid an enumeration leak.")
     if checkin.partners.filter(profile=invitee).exists():
-        raise SafetyValidationError(f"{invitee.username} has already been invited.")
+        raise PartnerAlreadyInvitedError(f"invite_checkin_partner: profile {invitee.pk} already has a partner row on checkin {checkin.pk}.")
 
     try:
         partner = SafetyCheckinPartner.objects.create(checkin=checkin, profile=invitee, invited_by=inviter)
@@ -723,7 +783,7 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
         # The .exists() check above isn't atomic against the unique_together
         # constraint - a double-submitted invite can race past it and only get
         # caught here. Same outcome as losing the .exists() check normally.
-        raise SafetyValidationError(f"{invitee.username} has already been invited.") from None
+        raise PartnerAlreadyInvitedError(f"invite_checkin_partner: IntegrityError race - profile {invitee.pk} already has a partner row on checkin {checkin.pk}.") from None
     _notify_checkin_partner_invite(partner)
     return partner
 
@@ -930,8 +990,9 @@ def update_live_location(checkin: SafetyCheckin, *, latitude: float, longitude: 
         accuracy: Reported accuracy in meters, if the browser/device provided one.
 
     Raises:
-        ValueError: If sharing isn't enabled, or the check-in has already resolved -
-            there's no one left to broadcast a live position to either way.
+        LiveLocationUnavailableError: If sharing isn't enabled, or the check-in
+            has already resolved - there's no one left to broadcast a live
+            position to either way.
     """
     updated_at = timezone.now()
     # Conditional UPDATE (not read-then-write): re-checks sharing-enabled/unresolved
@@ -945,7 +1006,7 @@ def update_live_location(checkin: SafetyCheckin, *, latitude: float, longitude: 
         .update(live_latitude=latitude, live_longitude=longitude, live_location_accuracy=accuracy, live_location_updated_at=updated_at, updated=updated_at)
     )
     if not updated:
-        raise SafetyValidationError("Live location sharing is not enabled for this check-in, or it has already concluded.")
+        raise LiveLocationUnavailableError(f"update_live_location: checkin {checkin.pk} has sharing disabled or is already resolved - 0 rows matched the conditional update.")
 
     checkin.live_latitude = latitude
     checkin.live_longitude = longitude
@@ -995,13 +1056,14 @@ def schedule_checkin_archival(checkin: SafetyCheckin) -> None:
         checkin: The just-resolved check-in. ``checkin.resolved_at`` must already be set.
 
     Raises:
-        ValueError: If ``checkin.resolved_at`` is unset - every caller sets it
-            immediately before calling this, so reaching here without it set is
-            a bug in the caller, not a normal "not resolved yet" state to handle quietly.
+        ArchivalNotResolvedError: If ``checkin.resolved_at`` is unset - every
+            caller sets it immediately before calling this, so reaching here
+            without it set is a bug in the caller, not a normal "not resolved
+            yet" state to handle quietly.
     """
     resolved_at = checkin.resolved_at
     if resolved_at is None:
-        raise SafetyValidationError(f"Cannot schedule archival for checkin {checkin.pk}: resolved_at is not set.")
+        raise ArchivalNotResolvedError(f"schedule_checkin_archival: checkin {checkin.pk} called with resolved_at unset - this is a caller bug, not a normal unresolved state.")
 
     other_viewers_exist = checkin.partners.filter(status=SafetyCheckinPartnerStatus.ACCEPTED).exists() or checkin.contacts.exists()
     archive_at = resolved_at + ARCHIVE_VIEWER_GRACE_PERIOD if other_viewers_exist else resolved_at
@@ -1398,26 +1460,39 @@ class CheckinEditOutcome:
 class CheckinArchivedError(ValueError):
     """Raised when a write targets a check-in that archival has closed to writes.
 
-    Covers both halves of the archival boundary, which are deliberately at
-    slightly different points: :func:`apply_checkin_edit` refuses as soon as
-    archival is *scheduled* (the grace window is exactly when a retrying client
-    is most likely to autosave plaintext back onto a row about to be scrubbed),
-    while :func:`create_chat_message` refuses once the encrypted archive
-    actually exists (the window itself is there so participants can post a final
-    message).
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below and author its own user-facing
+    text, rather than relaying ``message`` - that keeps a future raise site
+    here from being able to smuggle unreviewed text into a response just by
+    adding a new ``raise``.
 
     Distinct from the plain ``ValueError`` other lifecycle helpers raise so a
-    caller can map it to a 409 Conflict rather than a generic 400 - the request
-    was well-formed, the check-in's state is simply past the point of writing.
-    Subclasses ``ValueError`` so existing callers that only catch that keep
-    behaving exactly as they did.
-
-    ``safe_message`` is safe to surface directly to the caller.
+    caller can map it to a 409 Conflict rather than a generic 400 - the
+    request was well-formed, the check-in's state is simply past the point of
+    writing. Subclasses ``ValueError`` directly, not :class:`SafetyValidationError`,
+    so existing callers that only catch ``ValueError`` keep behaving exactly as
+    they did, while a bare ``except SafetyValidationError`` does not
+    accidentally swallow this.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class CheckinEditArchivedError(CheckinArchivedError):
+    """:func:`apply_checkin_edit` refused a write because archival is already scheduled.
+
+    Refuses as soon as archival is *scheduled*, not once it has actually run -
+    the grace window between the two is exactly when a retrying client is most
+    likely to autosave plaintext back onto a row about to be scrubbed.
+    """
+
+
+class CheckinMessagingArchivedError(CheckinArchivedError):
+    """:func:`create_chat_message` refused a send because the check-in is archived.
+
+    Refuses once the encrypted archive actually exists - later than
+    :class:`CheckinEditArchivedError` - since the grace window between
+    resolution and archival exists precisely so participants can still post a
+    final message during it.
+    """
 
 
 def apply_checkin_edit(
@@ -1479,7 +1554,7 @@ def apply_checkin_edit(
         A :class:`CheckinEditOutcome` describing warnings and what changed.
 
     Raises:
-        CheckinArchivedError: If the check-in is already scheduled for archival.
+        CheckinEditArchivedError: If the check-in is already scheduled for archival.
     """
     warnings: list[str] = []
     plan_changed = False
@@ -1508,7 +1583,7 @@ def apply_checkin_edit(
         # grace window between scheduling and archival is exactly when a
         # slow/retried client is most likely to autosave into the gap.
         if locked.archive_scheduled_at is not None:
-            raise CheckinArchivedError("This check-in has been archived and can no longer be edited.")
+            raise CheckinEditArchivedError(f"apply_checkin_edit: checkin {locked.pk} refused - archive_scheduled_at={locked.archive_scheduled_at!r} (archival already scheduled).")
 
         update_fields: list[str] = ["updated"]
 
@@ -1848,12 +1923,12 @@ def create_checkin(
         The newly created SafetyCheckin.
 
     Raises:
-        ValueError: If the profile already has an active check-in in this
-            scope - only one may be active per (profile, trip) at a time
-            (see ``get_active_checkin``).
+        ActiveCheckinExistsError: If the profile already has an active
+            check-in in this scope - only one may be active per
+            (profile, trip) at a time (see ``get_active_checkin``).
     """
     if get_active_checkin(profile, trip=trip) is not None:
-        raise SafetyValidationError("You already have an active check-in. Check in or cancel it before starting a new one.")
+        raise ActiveCheckinExistsError(f"create_checkin: profile {profile.pk} already has an active check-in in trip scope {trip.pk if trip else None}.")
 
     checkin = SafetyCheckin.objects.create(
         profile=profile,
@@ -2315,26 +2390,42 @@ def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, c
         The newly created SafetyCheckinMessage.
 
     Raises:
-        CheckinArchivedError: If the check-in has already been archived. A
-            ``ValueError`` subclass, so the WebSocket consumer and the no-JS
-            HTTP fallback keep catching it exactly as before; it is raised
-            distinctly so a REST caller can answer 409 Conflict (the request was
-            well-formed, the check-in is simply past the point of writing)
-            rather than folding it into the 400 a blank body earns.
-        ValueError: If ``body`` is blank or exceeds ``MAX_CHAT_MESSAGE_LENGTH``.
-            Callers catch this and surface it to the sender - a safety check-in
-            chat failing silently is worse than most other features failing
-            silently.
+        CheckinMessagingArchivedError: If the check-in has already been
+            archived. A ``ValueError`` subclass, so the WebSocket consumer and
+            the no-JS HTTP fallback keep catching it exactly as before; it is
+            raised distinctly so a REST caller can answer 409 Conflict (the
+            request was well-formed, the check-in is simply past the point of
+            writing) rather than folding it into the 400 a blank body earns.
+        EmptyMessageError: If ``body`` is blank after stripping.
+        MessageTooLongError: If ``body`` exceeds ``MAX_CHAT_MESSAGE_LENGTH``.
+        MessageRateLimitedError: If this sender's message budget for the
+            check-in is spent (also a ``ValueError``). Callers catch this and
+            surface it to the sender - a safety check-in chat failing silently
+            is worse than most other features failing silently.
     """
     if hasattr(checkin, "archive"):
-        raise CheckinArchivedError("This check-in has concluded and can no longer receive messages.")
+        raise CheckinMessagingArchivedError(f"create_chat_message: checkin {checkin.pk} refused - an archive already exists for it.")
     body = body.strip()
     if not body:
-        raise SafetyValidationError("Message cannot be empty.")
+        raise EmptyMessageError(f"create_chat_message: blank body submitted on checkin {checkin.pk}.")
     if len(body) > MAX_CHAT_MESSAGE_LENGTH:
-        raise SafetyValidationError(f"Message is too long (max {MAX_CHAT_MESSAGE_LENGTH} characters).")
+        raise MessageTooLongError(f"create_chat_message: body length {len(body)} exceeds MAX_CHAT_MESSAGE_LENGTH ({MAX_CHAT_MESSAGE_LENGTH}) on checkin {checkin.pk}.")
 
     sender_profile, sender_contact = resolve_message_sender(user, contact)
+    # After the sender is resolved, because the budget is keyed on who they turn
+    # out to be, and after every content check, so a client bug cannot throttle
+    # someone out of an emergency conversation. Charged here rather than in the
+    # consumer because SafetyCheckinMessageView - the no-JS fallback - calls the
+    # same function, and a socket-only budget is one a POST loop walks around (P31).
+    from urbanlens.dashboard.services.core.message_limits import charge_message, safety_chat_identity
+
+    charge_message(
+        safety_chat_identity(
+            checkin.pk,
+            profile_pk=sender_profile.pk if sender_profile else None,
+            contact_pk=sender_contact.pk if sender_contact else None,
+        )
+    )
     message = SafetyCheckinMessage.objects.create(checkin=checkin, sender_profile=sender_profile, sender_contact=sender_contact, body=body)
     logger.info(
         "Safety check-in %s: chat message %s from %s",
@@ -2404,8 +2495,9 @@ def post_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, con
         The newly created, already-broadcast SafetyCheckinMessage.
 
     Raises:
-        CheckinArchivedError: The check-in has been archived - see :func:`create_chat_message`.
-        ValueError: ``body`` is blank or too long - see :func:`create_chat_message`.
+        CheckinMessagingArchivedError: The check-in has been archived - see :func:`create_chat_message`.
+        EmptyMessageError: ``body`` is blank - see :func:`create_chat_message`.
+        MessageTooLongError: ``body`` is too long - see :func:`create_chat_message`.
     """
     message = create_chat_message(checkin, user=user, contact=contact, body=body)
     broadcast_chat_message(checkin, message)

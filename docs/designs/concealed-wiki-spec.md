@@ -185,7 +185,7 @@ Per field: how provenance is (or is not) recorded, the three options, and a reco
 
 `models/wiki/model.py:68`. The most important field on the surface.
 
-Automatic writers: `tasks.py:103-124` (`enrich_wiki_location`, replaces a non-meaningful name with `location.official_name` or `PlaceNameResolverChain.resolve()`); `naming.py:190-196`; `wiki/queryset.py (draft/claim code, removed 2026-08-25)/181/213`. User writers: `wiki_edits.py:122-169`; `wiki_aliases.py:111` (`promote_wiki_alias_to_name`); `consensus/fields.py:70-71`; `wiki_creation.py:141-177` (`_name_from_pin` renames a freshly-claimed wiki to a user-chosen pin alias via a bare `wiki.save()` with no `WikiEdit`).
+Automatic writers: `tasks.py:103-124` (`enrich_wiki_location`, replaces a non-meaningful name with `location.official_name` or `PlaceNameResolverChain.resolve()`); `naming.py:190-196`; `wiki/queryset.py (draft/claim code, removed 2026-08-25)/181/213`. User writers: `wiki_edits.py:122-169`; `wiki_aliases.py:50` (`promote_wiki_alias_to_name`); `consensus/fields.py:70-71`; `wiki_creation.py:141-177` (`_name_from_pin` renames a freshly-claimed wiki to a user-chosen pin alias via a bare `wiki.save()` with no `WikiEdit`).
 
 Four lossy channels, none authoritative:
 1. **No `name_is_user_provided` column.** `Pin` has exactly this flag at `models/pin/model.py:121`. `Wiki` never grew one.

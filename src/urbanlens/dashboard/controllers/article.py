@@ -30,17 +30,22 @@ from django.views import View
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH, text_length_error
 from urbanlens.dashboard.services.wiki.articles import ArticleConflictError, diff_revisions, get_article, render_article, restore_revision, save_article_checked
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
+    from django.core.paginator import Page
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
+
+#: Revisions per page in the history list.
+_HISTORY_PAGE_SIZE = 25
 
 
 @dataclass(slots=True)
@@ -170,11 +175,6 @@ def _visible_revision_queryset(scope: ArticleScope):
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
 
     return conceal_rows(revisions, scope.profile) if concealment_active(scope.wiki, scope.profile) else revisions
-
-
-def _visible_revisions(scope: ArticleScope) -> list[ArticleRevision]:
-    """The scope's visible revisions, newest first, ready for the history list."""
-    return list(_visible_revision_queryset(scope).order_by("-created"))
 
 
 class ArticleViewBase(LoginRequiredMixin, View):
@@ -413,21 +413,63 @@ class ArticleImageUploadView(ArticleViewBase):
         return JsonResponse({"url": request.build_absolute_uri(img.image.url)}, status=201)
 
 
-def _annotate_deltas(revisions: list[ArticleRevision]) -> list[dict]:
-    """Pair each revision (newest first) with its size delta and ordinal.
+def _annotate_deltas(revisions: list[ArticleRevision], *, following: ArticleRevision | None = None, highest_number: int | None = None, current_id: int | None = None) -> list[dict]:
+    """Pair each revision (newest first) with its size delta, ordinal and current flag.
 
     Args:
-        revisions: Revisions ordered newest first.
+        revisions: Revisions ordered newest first. One page of them, once the
+            list is long enough to paginate.
+        following: The revision immediately older than the last one in
+            ``revisions`` - the top of the next page. Sizing the oldest row on
+            a page against ``None`` instead would report it as an edit that
+            wrote the whole article from empty.
+        highest_number: The ordinal of ``revisions[0]``; defaults to the length
+            of the list, which is only right on an unpaginated history.
+        current_id: The id of the newest revision in the whole history. The
+            page's own first row is not it once there is more than one page,
+            and the template both marks that row "current" and withholds its
+            Restore button.
 
     Returns:
-        Dicts of {revision, delta, number} where number is 1 for the oldest.
+        Dicts of {revision, delta, number, is_current} where number is 1 for
+        the oldest revision of all, not for the oldest on this page.
     """
     total = len(revisions)
+    highest = total if highest_number is None else highest_number
     rows = []
     for index, revision in enumerate(revisions):
-        previous = revisions[index + 1] if index + 1 < total else None
-        rows.append({"revision": revision, "delta": revision.size_delta(previous), "number": total - index})
+        previous = revisions[index + 1] if index + 1 < total else following
+        rows.append(
+            {
+                "revision": revision,
+                "delta": revision.size_delta(previous),
+                "number": highest - index,
+                "is_current": revision.pk == current_id,
+            }
+        )
     return rows
+
+
+def _history_rows(request: HttpRequest, scope: ArticleScope) -> tuple[list[dict], Page]:
+    """One page of ``scope``'s revision history, newest first.
+
+    Args:
+        request: The current request; carries the page number.
+        scope: The resolved article scope.
+
+    Returns:
+        The annotated rows for the requested page, and the ``Page`` itself so
+        the template can render pagination controls.
+    """
+    revisions = _visible_revision_queryset(scope).order_by("-created")
+    page = get_page(request, revisions, _HISTORY_PAGE_SIZE)
+    rows = list(page.object_list)
+    # The oldest row on this page needs the one below it to size its delta, and
+    # that revision is the top of the next page.
+    following = next(iter(revisions[page.end_index() : page.end_index() + 1]), None) if page.has_next() else None
+    newest = rows[0] if page.number == 1 and rows else next(iter(revisions[:1]), None)
+    current_id = newest.pk if newest is not None else None
+    return _annotate_deltas(rows, following=following, highest_number=page.paginator.count - page.start_index() + 1, current_id=current_id), page
 
 
 class ArticleHistoryView(ArticleViewBase):
@@ -438,14 +480,15 @@ class ArticleHistoryView(ArticleViewBase):
 
     def get(self, request: HttpRequest, **kwargs) -> HttpResponse:
         scope = self.resolve(request, **kwargs)
-        revisions = _visible_revisions(scope)
+        rows, page = _history_rows(request, scope)
         return render(
             request,
             "dashboard/partials/articles/_article_history.html",
             {
                 "scope": scope,
                 "article": scope.article,
-                "revision_rows": _annotate_deltas(revisions),
+                "revision_rows": rows,
+                "page_obj": page,
             },
         )
 
@@ -497,14 +540,17 @@ class ArticleRestoreView(ArticleViewBase):
         revision = get_object_or_404(_visible_revision_queryset(scope), id=kwargs["revision_id"])
         _article, new_revision = restore_revision(scope_article=_writable_article(scope), revision=revision, editor=scope.profile)
         scope.article = _resolved_article(scope)
-        revisions = _visible_revisions(scope)
+        # Deliberately not carrying the caller's page number across: a restore
+        # writes a new newest revision, which is on page one.
+        rows, page = _history_rows(request, scope)
         response = render(
             request,
             "dashboard/partials/articles/_article_history.html",
             {
                 "scope": scope,
                 "article": scope.article,
-                "revision_rows": _annotate_deltas(revisions),
+                "revision_rows": rows,
+                "page_obj": page,
             },
         )
         message = "Article restored to the selected version." if new_revision else "That version is already the current article."

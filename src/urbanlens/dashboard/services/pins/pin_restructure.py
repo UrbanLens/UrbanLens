@@ -240,7 +240,10 @@ def nestable_root_pins(pin: Pin) -> list[Pin]:
     if polygon is None:
         return []
 
-    candidates = Pin.objects.filter(profile_id=pin.profile_id, parent_pin__isnull=True, location__point__within=polygon).exclude(pk=pin.pk).select_related("location").order_by("name")
+    # `location__wiki` because the dialog renders `effective_name` for every
+    # candidate, and a candidate with no `name` of its own falls through to
+    # `Location.display_name`, which reads the wiki.
+    candidates = Pin.objects.filter(profile_id=pin.profile_id, parent_pin__isnull=True, location__point__within=polygon).exclude(pk=pin.pk).select_related("location", "location__wiki").order_by("name")
     # would_create_cycle also covers the case of this pin itself being nested
     # under one of the candidates - re-parenting that candidate beneath this
     # pin would close a loop.

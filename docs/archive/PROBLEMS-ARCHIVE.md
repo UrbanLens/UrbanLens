@@ -11,6 +11,256 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-06: the upload quota check is fail-open, and that is now a decision rather than a defect
+
+`id: P28` · `status: fixed` · `resolved: 2026-09-06`
+
+Both halves are closed, by different means.
+
+**The call-site asymmetry was fixed 2026-08-25** (`bf9c31b0`). Nine interactive paths wrapped their
+check-then-create in `per_profile_upload_lock` and the background ones did not - which was backwards,
+since a bulk import fans out one task per image and is where the contention actually is. All seven
+background sites (one more than this entry had counted: `import_data.py` has two, `_import_photos`
+and `_restore_overlay_image`) wrap it now.
+
+**The remaining half - that the lock is fail-open and therefore does not bound a fan-out - is
+accepted, not fixed.** Decided 2026-09-06 by Jess: see D8 in
+[`designs/storage-running-total.md`](../designs/storage-running-total.md). Exact enforcement is not
+worth a denormalised counter; general enforcement already achieves the point of the quota, which is
+that no single user can eat unbounded storage. An over-quota profile keeps everything it has
+uploaded and is barred from uploading more until it is back under - verified rather than assumed:
+nothing in `dashboard/` deletes or purges on a quota failure, every call site refuses only the new
+upload, and the error message tells the user to free space themselves.
+
+**Do not re-propose the running-total column** without a reason that changes the premise - selling
+storage is the obvious one. I4, in the same document, is the full costing: why a `SUM` over many
+rows can be neither incremented atomically nor locked while a single row can be both, and why the
+hard part is that `file_size` changes in five places (insert, delete, the post-admission backfill at
+`tasks.py:1270`, the re-encode in that same task, and `quota_rewards` flipping the exemption with a
+`queryset.update()`), so the obvious `Image.save()` override misses three of them.
+
+**One correction to this entry's own argument**, worth keeping because it was used to sell the fix:
+it claimed the column "would also remove the repeated `SUM(file_size)` scan". There is already an
+index covering that scan (`idxdb_image_profile_quota`), and at this install's scale it costs
+nothing. The performance case was never real; only the correctness case was, and that is the one
+that was declined on its merits.
+
+## RESOLVED 2026-09-06: `F401` was off tree-wide, and 819 of the 1,063 hits were re-export surfaces, not drift
+
+`id: P84` · `status: fixed` · `resolved: 2026-09-06`
+
+`pyproject.toml`'s ruff config disabled `F401` for the whole tree, with the reason written next to
+it: *"unused imports. Enabling this will remove TYPE_CHECKING imports incorrectly."* The rule is on
+now, tree-wide, and `ruff check src/urbanlens` passes.
+
+**The headline number was the wrong number.** This entry opened with "1,124 unused imports have
+accumulated invisibly". Re-measured on 2026-09-06 the count was 1,063, and it broke down as:
+
+| where | count | what it actually was |
+|---|---|---|
+| `**/__init__.py` | 819 | re-export surfaces - the import *is* the export |
+| `**/tests/**` | 103 | genuinely dead |
+| everything else | 141 | mostly genuinely dead, 23 not |
+
+77% of the "drift" was 163 package front doors doing their job, 110 of which have no `__all__` for
+ruff to read the intent from. Those are now covered by a `F401` line in the `**/__init__.py`
+per-file-ignores block, next to the `F403`/`F405` entries that were already there for the same
+reason. That is not a suppression of the finding; it is the finding being 819 files smaller than
+the count suggested.
+
+**The original reason for disabling the rule was wrong, but a version of it was right.** Ruff does
+understand `if TYPE_CHECKING:` and annotation-only use, including string annotations - so the
+config comment's stated fear has not been true for some time. But ruff 0.15.20 does **not** resolve
+a string forward reference inside a *generic base-class subscript*, and this tree is full of them:
+
+```python
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.achievements.model import Achievement
+
+class AchievementQuerySet(abstract.PublicDashboardQuerySet["Achievement"]):   # ruff: unused. mypy: required.
+```
+
+Deleting that import is a clean ruff fix and four `name-defined` errors from mypy. Reproduced
+minimally (`Base["Decimal"]` with `Decimal` imported under `TYPE_CHECKING` → `F401`; the same name
+in `-> "Fraction"` position → no diagnostic), then confirmed against the real file. 20 imports
+across 8 `models/*/queryset.py` files are in this shape and now carry a `# noqa: F401` naming it.
+
+That is a **third** way a blind sweep goes wrong, alongside the two this entry already recorded.
+The other two both fired again on the real run:
+
+1. **An "unused" import can be another module's import path.** `models/labels/model.py` imported
+   ten constants from `models/labels/meta.py` and used four. The other six were reached *through*
+   `model.py` by 18 import statements in controllers, signals, services and tests - while ~80 other
+   statements imported the same constants from `meta` directly. So `model.py` was an accidental
+   facade, not a designed one, and the fix was to point the 18 at `meta` rather than to noqa the
+   re-export into permanence. `services/apis/calendar/google.py` was the same shape for
+   `extract_email_from_id_token`, reached by `controllers/calendar_sync.py`; that one now imports it
+   from `services/auth/google_oauth.py`, where it is defined and where the same file was already
+   importing `GoogleAuthExpiredError`.
+2. **An import can exist for its module's side effects.** Three, all load-bearing, all now carrying
+   a `# noqa: F401` that says why:
+   - `apps.py` - `import urbanlens.dashboard.models.wiki_edit.signals`, one of fourteen sibling
+     signal-registration imports in `ready()`. Ruff flags **only the last one**. Checked with
+     `--select F401,F811` and the noqa stripped: the thirteen above it are reported by neither -
+     they all bind the same name `urbanlens`, and only the surviving binding is tested for use. So
+     thirteen equally load-bearing imports are unmarked because of an implementation detail, not
+     because anything decided they were safe. If ruff's binding model changes they all need the
+     same marker, and the block would be better off as explicit `connect()` calls - the idiom the
+     two non-signal registrations beside it (`connect_achievement_signals`, `connect_file_cleanup`)
+     already use.
+   - `services/undo/service.py` - importing the `handlers` package is what populates the registry
+     `get_handler` reads. Verified: 12 `@register` decorators, 12 entries at runtime.
+   - `tasks.py` - `run_assistant_turn_task`. Celery's `autodiscover_tasks()` only imports
+     `<app>/tasks.py`, so this import is how the ai-worker learns the task exists at all; without it
+     the producer still enqueues and the worker answers "unregistered task". Confirmed by running
+     `app.loader.import_default_modules()` (what a starting worker does) and listing `app.tasks`,
+     then checking every importer of `services.ai.tasks` in non-test source: `dashboard/tasks.py`
+     is the only one at module scope. The other two - `controllers/assistant.py` and
+     `external_api/views_assistant.py` - import it inside a function, which registers it in the web
+     process handling that request and in no worker.
+
+**The checks that caught these, in the order they earn their keep.** An AST pass over the whole tree
+(`from <mod> import <name>`, parenthesised multi-line imports read as one statement) found the seven
+cross-module names before anything was deleted. `pytest --collect-only` over the full suite - 14,658
+tests, 22s - is the cheapest proof that no module lost an import path. `mypy src/urbanlens` is the
+only one of the three that sees the generic-base-class case; it caught one import this session's own
+edits had turned into that shape after the classifier had already run. It does not cover tests
+(`tests/` and `test_.*\.py` are excluded), so for the 80 changed test files, collection plus a run
+is the gate.
+
+**What was swept:** 219 imports, 175 files. Two `models/*/queryset.py` classes were parameterized
+rather than stripped - `GeocodedLocationQuerySet(abstract.DashboardQuerySet)` and `WikiQuerySet` had
+lost their type argument, which is *why* their model import read as dead. That pattern is not rare:
+107 of 148 queryset classes are still unparameterized. See P85.
+
+## RESOLVED 2026-09-06: `bun-types` was pinned at 1.1.6, so 81 valid assertions looked like type errors
+
+`id: P73` · `status: fixed` · `updated: 2026-09-06`
+
+`bun.lock` holds `bun-types@1.1.6`; the installed runtime is 1.3.14. Every `.ts` file in
+`frontend/ts/` is typechecked against a description of Bun from roughly two years earlier than the
+one that runs them.
+
+The visible cost so far is `src/urbanlens/dashboard/frontend/browser/floorplan-editor.test.ts` and
+`harness-parity.test.ts`, which cannot join a `tsconfig` project: they use `expect(value, message)`,
+supported by the runtime and by current `bun-types`, and 1.1.6's `expect` takes 0-1 arguments - 81
+`TS2554`s that are the pin's, not the code's. `bin/check_typescript_coverage.py` lists both in
+`_UNCOVERED` with that reason, so they are excluded on purpose rather than by omission.
+
+The unmeasured cost is everything else the two years changed: the 161 files in the `bun-types`
+project - 160 under `frontend/ts/` plus `bin/build-frontend.ts` - are checked against signatures
+that may no longer match, in both directions. (Not the whole tree - `tests/integration/`'s 84 files
+use `@types/node` and are unaffected.)
+
+Not fixed here because it cannot be from this checkout - `node_modules/` is owned by `apps` and not
+group-writable, and this user has no passwordless sudo, so `bun add -d bun-types@1.3.14` fails with
+`EACCES: Permission denied while writing packages into node_modules`. The bump wants a run where
+installing is possible, and `bun run typecheck` immediately afterwards to see what the newer types
+surface.
+
+**It reaches the typechecked project too, not only the two excluded files.** `bun run typecheck` was
+red on 2026-09-05 for one `expect(value, message)` in `shared/e2ee-signout.test.ts`, written the same
+day. `package.json` asks for `bun-types: "latest"`, so the form is correct against what the manifest
+requests and against the runtime that executes it; only the resolved version rejects it. The
+assertion's message moved into a comment to get the suite green, and should move back when the pin
+does. Note the shape of the trap: the whole-tree typecheck is manual, so a file can be committed
+green by pre-commit and CI and still be a type error.
+
+**Fixed 2026-09-06.** Two of this entry's own premises were wrong, and one of them was the reason it
+sat: it says "this user has no passwordless sudo", and sudo works on this host - `node_modules` is
+owned by `apps` and merely not group-writable, which `sudo chmod -R g+w node_modules` settles. The
+runtime it names is stale too; this host runs Bun 1.4.2, not 1.3.14. `bun update bun-types` then
+resolves 1.1.6 -> 1.4.2.
+
+**What two years of type changes actually surfaced: three errors, not a wave.** One in the
+typechecked project (`shared/undo-bar.ts`) and two in `floorplan-editor.test.ts`, which had never
+been typechecked at all.
+
+The one in the project was not only a type complaint. `wrapFetch` replaced `window.fetch` with a
+bare arrow function, dropping whatever the replaced function carried - including
+`__urbanLensWrapped`, the marker `themes/base.html` sets on *its* `window.fetch` wrapper to decline
+wrapping a second time. Not currently reachable, because that block is inline in the page and runs
+once per navigation, but anything that ran it again would wrap the wrapper and toast every failed
+request twice. Bun's own `fetch` carries `preconnect`, and that is the property whose absence the
+newer types noticed.
+
+The two in the test file were a `floors[0]` on a possibly-empty array, and an assignment that
+narrowed a spy field to `null` for the rest of the test - the handler that writes it back runs in
+the browser, which TypeScript cannot see, so a later comparison against a date read as an error.
+
+Both browser test files are in the root project now and `bin/check_typescript_coverage.py`'s
+`_UNCOVERED` is empty. The assertion message this entry records as having moved into a comment in
+`e2ee-signout.test.ts` has moved back into `expect`'s second argument.
+
+The trap this entry names at the end still stands and is worth keeping: the whole-tree typecheck is
+manual, so a file can commit green through pre-commit and CI and still be a type error.
+
+## RESOLVED 2026-09-06: Vault album bulk delete, send-to-wiki and share rendered hidden forever
+
+`id: P61` · `status: fixed` · `updated: 2026-09-06`
+
+Previously titled "Vault album bulk actions (delete, send-to-wiki, share) are silently unavailable".
+
+`controllers/albums.py:513-519` sets `gallery_bulk_url`/`pin_share_dialog_url` only when the album
+owner is a `Pin`; a `Profile` (vault) owner falls into the `else` and gets empty strings. Downstream,
+`album-items.ts:378-379` only wires the bulk wiki/delete callbacks `if (bulkUrl)`, and
+`_bulk_toolbar.html` hides any button without one - so the Delete and Send-to-wiki buttons declared
+in `_album_bulk_actions` (`albums.py:543-545`) render `hidden` forever inside a vault album, as do
+the equivalent right-click entries (`photo-context-menu.ts:144,146,159`).
+
+Net effect: inside a vault album you can multi-select and add/move/remove/set-cover, but there is no
+delete of any kind - you have to leave the album and use the per-tile trash button one photo at a
+time. Single-photo share still works from the lightbox, so only *bulk* share is lost.
+
+Unlike the other vault-album omissions (`move_url`, `reposition_base`, external media), which each
+carry an explicit "a vault album has none" rationale in the source, this one has no comment marking
+it deliberate - it reads as an oversight from widening `Pin | Wiki` to `Pin | Wiki | Profile`. Needs a
+decision (wire up a profile-scoped bulk endpoint, or document the refusal) rather than a silent gap.
+
+**Fixed 2026-09-06**, and the decision this asks for splits by action rather than resolving one way.
+
+- **Delete** transfers, and was the real gap. A vault photo already had a per-photo delete
+  (`PhotoActionView.delete_photo`); only the bulk form was missing. `VaultGalleryBulkView`
+  (`vault.photos.bulk`) is that, scoped by profile.
+
+  **The first version of it shared too much, and the browser check did not catch that.** The pin
+  endpoint's delete body moved into a shared helper *including* its wiki rule - a row also on a wiki
+  is unlinked from its pin rather than destroyed - which is pin-specific. A vault album may hold a
+  photo that is also filed to one of the profile's pins (`owner_kwargs_to_image_scope`'s docstring
+  says so deliberately), so deleting it from the vault ran `update(pin=None)` and quietly emptied a
+  gallery the user was not looking at, while leaving the vault tile in place: the client removes a
+  tile on any 2xx, so it read as "Deleted" and came back on refresh. Found by adversarial review,
+  not by the browser pass - which exercised a plain vault photo, the one shape where the two rules
+  agree. The rule is a caller's decision now.
+
+  Worth carrying forward: whether the *vault* should also protect a wiki-contributed photo is a real
+  question and a different one. It would have to change the per-photo delete too, and it belongs
+  with P55.
+- **Send to wiki** cannot. The pin endpoint derives the wiki from `pin.location`, and a vault album
+  has no location; the vault's own per-photo version asks *which* wiki, from a picker the bulk bar
+  has nowhere to put. The endpoint refuses with that sentence rather than a generic 400.
+- **Bulk share** cannot, for the same reason: it opens the *pin* share dialog. Single-photo share
+  from the lightbox is unaffected, which this entry already noted.
+
+The change that made the split possible is small and worth naming: send-to-wiki is keyed off its own
+URL now instead of off the delete one. One URL gating three unrelated capabilities is what produced
+the original symptom - a vault album could not be handed a bulk endpoint without also being offered
+an action that endpoint refuses.
+
+Verified in a browser: in a vault album, Delete shows and Send-to-wiki stays hidden, and deleting a
+selected photo removes its tile - for a plain vault photo, which is the shape that pass covered and
+the reason it missed the case above. Three things about doing that verification are worth knowing.
+`/dashboard/vault/photos/albums/` is an HTMX partial endpoint that loads no scripts - the panel has
+to be reached through `/dashboard/vault/photos/?album=<slug>`, the same trap the album-picker entry
+records. And the first attempt's POST came back 403 on CSRF origin checking, which turned out to be
+a real defect of its own in `UL_SITE_URL`'s default port - in `docker-compose.yml` *and*, missed on
+the first pass, in `settings/base.py`, which is the one any process outside compose actually uses.
+
+Also missed on the first pass and worth the warning: gating send-to-wiki on its own URL took that
+menu item off every pin's flat Photos tab, because `_photo_gallery.html` was not updated to emit it.
+A contract test now fails when a template offers one of the pair without the other.
+
+
 ## RESOLVED 2026-08-20: the mobile panel's `unpinned_count` still counts what the import won't create
 
 `ParcelBuildingsPanelSource.api_payload` derives `unpinned_count` as
@@ -11646,3 +11896,957 @@ The containment behaviour from 2026-08-20 is kept rather than reverted to `.get(
 restored from a backup predating 0054 still holds the pair, and answering deterministically beats
 refusing to render a profile. Its tests drop the index to build that state, which is the honest way
 to test data the code no longer creates.
+
+## RESOLVED 2026-09-05: video uploads were charged to quota and counted by nothing on the Vault home
+
+`id: P62` · `status: fixed` · `resolved: 2026-09-05`
+
+The entry's premise was half wrong in a way that changed the fix. It said a video "counts against
+`get_storage_totals` and the user's quota" and asked for videos to be surfaced "so the number
+reconciles". The number never disagreed: `get_storage_totals` aggregates every row of the profile
+with no media-type filter, so video bytes were always on the bar. What did not reconcile was the
+*breakdown* - three tiles and a recent strip accounting for two of three media kinds, explaining a
+bar bigger than all of them.
+
+The sharpest instance was one the entry did not name: `is_empty` was computed from photos,
+documents and albums, so a library holding nothing but videos rendered the "Your Vault is empty"
+welcome state - which also suppressed the storage bar - while its owner was billed for the bytes.
+
+"Appears nowhere" was also too strong: the external API's photo list is deliberately kind-agnostic
+and takes `?media_type=video`, its delete is kind-agnostic, and the data export walks every row. The
+gap was the web UI. So was the delete: `PhotoActionView` enforces ownership and deliberately does
+*not* restrict media type, and its docstring says so - nothing had ever handed a user one of their
+videos' ids. The missing piece was markup, not an endpoint.
+
+Fixed with the minimum, deliberately: `ImageQuerySet.videos()`, a fourth stat tile and a listed
+Videos section on the Vault home (with the delete the endpoint already supported), the video bytes
+named in the storage explanation, and videos in `is_empty` and the recent strip. A Videos *page*
+was not built - it would be the third ~600-line copy of the same grid, and that copy-paste is P63.
+
+Two things that shaped the markup:
+
+- **A video has no thumbnail and never will.** Thumbnails are written only in the photo branch of
+  upload processing and the hourly backfill filters to `media_type=PHOTO`, so `thumb_url` falls
+  through to the file itself - rendering a video through the photo tile downloads the whole video to
+  show a broken image. The recent strip therefore branches on *photo*, and everything else gets an
+  icon tile.
+- **The video-bytes line splits on `quota_exempt_reason=""`**, the same predicate `get_storage_totals`
+  uses, so the sentence explaining the bar cannot exceed the bar.
+
+Severity was lower than the entry implied and worth recording: `SiteSettings.default_features` is
+blank and the seeded VIP role does not include `video_uploads`, so only a site admin (whose feature
+check passes unconditionally) or an explicitly granted account can create a video at all.
+
+## RESOLVED 2026-09-05: the organize-this-property dialog planned merge conflicts once per candidate pin
+
+`id: P67` · `status: fixed` · `resolved: 2026-09-05`
+
+`_nestable_rows` called `plan_merge_conflicts(pin, candidate)` once per candidate, and each call
+issued an article lookup, two `Boundary` filters and two `CustomFieldValue` filters - two of which
+were the same statement with the same parameter, for the survivor, re-issued every iteration. With
+`nestable_root_pins` capped at 500 the worst case was a single GET issuing thousands of queries, on
+the feature whose own use case is a campus pinned building by building.
+
+The entry's "~6-7 per candidate" was slightly high for this path (the survivor's article is a reverse
+one-to-one, so Django caches it - including the miss - after the first candidate) and exactly right
+for a caller it did not name: `merge_suggestion_cards`, which `PinSuggestionQueueView` runs over the
+whole pending queryset with no page limit.
+
+`plan_merge_conflicts` is now a fetch half and a compare half, with `plan_merge_conflicts_bulk` for
+pages that render conflicts they are not about to act on. Three queries for the whole batch.
+
+**What must not be "simplified" later.** The single-pair function still reads at call time, and
+`merge_pins` still calls it. A conflict it does not see is not a warning it skips: `_merge_boundaries`,
+`_merge_custom_field_values` and `_merge_article` delete the loser's row when no resolution names it,
+and the apply loop mutates exactly those three relations between one candidate and the next. Threading
+a batched result into the merge loop would turn a rendering optimisation into silent data loss.
+`test_the_single_pair_function_still_reads_current_state` exists to make that loud.
+
+Also fixed here: candidates were fetched with `select_related("location")` only, so every candidate
+with a blank name cost another query when the template asked for `effective_name` and
+`Location.display_name` read the wiki.
+
+Measured by `OrganizeDialogQueryScalingTests`, which fails on the old shape with "24 queries for 2
+rows and 54 for 12 - it is querying per row" and names the three statements that multiplied.
+
+## RESOLVED 2026-09-05: nothing measured render time, so a 12-second page passed every scaling test
+
+`id: P65` · `status: fixed` · `resolved: 2026-09-05`
+
+The Organize Labels page had already been cut from ~146 queries to 3 by
+`Label.prime_total_pin_counts` and was still reported slow. Profiling it at 500 labels found ~12s of
+wall time against ~0.2s of database time: the six tabs switch client-side, and the view rendered all
+six on every load. `QueryScalingMixin` and `django_perf_rec` both measure the database and nothing
+else, so the page passed every performance test the project had while taking twelve seconds.
+
+**The fix this entry prescribed does not work, and that is the useful part of the record.** It asked
+for "the same shape - seed N vs 4N rows, assert wall time doesn't grow past a tolerance". A growth
+*ratio* cannot see this defect class. Render time on a list page is supposed to be linear in rows, so
+a page whose rows are sixty times too expensive still grows about fourfold when the rows grow
+fourfold. Measured over 25 trials at load 11.4 on 8 cores, the pathological workload's 3-to-12-row
+ratio came out 2.8-3.2 - the same as every well-behaved workload's, under any tolerance worth
+setting.
+
+What separates the classes is the marginal cost of one row expressed in a machine-independent unit:
+`(T(large) - T(small)) / rows`, divided by the page's own **zero-row** render. The subtraction
+cancels the fixed overhead exactly - client, middleware, auth, base template, connection setup - and
+the division cancels machine speed and steady load, because both terms scale with them. What is left
+reads as a sentence: one more row costs X% of what the whole empty page costs. Budget set at 10%,
+measured over 100 trials at the same load: a trivial row, a 120-element row and an O(n²) loop with a
+small constant never exceeded 4.4%, while a row rendering a full icon picker never came in under
+65%.
+
+Two further results worth not re-deriving:
+
+- **Best-of-K, not the mean.** Contention only ever adds time, so the minimum is the estimate that
+  converges. A benign row measured 0.3-2.8% of baseline best-of-5 and -5.6-6.3% by mean; the mean
+  crosses zero where the minimum does not.
+- **A superlinearity assertion was designed and rejected on measurement**, not omitted. The slope
+  ratio reached 3.24 on a *linear* workload and 3.37 on an O(n²) one whose constant was too small to
+  matter, against 1.11-1.45 on the genuinely broken one. At these sizes the second derivative is
+  noise.
+
+Database time is included rather than subtracted. It is technically available, and should not be
+used: Django rounds each statement's duration to the millisecond, so a page of 25 sub-millisecond
+queries carries more quantization error than the signal it would correct; reading those numbers at
+all needs `force_debug_cursor`, which perturbs what it measures; and the baseline already cancels
+everything constant. Instead the failure message reports the query count beside the timing, because
+"queries flat, render growing" is the sentence that would have ended the Organize investigation on
+the first run.
+
+Shipped as `core/tests/render_scaling.py`, over a `SeedScalingMixin` in `core/tests/scaling.py` that
+both mixins now share - so the guard that a seed actually changed what the endpoint renders exists
+once rather than twice. `test_render_time_scaling_harness.py` points it at two views in a test-only
+urlconf whose per-row cost is known, and includes the argument in executable form: the expensive page
+is perfectly flat under `QueryScalingMixin` and refused by this one.
+
+One limitation is pinned by a test rather than fixed, because it cannot be fixed: seeding rows in
+`setUp` inflates the denominator and silently disarms the measurement. The same page measures 4.1-5.8
+baselines per row from empty and 0.070-0.083 with a dozen rows already on it. A baseline taken at
+`n0` rows yields `k` and `C + k*n0`, and nothing separates the two, so it is a rule about writing the
+subclass and the harness is what holds it.
+
+**Not resolved by this**, and still recorded where they were: the instances the survey found. The
+achievement admin's per-row icon picker is the one this instrument was calibrated against and is
+still there - see P68, whose "~1,288 `ICON_CATEGORIES` entries" is 1,249 as measured on 2026-09-05.
+
+## RESOLVED 2026-09-05: the documented way to restore a backup was the one way that fails, and nobody had run it
+
+`id: P30` · `status: fixed` · `resolved: 2026-09-05`
+
+Restoring is now implemented (`bin/restore_backup.sh`), documented (`docs/BACKUPS.md`, R26) and
+tested by round trip (`bin/verify_backup_restore.sh`) - the entry's three options, all taken except
+`-Fc`, which is declined for stated reasons in the doc.
+
+**The entry's own restore instruction was backwards, and it is the sentence an operator would have
+followed.** It said to restore "into a database where PostGIS is already installed". A PostGIS-ready
+target is the one case that fails: the dump emits `CREATE SCHEMA tiger` with no `IF NOT EXISTS`, so
+with `ON_ERROR_STOP=1` it aborts at line 26 with `ERROR: schema "tiger" already exists`, exit 3, one
+table restored out of 235. The target has to be empty; `bin/restore_backup.sh` creates it from
+`template0` so that emptiness is structural rather than remembered.
+
+The `pg_restore` half was right, verbatim: `input file appears to be a text format dump. Please use
+psql.`
+
+Two failures the entry did not have, found by running it:
+
+- **psql exits 0 when statements fail.** Without `ON_ERROR_STOP=1` the collision above reports three
+  errors on stderr and still exits successfully with all 235 tables restored (the extensions are
+  `IF NOT EXISTS`; only the three `CREATE SCHEMA` statements fail). It happens to work, which is how
+  the habit of omitting the flag survives to a restore where something real fails.
+- **The database container cannot restore the app container's dumps.** `pg_dump` 17.11 in the app
+  image emits `\restrict`; the db image ships psql 17.5, which does not know it. With
+  `ON_ERROR_STOP` that aborts at line 5 having restored nothing, and without it exits 0 the same way.
+  The exit-0 case is the worse one: `\restrict` is the fix for CVE-2025-8714 (PostgreSQL 17.6,
+  2025-08-14), which stops a dump from executing psql meta-commands on the restoring machine, so an
+  older client restores the data with that protection silently absent. The script compares the two
+  versions and refuses.
+
+Verified, not asserted: 235 public tables from an 861,888-byte dump produced by
+`DatabaseBackup.run()` itself, every table's full contents hashed (`md5(string_agg(x::text, ...))`
+over a whole-row reference, which covers geography, jsonb and bytea without naming a column)
+identical live-vs-restored across all 271 tables - 271 because the comparison spans every schema the
+dump carries, and PostGIS puts 36 more in `tiger` and `topology`. Then a second hop with both ends
+quiescent, carrying a probe table of `geography(Point/MultiPolygon,4326)`, `jsonb`, `bytea`,
+`numeric`, `timestamptz`, non-ASCII text and an all-NULL row - identical across all 272. Teeth
+checked three ways: a `template_postgis` target fails at line 26, deleting a probe row between hops
+reports `FIDELITY FAILURE` naming the table, and so does wiping every non-key column of it.
+
+**The first version of this verifier proved almost none of that, and said it had.** The hash read
+`string_agg(x.r::text ...) FROM t x(r)`, where `x(r)` is a table alias *with a column alias list* -
+it renames the first column, so `x.r` was that column rather than the row, and every hash was of
+primary keys. A restore that lost every other column of every table compared clean, and the
+geography/jsonb/bytea probe reduced to md5 of its two serial ids. The row-deletion teeth check
+passed anyway, because removing a row does change a first-column aggregate: it happened to exercise
+one of the few failures the broken hash still caught. Found by adversarial review, reproduced, and
+fixed the same day.
+
+The verifier does **not** assert `migrate --check` passes, which was the obvious check and the wrong
+one: it asserts the deployment is fully migrated, a fact about the deployment rather than the
+restore. This environment has 5 pending migrations and fails it identically before and after. It
+compares migration state between source and copy instead.
+
+## RESOLVED 2026-09-05: the test container's venv drifted from pyproject and the fix kept not happening
+
+`id: P4` · `status: fixed` · `resolved: 2026-09-05`
+
+`bin/run_tests.sh` already detected this - it compared the container's venv against pyproject's dev
+group and printed a warning naming the missing packages. The warning was correct and did not work.
+Its recommended fix was `docker compose --profile test up -d --build test-runner`, an operator
+action on a container other sessions may be mid-run in, so it kept being deferred: `django-perf-rec`
+was still missing three days after it was first reported, and the list had grown from one package
+to seven.
+
+It now installs them instead of describing them. `uv` ships inside the container's own venv, so
+`uv pip install` of the exact specs from pyproject's dev group needs no host tooling and brings the
+container to its own stated dependencies rather than to whatever is newest. `--no-venv-fix` keeps
+the old warn-only behaviour.
+
+Measured before and after on `urbanlens_development_main_test_runner`, which was missing seven:
+`codespell`, `diff-cover`, `django-perf-rec`, `myst-parser`, `pytest-randomly`, `pytest-xdist`,
+`schemathesis`, `sphinx-autoapi`, `vulture`. After one run, all present at the declared versions
+(`django-perf-rec 4.31.0`, `pytest-xdist 3.8.0`, `pytest-randomly 4.1.0`, `diff-cover 10.5.1`,
+`schemathesis 4.25.2`), and a second run reports nothing missing.
+
+Two of those were worse than absent coverage. `pytest-xdist` and `pytest-randomly` back this
+script's own `--parallel` and `--shuffle` flags, so both were advertised in its usage text and
+broken in this container for as long as they had existed.
+
+This does not make the image correct - a fresh container still starts stale, and rebuilding it is
+still the durable fix. It makes the staleness stop costing a run.
+
+## RESOLVED 2026-09-05: main does start from an empty database, and CI now runs the migrations that prove it
+
+`id: P10` · `status: fixed` · `resolved: 2026-09-05`
+
+Ran it. `origin/main` at `fc696acd0`, its `src/` copied into the app container and pointed at a
+database created `TEMPLATE template0` (so genuinely empty - no PostGIS, nothing):
+
+    manage.py migrate --no-input   ->  exit 0
+
+80 migrations applied starting at `contenttypes.0001_initial`, all 31 of dashboard's among them,
+230 tables, and `postgis` and `pg_trgm` created by the migrations themselves. That covers the 12
+migrations on `main` carrying `RunPython`/`RunSQL`, which is where the entry expected a failure the
+migration graph could not show - `0003_v0_4_0_data` alone has 23.
+
+So the headline was wrong, not merely narrower than its evidence. The multiple-leaf conflict that
+produced it is gone, and nothing replaced it.
+
+The half that was true is "untested", and it had a bigger cause than this entry: **CI ran zero
+tests** (P74). pytest builds its test database by running every migration from zero and nothing
+here sets `MIGRATION_MODULES` or `--no-migrations`, so migrating from empty was always going to be
+covered the moment CI ran the suite at all - and it never did. Fixing that fixes this: every CI run
+on `main` now migrates from an empty database before it runs a single test.
+
+Two limits worth stating rather than leaving implied. The run used this checkout's container venv
+against `main`'s source, so it proves `main`'s *migrations* apply, not that `main`'s pinned
+dependencies resolve. And CI triggers only on `main` and pull requests into it, so a release branch
+still gets this backstop only when it merges.
+
+Cleanup: the scratch database and the `origin/main` worktree were removed.
+
+## RESOLVED 2026-09-05: CI's only Python test step discovered zero tests and reported 29% coverage doing it
+
+`id: P74` · `status: fixed` · `resolved: 2026-09-05`
+
+`.github/workflows/ci.yml` ran
+
+```
+coverage run --source=src src/urbanlens/manage.py test
+coverage xml
+coverage report --fail-under=1
+```
+
+from the repository root. Reproduced verbatim 2026-09-05 against this tree:
+
+```
+Found 0 test(s).
+Ran 0 tests in 0.000s
+NO TESTS RAN
+```
+
+`DiscoverRunner` returns `len(failures) + len(errors)`, which is 0 when nothing
+ran, so the step exited green. Unittest discovery starts at `.` and recurses only
+into importable packages; `src/` has no `__init__.py`, so the whole application
+was unreachable from the repository root. (It did walk into `docs/`, which *is* a
+package, and found no `test*.py` there.) Pointed at `src/` the same runner finds
+14,273 tests. It was the only Python test
+invocation in any workflow in the repository.
+
+The coverage step is what made this hard to see. `coverage report --fail-under=1`
+against that run printed **29%** and exited 0, and `coverage.xml` was uploaded as
+an artifact - all of it import-time coverage from `django.setup()`, none of it a
+test. A step named "Django tests with coverage", green, with a coverage artifact
+attached, is indistinguishable from one that worked.
+
+Fixed by running the suite the way this repo actually runs it:
+`coverage run --source=src -m pytest`. `testpaths` in `pyproject.toml` already
+points pytest at `src/urbanlens` (14,392 collected), `manage.py test` is
+forbidden here anyway because it never sets the `TESTING` flag, and **pytest
+exits 5 when it collects nothing** - so the silent zero cannot recur. That exit
+code, not `--fail-under=1`, is the guard; the threshold never was one.
+
+It has since been measured, and then fixed. A full local run reported **303 failed, 14,092 passed,
+3 skipped** in 32m40s. 287 of those were one environment bug in the parallel runner rather than the
+code (P77), and cannot occur under CI's own command; 3 were an unguarded `is_authenticated` in a
+`base.html` tag (P79); 3 were an unreviewed `RunPython.noop` reverse and a pair of one-query-stale
+`django_perf_rec` fingerprints, neither of which could run at all until the test container's venv
+was repaired (P4). Re-running the 79 files that produced every one of those failures:
+
+    1834 passed, 23 subtests passed in 745.31s
+
+So the suite is clean, and the first CI run should be green - which is a claim this entry could not
+make when it was written, because nothing had ever run it.
+
+## RESOLVED 2026-09-05: the dedicated test profile this entry speculated about had existed for six weeks
+
+`id: P17` · `status: fixed` · `resolved: 2026-09-05`
+
+The entry closed by guessing at the fix - "worth checking whether ... CI may run tests a different
+way that sidesteps it entirely - e.g. a dedicated test compose profile" - and that profile landed in
+`abb0f30db` on 2026-07-30, six days later. Nobody came back to the entry.
+
+`docker-compose.yml` defines `profiles: ["test"]` with `UL_DB_HOST: localhost` and
+`UL_VALKEY_URL: redis://localhost:6379/0`, and `test_db`/`test_valkey` run with
+`network_mode: service:test-runner` so they share its network namespace - meaning `localhost` really
+does reach them, and `LocalhostOnlyNetwork` is satisfied by construction rather than by exception.
+`bin/run_tests.sh` (2026-08-27) targets that container by default.
+
+Measured rather than assumed: a full-suite run in `urbanlens_development_main_test_runner` on
+2026-09-05 was 25% through with 47 failures in roughly 3,600 tests. The failure this entry describes
+is "almost every test that touches a logged-in request", so whatever those 47 are, they are not this.
+
+What remains true is the narrow statement in the title: `docker compose exec app pytest` still trips
+the guard, because the `app` container is wired to the shared dev stack by bridge IP and always will
+be. That is not a defect to fix - it is the reason the test profile exists.
+
+**`CLAUDE.local.md` still tells you to do it the broken way.** It documents `docker exec ... app
+... pytest` as the way to run tests here, and calls the guard "a known limitation of this setup,
+not a bug to paper over". The correct instruction is `bin/run_tests.sh`. That file is
+hook-protected, so the wording is left for its owner to apply.
+
+## RESOLVED 2026-09-05: every unrouted URL under /dashboard/ answered 200, so a broken link was invisible
+
+`id: P75` · `status: fixed` · `resolved: 2026-09-05`
+
+`dashboard/urls.py` ended with its own catch-all:
+
+```python
+re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404")
+```
+
+`TemplateView` takes no status, so it rendered the 404 *page* with a **200**. And because that
+pattern lived inside the `dashboard/` include, it matched before the root URLconf's catch-all -
+which calls `_render_404_page` and does set `status=404`. Measured against the running app:
+
+```
+/dashboard/this-route-does-not-exist/    HTTP 200
+/dashboard/rest/no-such-viewset/         HTTP 200
+/nope-not-a-page/                        HTTP 404
+/rest/nope/                              HTTP 404
+```
+
+Every other prefix on the site was correct. The one that holds essentially the whole application
+was the one answering 200 to a URL that does not exist.
+
+Three costs, none of them visible from the page, which renders identically either way:
+
+- **`response.ok` is true.** A `fetch()` against a removed or renamed endpoint takes the success
+  branch and then parses a 99KB HTML error page as JSON. P11 counts ~40 raw `fetch()` call sites,
+  several with no `ok` check at all; this made the ones that *do* check no better off.
+- **Alerting on 4xx cannot see a broken internal link**, because there is no 4xx.
+- **A crawler indexes every mistyped path as a real page** - a soft 404.
+
+Fixed by deleting the line. `handler404` and the root catch-all already render that same template
+with the right status, and the entry that added the dashboard one was duplicating them. Verified
+after: the four paths above now answer 404, 404, 404, 404, the styled page still renders (99,634
+bytes, not Django's plain-text fallback), and `/dashboard/map/` and `/dashboard/` are unchanged at
+302 and 200.
+
+**A test already asserted the right answer.** `tests/integration/specs/security/disclosure.spec.ts:32`
+navigates to `/dashboard/this-path-does-not-exist-91b2c/` and expects `404`, beside a sibling that
+checks the same thing at the site root and passes. That spec has only ever run when someone
+triggered it by hand - `integration.yml` is `workflow_dispatch` only, deliberately, because it
+drives a deployed instance - so an assertion encoding the correct behaviour sat next to code that
+could not satisfy it, and nothing said so.
+
+There were three implementations of "render the 404 page", which is how one of them stayed wrong.
+`_render_404_page` (root catch-all and `handler404`) is the live one; the `TemplateView` above is
+the one that was missing its status; and `IndexController.page_not_found` was a third copy, correct
+but with no caller anywhere in the tree. That one is deleted too.
+
+Found while auditing P35's hardcoded-URL claim: a check that resolved every hardcoded
+`/dashboard/...` path in the templates and TypeScript reported all 21 resolving, which was true and
+meaningless - the catch-all resolves everything. A check that cannot fail is worth noticing.
+## RESOLVED 2026-09-05: CI's frontend job installed with npm, so it checked different dependencies than everyone else
+
+`id: P76` · `status: fixed` · `resolved: 2026-09-05`
+
+`ci.yml`'s frontend job set up Bun - pinned to the same exact patch as the Dockerfile, with a
+comment explaining why the patch matters - and then ran `npm install`.
+
+npm cannot read `bun.lock`, and `package-lock.json` is gitignored (`.gitignore:23`), so on a fresh
+checkout there was no lockfile npm could use. Every range in `package.json` was resolved from the
+registry at job time. So the job that runs `bun run typecheck`, `bun run test:ts` and `bun run
+build` ran all three against a dependency set that matched neither the Docker image (`bun install
+--frozen-lockfile`, Dockerfile:119) nor any developer, and that could change without a commit.
+
+The sharpest instance is the one pin this repo has an open entry about. `bun.lock` holds
+`bun-types@1.1.6` while `package.json` asks for `"latest"` (P73), so `expect(value, message)` - which
+1.1.6's `expect` rejects and current `bun-types` accepts - fails `bun run typecheck` locally and
+would have **passed** in CI. The check meant to catch that class of error was the one place it could
+not be caught.
+
+Fixed by running `bun install --frozen-lockfile`, matching the Dockerfile. Verified: the dry-run
+resolves cleanly against the committed `bun.lock` (so the lockfile is in sync, and the flag turns a
+future drift into a CI failure rather than a silent re-resolution), and `bun run typecheck` passes
+under those frozen versions.
+
+`integration.yml` has the same shape and already knows it - a comment there says to switch to
+`npm ci` "once a package-lock.json is committed". That suite is Playwright and genuinely npm-based,
+so it is left alone; this entry is about the job that runs Bun for everything except its install.
+
+## RESOLVED 2026-09-05: every xdist worker used manifest static storage, so `--parallel` invented 287 failures
+
+`id: P77` · `status: fixed` · `resolved: 2026-09-05`
+
+`base.py` infers `TESTING` by looking for `"pytest"` in `sys.argv`, and freezes
+`STORAGES["staticfiles"]` from that guess at import. `settings/test.py` then sets `TESTING = True`,
+which is too late - the storage decision is already made.
+
+That is invisible for a normal run, where `argv[0]` really does end in `pytest`. A **pytest-xdist
+worker** is started by execnet with `argv[0] == "-c"`, so the guess comes out False, the worker gets
+`CompressedManifestStaticFilesStorage`, and every test rendering a page whose `{% static %}` target
+is not in the manifest dies with `ValueError: Missing staticfiles manifest entry`.
+
+Measured 2026-09-05. A full suite run with `-n 6`:
+
+    303 failed, 14092 passed, 3 skipped, 2261 subtests passed in 1960.36s
+
+**287 of the 303 were that one error.** The same files pass serially, and pass under `-n 2` once
+fixed. So `bin/run_tests.sh --parallel` - an advertised flag - could not be trusted for anything
+that renders a template, and a 2% "failure rate" was almost entirely an artifact of asking for
+speed. Note how that lands: the flag makes the suite faster *and* red, so the natural reading is
+"parallel exposes flakiness", which is the opposite of the truth.
+
+Fixed in `settings/test.py` by setting the storage there rather than improving the guess: a settings
+module named `test` does not need to infer whether it is under test. Verified by asserting the
+backend from inside a worker (fails before, passes after) and by re-running two of the 287 victims.
+
+Two things this also settles. `CLAUDE.local.md` says `manage.py test` "never sets the `TESTING`
+flag, so any test rendering a full page template hits a staticfiles-manifest 500" - the flag is set,
+measured; the storage was the real mechanism, and it is now fixed for every runner. And CI is
+unaffected either way: `coverage run --source=src -m pytest` gives `argv[0]` ending in
+`pytest/__main__.py`, so it always took the correct branch.
+
+## RESOLVED 2026-09-06: the AI-gateway patch guarded only the runner nobody uses
+
+`id: P78` · `status: fixed` · `resolved: 2026-09-06`
+
+`TestRunner.setup_test_environment` patched `LLMGateway.send_prompt` and `send_with_tools` so no
+test could reach a real provider. Django calls that hook; **pytest never does** - pytest-django
+ignores `TEST_RUNNER` entirely - so the guard covered `manage.py test` and nothing else, which is
+the runner this repo tells you not to use. Every ordinary `bin/run_tests.sh` run had no gateway
+patch at all.
+
+It went unnoticed because it was never the only defense: `settings/test.py` pins every provider
+credential to a placeholder, and `LocalhostOnlyNetwork` blocks the socket, so a slip failed rather
+than succeeded. The comment beside the patching called it "defense in depth", which was true - it
+was just depth the actual path did not have.
+
+It stopped being untidy and started mattering on 2026-09-05, when CI moved from `manage.py test` to
+pytest (P74). That moved CI from the path with the guard onto the path without it.
+
+The chokepoint list now lives in `core/tests/ai_guard.py` and both runners use it - the runner via a
+context manager in its hook, pytest via a session-scoped autouse fixture in `conftest.py`. The
+duplication the old comment warned about ("a new chokepoint on LLMGateway needs adding here too")
+would otherwise have become two places to remember instead of one.
+
+`test_ai_gateway_guarded.py` asserts every entry in `AI_CHOKEPOINTS` is a `Mock` at run time, so it
+extends itself when the tuple grows and fails when a chokepoint is added without it. Its teeth were
+checked by turning the fixture off: it fails naming the unpatched method.
+
+## RESOLVED 2026-09-06: the nav bar ran 40px past a phone viewport, so every page scrolled sideways
+
+`id: P52` · `status: fixed` · `resolved: 2026-09-06`
+
+Previously titled "`.app-nav-right` runs 40px past a 390px viewport, so every page scrolls sideways
+at phone width", and before that "the nav bar, not the map, is what overflows at phone width", and
+before that "the map page scrolls sideways at 390px" - which guessed the map. It was never the map.
+Once the overflow probe was taught to ignore elements clipped by an ancestor
+(`getBoundingClientRect` reports geometry as if nothing clipped it, so every Leaflet tile drawn past
+its own `overflow: hidden` container looked guilty) the nav came out shallowest-first.
+
+**Measured before, in Chromium against the running `development_main` stack:** 427px of content in
+viewports of 320, 360, 390 and 414px - identical at every phone width, on `/dashboard/`,
+`/dashboard/map/`, `/dashboard/trips/` and `/dashboard/organize/` alike, because the offender is the
+navigation bar and the navigation bar is on every page.
+
+The arithmetic at 390px: the bar has 375px of usable width, of which the brand takes 116 and the
+hamburger 38, leaving 200px for a right-hand group that wanted 227 - a 137px user button (68 of it
+the username), plus search and notification buttons. `.app-nav-right` is a flex item, and a flex
+item's default `min-width` is its own content, so it could not shrink and simply ran past the
+viewport instead.
+
+**Fixed by deciding which element yields.** Everything right of the brand is fixed-size icon
+buttons with nothing to give up, so they are `flex-shrink: 0` and the brand absorbs a narrow
+viewport instead - but only below `$breakpoint-sm`, where the primary links are already hidden.
+Above it the links are what absorb, and letting the brand shrink there squeezed its name to zero
+width at exactly 768px. The username and the brand name are hidden below `$breakpoint-xs` rather
+than truncated: the bar's slack at those widths is smaller than either word, so truncating renders
+two pixels and an ellipsis, which reads as a rendering fault rather than a layout choice. The avatar
+identifies the account and the logo carries the brand.
+
+**Measured after:** no horizontal overflow at 320, 360, 390, 414 or 1024px, on eleven pages -
+home, map, messages, safety, settings, profile, achievements, the site-admin achievements editor,
+trips, organize and vault. **768px still overflows, and this entry said otherwise until 2026-09-06.**
+That sentence was measured against an intermediate version, in which the brand shrank at every width
+and absorbed the 768px shortfall; scoping the shrink to below `$breakpoint-sm` - which had to be
+done, because at 768 it squeezed the brand name to nothing - put 768 back where it started. The
+claim was left standing next to P82, which says the opposite, in the same commit. An entry that
+contradicts itself is worse than one that admits a gap, and this file is meant to be evidence.
+
+The first attempt was measured too, and was wrong twice - a 2px ellipsis stub at 320px, and the
+brand name squeezed to nothing at 768px - neither of which a "does it overflow" check can see. Both
+were caught by measuring what each element actually rendered as, which is the only way this kind of
+fix can be checked. The false 768 claim is the third instance of the same lesson: a sweep that
+reports one number per width cannot tell you the number came from a version you then changed.
+
+`specs/ui/responsive-overflow.spec.ts` is the regression guard, asserting on the *document* rather
+than on any element: naming the culprit would need rewriting every time the nav is, and the defect
+is "the page scrolls sideways", not "`.app-nav-right` is 227px wide". Its failure message lists the
+widest unclipped offenders, so it ends an investigation rather than starting one. That suite needs a
+routed deployment, so the measurements above came from a direct Playwright probe against this
+checkout's own stack.
+
+**One thing this turned up and did not fix.** At exactly 768px the bar needs 837px: the seven
+primary links appear at that width and, with the brand and the right-hand group, do not fit. That is
+the same defect one breakpoint up, it predates this entry (the 837px reading reproduces on the
+unmodified stylesheet), and closing it means deciding whether a tablet gets the hamburger - which is
+a product call, not a layout fix. Filed as P82.
+
+## RESOLVED 2026-09-06: four chat sockets bounded nothing, and every write they made was reachable over unthrottled HTTP
+
+`id: P31` · `status: fixed` · `resolved: 2026-09-06`
+
+Previously titled "Safety chat's sockets are bounded; the other four, and the unthrottled HTTP paths
+that bypass them, are not", and before that "Session and DM chat sockets have no rate limit and cap
+frame size only after the whole frame is parsed", and before that "Session chat WebSockets have no
+rate limit or frame-size cap".
+
+`dashboard/consumers.py` accepted inbound frames on four sockets (`DirectMessageConsumer`,
+`SafetyCheckinChatConsumer`, and the three games via `_ParticipantSessionConsumer`). Authorization
+was thorough - participation verified before any group is joined, API-key scope checked, credentials
+re-validated on a timer. Nothing bounded *volume*, and each accepted frame is a DB insert plus a
+channel-layer broadcast to every member of the group.
+
+**Four things the original entry asserted were wrong, and each cost an implementer a wrong turn:**
+
+- **"a multi-megabyte frame is fully processed" cannot happen.** Daphne defaults both
+  `websocket_max_message_size` and `websocket_max_frame_size` to 1 MiB, and autobahn refuses at
+  frame-header time, before any payload is buffered. The real overshoot was 1 MiB against a body
+  limit - still 250x for safety chat, but a severity call made on "unbounded" was made on a false
+  premise.
+- **The flag spelling it gave exits daphne at startup.** It is `--websocket-max-message-size`, with
+  hyphens; daphne's neighbouring websocket options use underscores, which is what makes the wrong
+  guess so natural. A container that takes an unrecognised flag dies with no other symptom.
+- **Safety chat's body limit is 4,000, not the 1,000 it named.** That number is
+  `MAX_SESSION_CHAT_MESSAGE_LENGTH`, which belongs to game session chat only. A frame cap derived
+  from 1,000 would have refused legitimate safety messages, on the one feature whose own service
+  docstring says failing silently is worse than most.
+- **"the limit can be implemented once per family" understated what a family is.** Every write these
+  sockets perform is also reachable over HTTP with no throttle at all, and DRF's throttle classes do
+  not cover a plain `View`. That is the half that took the longest to fix and is the reason this
+  entry stayed open through two shipped batches.
+
+**Fixed in three batches.**
+
+*The transport and size bounds.* `services/core/frame_limits.py` and `consumers.InboundVolumeMixin`
+bound frame size before the parse and frame volume in two tiers - a per-connection in-process counter
+that cannot fail open, and a shared cache counter keyed by sender that bounds one account across many
+sockets. The daphne size flags are derived once in `bin/websocket_frame_flags.sh` and appended by
+`docker-entrypoint.sh`, so the transport and application bounds cannot drift.
+
+*Three things about that were wrong on the first attempt, and the shape of each is worth keeping.*
+The byte cap was written into `docker-compose.yml` as `${UL_WEBSOCKET_MAX_MESSAGE_BYTES:-...}` - but
+that name is a *derived Django setting*, not an environment variable, and compose substitutes `${...}`
+from the shell before any container exists. The guard meant to catch that was registered as a Django
+system check, which `manage.py` runs and daphne does not; it is a plain function called from
+`asgi.py` now, the one module daphne imports in its own process. And the helper was then resolved
+against `dirname "$0"`, which is the repo root on a developer's machine and `/` inside the image -
+**the flags silently were not applied and `app-ws` came up healthy anyway**, because a missing cap
+only reverts daphne to its own 1 MiB default. Only starting the real container showed it. See the
+`guards-that-cannot-run-in-their-own-process` memory.
+
+*The remaining sockets.* `DirectMessageConsumer` had no `isinstance(data, dict)` guard at all: a
+frame of `[]` is valid JSON and was an `AttributeError` on `.get` one line later, so the cheapest
+possible frame closed somebody's messaging connection. Its `typing` frame is now budgeted despite
+writing no row - it is the only frame there that fans out into the *recipient's* group, which makes
+an unmetered one the cheapest amplifier on the socket.
+
+*The clients, which had to land with the sockets rather than after.* `trivia.ts`, `spotguessr.ts` and
+`consensus.ts` each `switch (data.type)` with no `case "error"`, and each cleared the composer as
+soon as `send()` returned true - which reports transmission, not acceptance. Both consumers already
+emitted error frames (scope refusals, failed writes) that were being dropped on the floor, so adding
+a throttle in front of that would have converted an existing bug into routine silent data loss.
+`shared/chat-composer.ts` keeps what was sent until the broadcast confirms it and hands it back on a
+refusal, oldest-first: under a rate limit the refusal that comes back is about the earliest
+unacknowledged send while newer ones may already have succeeded.
+
+*The HTTP paths, which are why this was not closed sooner.* The budget now lives in
+`create_direct_message`, `create_group_message`, `create_chat_message` and `SessionChat.send`, with
+the identity built there rather than by each caller - a caller that constructs its own key is a
+caller that can get it wrong, and "the socket and the view spell the same sender differently" is a
+bypass that looks like a working limit from either side. `MessageRateLimitedError` is a `ValueError`,
+so the consumers report it without new knowledge; the views answer 429 rather than the 400 its
+siblings earn.
+
+**There are five doors, not two, and the first attempt at this counted wrong.** The socket and the
+two web views are what the entry above named; the external API has three more views calling the
+identical create functions. Because the refusal is deliberately a bare `ValueError`, and DRF's
+exception handler returns `None` for anything that is not an `APIException`, every legitimate
+throttling event on the mobile and OAuth surface rendered as a **500** - wrong retry semantics for
+the client, and error alerting fired for expected traffic. It is mapped in
+`uniform_exception_handler` now rather than in each view, so a view added later inherits it. Three
+more defects came out of the same review: the direct-message charge ran *before*
+`can_direct_message`, so being refused by someone whose visibility does not include you cost the
+sender their allowance (`create_group_message` already checked membership first); two concurrent
+retries of one `client_uuid` both charged, since the idempotency guard reads before it writes, which
+`FrameBudget.refund` now gives back; and `ChatComposer`'s in-flight queue outlived a reconnect,
+after which the next message with the same text retired the orphan instead of itself and shifted the
+queue for the rest of the session.
+
+`UL_WEBSOCKET_MESSAGES_PER_MINUTE` became `UL_MESSAGES_PER_MINUTE` in that move. The old name would
+have told an operator it governed only sockets, which stopped being true.
+
+**Two findings from the tests worth keeping.**
+
+Moving the refusal into the service regressed the throttling of the refusal itself: the consumers'
+generic `ValueError` handler answers every refused frame individually, so a flood was answered with a
+flood. `test_one_error_frame_per_window_not_one_per_refused_frame` caught it, which is the second time
+that test has paid for itself.
+
+And **draining a socket is not a synchronisation point** for these consumers. Neither the
+direct-message nor the game socket answers an accepted frame on the connection that sent it - one
+broadcasts through Celery, the other to the group - so `receive_nothing` returns immediately and the
+assertion counts rows the consumer has not written yet. A flood test written that way reads "1" and
+looks like a working throttle. Two tests were rewritten for that, and two more for passing against
+unfixed code: one sized an oversized frame above the *body* limit, where the service's own validator
+answers first, and one assumed a shared budget resets with a new connection.
+
+## RESOLVED 2026-09-06: the icon picker cost 594 KB per widget, and the site-admin directory ~15 queries per user
+
+`id: P68` · `status: fixed` · `resolved: 2026-09-06`
+
+Previously titled "The achievement icon picker still renders 1,249 icons per row, and the site-admin
+directory costs ~15 queries per user", and before that "N+1s in the site-admin user list, the
+achievement icon picker and Memories > Maps still have no perf test".
+
+Four things were surveyed; two were already fixed when the entry was written, one was fixed on
+2026-09-05, and the two that remained are fixed here.
+
+**Memories > Maps** (`test_query_scaling_memories_maps.py`, 2026-09-05). Adding the six missing
+prefetches changed nothing on its own: `MarkupMap.attachment`/`.attachments` called `.first()` and
+`.select_related(...)` on each manager, and both build a new queryset, so they query straight past a
+prefetch. The properties read `_prefetched_objects_cache` first now. Measured at 2 and 8 cards:
+58/112 queries, then 44/56 once the properties honoured the prefetch, then 42/48 with `pin__location`,
+then flat with `pin__location__wiki`.
+
+**Both games' friend lists** were already batched before the entry was written; `spotguessr/social.py`
+and `trivia/social.py` say so in their docstrings. The "2N+1 queries for N friends" claim was never
+true for either.
+
+**The site-admin directory.** The entry's "up to 5 uncached queries per user" was wrong: the page cost
+about **15 per row**, and the dominant term was neither the quota nor the roles. It was
+`can_view_contact_info`/`can_view_profile`, resolved per listed profile - three `dashboard_friendships`
+variants, a `dashboard_trip_memberships` lookup and a pin/place lookup, each once per user.
+
+Fixed by resolving both for the whole page at once. `Profile.visible_profile_pks` already existed for
+identity; the contact-info half did not, and writing a second copy of the relationship queries would
+have been a fourth place for the semantics to drift from `visibility_permits`. Both are now thin
+wrappers over one `_visible_subject_pks`, parameterised by the three things that actually differ:
+which field supplies the `VisibilityChoice`, whether an unanswered friend request opens the gate
+(it does not, for contact details), and whether a `DirectMessageTemporaryAccess` grant applies (it
+reveals an identity, never a contact method). `test_contact_visibility_batch.py` holds the new path
+to `can_view_contact_info` across every choice and relationship, the same way
+`test_identity_visibility_batch.py` already held the old one - and its two load-bearing tests are the
+negatives, because a helper parameterised over both fields passes everything else whether or not it
+honours them.
+
+**The achievement icon picker**, which was the largest of the set. `_icon_picker.html` nested two
+loops over all 1,249 `ICON_CATEGORIES` entries inside a `hidden` div *per widget*, re-rendered in
+full on every create/edit/delete/backfill via `hx-swap="outerHTML"`.
+
+Measured before: one grid was **594,669 bytes / 2,498 buttons**, the page rendered N+1 of them (the
+create form has one too), and 60 awards came to ~34.6 MB and 76,189 buttons.
+`pages/organize/index.html` rendered **13** as a flat page cost - ~7.6 MB on every load - which is
+very likely the residue of the twelve-second Organize Labels page `render_scaling.py`'s docstring
+cites.
+
+Measured after: the partial is **3,224 bytes**, a 184x cut, and the catalogue is one 451 KB response
+fetched once per session and cached immutably under a content-hashed URL. The achievement admin's
+per-row cost went from 594,669 to 25,533 bytes, and then to a passing render-scaling budget once the
+picker's 28 category tabs joined the shared fetch and the colour swatches stopped repeating a
+297-byte inline handler 21 times per row. Verified in a real browser against the dev stack: four
+pickers on the page, four grid items before opening one and 1,253 after, 29 tabs, **one** network
+request for all four, and a pick that lands in the hidden input.
+
+**The obvious fix - `hx-get` on the placeholder - is the one that must not be used, and this is why.**
+htmx events bubble, and with `hx-swap="outerHTML"` the placeholder is gone by the time
+`htmx:afterRequest` fires, so htmx re-dispatches it on the nearest surviving ancestor. Four templates
+wrap a picker in a `<form>` carrying `hx-on::after-request` that closes a dialog and toasts success on
+`event.detail.successful` - `organize_label_edit_form.html:8`, `organize_label_customize_form.html:7`,
+`organize_label_create_dialog.html:5`, and `pages/map/index.html:398` (which also calls `this.reset()`).
+Merely *opening* the picker would close the dialog, discard the user's edits and toast "saved". The
+achievement admin itself has no `hx-on`, which is exactly why a fix validated against the page this
+entry named would have looked fine. `hx-trigger="click once"` compounds it: htmx spends `once` when
+the event fires, not when the request succeeds, so a single failed fetch leaves that picker reading
+"Loading icons..." until a full page reload.
+
+Fetching from `IconPicker.toggle` emits no htmx events and sidesteps all of it. The cost was the
+third copy of that contract - `pages/map/index.html`'s inline picker, which cannot import the shared
+module because its `pick()` and `_handleUpload()` carry add-pin-specific behaviour. The retry
+behaviour `click once` would have got wrong is covered directly
+(`icon-picker-lazy-grid.test.ts`, "a failed fetch is retried on the next open").
+
+**A separate bug this turned up, fixed here too.** `clean_icon` rejected **29 of the catalogue's own
+1,249 icons** - the 14 keycaps (`0`-`9`, `#`, `*`, whose base code point is ASCII), `!!`, `!?`, and 13
+letter-category entries (Greek, Cyrillic, Hebrew, CJK, kana). Every write path routing through it -
+`labels.py:691`, `labels.py:814`, `services/labels/customization.py:86`, `saved_filters.py:123`,
+`maps.py:829`, `pin_creation.py:291` - silently stored *nothing* when a user picked one of those from
+the picker that offered them. `Achievement.icon` was unaffected only because it skips the validator.
+Fixed by checking membership of the catalogue before the emoji heuristic, rather than loosening the
+heuristic: loosening it would have admitted the bare ASCII those entries are built on, and a set
+cannot. The test asserts over the catalogue itself, so a future entry that trips the heuristic fails
+on the day it is added.
+
+## RESOLVED 2026-09-06: the site-admin directory's search confirmed hidden emails and names by guessing
+
+`id: P80` · `status: fixed` · `resolved: 2026-09-06`
+
+`SiteAdminUsersView`'s own docstring promised the opposite: "even a site admin does not get a
+backdoor around a user's `contact_visibility` setting here. Email is only shown when the viewing
+admin's own profile would satisfy that user's configured visibility rule". The rendering half was
+true. The search half was never checked.
+
+The queryset filtered on `username`, `email` and `first_name` before any visibility rule was
+consulted, and visibility was then applied per row and only decided what the row *rendered*. So for
+a user with `contact_visibility = NO_ONE` and no relationship to the admin, the row correctly showed
+"Hidden" - and `?q=<their address>` still returned exactly that one row, while a wrong guess rendered
+the empty state. One request per guess confirmed or denied any address. The same worked on
+`first_name` and on `username` against `profile_visibility`, since a masked row renders "Invisible
+User" rather than disappearing - which the original entry did not notice, having named only two of
+the three fields.
+
+Found 2026-09-06 by an adversarial review of a proposed P68 fix, which had claimed a masking test
+would close the docstring's promise. It would not have: an assertion that the hidden address is
+absent from the response *body* passes both before and after, because the leak is in which rows come
+back rather than in what they say. The tests written for the fix therefore assert on the **set of
+rows returned** and never on the body, and every hidden-field test is paired with a visible-field
+control - a search that matches nothing is otherwise indistinguishable from a search that is simply
+broken.
+
+**Fixed by restricting matching, not membership.** Each field is now combined with its own gate, so
+an account whose identity is visible but whose contact details are not stays findable by username, and
+a hidden account still appears when the admin browses the directory without a search term - which is
+what the page is for. The entry recorded this as a product decision between "restrict the predicate"
+and "declare admin search privileged and rewrite the docstring"; the first was taken, because the
+docstring's claim is the thing users would rely on.
+
+The shape that made it cheap: a non-`ANYONE` subject can only pass a gate through a relationship, and
+the set of profiles with *any* relationship to one viewer is bounded and enumerable in a fixed number
+of queries. So `Profile.related_profile_ids` enumerates that superset, the existing batch resolvers
+decide it, and the queryset is narrowed with `<field> = ANYONE OR pk IN (decided)` - exact, and one
+statement. `related_profile_ids` is deliberately loose and documented as such: an extra id costs one
+row for the real check to reject, while a missing one hides a profile the viewer is entitled to see,
+so the decision stays in the audited helper and never moves into the enumeration.
+
+Accounts with no `Profile` row satisfy neither clause and so are not matched by a search. That is
+consistent with how they render - `get_or_create` gives them the default visibility, which is not
+`ANYONE` - rather than a separate rule.
+
+## RESOLVED 2026-09-06: one throw in core.js's first line killed the other 23 installs, on every page, for four days
+
+`id: P81` · `status: fixed` · `resolved: 2026-09-06`
+
+`themes/base.html:24` loads `dashboard/js/core.js` as a plain, non-deferred `<script>` inside
+`<head>`, so `document.body` is null while it runs. `entries-classic/core.ts` is a flat list of 24
+top-level `installGlobal*()` calls, which means the first one that throws takes the other 23 with
+it - silently, because nothing catches it and nothing depends on it synchronously.
+
+On 2026-09-02 (`167000b77`) `installGlobalAssistantOverlay` - **the first call in that list** - began
+binding a listener to `document.body`. From that commit until this one, the entire shared frontend
+bundle was dead site-wide: no confirm dialog, no `fetchJson`, no label picker, no markup engine or
+toolbar, no mention autocomplete, no reaction picker, no leave confirmation, no safety live
+location, no map context menu, layers or export, no pin-cache purge, no undo bar.
+
+Measured in a real browser against the running dev stack, on `/dashboard/`: one `pageerror`
+("Cannot read properties of null (reading 'addEventListener')"), and `window.createMarkupToolbar`,
+`window.confirmDialog`, `window.MarkupEngine`, `window.UrbanLensLabelPicker` and
+`window.toggleReactionPicker` all `undefined`. After the fix: no page errors, all five defined.
+
+**The trap was already known, and documented, three times over.** `autosave-guard.ts`,
+`collapsible-sections.ts` and `undo-map-refresh.ts` each wait for the body and each explain in a
+comment that `core.js` loads from `<head>`. What did not exist was anything that *fails* when the
+next module forgets - so the fourth module to reach for `document.body` broke the whole bundle and
+no test, no linter and no CI job noticed.
+
+`core.install.test.ts` is that missing test. It runs the real entry with `document.body` null and
+`readyState` `"loading"` - both halves, because the three existing guards are split between those
+two readings of "the body is not there yet", and faking only one would report a correct module
+broken for a state a browser never produces. It then asserts on the entry's **last** statement,
+`window.createMarkupToolbar`, which is precisely the thing nothing can reach if anything earlier
+throws. It also asserts the premise it depends on: that `base.html` still loads the bundle from
+`<head>` without `defer` or `type="module"`.
+
+Found while browser-verifying an unrelated change (P68's icon picker), which is the second time in
+two days that running the thing rather than reading it produced the more valuable finding.
+
+## RESOLVED 2026-09-06: an unguarded is_authenticated in a base.html tag 500s any page rendered without a request
+
+`id: P79` · `status: fixed` · `resolved: 2026-09-06`
+
+`assistant_enabled_flag` (added 2026-09-02, `1fa2434b4`) opened with a bare `user.is_authenticated`.
+It is called from `themes/base.html:4`, so it runs for **every page**, and the argument is
+`request.user`.
+
+Render a page template without a `request` in the context - `render_to_string`, which is what a
+template-level test does - and Django resolves `request.user` to `string_if_invalid`, which is `""`.
+`"".is_authenticated` is an `AttributeError`, and it comes out of the template layer as a 500 on the
+whole page rather than as a missing value.
+
+Found in a full-suite run as three failures in `test_wiki_location_conflict_notice.py`, but the test
+was only the messenger: any code path rendering a page template without a request hit it, and it had
+been that way for four days. It is the one unguarded `is_authenticated` in `dashboard_tags.py`.
+
+Fixed with `getattr(user, "is_authenticated", False)`. Rendering a page without a request is a
+legitimate thing to do, and answering False is the honest result - the assistant surface needs a
+signed-in viewer, and there isn't one.
+
+## RESOLVED 2026-09-06: filed twice, nine days apart, for the same unvalidated key_version
+
+`id: P46` · `status: duplicate` · `resolved: 2026-09-06`
+
+The same defect as P26: `create_group_message` validated `key_version >= 1` and never checked it
+against the group. Filed independently on 2026-08-16 by an investigation that did not find the
+2026-08-07 entry.
+
+Merged into P26 rather than kept, because this one carried the constraint that decides the fix and
+P26 did not: **the obvious server-side fix has a worse failure mode than the gap.** Rotation
+requires every member enrolled and returns 409 when one is not, so refusing stale-version sends
+would let a single un-enrolled member stop the whole group from sending - trading confidentiality
+for availability. That is a product decision, and it is why the half that is now fixed is only the
+half that has no such trade: a `key_version` naming no `GroupKey` for this group is refused
+outright, since no legitimate client sends one.
+
+Worth noting for the next sweep: both entries describe the same code and neither cites the other.
+`docs/INDEX.md` carried both, one line apart in the P-block, with near-identical claims - which is
+the shape a duplicate takes here and is greppable.
+
+## RESOLVED 2026-09-08: `matching_vocabulary()` reloaded the entire tag-vocabulary table on every search term, uncached
+
+`id: P87` · `status: fixed` · `resolved: 2026-09-08`
+
+`matching_vocabulary()` (`services/locations/external_tag_groups.py`) now serves the vocabulary
+table from `django.core.cache.cache` (materialized once, on the first miss) instead of re-running
+`ExternalTagVocabularyEntry.objects.all()` on every call - fixing the per-search-term, per-provider
+multiplication the original entry measured. `_invalidate_vocabulary_cache()` is `cache.delete`d
+(not TTL-only) at the end of `create_group`, `move_entry` - once, covering both its normal-move
+and its old-group-empties-and-deletes branches, since the branch itself changes no surviving
+entry's bucket key beyond what the preceding `entry.save()` already did - and `set_preferred`.
+Tests in `tests/hypothesis/test_external_tag_groups.py::MatchingVocabularyCachingTests` cover both
+halves: a second call with no writes between does not requery (`assertNumQueries(0)`), and a write
+through each of the three functions (plus the delete branch specifically) is visible on the very
+next call with no manual cache-clear in the test.
+
+**The original entry's premise was incomplete, not just its fix.** It says the table "only changes
+through `create_group`/`move_entry`/`set_preferred`" (citing the module docstring) and that the
+fourth risk was `move_entry`'s group-delete side effect. Neither the module nor that survey caught
+a fourth *class* of write: `ExternalTagVocabularyEntry`'s own docstring says it is "Auto-registered
+(`get_or_create`) by `PlaceExternalTag.sync_for_source` as new tags appear" -
+`models/place/external_tag.py:sync_for_source`, a different file entirely, called on every tag
+ingestion from OSM/Overture, not an admin action. Left uncovered, the cache built for this entry
+would have hidden a newly-synced tag from search for up to the cache's TTL. `sync_for_source` now
+calls the same `_invalidate_vocabulary_cache()` helper, gated on `get_or_create`'s `created` flag so
+a plain resync (the common case - most tags it sees are already known) does not thrash the cache.
+Confirms the entry's own "anything that touches this table" framing was the right standard - it
+just was not applied to every file that does.
+
+## RESOLVED 2026-09-08: the paid Incident History panel could silently be served the free panel's narrower 3-year cache
+
+`id: P94` · `status: fixed` · `resolved: 2026-09-08`
+
+Found and fixed 2026-09-08 during the pre-merge audit of `release/v_0_8_0`; confirmed on an
+independent adversarial pass.
+
+`IncidentHistoryPanelSource` (`plugins/builtin/redata_incidents.py`, added `5795c4c3a` this release)
+promises subscribers a `_HISTORY_YEARS = 25` incident window and calls
+`RedataIncidentsGateway().get_incidents(latitude, longitude, years=25, limit=500)` with no
+`force_refresh` - identical to the sibling free `PoliceIncidentsPanelSource` (`_YEARS = 3`), which
+also never passed it. Both panels hit the exact same REData-side cache token: REData's
+`find_incidents_near` (`redata/parcels/services/incidents/lookup.py`) keys coverage purely by
+`coordinate_token(lat, lng, decimals=3)` plus a radius pinned to 500 m for every provider
+(`core/services/search_coverage.py`'s `_Coverage` dataclass carries only `radius_meters` and
+`checked_at` - no `years` field at all). So whichever panel populates the cache first for a given
+block wins the fetch window for both: since the free 3-year panel is the default/more-visited one,
+it usually populates first, and the paid 25-year panel would then silently be served the same
+narrow 3-year rows for a deterministic `incident_cache_min_ttl_hours` window (72 h,
+`REData/settings/app.py:668`) and probabilistically longer - with no error, no flag, and no way to
+tell from the response, since REData's `complete` field reflects provider reachability, not
+fetch-window narrowing.
+
+**Fixed entirely on the UrbanLens side - no REData change needed.** The plumbing already existed and
+was simply unused: `RedataIncidentsGateway.get_incidents` (`services/apis/locations/redata_incidents_gateway.py`)
+already accepted and forwarded `force_refresh: bool = False` ("Bypass REData's cache and re-query
+live"), and REData's `/api/v1/incidents/` endpoint already fully honored it
+(`lookup.py:159`: `if not force_refresh and is_covered(...)`). `IncidentHistoryPanelSource.fetch_envelope`
+now passes `force_refresh=True`, with a comment at the call site documenting the tradeoff: every
+Incident History view now does a live portal query rather than a cached one, which costs more
+(REData portal load, UrbanLens's own API-cost tracking per `dashboard/CLAUDE.md`'s "API
+Integrations" section) than the free panel's cached-when-possible fetch - but this panel is
+subscriber-gated (lower volume than the free panel) and its whole promise is the 25-year window;
+silently truncating it with no signal anything is wrong is worse than the extra cost.
+`PoliceIncidentsPanelSource` (the free panel) is deliberately left unchanged - its cached behavior
+was never broken, and forcing a refresh there would regress the caching benefit it exists for.
+
+The panel's `"{n} on this block in 25 years"` chip, which already assumed the full window
+unconditionally, is accurate again now that `force_refresh=True` makes that assumption true.
+
+`IncidentHistoryPanelRenderTests::test_fetches_the_full_25_year_window` (updated) and two new tests
+(`test_forces_a_live_refresh_so_the_free_panels_cache_cannot_truncate_the_window`,
+`test_the_free_panel_does_not_force_refresh`) in
+`tests/hypothesis/test_redata_incident_history_and_historical_features.py` pin both halves: the paid
+panel's gateway call carries `force_refresh=True`, and the free panel's does not (anti-vacuity -
+this fix must not regress the free panel's caching).
+
+## RESOLVED 2026-09-08: every wiki view minted a permanent access grant, with no product sign-off recorded for it
+
+`id: P88` · `status: fixed` · `resolved: 2026-09-08`
+
+Filed 2026-09-08 during the pre-merge audit of `release/v_0_8_0` against `docs/GOALS.md`; confirmed
+on an independent adversarial pass.
+
+`resolve_visible_wiki()` (`services/wiki/wiki_access.py:504`) calls
+`PlaceAccessGrant.objects.record_engagement(profile, location.place)` unconditionally on every
+successful wiki view. `record_engagement()` is a `get_or_create` under
+`GrantReason.GRANDFATHERED_ENGAGEMENT`, and grants are permanent - never revoked by pin churn. So
+the first time a profile loads a wiki they currently qualify for, they keep that access forever,
+even after the pin that earned it is later deleted, unpinned, or moved. `docs/GOALS.md:33-34`
+states the access rule this sits inside - "A user earns access to a location's wiki only by having
+their own pin inside that place's official boundary" - and a silent, permanent grandfather-on-read
+converts that into "you must have held one at least once and happened to open the page."
+
+**This was never a discovery leak or a code bug.** The existing 404 in the same function still
+gates the first view, so this only ever entrenched access already legitimately granted at least
+once, and the behavior was already well-tested
+(`tests/hypothesis/test_grandfathered_parcel_split_access.py::WikiEngagementGrandfatheringTests`).
+The gap was entirely that the sibling mechanism - split-family permanence
+(`PlaceAccessGrantManager.snapshot_family`) - carried an explicit "Confirmed with Jess" sign-off in
+its test docstring, and this one, doing the same kind of permanent and irreversible thing to the
+same model, had none anywhere.
+
+**Confirmed with Jess 2026-09-08: this is intended, not a bug.** Viewing a wiki once while access
+is legitimately held is meant to keep that access forever. No code changed - the sign-off itself
+was the fix. Added alongside the split-family one in
+`tests/hypothesis/test_grandfathered_parcel_split_access.py`'s module docstring, so both permanent
+mechanisms now carry the confirmation the original filing asked for.

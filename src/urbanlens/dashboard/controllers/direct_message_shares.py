@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -16,8 +17,22 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip
-from urbanlens.dashboard.services.messaging.direct_message_shares import ShareTargetPermissionError, ShareValidationError, invite_to_trip_in_message, recommend_friend_in_message, share_pin_in_message
+from urbanlens.dashboard.services.messaging.direct_message_shares import (
+    CannotRecommendSelfError,
+    FriendRecommendationUnavailableError,
+    NotATripMemberError,
+    RecommendedProfileNotConnectedError,
+    ShareTargetPermissionError,
+    ShareValidationError,
+    TripInviteNotConnectedError,
+    invite_to_trip_in_message,
+    recommend_friend_in_message,
+    share_pin_in_message,
+)
+from urbanlens.dashboard.services.sharing.pin_sharing import PinSharePermissionError
 from urbanlens.dashboard.services.social.connections import get_connections
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -59,10 +74,20 @@ class MessageSharePinView(LoginRequiredMixin, View):
 
         try:
             share_pin_in_message(profile, partner, pin, body, markup_map_uuid=request.POST.get("markup_map_uuid") or None)
+        except PinSharePermissionError as exc:
+            logger.info("pin share in message rejected: %s", exc)
+            return HttpResponseForbidden("Pins can only be shared with connected friends.")
         except ShareTargetPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+            # share_pin_in_message doesn't raise this itself; caught here only
+            # as a defensive fallback should that ever change.
+            logger.warning("pin share in message rejected: %s", exc)
+            return HttpResponseForbidden("That pin can't be shared with this recipient.")
         except ShareValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            # share_pin_in_message doesn't raise this itself - it's raised
+            # only by send_message_with_share, which this view doesn't call -
+            # caught here only as a defensive fallback should that ever change.
+            logger.warning("pin share in message rejected: %s", exc)
+            return HttpResponseBadRequest("That share request is invalid.")
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)
@@ -275,10 +300,17 @@ class MessageShareTripView(LoginRequiredMixin, View):
 
         try:
             invite_to_trip_in_message(profile, partner, trip, body)
-        except ShareTargetPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+        except TripInviteNotConnectedError as exc:
+            logger.info("trip invite in message rejected: %s", exc)
+            return HttpResponseForbidden("You can only invite connected friends to a trip.")
+        except NotATripMemberError as exc:
+            logger.info("trip invite in message rejected: %s", exc)
+            return HttpResponseForbidden("You aren't a member of that trip.")
         except ShareValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            # invite_to_trip_in_message doesn't raise this itself - see the
+            # matching comment in MessageSharePinView.post.
+            logger.warning("trip invite in message rejected: %s", exc)
+            return HttpResponseBadRequest("That share request is invalid.")
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)
@@ -319,10 +351,22 @@ class MessageShareFriendView(LoginRequiredMixin, View):
 
         try:
             recommend_friend_in_message(profile, partner, recommended, body)
-        except ShareTargetPermissionError as exc:
-            return HttpResponseForbidden(exc.safe_message)
+        except CannotRecommendSelfError as exc:
+            logger.info("friend recommendation in message rejected: %s", exc)
+            return HttpResponseForbidden("Choose a different friend to recommend.")
+        except RecommendedProfileNotConnectedError as exc:
+            logger.info("friend recommendation in message rejected: %s", exc)
+            return HttpResponseForbidden("You can only recommend your own connected friends.")
+        except FriendRecommendationUnavailableError as exc:
+            # Deliberately one generic message for both the opt-out and the
+            # blocked case - see FriendRecommendationUnavailableError.
+            logger.info("friend recommendation in message rejected: %s", exc)
+            return HttpResponseForbidden(f"{recommended.username} doesn't allow friend recommendations.")
         except ShareValidationError as exc:
-            return HttpResponseBadRequest(exc.safe_message)
+            # recommend_friend_in_message doesn't raise this itself - see the
+            # matching comment in MessageSharePinView.post.
+            logger.warning("friend recommendation in message rejected: %s", exc)
+            return HttpResponseBadRequest("That share request is invalid.")
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)

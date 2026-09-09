@@ -18,7 +18,6 @@ from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.abstract.addressable import AddressableModel
     from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)

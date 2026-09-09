@@ -35,6 +35,7 @@ than shared community content.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.contrib.gis.geos import GEOSException
@@ -89,7 +90,8 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
 from urbanlens.dashboard.services.comments.comments import (
     ALLOWED_EMOJIS,
-    CommentValidationError,
+    EmptyCommentTextError,
+    InvalidCommentHostError,
     aggregate_reactions,
     comment_is_visible,
     comment_mentions,
@@ -121,6 +123,8 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.comments.model import Comment as CommentModel
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
+
+logger = logging.getLogger(__name__)
 
 
 class WikiApiView(ExternalApiView):
@@ -212,9 +216,9 @@ class WikiDetailApiView(WikiApiView):
 
     PATCH applies a community edit through the same
     ``services.wiki.wiki_edits.apply_wiki_edit`` the dashboard's "Suggest edits"
-    form uses, and records the identical ``WikiEdit`` audit row - but with
-    ``strict=True``, so an unrecognized security level or an unparseable date
-    is a 400 rather than the internal view's silent skip.
+    form uses, and records the identical ``WikiEdit`` audit row - including its
+    rejections: an unrecognized security level or an unparseable date is a 400
+    on both paths.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -251,7 +255,7 @@ class WikiDetailApiView(WikiApiView):
         target = writable_wiki(wiki)
         try:
             with transaction.atomic():
-                apply_wiki_edit(target, profile, changes, strict=True, baseline=wiki)
+                apply_wiki_edit(target, profile, changes, baseline=wiki)
         except WikiEditValidationError as exc:
             return Response({"error": exc.message, "fields": {exc.field: exc.message} if exc.field else {}}, status=400)
 
@@ -619,7 +623,8 @@ class WikiBoundaryApiView(WikiApiView):
             try:
                 geom = parse_multipolygon_geojson(polygon_geojson)
             except InvalidPolygonGeoJSONError as exc:
-                return Response({"error": exc.safe_message}, status=400)
+                logger.info("wiki boundary polygon rejected: %s", exc)
+                return Response({"error": "That boundary isn't a valid polygon or multipolygon."}, status=400)
 
             from urbanlens.dashboard.models.site_settings import SiteSettings
 
@@ -1161,8 +1166,15 @@ class _CommentListMixin(PaginatedListMixin):
 
         try:
             comment = create_comment(profile=profile, pin=pin, wiki=wiki, text=data["text"], parent=parent)
-        except CommentValidationError as exc:
-            return Response({"error": exc.safe_message}, status=400)
+        except EmptyCommentTextError as exc:
+            logger.info("comment creation rejected: %s", exc)
+            return Response({"error": "Comment text can't be empty."}, status=400)
+        except InvalidCommentHostError as exc:
+            # Defensive: this view always calls create_comment with exactly one
+            # of pin/wiki, so reaching this means the caller wiring above it is
+            # broken, not that the requester did anything wrong.
+            logger.warning("comment creation rejected: %s", exc)
+            return Response({"error": "That comment couldn't be created."}, status=400)
 
         # The freshly created comment never passes through visible_comment_tree,
         # so its mentions are resolved here without the gate that call would

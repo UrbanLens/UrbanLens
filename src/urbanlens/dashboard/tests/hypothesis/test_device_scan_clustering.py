@@ -18,7 +18,6 @@ from model_bakery import baker
 
 from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.device_scan.model import (
     DeviceScanEntry,
     DeviceScanUpload,

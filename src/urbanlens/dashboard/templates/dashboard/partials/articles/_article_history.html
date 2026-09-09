@@ -1,4 +1,11 @@
-{# Revision history for the History tab. Each row can expand a diff below the list header. #}
+{% comment %}
+Revision history for the History tab. Each row can expand a diff below the
+list header.
+
+Rows carry `is_current` rather than reading `forloop.first`: once the list
+pages, the first row of page two is not the current revision, and this
+template both labels that row and withholds its Restore button.
+{% endcomment %}
 <div id="article-history-panel" class="article-history"
      hx-get="{{ scope.urls.history }}"
      hx-trigger="articleSaved from:body"
@@ -8,14 +15,14 @@
     <div id="article-revision-detail" class="article-revision-detail"></div>
     <ol class="article-history-list">
         {% for row in revision_rows %}
-        <li class="article-history-row{% if forloop.first %} article-history-row--current{% endif %}">
+        <li class="article-history-row{% if row.is_current %} article-history-row--current{% endif %}">
             <div class="article-history-main">
                 <span class="article-history-number" title="Revision {{ row.number }}">#{{ row.number }}</span>
                 <div class="article-history-summary">
                     <span class="article-history-meta">
                         <strong>{{ row.revision.editor_display_name }}</strong>
                         &middot; {{ row.revision.created|date:"M d, Y H:i" }}
-                        {% if forloop.first %}<span class="article-history-chip article-history-chip--current">current</span>{% endif %}
+                        {% if row.is_current %}<span class="article-history-chip article-history-chip--current">current</span>{% endif %}
                         {% if row.revision.restored_from %}<span class="article-history-chip" title="Restored an earlier version"><i class="material-symbols-outlined">history</i> restore</span>{% endif %}
                     </span>
                     {% if row.revision.edit_summary %}
@@ -32,7 +39,7 @@
                             hx-swap="innerHTML show:#article-revision-detail:top">
                         <i class="material-symbols-outlined">difference</i>
                     </button>
-                    {% if not forloop.first %}
+                    {% if not row.is_current %}
                     <button type="button" class="btn btn--icon-sm" title="Restore this version"
                             hx-post="{{ scope.urls.history }}{{ row.revision.id }}/restore/"
                             hx-target="#article-history-panel"
@@ -47,6 +54,7 @@
         </li>
         {% endfor %}
     </ol>
+    {% include "dashboard/partials/ui/_pagination_controls.html" with page_url=scope.urls.history page_target="#article-history-panel" page_swap="outerHTML" page_noun="article revisions" %}
     {% else %}
     <div class="article-history-empty">
         <i class="material-symbols-outlined">history</i>

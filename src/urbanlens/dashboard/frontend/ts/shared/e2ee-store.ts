@@ -169,11 +169,14 @@ export async function getGroupKey(selfSlug: string, groupUuid: string, version: 
 /**
  * Wipe every cached key for a profile.
  *
- * Called by the key-reset flow, and by nothing else. It is deliberately *not*
- * called on logout: whether an explicit sign-out should discard decrypted keys
- * is a product question - a shared machine says yes, one's own laptop says no,
- * and re-entering a recovery key is the cost of the second answer. See P48 in
- * `docs/PROBLEMS.md` ("Logging out leaves every decrypted E2EE key cached").
+ * Called from two places: the key-reset flow, and `wireSignOutForm` (see
+ * `e2ee-client.ts`), which races it against a 1.5s timeout before letting an
+ * explicit sign-out submit. P48 (`docs/archive/PROBLEMS-ARCHIVE.md`,
+ * resolved 2026-09-05) is the reason sign-out clears keys at all - answered
+ * "yes, an explicit sign-out should discard decrypted keys": a shared or
+ * borrowed machine expects it, and re-entering a recovery key on your own
+ * laptop is the smaller cost. This function does not decide that policy, it
+ * just performs the wipe either caller asks for.
  *
  * This used to say "logout-everywhere / key reset". There is no
  * logout-everywhere feature anywhere in this codebase, which made the sentence

@@ -24,6 +24,7 @@ import {
     expectIndistinguishableFromMissing,
     expectNotServerError,
     expectRefused,
+    fetchOwnPhotoBytes,
     MISSING_UUID,
     uniqueMarker,
     wasRefused,
@@ -318,12 +319,14 @@ test.describe("a private photo's actual bytes stay with its uploader", () => {
         // file on its way out, so a trailing byte marker does not survive.
         // The url's own per-photo random token is what makes this the right
         // resource; a non-empty 200 is enough to prove the control fetch
-        // worked.
-        const mine = await apiRequestContext.get(photo.url, { headers: bearerFor(api) });
+        // worked. fetchOwnPhotoBytes rides out the P58 async-rename race
+        // instead of trusting the (possibly already-superseded) url the
+        // upload response carried.
+        const { response: mine, url: photoUrl } = await fetchOwnPhotoBytes(api, apiRequestContext, photo.uuid, bearerFor(api));
         expect(mine.status(), `the owner could not fetch their own photo's bytes (${mine.status()}), so the stranger's refusal below would prove nothing`).toBe(200);
         expect((await mine.body()).length, "the owner's fetch returned no bytes").toBeGreaterThan(0);
 
-        const theirs = await apiRequestContext.get(photo.url, { headers: bearerFor(secondaryApi) });
+        const theirs = await apiRequestContext.get(photoUrl, { headers: bearerFor(secondaryApi) });
         await expectNotServerError(theirs, "another account fetching a private photo's media-gate url");
         expect(theirs.status(), `another account fetched a private photo's bytes (${theirs.status()})`).toBe(404);
     });

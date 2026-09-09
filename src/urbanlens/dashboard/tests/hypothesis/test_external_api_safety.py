@@ -430,7 +430,7 @@ class SafetyPartnerTests(_SafetyApiTestCase):
             self.partners_url, {"username": username}, content_type="application/json", **_bearer(self.raw_key)
         )
 
-    def test_unknown_username_is_400_with_the_services_own_message(self) -> None:
+    def test_unknown_username_is_400(self) -> None:
         response = self._invite("nobody-here")
         self.assertEqual(response.status_code, 400)
         self.assertIn("No user found", response.json()["error"])

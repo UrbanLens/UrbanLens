@@ -22,7 +22,6 @@ from urbanlens.dashboard.tests.hypothesis.strategies import (
     lon_float,
     nonempty_name,
     priority,
-    reasonable_datetime,
     two_distant_coord_pairs,
 )
 

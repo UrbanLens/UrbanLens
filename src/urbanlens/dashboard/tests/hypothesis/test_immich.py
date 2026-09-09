@@ -36,6 +36,7 @@ from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.immich.gateway import GatewayRequestError, ImmichGateway, MapMarker, SearchAsset
+from urbanlens.dashboard.services.apis.immich.nearby import NEARBY_ASSET_LIMIT
 
 _db_settings = settings(
     max_examples=25, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture]
@@ -516,6 +517,99 @@ class PinImmichSearchViewTests(TestCase):
             response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": "500"})
         asset_ids = [a["id"] for a in response.context["assets"]]
         self.assertEqual(asset_ids, ["near"])
+
+    def test_the_library_is_fetched_once_across_every_radius_option(self) -> None:
+        # P69: the radius <select> carries hx-trigger="change", so each of its
+        # six options re-downloaded every geolocated asset in the library -
+        # which for a self-hosted library is 10k-100k assets over the network,
+        # because Immich exposes no coordinate-radius filter to push this into.
+        markers = [MapMarker(id="near", lat=40.0001, lon=-74.0), MapMarker(id="far", lat=40.01, lon=-74.0)]
+        with mock.patch.object(ImmichGateway, "get_map_markers", return_value=markers) as get_markers:
+            for radius in (100, 250, 500, 1000, 2000, 5000):
+                self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": str(radius)})
+
+        get_markers.assert_called_once()
+
+    def test_each_radius_still_filters_from_the_cached_neighbourhood(self) -> None:
+        markers = [MapMarker(id="near", lat=40.0001, lon=-74.0), MapMarker(id="far", lat=40.01, lon=-74.0)]
+        with mock.patch.object(ImmichGateway, "get_map_markers", return_value=markers):
+            tight = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": "500"})
+            wide = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": "5000"})
+
+        self.assertEqual([a["id"] for a in tight.context["assets"]], ["near"])
+        self.assertEqual([a["id"] for a in wide.context["assets"]], ["near", "far"])
+
+    def test_another_account_never_reads_this_ones_cache(self) -> None:
+        stranger = baker.make(User)
+        ImmichAccount.objects.create(profile=stranger.profile, server_url="https://other.example.com", api_key="k2")
+        stranger_pin = baker.make_recipe("dashboard.pin", profile=stranger.profile, location=self.location)
+
+        with mock.patch.object(
+            ImmichGateway, "get_map_markers", return_value=[MapMarker(id="mine", lat=40.0, lon=-74.0)]
+        ):
+            self.client.get(reverse("pin.immich.search", args=[self.pin.slug]))
+        self.client.force_login(stranger)
+        with mock.patch.object(
+            ImmichGateway, "get_map_markers", return_value=[MapMarker(id="theirs", lat=40.0, lon=-74.0)]
+        ) as get_markers:
+            response = self.client.get(reverse("pin.immich.search", args=[stranger_pin.slug]))
+
+        get_markers.assert_called_once()
+        self.assertEqual([a["id"] for a in response.context["assets"]], ["theirs"])
+
+    def test_reconnecting_the_account_does_not_serve_the_old_server(self) -> None:
+        with mock.patch.object(
+            ImmichGateway, "get_map_markers", return_value=[MapMarker(id="old", lat=40.0, lon=-74.0)]
+        ):
+            self.client.get(reverse("pin.immich.search", args=[self.pin.slug]))
+        self.account.server_url = "https://moved.example.com"
+        self.account.save(update_fields=["server_url", "updated"])
+
+        with mock.patch.object(
+            ImmichGateway, "get_map_markers", return_value=[MapMarker(id="new", lat=40.0, lon=-74.0)]
+        ):
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]))
+
+        self.assertEqual([a["id"] for a in response.context["assets"]], ["new"])
+
+    def test_only_the_nearest_are_kept_and_the_page_says_so(self) -> None:
+        # Every marker inside the widest radius, so the cap is the only thing
+        # that can bound the result.
+        crowd = [
+            MapMarker(id=f"a{index}", lat=40.0 + index * 0.000001, lon=-74.0)
+            for index in range(NEARBY_ASSET_LIMIT + 20)
+        ]
+        with mock.patch.object(ImmichGateway, "get_map_markers", return_value=crowd):
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": "5000"})
+
+        self.assertEqual(len(response.context["assets"]), NEARBY_ASSET_LIMIT)
+        self.assertEqual(
+            [a["id"] for a in response.context["assets"][:2]], ["a0", "a1"], "the nearest are the ones kept"
+        )
+        self.assertContains(response, f"Showing the {NEARBY_ASSET_LIMIT} photos closest to this pin")
+
+    def test_a_library_of_exactly_the_cap_is_not_reported_as_truncated(self) -> None:
+        # The cap dropped nothing, so the picker is showing everything there
+        # is - telling the user to narrow the search would be a lie. Inferring
+        # truncation from the result's length gets this exact case wrong.
+        crowd = [
+            MapMarker(id=f"a{index}", lat=40.0 + index * 0.000001, lon=-74.0) for index in range(NEARBY_ASSET_LIMIT)
+        ]
+        with mock.patch.object(ImmichGateway, "get_map_markers", return_value=crowd):
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]), {"radius_m": "5000"})
+
+        self.assertEqual(len(response.context["assets"]), NEARBY_ASSET_LIMIT)
+        self.assertFalse(response.context["nearby_truncated"])
+        self.assertNotContains(response, "photos closest to this pin")
+
+    def test_a_short_result_is_not_reported_as_truncated(self) -> None:
+        with mock.patch.object(
+            ImmichGateway, "get_map_markers", return_value=[MapMarker(id="one", lat=40.0, lon=-74.0)]
+        ):
+            response = self.client.get(reverse("pin.immich.search", args=[self.pin.slug]))
+
+        self.assertFalse(response.context["nearby_truncated"])
+        self.assertNotContains(response, "photos closest to this pin")
 
     def test_already_imported_asset_is_flagged(self) -> None:
         marker = MapMarker(id="dup", lat=40.0, lon=-74.0)

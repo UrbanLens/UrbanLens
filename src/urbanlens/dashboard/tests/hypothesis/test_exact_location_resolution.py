@@ -26,7 +26,6 @@ from model_bakery import baker
 
 from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.location.queryset import quantize_coordinate
 from urbanlens.dashboard.models.pin.model import Pin

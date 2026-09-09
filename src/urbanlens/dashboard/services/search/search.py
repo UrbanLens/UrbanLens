@@ -4,13 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
-from urbanlens.dashboard.services.locations.naming import is_meaningful_name
-
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.pin.model import Pin
 
 logger = logging.getLogger(__name__)
 

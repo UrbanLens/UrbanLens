@@ -88,8 +88,6 @@ class DirectMessageTemporaryAccess(abstract.DashboardModel):
         if not profile_ids:
             return set()
 
-        from django.db.models import Q
-
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 
         granted = set(
@@ -104,6 +102,28 @@ class DirectMessageTemporaryAccess(abstract.DashboardModel):
             Friendship.objects.filter(to_profile_id__in=granted, from_profile_id=viewer_id, status=FriendshipStatus.BLOCKED).values_list("to_profile_id", flat=True),
         )
         return granted - blocked
+
+    @classmethod
+    def granting_profile_pks(cls, viewer_id: int) -> set[int]:
+        """Every profile holding an unexpired grant to ``viewer_id``, unfiltered.
+
+        Neither of the batch methods above answers this: both narrow to a
+        candidate set the caller already has, and this exists for the caller
+        that is still deciding what its candidate set *is* - see
+        ``Profile.related_profile_ids``.
+
+        Deliberately skips the BLOCKED veto that :meth:`grants_access` applies.
+        Its only consumer wants a superset, and the veto would be re-applied by
+        the real check anyway; leaving a blocked grantor in costs one row for
+        that check to reject.
+
+        Args:
+            viewer_id: The profile that grants would have been made to.
+
+        Returns:
+            The pks of the granting profiles.
+        """
+        return set(cls.objects.filter(granted_to_id=viewer_id, expires_at__gt=timezone.now()).values_list("profile_id", flat=True))
 
     @classmethod
     def granting_viewer_pks(cls, profile_id: int, viewer_ids: set[int]) -> set[int]:

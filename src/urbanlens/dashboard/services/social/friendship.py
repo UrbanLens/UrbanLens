@@ -7,10 +7,15 @@ share one implementation.
 The functions raise :class:`FriendshipActionError` subclasses rather than
 returning status codes, so each caller maps failures onto its own protocol
 (``HttpResponse`` for the web controller, ``{"error": ...}`` + status for the
-external API). The distinction between :class:`FriendshipNotFoundError`,
-:class:`FriendLimitExceededError` and the plain base matters: they become 404,
-403 and 400 respectively, and collapsing them would tell a caller "bad
-request" when the real answer is "you are at the friend limit".
+external API). A raised message is for logs only - see
+:class:`FriendshipActionError` - so a catch site must dispatch on exception
+type and author its own user-facing text rather than relay it. Which subclass
+maps to which status code is a caller decision, and the two callers do not
+even agree with each other: ``FriendActionView`` in the external API answers
+400 for anything past :class:`FriendshipNotFoundError`/
+:class:`FriendLimitExceededError`, while ``FriendController._friend_action``
+answers 403 for the same case. Dispatch on the type at each catch site rather
+than assuming either mapping.
 
 ``invite_by_email`` is the security-sensitive one - see its docstring for the
 anti-enumeration guarantee it must preserve.
@@ -30,7 +35,7 @@ from django.urls import reverse
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
-from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.keyset_cursor import InvalidCursorError, decode_cursor, encode_cursor
 from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
 
@@ -41,16 +46,14 @@ logger = logging.getLogger(__name__)
 
 
 class FriendshipActionError(ValueError):
-    """A friendship transition could not be applied.
+    """Raised when a friendship transition could not be applied.
 
-    ``safe_message`` is written for the end user and is safe to surface
-    directly. Callers map this to HTTP 400 unless a more specific subclass
-    applies.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
-
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
 
 
 class FriendshipNotFoundError(FriendshipActionError):
@@ -61,14 +64,6 @@ class FriendshipNotFoundError(FriendshipActionError):
     Callers map this to HTTP 404.
     """
 
-    def __init__(self, message: str = "Friend request not found.") -> None:
-        """Initialize with a caller-safe default message.
-
-        Args:
-            message: Human-readable detail to surface.
-        """
-        super().__init__(message)
-
 
 class FriendLimitExceededError(FriendshipActionError):
     """Accepting would push one of the two profiles past ``max_friends_per_user``.
@@ -77,22 +72,42 @@ class FriendLimitExceededError(FriendshipActionError):
     request was understood and refused) rather than 400 (malformed).
     """
 
-    def __init__(self, message: str = "This would exceed the maximum number of friends allowed.") -> None:
-        """Initialize with a caller-safe default message.
 
-        Args:
-            message: Human-readable detail to surface.
-        """
-        super().__init__(message)
+class CommunityDisabledError(FriendshipActionError):
+    """``Friendship.accept()`` refused because Community is off for one side.
+
+    ``accept()`` returns a bare ``False`` for two unrelated reasons; this is
+    raised for whichever one isn't :class:`FriendLimitExceededError` - see
+    :func:`accept_friend_request`, which checks the friend-limit case first.
+    """
+
+
+class MalformedCursorError(FriendshipActionError):
+    """A :func:`list_friendships` pagination cursor didn't decode, or wasn't ours."""
 
 
 class InviteValidationError(FriendshipActionError):
-    """The invite payload itself was rejected - bad address, own address, or over-long message.
+    """The invite payload itself was rejected - see the subclasses below.
 
-    This is the *only* class of invite failure a caller may distinguish, since
-    it depends solely on what the caller submitted and reveals nothing about
-    who is registered. Callers map this to HTTP 400.
+    Every condition here depends solely on what the caller submitted and
+    reveals nothing about who is registered - unlike most of
+    :class:`FriendshipActionError`'s hierarchy, a catch site is free to vary
+    its user-facing text per subclass without weakening the anti-enumeration
+    guarantee documented on :func:`invite_by_email`. All of them still map to
+    HTTP 400.
     """
+
+
+class MalformedEmailAddressError(InviteValidationError):
+    """The submitted address failed Django's ``validate_email``."""
+
+
+class SelfInviteError(InviteValidationError):
+    """The (normalized) address is the inviter's own."""
+
+
+class InviteMessageTooLongError(InviteValidationError):
+    """The optional note exceeds ``MAX_FRIEND_REQUEST_MESSAGE_LENGTH``."""
 
 
 class InviteRateLimitedError(FriendshipActionError):
@@ -103,14 +118,6 @@ class InviteRateLimitedError(FriendshipActionError):
     Callers map this to HTTP 429.
     """
 
-
-#: The single message every :func:`unblock_profile` refusal carries. It is
-#: deliberately the *profile lookup* wording rather than anything about blocks:
-#: callers already answer 404 with this text for a uuid that names nobody, so
-#: reusing it makes "there is no such person", "there is no block", and "the
-#: block is not yours" one indistinguishable answer. A caller must not be able
-#: to confirm a block exists by the shape of the failure to lift it.
-UNBLOCK_NOT_FOUND_MESSAGE = "No such profile."
 
 #: Default page size for :func:`list_friendships`.
 DEFAULT_FRIEND_PAGE_SIZE = 50
@@ -152,7 +159,7 @@ def list_friendships(
         The page of relationships, newest first, and the next page's cursor.
 
     Raises:
-        FriendshipActionError: ``cursor`` is malformed or was never ours.
+        MalformedCursorError: ``cursor`` is malformed or was never ours.
     """
     limit = min(max(int(limit or DEFAULT_FRIEND_PAGE_SIZE), 1), MAX_FRIEND_PAGE_SIZE)
 
@@ -161,7 +168,7 @@ def list_friendships(
         try:
             stamp, pk = decode_cursor(cursor)
         except InvalidCursorError as exc:
-            raise FriendshipActionError("Invalid cursor.") from exc
+            raise MalformedCursorError(f"cursor {cursor!r} for profile {profile.pk} failed to decode: {exc}") from exc
         query = query.filter(Q(created__lt=stamp) | Q(created=stamp, pk__lt=pk))
 
     rows = list(query.order_by("-created", "-pk")[: limit + 1])
@@ -292,7 +299,7 @@ def _existing_friendship(actor: Profile, target: Profile) -> Friendship:
     """
     friendship = Friendship.objects.all().between(target, actor)
     if not friendship:
-        raise FriendshipNotFoundError
+        raise FriendshipNotFoundError(f"no Friendship row joins profiles {actor.pk} and {target.pk}")
     return friendship
 
 
@@ -340,7 +347,9 @@ def _incoming_pending_request(actor: Profile, target: Profile) -> Friendship:
     """
     friendship = _existing_friendship(actor, target)
     if friendship.status != FriendshipStatus.REQUESTED or friendship.from_profile_id != target.pk:
-        raise FriendshipNotFoundError
+        raise FriendshipNotFoundError(
+            f"friendship {friendship.pk} between {actor.pk} and {target.pk} is {friendship.status!r}, not a pending request from {target.pk}",
+        )
     return friendship
 
 
@@ -363,17 +372,17 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
             - see :func:`_incoming_pending_request`.
         FriendLimitExceededError: Either profile is already at the site's
             ``max_friends_per_user`` limit.
-        FriendshipActionError: Either profile has Community disabled.
+        CommunityDisabledError: Either profile has Community disabled.
     """
     friendship = _incoming_pending_request(actor, target)
 
     if not friendship.accept():
         # Friendship.accept() returns a bare False for both refusal reasons;
-        # re-deriving which one applies is what lets the caller answer 403 with
-        # the actionable message rather than a generic failure.
+        # re-deriving which one applies is what lets the caller dispatch on
+        # exception type instead of a generic failure.
         if Friendship.profile_at_max_friends(actor) or Friendship.profile_at_max_friends(friendship.from_profile):
-            raise FriendLimitExceededError
-        raise FriendshipActionError("Enable Community in Settings to accept friend requests.")
+            raise FriendLimitExceededError(f"actor {actor.pk} or requester {friendship.from_profile_id} is at max_friends_per_user")
+        raise CommunityDisabledError(f"actor {actor.pk} or requester {friendship.from_profile_id} has community_enabled=False")
 
     requester = friendship.from_profile if friendship.to_profile == actor else friendship.to_profile
     try:
@@ -503,7 +512,7 @@ def remove_friend(actor: Profile, target: Profile) -> Friendship:
     """
     friendship = _existing_friendship(actor, target)
     if friendship.status == FriendshipStatus.BLOCKED and not _placed_the_block(actor, friendship):
-        raise FriendshipNotFoundError
+        raise FriendshipNotFoundError(f"friendship {friendship.pk} is BLOCKED and actor {actor.pk} did not place the block")
     friendship.remove()
     return friendship
 
@@ -688,7 +697,10 @@ def unblock_profile(actor: Profile, target: Profile) -> Friendship:
     no relationship row, a row in some other state, and a block placed by the
     *other* person all answer identically. Distinguishing them would let the
     blocked party confirm the block exists, which is the one fact a block is
-    meant to keep ambiguous.
+    meant to keep ambiguous. It is the catch site's job to answer all of them
+    (and an unknown profile uuid, resolved before this is ever called) with
+    one identical literal - this raises with a log-only detail, not text meant
+    to reach a response.
 
     Args:
         actor: The profile lifting its own block.
@@ -698,14 +710,12 @@ def unblock_profile(actor: Profile, target: Profile) -> Friendship:
         The now-``Removed`` Friendship.
 
     Raises:
-        FriendshipNotFoundError: No row joins the pair, the row is not blocked,
-            or the block belongs to ``target`` rather than ``actor``. Carries
-            :data:`UNBLOCK_NOT_FOUND_MESSAGE` so the refusal reads identically
-            to the one an unknown profile uuid produces.
+        FriendshipNotFoundError: No row joins the pair, the row is not
+            blocked, or the block belongs to ``target`` rather than ``actor``.
     """
     friendship = Friendship.objects.all().between(target, actor)
     if friendship is None or friendship.status != FriendshipStatus.BLOCKED or not _placed_the_block(actor, friendship):
-        raise FriendshipNotFoundError(UNBLOCK_NOT_FOUND_MESSAGE)
+        raise FriendshipNotFoundError(f"no block placed by {actor.pk} on {target.pk} to lift")
     friendship.remove()
     return friendship
 
@@ -904,8 +914,10 @@ def invite_by_email(
             ``subscription_role``; ignored without one.
 
     Raises:
-        InviteValidationError: The address is malformed, is the inviter's own,
-            or the message is over-long.
+        MalformedEmailAddressError: The address failed validation.
+        SelfInviteError: The address is the inviter's own.
+        InviteMessageTooLongError: The optional message exceeds
+            ``MAX_FRIEND_REQUEST_MESSAGE_LENGTH``.
         InviteRateLimitedError: The inviter is over their email budget.
     """
     # Imported inside the function, exactly as the controller version did.
@@ -929,21 +941,21 @@ def invite_by_email(
     try:
         validate_email(email)
     except ValidationError as exc:
-        raise InviteValidationError("Please enter a valid email address.") from exc
+        raise MalformedEmailAddressError("Submitted address failed Django's validate_email().") from exc
 
     if normalize_email(email) == normalize_email(inviter.email):
-        raise InviteValidationError("That's your own email address.")
+        raise SelfInviteError("Normalized invite address matches the inviter's own address.")
 
     message = (message or "").strip()
     length_error = text_length_error(message, MAX_FRIEND_REQUEST_MESSAGE_LENGTH, "Message")
     if length_error:
-        raise InviteValidationError(length_error)
+        raise InviteMessageTooLongError(length_error)
 
     # Must precede the registered/unregistered branch - see the anti-enumeration
     # note in this function's docstring.
     rate_limit_error = email_rate_limit_error(inviter)
     if rate_limit_error:
-        raise InviteRateLimitedError(rate_limit_error)
+        raise InviteRateLimitedError(f"inviter {inviter.pk} is over their outbound-email budget: {rate_limit_error}")
 
     existing_user = find_user_by_email(email)
     if existing_user:

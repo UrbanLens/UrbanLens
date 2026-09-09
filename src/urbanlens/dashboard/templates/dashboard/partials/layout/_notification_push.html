@@ -1,4 +1,4 @@
-{% if user.is_authenticated %}
+{% load static %}{% if user.is_authenticated %}
 {# -- Live notification push -------------------------------------------------- #}
 {# Connects to ws/notifications/ (UserNotificationConsumer). Each pushed        #}
 {# notification refreshes the nav bell badge (via the existing HTMX            #}
@@ -107,7 +107,7 @@
             var note = new Notification(n.title || 'UrbanLens', {
                 body: n.message || '',
                 tag: 'urbanlens-notif-' + n.id,
-                icon: '/static/favicon.ico'
+                icon: '{% static "favicon.ico" %}'
             });
             note.onclick = function () {
                 window.focus();

@@ -265,6 +265,24 @@ class FlickrSettingsViewTests(TestCase):
         self.assertEqual(account.oauth_token, "final")
         self.assertEqual(account.flickr_user_id, "1@N00")
 
+    def test_successful_connect_redirects_to_the_connections_tab(self) -> None:
+        """Regression guard: the success path used to redirect to the bare
+        settings URL (no #hash), unlike every error branch in the same view -
+        settings/index.html's tab-switch JS only activates a non-default tab
+        when the URL carries a fragment, so this silently landed the user on
+        the default Privacy tab instead of Connections."""
+        cache.set("ul_flickr_request_token_req-token", {"secret": "req-secret", "pid": self.user.profile.id}, 600)
+        with mock.patch(
+            "urbanlens.dashboard.controllers.flickr.finish_authorization",
+            return_value=flickr_oauth.FlickrAccessGrant(
+                oauth_token="final", oauth_token_secret="final-secret", user_nsid="1@N00", username="tester"
+            ),
+        ):
+            response = self.client.get(
+                reverse("settings.flickr.callback"), {"oauth_token": "req-token", "oauth_verifier": "v"}
+            )
+        self.assertEqual(response["Location"], f"{reverse('settings.view')}#flickr-settings-section")
+
 
 # -- Pin detail: search -------------------------------------------------------------
 

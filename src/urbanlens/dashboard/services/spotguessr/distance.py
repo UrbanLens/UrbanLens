@@ -16,7 +16,6 @@ from django.contrib.gis.db.models import GeometryField
 from django.contrib.gis.db.models.functions import Distance
 from django.db.models import Value
 
-from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.boundary.queryset import circle_for_coordinates
 from urbanlens.dashboard.models.location.model import Location
 

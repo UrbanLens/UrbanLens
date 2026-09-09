@@ -12,7 +12,7 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     import datetime
 
-    from urbanlens.dashboard.models.achievements.model import Achievement, ProfileActivityDay, ProfileStreak, UserAchievement
+    from urbanlens.dashboard.models.achievements.model import Achievement, ProfileActivityDay, ProfileStreak, UserAchievement  # noqa: F401 - mypy resolves these in the class-base subscripts below; ruff does not
     from urbanlens.dashboard.models.profile import Profile
 
 

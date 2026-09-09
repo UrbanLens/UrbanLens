@@ -10,6 +10,7 @@ fan-out to other participants happens over
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -34,6 +35,8 @@ from urbanlens.dashboard.services.trivia import chat as trivia_chat, eligibility
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
+
+logger = logging.getLogger(__name__)
 
 
 def _current_profile(request: HttpRequest) -> Profile:
@@ -165,8 +168,12 @@ class TriviaStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
             invitees = list(Profile.objects.filter(pk__in=invite_ids))
             try:
                 game_session = trivia_session.start_multiplayer_session(profile, config, invitees, total_rounds=total_rounds)
+            except trivia_session.InviteeNotFriendError as exc:
+                logger.info("trivia multiplayer start rejected: %s", exc)
+                return JsonResponse({"error": "You can only invite friends to a Trivia game."}, status=400)
             except trivia_session.TriviaError as exc:
-                return JsonResponse({"error": exc.safe_message}, status=400)
+                logger.info("trivia multiplayer start rejected: %s", exc)
+                return JsonResponse({"error": "That Trivia session couldn't be started."}, status=400)
             return JsonResponse({"session_id": game_session.pk, "lobby": True, "session": serializers.serialize_session(game_session)})
 
         if not eligibility.has_eligible_questions([profile]):
@@ -236,8 +243,18 @@ class TriviaInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             participant = trivia_session.invite_to_session(game_session, profile, invitee)
+        except trivia_session.InviteNotHostError as exc:
+            logger.info("trivia invite rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can invite players to this session."}, status=400)
+        except trivia_session.InviteAfterLobbyClosedError as exc:
+            logger.info("trivia invite rejected: %s", exc)
+            return JsonResponse({"error": "This game has already started - no more invites can go out."}, status=400)
+        except trivia_session.InviteeNotFriendError as exc:
+            logger.info("trivia invite rejected: %s", exc)
+            return JsonResponse({"error": "You can only invite friends."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia invite rejected: %s", exc)
+            return JsonResponse({"error": "That invite couldn't be sent."}, status=400)
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -253,8 +270,15 @@ class TriviaJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             participant = trivia_session.join_session(game_session, profile)
+        except trivia_session.NotInvitedError as exc:
+            logger.info("trivia join rejected: %s", exc)
+            return JsonResponse({"error": "You were not invited to this session."}, status=400)
+        except trivia_session.JoinAfterLobbyClosedError as exc:
+            logger.info("trivia join rejected: %s", exc)
+            return JsonResponse({"error": "This game has already started - you can no longer join."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia join rejected: %s", exc)
+            return JsonResponse({"error": "You couldn't be added to this session."}, status=400)
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -270,8 +294,15 @@ class TriviaBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             round_ = trivia_session.begin_session(game_session, profile)
+        except trivia_session.BeginNotHostError as exc:
+            logger.info("trivia begin rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can start the game."}, status=400)
+        except trivia_session.SessionAlreadyBegunError as exc:
+            logger.info("trivia begin rejected: %s", exc)
+            return JsonResponse({"error": "This session has already started."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia begin rejected: %s", exc)
+            return JsonResponse({"error": "This game couldn't be started."}, status=400)
 
         if round_ is None:
             if trivia_session.rounds_played(game_session) == 0:
@@ -299,8 +330,15 @@ class TriviaEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             trivia_session.end_session_now(game_session, profile)
+        except trivia_session.EndSessionNotHostError as exc:
+            logger.info("trivia end rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can end the game."}, status=400)
+        except trivia_session.SessionAlreadyEndedError as exc:
+            logger.info("trivia end rejected: %s", exc)
+            return JsonResponse({"error": "This game has already ended."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia end rejected: %s", exc)
+            return JsonResponse({"error": "This game couldn't be ended."}, status=400)
         return JsonResponse({"finished": True, "summary": trivia_session.session_summary(game_session)})
 
 
@@ -316,8 +354,15 @@ class TriviaLeaveSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View
 
         try:
             trivia_session.leave_session(game_session, profile)
+        except trivia_session.SessionAlreadyEndedError as exc:
+            logger.info("trivia leave rejected: %s", exc)
+            return JsonResponse({"error": "This game has already ended."}, status=400)
+        except trivia_session.NotASessionParticipantError as exc:
+            logger.info("trivia leave rejected: %s", exc)
+            return JsonResponse({"error": "You are not part of this session."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia leave rejected: %s", exc)
+            return JsonResponse({"error": "You couldn't be removed from this session."}, status=400)
         return JsonResponse({"left": True})
 
 
@@ -338,8 +383,21 @@ class TriviaKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixin, V
 
         try:
             trivia_session.kick_participant(game_session, profile, target)
+        except trivia_session.KickNotHostError as exc:
+            logger.info("trivia kick rejected: %s", exc)
+            return JsonResponse({"error": "Only the host can remove a player."}, status=400)
+        except trivia_session.CannotKickHostError as exc:
+            logger.info("trivia kick rejected: %s", exc)
+            return JsonResponse({"error": "The host can't remove themselves - use End game instead."}, status=400)
+        except trivia_session.SessionAlreadyEndedError as exc:
+            logger.info("trivia kick rejected: %s", exc)
+            return JsonResponse({"error": "This game has already ended."}, status=400)
+        except trivia_session.TargetNotAParticipantError as exc:
+            logger.info("trivia kick rejected: %s", exc)
+            return JsonResponse({"error": "That profile is not part of this session."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia kick rejected: %s", exc)
+            return JsonResponse({"error": "That player couldn't be removed."}, status=400)
         return JsonResponse({"kicked": True})
 
 
@@ -393,8 +451,15 @@ class TriviaAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
         try:
             answer = trivia_session.submit_answer(round_, profile, raw_answer)
+        except trivia_session.NotJoinedParticipantError as exc:
+            logger.info("trivia answer rejected: %s", exc)
+            return JsonResponse({"error": "You must join this session before submitting an answer."}, status=400)
+        except trivia_session.DuplicateAnswerError as exc:
+            logger.info("trivia answer rejected: %s", exc)
+            return JsonResponse({"error": "You've already answered this round."}, status=400)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("trivia answer rejected: %s", exc)
+            return JsonResponse({"error": "That answer couldn't be submitted."}, status=400)
 
         round_.refresh_from_db()
         return JsonResponse(serializers.serialize_reveal(round_, answer))

@@ -110,6 +110,24 @@ class DetailPinEditTypeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.child.refresh_from_db()
 
+    def test_a_json_float_literal_opacity_is_ignored_rather_than_a_500(self) -> None:
+        """`json.loads` accepts the bare literal `Infinity`; `int(float("inf"))` raises OverflowError.
+
+        This view parses the body itself rather than through DRF (whose parser
+        rejects the literal outright), so the value really does reach `safe_int`.
+        The opacity should fall back to its default, not take the request down.
+        """
+        before = self.child.detail_bg_opacity
+        for literal in ("Infinity", "-Infinity", "NaN"):
+            with self.subTest(literal=literal), patch(_ENQUEUE):
+                response = self.client.post(
+                    self.url, data=f'{{"bg_opacity": {literal}}}', content_type="application/json"
+                )
+                self.assertEqual(response.status_code, 200, "a non-finite opacity must not 500")
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.detail_bg_opacity, 80, "it falls back to safe_int's default")
+        self.assertIsNotNone(before)
+
     def test_an_unrelated_edit_never_touches_the_type(self) -> None:
         """Restyling an auto-classified pin must not freeze that guess as a user choice."""
         self._post(color="#ff0000")

@@ -27,7 +27,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinStatus
 from urbanlens.dashboard.services.visits.safety import (
-    CheckinArchivedError,
+    CheckinEditArchivedError,
     apply_checkin_edit,
     create_checkin,
     resolve_contact_inputs,
@@ -205,7 +205,7 @@ class CheckinEditArchivedTests(_CheckinTestCase):
         SafetyCheckin.objects.filter(pk=self.checkin.pk).update(archive_scheduled_at=timezone.now())
         self.checkin.refresh_from_db()
 
-        with pytest.raises(CheckinArchivedError):
+        with pytest.raises(CheckinEditArchivedError):
             apply_checkin_edit(self.checkin, editor=self.profile, plan_details="Should never be written")
 
     def test_refused_edit_writes_nothing(self) -> None:
@@ -215,7 +215,7 @@ class CheckinEditArchivedTests(_CheckinTestCase):
         )
         self.checkin.refresh_from_db()
 
-        with pytest.raises(CheckinArchivedError):
+        with pytest.raises(CheckinEditArchivedError):
             apply_checkin_edit(
                 self.checkin,
                 editor=self.profile,

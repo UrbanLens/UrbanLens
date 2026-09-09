@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 from django.contrib.auth.models import User
 from django.test import RequestFactory
 from model_bakery import baker

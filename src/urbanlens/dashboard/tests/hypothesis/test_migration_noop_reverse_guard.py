@@ -70,6 +70,15 @@ REVIEWED: dict[str, str] = {
         "drop_duplicate_links (was 0047) both merge/remove duplicates ahead of a unique constraint - un-merging is "
         "impossible and unnecessary, what remains is valid in the old schema."
     ),
+    "0032_v0_8_0.py": (
+        "The v0.8.0 squash, carrying three reviewed noop reverses inlined from the files it replaced. "
+        "_0049_backfill_friendinvitation_email_normalized and _0052__backfill fill columns this same file adds "
+        "and its reverse drops, so there is nothing for a reverse to restore. _0054_merge_reciprocal_rows "
+        "collapses A->B / B->A duplicates ahead of the constraint, keeping the lowest pk to match what "
+        "FriendshipQuerySet.between has been treating as authoritative - lossy, since the merged-away rows are "
+        "gone, but the survivors are ordinary Friendship rows the pre-migration code reads unchanged. Same shape "
+        "as 0005 and as 0030's merge_duplicate_labels."
+    ),
 }
 
 

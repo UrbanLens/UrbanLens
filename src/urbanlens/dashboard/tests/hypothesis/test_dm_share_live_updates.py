@@ -478,26 +478,28 @@ class RecommendationBlockTests(TestCase):
             recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
 
     def test_block_refusal_is_indistinguishable_from_recommendations_disabled(self) -> None:
-        """The sender must not be able to tell "blocked" apart from "opted out"."""
-        from urbanlens.dashboard.services.messaging.direct_message_shares import recommend_friend_in_message
+        """The sender must not be able to tell "blocked" apart from "opted out".
+
+        Both routes raise the exact same exception type
+        (``FriendRecommendationUnavailableError``) rather than merely the same
+        message text - a catch site dispatches on type now, so that's what
+        actually determines the response the sender sees.
+        """
+        from urbanlens.dashboard.services.messaging.direct_message_shares import (
+            FriendRecommendationUnavailableError,
+            recommend_friend_in_message,
+        )
 
         other = _profile()
         _make_accepted_friendship(self.sender, other)
         Profile.objects.filter(pk=other.pk).update(allow_friend_recommendations=False)
         other.refresh_from_db()
-        try:
+        with self.assertRaises(FriendRecommendationUnavailableError):
             recommend_friend_in_message(self.sender, self.recipient, other, "meet them")
-            self.fail("expected PermissionError")
-        except PermissionError as exc:
-            opt_out_text = str(exc).replace(other.username, "{name}")
 
         self._block(self.recommended, self.recipient)
-        try:
+        with self.assertRaises(FriendRecommendationUnavailableError):
             recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
-            self.fail("expected PermissionError")
-        except PermissionError as exc:
-            blocked_text = str(exc).replace(self.recommended.username, "{name}")
-        self.assertEqual(opt_out_text, blocked_text)
 
     def test_block_placed_after_the_grant_kills_access_immediately(self) -> None:
         from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess

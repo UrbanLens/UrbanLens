@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
-from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, JSONField, OneToOneField, Q, TextChoices, UniqueConstraint
+from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, JSONField, OneToOneField, Q, UniqueConstraint
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract

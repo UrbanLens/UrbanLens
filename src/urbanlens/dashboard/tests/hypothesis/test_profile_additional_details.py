@@ -19,7 +19,6 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
-from urbanlens.dashboard.models.profile.model import Profile
 
 
 def _strip_scripts(html: str) -> str:

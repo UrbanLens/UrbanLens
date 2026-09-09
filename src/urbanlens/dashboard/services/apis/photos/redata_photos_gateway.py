@@ -27,7 +27,6 @@ from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.apis.redata_json_gateway import RedataJsonGateway
 from urbanlens.dashboard.services.core.environment import skip_upstream_contribution
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)

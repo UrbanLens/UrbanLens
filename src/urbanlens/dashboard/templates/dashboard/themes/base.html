@@ -1,4 +1,4 @@
-{% load vendor_assets dashboard_tags %}
+{% load static vendor_assets dashboard_tags %}
 <!DOCTYPE html>
 {% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 {% assistant_enabled_flag request.user as assistant_global_enabled %}
@@ -9,7 +9,7 @@
     {# Anti-FOUC: when theme_mode is "system" (no server-side attribute), detect OS preference immediately. #}
     <script>!function(){var e=document.getElementById('html-root');if(!e.getAttribute('data-theme')){var d=window.matchMedia('(prefers-color-scheme: dark)').matches;e.setAttribute('data-theme',d?'dark':'light');window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(c){e.setAttribute('data-theme',c.matches?'dark':'light');});}}();</script>
     <title>{% block page_title %}{{ site_title|default:"UrbanLens" }}{% endblock %}</title>
-    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon">
 
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
     <!-- Compiled and minified CSS -->
@@ -31,6 +31,47 @@
 
     <!--Let browser know website is optimized for mobile-->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+        // In <head>, and not deferred: an `onerror` for an image that 404s fires
+        // during parsing, as soon as the response comes back. Nine templates
+        // render `<img onerror="urbanlensMediaThumbFallback(...)">`
+        // server-side, and defining this after the page content meant every one
+        // of them threw ReferenceError instead of swapping in the icon tile -
+        // while `typeof window.urbanlensMediaThumbFallback` read "function" by
+        // the time anyone looked, which is what made it invisible.
+        //
+        // Only a handler that can fire during parse needs to be up here; an
+        // `onclick` cannot, which is why the edit-in-place sizer further down
+        // is fine where it is.
+        //
+        // Swaps a broken/missing thumbnail <img> for an icon tile instead of
+        // hiding its wrapper - keeps records with no (or a dead) preview image
+        // visible, and their row/tile the same size as ones that have an image,
+        // instead of collapsing and breaking the grid/row's consistent styling.
+        window.urbanlensMediaThumbFallback = function (img, icon, className) {
+            // Server-rendered previews (a PDF/TIFF/HEIC tile) 404 until the
+            // sandbox worker has decoded them, so this particular 404 is
+            // "not yet" rather than "never" - retry a couple of times before
+            // giving up on it. Everything else falls back immediately.
+            var src = img.getAttribute('src') || '';
+            var isPreview = src.indexOf('/media-preview/') !== -1 || /[?&]preview=1(&|$)/.test(src);
+            var attempt = parseInt(img.dataset.previewRetry || '0', 10);
+            if (isPreview && attempt < 2) {
+                img.dataset.previewRetry = String(attempt + 1);
+                // A new query param, not the same URL again: the browser has
+                // already negatively cached this exact one.
+                var retryUrl = src.replace(/([?&])_r=\d+/, '$1_r=' + (attempt + 1));
+                if (retryUrl === src) retryUrl = src + (src.indexOf('?') === -1 ? '?' : '&') + '_r=' + (attempt + 1);
+                setTimeout(function () { img.setAttribute('src', retryUrl); }, 2000 * (attempt + 1));
+                return;
+            }
+            var span = document.createElement('span');
+            span.className = className || 'media-item-thumb media-item-thumb-fallback';
+            span.setAttribute('aria-hidden', 'true');
+            span.innerHTML = '<i class="material-icons">' + (icon || 'description') + '</i>';
+            img.replaceWith(span);
+        };
+    </script>
 </head>
 
 <body class="{% if page_name %}page-{{ page_name }}{% endif %}" data-page-name="{{ page_name }}" data-nav-section="{{ nav_section }}">
@@ -201,15 +242,30 @@
             // not a failure, and was surfacing as a spurious "Request was
             // cancelled" error toast on ordinary filter interactions.
 
+            // A net under every raw fetch() on the site, of which there are still
+            // about ninety: without it a non-2xx resolves normally, the caller
+            // calls .json() on an error page, and the SyntaxError lands in a
+            // void-ed promise nobody sees (P11).
+            //
+            // It says nothing when the caller has already said something better.
+            // shared/fetch-json.ts checks the status itself and reports the
+            // server's own sentence, so a request marked __ulReported would
+            // otherwise be announced twice - once usefully and once as
+            // "Request failed (HTTP 503)." That marker is how the migration off
+            // raw fetch() stays incremental: a call site that moves to fetchJson
+            // opts out of the generic message by moving.
             var nativeFetch = window.fetch;
             if (nativeFetch && !nativeFetch.__urbanLensWrapped) {
-                var wrappedFetch = function () {
+                var wrappedFetch = function (input, init) {
+                    var reported = !!(init && init.__ulReported);
                     return nativeFetch.apply(this, arguments).then(function (response) {
-                        if (!response.ok) _toastError('Request failed (HTTP ' + response.status + ').');
+                        if (!response.ok && !reported) _toastError('Request failed (HTTP ' + response.status + ').');
                         return response;
                     }).catch(function (err) {
-                        if (err && err.name === 'AbortError') _toastError('Request timed out.');
-                        else _toastError('Network request failed.');
+                        if (!reported) {
+                            if (err && err.name === 'AbortError') _toastError('Request timed out.');
+                            else _toastError('Network request failed.');
+                        }
                         throw err;
                     });
                 };
@@ -268,34 +324,6 @@
             document.addEventListener('click', _guard, true);
             document.addEventListener('submit', _guard, true);
         }());
-
-        // Swap a broken/missing thumbnail <img> for an icon tile instead of
-        // hiding its wrapper - keeps records with no (or a dead) preview image
-        // visible, and their row/tile the same size as ones that have an image,
-        // instead of collapsing and breaking the grid/row's consistent styling.
-        window.urbanlensMediaThumbFallback = function (img, icon, className) {
-            // Server-rendered previews (a PDF/TIFF/HEIC tile) 404 until the
-            // sandbox worker has decoded them, so this particular 404 is
-            // "not yet" rather than "never" - retry a couple of times before
-            // giving up on it. Everything else falls back immediately.
-            var src = img.getAttribute('src') || '';
-            var isPreview = src.indexOf('/media-preview/') !== -1 || /[?&]preview=1(&|$)/.test(src);
-            var attempt = parseInt(img.dataset.previewRetry || '0', 10);
-            if (isPreview && attempt < 2) {
-                img.dataset.previewRetry = String(attempt + 1);
-                // A new query param, not the same URL again: the browser has
-                // already negatively cached this exact one.
-                var retryUrl = src.replace(/([?&])_r=\d+/, '$1_r=' + (attempt + 1));
-                if (retryUrl === src) retryUrl = src + (src.indexOf('?') === -1 ? '?' : '&') + '_r=' + (attempt + 1);
-                setTimeout(function () { img.setAttribute('src', retryUrl); }, 2000 * (attempt + 1));
-                return;
-            }
-            var span = document.createElement('span');
-            span.className = className || 'media-item-thumb media-item-thumb-fallback';
-            span.setAttribute('aria-hidden', 'true');
-            span.innerHTML = '<i class="material-icons">' + (icon || 'description') + '</i>';
-            img.replaceWith(span);
-        };
 
         // Every click-to-edit-in-place field (pin name/description, trip
         // title/description, profile bio/name/contact fields, pin list

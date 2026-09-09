@@ -8,16 +8,20 @@ controllers/albums.py's Pin | Wiki | Profile widening.
 
 from __future__ import annotations
 
+import re
+
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import Client
+from django.test.utils import CaptureQueriesContext
 from django.urls import NoReverseMatch, reverse
 from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.images import JPEG_BYTES
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.controllers.vault_photos import _PIN_ALBUMS_PAGE_SIZE
 from urbanlens.dashboard.models.album.model import Album, AlbumItem
 from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.services.photos.uploads import UploadRejection, upload_photo_for_owner
@@ -278,6 +282,53 @@ class VaultPinAlbumsViewTests(TestCase):
 
         response = self.client.get(reverse("vault.photos.pin_albums"))
         self.assertNotContains(response, "My vault album")
+
+    def test_lists_one_page_at_a_time(self) -> None:
+        # P69: this panel loaded every album and every album membership row
+        # across all of a profile's pins the moment its toggle was opened.
+        pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        for index in range(_PIN_ALBUMS_PAGE_SIZE + 3):
+            Album.objects.create(name=f"Album {index:03d}", profile=self.profile, parent_pin=pin)
+
+        response = self.client.get(reverse("vault.photos.pin_albums"))
+
+        self.assertEqual(response.content.decode().count("album-card-name"), _PIN_ALBUMS_PAGE_SIZE)
+        self.assertContains(response, f"{reverse('vault.photos.pin_albums')}?page=2")
+
+    def test_the_remainder_is_on_the_second_page(self) -> None:
+        pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        for index in range(_PIN_ALBUMS_PAGE_SIZE + 3):
+            Album.objects.create(name=f"Album {index:03d}", profile=self.profile, parent_pin=pin)
+
+        response = self.client.get(reverse("vault.photos.pin_albums"), {"page": 2})
+
+        self.assertEqual(response.content.decode().count("album-card-name"), 3)
+        self.assertContains(response, f"Album {_PIN_ALBUMS_PAGE_SIZE + 2:03d}")
+
+    def test_membership_rows_are_only_loaded_for_the_page(self) -> None:
+        # The album cards themselves are the cheap half. The expensive half is
+        # that every AlbumItem of every album was fetched to count photos and
+        # choose covers, which a page-sized card count would not notice.
+        pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        albums = [
+            Album.objects.create(name=f"Album {index:03d}", profile=self.profile, parent_pin=pin)
+            for index in range(_PIN_ALBUMS_PAGE_SIZE + 3)
+        ]
+        image = baker.make("dashboard.Image", profile=self.profile, pin=pin)
+        for album in albums:
+            AlbumItem.objects.create(album=album, image=image)
+
+        with CaptureQueriesContext(connection) as queries:
+            self.client.get(reverse("vault.photos.pin_albums"))
+
+        item_reads = [q["sql"] for q in queries.captured_queries if "dashboard_album_items" in q["sql"]]
+        self.assertEqual(len(item_reads), 1, "memberships are still one query, not one per album")
+        asked_for = re.search(r'"album_id" IN \(([^)]*)\)', item_reads[0])
+        self.assertIsNotNone(asked_for, item_reads[0])
+        self.assertEqual(
+            len(asked_for.group(1).split(",")), _PIN_ALBUMS_PAGE_SIZE, "one page of albums, not all of them"
+        )
+        self.assertEqual(len(albums), _PIN_ALBUMS_PAGE_SIZE + 3)
 
 
 class VaultUploadDedupeTests(TestCase):

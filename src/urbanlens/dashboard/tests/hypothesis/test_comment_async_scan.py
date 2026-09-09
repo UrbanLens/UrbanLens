@@ -24,7 +24,6 @@ from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
 from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError
 from urbanlens.dashboard.tasks import scan_comment_image, scan_trip_comment_image

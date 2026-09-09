@@ -32,7 +32,6 @@ const COLLIDERS = [
     ".floorplan-toolbar-stack",
     ".floorplan-canvas-controls",
     ".map-bottom-controls",
-    ".article-floating-toolbar",
     ".ul-bulk-bar.visible",
     ".page-footer",
     "#toast-container",
@@ -44,6 +43,9 @@ let serverState: UndoStackState = { can_undo: false, can_redo: false, undo_label
 let installed = false;
 let fetchWrapped = false;
 let nativeFetch: typeof window.fetch | null = null;
+
+/** The function `wrapFetch` replaced, kept unbound so its own properties survive a restore. */
+let replacedFetch: typeof window.fetch | null = null;
 let refreshTimer = 0;
 
 function bar(): HTMLElement | null {
@@ -253,8 +255,9 @@ function requestMethod(input: RequestInfo | URL, init?: RequestInit): string {
 function wrapFetch(): void {
     if (fetchWrapped) return;
     fetchWrapped = true;
-    nativeFetch = window.fetch.bind(window);
-    window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    replacedFetch = window.fetch;
+    nativeFetch = replacedFetch.bind(window);
+    const wrapped = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const response = await (nativeFetch as typeof window.fetch)(input, init);
         const url = requestUrl(input);
         const isStackCall = url.includes("/undo/stack") || url.includes("/undo/undo") || url.includes("/undo/redo");
@@ -263,6 +266,14 @@ function wrapFetch(): void {
         if (response.ok && mutating && !isStackCall) scheduleRefresh();
         return response;
     };
+    // Carry over whatever the function being replaced was holding. base.html
+    // wraps `window.fetch` too and marks its own wrapper `__urbanLensWrapped`,
+    // which is how it declines to wrap a second time; replacing that function
+    // with a bare one drops the marker, and the next thing to run that block
+    // would double-wrap and toast every failed request twice. The runtime's
+    // own `fetch` also carries properties (Bun's has `preconnect`), which is
+    // how a two-year-stale `bun-types` was hiding this.
+    window.fetch = Object.assign(wrapped, replacedFetch) as typeof window.fetch;
 }
 
 export function resetUndoBarForTests(): void {
@@ -274,10 +285,14 @@ export function resetUndoBarForTests(): void {
     document.removeEventListener("keydown", onKeydown);
     window.removeEventListener("resize", placeBar);
     document.body?.removeEventListener("htmx:afterRequest", onHtmxAfterRequest);
-    if (fetchWrapped && nativeFetch) {
-        window.fetch = nativeFetch;
+    if (fetchWrapped && replacedFetch) {
+        // The unbound function that was there, not `nativeFetch`: binding
+        // makes a fresh function object, which would drop the same properties
+        // wrapping was just taught to keep.
+        window.fetch = replacedFetch;
         fetchWrapped = false;
         nativeFetch = null;
+        replacedFetch = null;
     }
     bar()?.remove();
 }

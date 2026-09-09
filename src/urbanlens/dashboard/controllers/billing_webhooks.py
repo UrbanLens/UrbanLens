@@ -39,8 +39,13 @@ class StripeWebhookView(View):
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         if not app_settings.stripe_webhook_secret:
+            # 503 used to be returned here, which reads as "retry later" - to Stripe (which
+            # retries on any non-2xx), and to an unauthenticated prober, both would take it as
+            # a crash rather than a refusal. There is no signature this deployment could ever
+            # accept while unconfigured, so it's a permanent refusal like a bad signature, not
+            # a transient one - same status as the construct_event failure below.
             logger.error("Stripe webhook received but UL_STRIPE_WEBHOOK_SECRET is not set.")
-            return HttpResponse(status=503)
+            return HttpResponse(status=400)
 
         sig_header = request.META.get("HTTP_STRIPE_SIGNATURE", "")
         try:

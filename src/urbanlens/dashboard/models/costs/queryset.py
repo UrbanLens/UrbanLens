@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Self
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.costs.model import CostComponent, OperatingCost
+    from urbanlens.dashboard.models.costs.model import CostComponent, OperatingCost  # noqa: F401 - mypy resolves these in the class-base subscripts below; ruff does not
 
 
 class CostComponentQuerySet(abstract.DashboardQuerySet["CostComponent"]):

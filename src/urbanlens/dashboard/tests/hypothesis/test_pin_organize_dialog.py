@@ -19,7 +19,6 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.pin.model import Pin
 
 
 class PinOrganizeDialogTests(TestCase):

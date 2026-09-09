@@ -11,6 +11,7 @@ from unittest import mock
 
 from urbanlens_ai.schema import InferenceResponse, TextBlock, ToolUseBlock, Usage
 
+from urbanlens.core.tests.ai_guard import real_ai_chokepoint
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.ai.anthropic import AnthropicGateway
 from urbanlens.dashboard.services.ai.inference_client import InferenceError, ToolSpec
@@ -24,6 +25,15 @@ _TOOLS = [
 
 class SendWithToolsTests(SimpleTestCase):
     def setUp(self) -> None:
+        # conftest's session-scoped guard replaces every AI chokepoint with a
+        # Mock returning None - including send_with_tools, which is this file's
+        # entire subject, so every assertion here would be made against a call
+        # that never happened. Restored for these tests only; the rest of the
+        # guard, the localhost-only socket guard and the placeholder credentials
+        # all stay in place, and the inference client below is a Mock, so
+        # nothing here can reach a provider.
+        self.enterContext(real_ai_chokepoint("urbanlens.dashboard.services.ai.gateway.LLMGateway.send_with_tools"))
+
         # "claude-*" isn't a tiktoken-native model, so calculate_tokens falls
         # back to downloading the o200k_base encoding on first use - fine in
         # the sandboxed containers (baked at build time, see the Dockerfile),

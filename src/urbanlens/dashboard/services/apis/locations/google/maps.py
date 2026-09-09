@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 # Only used to catch exceptions
 from defusedxml.ElementTree import ParseError as XMLParseError, fromstring as parse_xml_defused
-from django.core.cache import cache
 from django.db import DatabaseError
 from fastkml import kml
 from fastkml.exceptions import KMLParseError
@@ -22,7 +21,6 @@ import requests
 from shapely.errors import ShapelyError
 from shapely.geometry import shape as shapely_shape
 
-from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location import Location

@@ -495,6 +495,59 @@ class TripActivityTests(_TripApiTestCase):
         self.assertEqual(response.status_code, 201)
         record.assert_called_once()
 
+    def test_create_refuses_another_accounts_pin(self) -> None:
+        """Naming a pin_slug that belongs to someone else must not attach it - or succeed quietly.
+
+        P91: the live security spec caught this attaching nothing while still
+        answering 201, which told the caller their pin was saved when it
+        wasn't. ``resolve_activity_place`` now raises rather than falling
+        through to "no place given".
+        """
+        other_location = Location.objects.create(latitude=42.4, longitude=-83.1, official_name="Someone else's place")
+        their_pin = Pin.objects.create(profile=self.other_profile, location=other_location, name="Not yours")
+
+        response = self.client.post(
+            reverse("external_api:trips.activities", args=[self.trip.slug]),
+            {"title": "should not attach", "pin_slug": their_pin.slug},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(TripActivity.objects.filter(trip=self.trip, pin=their_pin).exists())
+
+    def test_create_accepts_the_callers_own_pin(self) -> None:
+        """The fix must not collaterally break the ordinary, same-owner case."""
+        location = Location.objects.create(latitude=42.4, longitude=-83.1, official_name="Mine")
+        mine = Pin.objects.create(profile=self.profile, location=location, name="Mine")
+
+        response = self.client.post(
+            reverse("external_api:trips.activities", args=[self.trip.slug]),
+            {"title": "should attach", "pin_slug": mine.slug},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(TripActivity.objects.filter(trip=self.trip, pin=mine).exists())
+
+    def test_patch_refuses_another_accounts_pin(self) -> None:
+        """The same gap existed on update: it silently wiped the activity's place instead of refusing."""
+        other_location = Location.objects.create(latitude=42.4, longitude=-83.1, official_name="Someone else's place")
+        their_pin = Pin.objects.create(profile=self.other_profile, location=other_location, name="Not yours")
+
+        response = self.client.patch(
+            reverse("external_api:trips.activities.detail", args=[self.trip.slug, self.activity.id]),
+            {"pin_slug": their_pin.slug},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.activity.refresh_from_db()
+        self.assertEqual(self.activity.location, self.location)
+        self.assertIsNone(self.activity.pin)
+
     def test_activity_quota_is_enforced(self) -> None:
         """max_trip_activities answers 400, not an unbounded itinerary."""
         settings_row = SiteSettings.get_current()

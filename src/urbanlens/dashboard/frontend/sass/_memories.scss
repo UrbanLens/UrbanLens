@@ -385,6 +385,9 @@ $memories-type-colors: (
 
 // -- Photos page ------------------------------------------------------------
 
+// Condensed to roughly album-card size - the whole page stays a drop target
+// (see the page-wide dragenter/drop listeners in photos.html/documents.html),
+// so this is just the click-to-upload affordance, not the only way in.
 .photos-dropzone {
     display: flex;
     flex-direction: column;
@@ -392,7 +395,9 @@ $memories-type-colors: (
     justify-content: center;
     gap: .3rem;
     text-align: center;
-    padding: 1.5rem 1rem;
+    width: 170px;
+    height: 170px;
+    padding: 1rem;
     margin-bottom: 1.5rem;
     border: 2px dashed var(--ul-surface-raised-border);
     border-radius: .9rem;
@@ -409,18 +414,15 @@ $memories-type-colors: (
     }
 
     .material-symbols-outlined {
-        font-size: 2rem;
+        font-size: 1.75rem;
         color: $color-deep-purple-500;
     }
 }
 
 .photos-dropzone-title {
     font-weight: 600;
+    font-size: .85rem;
     color: var(--ul-grey-8);
-}
-
-.photos-dropzone-sub {
-    font-size: .82rem;
 }
 
 .photos-upload-progress {
@@ -798,26 +800,11 @@ $memories-type-colors: (
 
 .photos-albums-section {
     margin-bottom: 2rem;
-}
 
-// The <details>/<summary> disclosure for "Show your pin albums" - a native
-// toggle (see pages/vault/photos.html's hx-trigger="toggle once") rather than
-// a hand-rolled one, so opening/closing needs no JS of its own.
-.vault-pin-albums-toggle-wrap {
-    margin-top: .75rem;
-}
-
-.vault-pin-albums-toggle {
-    // <summary> has its own default disclosure triangle and display:
-    // list-item; both are replaced so it reads as an ordinary .btn instead.
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-    cursor: pointer;
-    list-style: none;
-
-    &::-webkit-details-marker {
-        display: none;
+    // Pushes the overflow-menu trigger to the end of the section's header row
+    // (.photos-gallery-head only gaps its items left-to-right by default).
+    .photos-gallery-head .pin-list-more-menu {
+        margin-left: auto;
     }
 }
 
@@ -1017,14 +1004,6 @@ $memories-type-colors: (
     }
 }
 
-.vault-subnav {
-    margin-bottom: 1rem;
-
-    a.ul-subnav-tab {
-        text-decoration: none;
-    }
-}
-
 // -- Vault home -------------------------------------------------------------
 
 .vault-home-stats {
@@ -1077,9 +1056,37 @@ $memories-type-colors: (
 }
 
 .vault-home-storage,
-.vault-home-recent {
+.vault-home-recent,
+.vault-home-videos {
     padding: 1.1rem 1.25rem;
     margin-bottom: 1.5rem;
+}
+
+.vault-video-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.vault-video-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .6rem .8rem;
+
+    .material-symbols-outlined {
+        opacity: .75;
+    }
+
+    &__detail {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
 }
 
 .vault-home-section-title {
@@ -1132,7 +1139,10 @@ $memories-type-colors: (
         object-fit: cover;
     }
 
-    &--document {
+    // A video never has a thumbnail (nothing thumbnails one), so it wears the
+    // same icon-and-caption tile a document does.
+    &--document,
+    &--video {
         flex-direction: column;
         gap: .25rem;
         padding: .4rem;
@@ -1441,10 +1451,6 @@ $memories-type-colors: (
     .photos-grid {
         grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
         gap: .5rem;
-    }
-
-    .photos-dropzone {
-        padding: 2rem 1rem;
     }
 
     .memories-unlogged-grid {

@@ -16,7 +16,6 @@ from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLI
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.services.apis.locations.base import StreetViewSlide
 
 logger = logging.getLogger(__name__)
 

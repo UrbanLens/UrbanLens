@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
 import json
 import logging
 import random
 import re
 import time
-from typing import Any, ClassVar, Literal, Protocol
+from typing import Any, ClassVar, Literal
 
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Point, Polygon
 from django.core.cache import cache

@@ -36,8 +36,6 @@ import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from django.utils import timezone
-
 from urbanlens.dashboard.models.reputation.meta import TargetKind
 from urbanlens.dashboard.services.reputation import coefficients
 from urbanlens.dashboard.services.reputation.rules import Rule, ScoreResult, register

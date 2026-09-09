@@ -83,6 +83,7 @@ from urbanlens.dashboard.controllers import (
     trip,
     trivia,
     two_factor,
+    ui,
     undo,
     userprofile,
     vault,
@@ -95,7 +96,7 @@ from urbanlens.dashboard.controllers import (
     wiki_share,
 )
 from urbanlens.dashboard.controllers.index import HomeOverviewView, HomeWidgetLayoutSaveView, IndexController
-from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.pin import PinViewSet
 from urbanlens.dashboard.models.reviews import ReviewViewSet
 
@@ -429,6 +430,11 @@ urlpatterns = [
                                 "cris/attachment/<str:resource_uuid>/<int:attachment_id>/extracted/<int:image_id>/",
                                 pin.PinCrisExtractedImageView.as_view(),
                                 name="pin.cris.extracted_image",
+                            ),
+                            path(
+                                "place-cid/media/<int:cid>/<int:media_id>/",
+                                pin.PinPlaceCidMediaView.as_view(),
+                                name="pin.place_cid.media",
                             ),
                             path("<slug:pin_slug>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
                             path("<slug:pin_slug>/share/", pin_sharing.PinShareDialogView.as_view(), name="pin.share.dialog"),
@@ -899,6 +905,11 @@ urlpatterns = [
                                 name="pin.albums.items",
                             ),
                             path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/eligible/",
+                                albums.AlbumEligibleImagesView.as_view(),
+                                name="pin.albums.eligible",
+                            ),
+                            path(
                                 "<slug:pin_slug>/albums/<slug:album_slug>/move/",
                                 albums.AlbumMoveView.as_view(),
                                 name="pin.albums.move",
@@ -1169,6 +1180,7 @@ urlpatterns = [
     path("settings/security/totp/disable/", two_factor.TOTPDisableView.as_view(), name="settings.security.totp.disable"),
     path("settings/security/backup-codes/generate/", two_factor.BackupCodesGenerateView.as_view(), name="settings.security.backup_codes.generate"),
     path("settings/security/api-keys/", api_keys.ApiKeyCreateView.as_view(), name="settings.security.api_keys.create"),
+    path("settings/security/api-keys/section/", api_keys.ApiKeySectionView.as_view(), name="settings.security.api_keys.section"),
     path("settings/security/api-keys/<int:api_key_id>/revoke/", api_keys.ApiKeyRevokeView.as_view(), name="settings.security.api_keys.revoke"),
     path("settings/billing/", billing.BillingSettingsSectionView.as_view(), name="settings.billing"),
     path("settings/billing/checkout/", billing.BillingCheckoutView.as_view(), name="settings.billing.checkout"),
@@ -1577,6 +1589,11 @@ urlpatterns = [
                     name="location.wiki.albums.items",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/albums/<slug:album_slug>/eligible/",
+                    albums.AlbumEligibleImagesView.as_view(),
+                    name="location.wiki.albums.eligible",
+                ),
+                path(
                     "<slug:location_slug>/wiki/albums/<slug:album_slug>/",
                     albums.AlbumDetailView.as_view(),
                     name="location.wiki.albums.detail",
@@ -1979,6 +1996,8 @@ urlpatterns = [
                 path("visits/bulk/<str:action>/", memories.MemoriesVisitsBulkActionView.as_view(), name="memories.visits.bulk"),
                 path("maps/", memories.MemoriesMapsView.as_view(), name="memories.maps"),
                 path("sharing/", memories.MemoriesSharingView.as_view(), name="memories.sharing"),
+                path("sharing/sent/", memories.MemoriesSharingSentView.as_view(), name="memories.sharing.sent"),
+                path("sharing/received/", memories.MemoriesSharingReceivedView.as_view(), name="memories.sharing.received"),
                 path("journal/", memories.MemoriesJournalView.as_view(), name="memories.journal"),
                 path("unlogged/<slug:pin_slug>/<str:action>/", memories.MemoriesUnloggedActionView.as_view(), name="memories.unlogged.action"),
                 path("locations/", pin_suggestions.PinSuggestionQueueView.as_view(), name="memories.locations"),
@@ -2031,6 +2050,7 @@ urlpatterns = [
                 path("photos/pin-albums/", vault_photos.VaultPinAlbumsView.as_view(), name="vault.photos.pin_albums"),
                 path("photos/items/", vault_photos.PhotoItemsView.as_view(), name="vault.photos.items"),
                 path("photos/upload/", vault_photos.PhotoUploadView.as_view(), name="vault.photos.upload"),
+                path("photos/bulk/", image_gallery.VaultGalleryBulkView.as_view(), name="vault.photos.bulk"),
                 path("photos/failures/", vault_photos.PhotoUploadFailureCreateView.as_view(), name="vault.photos.failures"),
                 path("photos/failures/<int:failure_id>/dismiss/", vault_photos.PhotoUploadFailureDismissView.as_view(), name="vault.photos.failures.dismiss"),
                 path("photos/failures/<int:failure_id>/retry/", vault_photos.PhotoUploadFailureRetryView.as_view(), name="vault.photos.failures.retry"),
@@ -2059,6 +2079,7 @@ urlpatterns = [
                 path("photos/albums/<slug:album_slug>/reorder/", albums.AlbumReorderView.as_view(), name="vault.photos.albums.reorder", kwargs={"vault": True}),
                 path("photos/albums/<slug:album_slug>/upload/", albums.AlbumUploadView.as_view(), name="vault.photos.albums.upload", kwargs={"vault": True}),
                 path("photos/albums/<slug:album_slug>/items/", albums.AlbumItemsView.as_view(), name="vault.photos.albums.items", kwargs={"vault": True}),
+                path("photos/albums/<slug:album_slug>/eligible/", albums.AlbumEligibleImagesView.as_view(), name="vault.photos.albums.eligible", kwargs={"vault": True}),
                 path("photos/albums/<slug:album_slug>/", albums.AlbumDetailView.as_view(), name="vault.photos.albums.detail", kwargs={"vault": True}),
                 path("documents/", vault_documents.VaultDocumentsView.as_view(), name="vault.documents"),
                 path("documents/items/", vault_documents.DocumentItemsView.as_view(), name="vault.documents.items"),
@@ -2074,6 +2095,9 @@ urlpatterns = [
     path("site-admin/", site_admin.SiteAdminHomeView.as_view(), name="site_admin_home"),
     path("site-admin/status/", site_admin.SiteAdminHomeStatusPartialView.as_view(), name="site_admin_home_status"),
     path("site-admin/users/", site_admin.SiteAdminUsersView.as_view(), name="site_admin_users"),
+    # Shared UI fragment, versioned by content hash and cached immutably; see
+    # services/core/icon_grid.py for why it is not rendered into each picker.
+    path("ui/icon-picker-grid/", ui.IconPickerGridView.as_view(), name="ui.icon_picker_grid"),
     path("site-admin/settings/", site_admin.SiteAdminView.as_view(), name="site_admin"),
     path("site-admin/stats/", site_admin.SiteAdminStatsView.as_view(), name="site_admin_stats"),
     path("site-admin/stats/kpi/", site_admin.SiteAdminStatsKpiPartialView.as_view(), name="site_admin_stats_kpi"),
@@ -2144,5 +2168,4 @@ urlpatterns = [
         name="dev_toolbar.reset_onboarding",
     ),
     path("", include("social_django.urls", namespace="social")),
-    re_path(".*", TemplateView.as_view(template_name="dashboard/pages/errors/404.html"), name="404"),
 ]

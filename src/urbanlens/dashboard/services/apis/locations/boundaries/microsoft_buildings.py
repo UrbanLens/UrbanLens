@@ -27,7 +27,6 @@ import gzip
 import io
 import json
 import math
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, best_containing_polygon, create_bbox, feature_intersects_bbox, validate_bbox

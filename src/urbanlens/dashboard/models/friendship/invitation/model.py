@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import uuid
 
 from django.core.validators import MaxLengthValidator
-from django.db.models import CASCADE, CharField, DateTimeField, EmailField, ForeignKey, TextField, UUIDField
+from django.db.models import CASCADE, CharField, DateTimeField, EmailField, ForeignKey, UUIDField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract

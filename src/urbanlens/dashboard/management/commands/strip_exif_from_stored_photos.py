@@ -20,7 +20,7 @@ from django.db import DatabaseError
 from PIL import UnidentifiedImageError
 
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.media.images import downscale_stored_image, extract_exif_data
+from urbanlens.dashboard.services.media.images import discard_superseded_file, downscale_stored_image, extract_exif_data
 from urbanlens.dashboard.services.sandbox import allow_untrusted_parse
 
 
@@ -100,9 +100,12 @@ class Command(BaseCommand):
             with image.image.open("rb") as handle:
                 return bool(extract_exif_data(handle)), recorded
 
-        new_size = downscale_stored_image(image, max_dimension=None, convert_webp=False)
-        if new_size is None:
+        replacement = downscale_stored_image(image, max_dimension=None, convert_webp=False)
+        if replacement is None:
             return False, recorded
 
-        Image.objects.filter(pk=image.pk).update(image=image.image.name, file_size=new_size)
+        Image.objects.filter(pk=image.pk).update(image=image.image.name, file_size=replacement.size)
+        # After the update, never before: until the row names the rewritten file,
+        # deleting the old one leaves an authorized request with nothing to open.
+        discard_superseded_file(image, replacement.superseded_name)
         return True, recorded

@@ -8,7 +8,7 @@
 {% if profile.user == request.user %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
-        {% include "dashboard/partials/profile/_profile_tabs.html" with active="profile" profile_slug=profile.slug %}
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="profile" profile_slug=profile.slug has_achievements=has_achievements %}
     </div>
 </div>
 {% endif %}
@@ -47,12 +47,12 @@
         <div class="profile-photo-strip">
             {% for photo in profile_photos %}
             <button type="button" class="profile-photo-strip-item" id="profile-photo-{{ photo.pk }}"
-                    data-photo-url="{{ photo.image.url }}"
+                    data-photo-url="{{ photo.display_url }}"
                     data-photo-caption="{{ photo.display_caption|default:'' }}"
                     data-photo-taken-at="{{ photo.taken_at|date:'c'|default:'' }}"
                     data-photo-id="{{ photo.pk }}"
                     onclick="window.profilePhotoStripOpen(this)">
-                <img src="{{ photo.image.url }}" alt="{{ photo.display_caption|default:'' }}" loading="lazy">
+                <img src="{{ photo.display_url }}" alt="{{ photo.display_caption|default:'' }}" loading="lazy">
             </button>
             {% endfor %}
         </div>

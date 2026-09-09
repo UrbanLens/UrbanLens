@@ -17,7 +17,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db.models import Sum
-from django.db.models.functions import Coalesce
 
 from urbanlens.dashboard.models.profile.model import _haversine_km
 from urbanlens.dashboard.models.routes.model import Route

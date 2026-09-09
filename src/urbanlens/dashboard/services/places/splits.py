@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceRelation, PlaceStatus
+from urbanlens.dashboard.models.place.model import Place, PlaceAccessGrant, PlaceKind, PlaceRelation, PlaceStatus
 from urbanlens.dashboard.services.places import lineage, resolution
 
 if TYPE_CHECKING:

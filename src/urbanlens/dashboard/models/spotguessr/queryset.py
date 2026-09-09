@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.spotguessr.model import (
+    from urbanlens.dashboard.models.spotguessr.model import (  # noqa: F401 - mypy resolves these in the class-base subscripts below; ruff does not
         GameRound,
         GameSession,
         GameSessionChatMessage,

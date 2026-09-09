@@ -221,7 +221,16 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
     """Yield a MemoryEvent for each of the profile's own geotagged photos within the given range."""
     from urbanlens.dashboard.models.images.model import Image
 
-    photos = Image.objects.filter(profile=profile).with_coords().annotate(effective_taken_at=Coalesce("taken_at", "created")).filter(effective_taken_at__date__range=(start, end)).select_related("pin", "wiki", "wiki__location")
+    # Named `_effective_taken_at`, not `effective_taken_at`: annotating the
+    # latter collides with Image.effective_taken_at (a real @property), and
+    # Django raises AttributeError trying to setattr the annotated column
+    # onto that name during row materialization - silently swallowed by
+    # get_memory_events' broad exception guard, so every photo vanished from
+    # the feed. The Coalesce fallback matches the property's own chain
+    # (EXIF taken_at, else a filename-parsed date) so the two stay in sync;
+    # reading the real property below (not this annotation) keeps that the
+    # single source of truth.
+    photos = Image.objects.filter(profile=profile).with_coords().annotate(_effective_taken_at=Coalesce("taken_at", "filename_taken_at")).filter(_effective_taken_at__date__range=(start, end)).select_related("pin", "wiki", "wiki__location")
     if bbox is not None:
         photos = photos.filter(
             latitude__range=(bbox.min_lat, bbox.max_lat),

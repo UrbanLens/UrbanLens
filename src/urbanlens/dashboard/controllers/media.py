@@ -14,6 +14,18 @@ authorizes them against the owning row for the requested file, and then either:
 
 Neither half of the decision is implemented here.
 
+*Where the bytes come from* is :class:`MediaByteSource` and its two subclasses.
+The local filesystem is one case; an S3-compatible object store
+(``UL_MEDIA_STORAGE_BACKEND=s3``) is the other, and it exists so media can move
+off a single machine's disk without moving out from behind this view. What the
+object-store case deliberately does **not** do is hand the client a presigned
+URL: that would be a bearer token for one object, valid until it expires,
+readable by anything the URL reaches, and revocable by nothing - the access
+model this module enforces, replaced by a link. The bytes either pass through
+Django or are fetched by nginx from a URL Django signed and nginx strips
+(``MEDIA_X_ACCEL_OBJECT_PREFIX``); in both, the client only ever sees
+``/media/...``.
+
 *Authentication* - "a logged-in session, or a bearer credential holding
 ``media:read``" - lives in
 :class:`~urbanlens.dashboard.controllers.media_auth.CredentialOrSessionMediaMixin`,
@@ -32,12 +44,14 @@ nginx once someone has said yes.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from django.conf import settings
+from django.core.files.storage import FileSystemStorage, default_storage
 from django.http import FileResponse, Http404, HttpResponse
 from django.views import View
 
@@ -58,7 +72,7 @@ logger = logging.getLogger(__name__)
 #: moved to ``controllers.media_auth`` (where the panel image proxy and the
 #: SpotGuessr round image share it). Listed explicitly because it is otherwise
 #: an unused import as far as a linter is concerned.
-__all__ = ["MediaGateView", "MediaThrottledError"]
+__all__ = ["MediaByteSource", "MediaGateView", "MediaThrottledError"]
 
 
 class MediaGateView(CredentialOrSessionMediaMixin, View):
@@ -125,22 +139,22 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         if profile is None:
             return self.media_auth_failure_response(request)
 
-        rel_path, full_path = self._resolve_media_path(path)
+        source = self._resolve_media_path(path)
 
-        if not self._authorized(profile, rel_path):
-            logger.info("Denied media request for %s by profile %s", rel_path, profile.pk)
+        if not self._authorized(profile, source.rel_path):
+            logger.info("Denied media request for %s by profile %s", source.rel_path, profile.pk)
             raise Http404
 
-        return apply_media_response_headers(request, serve_media_file(rel_path, full_path))
+        return apply_media_response_headers(request, serve_media_file(source))
 
-    def _resolve_media_path(self, path: str) -> tuple[str, Path]:
+    def _resolve_media_path(self, path: str) -> MediaByteSource:
         """Delegate to :func:`resolve_media_path`.
 
         Args:
             path: The untrusted relative path from the URL.
 
         Returns:
-            Tuple of (path relative to ``MEDIA_ROOT``, absolute ``Path``).
+            The byte source for the requested file.
 
         Raises:
             Http404: See :func:`resolve_media_path`.
@@ -161,20 +175,200 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         return authorize_media(profile, rel_path)
 
 
-def resolve_media_path(path: str) -> tuple[str, Path]:
-    """Resolve a media path and verify it stays inside ``MEDIA_ROOT``.
+class MediaByteSource(ABC):
+    """One already-located media file, and the cheapest way to put its bytes on the wire.
+
+    A subclass per backing store, chosen by :func:`resolve_media_path` from
+    whatever ``STORAGES["default"]`` resolves to. Splitting it this way keeps
+    the path handling (which is security-critical and identical either way) in
+    one place, and lets a third store be added by writing one class rather than
+    by adding a branch to every caller.
+
+    Authorization is *not* this class's job and must already have happened -
+    see :func:`~urbanlens.dashboard.services.media.access.authorize_media`.
+    """
+
+    def __init__(self, rel_path: str) -> None:
+        """Store the normalized path.
+
+        Args:
+            rel_path: Normalized, traversal-checked path relative to the media
+                root (filesystem) or to the bucket (object store).
+        """
+        self.rel_path = rel_path
+
+    @abstractmethod
+    def response(self) -> HttpResponseBase:
+        """Return the response that delivers this file's bytes.
+
+        Returns:
+            An ``X-Accel-Redirect`` hand-off, or a ``FileResponse``.
+
+        Raises:
+            Http404: The file is gone between resolution and delivery.
+        """
+
+
+class LocalMediaSource(MediaByteSource):
+    """A file on the local filesystem under ``MEDIA_ROOT``."""
+
+    def __init__(self, rel_path: str, full_path: Path) -> None:
+        """Store the path pair.
+
+        Args:
+            rel_path: Path relative to ``MEDIA_ROOT``.
+            full_path: The resolved absolute path, already checked to be inside
+                ``MEDIA_ROOT`` and to be an existing file.
+        """
+        super().__init__(rel_path)
+        self.full_path = full_path
+
+    def response(self) -> HttpResponseBase:
+        """Hand the file to nginx, or stream it.
+
+        Returns:
+            An ``X-Accel-Redirect`` into ``/_protected_media/`` when nginx
+            fronts the app, otherwise a ``FileResponse``.
+
+        Raises:
+            Http404: The file was there when the resolver looked and is gone
+                now. Async processing replaces an upload's stored file
+                (``.jpg`` -> ``.webp``) while the row still names the old one,
+                so authorization passes for a path this open then fails on.
+        """
+        if getattr(settings, "MEDIA_X_ACCEL", False):
+            # Hand the actual byte-serving back to nginx: the internal-only
+            # /_protected_media/ location aliases the media volume. Content-Type
+            # is deliberately left unset so nginx derives it from the file
+            # extension via its own mime.types. Nothing is opened here, so a
+            # file that vanished is nginx's 404 to answer rather than this
+            # process's - and re-checking would cost a stat per media request.
+            return _accel_redirect(settings.MEDIA_X_ACCEL_PREFIX + quote(self.rel_path))
+
+        try:
+            handle = self.full_path.open("rb")  # lgtm[py/path-injection] -- already traversal-checked by resolve_media_path
+        except OSError as exc:
+            logger.info("Media file %r could not be opened: %s", self.rel_path, exc)
+            raise Http404 from exc
+
+        return mark_private_media(FileResponse(handle))
+
+
+class ObjectMediaSource(MediaByteSource):
+    """An object in an S3-compatible store, reached through ``STORAGES["default"]``.
+
+    Existence is not checked up front, unlike the filesystem case: on an object
+    store that is a second network round trip per media request, and the answer
+    changes nothing. A key with no owning row is refused by authorization before
+    this class is reached, and a key that vanishes between the two is a 404
+    raised from :meth:`response` instead of from the resolver.
+    """
+
+    def response(self) -> HttpResponseBase:
+        """Hand nginx a signed URL, or stream the object.
+
+        Returns:
+            An ``X-Accel-Redirect`` carrying a URL this process signed - which
+            nginx consumes and strips, so it never reaches the client - when
+            ``MEDIA_X_ACCEL_OBJECT_PREFIX`` names such a location. Otherwise a
+            ``FileResponse`` streaming the object through this process.
+
+        Raises:
+            Http404: The object does not exist.
+        """
+        prefix = getattr(settings, "MEDIA_X_ACCEL_OBJECT_PREFIX", "")
+        signer = getattr(default_storage, "signed_object_url", None)
+        if prefix and callable(signer):
+            ttl = getattr(settings, "MEDIA_X_ACCEL_OBJECT_URL_TTL_SECONDS", 60)
+            # The signed URL rides in a response header nginx removes before it
+            # answers the client, so it is a server-to-server credential rather
+            # than something the requester ever holds.
+            #
+            # Only the path and query go into the header, never the scheme and
+            # host. nginx therefore pins its own upstream in its config and this
+            # response cannot point it anywhere: an absolute URL here would make
+            # every bug that can influence a stored path into server-side request
+            # forgery, executed by the one process that is inside the cluster.
+            # The signature covers the Host header, so nginx must send the same
+            # host UL_S3_ENDPOINT_URL names - see docs/MEDIA_PIPELINE.md.
+            signed = urlsplit(signer(self.rel_path, ttl))
+            target = signed.path if not signed.query else f"{signed.path}?{signed.query}"
+            return _accel_redirect(prefix.rstrip("/") + "/" + target.lstrip("/"))
+
+        try:
+            stream = default_storage.open(self.rel_path, "rb")
+        except (FileNotFoundError, OSError) as exc:
+            logger.info("Media object %r could not be opened: %s", self.rel_path, exc)
+            raise Http404 from exc
+
+        return mark_private_media(FileResponse(stream))
+
+
+def _accel_redirect(target: str) -> HttpResponseBase:
+    """Build the empty response whose only job is the ``X-Accel-Redirect`` header.
+
+    Args:
+        target: The internal location (and, for an object store, the signed URL
+            appended to it) nginx should fetch.
+
+    Returns:
+        A private, content-type-less response carrying the header.
+    """
+    response = HttpResponse()
+    del response["Content-Type"]
+    response["X-Accel-Redirect"] = target
+    return mark_private_media(response)
+
+
+def _normalize_object_key(path: str) -> str:
+    """Normalize an untrusted media path into an object key, or refuse it.
+
+    The filesystem resolver leans on ``Path.resolve`` and a containment check,
+    neither of which means anything for a key in a bucket - ``resolve`` consults
+    the local disk, and there is no root to be contained by. So the check here is
+    structural: every segment must be a real name. That rejects the traversal
+    (``..``), the empty segment (a leading, trailing or doubled slash), the
+    current-directory segment, and the backslash - which is a legal character in
+    an object key and a path separator to plenty of clients, so a key containing
+    one could name one object and be read as another.
+
+    Args:
+        path: The untrusted relative path from the URL.
+
+    Returns:
+        The key, unchanged, once every segment has been accepted.
+
+    Raises:
+        Http404: Any segment is missing, relative, or contains a separator.
+    """
+    if not path or "\x00" in path or "\\" in path:
+        logger.warning("Blocked media object key: %r", path)
+        raise Http404
+
+    if any(segment in ("", ".", "..") for segment in path.split("/")):
+        logger.warning("Blocked media path traversal attempt: %r", path)
+        raise Http404
+
+    return path
+
+
+def resolve_media_path(path: str) -> MediaByteSource:
+    """Resolve a media path against the configured store, refusing anything that escapes.
 
     Args:
         path: The untrusted relative path.
 
     Returns:
-        Tuple of (normalized POSIX-style path relative to ``MEDIA_ROOT``,
-        resolved absolute ``Path`` of the file on disk).
+        The byte source for the requested file, carrying the normalized
+        POSIX-style path the authorizers key off.
 
     Raises:
-        Http404: The path is empty, contains a NUL byte, resolves outside
-            ``MEDIA_ROOT`` (traversal attempt), or isn't an existing file.
+        Http404: The path is empty, contains a NUL byte, escapes the media root
+            (traversal attempt), or - on the filesystem - isn't an existing file.
     """
+    if not isinstance(default_storage, FileSystemStorage):
+        return ObjectMediaSource(_normalize_object_key(path))
+
     if not path or "\x00" in path:
         raise Http404
 
@@ -191,10 +385,10 @@ def resolve_media_path(path: str) -> tuple[str, Path]:
     if not full_path.is_file():  # lgtm[py/path-injection] -- reached only after the is_relative_to(media_root) check above
         raise Http404
 
-    return full_path.relative_to(media_root).as_posix(), full_path
+    return LocalMediaSource(full_path.relative_to(media_root).as_posix(), full_path)
 
 
-def serve_media_file(rel_path: str, full_path: Path) -> HttpResponseBase:
+def serve_media_file(source: MediaByteSource) -> HttpResponseBase:
     """Serve one already-authorized media file.
 
     Authorization is the caller's job - this only moves bytes. Split out so a
@@ -203,21 +397,13 @@ def serve_media_file(rel_path: str, full_path: Path) -> HttpResponseBase:
     reimplementing it.
 
     Args:
-        rel_path: Path relative to ``MEDIA_ROOT``, already traversal-checked.
-        full_path: The resolved absolute path on disk.
+        source: The resolved byte source, from :func:`resolve_media_path`.
 
     Returns:
-        An ``X-Accel-Redirect`` response when nginx fronts the app, otherwise a
-        ``FileResponse`` streaming the file.
-    """
-    if getattr(settings, "MEDIA_X_ACCEL", False):
-        # Hand the actual byte-serving back to nginx: the internal-only
-        # /_protected_media/ location aliases the media volume. Content-Type
-        # is deliberately left unset so nginx derives it from the file
-        # extension via its own mime.types.
-        response = HttpResponse()
-        del response["Content-Type"]
-        response["X-Accel-Redirect"] = settings.MEDIA_X_ACCEL_PREFIX + quote(rel_path)
-        return mark_private_media(response)
+        Whatever the source's backing store delivers bytes with - an
+        ``X-Accel-Redirect`` response, or a ``FileResponse``.
 
-    return mark_private_media(FileResponse(full_path.open("rb")))  # lgtm[py/path-injection] -- already traversal-checked by resolve_media_path
+    Raises:
+        Http404: The file disappeared between resolution and delivery.
+    """
+    return source.response()

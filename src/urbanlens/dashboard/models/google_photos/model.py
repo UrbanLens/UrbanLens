@@ -13,7 +13,7 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, CharField, DateTimeField, OneToOneField
+from django.db.models import CASCADE, DateTimeField, OneToOneField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract

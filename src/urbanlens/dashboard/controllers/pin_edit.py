@@ -92,8 +92,7 @@ def _stat_item_context(pin: Pin, field: str) -> dict:
 
 
 def _overview_context(pin: Pin) -> dict:
-    from urbanlens.dashboard.models.labels.model import COLOR_CHOICES
-    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
     from urbanlens.dashboard.models.pin.model import PinType
 
     detail_pin_icon_choices = [
@@ -519,6 +518,7 @@ class PinSwapParentView(LoginRequiredMixin, View):
             # swap_with_parent() raises one of exactly two developer-authored
             # literals; match on it rather than echoing exc so a future raise
             # site added there can't smuggle unsafe text into this response.
+            logger.info("swap_with_parent rejected for pin %s: %s", pin.pk, exc)
             if str(exc) == "This pin has no parent to swap with.":
                 return JsonResponse({"error": "This pin has no parent to swap with."}, status=400)
             return JsonResponse({"error": "Can't complete the swap - you already have a top-level pin at this pin's own location."}, status=400)

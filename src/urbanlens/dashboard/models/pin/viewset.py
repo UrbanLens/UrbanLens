@@ -58,6 +58,11 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
         logger.info("Update request initiated by user %s", request.user.id)
+        # Unreachable while `get_queryset` scopes to `profile__user`: a stranger's
+        # pin 404s before this runs. Kept as the backstop for the day that filter
+        # widens (shared pins, an admin view), which is when a write path with no
+        # check of its own becomes the bug. Filed once as dead code - P19 in
+        # docs/PROBLEMS.md - so this says why it stays.
         if instance.profile.user != request.user:
             logger.error(
                 "User %s attempted to update pin %s, but does not have permission",
@@ -99,7 +104,8 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
                 try:
                     move_pin_to_coordinates(instance, latitude, longitude)
                 except PinMoveError as exc:
-                    return Response({"detail": exc.safe_message}, status=status.HTTP_400_BAD_REQUEST)
+                    logger.info("Pin move rejected for pin %s: %s", instance.id, exc)
+                    return Response({"detail": "You already have a pin at these exact coordinates."}, status=status.HTTP_400_BAD_REQUEST)
 
             self.perform_update(serializer)
             instance.refresh_from_db()
@@ -152,6 +158,7 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
         """
         logger.info("Delete request initiated by user %s", request.user.id)
         instance = self.get_object()
+        # The same backstop as in `partial_update` above, for the same reason.
         if instance.profile.user != request.user:
             logger.error(
                 "User %s attempted to delete pin %s, but does not have permission",
@@ -164,6 +171,7 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
         try:
             delete_pin(instance, children_mode=children_mode)
         except PinHasChildrenError as exc:
+            logger.info("Pin delete rejected for pin %s: %s", instance.id, exc)
             return Response(
                 {"requires_children_decision": True, "children": exc.descendant_count},
                 status=status.HTTP_409_CONFLICT,

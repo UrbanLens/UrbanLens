@@ -16,7 +16,8 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.labels.model import KIND_TAG, KIND_USER, Label
+from urbanlens.dashboard.models.labels.meta import KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.labels.model import Label
 
 
 class LabelCreateCandidateRefreshTests(TestCase):

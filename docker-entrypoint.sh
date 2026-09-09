@@ -90,6 +90,25 @@ case "${UL_ENVIRONMENT:-production}" in
         ;;
 esac
 
+# Daphne's inbound frame caps are appended here rather than written into
+# docker-compose.yml; bin/websocket_frame_flags.sh says why, and owns the
+# derivation. An explicit flag in the command wins, so an operator can override.
+#
+# Absolute, like every other path in this file: the image copies the entrypoint
+# to / and the repository to /app, so `dirname "$0"` is the root directory and
+# resolving the helper relative to it finds nothing. It did exactly that, and
+# because a missing cap only reverts daphne to its own 1 MiB default the socket
+# tier came up healthy with the limit quietly not applied - which is why this
+# refuses to start instead. A frame cap that can silently not exist is not one.
+if [ "$1" = "daphne" ] && [[ " $* " != *" --websocket-max-message-size "* ]]; then
+    if [ ! -x /app/bin/websocket_frame_flags.sh ]; then
+        echo "entrypoint: /app/bin/websocket_frame_flags.sh is missing; refusing to start daphne without its frame caps" >&2
+        exit 1
+    fi
+    readarray -t ws_frame_flags < <(/app/bin/websocket_frame_flags.sh)
+    set -- "$@" "${ws_frame_flags[@]}"
+fi
+
 # gosu needs CAP_SETUID/CAP_SETGID, which `cap_drop: ALL` also removes - a
 # service that declares `user:` is already unprivileged and must exec directly.
 if [ "$(id -u)" = "0" ]; then

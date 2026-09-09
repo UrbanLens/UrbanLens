@@ -29,6 +29,18 @@ unreachable, or a county source it depends on is down) is never cached at all
 - the fetch raises so the panel framework's failure-skip/retry machinery
 handles it, instead of a days-long ``LocationCache`` row remembering an
 outage as "no data".
+
+**Neighbourhood demographics are gated behind ``SiteFeature.NEARBY_RESEARCH``**
+(decided 2026-09-08): a census tract's population/income/home-value/rent
+figures describe the area around the parcel, not the parcel itself, so they
+follow the same "don't show information about anywhere but the pin's own
+place to a non-subscriber" rule ``epa_echo.py``'s nearby-facility panel
+already applies. **The rest of this card, including the ``containing_park``
+chip, stays free for everyone** - a parcel's own facts (situs address, APN,
+zoning, tax history, sale records, ``containing_park``) describe the parcel
+itself, a real point-in-boundary answer about the pin's own place rather than
+somewhere nearby, same as ``owner_name``'s existing ``SiteFeature.PROPERTY_OWNERS``
+gate this mirrors.
 """
 
 from __future__ import annotations
@@ -62,6 +74,29 @@ _CACHE_SOURCE = "property_records"
 #: interesting, but the card is a summary - the full list belongs to whoever
 #: goes looking in the county records.
 _MAX_LIEN_ROWS = 8
+
+
+def _coverage_worth_calling(coverage: dict[str, Any], domain: str) -> bool:
+    """Whether a coverage-precheck domain is worth an actual supplementary call.
+
+    A missing key, a non-dict entry, or ``available`` not exactly ``False``
+    are all treated as "call it" - :meth:`RedataGateway.lookup_coverage` is
+    only ever used to *skip* a call REData positively knows is pointless,
+    never to withhold one it simply didn't mention (most domains, including
+    ``liens``/``tax-payments``, have no coverage key at all).
+
+    Args:
+        coverage: :meth:`RedataGateway.lookup_coverage`'s payload - ``{}``
+            both for a parcel with no coverage data and for a failed precheck
+            (see :func:`_fetch_payload`), which is why this defaults to
+            calling rather than skipping.
+        domain: The coverage key to check (e.g. ``"assessments"``, ``"sale_records"``).
+
+    Returns:
+        False only when ``coverage[domain]["available"]`` is exactly ``False``.
+    """
+    entry = coverage.get(domain)
+    return not (isinstance(entry, dict) and entry.get("available") is False)
 
 
 def _fetch_payload(location: Location, latitude: float, longitude: float) -> dict[str, Any]:
@@ -110,48 +145,91 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
     payload["available"] = True
 
     if payload.get("uuid"):
+        parcel_uuid = payload["uuid"]
+        gateway = RedataGateway()
+
+        # Cheap local precheck for the two supplementary calls below that
+        # *are* coverage-registry domains (assessments, sale_records) - see
+        # RedataGateway.lookup_coverage. An optimization, not a dependency:
+        # a failed precheck falls back to calling both unconditionally rather
+        # than losing them, so a coverage-endpoint outage never blanks
+        # sections the parcel actually has data for.
+        try:
+            coverage = gateway.lookup_coverage(parcel_uuid)
+        except PropertyRecordsUnavailableError:
+            coverage = {}
+
         # Supplementary assessor history (annual valuations; Cook County
         # today). Best-effort: the record card stands on its own, so a
         # failure or no-coverage answer here must not blank it - the history
         # simply reappears on the next refresh cycle.
-        gateway = RedataGateway()
-        try:
-            rows = gateway.lookup_assessments(payload["uuid"])
-        except PropertyRecordsUnavailableError:
-            rows = []
-        history = _assessment_history(rows, payload.get("apn") or "")
-        if history:
-            payload["assessment_history"] = history
+        if _coverage_worth_calling(coverage, "assessments"):
+            try:
+                rows = gateway.lookup_assessments(parcel_uuid)
+            except PropertyRecordsUnavailableError:
+                rows = []
+            history = _assessment_history(rows, payload.get("apn") or "")
+            if history:
+                payload["assessment_history"] = history
 
         # Supplementary recorded sales (CT OPM, Cook County) - same
         # best-effort stance. Matched rows are appended to sales_history so
         # the existing OFFICIAL-sale pipeline ingests them unchanged.
-        try:
-            sale_rows = gateway.lookup_sale_records(payload["uuid"])
-        except PropertyRecordsUnavailableError:
-            sale_rows = []
-        supplementary = _supplementary_sales(sale_rows, payload.get("situs_address") or "", payload.get("apn") or "")
-        if supplementary:
-            payload["sales_history"] = list(payload.get("sales_history") or []) + supplementary
+        if _coverage_worth_calling(coverage, "sale_records"):
+            try:
+                sale_rows = gateway.lookup_sale_records(parcel_uuid)
+            except PropertyRecordsUnavailableError:
+                sale_rows = []
+            supplementary = _supplementary_sales(sale_rows, payload.get("situs_address") or "", payload.get("apn") or "")
+            if supplementary:
+                payload["sales_history"] = list(payload.get("sales_history") or []) + supplementary
 
         # Encumbrances and unpaid tax. For this application these are the most
         # telling records on the card: an open code-enforcement lien and years
         # of delinquent tax are what "abandoned" looks like in public records,
         # long before anything says so in words. Same best-effort stance as
-        # above - the card stands without them.
+        # above - the card stands without them. Neither is a coverage-registry
+        # domain (see lookup_coverage's own docstring), so there is no cheap
+        # way to know in advance whether either will return anything - these
+        # stay unconditional.
         try:
-            lien_rows = gateway.lookup_liens(payload["uuid"])
+            lien_rows = gateway.lookup_liens(parcel_uuid)
         except PropertyRecordsUnavailableError:
             lien_rows = []
         if lien_rows:
             payload["liens"] = _lien_rows(lien_rows)
 
         try:
-            tax_rows = gateway.lookup_tax_payments(payload["uuid"])
+            tax_rows = gateway.lookup_tax_payments(parcel_uuid)
         except PropertyRecordsUnavailableError:
             tax_rows = []
         if tax_rows:
             payload["tax_status"] = _tax_status(tax_rows)
+
+        # Neighbourhood demographics (census tract population/income/home
+        # value/rent/owner-renter split) - genuinely useful context for
+        # someone researching a site. Best-effort: the endpoint 503s wholesale
+        # without REData's own Census API key configured server-side, and that
+        # is no different from any other supplementary source being down.
+        try:
+            demographics = gateway.lookup_demographics(parcel_uuid)
+        except PropertyRecordsUnavailableError:
+            demographics = None
+        if demographics:
+            payload["demographics"] = demographics
+
+        # The park containing this parcel, if any - a real point-in-boundary
+        # check, unlike plugins.builtin.nps's nearest-by-coordinate panel
+        # elsewhere on the same pin (see that plugin's own docstring for the
+        # precision tradeoff it accepts). nearby_parks duplicates that
+        # existing panel, so it is read and discarded here rather than shown
+        # twice.
+        try:
+            national_parks = gateway.lookup_national_parks(parcel_uuid)
+        except PropertyRecordsUnavailableError:
+            national_parks = {}
+        if containing_park := national_parks.get("containing_park"):
+            payload["containing_park"] = containing_park
 
     return payload
 
@@ -460,7 +538,78 @@ def special_land_use_rows(areas: Any) -> list[dict[str, str]]:
     return rows
 
 
-def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, Any]:
+def _demographic_number(value: Any) -> float | None:
+    """Parse one of REData's demographics fields (a decimal string, per the ACS API) to a float."""
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _may_see_nearby_research(user: Any) -> bool:
+    """Whether this user may see this panel's nearby-area (not-the-parcel-itself) data.
+
+    Currently gates only the neighbourhood demographics section - see
+    :func:`_demographics_rows` and the module docstring.
+
+    Args:
+        user: The viewing user (``services.property.owner_access.viewer_of(pin)``),
+            or None for a caller with no viewer to resolve - fails closed,
+            same reasoning as ``can_see_official_owners``.
+
+    Returns:
+        True when the user holds ``SiteFeature.NEARBY_RESEARCH``.
+    """
+    from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+    if user is None:
+        return False
+    return user_has_feature(user, SiteFeature.NEARBY_RESEARCH)
+
+
+def _demographics_rows(demographics: Any, *, show_demographics: bool) -> list[dict[str, str]]:
+    """Neighbourhood context from the parcel's census tract, as display rows.
+
+    REData has been resolving this on every parcel fetch (see
+    :meth:`RedataGateway.lookup_demographics`) and this app has shown none of
+    it - genuinely useful context for someone researching a site, distinct
+    from the parcel's own facts above it.
+
+    Args:
+        demographics: :meth:`RedataGateway.lookup_demographics`'s payload, or
+            None/anything falsy (no coordinate, outside the USA, or the
+            endpoint was unavailable - see ``_fetch_payload``'s best-effort
+            handling of it).
+        show_demographics: See :func:`_may_see_nearby_research` - False
+            returns ``[]`` unconditionally, without even reading ``demographics``.
+
+    Returns:
+        Display rows for population, median household income, median home
+        value, median rent, and the owner/renter split - omitting any field
+        the ACS estimate doesn't carry.
+    """
+    if not show_demographics or not isinstance(demographics, dict):
+        return []
+
+    rows: list[dict[str, str]] = []
+    if (population := _demographic_number(demographics.get("population"))) is not None:
+        rows.append({"label": "Neighborhood population", "value": f"{population:,.0f}"})
+    if (income := _demographic_number(demographics.get("median_household_income"))) is not None:
+        rows.append({"label": "Median household income", "value": f"${income:,.0f}"})
+    if (home_value := _demographic_number(demographics.get("median_home_value"))) is not None:
+        rows.append({"label": "Median home value", "value": f"${home_value:,.0f}"})
+    if (rent := _demographic_number(demographics.get("median_gross_rent"))) is not None:
+        rows.append({"label": "Median gross rent", "value": f"${rent:,.0f}/mo"})
+    owner_pct = _demographic_number(demographics.get("percent_owner_occupied"))
+    renter_pct = _demographic_number(demographics.get("percent_renter_occupied"))
+    if owner_pct is not None and renter_pct is not None:
+        rows.append({"label": "Owner/renter occupied", "value": f"{owner_pct:.0f}% / {renter_pct:.0f}%"})
+    return rows
+
+
+def _render_available(data: dict[str, Any], *, show_owner: bool, show_demographics: bool) -> dict[str, Any]:
     """Build the info-panel context for a successful record.
 
     Args:
@@ -469,6 +618,9 @@ def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, An
             assessor data is the paid half of this card - the parcel/tax
             facts stay unconditional, the private individual's name does not
             (see ``services.property.owner_access``).
+        show_demographics: Whether this viewer may see the neighbourhood
+            demographics section - see :func:`_may_see_nearby_research` and
+            the module docstring.
     """
     meta = [{"label": "Address", "value": data["situs_address"]}] if data.get("situs_address") else []
     if data.get("apn"):
@@ -539,6 +691,11 @@ def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, An
     if data.get("school_district"):
         meta.append({"label": "School district", "value": data["school_district"]})
 
+    # Neighbourhood demographics (the parcel's census tract) - context about
+    # the area, not the parcel itself, so it sits after the parcel's own tax
+    # geography rather than among the parcel facts above it.
+    meta.extend(_demographics_rows(data.get("demographics"), show_demographics=show_demographics))
+
     # Recorded-document references (deeds, plats). Linked rather than listed as
     # bare URLs: they are the primary sources behind the ownership history above,
     # and a recorder's URL is not text anyone reads. Capped because a
@@ -554,6 +711,13 @@ def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, An
     # First, because it is the one fact here that changes what a visit *is*
     # rather than describing the property.
     chips.extend(area["label"] for area in special_land_use_rows(data.get("special_land_use_areas")))
+    # A real point-in-boundary check (see RedataGateway.lookup_national_parks),
+    # not the nearest-by-coordinate answer plugins.builtin.nps shows elsewhere
+    # on this same pin - same rationale as the Special Land Use chips above:
+    # it changes what a visit is, not just describes the property.
+    containing_park = data.get("containing_park") or {}
+    if full_name := containing_park.get("full_name"):
+        chips.append(f"Situated within {full_name}")
     if data.get("field_mismatches"):
         chips.append("Sources disagree")
     if any(entry.get("delinquent") for entry in data.get("tax_history") or []):
@@ -619,16 +783,18 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Render the found record, the manual-lookup pointer card, or nothing (204).
 
-        The owner's name is shown only to a viewer entitled to it - see
-        ``services.property.owner_access.viewer_of`` for who that is, and why
-        an unresolvable viewer withholds the name rather than showing it.
+        The owner's name and the demographics section are each shown only to
+        a viewer entitled to them - see ``services.property.owner_access.viewer_of``
+        for who that is, and why an unresolvable viewer withholds both rather
+        than showing them.
         """
         from urbanlens.dashboard.services.property.owner_access import can_see_official_owners, viewer_of
 
         if not data:
             return None
         if data.get("available"):
-            return _render_available(data, show_owner=can_see_official_owners(viewer_of(pin)))
+            viewer = viewer_of(pin)
+            return _render_available(data, show_owner=can_see_official_owners(viewer), show_demographics=_may_see_nearby_research(viewer))
         if data.get("reason") in (REASON_MANUAL_ONLY, REASON_BLOCKED):
             return _render_manual_only(data)
         return None

@@ -286,8 +286,14 @@ function boot(): void {
         /** Every currently selected item (ctrl+click or box-select can grow this past one). */
         multi: [] as SelectionItem[],
         markerKind: "hazard" as MarkerKind,
-        /** What the wall tool draws next. */
-        wallKind: "interior" as Wall["kind"],
+        /** What the wall tool draws next. Starts "exterior" (not "interior") to
+         * match the onboarding copy ("trace the building's outline") and the
+         * other two wall-seeding paths (seedFromOutline, "start from a
+         * rectangle") - room/opening/box tools stay disabled until a wall
+         * closes a loop with at least one exterior segment (see
+         * updateToolAvailability), so drawing interior-first silently blocks
+         * them with no explanation. */
+        wallKind: "exterior" as Wall["kind"],
         /** What the opening tool cuts next - this is where windows live. */
         openingKind: "door" as Opening["kind"],
         /** Snapping, as a setting. The backtick key suspends it momentarily. */
@@ -4377,6 +4383,7 @@ function boot(): void {
                 remove.className = "btn btn--icon-sm btn--danger";
                 remove.innerHTML = '<i class="material-symbols-outlined">close</i>';
                 remove.addEventListener("click", () => {
+                    checkpoint();
                     wall.openings.splice(index, 1);
                     renderSidebar();
                     markDirty();
@@ -4389,6 +4396,7 @@ function boot(): void {
             addOpening.className = "btn btn--sm btn--ghost";
             addOpening.textContent = "Add opening";
             addOpening.addEventListener("click", () => {
+                checkpoint();
                 // Placed mid-wall at a tenth of its length; drag handles come later.
                 wall.openings.push({ uuid: nextLocalId(), kind: "door", t_start: 0.45, t_end: 0.55, swing: "none" });
                 renderSidebar();
@@ -4793,6 +4801,7 @@ function boot(): void {
             unlink.className = "btn btn--sm btn--ghost";
             unlink.textContent = "Unlink";
             unlink.addEventListener("click", () => {
+                checkpoint();
                 marker.connector_id = null;
                 renderSidebar();
                 markDirty();
@@ -4817,6 +4826,7 @@ function boot(): void {
                 const where = candidate.floor.name || floorLabels().get(candidate.floor) || `Level ${candidate.floor.level}`;
                 button.textContent = `Link to ${candidate.marker.name || candidate.marker.kind} on ${where}`;
                 button.addEventListener("click", () => {
+                    checkpoint();
                     // Adopt the counterpart's id when it already has one, so a
                     // third floor joins the same shaft rather than starting a
                     // parallel one.

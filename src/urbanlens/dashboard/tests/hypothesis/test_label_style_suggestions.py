@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from unittest import mock
 
 from django.test import override_settings
@@ -14,9 +13,6 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_style
-
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
 
 
 @pytest.mark.django_db

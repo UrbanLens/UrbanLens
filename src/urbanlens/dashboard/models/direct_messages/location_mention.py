@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import models
-from django.db.models import Index, UniqueConstraint
+from django.db.models import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 

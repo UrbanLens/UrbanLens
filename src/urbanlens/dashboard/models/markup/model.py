@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import math
 from typing import TYPE_CHECKING, Any
 
 from django.core.validators import MaxLengthValidator
@@ -161,6 +160,51 @@ class MarkupMap(abstract.FrontendDashboardModel):
         direct_messages: QuerySet[DirectMessage]
         clones: QuerySet[MarkupMap]
 
+    def _attached_rows(self, relation: str, *select_related: str) -> Any:
+        """Rows from one attachment relation, using a prefetch when there is one.
+
+        `self.comments.select_related(...).first()` builds a *new* queryset, so
+        it queries even when the caller prefetched `comments` - which is how the
+        Memories map list ran up to eleven queries per card while its view
+        prefetched all six relations (P68). Reading
+        ``_prefetched_objects_cache`` first is what makes a `Prefetch` on this
+        relation actually count; without one, the `select_related` still applies.
+
+        Args:
+            relation: The reverse accessor name, matching what a caller would
+                pass to ``prefetch_related``.
+            *select_related: Applied only on the unprefetched path.
+
+        Returns:
+            An iterable of the related rows.
+        """
+        prefetched = getattr(self, "_prefetched_objects_cache", {})
+        if relation in prefetched:
+            return prefetched[relation]
+        manager = getattr(self, relation)
+        return manager.select_related(*select_related).all() if select_related else manager.all()
+
+    def _first_attached_row(self, relation: str, *select_related: str) -> Any:
+        """The first row of one attachment relation, or None.
+
+        Separate from :meth:`_attached_rows` so the unprefetched path keeps
+        ``.first()``'s ``LIMIT 1`` rather than fetching every row to discard all
+        but one - which is what a single-map caller (a detail page, a delete
+        confirmation) does.
+
+        Args:
+            relation: The reverse accessor name.
+            *select_related: Applied only on the unprefetched path.
+
+        Returns:
+            The first related row, or None when there is none.
+        """
+        prefetched = getattr(self, "_prefetched_objects_cache", {})
+        if relation in prefetched:
+            return next(iter(prefetched[relation]), None)
+        manager = getattr(self, relation)
+        return manager.select_related(*select_related).first() if select_related else manager.first()
+
     @property
     def attachment(self) -> tuple[str, Any] | None:
         """Return the first host object this map is attached to, if any.
@@ -170,22 +214,22 @@ class MarkupMap(abstract.FrontendDashboardModel):
             / ``comment`` / ``trip_comment`` / ``visit``, or None when the map
             is unattached (a draft).
         """
-        checkin = self.safety_checkins.first()
+        checkin = self._first_attached_row("safety_checkins")
         if checkin is not None:
             return ("safety_checkin", checkin)
-        comment = self.comments.select_related("pin", "wiki__location").first()
+        comment = self._first_attached_row("comments", "pin", "wiki__location")
         if comment is not None:
             return ("comment", comment)
-        trip_comment = self.trip_comments.select_related("trip").first()
+        trip_comment = self._first_attached_row("trip_comments", "trip")
         if trip_comment is not None:
             return ("trip_comment", trip_comment)
-        visit = self.visits.select_related("pin").first()
+        visit = self._first_attached_row("visits", "pin")
         if visit is not None:
             return ("visit", visit)
         # Secondary (many-to-many) safety check-in attachments, checked last since a map
         # attached this way is meant to be reusable across hosts, unlike the exclusive
         # relations above - see SafetyCheckin.markup_maps.
-        attached_checkin = self.attached_safety_checkins.first()
+        attached_checkin = self._first_attached_row("attached_safety_checkins")
         if attached_checkin is not None:
             return ("safety_checkin", attached_checkin)
         return None
@@ -215,12 +259,12 @@ class MarkupMap(abstract.FrontendDashboardModel):
             / ``comment`` / ``trip_comment`` / ``visit`` / ``direct_message``.
         """
         results: list[tuple[str, Any]] = [
-            *(("safety_checkin", checkin) for checkin in self.safety_checkins.all()),
-            *(("safety_checkin", checkin) for checkin in self.attached_safety_checkins.all()),
-            *(("comment", comment) for comment in self.comments.select_related("pin", "wiki__location").all()),
-            *(("trip_comment", trip_comment) for trip_comment in self.trip_comments.select_related("trip").all()),
-            *(("visit", visit) for visit in self.visits.select_related("pin").all()),
-            *(("direct_message", message) for message in self.direct_messages.select_related("sender__user", "recipient__user").all()),
+            *(("safety_checkin", checkin) for checkin in self._attached_rows("safety_checkins")),
+            *(("safety_checkin", checkin) for checkin in self._attached_rows("attached_safety_checkins")),
+            *(("comment", comment) for comment in self._attached_rows("comments", "pin", "wiki__location")),
+            *(("trip_comment", trip_comment) for trip_comment in self._attached_rows("trip_comments", "trip")),
+            *(("visit", visit) for visit in self._attached_rows("visits", "pin")),
+            *(("direct_message", message) for message in self._attached_rows("direct_messages", "sender__user", "recipient__user")),
         ]
         return results
 

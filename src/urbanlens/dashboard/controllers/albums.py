@@ -348,7 +348,14 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
     cover = cover_from_ids(album, visible_ids)
     row = _album_row(owner, album, page, cover=cover, photo_count=total, date_start=date_start, date_end=date_end)
     row["grid_images"] = page
-    row["available_images"] = list(eligible_images_for(owner, viewer).exclude(pk__in=visible_ids).only("id", "uuid", "image", "thumbnail", "caption", "source_url"))
+    # A count, not the photos. The picker fetches its own pages from
+    # AlbumEligibleImagesView when it opens; rendering them here put every photo
+    # the profile has ever uploaded into a closed dialog on every page view
+    # (P69). The count is still needed: it decides whether the "Add from this
+    # place" affordance appears at all, and which of two empty-state sentences
+    # the album shows.
+    row["available_image_count"] = eligible_images_for(owner, viewer).exclude(pk__in=visible_ids).count()
+    row["eligible_url"] = reverse(f"{_url_prefix(owner)}.eligible", args=[*_owner_url_args(owner), album.slug])
     row["back_url"] = reverse(_url_prefix(owner), args=_owner_url_args(owner))
     row["list_url"] = row["back_url"]
     # The gallery's own per-image endpoint owns repositioning; the album map
@@ -518,13 +525,35 @@ def _picker_album_payload(owner: Pin | Wiki | Profile, viewer: Profile, *, exclu
 
 
 def _attach_owner_action_urls(ctx: dict, owner: Pin | Wiki | Profile) -> None:
-    """URLs the album UI needs for delete / send-to-wiki / share, when they exist."""
+    """URLs the album UI needs for delete / send-to-wiki / share, when they exist.
+
+    Three separate questions, and P61 is what came of answering them with one
+    URL: a vault album got no bulk endpoint at all, so its Delete button
+    rendered hidden forever alongside the two that genuinely do not apply.
+
+    - Delete works for a pin and for the vault, at their own endpoints.
+    - Send to wiki is pin-only: the endpoint derives the wiki from
+      ``pin.location``, and a vault album has no location. The vault's own
+      per-photo version asks the user which wiki, from a picker the bulk bar
+      has nowhere to put.
+    - Share opens the *pin* share dialog, so it is pin-only for the same
+      reason. Single-photo share from the lightbox is how a vault photo gets
+      shared, and is unaffected.
+
+    A wiki-owned album gets none of the three, which is unchanged.
+    """
     if isinstance(owner, Pin):
         slug = _owner_slug(owner)
         ctx["gallery_bulk_url"] = reverse("pin.gallery.bulk", args=[slug])
+        ctx["gallery_wiki_url"] = ctx["gallery_bulk_url"]
         ctx["pin_share_dialog_url"] = reverse("pin.share.dialog", args=[slug])
+    elif isinstance(owner, Profile):
+        ctx["gallery_bulk_url"] = reverse("vault.photos.bulk")
+        ctx["gallery_wiki_url"] = ""
+        ctx["pin_share_dialog_url"] = ""
     else:
         ctx["gallery_bulk_url"] = ""
+        ctx["gallery_wiki_url"] = ""
         ctx["pin_share_dialog_url"] = ""
     ctx["label_image_url_template"] = reverse("label.image", args=["00000000-0000-0000-0000-000000000000"])
 
@@ -1045,6 +1074,59 @@ class AlbumItemsView(LoginRequiredMixin, View):
         )
 
 
+class AlbumEligibleImagesView(LoginRequiredMixin, View):
+    """Paginated JSON of the photos this album could still take, for its picker.
+
+    GET /map/pin/<pin_slug>/albums/<album_slug>/eligible/
+    GET /location/<location_slug>/wiki/albums/<album_slug>/eligible/
+    GET /vault/photos/albums/<album_slug>/eligible/
+
+    The picker used to be rendered into the page in full, inside a `<dialog>`
+    that stays closed until a click. For a pin or wiki album that is bounded by
+    one place's photos; for a Vault album it is every photo the profile has ever
+    uploaded, so a photographer with years of uploads had thousands of tiles
+    rendered on every album page view, for a dialog they usually never open
+    (P69).
+
+    Paginated rather than capped, so an older photo stays reachable. A cap would
+    have been the smaller change and the wrong one: this picker's whole purpose
+    can be "find the photo from last year", which is exactly what a newest-first
+    slice removes.
+
+    Excludes what the album already holds, which is what the inline version did
+    with ``.exclude(pk__in=visible_ids)``.
+    """
+
+    def get(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
+        """Return one page of photos that may still be added to this album.
+
+        Args:
+            request: HttpRequest with ``offset``/``limit`` query params.
+            album_slug: Slug of the album being added to.
+            pin_slug: Slug of the parent pin (personal route).
+            location_slug: Slug of the parent location (community route).
+            vault: True for a Vault (Profile-owned) album route.
+
+        Returns:
+            JSON ``{items, total, offset, limit}``.
+        """
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        offset, limit = _page_args(request)
+        already = list(album.items.values_list("image_id", flat=True))
+        eligible = eligible_images_for(owner, profile).exclude(pk__in=already)
+        total = eligible.count()
+        page = list(eligible[offset : offset + limit].only("id", "uuid", "image", "thumbnail", "caption", "source_url"))
+        return JsonResponse(
+            {
+                "items": [_photo_tile(image, request, profile) for image in page],
+                "total": total,
+                "offset": offset,
+                "limit": limit,
+            }
+        )
+
+
 class AlbumReorderView(LoginRequiredMixin, View):
     """Persist a drag-and-drop reordering of an album's photos.
 
@@ -1103,5 +1185,6 @@ class AlbumMoveView(LoginRequiredMixin, View):
         try:
             moved = move_album_to_pin(album, target)
         except ValueError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            logger.info("album %s move to pin %s rejected: %s", album.pk, target.pk, exc)
+            return JsonResponse({"error": "That album couldn't be moved there."}, status=400)
         return JsonResponse({"ok": True, "slug": moved.slug, "pin_slug": target.slug})

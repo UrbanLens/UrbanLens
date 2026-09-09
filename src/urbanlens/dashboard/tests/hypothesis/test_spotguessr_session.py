@@ -21,8 +21,8 @@ from urbanlens.dashboard.models.spotguessr.model import (
 )
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import (
+    DuplicateGuessError,
     GameConfig,
-    SpotGuessrError,
     complete_session,
     get_or_create_round,
     session_summary,
@@ -144,7 +144,7 @@ class SubmitGuessTests(TestCase):
     def test_a_second_guess_by_the_same_profile_is_rejected(self) -> None:
         guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)
         submit_guess(self.round_, self.profile, guess_point)
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(DuplicateGuessError):
             submit_guess(self.round_, self.profile, guess_point)
 
     def test_a_rejected_duplicate_guess_does_not_record_extra_coordinate_evidence(self) -> None:
@@ -163,7 +163,7 @@ class SubmitGuessTests(TestCase):
         submit_guess(self.round_, self.profile, guess_point)
         self.assertEqual(PhotoCoordinateGuess.objects.filter(image_id=self.round_.image_id).count(), 1)
 
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(DuplicateGuessError):
             submit_guess(self.round_, self.profile, guess_point)
 
         self.assertEqual(PhotoCoordinateGuess.objects.filter(image_id=self.round_.image_id).count(), 1)

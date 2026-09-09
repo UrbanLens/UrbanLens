@@ -13,8 +13,6 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
-from django.db import transaction
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
@@ -30,15 +28,20 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
-from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
-from urbanlens.dashboard.services.geo.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote, has_consensus
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.geo.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote
 from urbanlens.dashboard.services.locations import site_scope
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
-from urbanlens.dashboard.services.pins.public_pins import PublicVoteError, cast_public_vote, public_vote_context
+from urbanlens.dashboard.services.pins.public_pins import (
+    PublicVoteError,
+    UnrecognizedVoteChoiceError,
+    VoteNotOpenError,
+    VoterNotPinnedError,
+    cast_public_vote,
+    public_vote_context,
+)
 from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
 from urbanlens.dashboard.services.places.scope import scope_badge
-from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
-from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_parent_wiki
 from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit, save_edited_fields
@@ -48,6 +51,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
+
+#: Field edits per page in the wiki's history list.
+_HISTORY_PAGE_SIZE = 25
 
 # Metadata for the four community stat votes (danger / vulnerability / priority /
 # rating) shown on the wiki page - the shared-place equivalent of a pin's own
@@ -144,7 +150,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         # services.places.ambiguity for why this is now almost always empty.
         other_locations = [candidate for candidate in competing_wiki_locations(user_pin, profile) if candidate.pk != location.pk]
 
-        from urbanlens.dashboard.models.labels.model import COLOR_CHOICES
+        from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
         from urbanlens.dashboard.models.pin.model import PinType
 
         detail_pin_icon_choices = [
@@ -355,10 +361,6 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
-        # strict=False keeps this view's long-standing skip-invalid-and-continue
-        # behavior (see apply_wiki_edit's docstring, and "Messaging / external API
-        # (noted 2026-07-26)" in docs/PROBLEMS.md, the strict-vs-lenient item); the
-        # external API passes strict=True and gets a hard rejection instead.
         # apply_wiki_edit mutates and saves the row it is given, so it needs the
         # real one: resolve_visible_wiki hands back a concealed projection to a
         # gated viewer, and saving that would persist their redacted view over
@@ -367,9 +369,10 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         try:
             # baseline=wiki: the dialog was prefilled from the projection and
             # posts every field, touched or not.
-            edit = apply_wiki_edit(target, profile, body, strict=False, baseline=wiki)
+            edit = apply_wiki_edit(target, profile, body, baseline=wiki)
         except WikiEditValidationError as exc:
-            return JsonResponse({"error": exc.message}, status=400)
+            logger.info("wiki edit rejected for %s by profile %s: %s", wiki.pk, profile.pk, exc.message)
+            return JsonResponse({"error": "That edit couldn't be saved."}, status=400)
 
         if edit is None:
             return JsonResponse({"ok": True, "message": "No changes detected."})
@@ -389,7 +392,11 @@ def _render_history(request, location: Location, wiki: Wiki):
 
     Shared by the history list view and the revert/delete actions below so a
     successful action re-renders the up-to-date list in place, instead of
-    leaving a stale row (or a raw JSON body) swapped into the DOM.
+    leaving a stale row (or a raw JSON body) swapped into the DOM. Those
+    actions send the page they were fired from, so an expunge on page three
+    does not drop the user back to page one; ``get_page`` clamps an
+    out-of-range number, which is what deleting the only row on the last page
+    produces.
     """
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active, redact_edit_changes
 
@@ -397,6 +404,13 @@ def _render_history(request, location: Location, wiki: Wiki):
     edits = wiki.edits.select_related("editor__user", "reverted_by").order_by("-created")
 
     conceal = concealment_active(wiki, profile)
+    # Narrowed before paginating: a page taken over the unfiltered history
+    # would be short by however many of its rows concealment then removed.
+    page = get_page(request, conceal_rows(edits, profile) if conceal else edits, _HISTORY_PAGE_SIZE)
+    # Materialised before mutating: a queryset re-runs its query on each
+    # iteration, so redacting in place and handing the page to the template
+    # would render the unredacted rows from a second fetch.
+    rows: Any = list(page.object_list)
     if conceal:
         # Two separate problems here. The list itself names every editor and
         # what they changed, so it is filtered to the viewer and their friends.
@@ -404,20 +418,13 @@ def _render_history(request, location: Location, wiki: Wiki):
         # in its "from" side - which for the viewer's own edit is whatever a
         # stranger had written there. That half survives a perfect read gate,
         # because it lands in content the rules promise always to show.
-        # Materialised before mutating: a queryset re-runs its query on each
-        # iteration, so redacting in place and handing the queryset to the
-        # template would render the unredacted rows from a second fetch.
-        visible_edits = list(conceal_rows(edits, profile))
-        for edit in visible_edits:
+        for edit in rows:
             edit.changes = redact_edit_changes(edit.changes)
-        rows: Any = visible_edits
-    else:
-        rows = edits
 
     return render(
         request,
         "dashboard/pages/location/wiki_history.html",
-        {"location": location, "wiki": conceal_wiki(wiki, profile), "edits": rows, "current_profile": profile},
+        {"location": location, "wiki": conceal_wiki(wiki, profile), "edits": rows, "page_obj": page, "current_profile": profile},
     )
 
 
@@ -553,8 +560,18 @@ class PublicPinVoteView(LoginRequiredMixin, View):
 
         try:
             cast_public_vote(location, profile, request.POST.get("choice") or "")
+        except VoteNotOpenError as exc:
+            logger.info("public vote rejected: %s", exc)
+            return JsonResponse({"error": "Voting isn't open for this location."}, status=400)
+        except VoterNotPinnedError as exc:
+            logger.info("public vote rejected: %s", exc)
+            return JsonResponse({"error": "You need a pin at this location to vote."}, status=400)
+        except UnrecognizedVoteChoiceError as exc:
+            logger.info("public vote rejected: %s", exc)
+            return JsonResponse({"error": "That vote choice wasn't recognized."}, status=400)
         except PublicVoteError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("public vote rejected: %s", exc)
+            return JsonResponse({"error": "That vote couldn't be recorded."}, status=400)
 
         return render(
             request,
@@ -587,7 +604,8 @@ class BoundaryVoteView(LoginRequiredMixin, View):
         try:
             vote = cast_boundary_vote(location.place, profile, boundary_id)
         except BoundaryVoteError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("boundary vote rejected: %s", exc)
+            return JsonResponse({"error": "That boundary isn't a valid option for this place."}, status=400)
 
         # Same conceal-aware answer the GET's boundary_vote_context computes -
         # the raw has_consensus() states that other people voted, which is

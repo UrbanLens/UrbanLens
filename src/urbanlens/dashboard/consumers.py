@@ -3,11 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.conf import settings
 
+from urbanlens.dashboard.services.core.frame_limits import ConnectionRate, FrameBudget
+from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.websocket_auth import CREDENTIAL_SCOPE_KEY
 
 if TYPE_CHECKING:
@@ -46,6 +50,26 @@ _CREDENTIAL_REVALIDATION_INTERVAL_SECONDS = 60
 #: consumers already report a message that failed to save: closing would put the
 #: client into a reconnect loop over a condition that retrying cannot fix.
 _INSUFFICIENT_SCOPE_DETAIL = "This credential isn't allowed to send here. Reconnect with a credential granting the matching write scope."
+
+#: Sent when a frame is larger than this connection will parse.
+_OVERSIZED_FRAME_DETAIL = "That message is too large to send over this connection."
+
+#: Sent when a connection has spent one of its volume budgets. An error frame
+#: rather than a close, for the reason _INSUFFICIENT_SCOPE_DETAIL gives.
+_RATE_LIMITED_DETAIL = "You're sending messages too quickly. Wait a moment and try again."
+
+#: Shortest gap between two refusal frames on one connection. Replying to every
+#: refused frame would answer an inbound flood with an equal outbound one;
+#: replying once per 60-second budget window would leave someone who sent three
+#: messages in a row unaware that two of them never left. A couple of seconds
+#: damps the amplification while still telling a person what happened.
+_LIMIT_REPORT_INTERVAL_SECONDS = 2.0
+
+#: Used only when neither the consumer nor the settings offer a positive cap,
+#: which production cannot reach - ``websocket_max_frame_chars`` is ``ge=1``.
+#: It exists so that combination degrades to the documented default rather than
+#: to no limit at all.
+_FALLBACK_MAX_FRAME_CHARS = 65_536
 
 
 def _credential_is_still_valid(credential: Any) -> bool:
@@ -172,6 +196,138 @@ class CredentialScopeMixin(_CredentialScopeBase):
         return _credential_is_still_valid(self.credential)
 
 
+class InboundVolumeMixin(_CredentialScopeBase):
+    """Bounds how large and how fast one connection's inbound frames may be.
+
+    Authorization on these sockets is thorough - participation is verified
+    before any group is joined, credential scope is checked, credentials are
+    re-validated on a timer. None of it bounds *volume*, and every accepted
+    frame costs at least a parse and a dispatch, most of them a database write,
+    and some of them a fan-out to every other member of a group. This collapses
+    the size and volume gate into one place so a limit is added once per family
+    rather than once per consumer.
+
+    Three checks, in the order they are cheapest:
+
+    1. Frame size, compared before the frame is decoded. Parsing a megabyte to
+       keep a thousand characters of it is the work being avoided.
+    2. A per-connection counter, in this process, off a monotonic clock. It
+       needs no I/O, so a flood cannot knock out its own limiter.
+    3. A shared counter keyed by sender, which the per-connection tier cannot
+       substitute for: it is what stops one account opening fifty sockets.
+
+    Subclasses give :meth:`volume_identity` and may tighten
+    :attr:`max_frame_chars`; everything else is inherited.
+    """
+
+    #: Tightens the site-wide character cap for a consumer whose legitimate
+    #: frames are smaller. The effective cap is the smaller of this and
+    #: ``UL_WEBSOCKET_MAX_FRAME_CHARS``, so lowering the setting still lowers
+    #: every socket - a class attribute that could shadow the setting upwards
+    #: would make the setting a suggestion.
+    max_frame_chars: int | None = None
+
+    def volume_identity(self) -> str:
+        """Who this connection's shared budgets are charged to.
+
+        Built from ids the consumer resolved at connect time, never from
+        client-supplied text: a sender who could choose their own key could
+        spend somebody else's budget, or evade their own.
+        """
+        raise NotImplementedError
+
+    @property
+    def _effective_max_frame_chars(self) -> int:
+        """The smaller of this consumer's own cap and the site-wide one.
+
+        Never returns zero. A consumer that sets no ``max_frame_chars`` would
+        otherwise inherit "no cap at all" from a setting that had somehow
+        reached zero, which is the one answer this must not give: the site-wide
+        field is documented as having no off switch, and a size cap that
+        silently disables itself is worse than one that is merely too tight.
+        """
+        setting = int(getattr(settings, "UL_WEBSOCKET_MAX_FRAME_CHARS", 0) or 0)
+        candidates = [value for value in (self.max_frame_chars, setting) if value and value > 0]
+        return min(candidates) if candidates else _FALLBACK_MAX_FRAME_CHARS
+
+    async def accept_frame(self, text_data: str | None, bytes_data: bytes | None = None) -> dict[str, Any] | None:
+        """Size-check, budget-check and decode one inbound frame.
+
+        Args:
+            text_data: The raw frame, as Channels delivered it.
+            bytes_data: Set instead of *text_data* for a binary frame. These
+                sockets are JSON-text-only, so a binary frame is discarded -
+                but it is charged first, or flipping the opcode would buy an
+                unmetered flood.
+
+        Returns:
+            The decoded frame object, or None when the caller must stop -
+            having already replied with an error frame where one is owed.
+        """
+        if text_data is None:
+            if bytes_data is not None:
+                await self._charge_frame()
+            return None
+
+        cap = self._effective_max_frame_chars
+        if 0 < cap < len(text_data):
+            await self._report_limit(_OVERSIZED_FRAME_DETAIL)
+            return None
+
+        if not await self._charge_frame():
+            await self._report_limit(_RATE_LIMITED_DETAIL)
+            return None
+
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("%s received an unparseable frame", type(self).__name__)
+            return None
+        if not isinstance(data, dict):
+            # Valid JSON, but not a frame: ``"5"`` and ``[]`` parse fine and
+            # would raise AttributeError on ``.get`` below, killing the socket.
+            return None
+        return data
+
+    async def charge_fanout(self) -> bool:
+        """Charge one frame that reaches other people without writing a row.
+
+        Only the direct-message typing indicator, today. Anything that creates a
+        message is charged at the service layer instead
+        (``services.core.message_limits``), because those writes are equally
+        reachable over HTTP and a socket-only budget is one a POST loop walks
+        around.
+
+        Returns:
+            True when the frame may proceed. False once the budget is spent,
+            having already told the sender.
+        """
+        budget = FrameBudget(name="fanout", limit=int(getattr(settings, "UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE", 0) or 0))
+        if await budget.aconsume(self.volume_identity()):
+            return True
+        await self._report_limit(_RATE_LIMITED_DETAIL)
+        return False
+
+    async def _charge_frame(self) -> bool:
+        """Charge one inbound frame against both volume tiers."""
+        limit = int(getattr(settings, "UL_WEBSOCKET_FRAMES_PER_MINUTE", 0) or 0)
+        rate = getattr(self, "_connection_rate", None)
+        if rate is None or rate.limit != limit:
+            rate = ConnectionRate(limit=limit)
+            self._connection_rate = rate
+        if not rate.consume():
+            return False
+        return await FrameBudget(name="frame", limit=limit).aconsume(self.volume_identity())
+
+    async def _report_limit(self, detail: str) -> None:
+        """Tell the sender a frame was refused, at most once every couple of seconds."""
+        now = time.monotonic()
+        if now < getattr(self, "_limit_reported_until", 0.0):
+            return
+        self._limit_reported_until = now + _LIMIT_REPORT_INTERVAL_SECONDS
+        await self.send(text_data=json.dumps({"type": "error", "detail": detail}))
+
+
 class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     """Pushes on-site notifications to a logged-in user's open tabs as they are created.
 
@@ -277,7 +433,7 @@ class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         return profile.pk
 
 
-class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
+class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
     """Real-time direct-message channel for a logged-in user.
 
     Mounted at ``ws/messages/``. Authentication comes from the session cookie
@@ -363,6 +519,17 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             except Exception:
                 logger.exception("Direct message socket failed to mark profile %s offline", self.profile_id)
 
+    def volume_identity(self) -> str:
+        """Budget per sender.
+
+        Keyed on the profile rather than the connection, which is the point of
+        the shared tier: this socket is per-profile, and one account opening
+        fifty tabs would otherwise get fifty budgets. Nothing here comes from
+        the frame - a sender who could name their own key could spend somebody
+        else's.
+        """
+        return f"dm:{self.profile_id}"
+
     async def receive(self, text_data=None, bytes_data=None):
         """Persist an incoming message; the service broadcasts it to both parties.
 
@@ -381,24 +548,34 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """
         from urbanlens.dashboard.models.account.model import ApiKeyScope
 
-        if text_data is None:
+        data = await self.accept_frame(text_data, bytes_data)
+        if data is None:
             return
+
         # Every frame this socket accepts mutates something on the sender's
         # behalf - sending a message, broadcasting a typing indicator, marking a
         # thread read - so messages:write gates the whole method rather than only
         # the message branch. A messages:read credential is a listen-only grant.
+        #
+        # Checked after the volume gate, matching SafetyCheckinChatConsumer. The
+        # refusal below is one send per frame and is not itself throttled, so a
+        # listen-only credential flooding this socket would answer its own flood
+        # if nothing counted the frames first.
         if not self.credential_allows(ApiKeyScope.MESSAGES_WRITE):
             await self.send(text_data=json.dumps({"type": "error", "detail": _INSUFFICIENT_SCOPE_DETAIL}))
-            return
-        try:
-            data = json.loads(text_data)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Direct message socket received an unparseable frame from profile %s", self.profile_id)
             return
 
         if data.get("type") == "typing":
             recipient_slug = str(data.get("recipient") or "").strip()
             if recipient_slug:
+                # Budgeted despite writing no row. It is the only frame here
+                # that fans out into the *recipient's* group, which makes an
+                # unmetered one the cheapest amplifier on the socket: no
+                # validation, no insert, one channel-layer send per frame to
+                # somebody else's open tabs.
+                if not await self.charge_fanout():
+                    return
+
                 from urbanlens.dashboard.services.messaging.direct_messages import broadcast_typing_indicator
 
                 await database_sync_to_async(broadcast_typing_indicator)(self.profile_id, recipient_slug)
@@ -421,14 +598,31 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         group_uuid = str(data.get("group") or "").strip()
         if group_uuid:
+            from urbanlens.dashboard.services.messaging.group_chats import GroupChatPermissionError, GroupChatValidationError, NotAGroupMemberError
+
             # A group-chat frame: same validation/broadcast pipeline, but the
             # message fans out to every active member (see services.messaging.group_chats).
             if not (body or ciphertext):
                 return
             try:
                 await self._create_group_message(group_uuid, body, ciphertext, nonce, key_version)
-            except (ValueError, PermissionError) as exc:
-                await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
+            except MessageRateLimitedError as exc:
+                logger.info("Group message rate-limited for profile %s: %s", self.profile_id, exc)
+                await self._report_limit(_RATE_LIMITED_DETAIL)
+            except NotAGroupMemberError as exc:
+                logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
+                await self.send(text_data=json.dumps({"type": "error", "detail": "You aren't a member of this group."}))
+            except GroupChatPermissionError as exc:
+                logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
+                await self.send(text_data=json.dumps({"type": "error", "detail": "You don't have permission to do that."}))
+            except GroupChatValidationError as exc:
+                logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
+                await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please check it and try again."}))
+            except ValueError as exc:
+                # Not a GroupChatValidationError - _create_group_message's own
+                # "no such group" check.
+                logger.info("Group message rejected for profile %s: %s", self.profile_id, exc)
+                await self.send(text_data=json.dumps({"type": "error", "detail": "That group could not be found."}))
             except Exception:
                 logger.exception("Group message failed to save from profile %s", self.profile_id)
                 await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
@@ -442,10 +636,24 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         if not recipient_slug or not (body or ciphertext or image_ids or markup_map_uuid):
             return
 
+        from urbanlens.dashboard.services.messaging.direct_messages import DirectMessageValidationError, RecipientNotAcceptingMessagesError
+
         try:
             await self._create_message(recipient_slug, body, ciphertext, nonce, key_version, image_ids, markup_map_uuid, reply_to_id)
-        except (ValueError, PermissionError) as exc:
-            await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
+        except MessageRateLimitedError as exc:
+            logger.info("Direct message rate-limited for profile %s: %s", self.profile_id, exc)
+            await self._report_limit(_RATE_LIMITED_DETAIL)
+        except RecipientNotAcceptingMessagesError as exc:
+            logger.info("Direct message rejected for profile %s: %s", self.profile_id, exc)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "This user isn't accepting messages from you."}))
+        except DirectMessageValidationError as exc:
+            logger.info("Direct message rejected for profile %s: %s", self.profile_id, exc)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please check it and try again."}))
+        except ValueError as exc:
+            # Not a DirectMessageValidationError - _create_message's own "no
+            # such recipient" check.
+            logger.info("Direct message rejected for profile %s: %s", self.profile_id, exc)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "That user could not be found."}))
         except Exception:
             logger.exception("Direct message failed to save from profile %s", self.profile_id)
             await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
@@ -574,7 +782,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         )
 
 
-class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
+class SafetyCheckinChatConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
     """Real-time chat for a safety check-in, shared by the owner, every accepted partner, and every emergency contact.
 
     Mounted under two routes (see ``dashboard/routing.py``):
@@ -626,6 +834,23 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     ``services.visits.safety.set_checkin_contacts`` deletes every row missing
     from a resubmitted contact list.
     """
+
+    #: ``MAX_CHAT_MESSAGE_LENGTH`` is 4,000 characters, and a client sending
+    #: ASCII-safe JSON escapes a non-Latin character to six (``\uXXXX``), so a
+    #: legitimate frame reaches roughly 24,000 characters plus the envelope.
+    #: This leaves headroom above that while staying well under the site-wide cap.
+    max_frame_chars = 32_768
+
+    def volume_identity(self) -> str:
+        """Budget per sender per check-in.
+
+        The contact route has no profile - its authority is a magic-link token -
+        so a contact is identified by their own row instead. Compared with
+        ``is None`` rather than truthiness so a falsy-but-real id cannot fall
+        through to the branch that would raise on the other route.
+        """
+        who = f"c{self.contact.pk}" if self.profile_id is None else str(self.profile_id)
+        return f"safety:{self.checkin.pk}:{who}"
 
     async def connect(self):
         """Resolve the check-in (and, on the contact route, the authorizing contact), check scope, then join its group."""
@@ -788,20 +1013,13 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
                 instead.
             bytes_data: Unused - this socket is JSON-text-only. Accepting (and
                 ignoring) it keeps a stray binary frame from raising an uncaught
-                ``TypeError`` that would kill the connection.
+                ``TypeError`` that would kill the connection. It is still
+                charged to the frame budget; see ``InboundVolumeMixin``.
         """
         from urbanlens.dashboard.models.account.model import ApiKeyScope
 
-        if text_data is None:
-            return
-        try:
-            data = json.loads(text_data)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Safety chat received an unparseable frame on checkin %s", self.checkin.pk)
-            return
-        if not isinstance(data, dict):
-            # Valid JSON, but not a frame: ``"5"`` and ``[]`` parse fine and would
-            # raise AttributeError on ``.get`` below, killing the connection.
+        data = await self.accept_frame(text_data, bytes_data)
+        if data is None:
             return
 
         # The client's keep-alive - see ``ts/shared/live-socket.ts`` and the copy
@@ -828,9 +1046,37 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         if not body:
             return
 
+        from urbanlens.dashboard.services.visits.safety import CheckinMessagingArchivedError, SafetyValidationError
+
         try:
             message = await self._create_message(body)
+        except MessageRateLimitedError as exc:
+            # Reported through _report_limit rather than as a plain error frame:
+            # the refusal is now raised by the service (it has to be, so the HTTP
+            # fallback shares one budget), and answering every refused frame
+            # individually turns a flood into a flood in both directions.
+            logger.info("Safety chat message rate-limited on checkin %s: %s", self.checkin.pk, exc)
+            await self._report_limit(_RATE_LIMITED_DETAIL)
+            return
+        except CheckinMessagingArchivedError as exc:
+            # Named explicitly rather than falling into the bare ValueError
+            # branch below - previously the only thing that made that branch
+            # safe for this case was that __init__ passed the same string to
+            # both str(exc) and safe_message, which SafetyValidationError (see
+            # below) no longer does. The message is log-only now, same as
+            # SafetyValidationError - never relay str(exc) here.
+            logger.info("Safety chat message refused on archived checkin %s: %s", self.checkin.pk, exc)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "This check-in has concluded and can no longer receive messages."}))
+            return
+        except SafetyValidationError as exc:
+            # The message is log-only now (may be more detailed than anything
+            # meant for a client) - never relay str(exc) here.
+            logger.info("Safety chat message rejected on checkin %s: %s", self.checkin.pk, exc)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent."}))
+            return
         except ValueError as exc:
+            # Not a SafetyValidationError - e.g. _create_message's own "you no
+            # longer have access" check. Its own text is written to be shown.
             await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
             return
         except Exception:
@@ -1011,7 +1257,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         }
 
 
-class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
+class _ParticipantSessionConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
     """Shared real-time sync for one participant-based game session.
 
     Both ``GameSessionConsumer`` (SpotGuessr) and ``TriviaSessionConsumer``
@@ -1065,6 +1311,15 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     async def _send_chat_message(self, body: str) -> None:
         """Save and broadcast one chat message from this connection's profile."""
         raise NotImplementedError
+
+    def volume_identity(self) -> str:
+        """Budget per participant per session.
+
+        Scoped to the session rather than to the profile: someone playing two
+        games at once is doing something legitimate, and a shared per-profile
+        budget would have one game's chat throttle the other's.
+        """
+        return f"{self.game_label.lower()}:{self.session_id}:{self.profile_id}"
 
     @database_sync_to_async
     def _connection_profile_id(self, user) -> int:
@@ -1169,16 +1424,8 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """
         from urbanlens.dashboard.models.account.model import ApiKeyScope
 
-        if text_data is None:
-            return
-        try:
-            data = json.loads(text_data)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("%s socket received an unparseable frame on session %s", self.game_label, self.session_id)
-            return
-        if not isinstance(data, dict):
-            # Valid JSON, but not a frame: ``"5"`` and ``[]`` parse fine and would
-            # raise AttributeError on ``.get`` below, killing the connection.
+        data = await self.accept_frame(text_data, bytes_data)
+        if data is None:
             return
 
         # The client's keep-alive - see ``ts/shared/live-socket.ts``, which every
@@ -1206,6 +1453,9 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         try:
             await self._send_chat_message(body)
+        except MessageRateLimitedError as exc:
+            logger.info("%s chat message rate-limited on session %s: %s", self.game_label, self.session_id, exc)
+            await self._report_limit(_RATE_LIMITED_DETAIL)
         except Exception:
             logger.exception("%s chat message failed on session %s", self.game_label, self.session_id)
             await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))

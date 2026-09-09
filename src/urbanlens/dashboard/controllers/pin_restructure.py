@@ -20,7 +20,6 @@ Endpoints, all pin-scoped:
 from __future__ import annotations
 
 import json
-import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -32,12 +31,9 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
 from urbanlens.dashboard.services.locations import site_scope
 from urbanlens.dashboard.services.pins import pin_restructure
-from urbanlens.dashboard.services.pins.pin_merge import PinMergeCollisionError, UnresolvedMergeConflictError, merge_pins, plan_merge_conflicts
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
-logger = logging.getLogger(__name__)
 
 
 def _poll_attempt(request: HttpRequest) -> int:
@@ -80,35 +76,16 @@ def _selected_buildings(request: HttpRequest, buildings: list[dict]) -> list[dic
     return pin_restructure.select_buildings(buildings, request.POST.getlist("building_keys"))
 
 
-def _nestable_rows(pin: Pin, nestable: list[Pin], *, default_merge_pks: frozenset[int] = frozenset()) -> list[dict]:
+def _nestable_rows(nestable: list[Pin]) -> list[dict]:
     """Per-candidate context for the dialog's "Pins on this property" list.
 
-    Conflicts are computed fresh for every candidate up front (not only after
-    a failed merge attempt) so the dialog can warn about them before the owner
-    ever picks "Merge" - mirroring how the single-pair ``PinMergeSuggestion``
-    queue always shows its conflict pickers rather than waiting for a rejected
-    submission (see ``pin_merge_suggestions.merge_suggestion_cards``).
-
     Args:
-        pin: The property pin - always the merge survivor in this flow.
-        nestable: Candidates still worth offering (``plan.nestable``, or just
-            the ones left unresolved after a partial apply).
-        default_merge_pks: Candidate pks whose mode should default to "Merge"
-            rather than "Child pin" - set on the resubmit-with-conflicts
-            render so a candidate the owner already chose to merge doesn't
-            silently revert to nesting.
+        nestable: Candidates still worth offering (``plan.nestable``).
 
     Returns:
-        One ``{"pin", "conflicts", "default_merge"}`` dict per candidate.
+        One ``{"pin"}`` dict per candidate.
     """
-    return [
-        {
-            "pin": candidate,
-            "conflicts": plan_merge_conflicts(pin, candidate),
-            "default_merge": candidate.pk in default_merge_pks,
-        }
-        for candidate in nestable
-    ]
+    return [{"pin": candidate} for candidate in nestable]
 
 
 def _nestable_map_data(nestable: list[Pin]) -> list[dict]:
@@ -132,16 +109,15 @@ def _dialog_context(
     *,
     restructure: bool,
     nestable: Sequence[Pin] = (),
-    default_merge_pks: frozenset[int] = frozenset(),
 ) -> dict:
-    """Context shared by the full dialog render and its body-only resubmit render."""
+    """Context for the dialog render."""
     nestable = list(nestable)
     return {
         "pin": pin,
         "rows": _dialog_rows(buildings),
         "building_count": len(buildings),
         "restructure": restructure,
-        "nestable_rows": _nestable_rows(pin, nestable, default_merge_pks=default_merge_pks) if restructure else [],
+        "nestable_rows": _nestable_rows(nestable) if restructure else [],
         "nestable_map_data": _nestable_map_data(nestable) if restructure else [],
         "form_action": request.path,
     }
@@ -165,28 +141,11 @@ def _render_building_dialog(
     *,
     restructure: bool,
     nestable: Sequence[Pin] = (),
-    default_merge_pks: frozenset[int] = frozenset(),
 ) -> HttpResponse:
     """Render the full dialog (header + body) - used to open it fresh."""
-    ctx = _dialog_context(request, pin, buildings, restructure=restructure, nestable=nestable, default_merge_pks=default_merge_pks)
+    ctx = _dialog_context(request, pin, buildings, restructure=restructure, nestable=nestable)
     ctx["dialog_title"] = _dialog_title(ctx)
     return render(request, "dashboard/partials/pins/_building_import_dialog.html", ctx)
-
-
-def _render_building_dialog_body(
-    request: HttpRequest,
-    pin: Pin,
-    buildings: list[dict],
-    *,
-    restructure: bool,
-    nestable: Sequence[Pin] = (),
-    default_merge_pks: frozenset[int] = frozenset(),
-) -> HttpResponse:
-    """Render just the swappable body - a POST response that keeps the dialog open."""
-    ctx = _dialog_context(request, pin, buildings, restructure=restructure, nestable=nestable, default_merge_pks=default_merge_pks)
-    response = render(request, "dashboard/partials/pins/_building_import_dialog_body.html", ctx)
-    response["HX-Keep-Open"] = "1"
-    return response
 
 
 class PinRestructureOfferView(LoginRequiredMixin, View):
@@ -295,63 +254,19 @@ class PinRestructureApplyView(LoginRequiredMixin, View):
         else:
             candidates = list(plan.nestable)
 
-        to_nest: list[Pin] = []
-        to_merge: list[Pin] = []
-        for candidate in candidates:
-            if request.POST.get(f"nest_mode__{candidate.pk}") == "merge":
-                to_merge.append(candidate)
-            else:
-                to_nest.append(candidate)
-
-        nested = pin_restructure.nest_root_pins(pin, to_nest)
-
-        merged = 0
-        unresolved: list[Pin] = []
-        collision_messages: list[str] = []
-        for candidate in to_merge:
-            conflicts = plan_merge_conflicts(pin, candidate)
-            resolutions: dict[str, int] = {}
-            for conflict in conflicts:
-                raw = request.POST.get(f"resolution__{candidate.pk}__{conflict.key}", "")
-                if raw.isdigit():
-                    resolutions[conflict.key] = int(raw)
-            try:
-                merge_pins(survivor=pin, loser=candidate, profile=pin.profile, resolutions=resolutions)
-                merged += 1
-            except UnresolvedMergeConflictError:
-                unresolved.append(candidate)
-            except PinMergeCollisionError as exc:
-                collision_messages.append(exc.safe_message)
-
-        if unresolved:
-            # Recomputing the plan would drop these candidates too (merge_pins
-            # never touched them, but plan_for's own query re-runs regardless) -
-            # explicit default_merge_pks keeps "Merge" selected for exactly the
-            # ones still needing a choice, instead of reverting to "Child pin".
-            # refresh=True: buildings/nests/other merges above may already have
-            # changed this pin's children, so the page's own panels (and the
-            # organize suggestion card, via its pinDetailPinsChanged listener)
-            # should catch up even though the dialog itself stays open.
-            response = _render_building_dialog_body(
-                request,
-                pin,
-                [],
-                restructure=True,
-                nestable=unresolved,
-                default_merge_pks=frozenset(candidate.pk for candidate in unresolved),
-            )
-            return _toast(response, "error", "Resolve the highlighted differences to finish merging.", refresh=True)
+        # Organizing a pin under a property only ever changes its parent -
+        # nothing about the pin's own data (article, custom fields, ...)
+        # changes. Actually consolidating two pins into one is a separate,
+        # deliberate action (services.pins.pin_merge, reached from the map's
+        # "Merge pins" bulk-select flow), not something this dialog offers.
+        nested = pin_restructure.nest_root_pins(pin, candidates)
 
         parts = []
         if created:
             parts.append(f"Added {created} building pin{'s' if created != 1 else ''}.")
         if nested:
             parts.append(f"Nested {nested} existing pin{'s' if nested != 1 else ''} under this property.")
-        if merged:
-            parts.append(f"Merged {merged} pin{'s' if merged != 1 else ''} into this one.")
-        parts.extend(collision_messages)
-        level = "warning" if collision_messages else "success"
-        return _toast(HttpResponse("", status=200), level, " ".join(parts) or "Nothing left to organize.", refresh=True)
+        return _toast(HttpResponse("", status=200), "success", " ".join(parts) or "Nothing left to organize.", refresh=True)
 
 
 def _queue_wiki_mirror(pin, buildings) -> None:

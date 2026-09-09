@@ -19,7 +19,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.pins.pin_merge import PinMergeCollisionError, merge_pins
+from urbanlens.dashboard.services.pins.pin_merge import SurvivorRelocationCollisionError, merge_pins
 
 
 class _PinFixtures(TestCase):
@@ -81,7 +81,7 @@ class SurvivorIsLosersDirectChildWithGrandparentTests(_PinFixtures):
 class SurvivorPromotionCollidesTests(_PinFixtures):
     """Loser is root; survivor's own Location already has another root pin."""
 
-    def test_merge_is_refused_with_a_reason(self) -> None:
+    def test_merge_is_refused_with_the_right_error(self) -> None:
         shared = self.location()
         blocker = baker.make(Pin, profile=self.profile, location=shared, parent_pin=None)
         loser = baker.make(Pin, profile=self.profile, location=self.location(), parent_pin=None)
@@ -89,9 +89,8 @@ class SurvivorPromotionCollidesTests(_PinFixtures):
         # (location, profile) is conditional on parent_pin IS NULL.
         survivor = baker.make(Pin, profile=self.profile, location=shared, parent_pin=loser)
 
-        with self.assertRaises(PinMergeCollisionError) as caught:
+        with self.assertRaises(SurvivorRelocationCollisionError):
             merge_pins(survivor, loser, self.profile)
-        self.assertIn("already occupies its location", caught.exception.safe_message)
 
         for pin in (blocker, loser, survivor):
             self.assertTrue(Pin.objects.filter(pk=pin.pk).exists(), f"pin {pin.pk} was destroyed by a refused merge")

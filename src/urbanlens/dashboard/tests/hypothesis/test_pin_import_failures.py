@@ -630,7 +630,7 @@ class PinImportFailureResolveViewTests(TestCase):
         failure.refresh_from_db()
         self.assertEqual(failure.status, PinImportFailureStatus.PENDING)
 
-    def test_pin_creation_error_rerenders_the_card_with_the_safe_message(self) -> None:
+    def test_pin_creation_error_rerenders_the_card_with_an_error_toast(self) -> None:
         failure = self._failure()
         response = self.client.post(reverse("memories.locations.import_failures.resolve", args=[failure.pk]), {})
 
@@ -759,7 +759,14 @@ class PinImportFailureQueuePartialViewTests(TestCase):
         self.assertEqual(failures, [pending])
         self.assertIn(f'id="pin-import-failure-card-{pending.pk}"', response.content.decode())
 
-    def test_all_pending_rows_return_unpaginated_and_exclude_other_profiles(self) -> None:
+    def test_no_page_of_the_queue_shows_another_profile_s_failures(self) -> None:
+        """Ownership, checked across every page rather than on the first.
+
+        This used to assert the queue was unpaginated, which it no longer is
+        (P69) - but the half worth keeping is stronger when it walks the pages:
+        a slice applied before the ownership filter would leak on some page
+        other than the one a single-page assertion happens to look at.
+        """
         other = baker.make(User)
         PinImportFailure.objects.create(
             profile=other.profile, cid=999, name="Someone else's", reason=PinImportFailureReason.NO_LOCATION_FOUND
@@ -769,11 +776,13 @@ class PinImportFailureQueuePartialViewTests(TestCase):
                 profile=self.profile, cid=1000 + i, name=f"Place {i}", reason=PinImportFailureReason.NO_LOCATION_FOUND
             )
 
-        response = self.client.get(reverse("memories.locations.import_failures.queue"))
+        seen: set[int] = set()
+        for page in (1, 2):
+            response = self.client.get(reverse("memories.locations.import_failures.queue"), {"failures_page": page})
+            seen |= {failure.cid for failure in response.context["pin_import_failures"]}
 
-        all_cids = {f.cid for f in response.context["pin_import_failures"]}
-        self.assertEqual(len(all_cids), 13)
-        self.assertNotIn(999, all_cids)
+        self.assertEqual(len(seen), 13, "the pages together did not add up to every pending failure")
+        self.assertNotIn(999, seen)
 
     def test_empty_queue_renders_no_cards(self) -> None:
         response = self.client.get(reverse("memories.locations.import_failures.queue"))
@@ -815,3 +824,90 @@ class LocationsPageRendersImportFailuresTests(TestCase):
         response = self.client.get(reverse("memories.locations"))
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("pin-import-failures-wrap", response.content.decode())
+
+
+class PinImportFailureQueuePaginationTests(TestCase):
+    """The queue is paginated, and its pagination is its own.
+
+    It was unpaginated on the stated grounds that these failures are "rare",
+    which ``PinImportFailureGuessView``'s docstring in the same file
+    contradicts: "a single import can leave hundreds of failures". Each card
+    also fetches its own geocoder guess on reveal, so an unpaginated queue of
+    hundreds is hundreds of pending lookups as well as hundreds of cards (P69).
+
+    The second class of test here is the one worth having. This partial renders
+    inside the full Memories > Locations page alongside the pin-suggestion
+    queue, which paginates on ``page`` - so a shared parameter would move both
+    sections with one click, and only a test that renders *both* can see it.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def _seed(self, count: int) -> None:
+        for index in range(count):
+            record_pin_import_failure(
+                self.profile,
+                1000 + index,
+                name=f"Unresolved {index}",
+                description="",
+                reason=PinImportFailureReason.NO_LOCATION_FOUND,
+            )
+
+    def _cards(self, response) -> int:
+        return len(response.context["pin_import_failures"])
+
+    def test_the_queue_shows_one_page_not_every_failure(self) -> None:
+        self._seed(30)
+
+        response = self.client.get(reverse("memories.locations.import_failures.queue"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._cards(response), 12, "the import-failure queue is still rendering every row")
+        self.assertEqual(response.context["failures_page_obj"].paginator.count, 30)
+
+    def test_a_later_page_shows_the_rest(self) -> None:
+        """Without this the cap could be a truncation - the tail unreachable."""
+        self._seed(30)
+
+        response = self.client.get(reverse("memories.locations.import_failures.queue"), {"failures_page": 3})
+
+        self.assertEqual(self._cards(response), 6)
+        self.assertEqual(response.context["failures_page_obj"].number, 3)
+
+    def test_a_short_queue_still_renders_every_row(self) -> None:
+        self._seed(4)
+
+        response = self.client.get(reverse("memories.locations.import_failures.queue"))
+
+        self.assertEqual(self._cards(response), 4)
+
+    def test_paging_the_failures_does_not_move_the_suggestion_queue(self) -> None:
+        """The reason this section has its own parameter.
+
+        Both queues render on Memories > Locations, and the suggestions queue
+        pages on ``page``. Sharing it would make one next-page click advance
+        both lists, which reads as the page losing your place.
+        """
+        self._seed(30)
+
+        response = self.client.get(reverse("memories.locations"), {"failures_page": 2})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["failures_page_obj"].number, 2)
+        self.assertEqual(response.context["page_obj"].number, 1, "the suggestion queue moved with the failure queue")
+
+    def test_the_full_page_reports_the_total_not_the_page_size(self) -> None:
+        """The count gates whether the section renders at all, and is shown to
+        the user - a count of 12 for 30 failures would be a lie the pagination
+        controls immediately contradict."""
+        self._seed(30)
+
+        response = self.client.get(reverse("memories.locations"))
+
+        self.assertEqual(response.context["pin_import_failures_count"], 30)
+        self.assertEqual(len(response.context["pin_import_failures"]), 12)

@@ -50,7 +50,7 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.models.profile.signals
         import urbanlens.dashboard.models.trips.signals
         import urbanlens.dashboard.models.wiki.signals
-        import urbanlens.dashboard.models.wiki_edit.signals
+        import urbanlens.dashboard.models.wiki_edit.signals  # noqa: F401 - imported for the @receiver registrations, like every signals module above it
         from urbanlens.dashboard.plugins import plugin_registry
 
         # Deletes an icon or avatar that a replace or a row deletion left behind.

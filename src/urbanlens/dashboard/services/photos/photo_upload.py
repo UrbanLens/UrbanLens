@@ -56,6 +56,21 @@ class PhotoUploadError(Exception):
         self.message = message
         self.status = status
 
+    #: A generic, status-keyed message a catch site can show instead of
+    #: relaying ``message`` - kept here, next to ``status``, so every caller
+    #: gets the same wording rather than each one hand-writing its own mapping.
+    _GENERIC_MESSAGES_BY_STATUS = {
+        400: "That file couldn't be processed.",
+        403: "That upload type isn't enabled for your account.",
+        409: "You already uploaded this file.",
+        413: "That file is too large, or you're out of storage.",
+    }
+
+    @property
+    def generic_message(self) -> str:
+        """A status-keyed, catch-site-safe message that doesn't relay ``message``."""
+        return self._GENERIC_MESSAGES_BY_STATUS.get(self.status, "That upload couldn't be completed.")
+
 
 def _resolve_media_type(file_obj: UploadedFile, profile: Profile) -> MediaKind:
     """Classify an upload as photo/video/document and enforce the per-account gates.

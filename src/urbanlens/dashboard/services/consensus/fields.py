@@ -17,7 +17,6 @@ keeps them separate rather than inferring one from the other.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
 import random
 from typing import TYPE_CHECKING, Any
 

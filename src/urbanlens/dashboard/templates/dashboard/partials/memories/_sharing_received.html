@@ -1,0 +1,82 @@
+{% comment %}
+The "Shared with you" half of Memories > Sharing.
+
+Fetched the first time its toggle button is clicked rather than rendered with
+the page: the two halves are a client-side toggle, so this was being queried,
+grouped and rendered on every load for a panel nobody had opened.
+
+No chain/reshare counts here - those are rooted at the sender's side - and the
+links go through the recipient-scoped share-detail routes rather than the
+sender's own pin/map pages, which the recipient cannot open.
+
+Context:
+  incoming_share_groups     - this page's pin-share groups, newest share first
+  received_pins_page_obj    - the Django Page for those groups
+  incoming_map_share_groups - this page's map-share groups
+  received_maps_page_obj    - the Django Page for those
+{% endcomment %}
+<h2 class="memories-sharing-section-title">Pins</h2>
+{% if incoming_share_groups %}
+<div class="memories-sharing-list">
+    {% for group in incoming_share_groups %}
+    <article class="memories-sharing-card card">
+        <div class="memories-sharing-card-header">
+            <span class="memories-sharing-pin-link">
+                <i class="material-symbols-outlined">location_on</i>
+                {% if group.pin %}{{ group.pin.effective_name }}{% else %}{{ group.place_label }}{% endif %}
+            </span>
+        </div>
+        <ul class="memories-sharing-recipients">
+            {% for share in group.shares %}
+            <li class="memories-sharing-recipient">
+                <a class="memories-sharing-recipient-name" href="{% url 'pin.share.detail' share.id %}">
+                    <i class="material-symbols-outlined">person</i>
+                    {{ share.from_profile.username }}
+                </a>
+                <span class="memories-sharing-recipient-meta">
+                    shared {{ share.created|date:"M j, Y" }} ·
+                    <span class="memories-sharing-status memories-sharing-status--{{ share.status }}">{{ share.get_status_display }}</span>
+                </span>
+            </li>
+            {% endfor %}
+        </ul>
+    </article>
+    {% endfor %}
+</div>
+{% url 'memories.sharing.received' as received_url %}
+{% include "dashboard/partials/ui/_pagination_controls.html" with page_obj=received_pins_page_obj page_url=received_url page_param="received_pins_page" page_target="[data-sharing-view='received']" page_swap="innerHTML" page_noun="received pins" %}
+{% else %}
+<p class="memories-sharing-section-empty">Nobody has shared any pins with you yet.</p>
+{% endif %}
+
+<h2 class="memories-sharing-section-title">Maps</h2>
+{% if incoming_map_share_groups %}
+<div class="memories-sharing-list">
+    {% for group in incoming_map_share_groups %}
+    <article class="memories-sharing-card card">
+        <div class="memories-sharing-card-header">
+            <span class="memories-sharing-pin-link">
+                <i class="material-symbols-outlined">map</i>
+                {{ group.map.title|default:"Untitled map" }}
+            </span>
+        </div>
+        <ul class="memories-sharing-recipients">
+            {% for share in group.shares %}
+            <li class="memories-sharing-recipient">
+                <a class="memories-sharing-recipient-name" href="{% url 'markup_map.share.detail' share.id %}">
+                    <i class="material-symbols-outlined">person</i>
+                    {{ share.from_profile.username }}
+                </a>
+                <span class="memories-sharing-recipient-meta">
+                    shared {{ share.created|date:"M j, Y" }}
+                </span>
+            </li>
+            {% endfor %}
+        </ul>
+    </article>
+    {% endfor %}
+</div>
+{% include "dashboard/partials/ui/_pagination_controls.html" with page_obj=received_maps_page_obj page_url=received_url page_param="received_maps_page" page_target="[data-sharing-view='received']" page_swap="innerHTML" page_noun="received maps" %}
+{% else %}
+<p class="memories-sharing-section-empty">Nobody has shared any maps with you yet.</p>
+{% endif %}

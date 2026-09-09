@@ -12,7 +12,7 @@ coordinates (e.g. by the merge/child-pin coordinate bugs).
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.contrib.gis.geos import MultiPolygon, Point, Polygon
+from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
 from model_bakery import baker
 

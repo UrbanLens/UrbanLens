@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import math
 from typing import TYPE_CHECKING
 
@@ -47,7 +48,6 @@ from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
-    from django.db.models import QuerySet
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayQuerySet
@@ -55,6 +55,8 @@ if TYPE_CHECKING:
 #: Read from the column, not repeated: this truncates writes to
 #: MapImageOverlay.name, so a widened column would otherwise keep clipping at
 #: the old width with nothing to show why.
+logger = logging.getLogger(__name__)
+
 _MAX_NAME_LENGTH = column_max_length(MapImageOverlay, "name")
 #: How many overlays one pin or wiki may hold. Each is a full-resolution image
 #: composited on every map frame, so a page with dozens would be unusable long
@@ -274,12 +276,13 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
             # toast event nothing listened for, so the dialog just reset and
             # looked like a no-op. Reuse the existing row instead - the user
             # asked to overlay this image, not to store a second copy.
+            logger.info("overlay upload rejected for profile %s: %s", profile.pk, exc.message)
             if exc.status != 409:
-                return None, "", exc.message
+                return None, "", exc.generic_message
             existing = Image.objects.filter(profile=profile, checksum=compute_checksum(upload)).exclude(image="")
             image = _overlay_picker_images(owner, profile).filter(pk__in=existing).first() or existing.first()
             if image is None:
-                return None, "", exc.message
+                return None, "", exc.generic_message
             return image, "", None
         return image, "", None
 
@@ -302,7 +305,8 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
                 **({"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}),
             )
         except MaterializeError as exc:
-            return None, "", str(exc)
+            logger.info("overlay media-gallery materialize failed: %s", exc)
+            return None, "", "Couldn't use that photo for an overlay."
         return image, "", None
 
     # A pasted external URL, materialized rather than referenced - the same
@@ -321,7 +325,8 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
         try:
             ensure_public_http_url(external_url, max_length=1000)
         except UnsafeUrlError as exc:
-            return None, "", str(exc)
+            logger.info("overlay external url rejected: %s", exc)
+            return None, "", "That link can't be used for an overlay."
         if not is_web_safe(external_url):
             # A TIFF or PDF would be a silently blank overlay in the browser.
             # Upload it instead and the normal media pipeline can rasterize it.
@@ -337,7 +342,8 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
                 **({"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}),
             )
         except MaterializeError as exc:
-            return None, "", str(exc)
+            logger.info("overlay external-url materialize failed: %s", exc)
+            return None, "", "Couldn't download that image for an overlay."
         return image, "", None
 
     return None, "", "Choose an image to overlay."

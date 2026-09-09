@@ -43,6 +43,30 @@ class SubscriptionRoleCleanTests(TestCase):
             role.clean()
         self.assertIn("pwyw_minimum_cents", ctx.value.message_dict)
 
+    def test_a_static_minimum_requires_pay_what_you_want(self) -> None:
+        """The symmetric half of the dynamic-threshold rule, which clean() was missing.
+
+        With pay-what-you-want off there is nothing for a minimum *pledge* to be a
+        minimum of - the role is either fixed-price or free - so the field is inert
+        rather than wrong, and an admin gets no signal that the number they typed
+        does nothing.
+        """
+        role = baker.prepare(
+            SubscriptionRole, pay_what_you_want=False, pwyw_dynamic_threshold=False, pwyw_minimum_cents=300
+        )
+        with pytest.raises(ValidationError) as ctx:
+            role.clean()
+        self.assertIn("pwyw_minimum_cents", ctx.value.message_dict)
+
+    def test_a_zero_static_minimum_without_pwyw_is_valid(self) -> None:
+        """Anti-vacuity: 0/None is "unset", not "set to nothing", and must stay valid."""
+        for value in (0, None):
+            with self.subTest(pwyw_minimum_cents=value):
+                role = baker.prepare(
+                    SubscriptionRole, pay_what_you_want=False, pwyw_dynamic_threshold=False, pwyw_minimum_cents=value
+                )
+                role.clean()
+
     def test_plain_pwyw_with_a_static_minimum_is_valid(self) -> None:
         role = baker.prepare(
             SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=300

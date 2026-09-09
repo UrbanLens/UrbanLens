@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
     from django.contrib.auth.models import User
 
-    from urbanlens.dashboard.models.billing.model import BillingCustomer, RoleSubscription, StripeProcessedRefund, StripeWebhookEvent
+    from urbanlens.dashboard.models.billing.model import BillingCustomer, RoleSubscription, StripeProcessedRefund, StripeWebhookEvent  # noqa: F401 - mypy resolves these in the class-base subscripts below; ruff does not
 
 
 class BillingCustomerQuerySet(abstract.DashboardQuerySet["BillingCustomer"]):

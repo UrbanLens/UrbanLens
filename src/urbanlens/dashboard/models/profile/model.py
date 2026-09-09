@@ -21,8 +21,6 @@ from django.db.models import (
     OneToOneField,
     Q,
     SlugField,
-    TextChoices,
-    TextField,
 )
 from django.utils import timezone
 
@@ -1245,13 +1243,66 @@ class Profile(abstract.PublicDashboardModel):
         Returns:
             The pks of the subjects whose identity ``viewer`` may see.
         """
+        return Profile._visible_subject_pks(viewer, subjects, field="profile_visibility", allow_pending_request=True, temporary_access=True)
+
+    @staticmethod
+    def visible_contact_info_pks(viewer: Profile | None, subjects: Sequence[Profile]) -> set[int]:
+        """Batch equivalent of :meth:`can_view_contact_info` over many subjects at once.
+
+        The contact-info sibling of :meth:`visible_profile_pks`, differing in the two
+        ways ``can_view_contact_info`` differs from ``can_view_profile``: an unanswered
+        friend request does not open the gate (a phone number is more sensitive than
+        "who's asking to connect"), and there is no temporary-access fallback - a
+        ``DirectMessageTemporaryAccess`` grant reveals an identity, never a contact
+        method.
+
+        Args:
+            viewer: The profile viewing, or None for an anonymous viewer.
+            subjects: The profiles whose visibility is being resolved.
+
+        Returns:
+            The pks of the subjects whose contact methods ``viewer`` may see.
+        """
+        return Profile._visible_subject_pks(viewer, subjects, field="contact_visibility", allow_pending_request=False, temporary_access=False)
+
+    @staticmethod
+    def _visible_subject_pks(
+        viewer: Profile | None,
+        subjects: Sequence[Profile],
+        *,
+        field: str,
+        allow_pending_request: bool,
+        temporary_access: bool,
+    ) -> set[int]:
+        """Resolve one ``VisibilityChoice`` field over many subjects for one viewer.
+
+        Shared body of :meth:`visible_profile_pks` and
+        :meth:`visible_contact_info_pks`, parameterised by the three things that
+        separate them, so the relationship queries exist once. A second copy of
+        this would be a second place for the semantics to drift from
+        :meth:`visibility_permits`, which is the failure this whole family is
+        tested against.
+
+        Args:
+            viewer: The profile viewing, or None for an anonymous viewer.
+            subjects: The profiles whose visibility is being resolved.
+            field: Name of the ``VisibilityChoice`` field on each subject.
+            allow_pending_request: Whether an unanswered request from a subject
+                to the viewer opens that subject's gate, as in
+                :meth:`visibility_permits`.
+            temporary_access: Whether a ``DirectMessageTemporaryAccess`` grant
+                can pass a subject the settings would otherwise refuse.
+
+        Returns:
+            The pks of the subjects whose ``field`` permits ``viewer``.
+        """
         from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
         from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.trips.model import TripMembership
 
         subjects = list(subjects)
-        visible = {subject.pk for subject in subjects if subject.profile_visibility == VisibilityChoice.ANYONE}
+        visible = {subject.pk for subject in subjects if getattr(subject, field) == VisibilityChoice.ANYONE}
         if viewer is None:
             return visible
         visible |= {subject.pk for subject in subjects if subject.pk == viewer.pk}
@@ -1259,7 +1310,7 @@ class Profile(abstract.PublicDashboardModel):
         # NO_ONE subjects skip the visibility gates but must still reach the
         # temporary-access fallback below, exactly as can_view_profile does - an
         # early return here masked a profile holding a valid grant.
-        undecided = [subject for subject in subjects if subject.pk not in visible and subject.profile_visibility != VisibilityChoice.NO_ONE]
+        undecided = [subject for subject in subjects if subject.pk not in visible and getattr(subject, field) != VisibilityChoice.NO_ONE]
         pending_pks = {subject.pk for subject in undecided}
 
         accepted = FriendshipStatus.ACCEPTED
@@ -1273,16 +1324,17 @@ class Profile(abstract.PublicDashboardModel):
             )
             # Directional, matching has_pending_request_to(subject, viewer): a request
             # the subject sent opens the subject's own gates to its recipient, one way.
-            requesters = set(
-                Friendship.objects.filter(
-                    from_profile__in=pending_pks,
-                    to_profile=viewer,
-                    status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING),
-                ).values_list("from_profile_id", flat=True),
-            )
+            if allow_pending_request:
+                requesters = set(
+                    Friendship.objects.filter(
+                        from_profile__in=pending_pks,
+                        to_profile=viewer,
+                        status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING),
+                    ).values_list("from_profile_id", flat=True),
+                )
         connected = friends | requesters
 
-        needs = {subject.profile_visibility for subject in undecided if subject.pk not in connected}
+        needs = {getattr(subject, field) for subject in undecided if subject.pk not in connected}
         common_pin: set[int] = set()
         common_friend: set[int] = set()
         common_trip: set[int] = set()
@@ -1323,7 +1375,7 @@ class Profile(abstract.PublicDashboardModel):
                 )
 
         for subject in undecided:
-            visibility = subject.profile_visibility
+            visibility = getattr(subject, field)
             if subject.pk in connected:
                 visible.add(subject.pk)
                 continue
@@ -1335,11 +1387,87 @@ class Profile(abstract.PublicDashboardModel):
             ):
                 visible.add(subject.pk)
 
+        if not temporary_access:
+            return visible
+
         # The temporary-access fallback, last, exactly as can_view_profile reaches it.
         remaining = [subject for subject in subjects if subject.pk not in visible]
         if remaining:
             visible |= DirectMessageTemporaryAccess.granted_profile_pks({subject.pk for subject in remaining}, viewer.pk)
         return visible
+
+    @staticmethod
+    def related_profile_ids(viewer: Profile) -> set[int]:
+        """Every profile that could pass a non-``ANYONE`` visibility gate for ``viewer``.
+
+        Deliberately a **superset**, and only useful as one. Answering "which of
+        these subjects may I see" is :meth:`visible_profile_pks`'s job and stays
+        there; this answers the different question a *queryset* has to ask -
+        which rows are even worth resolving - so that a list can be narrowed in
+        SQL before it is paginated, rather than resolved row by row afterwards.
+
+        The union is the disjunction :meth:`visibility_permits` evaluates, read
+        from the viewer's side: accepted friends, profiles with an unanswered
+        request to the viewer, and the common-pin, common-friend and common-trip
+        partners, plus profiles holding a temporary-access grant to the viewer.
+        Nothing outside that union can pass any gate except ``ANYONE``, which
+        callers test directly in SQL and which is why it is absent here.
+
+        Being loose is safe and being tight is not: an extra id costs one more
+        row for the real check to reject, while a missing one hides a profile
+        the viewer is entitled to. So every branch here is unconditioned by the
+        subject's own setting - which setting a relationship happens to satisfy
+        is decided later, by the helper that decides it for every other caller.
+
+        Args:
+            viewer: The profile whose relationships are being enumerated.
+
+        Returns:
+            Profile pks, including the viewer's own.
+        """
+        from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        accepted = FriendshipStatus.ACCEPTED
+        related: set[int] = {viewer.pk}
+
+        friends = set(
+            Friendship.objects.filter(from_profile=viewer, status=accepted).values_list("to_profile_id", flat=True),
+        ) | set(
+            Friendship.objects.filter(to_profile=viewer, status=accepted).values_list("from_profile_id", flat=True),
+        )
+        related |= friends
+        related |= set(
+            Friendship.objects.filter(
+                to_profile=viewer,
+                status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING),
+            ).values_list("from_profile_id", flat=True),
+        )
+
+        viewer_place_ids: set[int] = set()
+        viewer_location_ids: set[int] = set()
+        for location_id, place_id in Pin.objects.filter(profile=viewer, location__isnull=False).values_list("location_id", "location__place_id"):
+            (viewer_place_ids if place_id is not None else viewer_location_ids).add(place_id if place_id is not None else location_id)
+        if viewer_place_ids or viewer_location_ids:
+            related |= set(
+                Pin.objects.filter(Q(location__place_id__in=viewer_place_ids) | Q(location_id__in=viewer_location_ids)).values_list("profile_id", flat=True),
+            )
+
+        if friends:
+            related |= set(
+                Friendship.objects.filter(to_profile__in=friends, status=accepted).values_list("from_profile_id", flat=True),
+            ) | set(
+                Friendship.objects.filter(from_profile__in=friends, status=accepted).values_list("to_profile_id", flat=True),
+            )
+
+        viewer_trips = set(TripMembership.objects.trip_ids_for(viewer))
+        if viewer_trips:
+            related |= set(TripMembership.objects.filter(trip_id__in=viewer_trips).values_list("profile_id", flat=True))
+
+        related |= DirectMessageTemporaryAccess.granting_profile_pks(viewer.pk)
+        return related
 
     @staticmethod
     def viewers_who_can_see(subject: Profile, viewers: Sequence[Profile]) -> set[int]:

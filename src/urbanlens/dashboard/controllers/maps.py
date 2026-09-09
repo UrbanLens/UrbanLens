@@ -1,6 +1,5 @@
 import contextlib
 from datetime import datetime
-import json
 import logging
 from typing import Any
 import urllib.parse
@@ -11,19 +10,15 @@ from django.core.exceptions import ValidationError
 from django.db import DatabaseError
 from django.db.models import Count, Prefetch
 from django.db.models.functions import Coalesce, Lower
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.search import SearchForm
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.models.labels.meta import KIND_USER
-from urbanlens.dashboard.models.labels.model import (
-    COLOR_CHOICES,
-    ICON_CATEGORIES,
-    Label,
-)
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, KIND_USER
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
@@ -35,8 +30,13 @@ from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
 from urbanlens.dashboard.services.pins.pin_creation import (
+    AddressResolutionError,
+    DuplicateCoordinatesError,
+    DuplicatePropertyError,
+    NoLocationProvidedError,
     PinCreationError,
     PinCreationForbiddenError,
+    PinParentNotFoundError,
     create_pin_for_profile,
 )
 from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
@@ -183,8 +183,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         )
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        from urbanlens.dashboard.models.labels.model import KIND_USER
-
         tags = Label.objects.tags().visible_to(profile).in_display_order()
         categories = Label.objects.categories().in_display_order()
         filter_labels = Label.objects.exclude(kind=KIND_USER).visible_to(profile).in_display_order()
@@ -269,7 +267,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             bounds = parse_infrastructure_bbox(request.GET.get("bbox"))
         except ValueError as exc:
             logger.warning("Unable to parse infrastructure bbox: %s", str(exc))
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": "Invalid bbox parameter."}, status=400)
 
         try:
             collection = infrastructure_feature_collection(bounds)
@@ -328,9 +326,26 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     name_is_user_provided=bool((name or "").strip()),
                 )
             except PinCreationForbiddenError as e:
-                return HttpResponse(f"Error: {e}", status=403)
+                logger.info("pin creation forbidden: %s", e)
+                return HttpResponse("Error: external lookups are turned off in your settings - drop a pin on the map instead.", status=403)
+            except DuplicateCoordinatesError as e:
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: you already have a pin at these exact coordinates. Place it slightly apart to keep both.", status=400)
+            except DuplicatePropertyError as e:
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: you already have a pin on this property.", status=400)
+            except PinParentNotFoundError as e:
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: no such pin to set as parent.", status=400)
+            except NoLocationProvidedError as e:
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: an address or coordinates are required.", status=400)
+            except AddressResolutionError as e:
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: that address couldn't be converted to coordinates.", status=400)
             except PinCreationError as e:
-                return HttpResponse(f"Error: {e}", status=400)
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: that pin couldn't be created.", status=400)
 
             pin = result.pin
             response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid), "pin_uuid": str(pin.uuid)}
@@ -842,10 +857,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if label_ids:
             from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
             from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
-            from urbanlens.dashboard.models.labels.model import KIND_USER as _KIND_USER
 
             # visible_to: same foreign-label-id guard as post_add_pin.
-            new_labels = Label.objects.exclude(kind=_KIND_USER).visible_to(request.user.profile).filter(id__in=label_ids)
+            new_labels = Label.objects.exclude(kind=KIND_USER).visible_to(request.user.profile).filter(id__in=label_ids)
             new_ids = set(new_labels.values_list("pk", flat=True))
             removed = pin.labels.filter(kind__in={KIND_TAG, KIND_CATEGORY, KIND_STATUS}).exclude(pk__in=new_ids)
             for label in removed:

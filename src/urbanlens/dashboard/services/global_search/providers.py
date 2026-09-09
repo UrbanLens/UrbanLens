@@ -908,7 +908,7 @@ class ArticleSearchProvider(SearchProvider):
             # domain-aware access rule as the wiki page itself, not just an
             # exact-Location pin match.
             access |= Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile))
-        queryset = Article.objects.filter(access).exclude(content="").select_related("pin__location__wiki", "wiki__location", "last_edited_by__user")
+        queryset = Article.objects.filter(access).with_content().select_related("pin__location__wiki", "wiki__location", "last_edited_by__user")
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place) | place_filter("wiki__location", parsed.place))
         queryset = queryset.filter(date_range_filter("updated", parsed))

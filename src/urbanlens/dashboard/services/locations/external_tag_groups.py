@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 
@@ -34,13 +35,69 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.place.external_tag import PlaceExternalTag
     from urbanlens.dashboard.models.place.model import Place
 
+# The whole vocabulary table, materialized. Small and admin-curated (see the
+# module docstring) but reloaded on every search keystroke through
+# matching_vocabulary()/tag_match_q() - once per term, per provider - so it is
+# worth caching wholesale rather than per-query. Invalidated explicitly by
+# _invalidate_vocabulary_cache() rather than left to the default TTL: a write
+# must be visible on the very next call, not up to five minutes later.
+_VOCABULARY_CACHE_KEY = "external_tag_vocabulary:all"
+
+
+def _cached_vocabulary_entries() -> list[ExternalTagVocabularyEntry]:
+    """The full vocabulary table, served from cache and refilled lazily on a miss.
+
+    Returns:
+        Every :class:`ExternalTagVocabularyEntry`, in no particular order.
+    """
+    entries = cache.get(_VOCABULARY_CACHE_KEY)
+    if entries is None:
+        entries = list(ExternalTagVocabularyEntry.objects.all())
+        cache.set(_VOCABULARY_CACHE_KEY, entries)
+    return entries
+
+
+def _invalidate_vocabulary_cache() -> None:
+    """Drop the cached vocabulary table so the next read reloads it.
+
+    Call this from anything that changes an entry's group membership or
+    preference, or that changes which groups exist - not just the three
+    obvious admin actions below: :meth:`PlaceExternalTag.sync_for_source`
+    also writes new rows here (see ``ExternalTagVocabularyEntry``'s
+    docstring) and invalidates through this same helper.
+    """
+    cache.delete(_VOCABULARY_CACHE_KEY)
+
 
 class ExternalTagGroupError(Exception):
-    """A mapping action was refused. ``safe_message`` is safe to show a caller verbatim."""
+    """A mapping action was refused.
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+    The message is for logs, not the response: an HTTP-facing caller should
+    catch a specific subclass below (or this base class as a fallback) and
+    author its own user-facing text, rather than relaying the message - that
+    keeps a future raise site here from being able to smuggle unreviewed text
+    into a response just by adding a new ``raise``.
+    """
+
+
+class EmptySelectionError(ExternalTagGroupError):
+    """No vocabulary entry ids were given to group."""
+
+
+class UnknownVocabularyEntryError(ExternalTagGroupError):
+    """One or more given vocabulary entry ids don't exist."""
+
+
+class AlreadyGroupedError(ExternalTagGroupError):
+    """One or more given entries already belong to a group."""
+
+
+class UnknownGroupError(ExternalTagGroupError):
+    """The given target group id doesn't exist."""
+
+
+class EntryNotInGroupError(ExternalTagGroupError):
+    """The given entry doesn't belong to the given group."""
 
 
 def default_group_key(value: str) -> str:
@@ -191,7 +248,7 @@ def matching_vocabulary(term: str) -> list[ExternalTagVocabularyEntry]:
     normalized = term.strip().lower()
     if not normalized:
         return []
-    entries = list(ExternalTagVocabularyEntry.objects.all())
+    entries = _cached_vocabulary_entries()
     matched_buckets = {_bucket_key(entry) for entry in entries if _loosely_contains(humanize_tag_value(entry.value).lower(), normalized)}
     if not matched_buckets:
         return []
@@ -242,17 +299,20 @@ def create_group(entry_ids: Sequence[int], *, preferred_id: int | None = None) -
         The new group.
 
     Raises:
-        ExternalTagGroupError: No entries given, an unknown id, or an entry
-            that already belongs to a group.
+        EmptySelectionError: ``entry_ids`` was empty.
+        UnknownVocabularyEntryError: One or more ids don't resolve to an
+            existing entry.
+        AlreadyGroupedError: One or more entries already belong to a group.
     """
     if len(entry_ids) < 1:
-        raise ExternalTagGroupError("Select at least one tag to group.")
+        raise EmptySelectionError("create_group called with an empty entry_ids.")
 
     entries = list(ExternalTagVocabularyEntry.objects.filter(pk__in=entry_ids))
     if len(entries) != len(set(entry_ids)):
-        raise ExternalTagGroupError("One or more tags could not be found.")
-    if any(entry.group_id is not None for entry in entries):
-        raise ExternalTagGroupError("One or more tags already belong to a group.")
+        missing = set(entry_ids) - {entry.pk for entry in entries}
+        raise UnknownVocabularyEntryError(f"create_group: entry_ids {sorted(missing)} do not exist.")
+    if already_grouped := [entry.pk for entry in entries if entry.group_id is not None]:
+        raise AlreadyGroupedError(f"create_group: entry_ids {already_grouped} already belong to a group.")
 
     preferred = preferred_id if preferred_id is not None else entry_ids[0]
     group = ExternalTagGroup.objects.create()
@@ -260,6 +320,7 @@ def create_group(entry_ids: Sequence[int], *, preferred_id: int | None = None) -
         entry.group = group
         entry.is_preferred = entry.pk == preferred
     ExternalTagVocabularyEntry.objects.bulk_update(entries, ["group", "is_preferred"])
+    _invalidate_vocabulary_cache()
     return group
 
 
@@ -284,11 +345,12 @@ def move_entry(entry_id: int, target_group_id: int | None) -> int | None:
         else ``None``. Also ``None`` for a no-op drop back where it started.
 
     Raises:
-        ExternalTagGroupError: The entry, or a given target group, is unknown.
+        UnknownVocabularyEntryError: ``entry_id`` doesn't exist.
+        UnknownGroupError: ``target_group_id`` was given but doesn't exist.
     """
     entry = ExternalTagVocabularyEntry.objects.filter(pk=entry_id).first()
     if entry is None:
-        raise ExternalTagGroupError("Tag not found.")
+        raise UnknownVocabularyEntryError(f"move_entry: entry_id {entry_id} does not exist.")
 
     if entry.group_id == target_group_id:
         return None
@@ -297,12 +359,17 @@ def move_entry(entry_id: int, target_group_id: int | None) -> int | None:
     if target_group_id is not None:
         target_group = ExternalTagGroup.objects.filter(pk=target_group_id).first()
         if target_group is None:
-            raise ExternalTagGroupError("Group not found.")
+            raise UnknownGroupError(f"move_entry: target_group_id {target_group_id} does not exist.")
 
     old_group = entry.group
     entry.group = target_group
     entry.is_preferred = False
     entry.save(update_fields=["group", "is_preferred", "updated"])
+    # Covers the old-group-delete branch below too: that deletion never
+    # changes any surviving entry's bucket by itself (the group was already
+    # empty), so one invalidation here - for the group_id change just saved -
+    # is enough for both outcomes.
+    _invalidate_vocabulary_cache()
 
     if old_group is not None and not old_group.members.exists():
         emptied_id = old_group.pk
@@ -319,12 +386,13 @@ def set_preferred(entry_id: int, group_id: int) -> None:
         group_id: The group it must belong to.
 
     Raises:
-        ExternalTagGroupError: The entry doesn't belong to ``group_id``.
+        EntryNotInGroupError: The entry doesn't belong to ``group_id``.
     """
     entry = ExternalTagVocabularyEntry.objects.filter(pk=entry_id, group_id=group_id).first()
     if entry is None:
-        raise ExternalTagGroupError("Tag not found in that group.")
+        raise EntryNotInGroupError(f"set_preferred: entry_id {entry_id} does not belong to group_id {group_id}.")
     with transaction.atomic():
         ExternalTagVocabularyEntry.objects.filter(group_id=group_id, is_preferred=True).update(is_preferred=False)
         entry.is_preferred = True
         entry.save(update_fields=["is_preferred", "updated"])
+    _invalidate_vocabulary_cache()

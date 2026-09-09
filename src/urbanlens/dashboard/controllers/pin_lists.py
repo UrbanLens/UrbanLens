@@ -21,7 +21,6 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, column_length_error, text_length_error
@@ -33,6 +32,8 @@ from urbanlens.dashboard.services.undo.handlers.pin_list import MODEL_LABEL as P
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from django.db.models import QuerySet
     from django.http import HttpRequest
 
@@ -49,6 +50,10 @@ _ITEMS_ROWS_TEMPLATE = "dashboard/partials/pin_lists/_items_rows.html"
 #: controllers.vault_photos.VaultPhotosView/_GALLERY_PAGE_SIZE), reused here
 #: rather than inventing a second pagination scheme for the same page shape.
 _ITEMS_PAGE_SIZE = 50
+
+#: Cap on markers drawn for the list's overview map, matching
+#: ``saved_filters._PREVIEW_MAP_PIN_LIMIT`` - the same map, over the same pins.
+_MAP_PIN_LIMIT = 500
 
 
 def _get_pin_list_or_404(list_slug: str, profile: Profile) -> PinList:
@@ -105,6 +110,15 @@ def _list_items_queryset(pin_list: PinList) -> QuerySet[PinListItem]:
     Returned as a queryset (not materialized), so a caller that only needs
     one page of rows (``PinListItemsPageView``) can paginate it at the
     database level instead of always pulling every item on the list.
+
+    Ordered on more than ``order`` because ``order`` is not unique within a
+    list: ``add_pins_to_list`` numbers new items from the *current row count*
+    rather than from ``max(order) + 1``, so removing an item and adding another
+    hands the new one a number an existing item already has. That was harmless
+    while every caller materialized this once and sliced in Python; a caller
+    taking two different slices in SQL gets no promise that tied rows keep the
+    same relative order across two executions, and a tie straddling a slice
+    boundary can then put a row in both or neither.
     """
     return (
         pin_list.items.select_related("pin", "pin__location", "pin__location__wiki")
@@ -112,17 +126,8 @@ def _list_items_queryset(pin_list: PinList) -> QuerySet[PinListItem]:
             Prefetch("pin__labels", queryset=Label.objects.exclude(kind=KIND_USER).order_by("-order", "name")),
             "pin__reviews",
         )
-        .order_by("order")
+        .order_by("order", "created", "pk")
     )
-
-
-def _list_items_with_labels(pin_list: PinList) -> list[PinListItem]:
-    """Every item on the list, fully prefetched - see :func:`_list_items_queryset`.
-
-    Used where the full set is genuinely needed regardless of pagination -
-    the overview map plots every pin on the list, not just the current page.
-    """
-    return list(_list_items_queryset(pin_list))
 
 
 def _pin_map_marker_data(pin: Pin) -> dict[str, Any]:
@@ -132,7 +137,7 @@ def _pin_map_marker_data(pin: Pin) -> dict[str, Any]:
     tags_data, rating, last_visited as "Never" or "YYYY-MM-DD", etc. - see
     maps.py's post-processing of ``Pin.to_json()``) so the same marker/popup
     look carries over here. Reads ``pin.labels.all()`` (not ``.filter()``) so
-    the ``pin__labels`` prefetch in ``_list_items_with_labels`` is reused
+    the ``pin__labels`` prefetch in ``_list_items_queryset`` is reused
     instead of triggering a query per pin.
     """
     tags = [{"id": b.id, "name": b.name, "color": b.effective_color, "icon": b.effective_icon} for b in pin.labels.all() if b.kind == "tag"]
@@ -152,24 +157,35 @@ def _pin_map_marker_data(pin: Pin) -> dict[str, Any]:
     }
 
 
-def _items_map_data(items: list[PinListItem]) -> list[dict[str, Any]]:
+def _items_map_data(items: Iterable[PinListItem]) -> list[dict[str, Any]]:
     return [_pin_map_marker_data(item.pin) for item in items if item.pin.effective_latitude and item.pin.effective_longitude]
 
 
 def _paginated_items_context(request: HttpRequest, pin_list: PinList) -> dict[str, Any]:
     """Build the items/page_obj/items_map_data context shared by the detail page and items panel.
 
-    ``items_map_data`` is built from the *full*, unpaginated list - the
-    overview map plots every pin on the list regardless of which page of
-    rows is currently rendered. ``items``/``page_obj`` are the first page of
-    that same already-materialized list, sliced in Python rather than
-    re-querying, so this costs no more than the unpaginated render did.
-    Later pages are fetched at the database level by
-    :class:`PinListItemsPageView` instead of repeating this full fetch.
+    ``items_map_data`` deliberately ignores which page of rows is rendered -
+    the overview map is about the whole list - but it is capped, matching the
+    ``_PREVIEW_MAP_PIN_LIMIT`` the near-identical saved-filter preview map has
+    always had. Past a few hundred markers the map is an unreadable blob
+    anyway, and each marker here carries far more than that one does: name,
+    address, description, rating, last-visited and every tag chip.
+
+    Both the page of rows and the map's slice are taken at the database level.
+    This used to materialize every item on the list to serve either.
     """
-    items = _list_items_with_labels(pin_list)
+    items = _list_items_queryset(pin_list)
     page_obj = get_page(request, items, _ITEMS_PAGE_SIZE)
-    return {"items": page_obj.object_list, "page_obj": page_obj, "items_map_data": _items_map_data(items)}
+    return {
+        "items": list(page_obj.object_list),
+        "page_obj": page_obj,
+        "items_map_data": _items_map_data(items[:_MAP_PIN_LIMIT]),
+        "map_pin_limit": _MAP_PIN_LIMIT,
+        # The count is the list's, not the map's: a pin with no coordinates is
+        # not plotted either way, and saying "showing the first 500" on a list
+        # of 600 where 200 have no coordinates is closer to true than silence.
+        "items_map_truncated": page_obj.paginator.count > _MAP_PIN_LIMIT,
+    }
 
 
 def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse:
@@ -393,7 +409,8 @@ class PinListEditView(LoginRequiredMixin, View):
                 try:
                     pin_list.smart_boundary = parse_multipolygon_geojson(polygon_geojson)
                 except InvalidPolygonGeoJSONError as exc:
-                    return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
+                    logger.info("smart_boundary rejected: %s", exc)
+                    return JsonResponse({"ok": False, "error": "smart_boundary isn't a valid polygon or multipolygon."}, status=400)
             else:
                 pin_list.smart_boundary = None
             changed_fields.add("smart_boundary")

@@ -27,7 +27,6 @@ from model_bakery import baker
 from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.account import AccountKdf
-from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message, serialize_direct_message

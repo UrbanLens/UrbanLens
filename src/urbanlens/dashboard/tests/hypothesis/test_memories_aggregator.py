@@ -16,6 +16,7 @@ from model_bakery import baker
 from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.baker_recipes import _make_profile
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.memories.aggregator import get_memory_events
 
@@ -98,3 +99,53 @@ class MemoryEventsDateRangeTests(TestCase):
 
         expected_included = start <= visit_day <= end
         self.assertEqual(len(events) == 1, expected_included)
+
+
+class PhotoMemoryEventTests(TestCase):
+    """get_memory_events() must surface geotagged photos, not silently drop them.
+
+    Regression test: _photos_for_range annotated a queryset field named
+    ``effective_taken_at``, colliding with the real read-only
+    ``Image.effective_taken_at`` property - Django raised AttributeError
+    trying to setattr the annotated value onto that name during row
+    materialization, and get_memory_events' broad exception guard (see
+    MemorySourceIsolationTests) swallowed it every time, for every profile
+    with any photo in range.
+    """
+
+    def setUp(self):
+        self.profile = _make_profile()
+
+    def _make_photo(self, **kwargs) -> Image:
+        kwargs.setdefault("latitude", 40.0)
+        kwargs.setdefault("longitude", -74.0)
+        kwargs.setdefault("map_hidden", False)
+        return baker.make(Image, profile=self.profile, **kwargs)
+
+    def test_a_geotagged_photo_within_range_is_included(self):
+        taken_at = timezone.make_aware(datetime.datetime(2024, 6, 15, 12, 0, 0))
+        self._make_photo(taken_at=taken_at)
+
+        events = get_memory_events(self.profile, datetime.date(2024, 6, 1), datetime.date(2024, 6, 30))
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].type, "photo")
+        self.assertEqual(events[0].occurred_at, taken_at)
+
+    def test_a_photo_with_no_exif_time_falls_back_to_filename_taken_at(self):
+        """Matches Image.effective_taken_at's own fallback chain exactly - a
+        photo with no EXIF time but a filename-parsed date still counts."""
+        filename_taken_at = timezone.make_aware(datetime.datetime(2024, 6, 10, 9, 0, 0))
+        self._make_photo(taken_at=None, filename_taken_at=filename_taken_at)
+
+        events = get_memory_events(self.profile, datetime.date(2024, 6, 1), datetime.date(2024, 6, 30))
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].occurred_at, filename_taken_at)
+
+    def test_a_photo_with_no_known_time_at_all_is_excluded_not_erroring(self):
+        self._make_photo(taken_at=None, filename_taken_at=None)
+
+        events = get_memory_events(self.profile, datetime.date(2024, 6, 1), datetime.date(2024, 6, 30))
+
+        self.assertEqual(events, [])

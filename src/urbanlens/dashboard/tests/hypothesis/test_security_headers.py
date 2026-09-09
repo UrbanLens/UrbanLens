@@ -182,6 +182,28 @@ class SecurityHeadersMiddlewareTests(SimpleTestCase):
 
         self.assertEqual(response.headers.get("X-Permitted-Cross-Domain-Policies"), "none")
 
+    def test_cross_origin_embedder_policy_is_sent_report_only(self) -> None:
+        """P56: enforcing it is a decision; observing what it would break is not."""
+        response = self.client.get("/health/")
+
+        self.assertEqual(
+            response.headers.get("Cross-Origin-Embedder-Policy-Report-Only"),
+            settings.CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY,
+        )
+
+    def test_cross_origin_embedder_policy_is_not_enforced(self) -> None:
+        """The enforcing header would block every pasted map-overlay image whose
+        host sends neither CORP nor CORS - `img-src: https:` is deliberately open,
+        so that host set is unbounded by design."""
+        response = self.client.get("/health/")
+
+        self.assertIsNone(response.headers.get("Cross-Origin-Embedder-Policy"))
+
+    def test_the_report_only_value_is_credentialless_not_require_corp(self) -> None:
+        """`require-corp` demands a CORP header the pasted host will not have;
+        `credentialless` drops credentials instead and still renders it."""
+        self.assertEqual(settings.CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY, "credentialless")
+
     def test_cross_origin_opener_policy_is_djangos_secure_default(self) -> None:
         """Refutes the scan's claim it's missing - SecurityMiddleware has sent this since Django 4.0."""
         self.assertEqual(settings.SECURE_CROSS_ORIGIN_OPENER_POLICY, "same-origin")

@@ -59,10 +59,6 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
         """Filter to calls that were blocked by rate limiting."""
         return self.filter(was_rate_limited=True)
 
-    def geo_filtered(self) -> Self:
-        """Filter to calls that were skipped due to geo filtering."""
-        return self.filter(was_geo_filtered=True)
-
     def service_disabled(self) -> Self:
         """Filter to calls that were skipped due to service being disabled."""
         return self.filter(was_service_disabled=True)

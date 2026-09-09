@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 from django.core.files.base import ContentFile
 import requests
@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExe
 from urbanlens.dashboard.models.images.relevance import media_item_key
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.media.images import compute_checksum
-from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url, fetch_public_url
+from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -257,7 +257,8 @@ def materialize_media_item(
         response.raise_for_status()
         content = response.raw.read(_MAX_DOWNLOAD_BYTES + 1, decode_content=True)
     except (requests.RequestException, OSError, UnsafeUrlError) as exc:
-        raise MaterializeError(f"Could not download {url}: {exc}") from exc
+        logger.info("Could not download %s: %s", url, exc)
+        raise MaterializeError(f"Could not download {url}.") from exc
     if len(content) > _MAX_DOWNLOAD_BYTES:
         raise MaterializeError(f"{url} is larger than the {_MAX_DOWNLOAD_BYTES // (1024 * 1024)}MB limit for Media gallery photos.")
     if not content:

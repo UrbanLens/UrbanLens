@@ -492,6 +492,87 @@ class SignalIntegrationTests(AchievementTestsBase):
 
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
 
+    def test_a_cosmetic_edit_does_not_requeue_the_backfill(self) -> None:
+        """`on_achievement_saved` fired on *every* save of an active award.
+
+        Its own docstring says "newly defined or re-activated", but the handler
+        never looked at `created` or at whether anything relevant had changed -
+        so renaming an award, recolouring it, or dragging it up the list
+        re-queued an evaluation across every profile on the site.
+        """
+        achievement = self._achievement(metric="pins_created", threshold=3, name="Stable")
+
+        with (
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            achievement.name = "Renamed"
+            achievement.color = "#123456"
+            achievement.order = 7
+            achievement.is_secret = True
+            achievement.save()
+
+        self.assertEqual(enqueue.call_args_list, [], "a cosmetic edit must not backfill the whole user base")
+
+    def test_lowering_the_threshold_does_requeue_the_backfill(self) -> None:
+        """Anti-vacuity, and the case a naive "only on create" fix would lose.
+
+        `threshold` and `metric` decide *who qualifies*, so widening either has
+        to reach the users it newly covers - exactly what the backfill is for.
+        """
+        from urbanlens.dashboard.tasks import backfill_achievement
+
+        baker.make(Pin, profile=self.profile, _quantity=3)
+        achievement = self._achievement(metric="pins_created", threshold=50, name="Far Off")
+        self.assertFalse(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
+
+        with tasks_run_inline(backfill_achievement), self.captureOnCommitCallbacks(execute=True):
+            achievement.threshold = 3
+            achievement.save()
+
+        self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
+
+    def test_a_field_excluded_from_update_fields_is_not_re_baselined(self) -> None:
+        """A value that never reached the database must not be recorded as persisted.
+
+        `save()` re-baselines the qualifying markers so a second save of the same
+        instance is not mistaken for another change. If it re-baselined a field
+        the caller excluded from `update_fields`, that field's *real* change
+        would later look like no change - a backfill missed silently. Erring the
+        other way only costs a redundant one.
+        """
+        from urbanlens.dashboard.tasks import backfill_achievement
+
+        baker.make(Pin, profile=self.profile, _quantity=3)
+        achievement = self._achievement(metric="pins_created", threshold=50, name="Excluded")
+
+        # Change the threshold but persist only the name: the new threshold is
+        # still in memory and still absent from the database.
+        achievement.threshold = 3
+        achievement.name = "Excluded Renamed"
+        achievement.save(update_fields=["name"])
+
+        with tasks_run_inline(backfill_achievement), self.captureOnCommitCallbacks(execute=True):
+            achievement.save(update_fields=["threshold"])
+
+        self.assertTrue(
+            UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists(),
+            "the threshold's real save must still count as a change",
+        )
+
+    def test_changing_the_metric_requeues_the_backfill(self) -> None:
+        """Anti-vacuity: the other field that decides who qualifies."""
+        achievement = self._achievement(metric="pins_created", threshold=1, name="Metric Swap")
+
+        with (
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            achievement.metric = "trips_created"
+            achievement.save()
+
+        self.assertTrue(enqueue.call_args_list, "a changed metric must reach the users it newly covers")
+
 
 class AchievementModelTests(AchievementTestsBase):
     """Model-level validation and display helpers."""

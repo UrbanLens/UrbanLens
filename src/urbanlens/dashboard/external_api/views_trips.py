@@ -40,7 +40,7 @@ Three constraints worth stating because each is easy to undo:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
 from django.urls import reverse
 from drf_spectacular.utils import extend_schema

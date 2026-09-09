@@ -12,7 +12,6 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway

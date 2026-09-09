@@ -89,9 +89,10 @@ class CustomFieldDefinitionsView(PaginatedListMixin, ExternalApiView):
 
 
 class CustomFieldDefinitionDetailView(ExternalApiView):
-    """PATCH: partially update one of the caller's field definitions.  DELETE: remove it."""
+    """GET one of the caller's field definitions.  PATCH: partially update it.  DELETE: remove it."""
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.CUSTOM_FIELDS_READ}),
         "PATCH": frozenset({ApiKeyScope.CUSTOM_FIELDS_WRITE}),
         "DELETE": frozenset({ApiKeyScope.CUSTOM_FIELDS_WRITE}),
     }
@@ -100,6 +101,14 @@ class CustomFieldDefinitionDetailView(ExternalApiView):
     def _get_field(request: Request, field_id: int) -> CustomField | None:
         """The caller's own field with this id, or None."""
         return CustomField.objects.filter(pk=field_id, profile=request.user.profile).first()
+
+    @extend_schema(responses={200: CustomFieldDefinitionSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, field_id: int) -> Response:
+        """Return one of the caller's own field definitions."""
+        field = self._get_field(request, field_id)
+        if field is None:
+            return Response({"error": "No such custom field."}, status=404)
+        return Response(CustomFieldDefinitionSerializer(field).data)
 
     @extend_schema(request=CustomFieldDefinitionWriteSerializer, responses={200: CustomFieldDefinitionSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def patch(self, request: Request, field_id: int) -> Response:

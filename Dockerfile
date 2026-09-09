@@ -172,7 +172,29 @@ RUN mkdir -p \
         /app/src/urbanlens/dashboard/frontend \
         /app/src/urbanlens/core/frontend \
         /app/src/backups \
-        /app/src/logs
+        /app/src/logs \
+        /var/log/urbanlens
+
+# Compile SCSS, bundle the TypeScript, and collect the result into STATIC_ROOT,
+# so the image is self-contained. Nothing else ever put these files in an image:
+# they are build output, they are .gitignore'd, and `COPY . /app` above is the
+# only step that has ever written to STATIC_ROOT - which is why every /static/
+# URL 404'd on a deployment that has no nginx in front of it.
+#
+# init.py runs the identical sequence at container start and still does, because
+# docker-compose mounts a named volume over STATIC_ROOT and a volume that
+# already has content is not re-seeded from the image. One definition of the
+# sequence, two callers: `--frontend-only` exists so this line cannot drift from
+# the runtime one.
+#
+# The dummy DJANGO_SECRET_KEY is scoped to this RUN and never becomes an ENV, so
+# it reaches no layer's environment. collectstatic imports settings, and
+# settings refuse to start without a key outside development; it opens no
+# database and no socket, which is why the rest of the runtime environment can
+# stay absent here. If this ever regresses the symptom is a build log saying
+# "0 static files copied" - check that number, not just the exit status.
+RUN DJANGO_SECRET_KEY=build-time-placeholder-not-used-at-runtime \
+    gosu appuser python /app/src/bin/init.py --frontend-only
 
 # Git >= 2.35.2 refuses to run in directories not owned by the current user.
 # COPY . /app runs as root, so /app/.git is root-owned; the app runs as appuser.

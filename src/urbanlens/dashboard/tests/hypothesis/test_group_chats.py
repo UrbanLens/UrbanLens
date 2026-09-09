@@ -39,7 +39,7 @@ from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for, reaction_summary
 from urbanlens.dashboard.services.messaging.group_chats import (
-    GroupChatValidationError,
+    ClientUuidReusedAcrossGroupsError,
     add_group_members,
     create_group_chat,
     create_group_message,
@@ -244,6 +244,13 @@ class CreateGroupMessageTests(TestCase):
             )
 
     def test_encrypted_message_persists(self) -> None:
+        # The key row is part of the fixture because it is part of reality: a
+        # client cannot encrypt under version 1 until it has uploaded that
+        # version's envelopes, which is the only thing that creates a GroupKey
+        # (controllers/e2ee.py). The send path checks it now - see
+        # test_group_key_version_is_real.
+        GroupKey.objects.create(group=self.group, version=1)
+
         message = create_group_message(
             self.creator, self.group, "", ciphertext=_blob(), nonce=_blob(b"\x03" * 24), key_version=1
         )
@@ -394,7 +401,7 @@ class GroupMessageReplayScopingTests(TestCase):
         shared_uuid = uuid_module.uuid4()
         share_pin_in_group_message(self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid)
 
-        with self.assertRaises(GroupChatValidationError):
+        with self.assertRaises(ClientUuidReusedAcrossGroupsError):
             share_pin_in_group_message(self.sender, self.group_b, self.pin_b, "for group B", client_uuid=shared_uuid)
 
         # The rejected call must not have fanned out any real access to group

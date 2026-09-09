@@ -546,7 +546,6 @@ class AcceptPinSuggestionTests(TestCase):
 
     def test_accept_new_pin_suggestion_applies_valid_label_ids(self) -> None:
         from urbanlens.dashboard.models.labels.meta import KIND_TAG
-        from urbanlens.dashboard.models.labels.model import Label
 
         label = ensure_label(kind=KIND_TAG, profile=self.profile, name="Abandoned")
         suggestion = PinSuggestion.objects.create(
@@ -842,7 +841,6 @@ class PinSuggestionActionViewTests(TestCase):
 
     def test_accept_new_pin_applies_submitted_labels(self) -> None:
         from urbanlens.dashboard.models.labels.meta import KIND_TAG
-        from urbanlens.dashboard.models.labels.model import Label
 
         label = ensure_label(kind=KIND_TAG, profile=self.profile, name="Abandoned")
         suggestion = self._suggestion(

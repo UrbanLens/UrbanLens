@@ -27,6 +27,12 @@
     <p class="immich-picker-error">{{ error }}</p>
     {% else %}
     {% if mode == "nearby" %}
+    {% if nearby_truncated %}
+    <p class="settings-help immich-picker-truncated">
+        <i class="material-symbols-outlined">info</i>
+        Showing the {{ nearby_limit }} photos closest to this pin. Narrow the radius to see the nearest ones.
+    </p>
+    {% endif %}
     <form class="immich-picker-radius"
           hx-get="{% url 'pin.immich.search' pin.slug %}"
           hx-target="#pin-import-photos-body"

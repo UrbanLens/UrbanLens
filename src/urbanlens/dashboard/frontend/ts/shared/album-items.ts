@@ -12,10 +12,14 @@ import Sortable from "sortablejs";
 import { destroyAlbumMap, highlightAlbumPhoto, initAlbumMap } from "./album-map";
 import { bindAlbumPicker, openAlbumPicker } from "./album-picker";
 import { getCsrfToken } from "./csrf";
+import { fetchJson, sendJson } from "./fetch-json";
 import { toast } from "./dialogs";
 import { bindPhotoContextMenu } from "./photo-context-menu";
 import { lightboxListFromGrid, parsePhotoIds, renderPhotoTile, tileFromJson, tileHasImage, writePhotoIds } from "./photo-tile";
 import { bindPhotoGrid } from "./photo-virtual-grid";
+
+/** Upload ceiling: long enough for a big photo on a slow uplink, short enough to fail. */
+const UPLOAD_TIMEOUT_MS = 600000;
 
 /**
  * How long to wait before re-rendering after the server queues a download.
@@ -40,16 +44,14 @@ function albumPanel(): HTMLElement | null {
     return document.getElementById("albums-panel");
 }
 
+/**
+ * POST JSON, throwing the server's own sentence on a refusal.
+ *
+ * Every caller catches and toasts that message itself, so this opts out of
+ * base.html's generic net rather than letting one refusal be announced twice.
+ */
 async function postJson(url: string, payload: unknown): Promise<Record<string, unknown>> {
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-        throw new Error((await response.text()) || response.statusText);
-    }
-    return (await response.json()) as Record<string, unknown>;
+    return ((await sendJson<Record<string, unknown>>(url, "POST", payload, { reportsItsOwnErrors: true })) ?? {}) as Record<string, unknown>;
 }
 
 /**
@@ -238,11 +240,10 @@ function ensureMapHiddenHandler(): void {
 function reportUploadFailure(filename: string, error: string): void {
     const url = albumPanel()?.dataset.failureUrl;
     if (!url) return;
-    void fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify({ filename, error }),
-    });
+    // Background telemetry the user never asked for: a failure here is not
+    // theirs to see, and without opting out of base.html's generic net it
+    // would toast "Request failed (HTTP 500)" over the real upload error.
+    void sendJson(url, "POST", { filename, error }, { reportsItsOwnErrors: true }).catch(() => undefined);
 }
 
 function markThumbFailed(img: HTMLImageElement, filename: string, error: string): void {
@@ -299,12 +300,17 @@ async function uploadFilesToAlbum(files: FileList | File[]): Promise<void> {
         const body = new FormData();
         body.append("image", file);
         try {
-            const response = await fetch(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body });
-            const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-            if (!response.ok) {
-                const message = String(data.error || `HTTP ${response.status}`);
-                reportUploadFailure(file.name, message);
-                throw new Error(message);
+            let data: Record<string, unknown>;
+            try {
+                // A longer ceiling than fetchJson's two-minute default, which a
+                // large photo on a slow uplink can legitimately exceed. There
+                // was no ceiling at all before, so an upload could hang forever.
+                data = (await fetchJson<Record<string, unknown>>(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body, timeoutMs: UPLOAD_TIMEOUT_MS, reportsItsOwnErrors: true })) ?? {};
+            } catch (err) {
+                // Reported to the server before rethrowing, which is what the
+                // outer catch's toast does not do.
+                reportUploadFailure(file.name, (err as Error).message);
+                throw err;
             }
             const tile = tileFromJson(data);
             const grid = document.getElementById("album-items-grid");
@@ -358,6 +364,9 @@ function syncAlbumToolbar(): void {
     const ids = Array.from(selected);
     const inAlbum = Boolean(panel?.dataset.albumSlug);
     const bulkUrl = panel?.dataset.galleryBulkUrl || "";
+    // Separate from the delete URL: a vault album has a bulk delete but no
+    // send-to-wiki, because there is no location to infer the wiki from.
+    const wikiUrl = panel?.dataset.galleryWikiUrl || "";
     // Bound outside the action map so its narrowing survives into the closure.
     const soleId = count === 1 ? ids[0] : undefined;
     window.ulBulkToolbar?.sync("albums", count, {
@@ -375,7 +384,7 @@ function syncAlbumToolbar(): void {
                 : null,
         remove: inAlbum && count ? () => bulkRemove(ids) : null,
         set_cover: inAlbum && soleId !== undefined ? () => setAlbumCoverFromToolbar(soleId) : null,
-        wiki: bulkUrl && count ? () => bulkWiki(ids, bulkUrl) : null,
+        wiki: wikiUrl && count ? () => bulkWiki(ids, wikiUrl) : null,
         delete: bulkUrl && count ? () => bulkDelete(ids, bulkUrl) : null,
         deselect: () => clearSelect(),
     });
@@ -691,6 +700,13 @@ document.addEventListener("click", (event) => {
     if (target.closest("[data-album-picker-open]")) {
         closeMenus();
         (document.getElementById("album-picker-dialog") as HTMLDialogElement | null)?.showModal();
+        void loadEligiblePage(false);
+        return;
+    }
+
+    if (target.closest("[data-album-picker-more]")) {
+        event.preventDefault();
+        void loadEligiblePage(true);
         return;
     }
 
@@ -740,6 +756,107 @@ document.addEventListener("click", (event) => {
             .catch((err: Error) => toast.error(`Could not add: ${err.message}`));
     }
 });
+
+// -- "Add from this place" picker -------------------------------------------
+//
+// Its photos arrive a page at a time when the dialog opens, rather than being
+// rendered into a closed dialog on every album page view: for a Vault album
+// that list is every photo the profile has ever uploaded (P69). Paginated
+// rather than capped, because "find the photo from last year" is half of what
+// this picker is for and a newest-first slice removes exactly that.
+
+/** How many eligible photos to fetch per request. */
+const ELIGIBLE_PAGE_SIZE = 60;
+
+
+function pickerGrid(): HTMLElement | null {
+    return document.querySelector<HTMLElement>(".album-add-grid[data-album-eligible-url]");
+}
+
+/** One picker tile, built rather than interpolated - a caption needs no escaping this way. */
+function renderEligibleTile(tile: { id: number; thumbUrl: string; caption: string }): HTMLLIElement {
+    const li = document.createElement("li");
+    li.className = "gallery-item album-add-item";
+    li.dataset.id = String(tile.id);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "album-item-add";
+    button.title = "Add to this album";
+    button.setAttribute("aria-label", "Add to this album");
+    button.dataset.imageId = String(tile.id);
+
+    const img = document.createElement("img");
+    img.src = tile.thumbUrl;
+    img.alt = tile.caption || "Photo";
+    img.className = "gallery-thumb";
+    img.loading = "lazy";
+    img.decoding = "async";
+
+    const tick = document.createElement("span");
+    tick.className = "album-add-tick";
+    tick.innerHTML = '<i class="material-symbols-outlined">add</i>';
+
+    button.append(img, tick);
+    li.append(button);
+    return li;
+}
+
+/**
+ * Fetch the next page of addable photos into the picker.
+ *
+ * @param more - True for a "show more" click; false for the first open, which
+ *   is a no-op once the grid already holds something (reopening the dialog must
+ *   not re-fetch page one on top of what is there).
+ */
+async function loadEligiblePage(more: boolean): Promise<void> {
+    const grid = pickerGrid();
+    if (!grid) return;
+    const url = grid.dataset.albumEligibleUrl;
+    if (!url) return;
+    if (!more && grid.childElementCount > 0) return;
+    if (grid.dataset.loading === "1") return;
+
+    const status = document.querySelector<HTMLElement>("[data-album-picker-status]");
+    const moreBtn = document.querySelector<HTMLElement>("[data-album-picker-more]");
+    const offset = more ? grid.childElementCount : 0;
+    grid.dataset.loading = "1";
+    if (status) {
+        status.textContent = "Loading photos...";
+        status.hidden = false;
+    }
+    if (moreBtn) moreBtn.hidden = true;
+
+    try {
+        const data = (await fetchJson<{ items: Record<string, unknown>[]; total: number }>(url + `?offset=${offset}&limit=${ELIGIBLE_PAGE_SIZE}`, {
+            reportsItsOwnErrors: true,
+        })) ?? { items: [], total: 0 };
+        for (const raw of data.items) {
+            const tile = tileFromJson(raw);
+            if (tile) grid.append(renderEligibleTile(tile));
+        }
+        if (status) {
+            // Cleared as well as hidden: a hidden node still holding "Loading
+            // photos..." is a stale sentence waiting for something to unhide it.
+            status.textContent = "";
+            status.hidden = true;
+        }
+        if (moreBtn) moreBtn.hidden = grid.childElementCount >= data.total;
+        if (!grid.childElementCount && status) {
+            status.textContent = "No photos left to add.";
+            status.hidden = false;
+        }
+    } catch (error) {
+        if (status) {
+            status.textContent = error instanceof Error ? error.message : "Could not load photos.";
+            status.hidden = false;
+        }
+        // Shown again so a failed page can be retried without closing the dialog.
+        if (moreBtn) moreBtn.hidden = false;
+    } finally {
+        delete grid.dataset.loading;
+    }
+}
 
 /** Close every open album overflow menu (they are <details> elements). */
 function closeMenus(): void {

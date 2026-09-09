@@ -11,14 +11,14 @@ property/display tests use unittest.TestCase with unsaved instances.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 
 from django.db import IntegrityError, transaction
 from model_bakery import baker
 
 from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
+from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 

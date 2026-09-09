@@ -19,6 +19,7 @@ import {
     expectCanaryNotInDom,
     expectNotServerError,
     markupCanary,
+    sendRawRequest,
     uniqueMarker,
 } from "../../lib/security.js";
 
@@ -189,12 +190,15 @@ test.describe("path traversal does not read files off disk", () => {
 });
 
 test.describe("request smuggling-adjacent headers do not change the response", () => {
-    test("CRLF in X-Forwarded-Host is not reflected as a header", async ({ request }) => {
-        const response = await request.get("/health/live", {
-            headers: { "X-Forwarded-Host": "example.invalid\r\nX-Injected: 1" },
-        });
-        expect(response.headers()["x-injected"], "a CR-LF in X-Forwarded-Host injected a response header").toBeFalsy();
-        expect(response.status()).toBe(200);
+    test("CRLF in X-Forwarded-Host is not reflected as a header", async () => {
+        // Playwright's request context (and Node's own `http`) validate header
+        // values client-side and refuse a raw CR/LF before a request is even
+        // issued, so this never reaches the server through either of those. A
+        // raw socket puts the literal bytes on the wire so this actually tests
+        // what the server does with them, not what the test client does.
+        const response = await sendRawRequest("/health/live", ["X-Forwarded-Host: example.invalid\r\nX-Injected: 1"]);
+        expect(response.headers["x-injected"], "a CR-LF in X-Forwarded-Host injected a response header").toBeFalsy();
+        expect(response.status).toBe(200);
     });
 
     test("a huge URL is refused rather than crashing", async ({ request }) => {

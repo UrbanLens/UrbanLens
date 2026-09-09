@@ -39,6 +39,19 @@ PROTECTED = {
         "If it truly belongs in CLAUDE.md, print the exact replacement lines in "
         "your reply and let the user apply them."
     ),
+    "CLAUDE.local.md": (
+        "CLAUDE.local.md is read by every session and every subagent, so every line "
+        "costs tokens on every task. It is kept short deliberately.\n"
+        "Write what you learned in docs/ instead:\n"
+        "  - a defect            -> docs/PROBLEMS.md   (next P id in docs/INDEX.md)\n"
+        "  - a measurement       -> docs/NOTES.md      (X id, and state its unit)\n"
+        "  - a choice you made   -> docs/designs/      (D id)\n"
+        "  - work to do          -> docs/ROADMAP.md    (T id)\n"
+        "  - how something works -> the relevant docs/*.md reference (R id)\n"
+        "and add the one-line entry to docs/INDEX.md in the same commit.\n"
+        "If it truly belongs in CLAUDE.local.md, print the exact replacement lines in "
+        "your reply and let the user apply them."
+    ),
     "docs/GOALS.md": ("GOALS.md is Jess' notes on project goals, written in their voice. Do not edit, summarise, or 'tidy' it. If you have something to say about it, write your own docs/ entry and cite SRC."),
 }
 

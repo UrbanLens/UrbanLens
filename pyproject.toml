@@ -9,7 +9,7 @@ dependencies = [
     "celery~=5.6.3",
     "channels~=4.3.2",
     "channels-redis~=4.3.0",
-    "cryptography~=49.0.0",
+    "cryptography>=49.0,<50.1",
     "daphne~=4.2.2",
     "dateparser~=1.4.1",
     "django~=6.0.6",
@@ -28,10 +28,10 @@ dependencies = [
     "geopy>=2.4.1,<2.6.0",
     "gevent>=26.5,<26.8",
     "gpxpy~=1.6.2",
-    "gunicorn~=26.0.0",
+    "gunicorn>=26.0,<26.3",
     "humanize>=4.15,<4.17",
     "jinja2~=3.1.6",
-    "linkify-it-py~=2.1.0",
+    "linkify-it-py>=2.1,<2.3",
     "lxml~=6.1.1",
     "markdown-it-py~=4.2.0",
     "mdit-py-plugins~=0.6.1",
@@ -51,8 +51,8 @@ dependencies = [
     "psycogreen~=1.0.2",
     "psycopg2-binary~=2.9.12",
     "pydantic~=2.13.4",
-    "pydantic-settings~=2.14.1",
-    "pypdf>=6.2,<6.15",
+    "pydantic-settings>=2.14.1,<2.16.0",
+    "pypdf>=6.2,<6.17",
     "pytesseract~=0.3.13",
     "python-dateutil~=2.9.0",
     "python-docx~=1.2.0",
@@ -80,6 +80,11 @@ dependencies = [
     "drf-spectacular>=0.30.0",
     "django-oauth-toolkit>=3.3.0",
     "anthropic>=0.120,<0.130",
+    # A base dependency rather than an extra: UL_MEDIA_STORAGE_BACKEND=s3 is
+    # what the production deployment is heading for, and an extra our own
+    # image never installs would be a code path nothing exercises. Costs a
+    # self-host an unused boto3 and nothing else.
+    "django-storages[s3]~=1.14",
 ]
 
 [build-system]
@@ -177,7 +182,6 @@ ignore = [
     "DOC502",  # This discourages reporting raises from ancestors
     "SIM108",  # Use ternary operator insead of if-else
     "TRY003",  # Avoid specifying long messages outside the exception class
-    "F401",    # unused imports. Enabling this will remove TYPE_CHECKING imports incorrectly.
     "W293",    # blank line contains whitespace
     "W391",    # blank line at end of file
     "DJ012",   # Order of model's inner classes, methods... does not follow Django style guide
@@ -262,11 +266,13 @@ unfixable = ["RUF100"]
     "PLR09",   # too-many-...
     "PLR2004", # magic values
 ]
-# An __init__.py is a re-export surface. Unused imports (F401) are already
-# globally ignored, which covers the plain `import X` half of that; these cover
-# the rest. Import ORDER is deliberately still checked - it was verified safe by
-# applying the fixes and running `manage.py check` in the app container.
+# An __init__.py is a re-export surface: every name it imports is imported so
+# that someone else can import it from here, which is exactly what F401 calls
+# unused. 819 of the tree's 1,063 F401 hits were in these 163 files. Import
+# ORDER is deliberately still checked - it was verified safe by applying the
+# fixes and running `manage.py check` in the app container.
 "**/__init__.py" = [
+    "F401",    # every import here IS the re-export; 110 of 163 have no __all__
     "F403",    # `from .x import *` - prospective re-export
     "F405",    # a name possibly from a star import
     "RUF100",  # a noqa here often documents a deliberate side-effect import
@@ -316,9 +322,9 @@ dev = [
     # detector watches for - which would make it quiet precisely where this
     # codebase's N+1s actually came from. See core/tests/query_scaling.py.
     "django-perf-rec~=4.31.0",
-    "django-stubs~=6.0.5",
-    "django-stubs-ext~=6.0.5",
-    "faker>=40.23,<40.37",
+    "django-stubs>=6.0.5,<6.2.0",
+    "django-stubs-ext>=6.0.5,<6.2.0",
+    "faker>=40.23,<40.39",
     "hypothesis[django]>=6.155.5,<6.162.0",
     "icecream~=2.2.0",
     "kombu~=5.6.2",
@@ -333,7 +339,7 @@ dev = [
     # against the browser's libsodium implementation (see docs/designs/e2ee.md).
     "pynacl~=1.6.2",
     "pytest>=9.1.1",
-    "pytest-django~=4.12.0",
+    "pytest-django>=4.12,<4.15",
     # Installed but disabled in `addopts`; `bin/run_tests.sh --shuffle` enables it.
     "pytest-randomly~=4.1.0",
     # Parallel test workers. Off by default: each worker takes its own database,
@@ -347,11 +353,11 @@ dev = [
     # and nothing else checks that a response matches what it advertises.
     # Drives tests/contract/; see docs/CONTRACT_TESTS.md.
     "schemathesis~=4.25.1",
-    "setuptools>=82.0.1,<83.1.0",
+    "setuptools>=82.0.1,<84.1.0",
     "sphinx~=9.1.0",
     "sphinx-autoapi~=3.8.1",
     "sphinx-rtd-theme~=3.1.0",
-    "tqdm>=4.68.3,<4.70.0",
+    "tqdm>=4.68.3,<4.71.0",
     "types-requests~=2.33.0.20260518",
     "types-requests-oauthlib~=2.0.0.20260610",
     "uv~=0.11.22",
@@ -525,7 +531,9 @@ only_mutate = [
 do_not_mutate = ["*/tests/*", "*/migrations/*"]
 # mutmut runs the suite in a copy of the tree at `mutants/`, which does not
 # contain the collected static files - and any test that renders a full page
-# fails on a missing staticfiles manifest entry without them.
+# fails on a missing staticfiles manifest entry without them. STATIC_ROOT is
+# build output and no longer tracked, so this path exists only after a build has
+# run: on a fresh clone, run one before mutmut.
 also_copy = ["src/urbanlens/frontend/static"]
 pytest_add_cli_args = ["--reuse-db", "-q"]
 # Scope both phases to the tests that actually cover the mutated modules.

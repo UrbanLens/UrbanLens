@@ -1268,6 +1268,41 @@ class CalendarCallbackViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
 
+    def test_successful_connect_redirects_to_the_settings_connections_tab(self):
+        """Regression guard: every redirect(next_name) call used to send a bare
+        view name straight into redirect(), producing a URL with no #hash for
+        "settings.view" - unlike Flickr/Google Photos's callbacks, whose error
+        branches already anchor to their own Connections-tab section.
+        settings/index.html's tab-switch JS only activates a non-default tab
+        when the URL carries a fragment, so this silently landed the user back
+        on the default Privacy tab regardless of where they connected from."""
+        from django.core import signing
+
+        state = signing.dumps({"pid": self.profile.id, "next": "settings.view"}, salt="google-calendar-connect")
+        with mock.patch(
+            "urbanlens.dashboard.controllers.calendar_sync.exchange_code_for_tokens",
+            return_value={"access_token": "tok", "refresh_token": "ref", "expires_in": 3600},
+        ):
+            response = self.client.get(reverse("trips.calendar.callback"), {"state": state, "code": "abc"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"{reverse('settings.view')}#google-calendar-settings-section")
+        self.assertTrue(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
+
+    def test_successful_connect_with_next_trips_list_redirects_there_unanchored(self):
+        """The "trips.list" next-target is a full page, not a settings
+        subsection - it must stay a plain URL, not gain a #hash."""
+        from django.core import signing
+
+        state = signing.dumps({"pid": self.profile.id, "next": "trips.list"}, salt="google-calendar-connect")
+        with mock.patch(
+            "urbanlens.dashboard.controllers.calendar_sync.exchange_code_for_tokens",
+            return_value={"access_token": "tok", "refresh_token": "ref", "expires_in": 3600},
+        ):
+            response = self.client.get(reverse("trips.calendar.callback"), {"state": state, "code": "abc"})
+
+        self.assertEqual(response["Location"], reverse("trips.list"))
+
 
 class CalendarInviteIdentityMaskingTests(TestCase):
     """The calendar importer's trip invite must mask like the ordinary one does.

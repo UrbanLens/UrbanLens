@@ -36,6 +36,7 @@ nav {
 }
 
 .app-nav-logo {
+    flex-shrink: 0;
     width: 36px;
     height: 36px;
     border-radius: 50%;
@@ -47,6 +48,15 @@ nav {
     font-weight: 700;
     color: var(--ul-grey-0);
     letter-spacing: -0.01em;
+    @include truncate;
+
+    // Gone rather than truncated on a phone. Below about 380px the bar's slack
+    // is smaller than the word, so shrinking it renders two pixels and an
+    // ellipsis - which reads as a rendering fault, not a layout choice. The logo
+    // beside it carries the brand on its own.
+    @include down($breakpoint-xs) {
+        display: none;
+    }
 }
 
 // -- Mobile hamburger ---------------------------------------------------------
@@ -126,6 +136,11 @@ nav {
     align-items: center;
     gap: 0.5rem;
     margin-left: auto;
+    // Fixed, and deliberately so: these are icon buttons with nothing to give
+    // up. Letting them shrink collapsed the boxes while their contents stayed
+    // put, which looks identical to the overflow it was meant to fix. The brand
+    // absorbs the shrink instead (P52).
+    flex-shrink: 0;
 }
 
 // -- User avatar component (reusable) -----------------------------------------
@@ -201,6 +216,20 @@ nav {
     font-weight: 500;
     max-width: 12rem;
     @include truncate;
+
+    // Dropped rather than truncated on a phone. The surplus at 390px is smaller
+    // than the name itself, so truncating leaves a couple of characters and an
+    // ellipsis, which reads as a rendering fault rather than a choice - and the
+    // avatar beside it already identifies the account, with the full username in
+    // the dropdown it opens.
+    @include down($breakpoint-xs) {
+        display: none;
+    }
+}
+
+.nav-user,
+.nav-user-btn {
+    flex-shrink: 0;
 }
 
 .nav-chevron {
@@ -1162,6 +1191,16 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
 
     .app-nav-right {
         margin-left: 0;
+    }
+
+    // The bar's one elastic element, but only once the links are hidden: above
+    // this width the links are what absorb a narrow viewport, and letting the
+    // brand shrink there squeezed its name to nothing at exactly 768px. Below
+    // it, everything to the right is fixed-size icon buttons with nothing to
+    // give up, so the brand is what has to yield (P52).
+    .app-nav-brand {
+        flex-shrink: 1;
+        min-width: 0;
     }
 }
 

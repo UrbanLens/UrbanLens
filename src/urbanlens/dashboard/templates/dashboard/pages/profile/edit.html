@@ -7,7 +7,7 @@
 {% block subnav %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
-        {% include "dashboard/partials/profile/_profile_tabs.html" with active="edit" profile_slug=profile.slug %}
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="edit" profile_slug=profile.slug has_achievements=has_achievements %}
     </div>
 </div>
 {% endblock %}

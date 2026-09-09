@@ -5,13 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 import re
-from typing import TYPE_CHECKING, Any, cast
-
-from django.contrib.auth.models import AnonymousUser
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from django.contrib.auth.base_user import AbstractBaseUser
-
     from urbanlens.dashboard.models.profile.model import Profile
 
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES

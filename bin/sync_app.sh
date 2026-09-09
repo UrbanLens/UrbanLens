@@ -100,6 +100,14 @@ if [ "$FRONTEND" -eq 1 ]; then
     # problem fails here, loudly, instead of at 3am on a restart.
     echo "==> rebuilding the frontend in $CONTAINER"
     docker exec -u appuser "$CONTAINER" bun run build
+    # SCSS too, and it is a separate command: `bun run build` is
+    # bin/build-frontend.ts, which only bundles TypeScript. This flag's usage
+    # line promised "SCSS/TS" without ever compiling the first of them, so a
+    # stylesheet change synced this way collected the *previous* CSS and the
+    # site kept serving it - the same class of silent staleness the
+    # collectstatic note above exists for.
+    echo "==> compiling SCSS"
+    docker exec -u appuser "$CONTAINER" bun run sass
     echo "==> collectstatic"
     docker exec -u appuser "$CONTAINER" /app/.venv/bin/python src/urbanlens/manage.py collectstatic --noinput
 fi

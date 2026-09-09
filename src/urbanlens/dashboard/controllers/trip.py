@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
@@ -20,7 +20,6 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import (
     Trip,
     TripActivity,
-    TripComment,
     TripMembership,
 )
 from urbanlens.dashboard.services.trips.trip_access import (
@@ -33,14 +32,11 @@ from urbanlens.dashboard.services.trips.trip_activities import (
     activity_queryset as _activity_qs,
     build_activity_rows,
     complete_activity,
-    compute_activity_index_map as _compute_activity_index_map,
     create_activity,
     delete_activity,
-    expand_trip_dates as _expand_trip_dates,
-    get_activity,
+    move_activity,
     parse_scheduled_at as _parse_scheduled_at,
     reorder_activities,
-    resolve_activity_place as _resolve_activity_place,
     set_activity_position,
     set_activity_rsvp,
     set_activity_status,
@@ -58,13 +54,11 @@ from urbanlens.dashboard.services.trips.trip_membership import (
     join_trip,
     leave_trip,
     list_members,
-    notify_added_to_trip as _notify_added_to_trip,
     remove_member,
     require_trip_creator,
     resolve_trip_member,
     set_member_organizer,
     set_trip_rsvp,
-    suggest_connections_for_new_member as _suggest_connections_for_new_member,
 )
 
 if TYPE_CHECKING:
@@ -73,7 +67,6 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from django.http import HttpRequest
 
-    from urbanlens.dashboard.controllers.comments import _ReactionData
     from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot
 
 logger = logging.getLogger(__name__)
@@ -1125,14 +1118,6 @@ class TripActivityMoveView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        if not _can_perform(profile, trip, Trip.PERM_EVERYONE):
-            return HttpResponse("Join this trip to contribute.", status=403)
-
-        try:
-            activity = get_activity(trip, activity_id)
-        except TripError as exc:
-            return _trip_error_response(exc)
-
         try:
             body = json.loads(request.body) if request.body else {}
         except (json.JSONDecodeError, ValueError):
@@ -1147,13 +1132,16 @@ class TripActivityMoveView(LoginRequiredMixin, View):
         except ValueError:
             return HttpResponse("Invalid date format.", status=400)
 
-        if activity.scheduled_at:
-            # Preserve existing time component; only update date
-            activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(new_date, activity.scheduled_at.time()))
-        else:
-            activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(new_date, datetime.time(0, 0)))
-
-        activity.save(update_fields=["scheduled_at", "updated"])
+        # move_activity enforces trip.allow_edit_activities (the same
+        # permission every other date/position change on an activity
+        # requires) - a bare trip-membership check here previously let any
+        # joined member reschedule any activity, even on a trip restricted to
+        # organizer-only edits. See services.trips.trip_activities.set_activity_position's
+        # docstring for the same class of fix made there earlier.
+        try:
+            move_activity(trip, profile, activity_id, date=new_date)
+        except TripError as exc:
+            return _trip_error_response(exc)
 
         return _render_activities_panel(request, trip, profile)
 

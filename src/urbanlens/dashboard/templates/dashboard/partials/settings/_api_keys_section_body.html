@@ -67,6 +67,9 @@
                   hx-post="{% url 'settings.security.api_keys.revoke' key.pk %}" hx-target="#api-keys-settings-section-body" hx-swap="outerHTML"
                   onsubmit="return confirm('Revoke this API key? Any application using it will immediately lose access.');">
                 {% csrf_token %}
+                {# A hidden field rather than hx-vals: this form is posted both ways, #}
+                {# and without it revoking from page two swaps page one back in. #}
+                <input type="hidden" name="api_keys_page" value="{{ api_keys_page_obj.number }}">
                 <button type="submit" class="btn btn--danger btn--sm" title="Revoke this API key" aria-label="Revoke this API key">
                     <i class="material-symbols-outlined">delete</i>
                 </button>
@@ -75,6 +78,8 @@
         </li>
         {% endfor %}
     </ul>
+    {% url 'settings.security.api_keys.section' as api_keys_url %}
+    {% include "dashboard/partials/ui/_pagination_controls.html" with page_obj=api_keys_page_obj page_url=api_keys_url page_param="api_keys_page" page_target="#api-keys-settings-section-body" page_swap="outerHTML" page_noun="API keys" %}
     {% endif %}
 
     <form method="post" action="{% url 'settings.security.api_keys.create' %}"

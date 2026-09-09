@@ -77,10 +77,17 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source, panel_visible_to
 
         panel = get_panel_source(source)
         if not isinstance(panel, GalleryMediaSource):
+            return HttpResponse(status=404)
+
+        # Same gate the pin page's own generic panel dispatch applies - a
+        # feature-gated source's photos must not leak through this separate
+        # wiki-media route, and LocationCache is shared with the pin page so
+        # a gated panel's row is just as reachable here without this check.
+        if not panel_visible_to(profile.user, panel):
             return HttpResponse(status=404)
 
         cached = LocationCache.get_fresh(location, panel.cache_source)

@@ -24,7 +24,6 @@ from typing import TYPE_CHECKING
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core import signing
 from django.core.cache import cache
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -157,7 +156,7 @@ class FlickrCallbackView(LoginRequiredMixin, View):
             },
         )
         messages.success(request, "Flickr connected.")
-        return redirect("settings.view")
+        return redirect(f"{reverse('settings.view')}#flickr-settings-section")
 
 
 class FlickrDisconnectView(LoginRequiredMixin, View):
@@ -227,7 +226,8 @@ class PinFlickrSearchView(LoginRequiredMixin, View):
                 pin_point = (float(pin.location.latitude), float(pin.location.longitude))
                 photos = [photo for photo in photos if _within_radius(pin_point, photo, radius_m)]
         except GatewayRequestError as exc:
-            return render(request, _PICKER_PARTIAL, {**context, "error": str(exc)})
+            logger.warning("Flickr picker request failed: %s", exc)
+            return render(request, _PICKER_PARTIAL, {**context, "error": "Couldn't load your Flickr library right now."})
 
         already_imported = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
         assets = [{"id": photo.id, "thumbnail_url": photo.thumbnail_url, "already_imported": account.photo_web_url(photo.id) in already_imported} for photo in photos]

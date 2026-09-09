@@ -68,13 +68,64 @@ STALL_ROUND_TIMEOUT_MINUTES = 10
 class SpotGuessrError(Exception):
     """Raised for invalid session/round/guess/lobby operations.
 
-    ``safe_message`` is always safe to surface to the caller verbatim - every
-    raise site in this module passes a developer-authored string.
+    The message is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below and author its own user-facing
+    text, rather than relaying the message - that keeps a future raise site
+    here from being able to smuggle unreviewed text into a response just by
+    adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class NotSessionHostForInviteError(SpotGuessrError):
+    """The caller isn't this session's host; only the host may invite players."""
+
+
+class LobbyClosedForInviteError(SpotGuessrError):
+    """The session has already left its lobby phase - it can no longer be invited into."""
+
+
+class InviteeNotFriendError(SpotGuessrError):
+    """The invitee isn't a friend/connection of the host."""
+
+
+class ParticipantNotInvitedError(SpotGuessrError):
+    """The profile has no participant row for this session at all - it was never invited."""
+
+
+class LobbyClosedForJoinError(SpotGuessrError):
+    """The session left its lobby phase before this invitation was accepted."""
+
+
+class NotSessionHostForStartError(SpotGuessrError):
+    """The caller isn't this session's host; only the host may start the game."""
+
+
+class SessionAlreadyStartedError(SpotGuessrError):
+    """The session has already left LOBBY - it can't be started a second time."""
+
+
+class RoundGenerationUnavailableError(SpotGuessrError):
+    """No round-generation strategy is registered for the session's mode.
+
+    A configuration/programming bug (an enabled ``SpotGuessrMode`` with no
+    matching entry in ``modes``), not a condition a player caused.
+    """
+
+
+class ParticipantNotJoinedError(SpotGuessrError):
+    """The profile must be a JOINED participant of this round's session to guess in it."""
+
+
+class DuplicateGuessError(SpotGuessrError):
+    """This profile already submitted a guess for this round."""
+
+
+class NotSessionHostForEndError(SpotGuessrError):
+    """The caller isn't this session's host; only the host may end the game."""
+
+
+class SessionAlreadyEndedError(SpotGuessrError):
+    """The session isn't LOBBY or ACTIVE any more - it has already ended."""
 
 
 @dataclass(frozen=True)
@@ -216,8 +267,9 @@ def start_solo_playthrough(profile: Profile, mode: str, config: GameConfig, *, t
         three outcomes apart.
 
     Raises:
-        SpotGuessrError: If the mode has no round-generation strategy
-            registered (a programming error, not a player-facing condition).
+        RoundGenerationUnavailableError: If the mode has no round-generation
+            strategy registered (a programming error, not a player-facing
+            condition).
     """
     if not eligibility.has_eligible_locations(
         [profile],
@@ -277,15 +329,16 @@ def invite_to_session(session: GameSession, host: Profile, invitee: Profile) -> 
     a non-friend is rejected server-side, not just hidden in a picker UI.
 
     Raises:
-        SpotGuessrError: if the caller isn't the host, the session has
-            already started, or ``invitee`` isn't a friend of the host.
+        NotSessionHostForInviteError: if the caller isn't the host.
+        LobbyClosedForInviteError: if the session has already started.
+        InviteeNotFriendError: if ``invitee`` isn't a friend of the host.
     """
     if session.host_profile_id != host.pk:
-        raise SpotGuessrError("Only the host can invite players.")
+        raise NotSessionHostForInviteError(f"Profile {host.pk} is not host {session.host_profile_id} of session {session.pk}.")
     if session.status != GameSessionStatus.LOBBY:
-        raise SpotGuessrError("Can't invite once the game has started.")
+        raise LobbyClosedForInviteError(f"Session {session.pk} is {session.status}, not LOBBY.")
     if not are_connections(host, invitee):
-        raise SpotGuessrError("You can only invite friends.")
+        raise InviteeNotFriendError(f"Profile {invitee.pk} is not a connection of host {host.pk}.")
 
     participant, created = GameSessionParticipant.objects.get_or_create(
         session=session,
@@ -328,21 +381,22 @@ def join_session(session: GameSession, profile: Profile) -> GameSessionParticipa
     the roster is locked - not a no-op re-call from someone already in.
 
     Raises:
-        SpotGuessrError: if ``profile`` was never invited to this session,
-            or the roster is already locked (the session isn't in LOBBY)
-            and they hadn't joined before that happened - an invite that
-            arrived too late to act on.
+        ParticipantNotInvitedError: if ``profile`` was never invited to this
+            session.
+        LobbyClosedForJoinError: if the roster is already locked (the session
+            isn't in LOBBY) and they hadn't joined before that happened - an
+            invite that arrived too late to act on.
     """
     try:
         participant = GameSessionParticipant.objects.get(session=session, profile=profile)
     except GameSessionParticipant.DoesNotExist:
-        raise SpotGuessrError("You were not invited to this session.") from None
+        raise ParticipantNotInvitedError(f"Profile {profile.pk} has no participant row for session {session.pk}.") from None
 
     if participant.status == GameSessionParticipantStatus.JOINED:
         return participant
 
     if session.status != GameSessionStatus.LOBBY:
-        raise SpotGuessrError("This game has already started - you can no longer join.")
+        raise LobbyClosedForJoinError(f"Session {session.pk} is {session.status}, not LOBBY; profile {profile.pk} was never accepted.")
 
     participant.status = GameSessionParticipantStatus.JOINED
     participant.save(update_fields=["status", "updated"])
@@ -357,13 +411,13 @@ def begin_session(session: GameSession, host: Profile) -> GameRound | None:
     design doc for why mid-game joining isn't supported).
 
     Raises:
-        SpotGuessrError: if the caller isn't the host or the session isn't
-            still in its lobby.
+        NotSessionHostForStartError: if the caller isn't the host.
+        SessionAlreadyStartedError: if the session isn't still in its lobby.
     """
     if session.host_profile_id != host.pk:
-        raise SpotGuessrError("Only the host can start the game.")
+        raise NotSessionHostForStartError(f"Profile {host.pk} is not host {session.host_profile_id} of session {session.pk}.")
     if session.status != GameSessionStatus.LOBBY:
-        raise SpotGuessrError("This session has already started.")
+        raise SessionAlreadyStartedError(f"Session {session.pk} is {session.status}, not LOBBY.")
 
     session.status = GameSessionStatus.ACTIVE
     session.save(update_fields=["status", "updated"])
@@ -428,7 +482,7 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
         session.save(update_fields=["config", "updated"])
 
     if modes.get_strategy(session.mode) is None:
-        raise SpotGuessrError(f"Mode {session.mode!r} has no round-generation logic.")
+        raise RoundGenerationUnavailableError(f"Session {session.pk}: mode {session.mode!r} has no round-generation strategy registered.")
 
     next_sequence_index = len(existing_rounds)
     picked = _consume_prewarmed_pick(session, config, participants, next_sequence_index, excluded_ids)
@@ -529,12 +583,13 @@ def generate_round_content(
         for this mode, or none were eligible at all.
 
     Raises:
-        SpotGuessrError: If ``mode`` has no round-generation strategy
-            registered (a programming error, not a player-facing condition).
+        RoundGenerationUnavailableError: If ``mode`` has no round-generation
+            strategy registered (a programming error, not a player-facing
+            condition).
     """
     strategy = modes.get_strategy(mode)
     if strategy is None:
-        raise SpotGuessrError(f"Mode {mode!r} has no round-generation logic.")
+        raise RoundGenerationUnavailableError(f"Mode {mode!r} has no round-generation strategy registered.")
 
     excluded_ids = list(excluded_location_ids)
     # Resolved once, not once per attempt. Eligibility is a multi-join across every
@@ -603,16 +658,16 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
         multiplayer withholding the reveal until everyone's guessed).
 
     Raises:
-        SpotGuessrError: if ``profile`` isn't a JOINED participant of this
-            round's session (e.g. still INVITED, never joined), or if
-            ``profile`` already guessed this round.
+        ParticipantNotJoinedError: if ``profile`` isn't a JOINED participant
+            of this round's session (e.g. still INVITED, never joined).
+        DuplicateGuessError: if ``profile`` already guessed this round.
     """
     try:
         participant = GameSessionParticipant.objects.get(session=round_.session, profile=profile)
     except GameSessionParticipant.DoesNotExist:
-        raise SpotGuessrError("You must join this session before submitting a guess.") from None
+        raise ParticipantNotJoinedError(f"Profile {profile.pk} has no participant row for session {round_.session_id}.") from None
     if participant.status != GameSessionParticipantStatus.JOINED:
-        raise SpotGuessrError("You must join this session before submitting a guess.")
+        raise ParticipantNotJoinedError(f"Profile {profile.pk} is {participant.status}, not JOINED, in session {round_.session_id}.")
 
     distance = scoring.distance_for_guess(
         round_.location,
@@ -655,7 +710,7 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
                 bonus_points=bonus.total,
             )
         except IntegrityError:
-            raise SpotGuessrError("This profile has already guessed this round.") from None
+            raise DuplicateGuessError(f"Profile {profile.pk} already has a guess recorded for round {locked_round.pk}.") from None
 
         # Recorded only once the guess is confirmed genuinely new - moved
         # below the duplicate-guess guard above. It used to fire before that
@@ -810,13 +865,13 @@ def end_session_now(session: GameSession, host: Profile) -> GameSession:
     it is exactly what the host asked for.
 
     Raises:
-        SpotGuessrError: if the caller isn't the host, or the session has
-            already ended.
+        NotSessionHostForEndError: if the caller isn't the host.
+        SessionAlreadyEndedError: if the session has already ended.
     """
     if session.host_profile_id != host.pk:
-        raise SpotGuessrError("Only the host can end the game.")
+        raise NotSessionHostForEndError(f"Profile {host.pk} is not host {session.host_profile_id} of session {session.pk}.")
     if session.status not in (GameSessionStatus.LOBBY, GameSessionStatus.ACTIVE):
-        raise SpotGuessrError("This game has already ended.")
+        raise SessionAlreadyEndedError(f"Session {session.pk} is {session.status}, already ended.")
 
     current_round = GameRound.objects.for_session(session).filter(revealed_at__isnull=True).first()
     if current_round is not None:

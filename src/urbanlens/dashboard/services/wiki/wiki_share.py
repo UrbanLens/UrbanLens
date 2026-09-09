@@ -30,6 +30,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: How many of a pin's photos the create-wiki dialog offers. Matches the caps
+#: the wiki's own Media gallery (``_WIKI_PHOTOS_PREVIEW_LIMIT``) and the visit
+#: dialog's picker already use, both of which reached this number first.
+SEEDABLE_PHOTO_LIMIT = 60
+
 #: Security fields shared between Pin and Wiki (both inherit SecurityModel).
 SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked")
 
@@ -234,5 +239,21 @@ def seedable_aliases(pin: Pin) -> list[PinAlias]:
 
 
 def seedable_photos(pin: Pin) -> list[Image]:
-    """The pin's own photos, for the create-wiki dialog's per-photo picker."""
-    return list(pin.images.all())
+    """The pin's most recent photos, for the create-wiki dialog's per-photo picker.
+
+    Capped, and ordered so the cap is stable: a LIMIT over an unordered
+    queryset may return a different slice per call, which would make which
+    photos are offerable depend on the query plan.
+
+    The cap is a display bound only. ``WikiShareService`` re-scopes whatever
+    ids come back on the POST through ``pin.images``, so a photo below the cap
+    is not thereby made unshareable by a crafted submission - and is not made
+    shareable by one either.
+
+    Args:
+        pin: The pin whose photos may seed the new wiki.
+
+    Returns:
+        At most ``SEEDABLE_PHOTO_LIMIT`` photos, newest first.
+    """
+    return list(pin.images.order_by("-created")[:SEEDABLE_PHOTO_LIMIT])

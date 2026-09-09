@@ -185,3 +185,42 @@ class PinVisitNotesHtmlTests(TestCase):
         visit = PinVisit(notes="<script>alert(1)</script>ok")
 
         self.assertNotIn("<script>", visit.notes_html)
+
+
+class VisitCreatePostTests(TestCase):
+    """POST /map/pin/<slug>/visits/ - creating a manual visit entry."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
+        self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
+        self.client.force_login(self.user)
+
+    def test_a_future_date_is_rejected_with_a_clean_400(self):
+        """VisitInFutureError must not reach the client as an unhandled 500.
+
+        `create_manual_visit` raises it when the given date is more than
+        `MAX_VISIT_CLOCK_SKEW` (5 minutes) ahead of now - this view's POST
+        handler had no except clause for it at all.
+        """
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        # +2 days, not +1: visited_date alone parses to that date's 00:00 UTC
+        # (see _parse_visited_at), so a bare +1 day could land under the 5-minute
+        # skew allowance depending what time "now" is when this test runs.
+        future_date = (timezone.now() + timedelta(days=2)).strftime("%Y-%m-%d")
+
+        response = self.client.post(reverse("pin.visits", args=[self.pin.slug]), {"visited_date": future_date})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(PinVisit.objects.filter(pin=self.pin).exists())
+
+    def test_a_past_date_still_creates_the_visit(self):
+        """Anti-vacuity: the fix must not reject ordinary, valid submissions."""
+        response = self.client.post(reverse("pin.visits", args=[self.pin.slug]), {"visited_date": "2024-06-15"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(PinVisit.objects.filter(pin=self.pin).exists())

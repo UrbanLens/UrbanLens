@@ -15,7 +15,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import MultiPolygonField
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, ForeignKey, Index, IntegerField, JSONField, TextField
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, ForeignKey, IntegerField, JSONField, TextField
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract

@@ -50,7 +50,8 @@ class PinLinkExtractionView(LoginRequiredMixin, View):
         try:
             start_link_extraction(request.user, profile, pin, request.POST.get("url", ""))
         except LinkExtractionError as exc:
-            return _toast(str(exc), "warning", status=403)
+            logger.info("link extraction rejected for pin %s: %s", pin.slug, exc)
+            return _toast("Couldn't start reading that link right now.", "warning", status=403)
         remaining = extractions_remaining_today(profile)
         return _toast(f"Reading that page in the background - you'll get a notification when it's done. ({remaining} run(s) left today.)", "success")
 

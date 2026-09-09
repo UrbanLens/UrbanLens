@@ -23,7 +23,7 @@ from django.views import View
 from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.pins.pin_merge import MergeFieldConflict, PinMergeCollisionError, UnresolvedMergeConflictError, plan_merge_conflicts
+from urbanlens.dashboard.services.pins.pin_merge import PinMergeCollisionError, UnresolvedMergeConflictError, plan_merge_conflicts, plan_merge_conflicts_bulk
 from urbanlens.dashboard.services.pins.pin_merge_suggestions import accept_pin_merge_suggestion, reject_pin_merge_suggestion
 
 if TYPE_CHECKING:
@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 
     from django.db.models import QuerySet
     from django.http import HttpRequest
+
+    from urbanlens.dashboard.models.pin.model import Pin
 
 logger = logging.getLogger(__name__)
 
@@ -83,14 +85,18 @@ def merge_suggestion_cards(suggestions: Iterable[PinMergeSuggestion]) -> list[di
     Returns:
         List of ``{"suggestion": ..., "conflicts": [...]}`` dicts.
     """
-    return [{"suggestion": suggestion, "conflicts": _conflicts_for(suggestion)} for suggestion in suggestions]
+    # Keyed off the pair rather than the suggestion's own FK columns, which are
+    # nullable: `_pair` is what establishes both pins are still there.
+    rows = [(suggestion, _pair(suggestion)) for suggestion in suggestions]
+    conflicts = plan_merge_conflicts_bulk([pair for _, pair in rows])
+    return [{"suggestion": suggestion, "conflicts": conflicts[(pin_a.pk, pin_b.pk)]} for suggestion, (pin_a, pin_b) in rows]
 
 
-def _conflicts_for(suggestion: PinMergeSuggestion) -> list[MergeFieldConflict]:
-    """plan_merge_conflicts for a suggestion's two pins - both must still be set (i.e. still pending)."""
+def _pair(suggestion: PinMergeSuggestion) -> tuple[Pin, Pin]:
+    """A suggestion's two pins - both must still be set (i.e. still pending)."""
     if suggestion.pin_a is None or suggestion.pin_b is None:
         raise ValueError(f"PinMergeSuggestion {suggestion.pk} is missing one of its pins")
-    return plan_merge_conflicts(suggestion.pin_a, suggestion.pin_b)
+    return suggestion.pin_a, suggestion.pin_b
 
 
 def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False, view_pin_url: str | None = None) -> HttpResponse:
@@ -169,7 +175,9 @@ class PinMergeSuggestionActionView(LoginRequiredMixin, View):
         raw_survivor = request.POST.get("survivor_pk", "")
         survivor_pk = int(raw_survivor) if raw_survivor.isdigit() else None
 
-        conflicts = _conflicts_for(suggestion)
+        # Not the bulk helper: this one is about to merge, so it must read the
+        # pins' current state rather than a batch fetched for rendering.
+        conflicts = plan_merge_conflicts(*_pair(suggestion))
         resolutions: dict[str, int] = {}
         for conflict in conflicts:
             raw_resolution = request.POST.get(f"resolution__{conflict.key}", "")
@@ -189,8 +197,9 @@ class PinMergeSuggestionActionView(LoginRequiredMixin, View):
         except PinMergeCollisionError as exc:
             # Refused rather than "went wrong": the user can act on this one by
             # moving the blocking top-level pin first.
+            logger.info("Merge suggestion %s: merge refused by collision: %s", suggestion.pk, exc)
             response = render(request, _CARD_PARTIAL, {"suggestion": suggestion, "conflicts": conflicts})
-            response["HX-Trigger"] = json.dumps({"showToast": {"message": exc.safe_message, "level": "error"}})
+            response["HX-Trigger"] = json.dumps({"showToast": {"message": "Another pin is already in the spot this merge needs to move a pin to. Move that pin first, then try again.", "level": "error"}})
             return response
         except ValueError:
             response = render(request, _CARD_PARTIAL, {"suggestion": suggestion, "conflicts": conflicts})

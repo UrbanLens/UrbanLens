@@ -44,6 +44,7 @@ survivor when the survivor has none of its own.
 
 from __future__ import annotations
 
+import collections
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
@@ -51,7 +52,6 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.album.model import Album
-from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.auto_removals.model import PinAutoRemoval
 from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.comments.model import Comment
@@ -74,6 +74,8 @@ from urbanlens.dashboard.models.trips.model import TripActivity
 from urbanlens.dashboard.models.visits.model import PinVisit
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from django.db.models import Model
 
     from urbanlens.dashboard.models.article.model import Article
@@ -104,29 +106,28 @@ class UnresolvedMergeConflictError(ValueError):
 class PinMergeCollisionError(ValueError):
     """Raised when a merge cannot proceed without destroying data.
 
-    Two situations produce this, both because leaving a pin parented to
-    ``loser`` would let ``Pin.parent_pin``'s CASCADE take it - and anything
-    nested beneath it, survivor included - out with ``loser.delete()``:
+    Both subclasses below exist because leaving a pin parented to ``loser``
+    would let ``Pin.parent_pin``'s CASCADE take it - and anything nested
+    beneath it, survivor included - out with ``loser.delete()``.
 
-    - A child pin has to be detached to top level (because re-parenting it
-      under the survivor would close a loop), but another top-level pin
-      already occupies its location.
-    - The survivor is itself one of loser's direct children and has to move
-      to loser's own parent, but another top-level pin already occupies the
-      survivor's location (only possible when that parent is None, i.e. the
-      survivor would become a new top-level pin).
-
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below (or this base class as a fallback)
+    and author its own user-facing text, rather than relaying ``message`` -
+    that keeps a future raise site here from being able to smuggle unreviewed
+    text into a response just by adding a new ``raise``.
     """
 
-    def __init__(self, message: str) -> None:
-        """Store the caller-safe message.
 
-        Args:
-            message: Explanation of which pin blocked the merge.
-        """
-        self.safe_message = message
-        super().__init__(message)
+class SurvivorRelocationCollisionError(PinMergeCollisionError):
+    """The survivor is one of loser's direct children and must move to loser's own parent - avoiding being deleted with it - but another top-level pin already occupies that location.
+
+    Only possible when loser's parent is None, i.e. the survivor would become
+    a new top-level pin.
+    """
+
+
+class ChildDetachCollisionError(PinMergeCollisionError):
+    """A child of loser has to be detached to top level - re-parenting it under the survivor would close a loop - but another top-level pin already occupies its location."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,20 +156,76 @@ def _get_floorplan_marker(pin: Pin) -> FloorplanMarker | None:
     return getattr(pin, "floorplan_marker", None)
 
 
-def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
-    """Every field where pin_a and pin_b both hold real, possibly-divergent data.
+@dataclass(frozen=True, slots=True)
+class _PinConflictData:
+    """The three relations a merge can collide on, for one pin."""
+
+    article: Article | None
+    boundaries: dict[str, Boundary]
+    values: dict[int, CustomFieldValue]
+
+
+#: What an unsaved pin has: none of the three relations, so nothing to collide
+#: with. Read-only, and never mutated by the comparison below.
+_NOTHING = _PinConflictData(article=None, boundaries={}, values={})
+
+
+def _conflict_data(pins: Sequence[Pin]) -> dict[int, _PinConflictData]:
+    """Everything :func:`plan_merge_conflicts` compares, for many pins at once.
+
+    Three queries whatever the number of pins. The dict-per-pin collapse is
+    safe because both relations are unique per key - ``boundary_unique_pin``
+    over ``(pin, boundary_type)`` and ``db_cfv_unique_pin`` over
+    ``(field, pin)`` - which is the assumption the comparison already made.
+
+    Args:
+        pins: The pins to fetch for. Duplicates collapse; an unsaved pin gets
+            no entry, which :func:`_conflicts_between` reads as ``_NOTHING``.
+
+    Returns:
+        One entry per distinct saved pin id.
+    """
+    from urbanlens.dashboard.models.article.model import Article as ArticleModel
+
+    pin_ids = {pin.pk for pin in pins if pin.pk is not None}
+    if not pin_ids:
+        return {}
+
+    articles = {article.pin_id: article for article in ArticleModel.objects.filter(pin_id__in=pin_ids)}
+    boundaries: collections.defaultdict[int, dict[str, Boundary]] = collections.defaultdict(dict)
+    # Only the type and the timestamp are compared, and a Boundary carries two
+    # geometry columns - fetching 500 candidates' polygons to read a date is
+    # the difference between a small query and a multi-megabyte one. Safe only
+    # while nothing below reads a deferred column; a summary that wanted the
+    # geometry would load it per row and put the fan-out back.
+    for boundary in Boundary.objects.filter(pin_id__in=pin_ids).only("pin", "boundary_type", "updated"):
+        boundaries[boundary.pin_id][boundary.boundary_type] = boundary
+    values: collections.defaultdict[int, dict[int, CustomFieldValue]] = collections.defaultdict(dict)
+    for value in CustomFieldValue.objects.filter(pin_id__in=pin_ids).select_related("field"):
+        values[value.pin_id][value.field_id] = value
+
+    return {pin_id: _PinConflictData(articles.get(pin_id), boundaries[pin_id], values[pin_id]) for pin_id in pin_ids}
+
+
+def _conflicts_between(pin_a: Pin, pin_b: Pin, data: dict[int, _PinConflictData]) -> list[MergeFieldConflict]:
+    """The comparison half of :func:`plan_merge_conflicts`, over fetched data.
 
     Args:
         pin_a: One pin under consideration.
         pin_b: The other pin under consideration.
+        data: Output of :func:`_conflict_data` covering both pins.
 
     Returns:
-        Conflicts the accepting user must resolve before ``merge_pins`` will
-        merge these two pins - empty when nothing needs a decision.
+        The conflicts between them.
     """
     conflicts: list[MergeFieldConflict] = []
+    # An unsaved pin has no entry, and correctly has no conflicts: it can hold
+    # none of the three relations. Django refuses it before that anyway - a
+    # related filter on an unsaved instance raises - so this is about answering
+    # rather than crashing, not about permitting something new.
+    side_a, side_b = data.get(pin_a.pk, _NOTHING), data.get(pin_b.pk, _NOTHING)
 
-    article_a, article_b = _get_article(pin_a), _get_article(pin_b)
+    article_a, article_b = side_a.article, side_b.article
     if article_a is not None and article_b is not None:
         conflicts.append(
             MergeFieldConflict(
@@ -179,22 +236,18 @@ def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
             ),
         )
 
-    boundaries_a = {boundary.boundary_type: boundary for boundary in Boundary.objects.filter(pin=pin_a)}
-    boundaries_b = {boundary.boundary_type: boundary for boundary in Boundary.objects.filter(pin=pin_b)}
-    for boundary_type in sorted(set(boundaries_a) & set(boundaries_b)):
+    for boundary_type in sorted(set(side_a.boundaries) & set(side_b.boundaries)):
         conflicts.append(
             MergeFieldConflict(
                 key=f"boundary:{boundary_type}",
                 label=f"Both pins have a {boundary_type} boundary",
-                pin_a_summary=f"Updated {boundaries_a[boundary_type].updated.date().isoformat()}",
-                pin_b_summary=f"Updated {boundaries_b[boundary_type].updated.date().isoformat()}",
+                pin_a_summary=f"Updated {side_a.boundaries[boundary_type].updated.date().isoformat()}",
+                pin_b_summary=f"Updated {side_b.boundaries[boundary_type].updated.date().isoformat()}",
             ),
         )
 
-    values_a = {value.field_id: value for value in CustomFieldValue.objects.filter(pin=pin_a).select_related("field")}
-    values_b = {value.field_id: value for value in CustomFieldValue.objects.filter(pin=pin_b).select_related("field")}
-    for field_id in sorted(set(values_a) & set(values_b)):
-        value_a, value_b = values_a[field_id], values_b[field_id]
+    for field_id in sorted(set(side_a.values) & set(side_b.values)):
+        value_a, value_b = side_a.values[field_id], side_b.values[field_id]
         conflicts.append(
             MergeFieldConflict(
                 key=f"custom_field:{field_id}",
@@ -205,6 +258,43 @@ def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
         )
 
     return conflicts
+
+
+def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
+    """Every field where pin_a and pin_b both hold real, possibly-divergent data.
+
+    Reads at call time and holds nothing between calls. ``merge_pins`` depends
+    on that: a conflict it does not see is not a warning it skips but a row it
+    silently deletes, and the apply loop mutates exactly these three relations
+    between one candidate and the next.
+
+    Args:
+        pin_a: One pin under consideration.
+        pin_b: The other pin under consideration.
+
+    Returns:
+        Conflicts the accepting user must resolve before ``merge_pins`` will
+        merge these two pins - empty when nothing needs a decision.
+    """
+    return _conflicts_between(pin_a, pin_b, _conflict_data([pin_a, pin_b]))
+
+
+def plan_merge_conflicts_bulk(pairs: Sequence[tuple[Pin, Pin]]) -> dict[tuple[int, int], list[MergeFieldConflict]]:
+    """Conflicts for many pairs, in three queries for the whole batch.
+
+    For a page that renders conflicts it is not about to act on. A caller that
+    then *merges* must re-plan per pair with :func:`plan_merge_conflicts`,
+    because each merge changes what the next one collides with.
+
+    Args:
+        pairs: ``(pin_a, pin_b)`` pairs, in any order.
+
+    Returns:
+        Conflicts keyed by ``(pin_a.pk, pin_b.pk)``. The key is ordered, so a
+        mirrored pair keeps its own summaries rather than overwriting them.
+    """
+    data = _conflict_data([pin for pair in pairs for pin in pair])
+    return {(pin_a.pk, pin_b.pk): _conflicts_between(pin_a, pin_b, data) for pin_a, pin_b in pairs}
 
 
 def _save_within_savepoint(instance: Model, update_fields: list[str]) -> bool:
@@ -252,8 +342,8 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
         if child.pk == survivor.pk:
             survivor.parent_pin = loser.parent_pin
             if not _save_within_savepoint(survivor, ["parent_pin", "updated"]):
-                raise PinMergeCollisionError(
-                    f"Cannot merge: survivor pin {survivor.pk} has to move to the loser's own parent to avoid being deleted with it, but another top-level pin already occupies its location.",
+                raise SurvivorRelocationCollisionError(
+                    f"Pin merge blocked: survivor pin {survivor.pk} is loser pin {loser.pk}'s direct child and must relocate to loser.parent_pin_id={loser.parent_pin_id} to avoid CASCADE deletion, but a top-level pin already occupies that location.",
                 )
             continue
         if child.would_create_cycle(survivor):
@@ -264,8 +354,8 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
                 # Pin.parent_pin CASCADEs - so this child, and the survivor
                 # somewhere beneath it, would both be destroyed by the delete
                 # this detach exists to prevent. Refuse the merge instead.
-                raise PinMergeCollisionError(
-                    f"Cannot merge: child pin {child.pk} has to be detached to top level to avoid a loop, but another top-level pin already occupies its location.",
+                raise ChildDetachCollisionError(
+                    f"Pin merge blocked: child pin {child.pk} of loser pin {loser.pk} must detach to top level (survivor pin {survivor.pk} sits beneath it) to avoid a cycle, but a top-level pin already occupies its location.",
                 )
             continue
         child.parent_pin = survivor

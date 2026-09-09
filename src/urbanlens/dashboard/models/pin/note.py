@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, ForeignKey, Index, TextField
+from django.db.models import CASCADE, ForeignKey, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_NOTE_LENGTH

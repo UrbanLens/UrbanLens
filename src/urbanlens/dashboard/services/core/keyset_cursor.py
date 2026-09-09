@@ -26,17 +26,11 @@ from django.utils import timezone
 class InvalidCursorError(ValueError):
     """The supplied cursor is malformed or was never issued by this service.
 
-    ``safe_message`` is safe to surface to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should author its own user-facing text rather than relaying it - that
+    keeps a future raise site here from being able to smuggle unreviewed text
+    into a response just by adding a new ``raise``.
     """
-
-    def __init__(self, message: str = "Invalid cursor.") -> None:
-        """Initialize with a caller-safe message.
-
-        Args:
-            message: Human-readable detail to surface.
-        """
-        self.safe_message = message
-        super().__init__(message)
 
 
 def encode_cursor(stamp: datetime, pk: int) -> str:
@@ -74,7 +68,7 @@ def decode_cursor(cursor: str) -> tuple[datetime, int]:
         stamp = datetime.fromisoformat(stamp_raw)
         pk = int(pk_raw)
     except (ValueError, binascii.Error, UnicodeDecodeError) as exc:
-        raise InvalidCursorError from exc
+        raise InvalidCursorError(f"cursor {cursor!r} failed to decode: {exc}") from exc
     if timezone.is_naive(stamp):
-        raise InvalidCursorError
+        raise InvalidCursorError(f"cursor {cursor!r} decoded to a naive timestamp {stamp!r}; every stored timestamp is timezone-aware")
     return stamp, pk

@@ -4827,6 +4827,89 @@
         if (input) input.value = colorHex;
     }
 
+    // The icon catalogue is fetched on first open rather than rendered into
+    // every picker - one grid is 594 KB of markup (P68). This mirrors
+    // frontend/ts/shared/icon-picker.ts; the copy exists because this page
+    // defines its own IconPicker with add-pin-specific behaviour in pick()
+    // and _handleUpload(), so it cannot import the shared one.
+    var _iconGridRequest = null;
+
+    function _parseIconCatalogue(html) {
+        var holder = document.createElement('template');
+        holder.innerHTML = html;
+        var tabs = holder.content.querySelector('[data-icon-picker-tabs]');
+        var items = holder.content.querySelector('[data-icon-picker-items]');
+        return { tabs: tabs ? tabs.innerHTML : '', items: items ? items.innerHTML : '' };
+    }
+
+    function _loadIconCatalogue(url) {
+        if (!_iconGridRequest) {
+            _iconGridRequest = fetch(url, { credentials: 'same-origin' })
+                .then(function(response) {
+                    if (!response.ok) throw new Error('icon grid: HTTP ' + response.status);
+                    return response.text();
+                })
+                .then(_parseIconCatalogue)
+                .catch(function(error) {
+                    // Dropped so the next open retries, rather than leaving the
+                    // picker reading "Loading icons..." until a page reload.
+                    _iconGridRequest = null;
+                    throw error;
+                });
+        }
+        return _iconGridRequest;
+    }
+
+    function _iconGridStatus(grid) {
+        var node = grid.querySelector('.icon-picker-status');
+        if (!node) {
+            node = document.createElement('div');
+            node.className = 'icon-picker-status';
+            grid.appendChild(node);
+        }
+        return node;
+    }
+
+    function _fillIconGrid(id) {
+        var grid = document.getElementById('icon-grid-' + id);
+        if (!grid || grid.dataset.iconsLoaded === '1' || !grid.dataset.gridUrl) return Promise.resolve();
+        var status = _iconGridStatus(grid);
+        status.textContent = 'Loading icons...';
+        return _loadIconCatalogue(grid.dataset.gridUrl).then(function(catalogue) {
+            // Re-checked: two opens can await the same promise, and the second
+            // must not append a second copy of the catalogue.
+            if (grid.dataset.iconsLoaded === '1') return;
+            grid.insertAdjacentHTML('beforeend', catalogue.items);
+            var tabs = document.getElementById('icon-tabs-' + id);
+            if (tabs) tabs.insertAdjacentHTML('beforeend', catalogue.tabs);
+            grid.dataset.iconsLoaded = '1';
+            status.remove();
+            var input = document.getElementById('icon-value-' + id);
+            var current = input ? input.value : '';
+            if (current) {
+                grid.querySelectorAll('.icon-picker-item').forEach(function(item) {
+                    item.classList.toggle('selected', item.dataset.icon === current);
+                });
+            }
+        }).catch(function() {
+            status.textContent = 'Icons could not be loaded. Close and reopen to try again.';
+        });
+    }
+
+    // Re-applies whatever filter is showing, for items that arrived after it was
+    // set. Mirrors reapplyFilter in frontend/ts/shared/icon-picker.ts.
+    function _reapplyIconFilter(id) {
+        var panel = document.getElementById('icon-panel-' + id);
+        var search = panel ? panel.querySelector('.icon-picker-search-input') : null;
+        var query = search ? search.value.trim() : '';
+        if (query) {
+            IconPicker.search(id, query);
+            return;
+        }
+        var activeTab = panel ? panel.querySelector('.icon-tab.active') : null;
+        IconPicker.setTabSilent(id, activeTab ? (activeTab.dataset.cat || '') : '');
+    }
+
     var IconPicker = {
         toggle: function(id) {
             var panel = document.getElementById('icon-panel-' + id);
@@ -4838,6 +4921,12 @@
                 var search = panel.querySelector('.icon-picker-search-input');
                 if (search) { search.value = ''; search.focus(); IconPicker.search(id, ''); }
                 IconPicker.setTabSilent(id, '');
+                // Revealed first, filled second, so the fetch shows as a loading
+                // row inside an open panel rather than as a click that does nothing.
+                // The chrome is live while the icons are still arriving, so
+                // whatever the user typed or clicked meanwhile is re-applied to
+                // them rather than reset - _reapplyIconFilter, not setTabSilent.
+                _fillIconGrid(id).then(function() { _reapplyIconFilter(id); });
             }
         },
         setTabSilent: function(id, cat) {

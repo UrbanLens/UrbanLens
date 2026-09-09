@@ -28,10 +28,9 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     CalendarNotConfiguredError,
     build_authorization_url,
     exchange_code_for_tokens,
-    extract_email_from_id_token,
     revoke_token,
 )
-from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
+from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError, extract_email_from_id_token
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.trips.calendar_sync import (
     build_import_preview,
@@ -53,6 +52,21 @@ _ALLOWED_NEXT_VIEW_NAMES = {"trips.list", "settings.view"}
 def _resolve_next_view_name(name: str | None) -> str:
     """Return `name` if it's an allowed post-connect redirect target, else the default."""
     return name if name in _ALLOWED_NEXT_VIEW_NAMES else "trips.list"
+
+
+def _next_url(next_name: str) -> str:
+    """The actual redirect target for an already-resolved next-view name.
+
+    ``settings.view`` specifically returns to its Connections tab (matching
+    every other integration's connect/callback flow - see flickr.py,
+    google_photos.py) rather than the bare settings URL, which would
+    silently leave the default Privacy tab active: settings/index.html's
+    ``activateFromHash()`` only switches tabs when the URL carries a
+    ``#...`` fragment.
+    """
+    if next_name == "settings.view":
+        return f"{reverse('settings.view')}#google-calendar-settings-section"
+    return reverse(next_name)
 
 
 def _callback_uri(request: HttpRequest) -> str:
@@ -125,7 +139,7 @@ class GoogleCalendarConnectView(LoginRequiredMixin, View):
             url = build_authorization_url(_callback_uri(request), state)
         except CalendarNotConfiguredError:
             messages.error(request, "Google Calendar integration is not configured on this server.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
         return redirect(url)
 
 
@@ -147,19 +161,19 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
 
         if request.GET.get("error"):
             messages.error(request, "Google Calendar access was not granted.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
 
         code = request.GET.get("code") or ""
         if payload.get("pid") != profile.id or not code:
             messages.error(request, "The calendar connection request was invalid or expired. Please try again.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
 
         try:
             tokens = exchange_code_for_tokens(code, _callback_uri(request))
         except (CalendarNotConfiguredError, GatewayRequestError):
             logger.exception("Google Calendar token exchange failed for profile %s", profile.id)
             messages.error(request, "Connecting to Google Calendar failed. Please try again.")
-            return redirect(next_name)
+            return redirect(_next_url(next_name))
 
         expires_in = int(tokens.get("expires_in") or 3600)
         account, _created = GoogleCalendarAccount.objects.update_or_create(
@@ -178,7 +192,7 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
             account.save(update_fields=["refresh_token", "updated"])
 
         messages.success(request, "Google Calendar connected. You can now import events and export trips.")
-        return redirect(next_name)
+        return redirect(_next_url(next_name))
 
 
 class GoogleCalendarDisconnectView(LoginRequiredMixin, View):
@@ -395,7 +409,8 @@ class TripCalendarExportView(LoginRequiredMixin, View):
         try:
             link, activity_count = export_trip_to_calendar(account, trip, trip_url=trip_url)
         except ValueError as exc:
-            return self._render_button(request, trip, profile, toast=("warning", str(exc)))
+            logger.info("calendar export rejected for trip %s: %s", trip.pk, exc)
+            return self._render_button(request, trip, profile, toast=("warning", "That trip couldn't be exported to your calendar."))
         except GoogleAuthExpiredError:
             _drop_expired_account(account)
             return self._render_button(request, trip, profile, toast=("warning", _RECONNECT_MESSAGE))

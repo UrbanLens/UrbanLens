@@ -33,12 +33,12 @@ import sys
 
 #: Files deliberately in no project, and why. Each is still a gap - this is a
 #: record of a decision, not an approval.
-_UNCOVERED = {
-    "src/urbanlens/dashboard/frontend/browser/floorplan-editor.test.ts": (
-        "bun-types is pinned at 1.1.6 against Bun 1.3.14, and its `expect` predates the second message argument these tests pass - 81 spurious TS2554s. Adding them to the root project needs the dependency bumped first."
-    ),
-    "src/urbanlens/dashboard/frontend/browser/harness-parity.test.ts": ("Same bun-types pin as its sibling above; kept together so both land in one pass."),
-}
+#:
+#: Empty as of 2026-09-06: the two browser test files that lived here were
+#: excluded only because `bun-types` was pinned at 1.1.6, whose `expect` predates
+#: the second message argument they pass. With the pin bumped they typecheck, so
+#: they are in the root project now (see P73).
+_UNCOVERED: dict[str, str] = {}
 
 #: What TypeScript excludes when a config says nothing. `outDir` is not among
 #: these because no config here sets one; a config that does needs it added.

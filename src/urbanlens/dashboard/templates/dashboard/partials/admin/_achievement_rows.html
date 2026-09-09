@@ -127,14 +127,18 @@ Context: achievements (annotated with earned_count), stats, metric_groups,
                     </label>
                     <div class="ul-field ul-field--wide">
                         <span>Colour</span>
-                        <div class="color-picker" id="achv-color-{{ picker_id }}">
+                        {% comment %}The ids live on the container, not repeated into every
+                        swatch's handler: that handler was 297 bytes x 21 colours on every row
+                        (P68). pickAchievementColor reads them back out - see
+                        entries/achievements.ts.{% endcomment %}
+                        <div class="color-picker" id="achv-color-{{ picker_id }}"
+                             data-color-value-id="achv-color-value-{{ picker_id }}"
+                             data-color-medal-id="achv-medal-{{ picker_id }}">
                             <input type="hidden" name="color" id="achv-color-value-{{ picker_id }}" value="{{ achievement.color|default:default_color }}">
                             {% for hex, color_name in color_choices %}
-                            <button type="button"
-                                    class="color-swatch {% if achievement.color == hex %}selected{% endif %}"
+                            <button type="button" class="color-swatch {% if achievement.color == hex %}selected{% endif %}"
                                     data-color="{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};"
-                                    onclick="pickColor('achv-color-{{ picker_id }}','achv-color-value-{{ picker_id }}','{{ hex }}',this); document.getElementById('achv-medal-{{ picker_id }}').style.setProperty('--achievement-color','{{ hex }}')">
-                            </button>
+                                    onclick="pickAchievementColor(this)"></button>
                             {% endfor %}
                         </div>
                     </div>
@@ -217,14 +221,14 @@ Context: achievements (annotated with earned_count), stats, metric_groups,
                 </label>
                 <div class="ul-field ul-field--wide">
                     <span>Colour</span>
-                    <div class="color-picker" id="achv-color-achv-new">
+                    <div class="color-picker" id="achv-color-achv-new"
+                         data-color-value-id="achv-color-value-achv-new"
+                         data-color-medal-id="achv-medal-achv-new">
                         <input type="hidden" name="color" id="achv-color-value-achv-new" value="{{ default_color }}">
                         {% for hex, color_name in color_choices %}
-                        <button type="button"
-                                class="color-swatch {% if default_color == hex %}selected{% endif %}"
+                        <button type="button" class="color-swatch {% if default_color == hex %}selected{% endif %}"
                                 data-color="{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};"
-                                onclick="pickColor('achv-color-achv-new','achv-color-value-achv-new','{{ hex }}',this); document.getElementById('achv-medal-achv-new').style.setProperty('--achievement-color','{{ hex }}')">
-                        </button>
+                                onclick="pickAchievementColor(this)"></button>
                         {% endfor %}
                     </div>
                 </div>

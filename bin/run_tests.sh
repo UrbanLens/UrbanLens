@@ -30,6 +30,7 @@
 #   bin/run_tests.sh --force --fresh-db ...     # rebuild even if something is connected
 #   bin/run_tests.sh --parallel[=N] [args...]   # N xdist workers (default: auto)
 #   bin/run_tests.sh --shuffle [pytest args...] # randomise test order
+#   bin/run_tests.sh --no-venv-fix ...          # do not install missing dev deps
 #
 # --fast is worth knowing about. A unique database per run is what keeps
 # parallel sessions from colliding, but building one costs about three minutes,
@@ -77,6 +78,7 @@
 set -euo pipefail
 
 CONTAINER="${UL_TEST_CONTAINER:-urbanlens_development_main_test_runner}"
+VENV_FIX=1
 SYNC=1
 VERIFY_ONLY=0
 FAST=0
@@ -107,6 +109,7 @@ for arg in "$@"; do
         --parallel) PARALLEL="auto" ;;
         --parallel=*) PARALLEL="${arg#*=}" ;;
         --shuffle) SHUFFLE=1 ;;
+        --no-venv-fix) VENV_FIX=0 ;;
         *) args+=("$arg") ;;
     esac
 done
@@ -166,9 +169,11 @@ verify_venv() {
     # reads as a broken import in the branch rather than as a stale container.
     # django-perf-rec cost a whole pre-merge run that way on 2026-08-31.
     #
-    # Checked by distribution name against pyproject's dev group, which is what
-    # `uv sync` installs. Cheap: one interpreter start, no imports of the
-    # packages themselves.
+    # Checked by distribution name against everything `uv sync` installs -
+    # `project.dependencies` as well as the dev group. Reading only the dev
+    # group missed django-storages, added to the main list on 2026-09-05, and
+    # every object-storage test failed at collection for a fortnight instead.
+    # Cheap: one interpreter start, no imports of the packages themselves.
     local missing
     # -i, or the heredoc never reaches the interpreter and this reports nothing.
     missing=$(docker exec -i "$CONTAINER" /app/.venv/bin/python - <<'PY' 2>/dev/null
@@ -177,9 +182,12 @@ import tomllib
 from importlib.metadata import PackageNotFoundError, version
 
 with open("/app/pyproject.toml", "rb") as handle:
-    groups = tomllib.load(handle).get("dependency-groups", {})
+    config = tomllib.load(handle)
 
-for spec in groups.get("dev", []):
+specs = list(config.get("project", {}).get("dependencies", []))
+specs += config.get("dependency-groups", {}).get("dev", [])
+
+for spec in specs:
     name = re.split(r"[<>=!~\[; ]", spec, maxsplit=1)[0].strip()
     if not name:
         continue
@@ -189,10 +197,52 @@ for spec in groups.get("dev", []):
         print(name)
 PY
 )
-    if [ -n "$missing" ]; then
-        echo "warning: the container's venv predates these dev dependencies:" >&2
-        echo "$missing" | sed 's|^|      |' >&2
-        echo "    A test importing one fails at collection, naming the module rather than the cause." >&2
+    [ -n "$missing" ] || return 0
+
+    echo "==> the container's venv predates these dependencies:" >&2
+    echo "$missing" | sed 's|^|      |' >&2
+
+    if [ "$VENV_FIX" -eq 0 ]; then
+        echo "    --no-venv-fix: a test importing one will fail at collection, naming the module" >&2
+        echo "    rather than the cause. Rebuild: docker compose --profile test up -d --build test-runner" >&2
+        return 0
+    fi
+
+    # Installing them beats warning about them. The rebuild this used to
+    # recommend is an operator action on a container other sessions may be
+    # using, so it kept not happening: django-perf-rec was still missing three
+    # days after it was first reported, and pytest-xdist and pytest-randomly
+    # back this script's own --parallel and --shuffle, which were therefore
+    # advertised and broken for as long as they had existed. What goes in is
+    # exactly what pyproject's dev group declares, constraints included, so this
+    # brings the container to its own stated dependencies rather than to
+    # whatever is newest. uv ships inside the venv, so no host tooling is needed.
+    echo "==> installing them from pyproject (--no-venv-fix to skip)" >&2
+    local specs
+    specs=$(docker exec -i "$CONTAINER" /app/.venv/bin/python - "$missing" <<'SPECS' 2>/dev/null
+import re
+import sys
+import tomllib
+
+wanted = set(sys.argv[1].split())
+with open("/app/pyproject.toml", "rb") as handle:
+    config = tomllib.load(handle)
+
+specs = list(config.get("project", {}).get("dependencies", []))
+specs += config.get("dependency-groups", {}).get("dev", [])
+for spec in specs:
+    if re.split(r"[<>=!~\[; ]", spec, maxsplit=1)[0].strip() in wanted:
+        print(spec)
+SPECS
+)
+    if [ -z "$specs" ]; then
+        echo "    could not resolve their specs from pyproject.toml; skipping" >&2
+        return 0
+    fi
+    # shellcheck disable=SC2086
+    if ! docker exec -e VIRTUAL_ENV=/app/.venv "$CONTAINER" /app/.venv/bin/uv pip install --quiet $specs >&2; then
+        echo "    install failed - the run continues, and a test importing one of these will fail" >&2
+        echo "    at collection naming the module rather than the cause." >&2
         echo "    Rebuild: docker compose --profile test up -d --build test-runner" >&2
     fi
 }
@@ -203,8 +253,6 @@ if [ "$ALLOW_DRIFT" -eq 1 ]; then
 else
     verify_parity
 fi
-# A warning, not an error: most runs touch none of the missing packages, and
-# refusing to run would be worse than a confusing failure in the few that do.
 verify_venv
 verify_frontend_build
 [ "$VERIFY_ONLY" -eq 1 ] && exit 0

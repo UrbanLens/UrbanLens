@@ -18,7 +18,6 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, MediaKind
-from urbanlens.dashboard.models.profile.model import Profile
 
 
 class ImageQuerySetMediaSplitTests(TestCase):
@@ -35,6 +34,27 @@ class ImageQuerySetMediaSplitTests(TestCase):
         baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO)
         document = baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT)
         self.assertEqual(list(Image.objects.filter(profile=self.profile).documents()), [document])
+
+    def test_videos_excludes_photos_and_documents(self) -> None:
+        baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO)
+        baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT)
+        video = baker.make(Image, profile=self.profile, media_type=MediaKind.VIDEO)
+        self.assertEqual(list(Image.objects.filter(profile=self.profile).videos()), [video])
+
+    def test_the_three_kind_filters_partition_the_library(self) -> None:
+        """Every row in exactly one of them - which is what makes counting two of
+        three a silent undercount rather than a visible error."""
+        for kind in (MediaKind.PHOTO, MediaKind.DOCUMENT, MediaKind.VIDEO):
+            baker.make(Image, profile=self.profile, media_type=kind, _quantity=2)
+        gallery = Image.objects.filter(profile=self.profile)
+        photos = set(gallery.photos().values_list("pk", flat=True))
+        documents = set(gallery.documents().values_list("pk", flat=True))
+        videos = set(gallery.videos().values_list("pk", flat=True))
+
+        self.assertEqual(photos | documents | videos, set(gallery.values_list("pk", flat=True)))
+        self.assertEqual(photos & documents, set())
+        self.assertEqual(photos & videos, set())
+        self.assertEqual(documents & videos, set())
 
     def test_photos_and_documents_both_exclude_video(self) -> None:
         # Neither is "not the other kind" - each must positively match its own
@@ -206,7 +226,7 @@ class DocumentUploadViewTests(TestCase):
         with patch("urbanlens.dashboard.models.subscriptions.user_has_feature", return_value=False):
             response = self._upload()
         self.assertEqual(response.status_code, HTTPStatus.FORBIDDEN)
-        self.assertEqual(response.json()["error"], "Document uploads are not enabled for your account.")
+        self.assertEqual(response.json()["error"], "That upload type isn't enabled for your account.")
 
     @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_uploaded_document_does_not_appear_on_vault_photos(self, _mock_enqueue) -> None:

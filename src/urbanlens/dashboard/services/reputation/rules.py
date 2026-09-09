@@ -142,6 +142,22 @@ TARGET_MODEL_PATHS: dict[str, str] = {
 }
 
 
+def target_kind_for(instance: Any) -> str | None:
+    """Which :class:`TargetKind` an object is, inverting :data:`TARGET_MODEL_PATHS`.
+
+    Args:
+        instance: A model instance a rule might be about.
+
+    Returns:
+        The matching target kind, or None when no rule targets this model.
+    """
+    label = f"{type(instance).__module__}:{type(instance).__qualname__}"
+    for kind, path in TARGET_MODEL_PATHS.items():
+        if path == label:
+            return kind
+    return None
+
+
 def resolve_target(event: ReputationEvent) -> Any | None:
     """Load the object an event is about.
 

@@ -53,7 +53,7 @@ from urbanlens.dashboard.external_api.errors import ErrorEnvelopeMixin
 from urbanlens.dashboard.external_api.permissions import HasApiKeyScope
 from urbanlens.dashboard.external_api.throttling import ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.comments.comments import CommentValidationError
+from urbanlens.dashboard.services.comments.comments import UnsupportedReactionEmojiError
 
 logger = logging.getLogger(__name__)
 
@@ -352,17 +352,20 @@ class _ReactionMixin:
         if (existing is not None) != want_present:
             try:
                 self.reaction_toggle(profile, target, emoji)
-            except CommentValidationError as exc:
-                # The only ValueError subclass a reaction service currently
-                # raises for a rejected emoji; its message is a
-                # developer-authored constant, so echoing it is safe. Anything
-                # else - notably ``PermissionError`` from the direct-message
-                # service - is left to propagate: a caller who got past
-                # resolve_reaction_target and still is not permitted means the
-                # subclass's lookup was not scoped tightly enough, and
-                # swallowing that into a tidy 400 would hide the bug and
-                # confirm the row exists at the same time.
-                return Response({"error": exc.safe_message}, status=400)
+            except UnsupportedReactionEmojiError as exc:
+                # The only exception a reaction service currently raises for a
+                # rejected emoji. Its own message is log-only now; the
+                # response reuses reaction_invalid_emoji_message, the same
+                # hand-authored constant the pre-check above answers with, so
+                # a client sees one wording whether the check fired here or in
+                # the service. Anything else - notably ``PermissionError``
+                # from the direct-message service - is left to propagate: a
+                # caller who got past resolve_reaction_target and still is not
+                # permitted means the subclass's lookup was not scoped tightly
+                # enough, and swallowing that into a tidy 400 would hide the
+                # bug and confirm the row exists at the same time.
+                logger.info("reaction toggle rejected: %s", exc)
+                return Response({"error": self.reaction_invalid_emoji_message}, status=400)
             except ValueError as exc:
                 # A future reaction service wired through this mixin that
                 # raises some other ValueError subclass hasn't been audited

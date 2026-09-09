@@ -191,12 +191,21 @@ def deserialize_criteria(stored: dict[str, Any], profile: Profile) -> dict[str, 
 class CriteriaOwnershipError(ValueError):
     """Stored criteria referenced a label or custom field the profile may not use.
 
-    ``safe_message`` is safe to surface directly to the caller.
+    ``message`` is for logs, not the response: a caller's HTTP-facing code
+    should catch a specific subclass below and author its own user-facing
+    text, rather than relaying ``message`` - that keeps a future raise site
+    here from being able to smuggle unreviewed text (including which id was
+    rejected) into a response just by adding a new ``raise``. See
+    :func:`validate_criteria_ownership` for why that distinction matters.
     """
 
-    def __init__(self, message: str) -> None:
-        self.safe_message = message
-        super().__init__(message)
+
+class LabelOwnershipError(CriteriaOwnershipError):
+    """A referenced label is not visible to the profile."""
+
+
+class CustomFieldOwnershipError(CriteriaOwnershipError):
+    """A referenced custom field does not belong to the profile."""
 
 
 def referenced_label_ids(stored: dict[str, Any]) -> set[int]:
@@ -266,11 +275,15 @@ def validate_criteria_ownership(stored: dict[str, Any], profile: Profile) -> Non
         profile: The profile the criteria will belong to.
 
     Raises:
-        CriteriaOwnershipError: If any referenced label is not visible to
-            *profile*, or any referenced custom field is not theirs. The
-            message deliberately does not say which id was rejected, since
-            distinguishing "exists but not yours" from "does not exist" is the
-            very thing being denied.
+        LabelOwnershipError: A referenced label is not visible to *profile*.
+        CustomFieldOwnershipError: A referenced custom field is not theirs.
+
+    Note:
+        Whichever subclass is raised, a catch site must respond with its own
+        hand-authored, generic text rather than anything derived from the
+        exception - it must not say which id was rejected, since
+        distinguishing "exists but not yours" from "does not exist" is the
+        very thing this function exists to deny an API client.
     """
     from urbanlens.dashboard.models.custom_fields.model import CustomField
     from urbanlens.dashboard.models.labels.model import Label
@@ -279,13 +292,13 @@ def validate_criteria_ownership(stored: dict[str, Any], profile: Profile) -> Non
     if label_ids:
         visible = set(Label.objects.visible_to(profile).filter(pk__in=label_ids).values_list("pk", flat=True))
         if visible != label_ids:
-            raise CriteriaOwnershipError("Filter criteria reference a label that does not exist.")
+            raise LabelOwnershipError(f"profile {profile.pk} referenced label(s) not visible to them: {sorted(label_ids - visible)}")
 
     field_ids = referenced_custom_field_ids(stored)
     if field_ids:
         owned = set(CustomField.objects.filter(profile=profile, pk__in=field_ids).values_list("pk", flat=True))
         if owned != field_ids:
-            raise CriteriaOwnershipError("Filter criteria reference a custom field that does not exist.")
+            raise CustomFieldOwnershipError(f"profile {profile.pk} referenced custom field(s) they don't own: {sorted(field_ids - owned)}")
 
 
 def _deserialize_custom_field_bounds(criterion: dict[str, Any]) -> dict[str, Any]:

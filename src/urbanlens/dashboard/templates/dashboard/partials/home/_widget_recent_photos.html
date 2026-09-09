@@ -12,7 +12,7 @@ overview.html) via homeOpenLightbox() (overview.html's script block).
     </div>
     <ul class="home-photo-strip photos-grid">
         {% for img in home_recent_photos %}
-        <li class="photo-tile" data-id="{{ img.pk }}" data-url="{{ img.image.url }}"
+        <li class="photo-tile" data-id="{{ img.pk }}" data-url="{{ img.display_url }}"
             data-caption="{{ img.display_caption|default:'' }}"
             data-author="{{ img.author|default:'' }}"
             data-copyright="{{ img.copyright|default:'' }}"
@@ -25,7 +25,7 @@ overview.html) via homeOpenLightbox() (overview.html's script block).
             button-name at critical.
             {% endcomment %}
             <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.display_caption|default:'untitled' }}" onclick="homeOpenLightbox({{ img.pk }})">
-                <img src="{{ img.image.url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy"
+                <img src="{{ img.display_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy"
                      onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
                 {% if img.latitude and img.longitude %}<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>{% endif %}
             </button>

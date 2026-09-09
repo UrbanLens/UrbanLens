@@ -54,6 +54,7 @@
             </section>
             {% endfor %}
         </div>
+        {% include "dashboard/partials/ui/_pagination_controls.html" with page_links=True page_noun="journal entries" %}
         {% else %}
         <section class="visits-empty-state" aria-labelledby="journal-empty-title">
             <div class="visits-empty-hero">

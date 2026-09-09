@@ -17,7 +17,8 @@ from model_bakery import baker
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.models.labels.model import KIND_MEDIA, KIND_TAG, KIND_USER, Label
+from urbanlens.dashboard.models.labels.meta import KIND_MEDIA, KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.labels.signals import DEFAULT_MEDIA_LABELS
 from urbanlens.dashboard.services.global_search.parser import parse_query
 from urbanlens.dashboard.services.global_search.providers import PhotoSearchProvider

@@ -9,6 +9,7 @@ rest of the settings page, since neither needs another WebAuthn ceremony.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.contrib import messages
@@ -21,10 +22,21 @@ from django.views import View
 
 from urbanlens.dashboard.models.account import WebAuthnCredential
 from urbanlens.dashboard.services.auth.two_factor import maybe_clear_backup_codes
-from urbanlens.dashboard.services.auth.webauthn import WebAuthnError, build_registration_options, verify_and_save_registration
+from urbanlens.dashboard.services.auth.webauthn import (
+    MAX_CREDENTIALS_PER_USER,
+    CredentialAlreadyRegisteredError,
+    MaxCredentialsReachedError,
+    RegistrationNotPendingError,
+    RegistrationVerificationError,
+    WebAuthnError,
+    build_registration_options,
+    verify_and_save_registration,
+)
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
+
+logger = logging.getLogger(__name__)
 
 
 class PasskeyRegisterOptionsView(LoginRequiredMixin, View):
@@ -35,8 +47,12 @@ class PasskeyRegisterOptionsView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Authentication required."}, status=401)
         try:
             options_json = build_registration_options(request, request.user)
+        except MaxCredentialsReachedError as exc:
+            logger.info("passkey registration options rejected: %s", exc)
+            return JsonResponse({"error": f"You can register at most {MAX_CREDENTIALS_PER_USER} passkeys. Remove one first."}, status=400)
         except WebAuthnError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("passkey registration options rejected: %s", exc)
+            return JsonResponse({"error": "Passkey registration could not be started."}, status=400)
         return HttpResponse(options_json, content_type="application/json")
 
 
@@ -60,8 +76,18 @@ class PasskeyRegisterView(LoginRequiredMixin, View):
 
         try:
             credential = verify_and_save_registration(request, request.user, credential_json, name, login_factor=login_factor)
+        except RegistrationNotPendingError as exc:
+            logger.info("passkey registration rejected: %s", exc)
+            return JsonResponse({"error": "No passkey registration in progress. Please try again."}, status=400)
+        except RegistrationVerificationError as exc:
+            logger.info("passkey registration rejected: %s", exc)
+            return JsonResponse({"error": "That passkey could not be verified."}, status=400)
+        except CredentialAlreadyRegisteredError as exc:
+            logger.info("passkey registration rejected: %s", exc)
+            return JsonResponse({"error": "That passkey is already registered."}, status=400)
         except WebAuthnError as exc:
-            return JsonResponse({"error": exc.safe_message}, status=400)
+            logger.info("passkey registration rejected: %s", exc)
+            return JsonResponse({"error": "That passkey could not be registered."}, status=400)
         # The id lets an unlock enrollment undo itself: whether the authenticator
         # really supports PRF is only knowable client-side, after this call, and
         # an unlock-only credential that cannot wrap anything is dead weight -

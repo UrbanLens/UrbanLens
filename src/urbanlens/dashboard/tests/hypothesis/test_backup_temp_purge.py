@@ -192,3 +192,75 @@ class BackupTimeoutTests(SimpleTestCase):
     def test_the_timeout_is_below_the_celery_soft_limit(self) -> None:
         """Otherwise the task limit fires first and the cleanup above never runs."""
         self.assertLess(BACKUP_TIMEOUT_SECONDS, django_settings.CELERY_TASK_SOFT_TIME_LIMIT)
+
+
+class CountBasedRetentionTests(SimpleTestCase):
+    """`purge_old_backups`'s count-deletion loop had never run in any test.
+
+    `test_backup_temp_purge.py` exercised only the `.tmp`-reaping side effect,
+    with zero real `.sql` backups on disk - so `backup_files[self.backup_retention:]`
+    was never reached. These assert by *identity*: which files survive, not how
+    many. A resulting count alone would pass an implementation that deleted the
+    newest and kept the oldest, which is the one mistake this loop can make.
+    """
+
+    def _backup(self, backup_dir: str | Path, retention: int) -> DatabaseBackup:
+        with mock.patch.object(DatabaseBackup, "schedule_backup", return_value=False):
+            backup = DatabaseBackup(auto_schedule=False)
+        backup.backup_dir = Path(backup_dir)
+        backup.backup_retention = retention
+        return backup
+
+    def _dated_backups(self, tmp: str, count: int) -> list[Path]:
+        """`count` backups, newest first - index 0 is the most recent."""
+        paths = []
+        for index in range(count):
+            path = Path(tmp) / f"backup_2026080{index + 1}_120000.sql"
+            _touch(path, age_seconds=index * 3600)
+            paths.append(path)
+        return paths
+
+    def test_exactly_the_oldest_excess_backups_are_removed(self) -> None:
+        with TemporaryDirectory() as tmp:
+            newest_first = self._dated_backups(tmp, count=7)
+
+            self._backup(tmp, retention=3).purge_old_backups()
+
+            for survivor in newest_first[:3]:
+                self.assertTrue(survivor.exists(), f"{survivor.name} is among the newest 3 and must survive")
+            for removed in newest_first[3:]:
+                self.assertFalse(removed.exists(), f"{removed.name} is beyond retention and must be gone")
+
+    def test_nothing_is_removed_below_the_retention_count(self) -> None:
+        """Anti-vacuity: the loop must not fire when there is nothing to purge."""
+        with TemporaryDirectory() as tmp:
+            paths = self._dated_backups(tmp, count=3)
+
+            self._backup(tmp, retention=5).purge_old_backups()
+
+            for path in paths:
+                self.assertTrue(path.exists(), f"{path.name} is within retention")
+
+    def test_exactly_the_retention_count_is_left_alone(self) -> None:
+        """The boundary: `len(files) > retention` must not fire at equality."""
+        with TemporaryDirectory() as tmp:
+            paths = self._dated_backups(tmp, count=4)
+
+            self._backup(tmp, retention=4).purge_old_backups()
+
+            for path in paths:
+                self.assertTrue(path.exists(), f"{path.name} is exactly at retention")
+
+    def test_a_stray_non_backup_file_is_neither_counted_nor_deleted(self) -> None:
+        """Retention must not be spent on, or reach, a file this class did not write."""
+        with TemporaryDirectory() as tmp:
+            newest_first = self._dated_backups(tmp, count=3)
+            stray = Path(tmp) / "notes.txt"
+            _touch(stray, age_seconds=99_999)
+
+            self._backup(tmp, retention=2).purge_old_backups()
+
+            self.assertTrue(stray.exists(), "a stray file must never be deleted alongside backups")
+            self.assertTrue(newest_first[0].exists())
+            self.assertTrue(newest_first[1].exists())
+            self.assertFalse(newest_first[2].exists(), "the stray must not have been counted toward retention")

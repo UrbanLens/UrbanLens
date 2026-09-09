@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P74` · `T3` · `PL7` · `D6` · `X14` · `I4` · `R26` · `N7`
+**Next free id:** `P95` · `T3` · `PL7` · `D11` · `X14` · `I5` · `R27` · `N10`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -26,7 +26,7 @@ each, and the house style. `P` numbers entries inside `PROBLEMS.md`; every other
 prefix numbers a whole document.
 
 Resolved problems are **not** listed here — they move to
-[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 302
+[`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md), which holds 314
 of them. This index is what is live. Grep the archive before concluding a defect
 is new - and an archived entry keeps its `id:` line, so a citation of `P70`
 still resolves after it is fixed, and the id is never handed out again.
@@ -36,57 +36,44 @@ still resolves after it is fixed, and the id is never handed out again.
 | P1 | open | 2026-09-01 | VirusTotal scanning is hash-lookup-only, so a file VirusTotal has never seen falls back to ClamAV forever | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P2 | open | 2026-08-31 | `parse_for_preview` parses archives and KML in the request, blocking `UL_UNTRUSTED_PARSE_POLICY=deny` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P3 | open | 2026-08-31 | The pin-detail hero no longer links to `PinRelinkView.get`, orphaning the `pin.link` wiki picker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P4 | open | 2026-08-31 | `urbanlens_development_main_test_runner`'s venv is missing five dev deps, silently dropping coverage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P5 | open | 2026-08-25 | Dialog forms post every field and handlers save every column, so untouched values overwrite and re-attribute | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P6 | open | 2026-08-21 | Production REData still 404s `/api/v1/public-locations/`, so a fresh dev environment seeds no catalog pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P7 | open | 2026-08-19 | nginx pins its app upstream at config load and REData's `ref` is stored as permanent identity | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P9 | open | 2026-08-19 | REData gaps remain - `?limit=` is inert, 15 routes unwired, and a `tile_template` slide is a single 256px tile | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P10 | open | 2026-08-19 | `main` is untested against an empty database; the multiple-leaf migration conflict that broke it is gone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P11 | open | 2026-08-15 | ~40 raw `fetch()` calls bypass `fetch-json.ts` and fail silently; Organize's Media tab is unwired dead UI | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P9 | open | 2026-09-08 | REData gaps: mostly closed 2026-09-08; `?limit=` is REData-side, land-use-area geometry needs a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P11 | open | 2026-09-06 | 84 raw `fetch()` calls bypass `fetch-json.ts`, and "all the wrappers are gone" was a count, not a search | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P14 | open | 2026-09-05 | Custom pin and label icons are readable by any authenticated user; narrowing that needs a pin-visibility query nothing has | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P16 | open | 2026-07-22 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P17 | open | 2026-07-24 | `docker compose exec app pytest` trips the localhost-only network guard because Valkey is a bridge IP | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P19 | open | 2026-07-25 | Audit re-verification's residual gaps remain: dead ownership re-check, 1,100-line `_dark.scss`, stub AI gateway | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P19 | open | 2026-09-06 | Audit re-verification's residual gaps remain: a 1,100-line `_dark.scss`, a stub AI gateway, blocking AI in the request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P20 | open | 2026-07-25 | The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()` resolves it wrongly for everyone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P21 | open | 2026-07-26 | `LocationWikiEditView.post` drops invalid wiki field edits and still answers `{"ok": true}` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P23 | open | 2026-07-31 | The production celery worker's env sets `UL_SITE_URL=staging.urbanlens.org`, so built URLs point at staging | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P24 | open | 2026-08-05 | A campus pin aggregates only the nearest CRIS building's media, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P25 | open | 2026-08-07 | `Comment.profile` CASCADEs but `TripComment.author` SET_NULLs, so account deletion erases only some comments | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P26 | open | 2026-08-07 | `create_group_message` never validates `key_version`, so a sender can use a key a removed member holds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P26 | open | 2026-09-06 | A group message can still be sent under a stale key version, and refusing one risks an availability outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P27 | open | 2026-08-08 | Saved-filter regions use leaflet-draw's transactional remove tool, so deleted polygons resurrect on the next draw | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P28 | open | 2026-08-12 | The upload quota check is fail-open under a cache lock, so a bulk import's fan-out can still exceed the quota | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P86 | open | 2026-09-07 | Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P29 | open | 2026-08-13 | 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P30 | open | 2026-08-13 | Backups are plain-SQL with no restore path, and the repo's only `pg_restore` example cannot read them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P31 | open | 2026-08-13 | Session and DM chat sockets have no rate limit and cap frame size only after the whole frame is parsed | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P34 | open | 2026-08-13 | 22,636 lines of inline template JS sit outside every automated check, with duplicated escaping helpers | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P36 | open | 2026-08-13 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P37 | open | 2026-08-13 | 100 write handlers totalling 1,217 statements never execute under the test suite | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P41 | open | 2026-09-05 | 68 of 249 public queryset methods have no production caller, so their logic may be duplicated inline elsewhere | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P46 | open | 2026-08-16 | A group message can still be sent under a key version a removed member holds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P36 | open | 2026-09-05 | 50 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P37 | open | 2026-09-08 | 100 write handlers totalling 1,217 statements never execute under the test suite | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P41 | open | 2026-09-06 | The queryset API's unused half, by call graph: 26 methods deleted, 27 test-only ones left | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P47 | open | 2026-08-16 | A deleted message's preview survives in the recipient's notification list | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P49 | open | 2026-08-17 | `npm run git-squash` is a force-deploy with none of `deploy.sh`'s dirty-tree guards | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P49 | open | 2026-09-05 | Doc citations drift silently, and a pin-suggestion race can still duplicate a row | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-05 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P52 | open | 2026-08-24 | `.app-nav-right` runs 40px past a 390px viewport, so every page scrolls sideways at phone width | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P53 | open | 2026-08-24 | One Private Pin page load fires dozens of concurrent panel requests and can exhaust the DB connection pool | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P55 | open | 2026-08-23 | A community quota bonus survives un-sharing the photo that earned it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P56 | open | 2026-08-28 | `Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed to set it does not exist | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P57 | open | 2026-08-29 | The test-quality audit left ~15 findings unfixed, from an unpatched `connect_ex` guard to untested views | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P58 | open | 2026-08-31 | A photo's grid tile can 404/500 for seconds after upload while async processing renames its file | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P59 | open | 2026-08-31 | A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P61 | open | 2026-08-31 | Vault album bulk delete, send-to-wiki and share render hidden forever, because only a `Pin` owner gets URLs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P62 | open | 2026-08-31 | Video uploads are charged to quota but appear nowhere in the Vault | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P53 | open | 2026-09-06 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P55 | open | 2026-09-06 | A withdrawn contribution keeps its reputation event, and the wiki gallery's delete strings are false there | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P56 | open | 2026-09-05 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P57 | open | 2026-09-06 | The test-quality audit's follow-ups: 13 done; three untested surfaces, two unproven locks and two decisions remain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P58 | open | 2026-09-06 | A renamed photo's old URL still 404s for the uploader who just uploaded it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P59 | open | 2026-09-06 | A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P63 | open | 2026-08-31 | Adding a third Vault media type means copying ~600 lines for ~90 lines of difference | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P65 | open | 2026-08-31 | Perf tooling measures query count only, so a 12-second render passes every scaling test | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P66 | open | 2026-08-31 | Organize's active label tab still renders its full card list unpaginated | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P67 | open | 2026-08-31 | "Organize this property" fans out ~6-7 queries per candidate pin, uncapped to 500 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P68 | open | 2026-08-31 | N+1s in the site-admin user list, the achievement icon picker and Memories > Maps still have no perf test | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P69 | open | 2026-08-31 | Unbounded lists with no pagination across most of the site, from album pickers to Immich imports | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P73 | open | 2026-09-05 | `bun-types` is pinned at 1.1.6 against Bun 1.3.14, so 81 valid assertions look like type errors | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P69 | open | 2026-09-08 | Unbounded lists across the site: 9 of 11 fixed; one argued against by measurement, one group deliberately left | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | T1 | done | 2026-08-27 | The mobile team's 2026-07-27 ask list is spent: its P0 was already false and its P2 remainder moved on | [`docs/notes/mobile_app_requirements.md`](notes/mobile_app_requirements.md) |
 | T2 | open | 2026-08-27 | HIGH 0-ref findings are all triaged; the MEDIUM tier and Jess's caching requests are still open | [`docs/reports/code_audit_status.txt`](reports/code_audit_status.txt) |
 | PL1 | live | 2026-09-01 | The strategy plus a six-tier backlog: locations are both the product and the thing being protected | [`docs/ROADMAP.md`](ROADMAP.md) |
@@ -95,11 +82,24 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL4 | live | 2026-08-27 | Existence, not detail, is the oracle - so the gate conceals a wiki's contributions rather than degrading it | [`docs/designs/reputation-and-gating.md`](designs/reputation-and-gating.md) |
 | PL5 | live | 2026-08-27 | One row per (target, field, write) resolves a per-viewer view in one DISTINCT ON query, with no replay | [`docs/designs/versioned-content.md`](designs/versioned-content.md) |
 | PL6 | live | 2026-08-29 | Every test file is being reviewed for negative coverage; 73 of 832 done, resume at manifest line 94 | [`docs/notes/test-quality-audit.md`](notes/test-quality-audit.md) |
+| P82 | open | 2026-09-06 | At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P83 | open | 2026-09-06 | Over half of every page's HTML is inline `<script>`, re-sent uncached on every load | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P85 | open | 2026-09-06 | Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P89 | open | 2026-09-08 | `MarkupJsonView`'s `?children=1` wiki path skips concealment; dormant only because `concealment_active()` is hardcoded False | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P90 | open | 2026-09-08 | `backfill_wiki_edit_points`, extracted from its migration specifically to be testable, has no test | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P91 | open | 2026-09-08 | Seven of eight new security integration specs have never run against a live deployment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P92 | open | 2026-09-08 | `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's inline script | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P93 | open | 2026-09-08 | Nine REData plugins declare no rate-limit defaults for their own gateway's service key | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |
 | D4 | accepted | 2026-08-27 | Place, with parent_relation and per-domain symmetric access, is the single answer to 'is this the same place?' | [`docs/designs/place-consolidation.md`](designs/place-consolidation.md) |
 | D5 | accepted | 2026-08-27 | Thirteen decisions answer the mobile team's asks: what shipped, what was declined, what is deferred | [`docs/notes/mobile_app_notes.md`](notes/mobile_app_notes.md) |
+| D6 | accepted | 2026-09-06 | Media may live in an object store, but a read is never a presigned URL - the gate stays in the data path | [`docs/designs/media-object-storage.md`](designs/media-object-storage.md) |
+| D7 | accepted | 2026-09-06 | Over-cap uploads become chunked posts to Django, not presigned multipart; until then the app advertises the ingress cap | [`docs/designs/large-upload-protocol.md`](designs/large-upload-protocol.md) |
+| D8 | accepted | 2026-09-06 | Storage quotas are enforced generally, not exactly: an over-quota profile keeps its assets and is barred from uploading more | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
+| D9 | accepted | 2026-09-07 | A moderator's removal costs reputation slightly and reversibly - a per-event weight, not the binary retraction | [`docs/designs/reputation-removal-weighting.md`](designs/reputation-removal-weighting.md) |
+| D10 | accepted | 2026-09-08 | A block's incident history is its own paid flag, not `NEARBY_RESEARCH` - it is a distinct pricing lever, not a variant of one | [`docs/designs/incident-history-feature-gate.md`](designs/incident-history-feature-gate.md) |
 | X1 | holds | 2026-08-27 | A release merge silently dropped --skip-undecryptable from DATA_ENCRYPTION.md; nothing else had drifted | [`docs/audits/DATA_ENCRYPTION_AUDIT.md`](audits/DATA_ENCRYPTION_AUDIT.md) |
 | X2 | holds | 2026-09-01 | A gate enforced in the web UI is repeatedly missing from the parallel external-API endpoint | [`docs/audits/FEATURES_CODE_AUDIT.md`](audits/FEATURES_CODE_AUDIT.md) |
 | X3 | holds | 2026-08-27 | GOALS.md contradicts the other docs on six points and states ten goals no other doc records at all | [`docs/audits/GOALS_AUDIT.md`](audits/GOALS_AUDIT.md) |
@@ -116,12 +116,13 @@ still resolves after it is fixed, and the id is never handed out again.
 | I1 | unvalidated | 2026-08-27 | Splitting into a near-zero-knowledge server and a data-holding agent was planned in full, then deferred | [`docs/designs/rejected-and-deferred/split-architecture.md`](designs/rejected-and-deferred/split-architecture.md) |
 | I2 | actionable | 2026-08-27 | Ten free/open APIs surveyed as integration candidates; several have since shipped as plugins, so re-check before using it | [`docs/reports/api-expansion-candidates.md`](reports/api-expansion-candidates.md) |
 | I3 | absorbed | 2026-07-30 | SpotGuessr's backend was sound and its frontend was the debt; all five recommendations shipped | [`docs/reports/spotguessr-audit.md`](reports/spotguessr-audit.md) |
+| I4 | absorbed | 2026-09-06 | Exact storage quotas need the total on one lockable row; the hard part is the five places `file_size` changes - declined, see D8 | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
 | R1 | current | 2026-09-02 | The assistant reaches a provider only through three credential-narrowed tiers behind a default-deny egress proxy | [`docs/AI_PIPELINE.md`](AI_PIPELINE.md) |
 | R2 | current | 2026-08-27 | Schemathesis holds the external API to its own published OpenAPI doc; detail routes still only prove 404 handling | [`docs/CONTRACT_TESTS.md`](CONTRACT_TESTS.md) |
 | R3 | stale | 2026-08-31 | Field encryption covers identity/credential/contact data only; core location content is left to disk encryption | [`docs/DATA_ENCRYPTION.md`](DATA_ENCRYPTION.md) |
 | R4 | current | 2026-08-27 | Demo isolation is a separate deployment, not a realm column, because ~20 visibility guards would fail open | [`docs/DEMO.md`](DEMO.md) |
 | R5 | current | 2026-09-04 | The v1 external API surface: two bearer credential kinds, per-scope gating everywhere, additive-only versioning | [`docs/EXTERNAL_API.md`](EXTERNAL_API.md) |
-| R6 | current | 2026-09-02 | Every shipped UrbanLens feature is inventoried here, so a "new feature" request is usually already built | [`docs/FEATURES.md`](FEATURES.md) |
+| R6 | current | 2026-09-08 | Every shipped UrbanLens feature is inventoried here, so a "new feature" request is usually already built | [`docs/FEATURES.md`](FEATURES.md) |
 | R7 | current | 2026-09-01 | A Playwright suite driving a deployed instance catches what a single-process pytest run structurally cannot | [`docs/INTEGRATION_TESTS.md`](INTEGRATION_TESTS.md) |
 | R8 | current | 2026-08-27 | A plausible boundary is not a sourced one, so the HRSH specs assert provenance and bounds, never values | [`docs/LOCATION_DATA_TESTS.md`](LOCATION_DATA_TESTS.md) |
 | R9 | current | 2026-09-02 | Uploads decode only in a network-isolated worker; served bytes are re-encoded, never the ones uploaded | [`docs/MEDIA_PIPELINE.md`](MEDIA_PIPELINE.md) |
@@ -141,9 +142,13 @@ still resolves after it is fixed, and the id is never handed out again.
 | R23 | current | 2026-07-22 | The re-runnable harness that produced the 120 Overpass measurements across six endpoints | [`docs/reports/overpass_bench.py`](reports/overpass_bench.py) |
 | R24 | current | 2026-07-22 | The 120 raw Overpass rows the mirror verdicts were computed from | [`docs/reports/overpass_mirror_results.json`](reports/overpass_mirror_results.json) |
 | R25 | stale | 2026-08-27 | A generated 0-reference scan whose line numbers no longer resolve; regenerate instead of reading | [`docs/reports/unused_functions.txt`](reports/unused_functions.txt) |
+| R26 | current | 2026-09-05 | Restoring these plain-SQL dumps needs an empty target and psql from the app container; round trip verified | [`docs/BACKUPS.md`](BACKUPS.md) |
 | N1 | stale | 2026-09-03 | The Celery requeue loop was a two-request DoS; fixed, and the durable version now lives in NOTES.md | [`docs/archive/NOTES-celery-acks.md`](archive/NOTES-celery-acks.md) |
 | N2 | current | 2026-08-27 | 82 ways a gated wiki gives itself away collapse to eleven classes and three viewer-less chokepoints | [`docs/designs/reputation-gating-tells.md`](designs/reputation-gating-tells.md) |
 | N3 | stale | 2026-08-27 | A 631-chunk audit log whose fixes landed and whose open items were refiled into docs/PROBLEMS.md | [`docs/reports/2026-08-11-codebase-audit.md`](reports/2026-08-11-codebase-audit.md) |
 | N4 | current | 2026-07-30 | Round-2 staging UAT: its two criticals (email exposure, raw-coordinate pin names) are now fixed | [`docs/reports/claude_uat.md`](reports/claude_uat.md) |
 | N5 | current | 2026-07-30 | Round-3 UAT found messaging and settings working; both 'ongoing' criticals have since been fixed | [`docs/reports/claude_uat_r3.md`](reports/claude_uat_r3.md) |
 | N6 | current | 2026-07-22 | Round-1 staging UAT: 4 criticals, from a misconfigured staging API key to email on public profiles | [`docs/reports/ua_testing.md`](reports/ua_testing.md) |
+| N7 | current | 2026-09-06 | Two Django template traps that each shipped a 500: a filter argument has no failure tolerance, and `.image.url` raises | [`docs/notes/template-render-traps.md`](notes/template-render-traps.md) |
+| N8 | current | 2026-09-06 | Reply to the infrastructure repo's two open handoffs: /static/ 404s, media on Garage, and the 100 MB body cap | [`docs/handoffs/infrastructure-media-and-static.md`](handoffs/infrastructure-media-and-static.md) |
+| N9 | current | 2026-09-08 | Reply on migration 0054: its IntegrityError confirmed and fixed, and why a stub-driven test could not have caught it | [`docs/handoffs/infrastructure-0054-friendship-merge.md`](handoffs/infrastructure-0054-friendship-merge.md) |

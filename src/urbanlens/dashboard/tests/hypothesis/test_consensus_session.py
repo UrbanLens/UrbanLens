@@ -127,7 +127,7 @@ class SoloRoundFlowTests(TestCase):
         round_ = consensus_session.get_or_create_round(session)
         consensus_session.submit_answer(round_, profile, "First answer.")
 
-        with self.assertRaises(consensus_session.ConsensusError):
+        with self.assertRaises(consensus_session.RoundAlreadySettledError):
             consensus_session.submit_answer(round_, profile, "Second answer.")
 
 

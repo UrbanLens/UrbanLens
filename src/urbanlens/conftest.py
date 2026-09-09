@@ -16,6 +16,7 @@ from urbanlens.core.testing_network import (
     LocalhostOnlyNetwork,
     verify_external_network_blocked,
 )
+from urbanlens.core.tests.ai_guard import patched_ai_gateway
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -118,3 +119,15 @@ def block_external_network() -> Iterator[None]:
         yield
     finally:
         guard.stop()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def block_ai_gateway() -> Iterator[None]:
+    """Stop any test reaching a real LLM provider.
+
+    The mirror of ``TestRunner.setup_test_environment``'s own patching, which
+    pytest never runs - pytest-django ignores ``TEST_RUNNER`` entirely. Without
+    this the guard existed only for ``manage.py test``.
+    """
+    with patched_ai_gateway():
+        yield

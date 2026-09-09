@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
 import logging
@@ -99,13 +99,23 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     "redata_cid_lookup": ServiceDefaults(
         display_name="REData CID Resolution",
         # Our own outbound throttle, well under REData's own dedicated
-        # 200 requests/hour-per-key limit on this endpoint (see
-        # ../REData/docs/api-reference.md) - deliberately generous since each
-        # call is a batch of up to 10,000 CIDs, not one lookup.
+        # 200 requests/hour-per-key limit on POST /places/resolve-cids/ (see
+        # ../REData/docs/api-reference.md) - deliberately generous for that
+        # endpoint, since each call is a batch of up to 10,000 CIDs, not one
+        # lookup. get_place_detail/download_media below share this same
+        # throttle even though they're unbatched (one CID/media item per
+        # call) - REData has no dedicated per-key cap on those two the way it
+        # does on resolve-cids, so there's no equivalent number to size against;
+        # both are also cached (LocationCache, the media proxy's own cache),
+        # so real call volume per pin stays low.
         calls_per_minute=10,
         calls_per_day=None,
         calls_per_30_days=None,
-        notes="Batch CID->coordinate resolution via POST /places/resolve-cids/. See docs/designs/redata-cid-resolution.md.",
+        notes=(
+            "Batch CID->coordinate resolution via POST /places/resolve-cids/ (see docs/designs/redata-cid-resolution.md), "
+            "plus reading (GET /places/cid/{cid}/) and downloading (GET /places/cid/{cid}/media/{id}/download/) a resolved "
+            "CID's deep-scraped place detail - see plugins.builtin.redata_place_details."
+        ),
     ),
     "redata_places": ServiceDefaults(
         display_name="REData Places",

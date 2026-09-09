@@ -154,6 +154,19 @@ MIDDLEWARE = [
     # can short-circuit a response) so CORS headers are applied to redirects
     # and preflight responses - see django-cors-headers docs.
     "corsheaders.middleware.CorsMiddleware",
+    # Serves STATIC_ROOT where nothing else fronts the app - the k8s deployment
+    # runs gunicorn directly, with no nginx and no static volume, so every
+    # /static/ URL 404s without this. Under docker compose nginx answers
+    # /static/ before Django is reached, which makes this a no-op there.
+    #
+    # Position: WhiteNoise short-circuits in the *request* phase, so everything
+    # above it still processes the response and everything below it is skipped.
+    # Here it keeps all four security-header layers (SecurityMiddleware,
+    # SecurityHeadersMiddleware, CSPMiddleware, CorsMiddleware) on a static
+    # response, and skips everything that costs a query or attaches a cookie:
+    # sessions, CSRF, auth, the media-origin cookie, the profile-preview swap.
+    # No Set-Cookie is what makes the response cacheable at a CDN edge.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -666,13 +679,47 @@ STATIC_ROOT = os.path.join(PROJECT_ROOT, "frontend", "static")
 STATICFILES_DIRS = [
     os.path.join(PROJECT_ROOT, "dashboard/frontend/static"),
 ]
+# Where user uploads live. The filesystem is the default and is what a
+# single-machine self-host needs; "s3" points the same FileField API at any
+# S3-compatible object store (Garage, MinIO, AWS). The backend is chosen here
+# rather than hardcoded because moving media to an object store must be a
+# configuration change, not a code change - but it is deliberately NOT only a
+# configuration change in one respect: GatedS3Storage overrides url() so
+# FileField.url keeps returning a /media/ path. Plain S3Storage returns a
+# presigned bucket URL, which would hand every caller a bearer token for the
+# object and take every media read out from behind the gate.
+# See dashboard/services/media/object_storage.py and docs/MEDIA_PIPELINE.md.
+UL_MEDIA_STORAGE_BACKEND = _app_settings.media_storage_backend.strip().lower()
+
+_S3_STORAGE_OPTIONS = {
+    "bucket_name": _app_settings.s3_bucket_name,
+    "endpoint_url": _app_settings.s3_endpoint_url or None,
+    "access_key": _app_settings.s3_access_key_id,
+    "secret_key": _app_settings.s3_secret_access_key,
+    "region_name": _app_settings.s3_region_name,
+    "addressing_style": _app_settings.s3_addressing_style,
+    # The bucket is private and stays private: nothing in this application
+    # serves an object directly, so an object needs no ACL of its own and a
+    # bucket-level grant would be the one way to reach a file without passing
+    # the gate.
+    "default_acl": None,
+    "querystring_auth": True,
+    # Two uploads that hash to the same name are two different files - Django's
+    # own default, restated because S3Storage's default is the opposite and
+    # silently overwrites.
+    "file_overwrite": False,
+    "signature_version": "s3v4",
+}
+
 # CompressedManifestStaticFilesStorage requires collectstatic to have been run
 # to generate the manifest; the test suite never runs collectstatic, so fall
 # back to plain (non-hashed) storage there.
 STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
+    "default": (
+        {"BACKEND": "urbanlens.dashboard.services.media.object_storage.GatedS3Storage", "OPTIONS": _S3_STORAGE_OPTIONS}
+        if UL_MEDIA_STORAGE_BACKEND == "s3"
+        else {"BACKEND": "django.core.files.storage.FileSystemStorage"}
+    ),
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage" if TESTING else "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
@@ -710,6 +757,36 @@ MEDIA_X_ACCEL = _env_bool("UL_MEDIA_X_ACCEL", not _is_dev)
 # Must match the `location /_protected_media/` block in
 # src/urbanlens/config/nginx/django.conf.
 MEDIA_X_ACCEL_PREFIX = "/_protected_media/"
+
+# The object-store equivalent of MEDIA_X_ACCEL_PREFIX, and empty by default
+# because it needs an nginx location this repository does not ship. Set it and
+# the gate authorizes the request, signs a URL for the object itself, and hands
+# that URL to nginx in an X-Accel-Redirect - so the bytes never pass through a
+# gevent worker and the signed URL never reaches the client. Leave it empty and
+# the gate streams the object through Django, which is correct everywhere and
+# is the only option when nothing fronts the app.
+#
+# /_protected_media/ cannot be reused for this: it aliases the local media
+# volume, so pointing it at an object store would serve a stale local file when
+# one exists and 404 when one does not.
+MEDIA_X_ACCEL_OBJECT_PREFIX = _app_settings.media_x_accel_object_prefix
+
+# How long the URL in that hand-off stays valid. Short on purpose: it is
+# consumed by nginx during the request that minted it, and the only reason it is
+# not shorter is clock skew between the app and the object store.
+MEDIA_X_ACCEL_OBJECT_URL_TTL_SECONDS = 60
+
+# What the ingress in front of this deployment will actually pass, in bytes; 0
+# when nothing imposes a limit. It is not a limit this application enforces for
+# its own sake - it enforces it so the user finds out. A proxy that rejects an
+# oversized body answers the browser directly, so the request never reaches
+# Django, no view runs, and the only thing the uploader sees is somebody else's
+# error page after uploading as much as the cap allows.
+#
+# services.media.storage.max_upload_file_size_bytes clamps the site-wide upload
+# limit to this, which is what both the server-side check and the browser's
+# pre-flight read - so the file is refused before it is sent.
+MAX_REQUEST_BODY_BYTES = max(0, _app_settings.max_request_body_mb) * 1_000_000
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -750,8 +827,24 @@ CROSS_ORIGIN_RESOURCE_POLICY = "same-site"
 # Legacy Flash/Adobe cross-domain policy discovery, unused - free to deny.
 X_PERMITTED_CROSS_DOMAIN_POLICIES = "none"
 
-# Cross-Origin-Embedder-Policy is not set - see docs/PROBLEMS.md, "Nuclei scan
-# follow-ups".
+# Cross-Origin-Embedder-Policy: observed, not enforced - see P56.
+#
+# `require-corp` is the wrong variant here. Map image overlays are a
+# paste-any-URL feature, which is why `img-src` is `https:` - under
+# `require-corp` every overlay whose host sends neither CORP nor CORS stops
+# rendering, and that host set is unbounded by design.
+#
+# `credentialless` loads such an image and strips credentials instead, so it is
+# the variant this app could actually enforce. Measured 2026-09-06: 79% global
+# support, and unsupported by Safari on every version (desktop through 27, iOS
+# through 26.6). A value a browser does not recognise leaves the policy at
+# `unsafe-none` - the spec's model fails open - so sending it costs Safari
+# users nothing and breaks nothing.
+#
+# Report-only until someone has watched a real session: the one behaviour this
+# would change that nobody has measured is the Street View embed iframe, which
+# under `credentialless` loads without the viewer's Google credentials.
+CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
 
 # Content-Security-Policy (django-csp >= 4).
 #
@@ -930,6 +1023,31 @@ USE_X_FORWARDED_HOST = True
 # Read by the per-IP rate limiters; see the field description in settings/app.py.
 TRUSTED_PROXY_COUNT = _app_settings.trusted_proxy_count
 
+# Bounds on what one WebSocket connection may send; see the field descriptions
+# in settings/app.py and services/core/frame_limits.py.
+UL_WEBSOCKET_MAX_FRAME_CHARS = _app_settings.websocket_max_frame_chars
+UL_WEBSOCKET_FRAMES_PER_MINUTE = _app_settings.websocket_frames_per_minute
+UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE = _app_settings.websocket_fanout_frames_per_minute
+UL_MESSAGES_PER_MINUTE = _app_settings.messages_per_minute
+
+# What daphne is told to refuse at the transport layer, derived rather than
+# configured so the two bounds cannot drift apart. Autobahn rejects an oversized
+# frame with no error frame and no explanation - the user sees an unexplained
+# disconnect - so the transport bound has to sit strictly above the application
+# one, at the worst case of four UTF-8 bytes per character. docker-compose.yml
+# interpolates this into the app-ws command.
+UL_WEBSOCKET_MAX_MESSAGE_BYTES = UL_WEBSOCKET_MAX_FRAME_CHARS * 4
+
+# The port this deployment is actually published on. docker-compose.yml sets it
+# on every app-family service; anything running outside compose is served by a
+# real web server on 80/443 and sets UL_SITE_URL instead.
+#
+# Read rather than restated because a literal is what drifted: the compose
+# default said 21080 while the published port was 21800, and every origin minted
+# from the wrong one is a browser POST rejected on CSRF with no hint that a port
+# is why.
+_APP_PORT = os.getenv("UL_APP_PORT", "21800")
+
 protocols = ["https://"]
 if _is_local:
     # Local development: cover common ports used by docker-compose and direct runserver.
@@ -937,19 +1055,17 @@ if _is_local:
         "urbanlens.org",
         "localhost",
         "localhost:8000",
-        "localhost:21080",
-        "localhost:21800",
+        f"localhost:{_APP_PORT}",
         "127.0.0.1",
         "127.0.0.1:8000",
-        "127.0.0.1:21080",
-        "127.0.0.1:21800",
+        f"127.0.0.1:{_APP_PORT}",
         "[::1]",
         "[::1]:8000",
     ]
 elif _is_dev:
-    domains = ["urbanlens.org", "localhost", "localhost:21080", "localhost:21800", "127.0.0.1"]
+    domains = ["urbanlens.org", "localhost", f"localhost:{_APP_PORT}", "127.0.0.1"]
 else:
-    domains = ["urbanlens.org", "localhost", "localhost:21080"]
+    domains = ["urbanlens.org", "localhost", f"localhost:{_APP_PORT}"]
 
 subdomains = ["www.", ""]
 if UNSAFE_ALLOW_HTTP:
@@ -1065,7 +1181,7 @@ def _derive_trusted_origins(allowed_hosts: list[str], site_url: str, *, allow_ht
 
 
 # The environment variable rather than SITE_URL (defined further down): SITE_URL
-# falls back to http://localhost:21080 when unset, and a fallback nobody
+# falls back to http://localhost:<the app port> when unset, and a fallback nobody
 # configured must not become an origin this deployment trusts.
 _derived_origins, _derived_wildcard_origins = _derive_trusted_origins(
     ALLOWED_HOSTS,
@@ -1135,7 +1251,7 @@ DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
 # Canonical base URL used to build absolute links in emails/notifications sent
 # from contexts with no HttpRequest to build them from (e.g. Celery tasks).
 _site_url_env = os.getenv("UL_SITE_URL")
-SITE_URL = _site_url_env or "http://localhost:21080"
+SITE_URL = _site_url_env or f"http://localhost:{_APP_PORT}"
 if not _site_url_env and not _is_dev:
     import logging
 

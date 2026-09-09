@@ -26,7 +26,13 @@ from urbanlens.dashboard.models.spotguessr.model import (
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import (
     GameConfig,
-    SpotGuessrError,
+    InviteeNotFriendError,
+    LobbyClosedForInviteError,
+    LobbyClosedForJoinError,
+    NotSessionHostForInviteError,
+    NotSessionHostForStartError,
+    ParticipantNotInvitedError,
+    SessionAlreadyStartedError,
     begin_session,
     get_or_create_round,
     invite_to_session,
@@ -88,18 +94,18 @@ class InviteToSessionTests(TestCase):
         self.session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [])
 
     def test_non_host_cannot_invite(self) -> None:
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(NotSessionHostForInviteError):
             invite_to_session(self.session, self.guest, self.guest)
 
     def test_cannot_invite_a_non_friend(self) -> None:
         stranger = _make_profile()
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(InviteeNotFriendError):
             invite_to_session(self.session, self.host, stranger)
 
     def test_cannot_invite_once_the_game_has_started(self) -> None:
         self.session.status = GameSessionStatus.ACTIVE
         self.session.save(update_fields=["status"])
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(LobbyClosedForInviteError):
             invite_to_session(self.session, self.host, self.guest)
 
     def test_inviting_twice_does_not_double_notify(self) -> None:
@@ -123,7 +129,7 @@ class JoinSessionTests(TestCase):
 
     def test_uninvited_profile_cannot_join(self) -> None:
         outsider = _make_profile()
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(ParticipantNotInvitedError):
             join_session(self.session, outsider)
 
     def test_invited_profile_can_join(self) -> None:
@@ -138,7 +144,7 @@ class JoinSessionTests(TestCase):
     def test_cannot_join_after_the_roster_is_locked(self) -> None:
         self.session.status = GameSessionStatus.ACTIVE
         self.session.save(update_fields=["status"])
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(LobbyClosedForJoinError):
             join_session(self.session, self.guest)
 
     def test_an_already_joined_profile_can_still_be_fetched_after_the_roster_locks(self) -> None:
@@ -169,7 +175,7 @@ class BeginSessionTests(TestCase):
         join_session(self.session, self.guest)
 
     def test_non_host_cannot_begin(self) -> None:
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(NotSessionHostForStartError):
             begin_session(self.session, self.guest)
 
     def test_host_begins_the_game(self) -> None:
@@ -181,7 +187,7 @@ class BeginSessionTests(TestCase):
 
     def test_cannot_begin_twice(self) -> None:
         begin_session(self.session, self.host)
-        with pytest.raises(SpotGuessrError):
+        with pytest.raises(SessionAlreadyStartedError):
             begin_session(self.session, self.host)
 
     @patch("urbanlens.dashboard.services.spotguessr.realtime.broadcast")

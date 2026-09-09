@@ -20,7 +20,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers import labels
 from urbanlens.dashboard.external_api import views as external_api_views
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 

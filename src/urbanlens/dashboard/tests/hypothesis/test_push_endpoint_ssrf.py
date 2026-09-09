@@ -23,7 +23,12 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
-from urbanlens.dashboard.services.notifications.push import PushRegistrationError, register_device
+from urbanlens.dashboard.services.notifications.push import (
+    EndpointCredentialsError,
+    EndpointUnreachableError,
+    InvalidEndpointUrlError,
+    register_device,
+)
 
 
 def _resolves_to(ip: str):
@@ -45,35 +50,35 @@ class PushEndpointSsrfTests(TestCase):
 
     def test_cgnat_address_is_refused(self) -> None:
         """The range the inline copy of this check used to miss."""
-        with _resolves_to("100.64.0.1"), self.assertRaises(PushRegistrationError):
+        with _resolves_to("100.64.0.1"), self.assertRaises(EndpointUnreachableError):
             self._register()
 
         self.assertFalse(PushDevice.objects.exists())
 
     def test_loopback_is_refused(self) -> None:
-        with _resolves_to("127.0.0.1"), self.assertRaises(PushRegistrationError):
+        with _resolves_to("127.0.0.1"), self.assertRaises(EndpointUnreachableError):
             self._register()
 
     def test_private_range_is_refused(self) -> None:
         for ip in ("10.0.0.5", "192.168.1.1", "172.16.0.1"):
-            with _resolves_to(ip), self.assertRaises(PushRegistrationError):
+            with _resolves_to(ip), self.assertRaises(EndpointUnreachableError):
                 self._register()
 
     def test_link_local_metadata_address_is_refused(self) -> None:
         """169.254.169.254 is the cloud instance-metadata endpoint."""
-        with _resolves_to("169.254.169.254"), self.assertRaises(PushRegistrationError):
+        with _resolves_to("169.254.169.254"), self.assertRaises(EndpointUnreachableError):
             self._register()
 
     def test_ipv6_loopback_is_refused(self) -> None:
-        with _resolves_to("::1"), self.assertRaises(PushRegistrationError):
+        with _resolves_to("::1"), self.assertRaises(EndpointUnreachableError):
             self._register()
 
     def test_embedded_credentials_are_refused(self) -> None:
-        with _resolves_to("93.184.216.34"), self.assertRaises(PushRegistrationError):
+        with _resolves_to("93.184.216.34"), self.assertRaises(EndpointCredentialsError):
             self._register("https://user:pass@push.example.test/UP")
 
     def test_non_http_scheme_is_refused(self) -> None:
-        with self.assertRaises(PushRegistrationError):
+        with self.assertRaises(InvalidEndpointUrlError):
             self._register("file:///etc/passwd")
 
     def test_a_public_endpoint_still_registers(self) -> None:

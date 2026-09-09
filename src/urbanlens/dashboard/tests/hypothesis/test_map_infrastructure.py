@@ -107,10 +107,13 @@ class InfrastructureMapEndpointTests(SimpleTestCase):
         self.assertIn(response.status_code, (301, 302))
 
     def test_rejects_oversized_viewport(self) -> None:
+        """The zoom-in guidance reaches the log now, not the response - see MapController's catch site."""
         request = self.factory.get(self.url, {"bbox": "-75,40,-70,45"})
-        response = MapController().infrastructure_features(request)
+        with self.assertLogs("urbanlens.dashboard.controllers.maps", level="WARNING") as logs:
+            response = MapController().infrastructure_features(request)
         self.assertEqual(response.status_code, 400)
-        self.assertIn("zoom in", json.loads(response.content)["error"])
+        self.assertEqual(json.loads(response.content)["error"], "Invalid bbox parameter.")
+        self.assertTrue(any("zoom in" in message for message in logs.output))
 
     @mock.patch(
         "urbanlens.dashboard.services.map.infrastructure_map.infrastructure_feature_collection",

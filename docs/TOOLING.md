@@ -531,6 +531,40 @@ Asserts an endpoint's query count does not grow with its row count, and:
 - **reports which statements multiplied** on failure, so the cause is in the
   message rather than a separate diagnostic run.
 
+### `RenderTimeScalingMixin` (`core/tests/render_scaling.py`)
+
+The sibling of the above, and only the pair is interpretable: queries answer
+*how many*, render time answers *how expensive*. The Organize Labels page had
+already been cut from ~146 queries to 3 and still took ~12s at 500 labels,
+because the view rendered all six client-side tabs every load. Flat in queries
+the whole time.
+
+Two things it does differently, both measured rather than chosen:
+
+- **It asserts a per-row cost, not a growth ratio.** Render time on a list page
+  is *supposed* to be linear, so a page whose rows are 60x too expensive still
+  grows 4x at 4x the rows. Measured over 25 trials at load 11.4 on 8 cores, the
+  pathological workload's ratio was 2.8–3.2 — the same as everything else's.
+  What separates the classes is `(T(large) − T(small)) / rows` divided by the
+  page's own **zero-row** render: the subtraction cancels the fixed overhead and
+  the division cancels machine speed, leaving "one row costs X% of the whole
+  empty page". Budget 10%; benign workloads never exceeded 4.4%, an icon-picker
+  row never came in under 65%.
+- **Best-of-5, not the mean.** Contention only adds time, so the minimum is the
+  estimate that converges. A benign row measured 0.3–2.8% best-of-5 and
+  −5.6–6.3% by mean.
+
+A superlinearity check was designed and rejected: the slope ratio reached 3.24
+on a *linear* workload against 1.11–1.45 on the genuinely broken one. Database
+time is included rather than subtracted — Django rounds each statement to the
+millisecond, reading those numbers needs `force_debug_cursor` which perturbs the
+measurement, and the baseline already cancels everything constant. The failure
+message carries bytes-per-row and the query count instead.
+
+`test_render_time_scaling_harness.py` points it at two views in a test-only
+urlconf whose per-row cost is known, including one showing the query mixin
+calling the expensive page perfectly flat.
+
 ### `run_concurrently` (`core/tests/concurrency.py`)
 
 Runs callables on real threads released from a barrier. Necessary because a lock
@@ -595,7 +629,7 @@ grew by the same amount without any of their records explaining why.
 - **`testcontainers-python`** — an ephemeral PostGIS per run. `bin/run_tests.sh`
   already runs pytest inside the project's own compose stack against real
   PostGIS, so this would replace a working setup rather than add a capability.
-- **Load testing (Locust / k6)** — a genuine gap: `QueryScalingMixin` proves
-  query counts do not grow per row, which says nothing about connection-pool
-  exhaustion or gevent worker behaviour under concurrency. Wants its own scoped
+- **Load testing (Locust / k6)** — a genuine gap: the two scaling mixins prove
+  query counts and per-row render cost do not grow, which says nothing about
+  connection-pool exhaustion or gevent worker behaviour under concurrency. Wants its own scoped
   effort against a deployment, not a bolt-on here.
