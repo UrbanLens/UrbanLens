@@ -27,6 +27,7 @@ from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, TextChoic
 from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.locations import display
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
 
 if TYPE_CHECKING:
@@ -636,16 +637,11 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         ``effective_latitude``), so this reads from ``self.location`` whenever
         the pin doesn't have its own override.
         """
-        address_basic = self.effective_address_basic
-        if not address_basic:
-            return None
-
-        parts = [address_basic]
-        if city := self.effective_city:
-            parts.append(city)
-        if state := self.effective_state:
-            parts.append(state)
-        return ", ".join(parts)
+        return display.formatted_address(
+            address_basic=self.effective_address_basic,
+            city=self.effective_city,
+            state=self.effective_state,
+        )
 
     @property
     def deduplicated_identity_fields(self) -> list[tuple[str, str]]:
