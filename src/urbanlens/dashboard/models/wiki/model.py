@@ -31,7 +31,10 @@ from urbanlens.dashboard.models.wiki.queryset import WikiManager
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
+
     from django.db.models import Manager as DjangoManager
+    from django.db.models.fetch_modes import FetchMode
 
     from urbanlens.dashboard.models.markup.model import PinMarkup
     from urbanlens.dashboard.models.trips.model import TripActivity
@@ -225,13 +228,17 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_db(cls, db, field_names, values) -> Wiki:
+    def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Wiki:  # noqa: ARG003
         """Track the persisted name so ``save()`` can detect renames.
 
         Args:
             db: Database alias the row was loaded from.
             field_names: Names of the loaded fields.
             values: Loaded field values.
+            fetch_mode: Unused - django-stubs 6.1 types this ahead of the
+                pinned Django 6.0, which has no such parameter at runtime.
+                Accepted only so this override stays substitutable for the
+                declared base signature; never forwarded to ``super()``.
 
         Returns:
             The loaded Wiki instance.

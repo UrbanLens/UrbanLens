@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 # Django Imports
 from django.core.exceptions import ValidationError
@@ -34,9 +34,11 @@ from urbanlens.dashboard.models.achievements.queryset import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     import datetime
 
     from django.db.models import Manager as DjangoManager
+    from django.db.models.fetch_modes import FetchMode
 
     from urbanlens.dashboard.services.achievements.metrics import Metric
 
@@ -128,13 +130,17 @@ class Achievement(abstract.PublicDashboardModel):
     QUALIFYING_FIELDS = ("metric", "threshold", "is_active")
 
     @classmethod
-    def from_db(cls, db, field_names, values) -> Achievement:
+    def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Achievement:  # noqa: ARG003
         """Track the persisted qualifying fields so a save can tell what changed.
 
         Args:
             db: Database alias the row was loaded from.
             field_names: Names of the loaded fields.
             values: Loaded field values.
+            fetch_mode: Unused - django-stubs 6.1 types this ahead of the
+                pinned Django 6.0, which has no such parameter at runtime.
+                Accepted only so this override stays substitutable for the
+                declared base signature; never forwarded to ``super()``.
 
         Returns:
             The loaded Achievement instance.

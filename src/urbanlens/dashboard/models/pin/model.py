@@ -30,7 +30,10 @@ from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LE
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
+
     from django.db.models import Manager as DjangoManager
+    from django.db.models.fetch_modes import FetchMode
 
     from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.markup.model import PinMarkup
@@ -287,13 +290,17 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_db(cls, db, field_names, values) -> Pin:
+    def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Pin:  # noqa: ARG003
         """Track the persisted name and location so ``save()`` can detect renames and moves.
 
         Args:
             db: Database alias the row was loaded from.
             field_names: Names of the loaded fields.
             values: Loaded field values.
+            fetch_mode: Unused - django-stubs 6.1 types this ahead of the
+                pinned Django 6.0, which has no such parameter at runtime.
+                Accepted only so this override stays substitutable for the
+                declared base signature; never forwarded to ``super()``.
 
         Returns:
             The loaded Pin instance.
