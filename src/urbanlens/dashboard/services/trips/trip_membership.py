@@ -147,31 +147,36 @@ def notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> None
 
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     try:
         pref = invitee.notification_preferences.added_to_trip
     except AttributeError:
         pref = DeliveryPreference.SITE
-    # "Email" and "Notification" are indistinguishable here on purpose - this
-    # type has no email-sending code, so anything but NONE still gets the
-    # in-app row (see controllers.notifications.EMAIL_UNAVAILABLE_PREF_FIELDS).
     if pref == DeliveryPreference.NONE:
         return
     # Resolved (and masked if needed) toward the specific recipient before
     # formatting - the message string is stored as plain text, so it must be
     # masked here, not at render time (see identity_visibility.py's docstring).
     inviter_name = resolve_visible_identity(invitee, inviter)["display_name"]
-    NotificationLog.objects.notify(
-        profile=invitee,
-        source_profile=inviter,
-        status=Status.UNREAD,
-        importance=Importance.MEDIUM,
-        notification_type=NotificationType.ADDED_TO_TRIP,
-        title="Trip invitation",
-        message=f'{inviter_name} invited you to join "{trip.name}".',
-        url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
-    )
+    title = "Trip invitation"
+    body = f'{inviter_name} invited you to join "{trip.name}".'
+    url = reverse("trips.detail", kwargs={"trip_slug": trip.slug})
+
+    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+        NotificationLog.objects.notify(
+            profile=invitee,
+            source_profile=inviter,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.ADDED_TO_TRIP,
+            title=title,
+            message=body,
+            url=url,
+        )
+    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
+        send_notification_email(invitee, title=title, body_text=body, url=url)
 
 
 def suggest_connections_for_new_member(new_member: Profile, existing_members: Iterable[Profile]) -> None:

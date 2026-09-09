@@ -38,6 +38,7 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.keyset_cursor import InvalidCursorError, decode_cursor, encode_cursor
 from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
+from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -191,27 +192,27 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile, message: s
         pref = to_profile.notification_preferences.friend_request
     except AttributeError:
         pref = DeliveryPreference.SITE
-
-    # "Email" and "Notification" are indistinguishable here on purpose - this
-    # type has no email-sending code, so anything but NONE still gets the
-    # in-app row (see controllers.notifications.EMAIL_UNAVAILABLE_PREF_FIELDS).
     if pref == DeliveryPreference.NONE:
         return
 
     body = f"{from_profile.username} wants to be your friend."
     if message:
         body += f' "{message}"'
+    url = reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)})
 
-    NotificationLog.objects.notify(
-        profile=to_profile,
-        status=Status.UNREAD,
-        importance=Importance.MEDIUM,
-        notification_type=NotificationType.FRIEND_REQUEST,
-        title="New friend request",
-        message=body,
-        url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
-        source_profile=from_profile,
-    )
+    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+        NotificationLog.objects.notify(
+            profile=to_profile,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.FRIEND_REQUEST,
+            title="New friend request",
+            message=body,
+            url=url,
+            source_profile=from_profile,
+        )
+    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
+        send_notification_email(to_profile, title="New friend request", body_text=body, url=url)
 
 
 def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, message: str | None = None) -> Friendship | None:
@@ -236,22 +237,7 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, mes
     if existing and existing.status == FriendshipStatus.REQUESTED and existing.from_profile_id == to_profile.pk:
         if not existing.accept():
             return None
-        try:
-            accepted_pref = to_profile.notification_preferences.friend_accepted
-        except AttributeError:
-            accepted_pref = DeliveryPreference.SITE
-        # See notify_friend_request's comment above - same no-email-channel tradeoff.
-        if accepted_pref != DeliveryPreference.NONE:
-            NotificationLog.objects.notify(
-                profile=to_profile,
-                status=Status.UNREAD,
-                importance=Importance.MEDIUM,
-                notification_type=NotificationType.FRIEND_ACCEPTED,
-                title="Friend request accepted",
-                message=f"{from_profile.username} accepted your friend request.",
-                url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
-                source_profile=from_profile,
-            )
+        _notify_friend_accepted(to_profile, from_profile)
         # Mark from_profile's own pending friend_request notification (from to_profile) as read
         NotificationLog.objects.filter(
             profile=from_profile,
@@ -389,39 +375,52 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
         raise CommunityDisabledError(f"actor {actor.pk} or requester {friendship.from_profile_id} has community_enabled=False")
 
     requester = friendship.from_profile if friendship.to_profile == actor else friendship.to_profile
-    try:
-        accepted_pref = requester.notification_preferences.friend_accepted
-    except AttributeError:
-        accepted_pref = DeliveryPreference.SITE
-    # See notify_friend_request's comment above - same no-email-channel tradeoff.
-    if accepted_pref != DeliveryPreference.NONE:
-        _notify_friend_accepted(requester, actor)
+    _notify_friend_accepted(requester, actor)
     _dismiss_friend_request_notifications(actor, target.pk)
     return friendship
 
 
 def _notify_friend_accepted(requester: Profile, actor: Profile) -> None:
-    """Raise the FRIEND_ACCEPTED notification for *requester*.
+    """Raise the FRIEND_ACCEPTED notification for *requester*, honoring their delivery preference.
 
     Split out so the acceptance flow's post-notification steps (dismissing the
     request notification, returning the friendship) run whether or not
-    the recipient has silenced this type.
+    the recipient has silenced this type. Shared by both places a friendship
+    becomes ACCEPTED (an explicit accept, and the auto-accept branch of
+    ``request_or_accept_friendship``) so they can't drift on delivery again.
+
+    Args:
+        requester: The profile being notified - the one who sent the original request.
+        actor: The profile that just accepted it.
     """
-    NotificationLog.objects.notify(
-        profile=requester,
-        status=Status.UNREAD,
-        importance=Importance.MEDIUM,
-        notification_type=NotificationType.FRIEND_ACCEPTED,
-        title="Friend request accepted",
-        message=f"{actor.username} accepted your friend request.",
-        url=reverse("profile.view_user", kwargs={"profile_slug": actor.slug or str(actor.uuid)}),
-        # The actor is who accepted - the same profile this notification's message
-        # and url already point at. Without it the external API's
-        # NotificationSerializer reports a null actor, so a mobile client renders
-        # the notification with no one to link back to. The other two paths that
-        # raise FRIEND_ACCEPTED both set it.
-        source_profile=actor,
-    )
+    try:
+        pref = requester.notification_preferences.friend_accepted
+    except AttributeError:
+        pref = DeliveryPreference.SITE
+    if pref == DeliveryPreference.NONE:
+        return
+
+    title = "Friend request accepted"
+    body = f"{actor.username} accepted your friend request."
+    url = reverse("profile.view_user", kwargs={"profile_slug": actor.slug or str(actor.uuid)})
+
+    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+        NotificationLog.objects.notify(
+            profile=requester,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.FRIEND_ACCEPTED,
+            title=title,
+            message=body,
+            url=url,
+            # The actor is who accepted - the same profile this notification's message
+            # and url already point at. Without it the external API's
+            # NotificationSerializer reports a null actor, so a mobile client renders
+            # the notification with no one to link back to.
+            source_profile=actor,
+        )
+    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
+        send_notification_email(requester, title=title, body_text=body, url=url)
 
 
 def reject_friend_request(actor: Profile, target: Profile) -> Friendship:

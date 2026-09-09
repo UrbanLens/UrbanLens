@@ -58,19 +58,7 @@
                            onchange="notifDelivery(this)">
                 </label>
 
-                {# Email - unavailable for a category with no email-sending code #}
-                {% if field in email_unavailable_fields %}
-                <label class="notif-prefs__cell notif-prefs__cell--unavailable"
-                       title="Email delivery isn't available for this yet - you'll still get the in-app notification.">
-                    <span class="notif-prefs__sr-only">{{ title }}: email (not yet available; in-app notification is sent instead)</span>
-                    <input type="checkbox"
-                           name="{{ field }}__email"
-                           class="notif-delivery-box"
-                           data-field="{{ field }}"
-                           {% if current == 'email' or current == 'both' %}checked{% endif %}
-                           onclick="return false;">
-                </label>
-                {% else %}
+                {# Email #}
                 <label class="notif-prefs__cell">
                     <span class="notif-prefs__sr-only">{{ title }}: email</span>
                     <input type="checkbox"
@@ -80,7 +68,6 @@
                            {% if current == 'email' or current == 'both' %}checked{% endif %}
                            onchange="notifDelivery(this)">
                 </label>
-                {% endif %}
 
 
                 <label class="notif-prefs__cell{% if not has_whatsapp_number %} notif-prefs__cell--unavailable{% endif %}"

@@ -18,10 +18,8 @@ The rules that live here, and only here:
   ``comment_liked`` on ``notification_preferences`` can be set to
   ``DeliveryPreference.NONE``, which must suppress the row entirely rather than
   writing it and hiding it at render time - a stored notification still shows
-  up in counts and digests. Neither type has any email-sending code behind
-  it, though, so "Email" and "Notification" are indistinguishable here on
-  purpose - anything but NONE still gets the in-app row (see
-  ``controllers.notifications.EMAIL_UNAVAILABLE_PREF_FIELDS``).
+  up in counts and digests. ``SITE``/``EMAIL``/``BOTH`` each do what they say -
+  the in-app row, ``send_notification_email``, or both.
 - **Name the actor only as far as the recipient may see them.** Both helpers
   resolve the actor through ``resolve_visible_identity`` before building their
   strings, so a notification never discloses someone the thread it links to
@@ -47,6 +45,7 @@ from django.urls import NoReverseMatch, reverse
 
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -158,16 +157,24 @@ def notify_reply(actor: Profile, parent_comment: Any, reply: Any = None) -> None
     recipient = _recipient_of(parent_comment)
     if recipient is None or recipient == actor:
         return
-    if _preference(recipient, "comment_reply") == DeliveryPreference.NONE:
+    pref = _preference(recipient, "comment_reply")
+    if pref == DeliveryPreference.NONE:
         return
     name, handle = _actor_names(recipient, actor)
-    NotificationLog.objects.notify(
-        profile=recipient,
-        notification_type=NotificationType.COMMENT_REPLY,
-        title=f"{name} replied to your comment",
-        message=f"{handle} replied to your comment.",
-        url=comment_url(reply or parent_comment),
-    )
+    title = f"{name} replied to your comment"
+    body = f"{handle} replied to your comment."
+    url = comment_url(reply or parent_comment)
+
+    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+        NotificationLog.objects.notify(
+            profile=recipient,
+            notification_type=NotificationType.COMMENT_REPLY,
+            title=title,
+            message=body,
+            url=url,
+        )
+    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
+        send_notification_email(recipient, title=title, body_text=body, url=url)
 
 
 def notify_reaction(actor: Profile, comment: Any) -> None:
@@ -184,13 +191,21 @@ def notify_reaction(actor: Profile, comment: Any) -> None:
     recipient = _recipient_of(comment)
     if recipient is None or recipient == actor:
         return
-    if _preference(recipient, "comment_liked") == DeliveryPreference.NONE:
+    pref = _preference(recipient, "comment_liked")
+    if pref == DeliveryPreference.NONE:
         return
     name, handle = _actor_names(recipient, actor)
-    NotificationLog.objects.notify(
-        profile=recipient,
-        notification_type=NotificationType.COMMENT_LIKED,
-        title=f"{name} reacted to your comment",
-        message=f"{handle} reacted to your comment.",
-        url=comment_url(comment),
-    )
+    title = f"{name} reacted to your comment"
+    body = f"{handle} reacted to your comment."
+    url = comment_url(comment)
+
+    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+        NotificationLog.objects.notify(
+            profile=recipient,
+            notification_type=NotificationType.COMMENT_LIKED,
+            title=title,
+            message=body,
+            url=url,
+        )
+    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
+        send_notification_email(recipient, title=title, body_text=body, url=url)

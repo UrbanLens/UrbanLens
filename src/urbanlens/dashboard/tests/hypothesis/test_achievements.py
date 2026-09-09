@@ -379,6 +379,52 @@ class AwardingTests(AchievementTestsBase):
             ).exists(),
         )
 
+    def test_email_preference_emails_instead_of_the_in_app_row(self) -> None:
+        from django.core import mail
+
+        from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
+        from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
+
+        self.user.email = "achiever@example.com"
+        self.user.save(update_fields=["email"])
+        NotificationPreference.objects.create(profile=self.profile, achievement_earned=DeliveryPreference.EMAIL)
+        self._achievement(metric="pins_created", threshold=1, name="Emailed Award")
+        baker.make(Pin, profile=self.profile)
+        mail.outbox.clear()
+
+        evaluate_profile(self.profile)
+
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACHIEVEMENT_EARNED
+            ).exists(),
+        )
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["achiever@example.com"])
+        self.assertIn("Emailed Award", mail.outbox[0].subject)
+
+    def test_both_preference_notifies_and_emails(self) -> None:
+        from django.core import mail
+
+        from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
+        from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
+
+        self.user.email = "both@example.com"
+        self.user.save(update_fields=["email"])
+        NotificationPreference.objects.create(profile=self.profile, achievement_earned=DeliveryPreference.BOTH)
+        self._achievement(metric="pins_created", threshold=1, name="Double Award")
+        baker.make(Pin, profile=self.profile)
+        mail.outbox.clear()
+
+        evaluate_profile(self.profile)
+
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, notification_type=NotificationType.ACHIEVEMENT_EARNED
+            ).exists(),
+        )
+        self.assertEqual(len(mail.outbox), 1)
+
 
 class SignalIntegrationTests(AchievementTestsBase):
     """The end-to-end path: a contribution lands, the award appears.

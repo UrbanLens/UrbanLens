@@ -180,6 +180,7 @@ def _notify(profile: Profile, award: UserAchievement) -> None:
     """
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
     from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
 
     # A missing preferences row raises RelatedObjectDoesNotExist, which is an
     # AttributeError subclass. Default to SITE rather than NONE so a user who
@@ -188,9 +189,6 @@ def _notify(profile: Profile, award: UserAchievement) -> None:
         preference = getattr(profile.notification_preferences, "achievement_earned", DeliveryPreference.SITE)
     except AttributeError:
         preference = DeliveryPreference.SITE
-    # "Email" and "Notification" are indistinguishable here on purpose - this
-    # type has no email-sending code, so anything but NONE still gets the
-    # in-app row (see controllers.notifications.EMAIL_UNAVAILABLE_PREF_FIELDS).
     if preference == DeliveryPreference.NONE:
         return
 
@@ -199,15 +197,20 @@ def _notify(profile: Profile, award: UserAchievement) -> None:
         url = reverse("profile.view")
     except NoReverseMatch:
         url = None
+    title = f"Achievement unlocked: {achievement.name}"
+    body = achievement.description or achievement.requirement_text
 
     try:
-        NotificationLog.objects.notify(
-            profile=profile,
-            notification_type=NotificationType.ACHIEVEMENT_EARNED,
-            title=f"Achievement unlocked: {achievement.name}",
-            message=achievement.description or achievement.requirement_text,
-            url=url,
-        )
+        if preference in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+            NotificationLog.objects.notify(
+                profile=profile,
+                notification_type=NotificationType.ACHIEVEMENT_EARNED,
+                title=title,
+                message=body,
+                url=url,
+            )
+        if preference in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
+            send_notification_email(profile, title=title, body_text=body, url=url)
     except Exception:
         logger.exception("Failed to notify profile %s of achievement %s", profile.pk, achievement.pk)
 
