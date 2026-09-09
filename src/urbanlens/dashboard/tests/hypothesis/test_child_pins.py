@@ -860,11 +860,16 @@ class PinActionsFabVisibilityTests(TestCase):
         pin.save(update_fields=["slug"])
         return self.client.get(reverse("pin.details", kwargs={"pin_slug": pin.slug}))
 
-    def test_hidden_when_the_pin_has_no_children_and_no_parent(self) -> None:
+    def test_hierarchy_items_hidden_but_the_fab_remains_for_its_article_actions(self) -> None:
+        """The fab itself always renders (it also holds the Article tab's
+        Source/Clear controls - see _hierarchy_actions_fab.html and
+        test_articles.py's test_pin_detail_page_offers_source_and_clear_via_the_actions_menu),
+        even for the common case of a pin with neither children nor a parent."""
         pin = _make_pin(self.profile, name="Lonely")
         response = self._page(pin)
-        self.assertNotContains(response, "pin-actions-fab")
+        self.assertContains(response, "pin-actions-fab")
         self.assertNotContains(response, "Child pin details")
+        self.assertNotContains(response, "Open parent pin")
 
     def test_toggle_shown_when_the_pin_has_children(self) -> None:
         parent = _make_pin(self.profile, name="Campus")

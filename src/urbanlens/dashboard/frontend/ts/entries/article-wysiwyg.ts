@@ -75,6 +75,14 @@ function editorRoot(el: Element | null): HTMLElement | null {
     return el?.closest<HTMLElement>("[data-article-editor]") ?? null;
 }
 
+// The Source/Clear buttons live in the pin-detail actions menu (see
+// _hierarchy_actions_fab.html), outside the editor's own DOM subtree, so
+// ancestry lookup finds nothing for them - fall back to the page's one
+// mounted editor. There is never more than one article editor on a page.
+function editorRootForControl(el: Element | null): HTMLElement | null {
+    return editorRoot(el) ?? document.querySelector<HTMLElement>("[data-article-editor]");
+}
+
 function textareaOf(root: HTMLElement): HTMLTextAreaElement | null {
     return root.querySelector<HTMLTextAreaElement>("[data-article-textarea]");
 }
@@ -118,7 +126,9 @@ function setMode(root: HTMLElement, mode: EditorMode): void {
     }
 
     root.dataset.editorMode = mode;
-    const toggle = root.querySelector<HTMLElement>("[data-article-mode-toggle]");
+    // Not root.querySelector: the toggle button now lives in the pin-detail
+    // actions menu, outside root's own subtree (see editorRootForControl).
+    const toggle = document.querySelector<HTMLElement>("[data-article-mode-toggle]");
     if (toggle) {
         toggle.classList.toggle("is-active", mode === "source");
         toggle.title = mode === "source" ? "Switch to the visual editor" : "View/edit Markdown source";
@@ -652,17 +662,22 @@ document.addEventListener(
         }
         const modeToggle = target?.closest<HTMLElement>("[data-article-mode-toggle]");
         if (modeToggle) {
-            const root = editorRoot(modeToggle);
+            const root = editorRootForControl(modeToggle);
             if (!root) return;
             event.preventDefault();
+            // A no-op unless the button lives outside the Article tab's own
+            // panel (the actions-menu case) - page-tabs.js only acts when
+            // "article" isn't already the active tab.
+            window.ulActivatePageTab?.("article");
             setMode(root, root.dataset.editorMode === "source" ? "wysiwyg" : "source");
             return;
         }
         const clearButton = target?.closest<HTMLElement>("[data-article-clear]");
         if (clearButton) {
-            const root = editorRoot(clearButton);
+            const root = editorRootForControl(clearButton);
             if (!root) return;
             event.preventDefault();
+            window.ulActivatePageTab?.("article");
             void handleClearClick(root);
         }
     },

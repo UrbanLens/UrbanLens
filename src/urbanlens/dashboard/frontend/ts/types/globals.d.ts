@@ -120,6 +120,12 @@ declare global {
         // shared/hotkeys.ts's loadHotkeys(), the only reader. Keyed by action id,
         // e.g. {"undo": "ctrl+alt+z"}; absent for an anonymous request.
         UL_HOTKEYS?: Record<string, string>;
+        // Wikipedia-style page tabs (static/js/page-tabs.js, not bundled).
+        // Switches to the named data-tab panel; used by article-wysiwyg.ts's
+        // Source/Clear handling so clicking those from the pin-detail actions
+        // menu (which isn't scoped to any one tab) brings the Article tab
+        // into view along with acting on it.
+        ulActivatePageTab?: (name: string, options?: { skipHash?: boolean }) => void;
     }
 
     const toastr: Toastr;

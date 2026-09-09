@@ -32,7 +32,6 @@ const COLLIDERS = [
     ".floorplan-toolbar-stack",
     ".floorplan-canvas-controls",
     ".map-bottom-controls",
-    ".article-floating-toolbar",
     ".ul-bulk-bar.visible",
     ".page-footer",
     "#toast-container",

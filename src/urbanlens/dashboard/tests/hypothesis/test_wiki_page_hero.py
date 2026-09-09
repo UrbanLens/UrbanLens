@@ -89,9 +89,11 @@ class WikiActionsFabVisibilityTests(TestCase):
         baker.make(Pin, profile=self.profile, location=self.location)
         self.client.force_login(self.user)
 
-    def test_hidden_when_the_wiki_has_no_children_and_no_parent(self) -> None:
+    def test_hierarchy_items_hidden_but_the_fab_remains_for_its_article_actions(self) -> None:
+        """The fab itself always renders on a wiki page too - it also holds the
+        Article tab's Source/Clear controls (see _hierarchy_actions_fab.html)."""
         content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
-        self.assertNotIn("pin-actions-fab", content)
+        self.assertIn("pin-actions-fab", content)
         self.assertNotIn("Child pin details", content)
 
     def test_toggle_shown_when_the_wiki_has_child_wikis(self) -> None:

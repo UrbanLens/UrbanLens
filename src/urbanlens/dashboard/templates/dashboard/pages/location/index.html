@@ -838,7 +838,7 @@
 {# the page-wide "child pin details" toggle, jump-to-parent, and detach.     #}
 {# Hidden entirely when there is nothing to show (no children, no parent).  #}
 {% if parent_pin %}{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid as pin_parent_url %}{% url 'pin.detach_parent' pin.slug as pin_detach_url %}{% endif %}
-{% include "dashboard/partials/ui/_hierarchy_actions_fab.html" with has_children=has_child_pins include_children=include_children parent_url=pin_parent_url parent_name=parent_pin.effective_name detach_url=pin_detach_url csrf_token=csrf_token request=request only %}
+{% include "dashboard/partials/ui/_hierarchy_actions_fab.html" with has_children=has_child_pins include_children=include_children parent_url=pin_parent_url parent_name=parent_pin.effective_name detach_url=pin_detach_url csrf_token=csrf_token request=request show_article_actions=True only %}
 
 {# -- Media gallery multi-select floating toolbar --------------------------- #}
 {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="media" actions=media_bulk_actions %}

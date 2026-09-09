@@ -277,7 +277,6 @@ class PinArticleViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data-article-editor")
         self.assertContains(response, "data-article-canvas")
-        self.assertContains(response, "data-article-mode-toggle")
         self.assertContains(response, "data-article-textarea")
         self.assertContains(response, 'name="content"')
         self.assertNotContains(response, "article-edit-btn")
@@ -286,6 +285,17 @@ class PinArticleViewTests(TestCase):
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "dashboard/js/article-wysiwyg.js")
+
+    def test_pin_detail_page_offers_source_and_clear_via_the_actions_menu(self) -> None:
+        """Source/Clear live in the pin-detail actions menu (_hierarchy_actions_fab.html),
+        not a floating toolbar inside the article panel itself - see
+        editorRootForControl() in article-wysiwyg.ts for how they still reach the
+        editor from outside its own DOM subtree."""
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-article-mode-toggle")
+        self.assertContains(response, "data-article-clear")
+        self.assertContains(response, 'id="pin-actions-fab"')
 
 
 class WikiArticleViewTests(TestCase):
