@@ -1,6 +1,15 @@
 {% load humanize %}
 {% if n.notification_type == 'pin_shared' %}
-<li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %}{% if n.pin_share.is_actionable %} notif-item--friend-req{% endif %}" id="notif-{{ n.id }}" role="menuitem">
+<li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %}{% if n.pin_share.is_actionable %} notif-item--friend-req{% endif %}"
+    id="notif-{{ n.id }}"
+    role="menuitem"
+    {% if n.is_unread %}
+    hx-post="{% url 'notifications.read' n.id %}"
+    hx-vals='{"surface": "{{ notif_surface|default:"inbox" }}"}'
+    hx-target="this"
+    hx-swap="outerHTML"
+    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+    {% endif %}>
   <div class="notif-item__icon-wrap notif-item__icon-wrap--pin_shared"><i class="material-symbols-outlined">ios_share</i></div>
   <div class="notif-item__body">
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
@@ -76,7 +85,16 @@
   {% if n.is_unread %}<div class="notif-item__dot" aria-hidden="true"></div>{% endif %}
 </li>
 {% elif n.notification_type == 'visit_suggested' %}
-<li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %}{% if n.visit_suggestion.is_actionable %} notif-item--friend-req{% endif %}" id="notif-{{ n.id }}" role="menuitem">
+<li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %}{% if n.visit_suggestion.is_actionable %} notif-item--friend-req{% endif %}"
+    id="notif-{{ n.id }}"
+    role="menuitem"
+    {% if n.is_unread %}
+    hx-post="{% url 'notifications.read' n.id %}"
+    hx-vals='{"surface": "{{ notif_surface|default:"inbox" }}"}'
+    hx-target="this"
+    hx-swap="outerHTML"
+    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+    {% endif %}>
   <div class="notif-item__icon-wrap notif-item__icon-wrap--visit_suggested"><i class="material-symbols-outlined">event_available</i></div>
   <div class="notif-item__body">
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
