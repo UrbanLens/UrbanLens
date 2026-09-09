@@ -37,6 +37,7 @@
     if (!overlay || !input || !panel) return;
 
     var commitUrl = "{% url 'search.commit' %}";
+    var panelUrl = "{% url 'search.panel' %}";
 
     function csrfToken() {
         var el = overlay.querySelector('input[name=csrfmiddlewaretoken]');
@@ -112,8 +113,22 @@
             var q = input.value.trim();
             if (!q) return;
             commitQuery();
-            var first = panel.querySelector('.gs-result');
-            if (first && first.href) window.location = first.href;
+            // #gs-panel is a shared swap target for three independent,
+            // uncoordinated triggers - the dialog's own initial (empty-query)
+            // load, the debounced 250ms live search, and this - so its DOM
+            // state at any given instant is inherently racy: whichever
+            // response lands last wins, not whichever request was newest.
+            // Fetching this exact query directly and reading the first
+            // result out of *that* response (never out of the shared panel)
+            // sidesteps the race entirely rather than trying to out-time it.
+            fetch(panelUrl + '?q=' + encodeURIComponent(q), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { return r.text(); })
+                .then(function (html) {
+                    var doc = new DOMParser().parseFromString(html, 'text/html');
+                    var first = doc.querySelector('.gs-result');
+                    var href = first && first.getAttribute('href');
+                    if (href) window.location = href;
+                });
         }
     });
     panel.addEventListener('keydown', function (e) {
