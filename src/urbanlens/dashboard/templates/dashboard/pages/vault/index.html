@@ -7,8 +7,15 @@
 {% include "dashboard/partials/ui/_page_hero.html" with icon="home_storage" title="Vault" subtitle="Your photos, documents, and albums, all in one place." modifier="top" %}
 {% endblock %}
 
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/vault/_vault_subnav.html" with active_tab="home" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/vault/_vault_subnav.html" with active_tab="home" %}
 <div class="page-inner">
 
     {% if is_empty %}

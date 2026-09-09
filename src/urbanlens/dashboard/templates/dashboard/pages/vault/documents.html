@@ -11,8 +11,15 @@
 {% include "dashboard/partials/ui/_page_hero.html" with icon="folder_copy" title="Documents" subtitle="Deeds, permits, reports - any file worth keeping with a place." modifier="top" %}
 {% endblock %}
 
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/vault/_vault_subnav.html" with active_tab="documents" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/vault/_vault_subnav.html" with active_tab="documents" %}
 <div id="documents-page" class="memories-tab-page"
      data-upload-url="{% url 'vault.documents.upload' %}"
      data-action-base="{% url 'vault.photos' %}"
@@ -25,11 +32,12 @@
         <input type="file" id="documents-file-input" accept=".pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.odp" multiple hidden
                onchange="documentsHandleFiles(this.files); this.value='';">
 
-        {# -- Upload dropzone ------------------------------------------------- #}
-        <label for="documents-file-input" class="photos-dropzone" id="documents-dropzone">
+        {# -- Upload dropzone (compact - the whole page is still a drop target, #}
+        {# see the page-wide dragenter/drop listeners below) ------------------ #}
+        <label for="documents-file-input" class="photos-dropzone" id="documents-dropzone"
+               title="Drag &amp; drop anywhere on this page, or click to upload. PDF, Word, Excel, PowerPoint, and plain text.">
             <i class="material-symbols-outlined">cloud_upload</i>
-            <span class="photos-dropzone-title">Drag documents here, or click to upload</span>
-            <span class="photos-dropzone-sub">PDF, Word, Excel, PowerPoint, and plain text.</span>
+            <span class="photos-dropzone-title">Add documents</span>
             <div class="photos-upload-progress" id="documents-upload-progress" hidden>
                 <div class="photos-upload-bar" id="documents-upload-bar"></div>
             </div>
