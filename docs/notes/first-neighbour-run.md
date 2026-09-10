@@ -1,4 +1,4 @@
-# X15 — The first neighbour run: one user's ordinary actions multiply another user's latency by up to 39x
+# X15 — The first neighbour run, and the correction: on the real process model one user filtering costs another user nothing
 
 > **Written by a Claude agent. Not authoritative.**
 >
@@ -11,8 +11,13 @@
 `id: X15` · `status: holds` · `updated: 2026-09-10`
 
 The owner's requirement is *"no action a user takes should impact the availability of the site for
-other users, ever"*. This is the first direct measurement of it. It is violated today, by a wide
-margin, by a single user performing one ordinary action.
+other users, ever"*. This is the first direct measurement of it.
+
+**Read the correction below before quoting anything from the first table.** The run that produced it
+used a *development* process model — `runserver` under daphne — and a later run on the real one
+(gunicorn + gevent, with the connection cap) moved the single-user result by a factor of twenty. The
+headline this document originally carried, that one user pressing a filter button costs another user
+4.4 seconds, **does not hold on the process model production runs**.
 
 ## Method
 
@@ -94,6 +99,46 @@ The `application_name` change from phase 2 is what makes that attributable: 74 o
 were the web tier, and unlike P104's outage they were *working*, not idle. Worth noting the sampler
 reported "never close to full" because its pressure threshold is 80% — at 75/100 with 74 from one
 tier that reads as too lax, and is probably the wrong threshold.
+
+## Corrected 2026-09-10: the same measurement on the real process model
+
+`dev_env.py create --environment staging` gives gunicorn + gevent with the phase-2 flags
+(`--worker-connections 20 --backlog 256 --max-requests 1000`). Same harness, same 20,000-pin account,
+same 5 req/s neighbour, host quieter (the development stack stopped, and the environment's own
+out-of-path services with it). Budget 563 ms, derived the same way.
+
+| | runserver + daphne | **gunicorn + gevent, capped** |
+|---|---|---|
+| idle baseline p95 | 241 ms | **183 ms** |
+| **`map_search_1`** — one user filtering | **4,431 ms** | **221 ms** |
+| `map_search_8` — eight users filtering | 8,902 ms | **1,281 ms** |
+| dropped iterations | 231 (39% of the schedule) | **0** |
+| failed requests | 19.2% | **0%** |
+| peak Postgres backends | 75/100, 74 of them web | **14/100** |
+| k6 VU pool | grew 20 → 261 | **29, never grew** |
+
+**One user filtering is now indistinguishable from idle** — 221 ms against a 183 ms baseline. The
+19x degradation this document led with was substantially an artifact of the development server's
+threading, not the endpoint's cost. That is a large correction to the strongest claim here and it
+was found by running the thing rather than reasoning about it.
+
+Three further things the run settles:
+
+- **The `--worker-connections 20` cap works.** 14 backends at peak against 75 before, on identical
+  work. This is the first time P104's fix has been exercised, and it is the mechanism it was written
+  for.
+- **`map_search_8` still misses the budget** at 1,281 ms against 563 ms — about 7x the baseline.
+  Concurrent filtering is a real cost that gunicorn absorbs far better than daphne and does not
+  remove. The 11.3 MB payload measurement stands, and so does the case for D12's data contract.
+- **No worker was killed.** The only lifecycle events were clean `--max-requests 1000` recycles
+  ("Worker exiting" / "Booting worker"), no `WORKER TIMEOUT`, no SIGKILL. The gevent heartbeat
+  starvation predicted in D11 §2.1 did not appear at this load — which is not the same as it not
+  existing; `search_storm`, `map_init` and the import phases have not yet run on this model.
+
+What has *not* been re-measured on the real process model: `map_init_1/4`, `label_edit`,
+`search_storm`, `import_confirmed` and `cooldown`. Every figure for those below is still a
+development-server figure. P108 and P110 are properties of the code and are unaffected; P111 was
+found on this environment and is a property of the deployment.
 
 ## What this cannot tell you
 
