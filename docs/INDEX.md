@@ -106,7 +106,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P108 | open | 2026-09-10 | Opening the map compares every pin with every other pin, in Python, before the page renders | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P109 | open | 2026-09-10 | One import's task fan-out fills the only Celery queue for hours, and a safety task waits behind it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P110 | open | 2026-09-10 | The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P111 | open | 2026-09-10 | The `app` container idles at 97% of its memory limit under gunicorn, because the sizing assumed 140MB a worker and it is 790 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P111 | open | 2026-09-10 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |

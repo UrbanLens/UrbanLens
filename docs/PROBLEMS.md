@@ -4225,59 +4225,69 @@ go through `pyarrow`/`S3FileSystem` rather than `self.session`, so nothing bound
 enrichment reaches Overture in the first place. The circuit breaker bounds the *damage* of a refusal;
 it does not bound the request rate that earns one.
 
-## P111 — The `app` container idles at 97% of its memory limit under gunicorn, because the sizing assumed 140MB a worker and it is 790
+## P111 — A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back
 
 `id: P111` · `status: open` · `updated: 2026-09-10`
 
 Measured on a `--environment staging` dev environment — the first time this project's real process
-model has been run and looked at. With **no traffic at all**:
+model has been run and looked at.
 
-```
-ul_perf_app   1.939GiB / 2GiB   96.93%
+**A fresh worker is 347 MB**, and that is reproducible from the import path alone:
 
-  17 MB  arbiter
- 836 MB  worker
- 777 MB  worker
- 768 MB  worker
-```
+| stage | RSS |
+|---|---|
+| bare interpreter | 12 MB |
+| `import django` | 12 MB |
+| `django.setup()` — settings, apps, 58 plugins | 181 MB |
+| URLconf resolved (`post_worker_init`'s warm) | 343 MB |
+| reverse dict populated | 348 MB |
 
-`docker-compose.yml`'s own sizing note for the service says:
+`docker-compose.yml`'s sizing note for the service says **"~140MB/worker idle"**. It is 347 — wrong
+by 2.5x, and the URLconf warm is half of it: resolving 31 root patterns imports every view in the
+project and everything they import.
 
-> gunicorn (WEB_CONCURRENCY=3 by default): ~140MB/worker idle, but Pillow/GDAL/GeoPandas/Shapely and
-> per-worker DB/valkey pools all run in the request path and push real traffic well above that
+Worth ruling out, because it is the obvious suspect: the heavy geospatial stack is **not** loaded at
+startup. After `django.setup()` only `numpy` and `PIL` are in `sys.modules`; `pyarrow` (+27 MB),
+`pandas` (+47 MB), `geopandas` (+18 MB) and GDAL (+43 MB) are all imported lazily. That is already
+right and is not where the memory goes.
 
-The second half is right and the first half is wrong by **5.6x**. Three workers at 140 MB is 420 MB
-inside a 2 GiB limit — comfortable, with room for exactly the traffic the comment anticipates. Three
-workers at ~790 MB is 2.37 GB, which does not fit the limit *before a single request arrives*, so the
-headroom the sizing was reasoning about does not exist.
+**The growth is the actual problem, and it tracks concurrency rather than volume.** On the same
+worker pool:
 
-Why a worker is that large is not mysterious: GeoDjango, GDAL, GeoPandas, Shapely and pyarrow are all
-imported at startup, 58 plugins are discovered, and `gunicorn.conf.py`'s `post_worker_init` warms the
-URLconf — which imports every view. None of that is shared after the fork in any way the kernel can
-reclaim.
+| | total worker RSS |
+|---|---|
+| fresh | 1,103 MB |
+| after 5 sequential `map.search` POSTs | 1,277 MB |
+| after 10 | 1,300 MB |
+| after 15 | 1,300 MB — **plateaus** |
+| after **24 concurrent** `map.search` POSTs | **1,910 MB** |
 
-**Why it is an availability problem and not just untidy.** Under `-k gevent` a worker carries many
-in-flight requests as greenlets. A container OOM kills the whole worker process, so every request it
-was serving dies with it — not the one that allocated too much. The programme's own invariant fails
-from a configuration mismatch rather than from any code path, and the endpoints most likely to
-trigger it are the ones already known to allocate: an 11.3 MB map payload per filter POST (X15), or
-an Overture read that could not be narrowed (P110).
+Sequential requests plateau: the allocator keeps one request's peak and reuses it. Concurrency does
+not, because *n* requests in flight need *n* copies at once. 24 concurrent added **610 MB** and it
+stayed there after every request finished — the allocator does not return it to the OS, so the pool's
+footprint is a high-water mark of concurrency, permanently.
 
-`--max-requests 1000 --max-requests-jitter 100` recycles workers, which bounds slow growth but not a
-single large response.
+That is why the earlier figure in this entry was wrong. It recorded 790 MB "idle", measured on
+workers that had already served a load run; they were not idle, they were holding a high-water mark.
+The correction matters because it changes the fix: this is not a fat baseline to trim, it is a
+per-request cost multiplied by how many can be in flight.
 
-Three ways out, and they are not equivalent:
+**The arithmetic that does not close.** `--worker-connections 20` across 3 workers permits 60
+concurrent requests. A `map.search` on a 20,000-pin account is 11.3 MB on the wire (X15) and more in
+flight — the payload dicts, the JSON string and the rendered HTML all exist at once. 3 x 347 MB of
+base is comfortable inside `mem_limit: 2g`; 60 concurrent large responses on top of it is not, and
+the failure is not graceful: under `-k gevent` a container OOM kills the whole worker process, so
+every greenlet it was serving dies with it — not the one that allocated too much.
 
-1. **Raise `MEM_LIMIT__APP`.** Honest and immediate: 3 x 790 MB plus request headroom wants ~4 GB.
-   Costs host memory that damballa may or may not have spare, and does nothing about why a worker is
-   790 MB.
-2. **Lower `WEB_CONCURRENCY`.** Fits the existing limit, and cuts the request concurrency the D11
-   connection arithmetic is built on. Not free.
-3. **Make a worker smaller.** The URLconf warm is the interesting one: it exists to avoid a 9.5s
-   first request, and it is also what pulls every view and its imports into every worker. Whether
-   that trade still pays is worth measuring rather than assuming.
+**Order of operations.** The response size is the problem and the memory limit is the symptom.
+D12's data contract exists to stop `map.search` building an 11.3 MB HTML document at all; with a
+bounded response the base plus modest headroom fits 2 GiB comfortably. Raising the limit first would
+buy room for a payload that should not exist. If it turns out more memory is genuinely wanted after
+that — the host has plenty spare — the number to ask for is roughly `3 x 400 MB` of base plus
+`worker_connections x workers x peak response size`, which is a formula rather than a guess only
+once the payload is bounded.
 
-Nothing here is decided. What is measured is that the current pair of numbers cannot both be right.
+Also worth fixing regardless of any of that: the "~140MB/worker idle" comment, which is the number
+the current limit was reasoned from.
 
-Found while trying to run the neighbour suite on the real process model; it is why that run could
-not complete, and it was visible before the load started.
+Found while trying to run the neighbour suite on the real process model.

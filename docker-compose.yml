@@ -319,9 +319,20 @@ services:
         max-size: "200k"
         max-file: "10"
 
-    # gunicorn (WEB_CONCURRENCY=3 by default): ~140MB/worker idle, but Pillow/
-    # GDAL/GeoPandas/Shapely and per-worker DB/valkey pools all run in the
-    # request path and push real traffic well above that
+    # gunicorn (WEB_CONCURRENCY=3 by default). Measured on a staging-model
+    # environment, not estimated: a fresh worker is ~347MB, half of it the
+    # post_worker_init URLconf warm, which resolves 31 root patterns and so
+    # imports every view in the project. The geospatial stack is *not* in that
+    # - pyarrow/pandas/geopandas/GDAL are all imported lazily on first use.
+    #
+    # The number that decides this limit is not the baseline though. A worker's
+    # footprint is a high-water mark of *concurrent* response size and the
+    # allocator never returns it: 24 concurrent map.search POSTs on a
+    # 20,000-pin account added 610MB across the pool and kept it. With
+    # --worker-connections 20 x 3 workers, 60 such requests are permitted at
+    # once, and 2g does not cover that - see P111. The response size is the
+    # problem (D12) and this ceiling is the symptom, so raising it first would
+    # buy room for a payload that should not exist.
     cpus: ${CPU_LIMIT__APP:-${CPU_LIMIT:-2}}
     # cpu_shares is the other half of `cpus:`, and the two answer different
     # questions. `cpus:` is a CFS *ceiling* - it caps a service and reserves
