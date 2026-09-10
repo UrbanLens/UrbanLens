@@ -49,10 +49,35 @@ baseline is already so slow that the absolute ceiling sets the budget instead of
 the slack, `derive_budget.py` says so - a failure then says more about the host
 than about the account under test.
 
-## What this cannot tell you yet
+## Run it against the real process model
 
-A development environment runs `runserver`, not gunicorn, so **no dev target
-reproduces the process model the invariant actually depends on** - worker class,
-worker count, and the connection budget that follows from them. Runs against one
-exercise the endpoints and the harness; they do not exercise the topology. That
-needs a staging-like environment (`dev_env.py create --environment staging`).
+The default dev environment runs `runserver` under daphne, and **the process
+model changes the answer** - not by a little. Measured on the same account with
+the same harness: one user filtering cost the neighbour 4,431 ms on daphne and
+221 ms on gunicorn (X15). A run against `runserver` exercises the endpoints and
+the harness honestly; it does not tell you what the deployment does.
+
+```bash
+cd ../infrastructure
+python3 bin/dev_env.py create --name perf --branch <branch> \
+    --environment staging --metrics --no-redata
+```
+
+`--environment staging` sets `UL_ENVIRONMENT=staging`, which is the only axis the
+application branches on, so it gets gunicorn *and* is treated as a real
+deployment by anything reading that variable. Two consequences worth knowing
+before you run a load test on one:
+
+- Set **`UL_ALLOW_OUTBOUND_APIS=false`** in its `.env`. Otherwise the import
+  phase calls providers for real, thousands of times (P109). It is inherited
+  automatically from this repo's own `.env`, which carries it.
+- Set **`COMPOSE_PROFILES=metrics`** alongside `--metrics`, or the Celery
+  exporter is silently absent (N15).
+
+Containers are named `ul_<slug>_<service>`, so point the runner at
+`--provision-container ul_perf_app --db-container ul_perf_db`.
+
+## What it still cannot tell you
+
+The load generator shares the host with the target, so its own CPU is part of
+what the target competes with. The single-actor phases are the clean ones.

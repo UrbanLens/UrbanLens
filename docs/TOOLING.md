@@ -665,12 +665,17 @@ k6 rather than Locust because the assertion is open-model: a closed-model tool
 lets a slowing server reduce the probe's own request rate, hiding exactly the
 degradation being measured. Runs against a deployment, so it is not in pytest.
 
-Two things it will not tell you. A development environment runs `runserver`
-rather than gunicorn, so **no dev target reproduces the process model the
-invariant depends on** — runs against one exercise the endpoints and the
-harness, not the topology; that needs `dev_env.py create --environment
-staging`. And the load generator shares the host with the target, so its own
-CPU is part of what the target is competing with.
+**Run it against the real process model, because the process model changes the
+answer.** The default dev environment is `runserver` under daphne; measured on
+the same account with the same harness, one user filtering cost the neighbour
+4,431 ms there and 221 ms under gunicorn (X15). `dev_env.py create
+--environment staging` gives gunicorn + gevent with the deployed flags — see
+`tests/perf/README.md` for the two environment variables such an environment
+needs before a load run, both of which are easy to miss and quiet when missing.
+
+The one thing it still will not tell you: the load generator shares the host
+with the target, so its own CPU is part of what the target competes with. The
+single-actor phases are the clean ones.
 
 ### `run_concurrently` (`core/tests/concurrency.py`)
 
