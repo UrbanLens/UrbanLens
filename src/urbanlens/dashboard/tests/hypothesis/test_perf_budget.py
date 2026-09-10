@@ -117,6 +117,19 @@ def test_it_falls_back_to_the_untagged_trend() -> None:
     assert derive_budget.baseline_p95(summary(180.0, metric="http_req_duration")) == pytest.approx(180.0)
 
 
+def test_the_fallback_says_it_fell_back(capsys: Any) -> None:
+    """A budget from a wider metric is not wrong, but it is not what was asked for."""
+    derive_budget.baseline_p95(summary(180.0, metric="http_req_duration"))
+
+    assert "warning" in capsys.readouterr().err
+
+
+def test_the_tagged_trend_is_taken_silently(capsys: Any) -> None:
+    derive_budget.baseline_p95(summary(180.0))
+
+    assert capsys.readouterr().err == ""
+
+
 def test_a_baseline_that_measured_nothing_is_refused() -> None:
     """The dangerous case. A budget derived from no requests has nothing behind it,
     and every phase of the run that follows would be judged against it."""

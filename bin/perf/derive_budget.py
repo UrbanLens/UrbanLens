@@ -44,11 +44,16 @@ SLACK_FLOOR_MS = 250.0
 #: about where a page stops feeling like it responded.
 CEILING_MS = 1000.0
 
-#: Where k6 puts the whole-scenario trend for the neighbour.
+#: Where k6 puts the neighbour's trend for the baseline phase. The phase name is
+#: `baselinePhase()` in `tests/perf/k6/lib/schedule.js`; renaming it there
+#: without changing it here falls back to the metric below, which is why the
+#: fallback says so out loud rather than quietly producing a slightly different
+#: number.
 _METRIC = "http_req_duration{scenario:neighbour,phase:idle}"
 
-#: Used when the phase-tagged metric is missing, which happens if the baseline
-#: was run with a schedule whose first phase is not the baseline phase.
+#: Used when the phase-tagged metric is missing. Wider than intended - it
+#: includes `setup`'s sign-ins, which are a second of PBKDF2 each - so a budget
+#: derived from it is not wrong so much as not the thing that was asked for.
 _FALLBACK_METRIC = "http_req_duration"
 
 
@@ -72,6 +77,11 @@ def baseline_p95(summary: dict) -> float:
         p95 = values.get("p(95)")
         count = values.get("count", 0)
         if p95 is not None and count:
+            if name == _FALLBACK_METRIC:
+                print(
+                    f"warning: the baseline summary has no {_METRIC!r}, so this budget comes from every request in the run including setup's sign-ins. Check that schedule.js's baseline phase is still called 'idle'.",
+                    file=sys.stderr,
+                )
             return float(p95)
     raise SystemExit("The baseline summary has no request timings in it. The baseline pass measured nothing, so there is no budget to derive.")
 
