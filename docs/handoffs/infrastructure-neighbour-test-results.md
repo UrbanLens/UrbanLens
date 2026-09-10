@@ -132,6 +132,53 @@ publishing them — which is the same silent-gap failure N15 was about, just fro
 the other direction. This one is ours in origin, so apologies for the churn; the
 variable is now documented next to `UL_METRICS_ENABLED` in `.env-sample`.
 
+## `chaos.py inject` cannot dispatch — one line
+
+Found trying to run the four scenarios. `inject` never executes, with or without
+a command; it falls through to the hidden watchdog and dies on a missing
+attribute:
+
+```
+AttributeError: 'Namespace' object has no attribute 'deadline'
+```
+
+`build_parser()` declares the subparsers as `dest="command"` (chaos.py:52) and
+`inject` also declares a positional called `command` (chaos.py:67). The
+positional wins, so `args.command` is the command *list* rather than the
+subcommand *name*, every `args.command == "..."` check in `main()` fails, and
+control reaches `cmd_watchdog`. Reproduced directly against your own parser:
+
+```
+['list']                                     -> args.command = 'list'
+['status']                                   -> args.command = 'status'
+['inject', 'perf', 'worker-outage']          -> args.command = []
+['inject', 'perf', 'worker-outage', '--for', '30s'] -> args.command = []
+```
+
+`list`, `status` and `sample` are unaffected — none of them declares that
+positional — and `sample` works well against a live environment; we used it.
+
+The fix is `dest="subcommand"` on `add_subparsers` plus the four comparisons in
+`main()`, or renaming the positional.
+
+There is a second, smaller one behind it. Even once dispatch works, the
+documented form
+
+```
+chaos.py inject a1b2c3 cache-outage --for 120s -- curl -sf https://...
+```
+
+cannot parse: `command` is `nargs="*"`, and argparse fills all positionals from
+the first group of arguments, so anything after `--for` is left over and
+reported as unrecognised. `nargs=argparse.REMAINDER` is the usual fix, and the
+docstring's example is worth running once as a test — a `test_chaos_cli.py`
+asserting `parse_args(['inject','x','cache-outage','--for','10s','--','true'])`
+yields `subcommand == 'inject'` and `command == ['true']` would have caught both.
+
+Not a criticism of the design, which we like: the assertions-are-the-caller's
+split is right, and our half is written against it
+(`bin/perf/chaos_probe.py`). It just has not been executed yet.
+
 ## Three questions
 
 **1. We now have two Postgres connection samplers.** `chaos.py sample` (yours,
