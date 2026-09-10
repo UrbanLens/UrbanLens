@@ -3875,3 +3875,37 @@ Not measured against a browser this session - the mechanism is read from source.
 fourth copy of that `UPDATE`: D12 replaces `Max(updated)` with a derived fingerprint and routes
 every one of these sites through a single `services/map_pins/touch.py`, so the next write path that
 forgets is a missing call to one named function rather than a silently absent statement.
+
+## P107 — The saved-filter count badges read every pin in the account to draw a number
+
+`id: P107` · `status: open` · `updated: 2026-09-10`
+
+`SavedFilterMatchCountsView.get` (`controllers/saved_filters.py:314`) returns one count per saved
+filter — a body sized by how many filters a profile has, which does not grow with the pin table at
+all. It builds that body by materialising every root pin's uuid in Python:
+
+```python
+base_uuids = {str(u) for u in base_query.values_list("uuid", flat=True)}
+```
+
+and then intersects that set with each filter's own cached uuid set. The map page calls this endpoint
+on every filter change, so the cost of drawing a badge is one full read of the account's pin table.
+
+The set-intersection design above it is deliberate and good — the comments record that it replaced
+`O(F^2)` chained `.filter(uuid__in=...)` queries for F saved filters, and the projection is the right
+call. What was not reconsidered at the same time is that the *base* set is unbounded.
+
+**Why nothing caught it.** This is the first defect found by the rows-fetched axis, and it is
+invisible to all three older instruments: `QueryScalingMixin` sees one statement at every size
+(correctly — there *is* one), a bytes-per-row budget sees a body that never moves (correctly — it
+never does), and `InstantiationScalingMixin` sees no model objects (correctly — `values_list` builds
+none). Only "rows read per rendered row, under the capped budget" separates it from a healthy list
+endpoint, which reads the same one row per row and renders them.
+
+Guarded by `dashboard/tests/hypothesis/test_saved_filter_counts_scaling.py`, whose reproduction is
+`xfail(strict=True)` and turns red when this is fixed.
+
+Not fixed, and not measured against a large account this session — the complexity is read from the
+code. The fix is to count in the database (a `COUNT(*)` per filter, or one grouped query over the
+filter/pin join) rather than by intersecting Python sets, at which point the per-filter uuid cache
+this depends on may stop earning its keep too.

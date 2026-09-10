@@ -588,9 +588,42 @@ Reach for it on any endpoint that serialises a collection. `objects/row <= 1` is
 the target; a DRF view with nested serializers needs a per-endpoint number and a
 comment saying why.
 
-### What all three share: `SeedScalingMixin` and the `ANALYZE` it runs
+### `EndpointScalingMixin` (`core/tests/endpoint_scaling.py`)
 
-All three seed through `seed()`, which calls the test's `seed_rows()` and then
+The three above in one seed pass, plus the two axes none of them can see. Reach
+for this on any endpoint that returns a collection; the others remain useful when
+only one axis is in question.
+
+- **Rows fetched per row**, summed from `cursor.rowcount` across the request.
+  Found P107 immediately: `SavedFilterMatchCountsView` returns one count per
+  saved filter and reads every root pin's uuid to build it. That is invisible to
+  a statement counter (one query at every size), to a bytes budget (the body
+  never moves), and to the object counter (`values_list` builds nothing).
+
+  The budget is not one number, and the reason is worth knowing before setting
+  it: at one row read per row, a healthy list endpoint and that defect are
+  numerically identical. What separates them is whether the rows are *rendered*.
+  So the budget is chosen from `expect_growth` — 1.5 per rendered row when the
+  output grows, **0.5 when it does not**, because an endpoint that caps its
+  output must cap its reading.
+- **Bytes per row** — measured by the older mixins, asserted by none of them.
+- **Payload rows against a ceiling**, via an overridable `count_payload_rows`.
+  No per-row budget can express "and never more than N records", which is the
+  shape both P96 and the unbounded map document have: their per-row costs are
+  fine.
+
+Failures report every axis that moved, not the first, because an endpoint
+building objects per row usually also fetches rows per row and fixing one at a
+time means measuring three times.
+
+`test_endpoint_scaling_harness.py` points it at six views whose per-row cost is
+known — one broken per axis, so a harness failure is unambiguous about which axis
+caught it — and includes a negative control for the *axis* rather than the
+fixture: `/bounded/` reads the identical one row per row and must pass.
+
+### What all four share: `SeedScalingMixin` and the `ANALYZE` it runs
+
+All four seed through `seed()`, which calls the test's `seed_rows()` and then
 refreshes the planner statistics for the tables that seed actually wrote to.
 
 Without it the measurement is of the planner's ignorance. Seeding through the
