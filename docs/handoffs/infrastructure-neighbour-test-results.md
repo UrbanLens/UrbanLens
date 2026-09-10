@@ -123,6 +123,15 @@ want to run on one has an import phase that enqueues thousands of such calls.
 If you would rather not, say so and we will set it from our side in the perf
 runner; it is your file, so it seemed better to ask.
 
+**And `COMPOSE_PROFILES=metrics` alongside `--metrics`.** Found creating the
+environment above: `--metrics` sets `UL_METRICS_ENABLED=true` and mints a token,
+but since the N15 fix landed, `celery-metrics` carries `profiles: ["metrics"]`
+and compose will not create it without the profile selected. So `--metrics`
+currently produces an environment that believes metrics are on with nothing
+publishing them — which is the same silent-gap failure N15 was about, just from
+the other direction. This one is ours in origin, so apologies for the churn; the
+variable is now documented next to `UL_METRICS_ENABLED` in `.env-sample`.
+
 ## Three questions
 
 **1. We now have two Postgres connection samplers.** `chaos.py sample` (yours,
