@@ -173,12 +173,42 @@ against 60 s here. That is the trade the cap makes. Unbounded threads let every 
 through slowly; a bounded pool serves 60 requests properly and queues the rest absolutely. The second
 is better for the database and worse for the starved user, and neither satisfies the invariant.
 
+### `map_init` on the real process model: the CPU-bound phase, and the prediction still does not fire
+
+`map.init` serialises the whole account into one HTML document — Python work, not database work.
+This is the phase that was supposed to test D11 §2.1. Budget 567 ms:
+
+| phase | count | p50 | **p95** | max | daphne p95 |
+|---|---|---|---|---|---|
+| `idle` | 250 | 68 ms | **192 ms** | 359 ms | 241 ms |
+| `map_init_1` — one user | 250 | 75 ms | **374 ms** | 592 ms | 778 ms |
+| `map_init_4` — four users | 250 | 271 ms | **1,065 ms** | 1,535 ms | 8,735 ms |
+
+**`map_init_1` now passes the budget.** One user serialising their whole 20,000-pin account costs
+the neighbour 374 ms against a 192 ms baseline and a 567 ms ceiling. `map_init_4` is 8x better than
+under daphne and still 5.5x baseline, so four of them is a real cost — but nothing failed, nothing
+was dropped, and the VU pool never grew past 25.
+
+Peak backends: **9/100, 89% idle**. This work is CPU, not connections, which is why the connection
+cap neither helps nor hurts here.
+
+**D11 §2.1's prediction did not fire again, and the reason is now clear.** The argument was that a
+CPU-bound request starves gevent's heartbeat greenlet, so the arbiter concludes the worker is hung
+and SIGKILLs it at `-t 180`, taking every co-resident greenlet with it. Zero kills here, under the
+most CPU-bound phase in the suite. The mechanism is real but the threshold matters: these requests
+cost a second or two of CPU each, and the heartbeat gets scheduled between them. Starving it for 180
+consecutive seconds needs a request that *runs* for 180 seconds.
+
+There are exactly two known candidates for that, and both have their own entries: **P108**, where a
+20,000-pin map page spends ~7 minutes in a pairwise Haversine scan, and **P96**, where a 20,000-pin
+import would run 78 minutes. So §2.1's concern should be read as a property of those two defects
+rather than of heavy endpoints generally — which narrows what the gthread move has to buy.
+
 ### Still not measured on the real process model
 
-`map_init_1/4`, `label_edit`, `import_confirmed` and `cooldown`. Every figure for those below is a
-development-server figure. The CPU-bound phases are the ones that would test D11 §2.1's prediction
-properly. P108 and P110 are properties of the code and are unaffected; P111 was found on this
-environment and is a property of the deployment.
+`label_edit`, `import_confirmed` and `cooldown`. Their figures below are development-server figures.
+P108 and P110 are properties of the code and are unaffected; P111 was found on this environment and
+is a property of the deployment.
 
 ## What this cannot tell you
 
