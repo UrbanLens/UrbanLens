@@ -28,8 +28,10 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 
 from urbanlens.dashboard.models.account.model import AccountKdf, ApiKey, ApiKeyScope, EmailVerification, TOTPDevice
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.notifications.meta.delivery_preference import DeliveryPreference
 from urbanlens.dashboard.models.notifications.model import NotificationPreference
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.admin.site_admin import promote_first_user_if_needed
@@ -395,3 +397,79 @@ class CommandTests(TestCase):
             )
 
         self.assertTrue(User.objects.filter(username=username_for("primary")).exists())
+
+
+class HeavySeedingTests(TestCase):
+    """`--heavy-pins`, and the two ways it could lie.
+
+    The load harness reads the shared label's id and the account's pin count out
+    of the manifest this writes. If the manifest said a role was seeded and it
+    was not, the run that follows would measure an empty account, take twelve
+    minutes doing it, and pass - which is the worst outcome available, because
+    it is indistinguishable from the site being fast.
+    """
+
+    def test_nothing_is_seeded_by_default(self):
+        """Provisioning is cheap; seeding is not. Every ordinary run must stay cheap."""
+        out = StringIO()
+
+        call_command("provision_integration_env", "--roles", "primary", stdout=out)
+
+        manifest = json.loads(out.getvalue())
+        self.assertEqual(manifest["seeds"], {})
+
+    def test_the_manifest_reports_a_seed_that_actually_happened(self):
+        out = StringIO()
+
+        call_command(
+            "provision_integration_env", "--roles", "primary,heavy", "--heavy-pins", "5", stdout=out, stderr=StringIO()
+        )
+
+        profile = Profile.objects.get(user__username=username_for("heavy"))
+        self.assertEqual(Pin.objects.filter(profile=profile).root_pins().count(), 5)
+
+    def test_the_manifest_carries_what_the_harness_reads(self):
+        out = StringIO()
+
+        call_command(
+            "provision_integration_env", "--roles", "primary,heavy", "--heavy-pins", "4", stdout=out, stderr=StringIO()
+        )
+
+        manifest = json.loads(out.getvalue())
+        report = manifest["seeds"]["heavy"]
+        self.assertEqual(report["pins"], 4)
+        # Asserted against the database, not against the report: the report is
+        # the thing under suspicion.
+        label = Label.objects.get(pk=report["label_id"])
+        profile = Profile.objects.get(user__username=username_for("heavy"))
+        self.assertEqual(label.profile, profile)
+        self.assertEqual(Pin.objects.filter(profile=profile, labels=label).count(), 4)
+        self.assertTrue(report["analyzed"])
+
+    def test_seeding_a_role_that_was_not_provisioned_is_refused(self):
+        """Silently seeding nothing would produce a manifest that reads as seeded."""
+        with self.assertRaises(CommandError) as caught:
+            call_command("provision_integration_env", "--roles", "primary", "--heavy-pins", "5", stdout=StringIO())
+
+        self.assertIn("heavy", str(caught.exception))
+        self.assertIn("--roles", str(caught.exception))
+
+    def test_skipping_analyze_says_so_in_both_places(self):
+        """A run whose statistics are stale must be visible without being inferred."""
+        out, err = StringIO(), StringIO()
+
+        call_command(
+            "provision_integration_env", "--roles", "heavy", "--heavy-pins", "3", "--no-analyze", stdout=out, stderr=err
+        )
+
+        self.assertFalse(json.loads(out.getvalue())["seeds"]["heavy"]["analyzed"])
+        self.assertIn("planner", err.getvalue().lower())
+
+    def test_seeding_progress_never_lands_in_the_manifest(self):
+        """stdout is a document. A progress line inside it is a parse error downstream."""
+        out, err = StringIO(), StringIO()
+
+        call_command("provision_integration_env", "--roles", "heavy", "--heavy-pins", "3", stdout=out, stderr=err)
+
+        json.loads(out.getvalue())
+        self.assertIn("Seeding", err.getvalue())

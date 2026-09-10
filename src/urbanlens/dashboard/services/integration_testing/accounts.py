@@ -99,7 +99,7 @@ class ProvisionResult:
     created_roles: list[str] = field(default_factory=list)
     refreshed_roles: list[str] = field(default_factory=list)
 
-    def manifest(self, *, site_url: str, environment: str) -> dict[str, object]:
+    def manifest(self, *, site_url: str, environment: str, seeds: dict[str, object] | None = None) -> dict[str, object]:
         """The JSON document ``UL_E2E_ACCOUNTS_FILE`` points at.
 
         Keys are snake_case to match the rest of this codebase; the TypeScript
@@ -109,6 +109,10 @@ class ProvisionResult:
         Args:
             site_url: Absolute URL the accounts were provisioned on.
             environment: ``UL_ENVIRONMENT`` of the provisioning instance.
+            seeds: What was seeded into which role, keyed by role name. The
+                load harness reads label ids and row counts out of here, so a
+                run against an unseeded target can say so rather than measuring
+                an empty account and passing.
 
         Returns:
             A JSON-serialisable manifest.
@@ -118,6 +122,7 @@ class ProvisionResult:
             "site_url": site_url,
             "environment": environment,
             "accounts": [asdict(account) for account in self.accounts],
+            "seeds": seeds or {},
         }
 
 

@@ -28,10 +28,16 @@ from pathlib import Path
 from django.conf import settings as django_settings
 from django.core.management.base import BaseCommand, CommandError
 
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.integration_testing import INTEGRATION_OVERRIDE_ENV_VAR
 from urbanlens.dashboard.services.integration_testing.accounts import DEFAULT_ROLES, integration_users, provision, purge
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+#: Role the load harness drives as the noisy neighbour. Not in ``DEFAULT_ROLES``
+#: because provisioning it is cheap but *seeding* it is not, and every ordinary
+#: integration run would otherwise pay for a fixture only the perf suite uses.
+_HEAVY_ROLE = "heavy"
 
 
 class Command(BaseCommand):
@@ -52,6 +58,22 @@ class Command(BaseCommand):
             help="Password to set on every account. A strong one is generated when omitted, which is the better option.",
         )
         parser.add_argument("--no-api-keys", action="store_true", help="Skip minting external-API keys.")
+        parser.add_argument(
+            "--heavy-pins",
+            type=int,
+            default=0,
+            help="Seed the --heavy-role account up to this many root pins, for the load harness. Tops up rather than restarting, so re-running is cheap.",
+        )
+        parser.add_argument(
+            "--heavy-role",
+            default=_HEAVY_ROLE,
+            help=f"Which role --heavy-pins seeds (default: {_HEAVY_ROLE}). Must be one of --roles.",
+        )
+        parser.add_argument(
+            "--no-analyze",
+            action="store_true",
+            help="Skip refreshing planner statistics after seeding. Only useful for demonstrating what skipping it costs; every measurement taken afterwards is of the planner's ignorance rather than of the query.",
+        )
         parser.add_argument(
             "--external-apis",
             action="store_true",
@@ -90,7 +112,8 @@ class Command(BaseCommand):
             with_api_keys=not options["no_api_keys"],
             external_apis=options["external_apis"],
         )
-        manifest = result.manifest(site_url=django_settings.SITE_URL, environment=str(app_settings.environment_name))
+        seeds = self._seed(result, options)
+        manifest = result.manifest(site_url=django_settings.SITE_URL, environment=str(app_settings.environment_name), seeds=seeds)
 
         if options["format"] == "text":
             self._write_text(manifest)
@@ -118,6 +141,53 @@ class Command(BaseCommand):
         refreshed = ", ".join(result.refreshed_roles) or "none"
         self.stdout.write(f"Wrote {len(result.accounts)} account(s) to {path}. Created: {created}. Refreshed: {refreshed}.")
         self.stdout.write(f"Point the suite at it with UL_E2E_ACCOUNTS_FILE={path}")
+
+    def _seed(self, result, options: dict) -> dict[str, object]:
+        """Seed the heavy account, if asked, and report what was made.
+
+        The report goes into the manifest rather than only to stdout because the
+        load harness reads the shared label's id out of it. Editing that label
+        is the phase that measures P102's fan-out, and finding it by name would
+        break the first time a run recoloured or renamed it.
+
+        Args:
+            result: What ``provision`` just produced.
+            options: Parsed command options.
+
+        Returns:
+            A mapping of role name to that role's seed report; empty when
+            nothing was seeded.
+
+        Raises:
+            CommandError: ``--heavy-pins`` names a role that was not provisioned.
+        """
+        wanted = options["heavy_pins"]
+        if wanted <= 0:
+            return {}
+
+        from urbanlens.dashboard.services.integration_testing.perf_seed import seed_heavy_account
+
+        role = options["heavy_role"]
+        account = next((candidate for candidate in result.accounts if candidate.role == role), None)
+        if account is None:
+            provisioned = ", ".join(candidate.role for candidate in result.accounts) or "none"
+            raise CommandError(f"--heavy-pins asked to seed the '{role}' account, but only these were provisioned: {provisioned}. Add it to --roles.")
+
+        profile = Profile.objects.get(user__username=account.username)
+        # Progress goes to stderr because stdout is a document: with --format
+        # json and no --out it is the manifest itself, and with --format text it
+        # is a block of shell exports. Either one stops parsing the moment a
+        # progress line lands in the middle of it.
+        self.stderr.write(f"Seeding {account.username} to {wanted} pins. This writes rows in bulk and can take a while at large sizes.")
+        report = seed_heavy_account(profile, pins=wanted, analyze=not options["no_analyze"])
+        self.stderr.write(
+            f"  {report['pins']} pins ({report['created']} created, {report['already_present']} already there) on label {report['label']!r} (id {report['label_id']}), analyzed={report['analyzed']}, {report['seconds']}s",
+        )
+        if not report["analyzed"]:
+            self.stderr.write(
+                self.style.WARNING("Planner statistics were NOT refreshed. Every timing taken against this account measures the planner's ignorance, not the query."),
+            )
+        return {role: report}
 
     def _check_environment(self, *, force: bool) -> None:
         """Refuse to run against production unless both locks are open.
