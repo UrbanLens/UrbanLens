@@ -58,10 +58,19 @@ the next run.
 
 ## One thing worth acting on regardless
 
-**`/health/ready` stops answering under this load.** During the saturated phases
-it timed out at 120 s. If anything watching staging flips an instance out of
-service on a readiness timeout, it will do so at precisely the moment the
-remaining instances are least able to absorb the traffic.
+**`/health/ready` stops answering when the process is saturated.** Two separate
+observations, and the stronger one is not from the load run:
+
+- While one account's map page was monopolising the process (P108), a plain
+  `curl` of `/health/ready` returned **nothing for 120 seconds** and then nginx's
+  504. The healthcheck went red and the container was marked unhealthy.
+- During the load run's saturated phases, 6.2% of the neighbour's requests —
+  which include `/health/ready` on rotation — failed outright, and p95 reached
+  the harness's own 60 s timeout.
+
+If anything watching staging flips an instance out of service on a readiness
+timeout, it will do so at precisely the moment the remaining instances are least
+able to absorb the traffic.
 
 This is the same reasoning behind keeping `degraded` a field rather than a
 status code, which your reply already made — so the position is consistent;
