@@ -1,23 +1,13 @@
-# Shared build configuration - all three app containers use the same image.
-# UL_ENVIRONMENT is passed as a build arg (not just a runtime env var) so the
-# Dockerfile can `uv sync --no-dev` for staging/production
 x-app-build: &app-build
   context: .
   dockerfile: Dockerfile
   args:
     UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
     UL_CONTAINER_NAME: ${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}
-
-# Every UL_* value in the host .env, injected at container start rather than
-# baked into the image. This block is load-bearing.
 x-app-env-file: &app-env-file
   - path: .env
     required: false
-
-# Full environment for the app server and celery workers (need all API keys).
 x-app-env: &app-env
-  # Read natively by gunicorn - without this, gunicorn defaults to a single worker
-  # process
   WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
   UL_DB_USER: ${UL_DB_USER:-postgres}
   UL_DB_NAME: ${UL_DB_NAME:-postgres}
@@ -26,12 +16,6 @@ x-app-env: &app-env
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_APP_PORT: ${UL_APP_PORT:-21800}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
-  # Defaulted from UL_APP_PORT, not written out: as a literal it named 21080
-  # while the app publishes on 21800, and nothing about the symptoms says
-  # "port typo" - a browser's every POST is rejected on CSRF origin checking
-  # (ALLOWED_HOSTS never carries a port, so this is the only place one can come
-  # from), every URL the app builds for itself points nowhere, and the media
-  # host's frame-ancestors names an origin that does not exist.
   UL_SITE_URL: ${UL_SITE_URL:-http://localhost:${UL_APP_PORT:-21800}}
   UL_GOOGLE_CLIENT_ID: ${UL_GOOGLE_CLIENT_ID}
   UL_GOOGLE_CLIENT_SECRET: ${UL_GOOGLE_CLIENT_SECRET}
@@ -46,63 +30,20 @@ x-app-env: &app-env
   UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
-  # Independent of DJANGO_SECRET_KEY: without it, EncryptedTextField
-  # falls back to deriving its Fernet key from SECRET_KEY
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
   UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
   UL_PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
-  # Sandbox tier. UL_SANDBOX_ENABLED must agree across every container: the
-  # process that *enqueues* a task is the one that stamps its queue, so a
-  # disagreement here sends uploads to a queue nothing drains.
   UL_SANDBOX_ENABLED: ${UL_SANDBOX_ENABLED:-true}
   UL_UNTRUSTED_PARSE_POLICY: ${UL_UNTRUSTED_PARSE_POLICY:-warn}
   UL_MEDIA_BASE_URL: ${UL_MEDIA_BASE_URL:-}
   UL_MEDIA_COOKIE_DOMAIN: ${UL_MEDIA_COOKIE_DOMAIN:-}
   UL_MEDIA_CSP: ${UL_MEDIA_CSP:-}
-
-  # Prometheus. UL_METRICS_ENABLED is deliberately NOT here - exposing /metrics
-  # is a decision about one process, not about the image, so it is set per
-  # service. Only `app` opts in.
-  #
-  # The endpoint is guarded by a bearer token, a network allowlist, or both;
-  # enabling it on staging/production with neither is a startup error
-  # (dashboard.E006). Both empty is only for a local checkout.
   UL_METRICS_TOKEN: ${UL_METRICS_TOKEN:-}
   UL_METRICS_ALLOWED_CIDRS: ${UL_METRICS_ALLOWED_CIDRS:-}
-  # Read by prometheus_client itself, not by Django. A path on the container's
-  # own filesystem and never a shared volume: everything in this directory is
-  # aggregated wholesale into one scrape, so sharing it between services would
-  # report all of their numbers as whichever one was scraped. The entrypoint
-  # creates and clears it; gunicorn clears it again after migrations and retires
-  # each worker's files as that worker exits.
   PROMETHEUS_MULTIPROC_DIR: /var/run/urbanlens/prometheus
-  # No provider API key appears anywhere in this anchor, deliberately.
-  # Every provider call this tier makes - LLMGateway's, and vision's since
-  # the vision migration - goes over this HTTP hop to ai-inference, which is
-  # the only container holding those credentials (it reads them from
-  # .env.ai; see its own service entry). Adding one back here would put a
-  # provider key next to the database credentials again, which is the whole
-  # thing this split exists to prevent - test_ai_isolation.py fails if you do.
   UL_AI_INFERENCE_URL: ${UL_AI_INFERENCE_URL:-http://urbanlens_ai_inference:8002}
   UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
   UL_DIRECT_INFERENCE_POLICY: ${UL_DIRECT_INFERENCE_POLICY:-warn}
-
-# Environment for the sandbox worker (media-worker), which parses untrusted
-# uploads: images through Pillow, video through ffmpeg, documents through
-# LibreOffice, archives through zipfile, GIS files through GDAL. Every one of
-# those is a C parser being pointed at bytes a stranger chose, and the mitigation
-# for a decoder memory-corruption bug is not detection - it is making a
-# successful exploit worthless. So this block is defined by what it OMITS:
-#
-#   - No third-party API keys. Nothing to steal, nothing to bill.
-#   - No email credentials.
-#
-# and the service itself joins only `sandbox_network` (internal: true), so a
-# process that does get code execution has no route off the host.
-#
-# DB and field-encryption credentials remain, because the processing tasks write
-# their results back to the row they were given. That is the residual risk this
-# tier does not remove; see docs/MEDIA_PIPELINE.md.
 x-sandbox-env: &sandbox-env
   UL_DB_USER: ${UL_DB_USER:-postgres}
   UL_DB_NAME: ${UL_DB_NAME:-postgres}
@@ -110,7 +51,6 @@ x-sandbox-env: &sandbox-env
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
-  # Defaulted from UL_APP_PORT - see the note on the first of these.
   UL_SITE_URL: ${UL_SITE_URL:-http://localhost:${UL_APP_PORT:-21800}}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
@@ -119,31 +59,18 @@ x-sandbox-env: &sandbox-env
   UL_CLAMAV_ENABLED: ${UL_CLAMAV_ENABLED:-true}
   UL_CLAMAV_HOST: ${UL_CLAMAV_HOST:-urbanlens_clamav}
   UL_SANDBOX_ENABLED: ${UL_SANDBOX_ENABLED:-true}
-  # This is the only container permitted to run a parser over an upload; the
-  # guard in services/sandbox/guard.py reads this to decide.
   UL_PROCESS_ROLE: sandbox
-
-# Everything two sandbox workers share. They differ only in which queue they
-# drain and how they are sized; the isolation must not drift between them, so
-# it is written once here rather than copied per service.
 x-sandbox-worker: &sandbox-worker
   build:
     <<: *app-build
   entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
   restart: on-failure
-  # Explicitly unprivileged, because `cap_drop: ALL` below removes CAP_SETUID -
-  # so the entrypoint's `gosu appuser` cannot work here and must be skipped
-  # (it is; see docker-entrypoint.sh). Same uid the image creates.
   user: "1001:1001"
   depends_on:
     db:
       condition: service_healthy
     valkey:
       condition: service_healthy
-    # Not for a network route (these workers are not on app_network) but for
-    # ordering: `app` runs as root and is what chowns the shared logs and media
-    # volumes to appuser on a fresh deploy. Without CAP_CHOWN these workers
-    # cannot do it themselves, so they must not be the first to mount them.
     app:
       condition: service_healthy
   volumes:
@@ -151,40 +78,18 @@ x-sandbox-worker: &sandbox-worker
     - media_volume:/app/src/urbanlens/media
   networks:
     - sandbox_network
-  # No env_file: the host .env carries every API key, and pulling it in here
-  # would undo the point of *sandbox-env below. Anything these workers genuinely
-  # need belongs in that anchor, explicitly.
   environment:
     <<: *sandbox-env
   security_opt:
     - no-new-privileges:true
   cap_drop:
     - ALL
-  # LibreOffice and ffmpeg both spawn helpers; this is well above their normal
-  # use and far below what a fork bomb needs.
   pids_limit: 512
   logging:
     driver: "json-file"
     options:
       max-size: "200k"
       max-file: "10"
-
-# Environment for ai-worker, which drains Queue.AI and runs the assistant's
-# tool loop. Modeled on x-sandbox-env above for the same reason: this container
-# executes registry-dispatched handlers over user-influenced input, so it gets
-# the same "defined by what it omits" treatment.
-#
-#   - No REData/OAuth credentials, no other providers' API keys. Model calls
-#     go out over HTTP to ai-inference instead - see docs/AI_PIPELINE.md.
-#   - UL_PROCESS_ROLE/UL_UNTRUSTED_PARSE_POLICY are literals, not
-#     ${VAR:-default} - this worker must never decode untrusted bytes and
-#     must always identify itself as the ai role, regardless of what the host
-#     .env sets for those variables elsewhere (see services/sandbox/guard.py).
-#
-# DB and field-encryption credentials remain, because tools read (never
-# write - see registry.execute()'s read_only enforcement) encrypted content.
-# UL_OPENWEATHERMAP_API_KEY is here because the weather tool calls it directly
-# rather than through REData (see get_weather in services/ai/tools/).
 x-ai-env: &ai-env
   UL_DB_USER: ${UL_DB_USER:-postgres}
   UL_DB_NAME: ${UL_DB_NAME:-postgres}
@@ -192,7 +97,6 @@ x-ai-env: &ai-env
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
-  # Defaulted from UL_APP_PORT - see the note on the first of these.
   UL_SITE_URL: ${UL_SITE_URL:-http://localhost:${UL_APP_PORT:-21800}}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
@@ -206,11 +110,8 @@ x-ai-env: &ai-env
   HTTPS_PROXY: http://urbanlens_egress_proxy:8888
   HTTP_PROXY: http://urbanlens_egress_proxy:8888
   NO_PROXY: localhost,127.0.0.1,urbanlens_db,urbanlens_valkey,urbanlens_ai_inference
-  # Literals, not ${VAR:-default}: see the block comment above.
   UL_PROCESS_ROLE: ai
   UL_UNTRUSTED_PARSE_POLICY: deny
-
-# Minimal environment for celery-beat - only needs DB + broker to schedule tasks.
 x-beat-env: &beat-env
   UL_DB_USER: ${UL_DB_USER:-postgres}
   UL_DB_NAME: ${UL_DB_NAME:-postgres}
@@ -220,21 +121,13 @@ x-beat-env: &beat-env
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
-  # the encryption key must resolve the same way here or an import-time read of an
-  # encrypted field would decrypt under the wrong key.
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
   UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
-  # Sandbox tier. UL_SANDBOX_ENABLED must agree across every container: the
-  # process that *enqueues* a task is the one that stamps its queue, so a
-  # disagreement here sends uploads to a queue nothing drains.
   UL_SANDBOX_ENABLED: ${UL_SANDBOX_ENABLED:-true}
   UL_UNTRUSTED_PARSE_POLICY: ${UL_UNTRUSTED_PARSE_POLICY:-warn}
   UL_MEDIA_BASE_URL: ${UL_MEDIA_BASE_URL:-}
   UL_MEDIA_COOKIE_DOMAIN: ${UL_MEDIA_COOKIE_DOMAIN:-}
   UL_MEDIA_CSP: ${UL_MEDIA_CSP:-}
-
-# Project name is derived from the environment so each of prod/dev/test/staging
-# gets its own Compose namespace
 name: urbanlens-${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}
 
 services:
@@ -261,39 +154,14 @@ services:
       app_network:
         aliases:
           - urbanlens_app
-          # Hyphenated twin of the alias above, for anything that reaches this
-          # service over HTTP with a Host header - which today means a metrics
-          # scraper. Django validates Host against
-          # `^([a-z0-9.-]+|\[...\])(?::([0-9]+))?$` *before* consulting
-          # ALLOWED_HOSTS, and an underscore is not legal in a hostname, so
-          # `urbanlens_app` fails that regex and returns 400 no matter what
-          # ALLOWED_HOSTS contains. Scrape this name instead, and list it in
-          # UL_ALLOWED_HOSTS.
           - urbanlens-app
-      # Permanent, not just until ai-worker exists: only the assistant's tool
-      # loop moves to ai-worker. The other AI features (trivia moderation,
-      # trip suggestions, label style suggestions, document import, link
-      # extraction, article expansion/safety) call LLMGateway synchronously
-      # from here and stay on this path indefinitely - see docs/AI_PIPELINE.md.
       inference_network: {}
 
     env_file: *app-env-file
     environment:
       <<: *app-env
       UL_PROCESS_ROLE: web
-      # The gunicorn web process is the one worth scraping: it serves the
-      # request path, and multiprocess aggregation across its WEB_CONCURRENCY
-      # workers is wired for it specifically (gunicorn.conf.py). app-ws is
-      # deliberately left off - nginx routes only /ws/ there, so its HTTP
-      # metrics would be an empty set of series; instrumenting Channels
-      # consumers is separate work, as are Celery task metrics.
       UL_METRICS_ENABLED: ${UL_METRICS_ENABLED:-false}
-
-    # Labels a Prometheus docker_sd_configs job relabels on. Harmless when
-    # nothing is watching, and they are only half the story: a docker_sd job
-    # discovers containers on the host Prometheus itself runs on, so a
-    # Prometheus on another machine needs a static/file_sd target pointed at
-    # this host's published port instead. See docs/METRICS.md.
     labels:
       prometheus_scrape: "${UL_METRICS_ENABLED:-false}"
       prometheus_port: "8000"
@@ -304,13 +172,6 @@ services:
       interval: 30s
       timeout: 30s
       retries: 5
-      # A from-scratch database's first migrate runs every squashed operation in
-      # dashboard.0030_v0_7_0 (~200 of them) - measured ~3m14s. The old 30s start
-      # period gave ~180s of total grace (start_period + retries*interval) before
-      # Compose gave up waiting and declined to start app-ws/nginx/the workers,
-      # which never happens once the schema exists (migrate is then a no-op and
-      # health returns in seconds) - so this costs nothing on every boot after
-      # the first.
       start_period: 300s
 
     logging:
@@ -319,50 +180,11 @@ services:
         max-size: "200k"
         max-file: "10"
 
-    # gunicorn (WEB_CONCURRENCY=3 by default). Measured on a staging-model
-    # environment, not estimated: a fresh worker is ~347MB, half of it the
-    # post_worker_init URLconf warm, which resolves 31 root patterns and so
-    # imports every view in the project. The geospatial stack is *not* in that
-    # - pyarrow/pandas/geopandas/GDAL are all imported lazily on first use.
-    #
-    # The number that decides this limit is not the baseline though. A worker's
-    # footprint is a high-water mark of *concurrent* response size and the
-    # allocator never returns it: 24 concurrent map.search POSTs on a
-    # 20,000-pin account added 610MB across the pool and kept it. With
-    # --worker-connections 20 x 3 workers, 60 such requests are permitted at
-    # once, and 2g does not cover that - see P111. The response size is the
-    # problem (D12) and this ceiling is the symptom, so raising it first would
-    # buy room for a payload that should not exist.
     cpus: ${CPU_LIMIT__APP:-${CPU_LIMIT:-2}}
-    # cpu_shares is the other half of `cpus:`, and the two answer different
-    # questions. `cpus:` is a CFS *ceiling* - it caps a service and reserves
-    # nothing - so with every service capped and none weighted, a busy Celery
-    # worker and the request path compete as equals for whatever the host has
-    # left. The ceilings here sum to roughly 20 CPU against 16 cores, and
-    # production and staging both run on damballa, so that competition is real
-    # rather than theoretical.
-    #
-    # A weight only bites under contention: when the host is not short, nothing
-    # changes. When it is, this decides who yields. Roughly 8:1 between the
-    # request path and a background worker, which is a preference rather than a
-    # guarantee - a cgroup weight cannot promise latency, and the thing that
-    # actually stops one user's work reaching another's is the bounded pools in
-    # D11. Docker maps this to cgroup v2's cpu.weight (damballa is v2; check
-    # with `docker info | grep -i cgroup` before assuming elsewhere).
-    #
-    # No entry for the test-* services: they are not production contenders, and
-    # a weight on the test runner would only slow the suite.
-    #
-    # the request path; nothing else on this host matters more
     cpu_shares: ${CPU_SHARES__APP:-2048}
     mem_limit: ${MEM_LIMIT__APP:-${MEM_LIMIT:-2g}}
-    # A soft floor, unlike mem_limit's hard ceiling: under host memory pressure
-    # the kernel reclaims from services above their reservation before this one.
-    # Set here and on db only - a reservation on everything reserves nothing.
-    mem_reservation: ${MEM_RESERVATION__APP:-768m}
 
-  # Dedicated ASGI (Daphne) process for WebSocket traffic only (safety check-in
-  # chat, etc).
+    mem_reservation: ${MEM_RESERVATION__APP:-768m}
   app-ws:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_app_ws
     build:
@@ -371,16 +193,6 @@ services:
     restart: unless-stopped
 
     entrypoint: ["/docker-entrypoint.sh", "daphne"]
-    # Daphne logs an access line to stdout for every request by default (verbosity=1),
-    # including the docker healthcheck hitting /health/ every 30s - that's pure noise
-    # in `docker logs`. Route it to the shared log volume instead so it's still on
-    # disk for debugging WS issues (see channels_redis timeout tuning) without
-    # flooding the console.
-    # The inbound frame-size flags are deliberately absent here and appended by
-    # docker-entrypoint.sh instead: compose substitutes ${...} from the shell
-    # before any container starts, so it cannot read a cap Django derives at
-    # import time, and spelling the number in both places is how the two drift.
-    # Passing --websocket-max-message-size explicitly here overrides that.
     command:
       [
         "-b",
@@ -391,11 +203,6 @@ services:
         "/var/log/urbanlens/daphne-access.log",
         "urbanlens.UrbanLens.asgi:application",
       ]
-
-    # `app`'s own entrypoint runs bin/init.py (migrate + collectstatic) before
-    # its healthcheck can pass - waiting on `app` being healthy, not just
-    # db/valkey, is what actually guarantees the schema and static manifest
-    # exist before it serves any traffic.
     depends_on:
       db:
         condition: service_healthy
@@ -417,12 +224,6 @@ services:
     environment:
       <<: *app-env
       UL_PROCESS_ROLE: websocket
-      # Explicitly off, not merely unset. This service reads the same .env as
-      # `app`, and `environment:` outranks `env_file:` - so without this line a
-      # UL_METRICS_ENABLED=true meant for `app` would quietly enable a second
-      # /metrics here as well. nginx routes only /ws/ to this process, so its
-      # HTTP metrics would be an empty set of series anyway; the numbers worth
-      # having are Channels-level and need their own instrumentation.
       UL_METRICS_ENABLED: "false"
 
     healthcheck:
@@ -431,21 +232,12 @@ services:
       timeout: 20s
       retries: 4
       start_period: 25s
-
-    # Bounds this service's own stdout/stderr (startup, errors) - the per-request
-    # access log is deliberately routed to the logs volume above instead, and
-    # still needs its own rotation (tracked separately, see docs/audits/GOALS_CODE_AUDIT.md
-    # "Backups and logs" - this block does not cover that file).
     logging:
       driver: "json-file"
       options:
         max-size: "200k"
         max-file: "10"
-    # Single Daphne process, no fan-out - idle is ~227MB (full Django/Channels
-    # registry import, unamortized). An OOM-kill here drops every open
-    # WebSocket at once, so this gets generous headroom
     cpus: ${CPU_LIMIT__APP_WS:-${CPU_LIMIT:-1}}
-    # a dropped WebSocket is a user-visible failure, not a delay
     cpu_shares: ${CPU_SHARES__APP_WS:-2048}
     mem_limit: ${MEM_LIMIT__APP_WS:-${MEM_LIMIT:-1g}}
 
@@ -470,64 +262,30 @@ services:
           - urbanlens_nginx
 
     healthcheck:
-      # 127.0.0.1, not localhost: inside the alpine image localhost resolves
-      # to ::1 first and nginx's `listen 8080` binds IPv4 only, so the check
-      # was connection-refused on every probe (container permanently
-      # "unhealthy" despite serving traffic fine).
       test:
         ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
       interval: 30s
       timeout: 15s
       retries: 3
       start_period: 20s
-
-    # Request logs come through here too (nginx.conf logs to the stdout symlink),
-    # so this driver is what rotates them - hence a much larger budget than the
-    # error-output-only services get. 20MB x 5 caps the container at 100MB.
     logging:
       driver: "json-file"
       options:
         max-size: "20m"
         max-file: "5"
-    # worker_processes is hardcoded to 2 in nginx.conf, and its temp paths are
-    # disk-backed (not tmpfs) so uploads/sendfile don't inflate RAM - idle is
-    # ~3MB. cpus matches the hardcoded worker count exactly; a third core
-    # would go unused
     cpus: ${CPU_LIMIT__NGINX:-${CPU_LIMIT:-2}}
-    # cheap, and everything upstream is behind it
     cpu_shares: ${CPU_SHARES__NGINX:-1024}
     mem_limit: ${MEM_LIMIT__NGINX:-${MEM_LIMIT:-128m}}
-
-  # The media origin (media.urbanlens.org). Point NGINX Proxy Manager at
-  # ${UL_MEDIA_PORT} on this host, and set UL_MEDIA_BASE_URL to the resulting
-  # https:// URL so Django builds its media URLs against it.
-  #
-  # Its own container rather than a second server block on `nginx` so the two
-  # vhosts cannot share a location by accident: media.conf contains no route to
-  # an application page, so nothing a client can put in a Host header turns this
-  # hostname into a way into the app. It also gets its own resource envelope -
-  # media traffic is long-lived byte streaming, page traffic is not.
   media-nginx:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_media_nginx
     image: nginxinc/nginx-unprivileged:alpine
     restart: unless-stopped
     volumes:
-      # Read-only: this container serves uploads and must never be a way to
-      # write one.
       - media_volume:/app/src/urbanlens/media:ro
       - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # A *template*, not a conf: the nginx entrypoint runs envsubst over
-      # /etc/nginx/templates/*.template into /etc/nginx/conf.d/, which is how
-      # MEDIA_FRAME_ANCESTORS below reaches the CSP. envsubst only substitutes
-      # names present in the environment, so nginx's own $host/$scheme survive.
       - ./src/urbanlens/config/nginx/media.conf.template:/etc/nginx/templates/media.conf.template:ro
-      # django.conf is deliberately NOT mounted here.
       - /dev/null:/etc/nginx/conf.d/default.conf:ro
     environment:
-      # Who may frame a document served from this origin - the app origin, so
-      # the Vault lightbox's cross-origin <iframe> works. 'none' when UL_SITE_URL
-      # is unset: a misconfigured deployment should refuse framing, not allow it
-      # from anywhere.
       MEDIA_FRAME_ANCESTORS: ${UL_SITE_URL:-'none'}
     ports:
       - "${UL_MEDIA_PORT:-21801}:8080"
@@ -538,32 +296,23 @@ services:
         aliases:
           - urbanlens_media_nginx
     healthcheck:
-      # 127.0.0.1, not localhost - see the nginx service for why.
       test:
         ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
       interval: 30s
       timeout: 15s
       retries: 3
       start_period: 20s
-    # Media is the highest-volume request class on the site, and after the origin
-    # split these requests are logged nowhere else - so the same rotated budget
-    # as `nginx`, not the 200k one the error-output-only services use.
     logging:
       driver: "json-file"
       options:
         max-size: "20m"
         max-file: "5"
-    # Same profile as `nginx`: worker_processes is 2 in the shared nginx.conf,
-    # and this vhost does strictly less than that one.
     cpus: ${CPU_LIMIT__MEDIA_NGINX:-${CPU_LIMIT:-2}}
-    # same, for the media path
     cpu_shares: ${CPU_SHARES__MEDIA_NGINX:-1024}
     mem_limit: ${MEM_LIMIT__MEDIA_NGINX:-${MEM_LIMIT:-128m}}
 
   db:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_db
-    # Pin to the same major version as postgresql-client-17 in the Dockerfile so
-    # the pg_dump binary and server protocol stay in sync.
     image: postgis/postgis:17-3.5
     restart: unless-stopped
     volumes:
@@ -572,12 +321,9 @@ services:
       app_network:
         aliases:
           - urbanlens_db
-      # Also on the sandbox network so media-worker can reach it without
-      # joining app_network (which would give it a route to the internet).
       sandbox_network:
         aliases:
           - urbanlens_db
-      # Same reasoning, for ai-worker.
       ai_network:
         aliases:
           - urbanlens_db
@@ -599,16 +345,9 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
-    # Idle RSS (~98MB) is a poor proxy: CONN_MAX_AGE=0 means every request/task
-    # opens its own short-lived connection, and concurrent backends scale with
-    # gunicorn+daphne+both celery workers - a plausible ~25-30 simultaneous
-    # backends against default shared_buffers/work_mem.
     cpus: ${CPU_LIMIT__DB:-${CPU_LIMIT:-2}}
-    # starving Postgres slows every other service at once
     cpu_shares: ${CPU_SHARES__DB:-2048}
     mem_limit: ${MEM_LIMIT__DB:-${MEM_LIMIT:-2g}}
-    # Postgres degrades badly when its page cache is reclaimed out from under it,
-    # and every other service waits on it when it does.
     mem_reservation: ${MEM_RESERVATION__DB:-1g}
 
   celery-worker:
@@ -616,16 +355,6 @@ services:
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
-    # Handles every task EXCEPT external-data panel fetches, which now run on
-    # celery-worker-panels below (see that service's comment for why they're
-    # split out). Concurrency=4 (prefork - one OS process per slot) is plenty
-    # for this queue's remaining traffic: photo/backup/export jobs and the
-    # scheduled housekeeping tasks (safety check-ins, account deletion, etc),
-    # none of which arrive in the same "~10 at once" bursts panel fetches did.
-    # loglevel=warning: info logs a "received"/"succeeded" line for every task,
-    # including the safety-checkin scheduled tasks that fire every 5 minutes -
-    # that drowns out real signal in production. Failures/retries are still
-    # surfaced explicitly via the task_failure/task_retry handlers in celery.py.
     command:
       [
         "-A",
@@ -646,7 +375,6 @@ services:
       - backups:/app/src/backups
     networks:
       - app_network
-      # Permanent - see the app service's own comment.
       - inference_network
     env_file: *app-env-file
     environment:
@@ -657,13 +385,7 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
-    # --concurrency=4 prefork children, each bounded near
-    # CELERY_WORKER_MAX_MEMORY_PER_CHILD (512MB, settings/base.py) - checked
-    # only *after* a task finishes, so one task can still overshoot before
-    # recycling. This container-level ceiling is the fast circuit breaker for
-    # exactly that case. Should re-assess with time and code changes.
     cpus: ${CPU_LIMIT__CELERY_WORKER:-${CPU_LIMIT:-2}}
-    # interactive tasks: a user is usually waiting
     cpu_shares: ${CPU_SHARES__CELERY_WORKER:-256}
     mem_limit: ${MEM_LIMIT__CELERY_WORKER:-${MEM_LIMIT:-3g}}
 
@@ -672,13 +394,6 @@ services:
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
-    # Dedicated queue + worker for external-data panel fetches
-    # Split out from celery-worker
-    # above because a cold pin detail page enqueues ~10 of these small,
-    # mostly-IO-bound tasks at once
-    #
-    # --pool=threads instead of prefork: one thread per task costs kilobytes
-    # letting --concurrency go higher for the same resource budget.
     command:
       [
         "-A",
@@ -711,45 +426,12 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
-    # --pool=threads: one process, so memory isn't multiplied per concurrent
-    # task the way celery-worker's prefork pool is - idle is ~242MB with
-    # GDAL/GeoPandas/Pillow already resident.
     cpus: ${CPU_LIMIT__CELERY_PANELS:-${CPU_LIMIT:-1}}
-    # fetches panels a page is waiting on
     cpu_shares: ${CPU_SHARES__CELERY_WORKER_PANELS:-256}
     mem_limit: ${MEM_LIMIT__CELERY_PANELS:-${MEM_LIMIT:-1g}}
-
-  # The sandbox tier: every task that points a parser at bytes a user uploaded
-  # runs here and nowhere else. Pillow, ffmpeg, LibreOffice, GDAL and zipfile are
-  # all C code with a long history of memory-corruption bugs reachable from a
-  # well-formed file, and no signature scanner can see one coming. This container
-  # exists so that when one of them is exploited, the attacker lands somewhere
-  # with no route to the internet and no credentials worth having.
-  #
-  # What makes it a sandbox, in the order that matters:
-  #   1. `networks: [sandbox_network]` and nothing else. That network is
-  #      `internal: true`, so there is no gateway and no NAT - no exfiltration,
-  #      no second-stage download. This is the load-bearing line.
-  #   2. `*sandbox-env` instead of `*app-env`: no third-party API keys.
-  #   3. `cap_drop: ALL` + `no-new-privileges`: the image already runs as
-  #      appuser (uid 1001); this removes the rest of the escalation surface.
-  #   4. Tight cpu/mem/pids ceilings, so a decompression bomb or a fork bomb
-  #      inside a decoder starves this container rather than the host.
-  #
-  # It deliberately does NOT get the static volume or the backups volume - it has
-  # no business reading either - and it is the only worker besides celery-worker
-  # that mounts media_volume, because writing the processed file back is the job.
   media-worker:
     <<: *sandbox-worker
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_media_worker
-    # -Q sandbox: drains only that queue, so an unrouted task can never
-    # accidentally execute here with the reduced environment and fail obscurely.
-    # Notably it does NOT drain sandbox_batch - that is the whole point of the
-    # split: an interactive upload must never queue behind a 500MB archive walk.
-    #
-    # --concurrency=2 (prefork): decoding is CPU-bound and does not yield, so
-    # slots beyond the cpu ceiling only add memory. Two lets a slow LibreOffice
-    # conversion run without blocking every photo behind it.
     command:
       [
         "-A",
@@ -761,45 +443,13 @@ services:
         "sandbox",
       ]
     tmpfs:
-      # Decoders stage temp files here (ffmpeg's transcode scratch, soffice's
-      # profile dir), and noexec/nosuid means a payload dropped in the one
-      # directory this container writes freely cannot be executed from it.
-      #
-      # A Docker tmpfs is RAM, and it is charged to this service's own
-      # mem_limit - not to disk, as the sizing here originally assumed. So
-      # `size=` and `mem_limit` are one budget, split: 1g of scratch against
-      # 3g total leaves ~2g for the two prefork children and their ffmpeg /
-      # soffice subprocesses. Sizing the tmpfs at the full mem_limit (which
-      # this did) means a single large transcode can claim the entire budget
-      # and OOM-kill the worker that is writing it.
-      #
-      # 1g covers one 200MB upload (nginx client_max_body_size) copied in plus
-      # its re-encode, with room for the second slot to be mid-sized. Two
-      # simultaneous maximal videos will not fit - that is deliberate: failing
-      # one transcode is better than the OOM killer taking the container.
       - /tmp:size=1g,mode=1777,noexec,nosuid,nodev
-    # Two prefork children each decoding a full-resolution photo, plus the
-    # resident GDAL/Pillow/Django imports, plus the tmpfs above - which is RAM
-    # and comes out of this same number, so this is ~2g of processes and 1g of
-    # scratch rather than 3g of processes.
     cpus: ${CPU_LIMIT__MEDIA_WORKER:-${CPU_LIMIT:-2}}
-    # background media work, progress-tracked
     cpu_shares: ${CPU_SHARES__MEDIA_WORKER:-128}
     mem_limit: ${MEM_LIMIT__MEDIA_WORKER:-3g}
-
-  # Same sandbox, different pool. Batch imports (`run_user_data_import`, and any
-  # future long archive walk) are the same untrusted-parse workload and belong
-  # on the same isolated network - but they run for minutes to an hour against a
-  # 500MB ZIP, while a photo upload runs for a second or two. Sharing one
-  # two-slot pool meant two concurrent imports could stall every upload on the
-  # site for the length of CELERY_TASK_TIME_LIMIT.
   media-worker-batch:
     <<: *sandbox-worker
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_media_worker_batch
-    # --concurrency=1: an import is one long serial walk over an archive, so a
-    # second slot doubles peak memory and disk churn without shortening the
-    # queue much. Scale this pool by adding slots only if imports actually
-    # backlog - the interactive path is no longer affected either way.
     command:
       [
         "-A",
@@ -811,13 +461,8 @@ services:
         "sandbox_batch",
       ]
     tmpfs:
-      # Larger than media-worker's: an import extracts a 500MB archive here.
-      # Same RAM-not-disk budget rule - 2g of scratch inside a 3g limit leaves
-      # ~1g for the single child, which is ample since an import streams rather
-      # than holding the archive in memory.
       - /tmp:size=2g,mode=1777,noexec,nosuid,nodev
     cpus: ${CPU_LIMIT__MEDIA_WORKER_BATCH:-${CPU_LIMIT:-1}}
-    # long archive walks; the most yielding thing here
     cpu_shares: ${CPU_SHARES__MEDIA_WORKER_BATCH:-64}
     mem_limit: ${MEM_LIMIT__MEDIA_WORKER_BATCH:-3g}
 
@@ -826,9 +471,6 @@ services:
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
-    # loglevel=warning: info logs "Scheduler: Sending due task ..." on every beat tick
-    # (every 5 minutes for the safety-checkin tasks alone), which is pure noise once
-    # the schedule is known-good.
     command:
       [
         "-A",
@@ -857,28 +499,14 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
-    # Scheduler only - never executes a task body, so none of the heavy
-    # per-task-type lazy imports (GeoPandas/Shapely/Pillow/...) that inflate
-    # the actual workers ever trigger here.
     cpus: ${CPU_LIMIT__CELERY_BEAT:-${CPU_LIMIT:-0.5}}
-    # tiny, and late scheduling cascades
     cpu_shares: ${CPU_SHARES__CELERY_BEAT:-256}
     mem_limit: ${MEM_LIMIT__CELERY_BEAT:-${MEM_LIMIT:-512m}}
-
-  # Consumes the Celery event stream and exposes it as Prometheus metrics.
-  #
-  # Its own process, not a thread in an existing one: the web tier runs
-  # WEB_CONCURRENCY gunicorn workers and each would open its own receiver and
-  # triple-count every event, and the Celery workers cannot be scraped at all -
-  # the two media-workers run cap_drop: ALL on an isolated network precisely so
-  # they have no inbound surface. Every worker already publishes to the broker,
-  # so one consumer here covers all six of them.
   celery-metrics:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_metrics
     build:
       <<: *app-build
-    entrypoint:
-      ["/docker-entrypoint.sh", "python", "src/urbanlens/manage.py"]
+    entrypoint: ["/docker-entrypoint.sh", "python", "src/urbanlens/manage.py"]
     command: ["celery_metrics_exporter", "--port", "8002"]
     restart: unless-stopped
     depends_on:
@@ -892,63 +520,27 @@ services:
     environment:
       <<: *app-env
       UL_PROCESS_ROLE: metrics
-      # Cleared, having been inherited from *app-env. This is a single process
-      # holding its counters in memory, so multiprocess mode buys nothing here
-      # and costs the mmap files a restart then has to be trusted to clear. The
-      # exporter is written for the plain in-process registry; leaving the
-      # variable set silently put it in the other mode.
       PROMETHEUS_MULTIPROC_DIR:
-      # Follows `app`. The command exits rather than binding an unguarded port,
-      # so this service would restart in a loop if metrics were off - which is
-      # what `profiles:` below now prevents.
       UL_METRICS_ENABLED: ${UL_METRICS_ENABLED:-false}
-    # The condition above used to be stated only in a comment, and a comment does
-    # not gate anything: `docker compose up` started this unconditionally and
-    # `restart: unless-stopped` retried forever. Measured on staging 2026-09-10 -
-    # 2,578 restarts and still going, each one paying a full `django.setup()`
-    # (178 MiB), and staging had therefore never had Celery task metrics at all.
-    # A crash-looping container reads as a running one at a glance, which is what
-    # made it survive that long. Set COMPOSE_PROFILES=metrics alongside
-    # UL_METRICS_ENABLED=true to deploy it; the CommandError stays, because
-    # refusing to serve without the flag is correct - it just should not be
-    # reachable. See N15.
     profiles: ["metrics"]
     labels:
       prometheus_scrape: "${UL_METRICS_ENABLED:-false}"
       prometheus_port: "8002"
       prometheus_path: "/metrics"
-    # No ports: - deliberately unpublished. Only the compose network reaches
-    # 8002, and the scraping agent joins that network. The bearer-token gate
-    # applies anyway; this is the second layer, not the only one.
     logging:
       driver: "json-file"
       options:
         max-size: "200k"
         max-file: "10"
-    # One event-loop process holding counters in memory. It never imports a task
-    # body, so none of the GeoPandas/Shapely/Pillow weight the real workers carry
-    # applies here - but it is still a Django process, and `django.setup()` alone
-    # measured 178 MiB, with the running exporter at 216 MiB. The 256m this was
-    # first given left ~15% headroom, which an event receiver that retains task
-    # state can cross; the earlier figure only counted what the exporter adds on
-    # top of Django rather than the total.
     cpus: ${CPU_LIMIT__CELERY_METRICS:-${CPU_LIMIT:-0.5}}
-    # observability must never cost the thing it observes
     cpu_shares: ${CPU_SHARES__CELERY_METRICS:-64}
     mem_limit: ${MEM_LIMIT__CELERY_METRICS:-${MEM_LIMIT:-512m}}
-
-  # clamd daemon every upload is scanned through before
-  # it's ever written to permanent storage
   clamav:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_clamav
     image: clamav/clamav-debian:stable
     restart: unless-stopped
     environment:
-      # StreamMaxLength is unset by default, which falls back to clamd's own
-      # compiled-in default
       CLAMD_CONF_StreamMaxLength: "1000M"
-      # clamd has no separate log-level control for its heartbeat -
-      # so the only lever is how often it runs.
       CLAMD_CONF_SelfCheck: "86400"
     volumes:
       - clamav-db:/var/lib/clamav
@@ -956,8 +548,6 @@ services:
       app_network:
         aliases:
           - urbanlens_clamav
-      # See the db service - same reason. clamd is the one outbound connection
-      # the sandbox worker legitimately makes.
       sandbox_network:
         aliases:
           - urbanlens_clamav
@@ -966,12 +556,7 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
-    # Measured steady-state (clamd loads its full signature DB into RAM at
-    # startup) is already 950MB-1020MB
-    # with zero headroom for the ~2x transient spike SelfCheck's daily
-    # signature reload can cause while the old DB is still resident.
     cpus: ${CPU_LIMIT__CLAMAV:-${CPU_LIMIT:-2}}
-    # uploads wait on it, but nothing user-facing blocks
     cpu_shares: ${CPU_SHARES__CLAMAV:-128}
     mem_limit: ${MEM_LIMIT__CLAMAV:-${MEM_LIMIT:-2g}}
 
@@ -980,10 +565,6 @@ services:
     image: valkey/valkey:7-alpine
     user: nobody
     restart: unless-stopped
-    # volatile-lru: this instance is shared by the Django cache,
-    # the Channels layer, and the Celery broker/result backend. volatile-lru
-    # only evicts keys with a TTL, so queued Celery tasks are never silently
-    # dropped; if memory is exhausted, writes fail loudly (OOM) instead.
     command:
       [
         "valkey-server",
@@ -1000,7 +581,6 @@ services:
       app_network:
         aliases:
           - urbanlens_valkey
-      # See the db service - same reason.
       sandbox_network:
         aliases:
           - urbanlens_valkey
@@ -1017,42 +597,23 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
-    # --maxmemory 512mb (above) already hard-caps the dataset
-    # 1g covers allocator
-    # fragmentation and fork()-based COW headroom above the internal cap
     cpus: ${CPU_LIMIT__VALKEY:-${CPU_LIMIT:-1}}
-    # sessions and the broker; single-threaded, so a slice matters
     cpu_shares: ${CPU_SHARES__VALKEY:-1024}
     mem_limit: ${MEM_LIMIT__VALKEY:-${MEM_LIMIT:-1g}}
-
-  # --- AI sandbox tier (docs/AI_PIPELINE.md) ----------------------------------
-  # Only outbound route off `ai_network`/`inference_network` (both
-  # `internal: true`, no gateway, no NAT). ai-inference's provider calls and
-  # ai-worker's tool calls (OSRM, weather) are the only traffic that reaches
-  # this proxy. Never on `app_network` - a bug here must not become a route to
-  # db/valkey/app.
   egress-proxy:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_egress_proxy
     build:
       context: ./src/urbanlens/config/egress
     restart: unless-stopped
-    # Alpine's tinyproxy package creates this account (uid 100, gid 101) -
-    # starting the container as it directly means tinyproxy never needs to
-    # setuid/setgid itself away from root, which cap_drop: [ALL] below would
-    # otherwise make impossible (no CAP_SETUID/CAP_SETGID left to do it with).
     user: "tinyproxy:tinyproxy"
     read_only: true
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    # tinyproxy's PidFile/logging need one writable path; everything else it
-    # touches (its own binary, tinyproxy.conf, filter) is baked into the image.
     tmpfs:
       - /var/run/tinyproxy:size=1m,mode=1777,noexec,nosuid,nodev
     networks:
-      # Its clients only - deliberately not ai_network/inference_network,
-      # where db/valkey/app/celery-worker sit. See proxy_network's own comment.
       proxy_network:
         aliases:
           - urbanlens_egress_proxy
@@ -1069,16 +630,9 @@ services:
         max-size: "200k"
         max-file: "10"
     cpus: ${CPU_LIMIT__EGRESS_PROXY:-0.25}
-    # in the path of any outbound call
     cpu_shares: ${CPU_SHARES__EGRESS_PROXY:-256}
     mem_limit: ${MEM_LIMIT__EGRESS_PROXY:-128m}
     pids_limit: 32
-
-  # Django-free: no DB, no cache, no secret key, no volumes - see
-  # src/urbanlens_ai/__init__.py and docs/AI_PIPELINE.md. Holds provider API
-  # keys and nothing else. On `inference_network` only, always - callers
-  # (`app`, `celery-worker`, `ai-worker`) join that network instead, so this
-  # service's own network footprint never needs to change.
   ai-inference:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_ai_inference
     build:
@@ -1114,19 +668,7 @@ services:
       inference_network:
         aliases:
           - urbanlens_ai_inference
-      # egress-proxy, its only route to a provider API.
       proxy_network: {}
-    # Provider keys come from .env.ai, NOT the host .env, and NOT compose
-    # interpolation. That distinction is the whole point: `${VAR}` is
-    # resolved by compose from the root .env, so a key referenced that way
-    # has to *live* in .env - where `env_file: .env` would hand it to app
-    # and celery-worker too, next to the database credentials. Reading a
-    # separate file is what lets the key exist for this container and
-    # nowhere else. See docs/AI_PIPELINE.md and .env.ai-sample.
-    #
-    # required: false so a checkout with no .env.ai still starts; the
-    # service then answers every call with "No <provider> API key
-    # configured", which is a clear failure rather than a silent one.
     env_file:
       - path: .env.ai
         required: false
@@ -1137,11 +679,8 @@ services:
       HTTP_PROXY: http://urbanlens_egress_proxy:8888
       NO_PROXY: localhost,127.0.0.1
     healthcheck:
-      # --noproxy '*': HTTPS_PROXY/HTTP_PROXY above are set for this
-      # container's *outbound provider* calls; NO_PROXY already covers
-      # localhost, but this makes the healthcheck immune to proxy env vars
-      # regardless of casing rather than depending on it.
-      test: ["CMD", "curl", "-f", "--noproxy", "*", "http://localhost:8002/health/"]
+      test:
+        ["CMD", "curl", "-f", "--noproxy", "*", "http://localhost:8002/health/"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -1151,35 +690,13 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
-    # gthread with one worker process and 8 threads: provider SDK calls block
-    # on I/O, so threads (which actually park) are the right model here, not
-    # gevent - see the plan's architecture note. Memory stays low with nothing
-    # cached between requests.
     cpus: ${CPU_LIMIT__AI_INFERENCE:-0.5}
-    # user-facing but degradable
     cpu_shares: ${CPU_SHARES__AI_INFERENCE:-512}
     mem_limit: ${MEM_LIMIT__AI_INFERENCE:-512m}
     pids_limit: 64
-
-  # Drains Queue.AI: the assistant's tool loop. Same "isolation, not just
-  # scheduling" reasoning as media-worker, for a different residual - not
-  # untrusted bytes reaching a C parser, but REData/OAuth/provider
-  # credentials sitting next to a loop that dispatches on model output.
-  # Reaches db/valkey/ai-inference and, through egress-proxy, OSRM/weather -
-  # nothing else. See x-ai-env's own comment for what this container's
-  # environment deliberately omits, and docs/AI_PIPELINE.md for the full
-  # topology.
   ai-worker:
     <<: *sandbox-worker
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_ai_worker
-    # --pool=prefork, not the celery-worker-panels thread pool: threads
-    # silently drop soft_time_limit/time_limit (celery/concurrency/thread.py),
-    # and this loop's per-turn deadline depends on the task's own limits
-    # actually firing. --concurrency=2 is deliberately the global cap on
-    # concurrent turns - see ToolContext.deadline / run_assistant_turn_task.
-    # --prefetch-multiplier=1: a turn already reserved by acks_late=False
-    # semantics should not sit prefetched behind another while a worker slot
-    # is free elsewhere.
     command:
       [
         "-A",
@@ -1201,46 +718,20 @@ services:
         condition: service_healthy
       ai-inference:
         condition: service_healthy
-      # Not for a network route - same reasoning as sandbox-worker's own
-      # depends_on: `app` chowns the shared logs volume on a fresh deploy.
       app:
         condition: service_healthy
-    # logs only - no media_volume. This worker never touches an upload.
     volumes:
       - logs:/var/log/urbanlens
     networks:
-      # db and valkey.
       - ai_network
-      # ai-inference itself - a direct membership, not routed through the
-      # proxy; this worker resolves ai-inference by same-network DNS.
       - inference_network
-      # egress-proxy, for outbound tool calls (OSRM, weather).
       - proxy_network
-    # No env_file - see x-ai-env's own comment.
     environment:
       <<: *ai-env
-    # Tools call OSRM/weather with their own short per-call deadlines
-    # (ToolContext.deadline); nothing here spawns a subprocess the way
-    # ffmpeg/LibreOffice do, so this is tighter than sandbox-worker's 512.
     pids_limit: 128
-    # Two prefork children, each a full Django import plus HTTP-bound work -
-    # no transcoding, no tmpfs scratch, so well below media-worker's profile.
     cpus: ${CPU_LIMIT__AI_WORKER:-${CPU_LIMIT:-1}}
-    # background inference, progress-tracked
     cpu_shares: ${CPU_SHARES__AI_WORKER:-128}
     mem_limit: ${MEM_LIMIT__AI_WORKER:-${MEM_LIMIT:-1g}}
-
-  # --- Test topology (opt-in: docker compose --profile test ...) -------------
-  # pytest's LocalhostOnlyNetwork guard (core/tests/testing_network.py) only
-  # permits loopback connections, which the normal service topology can't
-  # satisfy - UL_VALKEY_URL/UL_DB_HOST resolve to container-bridge IPs, so
-  # running pytest inside `app` trips the guard on legitimate same-stack
-  # traffic
-  #
-  # Usage (fresh throwaway DB every time - no volumes are mounted):
-  #   docker compose --profile test up -d --build test-runner test-db test-valkey
-  #   docker compose exec -e UL_TEST_DB_NAME=ul_test_$RANDOM test-runner \
-  #     python -m pytest src/urbanlens/dashboard/tests/
   test-runner:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_runner
     profiles: ["test"]
@@ -1248,10 +739,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # Always a dev-grade build
         UL_ENVIRONMENT: development
         UL_CONTAINER_NAME: ${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test
-    # Bypass /docker-entrypoint.sh: init.py runs migrate+collectstatic
     entrypoint: ["sleep", "infinity"]
     env_file: *app-env-file
     environment:
@@ -1263,10 +752,6 @@ services:
       UL_ENVIRONMENT: development
     networks:
       - app_network
-    # pytest-xdist spawns real subprocesses (execnet), not fork+COW - each
-    # worker independently pays the full Django+GDAL+GeoPandas+Shapely+Pillow
-    # import cost. Only started on-demand (--profile test), so more
-    # generosity than the always-on services is acceptable.
     cpus: ${CPU_LIMIT__TEST_RUNNER:-${CPU_LIMIT:-6}}
     mem_limit: ${MEM_LIMIT__TEST_RUNNER:-${MEM_LIMIT:-6g}}
 
@@ -1274,8 +759,6 @@ services:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_db
     profiles: ["test"]
     image: postgis/postgis:17-3.5
-    # Shares test-runner's network namespace so it listens on the runner's
-    # localhost:5432. No data volume on purpose: every `up` starts pristine.
     network_mode: service:test-runner
     depends_on:
       - test-runner
@@ -1293,8 +776,6 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
-    # Fixture-scale data, no persistent volume - covers several xdist
-    # per-worker databases running DDL/DML concurrently.
     cpus: ${CPU_LIMIT__TEST_DB:-${CPU_LIMIT:-2}}
     mem_limit: ${MEM_LIMIT__TEST_DB:-${MEM_LIMIT:-2g}}
 
@@ -1328,8 +809,6 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
-    # --maxmemory 256mb (above) already hard-caps this one, same reasoning as
-    # the production valkey service.
     cpus: ${CPU_LIMIT__TEST_VALKEY:-${CPU_LIMIT:-1}}
     mem_limit: ${MEM_LIMIT__TEST_VALKEY:-${MEM_LIMIT:-512m}}
 
@@ -1344,60 +823,22 @@ volumes:
 networks:
   app_network:
     driver: bridge
-    # Docker defaults new bridge networks to dual-stack.
-    # Disable IPv6 here so only the working A record is ever returned.
     enable_ipv6: false
-
-  # `internal: true` is the isolation. Docker creates no gateway for an internal
-  # network, so a container attached only to this one cannot reach the internet,
-  # the host, or any other Docker network - it can reach exactly the services
-  # that also joined here (db, valkey, clamav). That is what turns a decoder RCE
-  # in media-worker from a foothold into a dead end: no egress to exfiltrate to,
-  # and no second-stage payload to fetch.
   sandbox_network:
     driver: bridge
     internal: true
-
-  # ai-worker's own isolated tier: db, valkey, and egress-proxy for its
-  # outbound tool calls (ai-worker reaches ai-inference itself over a
-  # separate direct membership on inference_network, not through this one).
-  # `internal: true` for the same reason as sandbox_network - no gateway, no
-  # NAT, so this worker's only route off the network is through
-  # egress-proxy's allowlist, regardless of what a tool handler, a
-  # misconfigured env var, or a future bug tries to reach.
   ai_network:
     driver: bridge
     internal: true
     enable_ipv6: false
-
-  # ai-worker/celery-worker/app <-> ai-inference. `internal: true` for the same
-  # reason as sandbox_network: no gateway, no NAT. This is a call path between
-  # our own services only - the proxy is deliberately NOT here (see
-  # proxy_network).
   inference_network:
     driver: bridge
     internal: true
     enable_ipv6: false
-
-  # The proxy's clients reach it here, and nowhere else. egress-proxy is the
-  # one process in this tier that parses bytes from the public internet, so it
-  # gets a network shared with exactly the two containers that must call it
-  # (ai-worker, ai-inference) rather than joining ai_network/inference_network,
-  # where db, valkey, app and celery-worker live: a bug in the proxy is then a
-  # foothold with nothing reachable behind it, which is the whole point of
-  # putting a proxy here. `internal: true` - the proxy's own route out is
-  # ai_egress_network, not this one.
   proxy_network:
     driver: bridge
     internal: true
     enable_ipv6: false
-
-  # The one network with a real gateway in this tier - egress-proxy is its
-  # only member, so it is the sole thing in the whole AI sandbox with a route
-  # to the internet at all. Sorts first alphabetically among egress-proxy's
-  # networks, which is what makes its gateway the container's default route;
-  # renaming it or adding a proxy network that sorts earlier would silently
-  # cut the proxy's own egress.
   ai_egress_network:
     driver: bridge
     enable_ipv6: false
