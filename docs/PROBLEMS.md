@@ -4224,3 +4224,60 @@ limiter and to the outbound-call guard.** `service_key` is still `None` and the 
 go through `pyarrow`/`S3FileSystem` rather than `self.session`, so nothing bounds how often
 enrichment reaches Overture in the first place. The circuit breaker bounds the *damage* of a refusal;
 it does not bound the request rate that earns one.
+
+## P111 — The `app` container idles at 97% of its memory limit under gunicorn, because the sizing assumed 140MB a worker and it is 790
+
+`id: P111` · `status: open` · `updated: 2026-09-10`
+
+Measured on a `--environment staging` dev environment — the first time this project's real process
+model has been run and looked at. With **no traffic at all**:
+
+```
+ul_perf_app   1.939GiB / 2GiB   96.93%
+
+  17 MB  arbiter
+ 836 MB  worker
+ 777 MB  worker
+ 768 MB  worker
+```
+
+`docker-compose.yml`'s own sizing note for the service says:
+
+> gunicorn (WEB_CONCURRENCY=3 by default): ~140MB/worker idle, but Pillow/GDAL/GeoPandas/Shapely and
+> per-worker DB/valkey pools all run in the request path and push real traffic well above that
+
+The second half is right and the first half is wrong by **5.6x**. Three workers at 140 MB is 420 MB
+inside a 2 GiB limit — comfortable, with room for exactly the traffic the comment anticipates. Three
+workers at ~790 MB is 2.37 GB, which does not fit the limit *before a single request arrives*, so the
+headroom the sizing was reasoning about does not exist.
+
+Why a worker is that large is not mysterious: GeoDjango, GDAL, GeoPandas, Shapely and pyarrow are all
+imported at startup, 58 plugins are discovered, and `gunicorn.conf.py`'s `post_worker_init` warms the
+URLconf — which imports every view. None of that is shared after the fork in any way the kernel can
+reclaim.
+
+**Why it is an availability problem and not just untidy.** Under `-k gevent` a worker carries many
+in-flight requests as greenlets. A container OOM kills the whole worker process, so every request it
+was serving dies with it — not the one that allocated too much. The programme's own invariant fails
+from a configuration mismatch rather than from any code path, and the endpoints most likely to
+trigger it are the ones already known to allocate: an 11.3 MB map payload per filter POST (X15), or
+an Overture read that could not be narrowed (P110).
+
+`--max-requests 1000 --max-requests-jitter 100` recycles workers, which bounds slow growth but not a
+single large response.
+
+Three ways out, and they are not equivalent:
+
+1. **Raise `MEM_LIMIT__APP`.** Honest and immediate: 3 x 790 MB plus request headroom wants ~4 GB.
+   Costs host memory that damballa may or may not have spare, and does nothing about why a worker is
+   790 MB.
+2. **Lower `WEB_CONCURRENCY`.** Fits the existing limit, and cuts the request concurrency the D11
+   connection arithmetic is built on. Not free.
+3. **Make a worker smaller.** The URLconf warm is the interesting one: it exists to avoid a 9.5s
+   first request, and it is also what pulls every view and its imports into every worker. Whether
+   that trade still pays is worth measuring rather than assuming.
+
+Nothing here is decided. What is measured is that the current pair of numbers cannot both be right.
+
+Found while trying to run the neighbour suite on the real process model; it is why that run could
+not complete, and it was visible before the load started.
