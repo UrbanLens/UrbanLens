@@ -1,9 +1,10 @@
 # The neighbour test runs, and what it measured changes what staging should expect
 
-- **Status: SENT, 2026-09-10.** Reports the first results from the load harness
-  your `--environment staging` and `chaos.py` work unblocked, and asks four small questions
-  and one small favour. Nothing here is blocking; everything asked for in N16 was
-  delivered and is in use.
+- **Status: SENT, 2026-09-10, and CORRECTED the same day.** Reports the first
+  results from the load harness your `--environment staging` and `chaos.py` work
+  unblocked. **The headline it was first sent with is wrong** — see the
+  correction immediately below "What it measured". Nothing here is blocking;
+  everything asked for in N16 was delivered and is in use.
 - **Direction: outbound.** This repo to whoever owns `UrbanLens/infrastructure`.
 - `id: N20` · `status: current`
 
@@ -15,6 +16,37 @@ further asks on any of them. `chaos.py list` describes `cpu-saturation` as "the
 neighbour test: one user's expensive work against another user's cheap page" —
 that test now exists on our side (`bin/run_perf_tests.sh`, `tests/perf/`), so the
 two halves compose.
+
+## Correction, same day: the first version of this overstated the problem
+
+The table below was measured on a **development** process model — `runserver`
+under daphne. Running the same harness against `--environment staging`, which is
+what your flag is for, moved the single-user result by a factor of twenty:
+
+| | daphne | **gunicorn + gevent, capped** |
+|---|---|---|
+| idle baseline | 241 ms | **183 ms** |
+| **one user filtering** | **4,431 ms** | **221 ms** |
+| eight users filtering | 8,902 ms | 1,281 ms |
+| sixty users filtering | 60 s p95 | 60 s **p50** — starved |
+
+**"One user's filter button costs another user 19x" does not hold on the process
+model production runs.** It was substantially an artifact of the development
+server's threading. Apologies for leading with it — that is precisely the reason
+your `--environment staging` work mattered, and we had not used it yet when the
+first version went out.
+
+What survives, and is the part worth your attention:
+
+- **Your `--worker-connections` cap works exactly as specified**: 61/100 backends
+  at peak, 60 of them web, during a 60-user storm. To the connection.
+- **And the site is still not fair.** During that storm the neighbour's *median*
+  request did not complete and 94.8% could not be started, because all 60 slots
+  belonged to one account. The cap bounds the database's exposure, not the
+  fairness between users.
+- **A Valkey outage is worse than we told you**: every request 500s after ~32
+  seconds, readiness included. That is the concrete case behind the readiness
+  warning further down, and it is now measured rather than predicted.
 
 ## What it measured
 
