@@ -33,6 +33,7 @@ conflating them overstates what is actually enforced:
 | Parser | Reached by | Runs in | Guarded? |
 |---|---|---|---|
 | Pillow (+ pillow-heif) | photos, media previews | sandbox | yes |
+| Pillow (bare `PIL.Image`) | **custom label/pin icon resize (request)** | request, unsandboxed | **no — P103** |
 | ffmpeg / ffprobe | video | sandbox | yes |
 | LibreOffice (`soffice`) | doc/spreadsheet conversion | sandbox | yes |
 | poppler + tesseract | PDF text/OCR, preview render | sandbox | yes |
@@ -42,10 +43,13 @@ conflating them overstates what is actually enforced:
 | GDAL / GeoPandas / Shapely | shapefile, WKT/WKB | routed via `run_user_data_import` | yes |
 | clamd | everything, except VirusTotal-eligible fetched assets (see below) | sandbox (its own container for the daemon) | n/a |
 
-Every parser is now guarded, so `warn` logs a complete worklist rather than a
-partial one. Two rows still say **request**: `controllers/pin.parse_for_preview`
-is the last thing standing between here and `UL_UNTRUSTED_PARSE_POLICY=deny`.
-See `docs/PROBLEMS.md`.
+Not every parser is guarded (corrected 2026-09-10, P103 — this used to claim
+"every parser is now guarded", which was false). `controllers/pin.parse_for_preview`
+is the last *sandboxing* blocker standing between here and
+`UL_UNTRUSTED_PARSE_POLICY=deny` (P2), but `controllers/labels._resize_custom_icon`
+calls bare `PIL.Image.open()` on a request path with no decorator and no sandbox
+routing at all — a gap `warn` cannot even log, since nothing marks that call
+site as one it should be watching. See `docs/PROBLEMS.md` P2 and P103.
 
 ## The tiers
 

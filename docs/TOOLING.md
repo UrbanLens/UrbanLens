@@ -609,11 +609,13 @@ grew by the same amount without any of their records explaining why.
 
 ## Evaluated, not adopted
 
-- **`nplusone`** — the obvious runtime N+1 detector, and rejected on two counts:
-  it has not shipped a release since 2019, and `django-auto-prefetch` (already a
-  dependency) suppresses exactly the access pattern it watches for, so it would
-  be quietest where this codebase's N+1s actually came from — model *properties*
-  that fall back to a query. `django-perf-rec` was adopted instead, above.
+- **`nplusone`** — the obvious runtime N+1 detector, rejected because it has not
+  shipped a release since 2019. `django-perf-rec` was adopted instead, above.
+  (Corrected 2026-09-10, N12: this used to also cite `django-auto-prefetch` as
+  already suppressing the access pattern such a detector watches for — false,
+  it is a listed dependency with zero imports anywhere in `src/urbanlens`, not
+  in `INSTALLED_APPS`, and no model inherits from it. The 2019 reason above
+  carries the decision on its own.)
 - **`django-linear-migrations`** — would subsume part of
   `check_migration_graph.py` and additionally prevent branching migration
   graphs. Worth adopting if migrations ever branch across parallel work.

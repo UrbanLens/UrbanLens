@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P95` · `T3` · `PL7` · `D11` · `X14` · `I5` · `R27` · `N10`
+**Next free id:** `P105` · `T3` · `PL7` · `D11` · `X14` · `I5` · `R29` · `N15`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -90,6 +90,16 @@ still resolves after it is fixed, and the id is never handed out again.
 | P91 | open | 2026-09-08 | Seven of eight new security integration specs have never run against a live deployment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P92 | open | 2026-09-08 | `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's inline script | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P93 | open | 2026-09-08 | Nine REData plugins declare no rate-limit defaults for their own gateway's service key | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P95 | open | 2026-09-10 | `ExtractionBudget` cannot bound a single file's decompression, and nothing prices what parsing one costs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P96 | open | 2026-09-10 | `import_confirmed`'s SSE import creates as many Pins as the client claims, synchronously in the web worker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P97 | open | 2026-09-10 | `dissolve_polygons` is O(n^3) GEOS work over an uncapped user-supplied polygon count | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P98 | open | 2026-09-10 | The site-admin system panel re-walks the whole media tree on every load, gated only by admin permission | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P99 | open | 2026-09-10 | Bulk photo delete is quadratic in batch size, and the request sets that size with no cap | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P101 | open | 2026-09-10 | `MapPinCache.rebuild` still drops concurrent writes and can release a lock it no longer holds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P102 | open | 2026-09-10 | One Label edit re-serializes every pin carrying it, synchronously, inside the edit's own request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P103 | open | 2026-09-10 | `MEDIA_PIPELINE.md`'s "every parser is now guarded" was false; a label-icon resize decodes unsandboxed in-request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P104 | open | 2026-09-10 | Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |
@@ -125,11 +135,11 @@ still resolves after it is fixed, and the id is never handed out again.
 | R6 | current | 2026-09-08 | Every shipped UrbanLens feature is inventoried here, so a "new feature" request is usually already built | [`docs/FEATURES.md`](FEATURES.md) |
 | R7 | current | 2026-09-01 | A Playwright suite driving a deployed instance catches what a single-process pytest run structurally cannot | [`docs/INTEGRATION_TESTS.md`](INTEGRATION_TESTS.md) |
 | R8 | current | 2026-08-27 | A plausible boundary is not a sourced one, so the HRSH specs assert provenance and bounds, never values | [`docs/LOCATION_DATA_TESTS.md`](LOCATION_DATA_TESTS.md) |
-| R9 | current | 2026-09-02 | Uploads decode only in a network-isolated worker; served bytes are re-encoded, never the ones uploaded | [`docs/MEDIA_PIPELINE.md`](MEDIA_PIPELINE.md) |
+| R9 | current | 2026-09-10 | Uploads decode only in a network-isolated worker, except one unsandboxed label-icon resize (P103) | [`docs/MEDIA_PIPELINE.md`](MEDIA_PIPELINE.md) |
 | R10 | current | 2026-09-03 | /metrics is off by default and unrouted when off, and undercounts silently unless multiprocess mode is on | [`docs/METRICS.md`](METRICS.md) |
 | R11 | current | 2026-09-03 | Twenty-nine non-obvious behaviours that read as bugs until explained; eleven source files cite it by name | [`docs/NOTES.md`](NOTES.md) |
 | R12 | current | 2026-08-27 | Nothing is visible until both the container gate and the owner's settings gate say yes; three items still open | [`docs/PRIVACY_MODEL.md`](PRIVACY_MODEL.md) |
-| R13 | current | 2026-09-04 | Every diagnostic here exists because a specific defect got through without it; twelve checkers now run in CI | [`docs/TOOLING.md`](TOOLING.md) |
+| R13 | current | 2026-09-10 | Every diagnostic here exists because a specific defect got through without it; twelve checkers now run in CI | [`docs/TOOLING.md`](TOOLING.md) |
 | R14 | current | 2026-09-01 | Where a fallback exists, asserting the shape of the answer passes forever - assert provenance instead | [`docs/audits/TEST_COVERAGE_GAPS.md`](audits/TEST_COVERAGE_GAPS.md) |
 | R15 | current | 2026-09-01 | SpotGuessr's rules: pinned-by-everyone eligibility, Glicko-2 for players and locations, wiki-only photos | [`docs/designs/drafts/spotguessr.md`](designs/drafts/spotguessr.md) |
 | R16 | current | 2026-08-27 | Trivia reuses SpotGuessr eligibility and Glicko-2, funnelling all three question sources through one classifier | [`docs/designs/drafts/trivia.md`](designs/drafts/trivia.md) |
@@ -143,6 +153,8 @@ still resolves after it is fixed, and the id is never handed out again.
 | R24 | current | 2026-07-22 | The 120 raw Overpass rows the mirror verdicts were computed from | [`docs/reports/overpass_mirror_results.json`](reports/overpass_mirror_results.json) |
 | R25 | stale | 2026-08-27 | A generated 0-reference scan whose line numbers no longer resolve; regenerate instead of reading | [`docs/reports/unused_functions.txt`](reports/unused_functions.txt) |
 | R26 | current | 2026-09-05 | Restoring these plain-SQL dumps needs an empty target and psql from the app container; round trip verified | [`docs/BACKUPS.md`](BACKUPS.md) |
+| R27 | current | 2026-09-10 | The map payload's cost was 88% Python object construction, not SQL; the fix is query- and allocation-flat | [`docs/MAP_PERFORMANCE.md`](MAP_PERFORMANCE.md) |
+| R28 | current | 2026-09-10 | The WSGI tier runs gevent with no recorded rationale, contradicting reasoning the project applied everywhere else it chose a worker model | [`docs/notes/wsgi-worker-model-and-connections.md`](notes/wsgi-worker-model-and-connections.md) |
 | N1 | stale | 2026-09-03 | The Celery requeue loop was a two-request DoS; fixed, and the durable version now lives in NOTES.md | [`docs/archive/NOTES-celery-acks.md`](archive/NOTES-celery-acks.md) |
 | N2 | current | 2026-08-27 | 82 ways a gated wiki gives itself away collapse to eleven classes and three viewer-less chokepoints | [`docs/designs/reputation-gating-tells.md`](designs/reputation-gating-tells.md) |
 | N3 | stale | 2026-08-27 | A 631-chunk audit log whose fixes landed and whose open items were refiled into docs/PROBLEMS.md | [`docs/reports/2026-08-11-codebase-audit.md`](reports/2026-08-11-codebase-audit.md) |
@@ -152,3 +164,8 @@ still resolves after it is fixed, and the id is never handed out again.
 | N7 | current | 2026-09-06 | Two Django template traps that each shipped a 500: a filter argument has no failure tolerance, and `.image.url` raises | [`docs/notes/template-render-traps.md`](notes/template-render-traps.md) |
 | N8 | current | 2026-09-06 | Reply to the infrastructure repo's two open handoffs: /static/ 404s, media on Garage, and the 100 MB body cap | [`docs/handoffs/infrastructure-media-and-static.md`](handoffs/infrastructure-media-and-static.md) |
 | N9 | current | 2026-09-08 | Reply on migration 0054: its IntegrityError confirmed and fixed, and why a stub-driven test could not have caught it | [`docs/handoffs/infrastructure-0054-friendship-merge.md`](handoffs/infrastructure-0054-friendship-merge.md) |
+| N10 | current | 2026-09-10 | A seed-then-measure benchmark without ANALYZE measures the planner's ignorance, not the query - cost this investigation 3 rounds | [`docs/notes/map-perf-measurement-and-test-gaps.md`](notes/map-perf-measurement-and-test-gaps.md) |
+| N11 | current | 2026-09-10 | Query- and render-time scaling mixins are structurally blind to a per-row object-count regression; a third axis now exists | [`docs/notes/map-perf-measurement-and-test-gaps.md`](notes/map-perf-measurement-and-test-gaps.md) |
+| N12 | current | 2026-09-10 | `pyproject.toml`'s nplusone-rejection comment misdescribed `django-auto-prefetch`; it is wholly unwired | [`docs/notes/map-perf-doc-corrections.md`](notes/map-perf-doc-corrections.md) |
+| N13 | current | 2026-09-10 | The archived "map payload is already query-flat" claim was true and answered the wrong question | [`docs/notes/map-perf-doc-corrections.md`](notes/map-perf-doc-corrections.md) |
+| N14 | current | 2026-09-10 | Nothing in pytest or local dev exercises the shared-connection-pool topology that caused P104's outage | [`docs/notes/wsgi-worker-model-and-connections.md`](notes/wsgi-worker-model-and-connections.md) |
