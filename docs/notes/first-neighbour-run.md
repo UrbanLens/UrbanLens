@@ -204,11 +204,44 @@ There are exactly two known candidates for that, and both have their own entries
 import would run 78 minutes. So §2.1's concern should be read as a property of those two defects
 rather than of heavy endpoints generally — which narrows what the gthread move has to buy.
 
-### Still not measured on the real process model
+### The whole suite on the real process model
 
-`label_edit`, `import_confirmed` and `cooldown`. Their figures below are development-server figures.
-P108 and P110 are properties of the code and are unaffected; P111 was found on this environment and
-is a property of the deployment.
+Every phase, measured against gunicorn + gevent with the phase-2 caps, the outbound guard on, and
+P110's fix in place. Budgets 563–568 ms, each derived from its own run's baseline.
+
+| phase | daphne p95 | **gunicorn p95** | verdict |
+|---|---|---|---|
+| `idle` baseline | 241 ms | **190 ms** | — |
+| `map_search_1` — one user filtering | 4,431 ms | **221 ms** | ✅ |
+| `map_init_1` — one user | 778 ms | **374 ms** | ✅ |
+| `label_edit` — the P102 fan-out | 340 ms | **195 ms** | ✅ |
+| `import_confirmed` | 11,191 ms | **210 ms** | ✅ |
+| `cooldown` — after the import | **60,001 ms** | **206 ms** | ✅ |
+| `map_init_4` — four users | 8,735 ms | 1,065 ms | ✗ 5.5x baseline |
+| `map_search_8` — eight users | 8,902 ms | 1,281 ms | ✗ 6.7x baseline |
+| `search_storm` — sixty users | 60,001 ms | 60,000 ms **p50** | ✗ starved |
+
+Across the `label_edit`/`import_confirmed`/`cooldown` run: **0 dropped iterations, 0 failed requests,
+0 worker deaths, VU pool never above 22, and the Celery queue drained to 0**.
+
+**Everything one user can do alone now costs the neighbour nothing measurable.** The two phases that
+still fail are concurrency — four or eight users doing the same expensive thing at once — and the
+storm, where the failure is total.
+
+**The `cooldown` row is the day's biggest single change: 60 seconds to 206 ms.** That phase existed
+to catch damage outliving the action, and under daphne it caught exactly that (P109's task tail, made
+of Overture reads that could not be narrowed). Here the import's fan-out drained to zero and the
+neighbour never noticed.
+
+**Read that with the caveat it deserves.** This environment runs `UL_ALLOW_OUTBOUND_APIS=false`, so
+the enrichment tasks fail fast instead of spending minutes each on the wire. Production makes those
+calls for real and *should*. So what is demonstrated is that the tail is not inherent to the import —
+it is the provider work behind it — and **P109's shape is unchanged**: one queue, no class of
+service, and a safety task still able to queue behind one user's import. The fix for that is PL7
+phase 6, and this run does not substitute for it.
+
+P108 and P110 are properties of the code and are unaffected by the process model; P111 was found on
+this environment and is a property of the deployment.
 
 ## What this cannot tell you
 
