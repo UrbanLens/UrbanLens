@@ -1,7 +1,7 @@
 """Building provenance survives REData's move to a reconciled response.
 
 REData now reconciles `/parcels/{uuid}/buildings/` into one record per physical
-building (its `../REData/docs/buildings-dedup-spec.md`), which removed the top-level
+building (its `../REData/docs/archive/buildings-dedup-spec.md`), which removed the top-level
 `source` string a per-observation record used to carry and replaced it with a
 `sources[]` array - one entry per source referencing that building, ordered by
 `BUILDING_SOURCES` precedence.

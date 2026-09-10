@@ -32,7 +32,7 @@ decides this:
   on that worker** with it. One user's slow request does not merely queue behind — it kills.
 
 That last line is the whole argument. Under gevent the failure mode is collateral by construction,
-and `worker_connections` defaults to 1000 (`config.py:798-805`), so with `CONN_MAX_AGE=0` a single
+and `worker_connections` defaults to 1000 (gunicorn's own `gunicorn/config.py`, not ours), so with `CONN_MAX_AGE=0` a single
 worker can demand up to 1000 Postgres backends and three can demand 3000 against
 `max_connections=100`. Under `gthread` the in-process concurrency, and therefore the connection
 demand, is `workers × threads` — a number chosen rather than discovered. 3 × 4 = 12.
