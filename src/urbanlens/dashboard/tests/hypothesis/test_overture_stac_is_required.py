@@ -22,6 +22,7 @@ next lookup rather than adding to the storm.
 
 from __future__ import annotations
 
+import time
 from unittest.mock import patch
 
 import pytest
@@ -171,3 +172,60 @@ def _bbox():
     from overturemaps import core
 
     return core._coerce_bbox(SMALL_BBOX)  # noqa: SLF001
+
+
+class TheLookupCannotHangTests(SimpleTestCase):
+    """The library gives its own HTTP call no timeout at all.
+
+    `_get_files_from_stac` does `with urlopen(stac_url) as response`, with no
+    `timeout=`. A stalled connection therefore parks the calling thread forever,
+    and this is reached from the request path as well as from tasks - observed
+    as an app serving nothing at 0% CPU, every worker thread waiting.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        _reset_breaker()
+        self.addCleanup(_reset_breaker)
+
+    def test_the_library_still_has_no_timeout_of_its_own(self) -> None:
+        """Pinned so an upstream fix is noticed rather than silently duplicated."""
+        import inspect
+
+        from overturemaps import core
+
+        source = inspect.getsource(core._get_files_from_stac)  # noqa: SLF001
+        self.assertIn(
+            "urlopen(stac_url)",
+            source,
+            "the library's STAC call changed shape; re-check whether our deadline is still needed",
+        )
+
+    def test_a_hanging_lookup_is_refused_rather_than_waited_on(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.boundaries import overture_maps
+
+        gateway = OvertureMapsGateway()
+        with (
+            patch.object(overture_maps, "_STAC_LOOKUP_TIMEOUT_SECONDS", 0.05),
+            patch(_STAC_LOOKUP, side_effect=lambda *a, **k: time.sleep(5)),
+            patch(_GEODATAFRAME) as geodataframe,
+            pytest.raises(GatewayRateLimitedError),
+        ):
+            gateway.get_buildings(SMALL_BBOX)
+
+        geodataframe.assert_not_called()
+
+    def test_a_hanging_lookup_opens_the_breaker_too(self) -> None:
+        """A slow index is as useless as a refusing one, so it stops the storm the same way."""
+        from urbanlens.dashboard.services.apis.locations.boundaries import overture_maps
+
+        gateway = OvertureMapsGateway()
+        with (
+            patch.object(overture_maps, "_STAC_LOOKUP_TIMEOUT_SECONDS", 0.05),
+            patch(_STAC_LOOKUP, side_effect=lambda *a, **k: time.sleep(5)) as lookup,
+        ):
+            for _ in range(3):
+                with pytest.raises(GatewayRateLimitedError):
+                    gateway.get_buildings(SMALL_BBOX)
+
+        self.assertEqual(lookup.call_count, 1)

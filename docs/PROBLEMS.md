@@ -4195,6 +4195,30 @@ Known cost: one extra read of the (small) index on the healthy path, because the
 it and will not accept a resolved file list. Worth paying to never scan the theme, and it disappears
 if `overturemaps` grows a strict mode or takes the files.
 
+**A second defect, found by shipping the first.** `_get_files_from_stac` calls `urlopen(stac_url)`
+with **no timeout at all**, so a stalled connection parks the calling thread indefinitely — and this
+is reached from the request path (the pin-detail panels), not only from tasks. Adding the
+precondition without a deadline wedged the development app immediately: every worker thread parked,
+`/health/ready` timing out, **0% CPU** — a different signature from P108's spin, and the same
+outcome. The lookup now runs under `call_with_deadline` at 15s with `default=None`, which joins the
+timeout to the refusal path: an index too slow to answer is as useless as one that refuses, and both
+stop the read rather than let it widen.
+
+**Verified end to end on the development stack**, importing 50 pins:
+
+| | before | after |
+|---|---|---|
+| import request | 504 at 120 s (app wedged) | **200 in 12.3 s** |
+| queue drain | 0.20/s | **2.57/s — 154 tasks to zero in 60 s** |
+| worker memory | pinned at 3 GiB, children SIGKILLed | **896 MiB** |
+| `/health/ready` | timing out | 200 in 58 ms |
+
+Of 50 building lookups, **4 probed the index and 46 were refused by the circuit without touching the
+network** — which is the breaker doing exactly its job. No `arrow_to_geopandas`, no `WorkerLostError`.
+Note that `stac.overturemaps.org` is not reachable from this box, so the *narrowed* path was
+exercised only in tests; what was verified live is that being unable to narrow now costs a fast
+refusal instead of a planet scan.
+
 Still open in this entry, and the reason it is not archived: **the reads remain invisible to the rate
 limiter and to the outbound-call guard.** `service_key` is still `None` and the parquet reads still
 go through `pyarrow`/`S3FileSystem` rather than `self.session`, so nothing bounds how often

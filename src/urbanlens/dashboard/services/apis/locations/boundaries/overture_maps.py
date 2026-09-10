@@ -43,6 +43,7 @@ from urbanlens.dashboard.services.apis.locations.base import (
 
 # Adjust this import to wherever Gateway/Gateway actually live.
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError
+from urbanlens.dashboard.services.core.timeout_utils import call_with_deadline
 
 try:
     from overturemaps import geodataframe as _overture_geodataframe  # pyright: ignore[reportMissingImports]
@@ -69,6 +70,16 @@ _STAC_COOLDOWN_SECONDS = 120.0
 
 #: When the circuit re-closes. Module-level, one per worker child.
 _stac_unavailable_until = 0.0
+
+#: Seconds the STAC lookup gets before it counts as unavailable.
+#:
+#: It needs one because the library does not have one: `_get_files_from_stac`
+#: calls `urlopen(stac_url)` with no timeout at all, so a stalled connection
+#: blocks its thread forever. On the request path (the pin-detail panels reach
+#: this too) that is every worker thread in turn, and the process stops
+#: answering while using no CPU - observed exactly that way before this bound
+#: existed. The index is small, so this is generous.
+_STAC_LOOKUP_TIMEOUT_SECONDS = 15.0
 
 
 _EARTH_RADIUS_M = 6_371_000.0
@@ -192,6 +203,11 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             overture_type: The Overture type being fetched.
             bbox: The bounding box being looked up.
 
+        The lookup is given its own deadline because the library gives it none -
+        `_get_files_from_stac` calls `urlopen` with no timeout, so a stalled
+        connection parks the calling thread indefinitely. This is reached from
+        the request path as well as from tasks.
+
         Raises:
             GatewayRateLimitedError: The index is unavailable, now or recently.
         """
@@ -207,7 +223,16 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             )
 
         theme = _overture_core.type_theme_map[overture_type]
-        resolved = _overture_core._get_files_from_stac(theme, overture_type, _overture_core._coerce_bbox(bbox), self.release)  # noqa: SLF001
+        coerced = _overture_core._coerce_bbox(bbox)  # noqa: SLF001
+        # `default=None` deliberately joins the timeout to the failure path: a
+        # lookup too slow to answer is as useless as one that refuses, and both
+        # should stop the read rather than let it widen.
+        resolved = call_with_deadline(
+            lambda: _overture_core._get_files_from_stac(theme, overture_type, coerced, self.release),  # noqa: SLF001
+            timeout=_STAC_LOOKUP_TIMEOUT_SECONDS,
+            default=None,
+            name="overture-stac-index",
+        )
         if resolved is None:
             _stac_unavailable_until = now + _STAC_COOLDOWN_SECONDS
             raise GatewayRateLimitedError(
