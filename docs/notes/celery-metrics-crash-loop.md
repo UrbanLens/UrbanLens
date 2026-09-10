@@ -10,6 +10,11 @@
 
 `id: N15` · `status: current` · `updated: 2026-09-10`
 
+**Stopped 2026-09-10 ~14:46Z at 4,410 restarts**, by hand on damballa. The gate
+below is on `release/v_0_8_0`; staging's checkout is 52 commits behind it, so the
+permanent fix is a scheduled deploy rather than a container action. See
+[`../handoffs/infrastructure-metrics-exporter-loop-closed.md`](../handoffs/infrastructure-metrics-exporter-loop-closed.md).
+
 Observed 2026-09-10 on damballa:
 
 ```bash

@@ -19,6 +19,7 @@ sentence is a bug and gets rewritten; here it is the content.
 | [`infrastructure-availability-drills-and-gunicorn-dev-envs.md`](infrastructure-availability-drills-and-gunicorn-dev-envs.md) — asks for a dev environment that runs gunicorn, and where availability chaos scenarios should live given drills are explicitly not a test suite | outbound, `UrbanLens/infrastructure` | ANSWERED 2026-09-10 |
 | [`infrastructure-availability-drills-reply.md`](infrastructure-availability-drills-reply.md) — accepts both their corrections, takes their broker finding into D11 and P105, and returns two of our own | outbound, `UrbanLens/infrastructure` | SENT 2026-09-10 |
 | [`infrastructure-availability-drills-followup.md`](infrastructure-availability-drills-followup.md) — the metrics override guards a branch that does not exist, and their Docker-access item is already satisfied | outbound, `UrbanLens/infrastructure` | SENT 2026-09-10 |
+| [`infrastructure-metrics-exporter-loop-closed.md`](infrastructure-metrics-exporter-loop-closed.md) — the 30-hour restart loop is stopped at 4,410; what remains is a scheduled staging deploy | outbound, `UrbanLens/infrastructure` | SENT 2026-09-10 |
 
 ## The convention
 

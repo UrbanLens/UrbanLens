@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P108` · `T3` · `PL8` · `D13` · `X15` · `I5` · `R29` · `N19`
+**Next free id:** `P108` · `T3` · `PL8` · `D13` · `X15` · `I5` · `R29` · `N20`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -179,3 +179,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | N16 | current | 2026-09-10 | Asks infrastructure for a dev environment that runs gunicorn, and where availability chaos belongs given drills are explicitly not a test suite | [`docs/handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md`](handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md) |
 | N17 | current | 2026-09-10 | Reply to infrastructure: both their corrections hold, their broker finding invalidates part of our chaos table, and N15's restart count is confirmable | [`docs/handoffs/infrastructure-availability-drills-reply.md`](handoffs/infrastructure-availability-drills-reply.md) |
 | N18 | current | 2026-09-10 | Follow-up to infrastructure: the metrics override guards a branch that does not exist, and their Docker-access plan item is already satisfied | [`docs/handoffs/infrastructure-availability-drills-followup.md`](handoffs/infrastructure-availability-drills-followup.md) |
+| N19 | current | 2026-09-10 | The staging metrics exporter's 30-hour restart loop is stopped at 4,410; the permanent fix is a 52-commit staging deploy, not a container fix | [`docs/handoffs/infrastructure-metrics-exporter-loop-closed.md`](handoffs/infrastructure-metrics-exporter-loop-closed.md) |
