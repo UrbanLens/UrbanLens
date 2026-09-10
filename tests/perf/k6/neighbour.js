@@ -35,7 +35,7 @@ import exec from "k6/execution";
 import { check, fail } from "k6";
 
 import { ACTIONS } from "./lib/actions.js";
-import { PHASES, assertedPhases, baselinePhase, phaseAt, phaseStarts, totalSeconds } from "./lib/schedule.js";
+import { assertedPhases, baselinePhase, phaseAt, phaseStarts, selectPhases, totalSeconds } from "./lib/schedule.js";
 import { adopt, get, signIn } from "./lib/session.js";
 
 const BASE_URL = (__ENV.UL_PERF_BASE_URL || "").replace(/\/+$/, "");
@@ -69,6 +69,18 @@ const BASELINE_SECONDS = Number(__ENV.UL_PERF_BASELINE_SECONDS || 60);
 const SUMMARY_PATH = __ENV.UL_PERF_SUMMARY || "";
 
 /**
+ * The phases this run will actually execute.
+ *
+ * A full run is fourteen and a half minutes, which is the wrong instrument for
+ * "what does an import do to the neighbour" - and when a long run is cut short,
+ * re-running the whole thing to reach the phase that was missed costs the
+ * fourteen minutes again. `UL_PERF_PHASES=import_confirmed,cooldown` runs those
+ * and the baseline, which is always kept because every verdict is relative to
+ * it.
+ */
+const ACTIVE = selectPhases(__ENV.UL_PERF_PHASES);
+
+/**
  * The p95 ceiling for the neighbour, in milliseconds.
  *
  * Supplied by the runner from a baseline pass, because a fixed number would be
@@ -83,9 +95,10 @@ const FIXTURES = {
     labelUrlKind: __ENV.UL_PERF_LABEL_KIND || "tags",
     pinNamePrefix: __ENV.UL_PERF_PIN_PREFIX || "Perf Pin",
     importPins: Number(__ENV.UL_PERF_IMPORT_PINS || 500),
-    // Generous, and deliberately shorter than the phase that runs it, so an
-    // import that never returns is recorded as a timeout rather than running on
-    // into the phase after it.
+    // Longer than the phase's own nginx timeout on purpose. Whatever sits in
+    // front of the app ends this request first (120s in compose), and the
+    // outcome worth recording is the server's answer to the user - a 504 - not
+    // the harness giving up before it and recording an error nobody saw.
     importTimeout: __ENV.UL_PERF_IMPORT_TIMEOUT || "230s",
     actorTimeout: __ENV.UL_PERF_ACTOR_TIMEOUT || "120s",
     expectedPins: Number(__ENV.UL_PERF_EXPECTED_PINS || seedValue("pins", 0)),
@@ -189,7 +202,7 @@ export function neighbour(data) {
 export function actor(data) {
     const session = sessionFor("heavy", data);
     const phase = exec.scenario.name.replace(/^actor_/, "");
-    const definition = PHASES.find((candidate) => candidate.name === phase);
+    const definition = ACTIVE.find((candidate) => candidate.name === phase);
     if (!definition || !definition.action) {
         fail(`Scenario ${exec.scenario.name} has no action in schedule.js.`);
     }
@@ -211,7 +224,7 @@ function buildScenarios() {
             executor: "constant-arrival-rate",
             rate: RATE,
             timeUnit: "1s",
-            duration: `${BASELINE ? BASELINE_SECONDS : totalSeconds()}s`,
+            duration: `${BASELINE ? BASELINE_SECONDS : totalSeconds(ACTIVE)}s`,
             // Sized so that dropping an iteration means average latency crossed
             // 40 seconds, not that the generator was under-provisioned.
             preAllocatedVUs: Math.max(RATE * 4, 20),
@@ -223,8 +236,8 @@ function buildScenarios() {
         return scenarios;
     }
 
-    const starts = phaseStarts();
-    PHASES.forEach((phase, index) => {
+    const starts = phaseStarts(ACTIVE);
+    ACTIVE.forEach((phase, index) => {
         if (!phase.action) {
             return;
         }
@@ -249,7 +262,7 @@ function buildScenarios() {
  * produce.
  */
 function buildThresholds() {
-    const recordBaseline = { [`http_req_duration{scenario:neighbour,phase:${baselinePhase()}}`]: ["p(95)>=0"] };
+    const recordBaseline = { [`http_req_duration{scenario:neighbour,phase:${baselinePhase(ACTIVE)}}`]: ["p(95)>=0"] };
     if (BASELINE) {
         // The guard matters more here than anywhere: a baseline taken against
         // the sign-in page is fast, and every later phase would then be judged
@@ -269,7 +282,7 @@ function buildThresholds() {
         // measured against, so a threshold on it would be circular.
         ...recordBaseline,
     };
-    for (const phase of assertedPhases()) {
+    for (const phase of assertedPhases(ACTIVE)) {
         thresholds[`http_req_duration{scenario:neighbour,phase:${phase}}`] = [`p(95)<${BUDGET_MS}`];
     }
     return thresholds;
@@ -296,11 +309,11 @@ export function handleSummary(data) {
 function renderVerdict(data) {
     const lines = [];
     lines.push("");
-    lines.push(BASELINE ? `baseline pass (${BASELINE_SECONDS}s, neighbour only)` : `measured pass (${totalSeconds()}s, budget p95 < ${BUDGET_MS}ms)`);
+    lines.push(BASELINE ? `baseline pass (${BASELINE_SECONDS}s, neighbour only)` : `measured pass (${totalSeconds(ACTIVE)}s, budget p95 < ${BUDGET_MS}ms)`);
     lines.push("");
     lines.push("  phase                 count      p50      p95      p99      max   verdict");
 
-    const names = BASELINE ? [baselinePhase()] : [baselinePhase(), ...assertedPhases()];
+    const names = BASELINE ? [baselinePhase(ACTIVE)] : [baselinePhase(ACTIVE), ...assertedPhases(ACTIVE)];
     for (const phase of names) {
         const metric = data.metrics[`http_req_duration{scenario:neighbour,phase:${phase}}`];
         if (!metric) {
@@ -332,7 +345,7 @@ function fixed(value) {
 }
 
 function currentPhase() {
-    return phaseAt(exec.instance.currentTestRunDuration / 1000);
+    return phaseAt(exec.instance.currentTestRunDuration / 1000, ACTIVE);
 }
 
 /**

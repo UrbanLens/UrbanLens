@@ -54,11 +54,37 @@ export const PHASES = [
     { name: "cooldown", seconds: 120, action: null },
 ];
 
+/**
+ * A subset of the timeline, for running one phase without the other fourteen minutes.
+ *
+ * The baseline phase is always kept whether or not it was asked for: every
+ * verdict is relative to it, and a run without it has nothing to be relative to.
+ * Order follows the full schedule rather than the argument, so a subset is
+ * always a subsequence of the real run.
+ *
+ * @param {string|string[]|null} names Comma-separated or array; falsy means all.
+ * @returns {object[]} The phases to run, in schedule order.
+ */
+export function selectPhases(names) {
+    if (!names) {
+        return PHASES;
+    }
+    const wanted = new Set((Array.isArray(names) ? names : String(names).split(",")).map((name) => name.trim()).filter(Boolean));
+    if (!wanted.size) {
+        return PHASES;
+    }
+    const unknown = [...wanted].filter((name) => !PHASES.some((phase) => phase.name === name));
+    if (unknown.length) {
+        throw new Error(`No such phase: ${unknown.join(", ")}. Known phases: ${PHASES.map((phase) => phase.name).join(", ")}.`);
+    }
+    return PHASES.filter((phase) => phase.baseline || wanted.has(phase.name));
+}
+
 /** Wall-clock second each phase begins at, relative to the start of the run. */
-export function phaseStarts() {
+export function phaseStarts(phases = PHASES) {
     const starts = [];
     let elapsed = 0;
-    for (const phase of PHASES) {
+    for (const phase of phases) {
         starts.push(elapsed);
         elapsed += phase.seconds;
     }
@@ -66,8 +92,8 @@ export function phaseStarts() {
 }
 
 /** Total run length in seconds. */
-export function totalSeconds() {
-    return PHASES.reduce((sum, phase) => sum + phase.seconds, 0);
+export function totalSeconds(phases = PHASES) {
+    return phases.reduce((sum, phase) => sum + phase.seconds, 0);
 }
 
 /**
@@ -77,28 +103,28 @@ export function totalSeconds() {
  * @returns {string} A phase name, or `edge` within `GUARD_SECONDS` of a
  *     boundary, or `over` past the end of the schedule.
  */
-export function phaseAt(elapsedSeconds) {
-    const starts = phaseStarts();
-    for (let index = 0; index < PHASES.length; index += 1) {
+export function phaseAt(elapsedSeconds, phases = PHASES) {
+    const starts = phaseStarts(phases);
+    for (let index = 0; index < phases.length; index += 1) {
         const start = starts[index];
-        const end = start + PHASES[index].seconds;
+        const end = start + phases[index].seconds;
         if (elapsedSeconds < start || elapsedSeconds >= end) {
             continue;
         }
         const nearStart = elapsedSeconds - start < GUARD_SECONDS;
         const nearEnd = end - elapsedSeconds < GUARD_SECONDS;
-        return nearStart || nearEnd ? "edge" : PHASES[index].name;
+        return nearStart || nearEnd ? "edge" : phases[index].name;
     }
     return "over";
 }
 
 /** The phase the thresholds treat as the reference, by name. */
-export function baselinePhase() {
-    const found = PHASES.find((phase) => phase.baseline);
-    return found ? found.name : PHASES[0].name;
+export function baselinePhase(phases = PHASES) {
+    const found = phases.find((phase) => phase.baseline);
+    return found ? found.name : phases[0].name;
 }
 
 /** Phase names a threshold should be asserted on: every acting phase, plus cooldown. */
-export function assertedPhases() {
-    return PHASES.filter((phase) => !phase.baseline).map((phase) => phase.name);
+export function assertedPhases(phases = PHASES) {
+    return phases.filter((phase) => !phase.baseline).map((phase) => phase.name);
 }

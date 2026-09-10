@@ -12,7 +12,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { GUARD_SECONDS, PHASES, assertedPhases, baselinePhase, phaseAt, phaseStarts, totalSeconds } from "./schedule.js";
+import { GUARD_SECONDS, PHASES, assertedPhases, baselinePhase, phaseAt, phaseStarts, selectPhases, totalSeconds } from "./schedule.js";
 
 describe("the timeline", () => {
     test("starts are the running total of the durations", () => {
@@ -119,6 +119,52 @@ describe("the actor's half", () => {
     test("no phase is named after the lookup's own sentinels", () => {
         for (const phase of PHASES) {
             expect(["edge", "over"]).not.toContain(phase.name);
+        }
+    });
+});
+
+describe("running a subset", () => {
+    test("no selection means the whole schedule", () => {
+        expect(selectPhases(null)).toBe(PHASES);
+        expect(selectPhases("")).toBe(PHASES);
+        expect(selectPhases([])).toBe(PHASES);
+    });
+
+    test("keeps the baseline whether or not it was asked for", () => {
+        // Every verdict is relative to it, so a subset without it has nothing
+        // to be relative to.
+        const chosen = selectPhases("import_confirmed");
+        expect(chosen.map((phase) => phase.name)).toContain(baselinePhase());
+        expect(chosen.map((phase) => phase.name)).toContain("import_confirmed");
+    });
+
+    test("stays in schedule order, not argument order", () => {
+        const chosen = selectPhases("search_storm,map_init_1");
+        const order = PHASES.map((phase) => phase.name);
+        const positions = chosen.map((phase) => order.indexOf(phase.name));
+        expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    });
+
+    test("refuses a phase that does not exist", () => {
+        // Silently running fewer phases than asked for is how a run reports a
+        // clean table for work it never did.
+        expect(() => selectPhases("import_confirmd")).toThrow(/No such phase/);
+    });
+
+    test("the derived helpers follow the subset", () => {
+        const chosen = selectPhases("import_confirmed");
+
+        expect(totalSeconds(chosen)).toBeLessThan(totalSeconds());
+        expect(assertedPhases(chosen)).toEqual(["import_confirmed"]);
+        const starts = phaseStarts(chosen);
+        expect(starts).toHaveLength(chosen.length);
+        expect(phaseAt(starts[1] + chosen[1].seconds / 2, chosen)).toBe("import_confirmed");
+    });
+
+    test("a subset still covers its own run with no gap", () => {
+        const chosen = selectPhases("label_edit,cooldown");
+        for (let second = 0; second < totalSeconds(chosen); second += 1) {
+            expect(phaseAt(second + 0.5, chosen)).not.toBe("over");
         }
     });
 });

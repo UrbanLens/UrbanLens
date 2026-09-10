@@ -44,6 +44,7 @@ BUDGET_MS=""
 OUT_DIR=""
 K6_IMAGE="${UL_PERF_K6_IMAGE:-grafana/k6:latest}"
 SKIP_BASELINE=0
+PHASES=""
 PASSTHROUGH=()
 
 usage() {
@@ -62,6 +63,10 @@ usage() {
 		  --rate N                   Neighbour requests per second (default: ${RATE}).
 		  --budget-ms N              Skip the baseline pass and use this p95 ceiling.
 		  --baseline-seconds N       Baseline pass length (default: ${BASELINE_SECONDS}).
+		  --phases A,B               Run only these phases (the baseline is always
+		                             kept). A full run is ~15 minutes; this is how
+		                             you measure one phase, or pick up the one a
+		                             cut-short run never reached.
 		  --out DIR                  Where summaries and the sampler CSV go
 		                             (default: a timestamped dir under tests/perf/results).
 		  -- ARGS...                 Everything after this goes to \`k6 run\`.
@@ -81,6 +86,7 @@ while [[ $# -gt 0 ]]; do
 		--rate) RATE="$2"; shift 2 ;;
 		--budget-ms) BUDGET_MS="$2"; SKIP_BASELINE=1; shift 2 ;;
 		--baseline-seconds) BASELINE_SECONDS="$2"; shift 2 ;;
+		--phases) PHASES="$2"; shift 2 ;;
 		--out) OUT_DIR="$2"; shift 2 ;;
 		-h | --help) usage; exit 0 ;;
 		--) shift; PASSTHROUGH=("$@"); break ;;
@@ -183,6 +189,7 @@ run_k6() {
 		-e UL_PERF_SUMMARY="/out/${summary_name}" \
 		-e UL_PERF_RATE="${RATE}" \
 		-e UL_PERF_BASELINE_SECONDS="${BASELINE_SECONDS}" \
+		${PHASES:+-e UL_PERF_PHASES="${PHASES}"} \
 		"$@" \
 		"${K6_IMAGE}" run ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"} /perf/k6/neighbour.js
 }
