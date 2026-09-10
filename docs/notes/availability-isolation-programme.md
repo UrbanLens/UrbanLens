@@ -132,9 +132,19 @@ budget from the compose file rather than hardcoding it — so raising
   arrives here as a 500 and the `raised` branch is rare rather than the common
   case. Both the comment and the test say so now.
 
+- **`/health/ready` connection headroom.** Reports `connections {used, max}`
+  and `degraded`, and **stays 200 when degraded**. That is the load-bearing
+  choice: a readiness probe flipping to 503 during a connection storm removes
+  the instances still able to serve, converting a degradation into an outage —
+  which this deployment has done before (the ws manifest's comments record it).
+  Alert on the field. The 0.8 threshold is chosen because P104 went from healthy
+  to 97-of-100 with nothing in between reporting the climb. Unreadable
+  `pg_stat_activity` reports None, meaning *not measured*, never degraded: a
+  probe that fails closed on a missing read privilege takes the site down over a
+  permissions choice.
+
 Not done in this phase: `pg_stat_statements` on the `db` service,
-`/health/ready` connection headroom, `cpu_shares`/`mem_reservation`, and the
-nginx `limit_req`/`limit_conn` zones.
+`cpu_shares`/`mem_reservation`, and the nginx `limit_req`/`limit_conn` zones.
 
 ## Phase 1 — the tests that state the invariant
 

@@ -27,16 +27,41 @@ test.describe("health probes", () => {
 
     test("readiness reports every dependency it checked", async ({ request }) => {
         const response = await request.get(publicRoutes.healthReady);
-        const report = (await response.json()) as Record<string, string>;
+        const report = (await response.json()) as Record<string, unknown>;
 
         // The body is a contract: an operator reads it to find out *which*
         // dependency is unwell, and a probe that reported only a status code
         // would send them to the logs instead.
-        expect(Object.keys(report).sort()).toEqual(["cache", "db", "migrations", "role"]);
+        expect(Object.keys(report).sort()).toEqual(["cache", "connections", "db", "degraded", "migrations", "role"]);
         expect(report.db, `readiness reported the database as "${report.db}"`).toBe("ok");
         expect(report.cache, `readiness reported the cache as "${report.cache}"`).toBe("ok");
         expect(["primary", "replica", "unknown"]).toContain(report.role);
         expect(response.status()).toBe(200);
+    });
+
+    test("readiness reports connection headroom, and stays 200 under pressure", async ({ request }) => {
+        const response = await request.get(publicRoutes.healthReady);
+        const report = (await response.json()) as { connections: { used: number; max: number } | null; degraded: boolean };
+
+        // The number P104's postmortem needed: an 11-hour outage read 97 of 100
+        // connections in use, and the first anyone knew was the site being down.
+        // `connections` is null only where pg_stat_activity is not readable, so a
+        // deployment that reports it should keep reporting it.
+        if (report.connections !== null) {
+            expect(report.connections.max).toBeGreaterThan(0);
+            expect(report.connections.used).toBeGreaterThan(0);
+            expect(report.connections.used).toBeLessThanOrEqual(report.connections.max);
+        }
+
+        // Degraded is a field, never a status code. A readiness probe that flips
+        // to 503 during a connection storm removes the instances still able to
+        // serve, which turns a degradation into an outage - this deployment has
+        // done that before (see the ws deployment manifest). Alert on the field.
+        expect(response.status()).toBe(200);
+        expect(typeof report.degraded).toBe("boolean");
+        if (report.degraded) {
+            test.info().annotations.push({ type: "warning", description: "The deployment reports itself degraded." });
+        }
     });
 
     test("migration state is reported, and is current on a settled deployment", async ({ request }) => {

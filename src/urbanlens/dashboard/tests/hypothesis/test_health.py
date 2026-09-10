@@ -129,3 +129,88 @@ class DefaultAllowedHostsTests(SimpleTestCase):
             hosts = _default_allowed_hosts()
         self.assertIn("localhost", hosts)
         self.assertIn("127.0.0.1", hosts)
+
+
+class ConnectionHeadroomTests(TestCase):
+    """Readiness must report how much of the connection pool is left."""
+
+    url = "/health/ready"
+
+    def test_it_reports_backends_in_use_and_the_ceiling(self) -> None:
+        """The number P104's postmortem needed and nothing exposed.
+
+        The outage read 97 of 100 connections in use, and the first anyone knew
+        of it was the site being down; a count turns that into something a scrape
+        can watch climb.
+        """
+        report = json.loads(Client().get(self.url).content)
+
+        connections = report["connections"]
+        self.assertIsNotNone(connections, "readiness reported no connection usage against PostgreSQL")
+        self.assertGreater(connections["used"], 0, "this very request holds a connection")
+        self.assertGreater(connections["max"], 0)
+        self.assertLessEqual(connections["used"], connections["max"])
+
+    def test_pressure_is_reported_as_a_field_not_a_status_code(self) -> None:
+        """A readiness probe that 503s under connection pressure causes an outage.
+
+        It removes the instances that are still serving, which is the opposite of
+        what it is for - and this deployment has done it before. So the endpoint
+        keeps answering 200 and something else alerts on `degraded`.
+        """
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        with mock.patch.object(HealthController, "_probe_connections", return_value={"used": 99, "max": 100}):
+            response = Client().get(self.url)
+
+        self.assertEqual(response.status_code, 200, "readiness went unhealthy on connection pressure alone")
+        self.assertTrue(json.loads(response.content)["degraded"], "99 of 100 connections was not called degraded")
+
+    def test_a_healthy_pool_is_not_degraded(self) -> None:
+        """The negative control: if everything is degraded, nothing is."""
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        with mock.patch.object(HealthController, "_probe_connections", return_value={"used": 5, "max": 100}):
+            report = json.loads(Client().get(self.url).content)
+
+        self.assertFalse(report["degraded"])
+
+    def test_a_cache_outage_is_degraded_but_not_a_readiness_failure_of_its_own(self) -> None:
+        """`degraded` is the field that distinguishes serving-badly from down.
+
+        Whether an unreachable cache should fail readiness outright is a separate
+        question this does not change - the existing test asserting 503 still
+        holds. This asserts only that the flag is set, so an operator reading the
+        body can tell the two apart.
+        """
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        self.assertTrue(
+            HealthController._is_degraded(cache_status="error", db_status="ok", connections={"used": 1, "max": 100}),
+        )
+
+    def test_unreadable_connection_stats_are_not_a_failure(self) -> None:
+        """`pg_stat_activity` needs a privilege a hardened deployment may not grant.
+
+        Reporting None there has to mean "not measured", never "degraded" - a
+        probe that fails closed on a missing read privilege takes the site down
+        for a permissions choice.
+        """
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        self.assertFalse(HealthController._is_degraded(cache_status="ok", db_status="ok", connections=None))
+
+        with mock.patch.object(HealthController, "_probe_connections", return_value=None):
+            response = Client().get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(json.loads(response.content)["connections"])
+
+    def test_the_probe_survives_a_database_error(self) -> None:
+        """It runs its own query, so it needs its own failure path."""
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        with mock.patch("urbanlens.dashboard.controllers.health.connection") as fake:
+            fake.vendor = "postgresql"
+            fake.cursor.side_effect = DatabaseError("gone")
+            self.assertIsNone(HealthController._probe_connections())
