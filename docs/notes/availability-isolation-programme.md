@@ -77,9 +77,10 @@ fan-out test written the obvious way passes against the broken code. The import
 tests were vacuous in their first draft for a third reason (wrong payload keys),
 caught by probing the live endpoint rather than by review.
 
-Still to do in this phase: the k6 neighbour scenario and its seed command, the
-`EndpointScalingCase` generalisation with the bytes/row and rows-fetched/row
-axes, and the chaos specs. The first and last need the infra-repo work in T3.
+Still to do in this phase: the `EndpointScalingCase` generalisation with the
+bytes/row and rows-fetched/row axes (self-contained, here), the k6 neighbour
+scenario and its seed command, and the chaos scenarios. The last two block on the
+infra-repo asks in N16.
 
 ## Phase 1 — the tests that state the invariant
 
@@ -114,16 +115,26 @@ before a loaded host produces a false failure. Neither clock is quiet at these b
 instrument that answers N11's concern precisely is `InstantiationScalingMixin`'s object count, which
 does not move with load at all.
 
-**Chaos specs.** A Playwright project gated on an environment flag, with injection from the infra
-repo (guarded against production and staging container prefixes). Valkey paused, Postgres at its
-connection ceiling, a worker stopped, a rebuild lock held.
+**Chaos scenarios live in the `infrastructure` repo**, not in this one's Playwright suite — Jess's
+call, 2026-09-10, and the right one: the injections are destructive against a host that also runs
+production, and that repo's `drills/guard.sh` already encodes the "never touch these stacks" rule
+that makes them safe. Four scenarios (Valkey paused, Postgres at its connection ceiling, a worker
+stopped, CPU starvation in the app container), specified in full in
+[`../handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md`](../handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md).
+
+That handoff also raises the one definitional problem worth settling before anyone writes them:
+`drills/README.md` says a drill rehearses a *runbook* and "is not a test suite", and these assert an
+application invariant instead of recovering anything — so whether they belong in `drills/` or a
+sibling directory is the infra team's decision, not ours.
 
 ## Notes for whoever picks this up
 
-- A `dev_env.py` environment writes `UL_ENVIRONMENT=development`, so `init.py` runs Django's
-  `runserver` and **no dev env exercises gunicorn at all**. N14 says pytest and local dev never build
-  P104's topology; the dev-env tool does not either. Phase 1 depends on a `--environment staging`
-  option in the infra repo.
+- A `dev_env.py` environment writes `UL_ENVIRONMENT=development` (`bin/opslib/devenv.py:963`), so
+  `init.py` runs Django's `runserver` and **no dev env exercises gunicorn at all**. That default is
+  deliberate — it is what gives hot reload without a bind mount — so the ask is an opt-in flag, not a
+  change. N14 says pytest and local dev never build P104's topology; the dev-env tool does not
+  either. Phase 1's k6 and chaos halves both block on it. Asked for in
+  [`../handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md`](../handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md).
 - Both production and staging currently run `-t 600 -k gevent` with no `--max-requests`: the
   timeout work in `f2623a5d4` is committed but not deployed. Nothing on `release/v_0_8_0` is live.
 - Do not deploy to staging as part of this work. Use a dev environment; staging is Jess's call.
