@@ -26,6 +26,13 @@ import sys
 #: Fraction of ``max_connections`` above which the pool is reported as pressured.
 #: The same figure the readiness endpoint uses, so the two agree about what
 #: "close to full" means.
+#:
+#: Probably too lax, on one run's evidence: X15 peaked at 75/100 with 74 of them
+#: from a single tier, and this reported "never close to full". Left aligned with
+#: the readiness endpoint rather than tuned here, because two different answers
+#: to "is the pool in trouble" is worse than one imperfect answer - but the
+#: composition matters as much as the total, and neither this nor the endpoint
+#: looks at it yet.
 PRESSURE_FRACTION = 0.8
 
 
