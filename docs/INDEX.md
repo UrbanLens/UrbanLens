@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P105` · `T3` · `PL7` · `D11` · `X14` · `I5` · `R29` · `N15`
+**Next free id:** `P107` · `T3` · `PL8` · `D13` · `X14` · `I5` · `R29` · `N16`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -82,6 +82,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL4 | live | 2026-08-27 | Existence, not detail, is the oracle - so the gate conceals a wiki's contributions rather than degrading it | [`docs/designs/reputation-and-gating.md`](designs/reputation-and-gating.md) |
 | PL5 | live | 2026-08-27 | One row per (target, field, write) resolves a per-viewer view in one DISTINCT ON query, with no replay | [`docs/designs/versioned-content.md`](designs/versioned-content.md) |
 | PL6 | live | 2026-08-29 | Every test file is being reviewed for negative coverage; 73 of 832 done, resume at manifest line 94 | [`docs/notes/test-quality-audit.md`](notes/test-quality-audit.md) |
+| PL7 | live | 2026-09-10 | Making "no user can affect another user's availability" a property the tests can prove; phase 0 of 7 done | [`docs/notes/availability-isolation-programme.md`](notes/availability-isolation-programme.md) |
 | P82 | open | 2026-09-06 | At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P83 | open | 2026-09-06 | Over half of every page's HTML is inline `<script>`, re-sent uncached on every load | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P85 | open | 2026-09-06 | Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -94,12 +95,13 @@ still resolves after it is fixed, and the id is never handed out again.
 | P96 | open | 2026-09-10 | `import_confirmed`'s SSE import creates as many Pins as the client claims, synchronously in the web worker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P97 | open | 2026-09-10 | `dissolve_polygons` is O(n^3) GEOS work over an uncapped user-supplied polygon count | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P98 | open | 2026-09-10 | The site-admin system panel re-walks the whole media tree on every load, gated only by admin permission | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P99 | open | 2026-09-10 | Bulk photo delete is quadratic in batch size, and the request sets that size with no cap | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P101 | open | 2026-09-10 | `MapPinCache.rebuild` still drops concurrent writes and can release a lock it no longer holds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P102 | open | 2026-09-10 | One Label edit re-serializes every pin carrying it, synchronously, inside the edit's own request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P103 | open | 2026-09-10 | `MEDIA_PIPELINE.md`'s "every parser is now guarded" was false; a label-icon resize decodes unsandboxed in-request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P104 | open | 2026-09-10 | Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P105 | open | 2026-09-10 | A Valkey outage locks every user out of logging in, while already-signed-in browsing keeps working | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P106 | open | 2026-09-10 | Reordering labels changes which icon a pin draws, but never tells the client | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |
@@ -110,6 +112,8 @@ still resolves after it is fixed, and the id is never handed out again.
 | D8 | accepted | 2026-09-06 | Storage quotas are enforced generally, not exactly: an over-quota profile keeps its assets and is barred from uploading more | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
 | D9 | accepted | 2026-09-07 | A moderator's removal costs reputation slightly and reversibly - a per-event weight, not the binary retraction | [`docs/designs/reputation-removal-weighting.md`](designs/reputation-removal-weighting.md) |
 | D10 | accepted | 2026-09-08 | A block's incident history is its own paid flag, not `NEARBY_RESEARCH` - it is a distinct pricing lever, not a variant of one | [`docs/designs/incident-history-feature-gate.md`](designs/incident-history-feature-gate.md) |
+| D11 | accepted | 2026-09-10 | One user's expensive request must be unable to reach another user's request, and the way to guarantee that is bounded pools with named budgets | [`docs/designs/request-isolation-and-connection-budget.md`](designs/request-isolation-and-connection-budget.md) |
+| D12 | accepted | 2026-09-10 | The map cache becomes an accelerator the site can lose, and labels stop being copied into every pin | [`docs/designs/map-data-contract-v11.md`](designs/map-data-contract-v11.md) |
 | X1 | holds | 2026-08-27 | A release merge silently dropped --skip-undecryptable from DATA_ENCRYPTION.md; nothing else had drifted | [`docs/audits/DATA_ENCRYPTION_AUDIT.md`](audits/DATA_ENCRYPTION_AUDIT.md) |
 | X2 | holds | 2026-09-01 | A gate enforced in the web UI is repeatedly missing from the parallel external-API endpoint | [`docs/audits/FEATURES_CODE_AUDIT.md`](audits/FEATURES_CODE_AUDIT.md) |
 | X3 | holds | 2026-08-27 | GOALS.md contradicts the other docs on six points and states ten goals no other doc records at all | [`docs/audits/GOALS_AUDIT.md`](audits/GOALS_AUDIT.md) |
@@ -169,3 +173,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | N12 | current | 2026-09-10 | `pyproject.toml`'s nplusone-rejection comment misdescribed `django-auto-prefetch`; it is wholly unwired | [`docs/notes/map-perf-doc-corrections.md`](notes/map-perf-doc-corrections.md) |
 | N13 | current | 2026-09-10 | The archived "map payload is already query-flat" claim was true and answered the wrong question | [`docs/notes/map-perf-doc-corrections.md`](notes/map-perf-doc-corrections.md) |
 | N14 | current | 2026-09-10 | Nothing in pytest or local dev exercises the shared-connection-pool topology that caused P104's outage | [`docs/notes/wsgi-worker-model-and-connections.md`](notes/wsgi-worker-model-and-connections.md) |
+| N15 | current | 2026-09-10 | `celery-metrics` has been crash-looping on staging since it was deployed, because nothing gates it on the flag it requires | [`docs/notes/celery-metrics-crash-loop.md`](notes/celery-metrics-crash-loop.md) |

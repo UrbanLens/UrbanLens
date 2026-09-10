@@ -3670,24 +3670,6 @@ the admin viewing the page.
 
 Not fixed. Not measured this session - no timing taken against a production-sized media tree.
 
-## P99 — Bulk photo delete is quadratic in batch size, and the request sets that size with no cap
-
-`id: P99` · `status: open` · `updated: 2026-09-10`
-
-`image_gallery.py:296-305` builds `batch_pks` from the whole delete batch and passes it as
-`also_deleting=batch_pks` into `delete_stored_file` once per image (`image_gallery.py:304`); each
-call's reference check ends in `file_still_referenced`'s `.exclude(pk__in=list(exclude_pks)).exists()`.
-That is O(n) work per image for n images in the batch - O(n^2) total - and `image_ids` is parsed
-with no cap: `image_gallery.py:231` (`ImageGalleryBulkView`, scoped to a pin's gallery) and
-`image_gallery.py:342` (`VaultGalleryBulkView`, scoped to the profile's own Vault) both do
-`[int(i) for i in data.get("image_ids", [])]` with no length limit. Reachable at
-`POST /vault/photos/bulk/` and the pin-gallery equivalent (`image_gallery.py:225`), bounded only by
-how many `Image` rows the requester's own pin/profile owns - i.e. by how many photos one account
-has uploaded, not by anything the request itself limits.
-
-Not fixed. Not measured this session - no timing taken against a large batch; the complexity claim
-is by code inspection of the per-image `.exclude(...).exists()` call.
-
 ## P100 — Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them
 
 `id: P100` · `status: open` · `updated: 2026-09-10`
@@ -3819,3 +3801,77 @@ as the evidence that the connection ceiling, not CPU, is the resource that actua
 
 Not fixed: needs either a connection pooler (pgbouncer or equivalent) or per-role `CONNECTION
 LIMIT`s on Postgres roles, not a cgroup change. No decision recorded on which.
+
+## P105 — A Valkey outage locks every user out of logging in, while already-signed-in browsing keeps working
+
+`id: P105` · `status: open` · `updated: 2026-09-10`
+
+Found by reading the failure path while designing the Valkey split (D11), not by an incident. The
+chaos spec that demonstrates it is not yet written; treat the shape as verified from source and the
+user-visible consequence as predicted.
+
+`SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"` with `SESSION_CACHE_ALIAS =
+"default"` over the stock `django.core.cache.backends.redis.RedisCache`
+(`settings/base.py:289-307`). The settings comment there says "cached_db writes through to the
+database so sessions survive a cache flush", which is true for a *flush* and, it turns out, for
+most of an *outage* too - but not all of it.
+
+Django wraps the two paths people assume break, and leaves three unwrapped
+(`django/contrib/sessions/backends/cached_db.py`, Django 6.0.6):
+
+- `load()` catches bare `Exception` and falls through to `_get_session_from_db()`. A signed-in
+  request therefore keeps working with Valkey down.
+- `save()` catches bare `Exception` and logs. Session writes keep working.
+- `exists()` does `(prefix + session_key) in self._cache` with **no** guard. `_get_new_session_key()`
+  calls it in a loop, and `create()` calls that - so `cycle_key()`, which Django's login does, raises.
+- `delete()` calls `self._cache.delete(...)` with **no** guard, and `flush()` calls `delete()` - so
+  logout raises.
+
+The login path fails even earlier, in this codebase's own code rather than Django's: `LoginView`
+calls `_is_locked_out()` (`controllers/account.py:873` → `:67-68`), which is a bare `cache.get()`.
+The brute-force counters around it (`:92-97`, `:197`, `:261`, `:286`, `:310`, `:343`) and the
+passphrase/password rate limiters (`:1395-1398`, `:1441-1444`) are the same shape. Other unguarded
+request-path callers: `controllers/immich.py:96,100,286,295` (scan status, thumbnail proxy) and
+`controllers/flickr.py:126` (OAuth request token).
+
+So the outage profile is: **existing sessions browse fine; nobody can log in or out; a signed-out
+user cannot get in at all.** Worth stating because the intuition ("Valkey is a cache, the site
+degrades") is right about pages and wrong about the door.
+
+Note before fixing: `_is_locked_out` failing *open* would be worse than failing closed - it is the
+brute-force gate. A wrapper that turns cache errors into misses must not be applied blindly to the
+lockout keys; those want an explicit decision (fail closed with a 503, or fall back to a DB-backed
+counter), not a silent miss.
+
+Not fixed. See D11 for the Valkey split this sits inside; the chaos spec is the reproduction.
+
+## P106 — Reordering labels changes which icon a pin draws, but never tells the client
+
+`id: P106` · `status: open` · `updated: 2026-09-10`
+
+`_winning_display_label` sorts a pin's labels by `-order`, so a label's `order` decides which label
+supplies the pin's icon and colour when the pin has none of its own
+(`services/map_pins/payload.py`). Every reorder path knows this and invalidates the *server* cache
+for it - and every one of them stops there:
+
+- `controllers/labels.py:918-923` (`LabelReorderView`)
+- `controllers/organize.py:238-243`
+- `external_api/views_labels_bulk.py:80-85` and `:174-182`
+
+All four do `Label.objects.bulk_update(..., ["order"])` then
+`refresh_map_pin_cache_for_label_ids(...)`, each with a comment explaining that `bulk_update` fires
+no `post_save` so the receiver would otherwise not run. Correct as far as it goes. But the *client*
+does not read that cache - it polls `map.pins.meta`, which is `Max(Pin.updated)` over the profile's
+root pins (`controllers/maps.py:766`), and `bulk_update` does not touch `auto_now` columns, so no
+pin's `updated` moves. The poll sees nothing, `_refreshAllPins` never runs, and the browser keeps
+drawing the old icon from its own cache until that expires (6 h) or the user hard-refreshes.
+
+Every *other* label write does bump it, which is what makes the omission easy to miss:
+`controllers/labels.py:843` (edit) and `services/labels/customization.py:99,118` both run
+`Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())` with a comment
+saying exactly why.
+
+Not measured against a browser this session - the mechanism is read from source. The fix is not a
+fourth copy of that `UPDATE`: D12 replaces `Max(updated)` with a derived fingerprint and routes
+every one of these sites through a single `services/map_pins/touch.py`, so the next write path that
+forgets is a missing call to one named function rather than a silently absent statement.
