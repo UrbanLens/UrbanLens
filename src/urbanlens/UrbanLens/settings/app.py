@@ -248,6 +248,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "LibreOffice, GDAL, zipfile); see UL_UNTRUSTED_PARSE_POLICY."
         ),
     )
+    slow_request_ms: int = Field(
+        default=1000,
+        description=(
+            "Log a warning naming any request slower than this many milliseconds, with its wall time, CPU time, and "
+            "SQL time/statement-count/rows-fetched. Those three separate a slow database from a busy worker, which "
+            "need different fixes and which nothing recorded when the map endpoint was timing out. Set to 0 or less "
+            "to disable the instrument; turn it down when hunting something specific."
+        ),
+    )
     sandbox_enabled: bool = Field(
         default=True,
         description=(

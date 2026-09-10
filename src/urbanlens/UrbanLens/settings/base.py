@@ -171,6 +171,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Also below AuthenticationMiddleware, because it reports the user id.
+    # Logs wall, CPU and SQL time/count/rows for any request over
+    # UL_SLOW_REQUEST_MS - the three numbers that separate a slow database from
+    # a busy worker, which is the distinction R27 needed and nothing recorded.
+    "urbanlens.dashboard.middleware.RequestTelemetryMiddleware",
     # Directly below AuthenticationMiddleware, which is the first point
     # request.user exists. Mints/refreshes the media-origin cookie; a no-op
     # unless UL_MEDIA_BASE_URL is set.
@@ -447,6 +452,8 @@ CELERY_WORKER_MAX_MEMORY_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_MEMORY_
 # for the deployment topology. Surfaced as Django settings rather than read off
 # _app_settings at each call site so tests can flip them with override_settings.
 UL_PROCESS_ROLE = _app_settings.process_role
+# Threshold for RequestTelemetryMiddleware's slow-request log. See settings/app.py.
+UL_SLOW_REQUEST_MS = _app_settings.slow_request_ms
 UL_SANDBOX_ENABLED = _app_settings.sandbox_enabled
 UL_UNTRUSTED_PARSE_POLICY = _app_settings.untrusted_parse_policy
 # AI inference sandbox tier - see services/sandbox/guard.py's

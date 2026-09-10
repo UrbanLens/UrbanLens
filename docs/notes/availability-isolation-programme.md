@@ -118,9 +118,23 @@ Guarded by `test_connection_budget_wiring.py`, which computes the connection
 budget from the compose file rather than hardcoding it — so raising
 `WEB_CONCURRENCY` or the per-worker cap fails there instead of in production.
 
-Not done in this phase: `RequestTelemetryMiddleware` and the slow-request log,
-`pg_stat_statements` on the `db` service, `/health/ready` connection headroom,
-`cpu_shares`/`mem_reservation`, and the nginx `limit_req`/`limit_conn` zones.
+- **`RequestTelemetryMiddleware`** and `UL_SLOW_REQUEST_MS` (default 1000). Logs
+  wall, CPU and SQL time/statements/rows for any request over the threshold.
+  The CPU split is the point: R27's diagnosis turned on 88% Python against 6%
+  Postgres, which is what ruled out the index work everyone assumed was needed,
+  and a line carrying only a total would not have helped. `sql_rows` is what
+  makes P107's shape visible in a log.
+
+  Two corrections came out of writing it. A slow request that *raises* was
+  reported nowhere, because the log sat after the `try` — it is in the `finally`
+  now. And the belief that motivated that fix was itself wrong: Django wraps
+  every middleware in `convert_exception_to_response`, so a view's exception
+  arrives here as a 500 and the `raised` branch is rare rather than the common
+  case. Both the comment and the test say so now.
+
+Not done in this phase: `pg_stat_statements` on the `db` service,
+`/health/ready` connection headroom, `cpu_shares`/`mem_reservation`, and the
+nginx `limit_req`/`limit_conn` zones.
 
 ## Phase 1 — the tests that state the invariant
 

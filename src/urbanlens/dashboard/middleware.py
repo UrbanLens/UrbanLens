@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -326,3 +327,144 @@ class WriteSourceMiddleware:
 
         with writing_as(WriteSource.USER, actor=profile_id):
             return self.get_response(request)
+
+
+class RequestTelemetryMiddleware:
+    """Log what a slow request actually spent its time on, while it is still known.
+
+    The map endpoint was 504ing on staging for some time before anyone worked out
+    why, and the reason it took a session rather than a log line is that nothing
+    recorded the shape of a slow request. nginx knew a request was slow (and until
+    2026-09-10 did not even log that, see ``config/nginx/nginx.conf``); Prometheus
+    knew the p95 of a view had moved; neither could say whether the time went to
+    the database, to Python, or to something waiting on the network. Those need
+    different fixes, and R27 turned on exactly that distinction - 88% of the map
+    payload was CPU and 6% was SQL, which is what ruled out the index work
+    everyone assumed was needed.
+
+    So this records all three per request and logs the ones that cross a
+    threshold:
+
+    - **wall**, which is what the user experienced;
+    - **CPU** (``time.process_time``), which separates "this worker was busy"
+      from "this worker was waiting". Under gevent that distinction is the whole
+      game, because pure-Python work yields to nothing and takes every
+      co-resident request down with it;
+    - **SQL time, statement count and rows fetched**, via
+      ``connection.execute_wrapper``. Rows matter as much as time here: a single
+      fast statement that returns the whole table is the shape of P107, and no
+      timing or statement count shows it.
+
+    Deliberately a log line rather than a metric. A metric answers "is the p95
+    bad"; this answers "which request, whose, and doing what" - and by the time
+    the p95 has moved the request that caused it is gone. `UL_SLOW_REQUEST_MS`
+    turns the threshold down when hunting something specific.
+
+    Placed directly below ``AuthenticationMiddleware`` because it reports the
+    user id, and inside the django-prometheus pair so its own cost is counted
+    rather than hidden.
+    """
+
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        """Store the next handler in the chain."""
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        """Time the request, and log it if it took longer than the threshold."""
+        from django.conf import settings
+        from django.db import connection
+
+        threshold_ms = getattr(settings, "UL_SLOW_REQUEST_MS", 1000)
+        # A non-positive threshold disables the instrument outright rather than
+        # logging every request, which is what a 0 would otherwise mean.
+        if threshold_ms <= 0:
+            return self.get_response(request)
+
+        stats = _SqlStats()
+        response: HttpResponse | None = None
+        started, cpu_started = time.perf_counter(), time.process_time()
+        try:
+            with connection.execute_wrapper(stats):
+                response = self.get_response(request)
+        finally:
+            # In the `finally` rather than after it. Django wraps every
+            # middleware in `convert_exception_to_response`, so a view's
+            # exception normally arrives here as a 500 and this placement makes
+            # no difference to that case - it costs nothing and is the
+            # difference between a line and silence for anything that does
+            # escape. `response` is None there, rendered as status=raised.
+            wall_ms = (time.perf_counter() - started) * 1000
+            if wall_ms >= threshold_ms:
+                self._log(request, response, wall_ms, (time.process_time() - cpu_started) * 1000, stats)
+        # Unreachable when `get_response` raised: the exception propagates out of
+        # the `finally` above, having been reported by it first.
+        return response
+
+    @staticmethod
+    def _log(
+        request: HttpRequest,
+        response: HttpResponse | None,
+        wall_ms: float,
+        cpu_ms: float,
+        stats: _SqlStats,
+    ) -> None:
+        """Emit one line describing where a slow request's time went.
+
+        Args:
+            request: The request being reported.
+            response: The response, or None when the request raised.
+            wall_ms: Total time, which is what the user experienced.
+            cpu_ms: Time this process spent running, which separates a busy
+                worker from one that was waiting.
+            stats: The request's accumulated query time, count and rows.
+        """
+        match = getattr(request, "resolver_match", None)
+        user = getattr(request, "user", None)
+        logger.warning(
+            "slow request view=%s method=%s status=%s wall_ms=%.0f cpu_ms=%.0f sql_ms=%.0f sql_n=%d sql_rows=%d user=%s bytes=%s path=%s",
+            getattr(match, "view_name", "?") if match else "?",
+            request.method,
+            getattr(response, "status_code", "raised"),
+            wall_ms,
+            cpu_ms,
+            stats.ms,
+            stats.count,
+            stats.rows,
+            getattr(user, "pk", None) if user is not None and user.is_authenticated else None,
+            # A streaming response has no Content-Length and asking for one would
+            # consume the iterator, so the field is simply absent there.
+            response.get("Content-Length", "-") if response is not None else "-",
+            request.path,
+        )
+
+
+class _SqlStats:
+    """Accumulates time, statement count and rows across one request's queries.
+
+    An ``execute_wrapper`` callable rather than a context manager: Django calls
+    it once per statement with the wrapped ``execute``, so the accumulation is
+    per-connection and therefore per-greenlet, which is what makes the numbers
+    belong to this request rather than to whatever else the worker is serving.
+    """
+
+    __slots__ = ("count", "ms", "rows")
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.ms = 0.0
+        self.rows = 0
+
+    def __call__(self, execute: Callable[..., object], sql: str, params: object, many: bool, context: dict) -> object:
+        """Run one statement, recording what it cost."""
+        started = time.perf_counter()
+        try:
+            return execute(sql, params, many, context)
+        finally:
+            self.ms += (time.perf_counter() - started) * 1000
+            self.count += 1
+            cursor = context.get("cursor")
+            rowcount = getattr(cursor, "rowcount", -1)
+            # -1 means "not determined", which is not zero and must not be
+            # summed as if it were.
+            if isinstance(rowcount, int) and rowcount > 0:
+                self.rows += rowcount
