@@ -32,7 +32,18 @@ const IMPORT_STEP = 0.5;
 /** Where imported pins go. Deliberately far from the seeded block, so an import
  * cannot merge into seeded locations and quietly do less work than it claims.
  */
-const IMPORT_ORIGIN = { lat: 10.0, lng: 100.0 };
+const IMPORT_ORIGIN = { lat: 10.0, lng: -150.0 };
+
+/** Columns in the import grid.
+ *
+ * Wide on purpose. The import phase loops for its whole duration, and each
+ * iteration continues where the last stopped, so a narrow grid climbs in
+ * latitude fast: at 23 columns and 500 pins an iteration, the fourteenth import
+ * would be asking the server to create pins north of the pole. 600 columns at
+ * half a degree spans nearly the whole usable longitude range and advances
+ * latitude by well under a degree per import.
+ */
+const IMPORT_COLUMNS = 600;
 
 /**
  * Serialise the whole account into one HTML document.
@@ -112,11 +123,10 @@ export function importConfirmed(session, fixtures, tags) {
     const base = __ITER * fixtures.importPins;
     for (let index = 0; index < fixtures.importPins; index += 1) {
         const n = base + index;
-        const side = Math.ceil(Math.sqrt(fixtures.importPins)) || 1;
         pins.push({
             name: `Perf Import ${n}`,
-            lat: IMPORT_ORIGIN.lat + Math.floor(n / side) * IMPORT_STEP,
-            lng: IMPORT_ORIGIN.lng + (n % side) * IMPORT_STEP,
+            lat: IMPORT_ORIGIN.lat + Math.floor(n / IMPORT_COLUMNS) * IMPORT_STEP,
+            lng: IMPORT_ORIGIN.lng + (n % IMPORT_COLUMNS) * IMPORT_STEP,
             description: "",
             cid: "",
             maps_url: "",
