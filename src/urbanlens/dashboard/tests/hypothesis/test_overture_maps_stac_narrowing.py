@@ -26,9 +26,16 @@ from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import
 class OvertureMapsGatewayStacNarrowingTests(SimpleTestCase):
     def test_fetch_passes_stac_true_to_narrow_the_file_list(self) -> None:
         gateway = OvertureMapsGateway()
-        with patch(
-            "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._overture_geodataframe"
-        ) as mock_geodataframe:
+        with (
+            # The gateway now resolves the file list itself before reading, and
+            # refuses when the index cannot answer (P110) - so a test that mocks
+            # only the read reaches a real network call and is refused. Mocking
+            # the lookup keeps this test about what it has always been about.
+            patch("overturemaps.core._get_files_from_stac", return_value=["bucket/one.parquet"]),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._overture_geodataframe"
+            ) as mock_geodataframe,
+        ):
             gateway.get_buildings((-71.059, 42.36, -71.058, 42.361))
 
         mock_geodataframe.assert_called_once()

@@ -15,8 +15,9 @@ Observed 2026-09-10: a worker child at 1,743 MB inside `arrow_to_geopandas`,
 reached from `enrich_wiki_location`, while the STAC index was answering
 `HTTP Error 429`.
 
-The reproductions are `xfail(strict=True)`: green while the gap stands, failing
-the day the gateway learns to refuse instead of falling back.
+Fixed 2026-09-10: the gateway resolves the file list itself and refuses when the
+index cannot answer, with a short per-process circuit so a refusal stops the
+next lookup rather than adding to the storm.
 """
 
 from __future__ import annotations
@@ -27,11 +28,13 @@ import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
+from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
 
 #: A bbox the size every caller here actually uses - a single building.
 SMALL_BBOX = (-71.059, 42.36, -71.058, 42.361)
 
 _GEODATAFRAME = "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._overture_geodataframe"
+_STAC_LOOKUP = "overturemaps.core._get_files_from_stac"
 
 
 class TheLibraryFallsBackToThePlanetTests(SimpleTestCase):
@@ -82,32 +85,85 @@ class TheLibraryFallsBackToThePlanetTests(SimpleTestCase):
         self.assertEqual(dataset.call_args.args[0], ["bucket/one.parquet"])
 
 
-class TheGatewayShouldRefuseTests(SimpleTestCase):
-    """What we want instead: no narrowing, no lookup."""
+class TheGatewayRefusesTests(SimpleTestCase):
+    """No narrowing, no lookup."""
 
-    @pytest.mark.xfail(strict=True, reason="P110: the gateway has no way to require the narrowing it asks for")
+    def setUp(self) -> None:
+        super().setUp()
+        _reset_breaker()
+        self.addCleanup(_reset_breaker)
+
     def test_it_raises_when_the_stac_index_is_unavailable(self) -> None:
-        """Falling back to scanning the planet is never what we want here."""
-        from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
-
+        """Scanning the planet is never what we want, so refusing is the better answer."""
         gateway = OvertureMapsGateway()
-        with patch(_GEODATAFRAME, side_effect=_unavailable_stac), pytest.raises(GatewayRateLimitedError):
+        with (
+            patch(_STAC_LOOKUP, return_value=None),
+            patch(_GEODATAFRAME) as geodataframe,
+            pytest.raises(GatewayRateLimitedError),
+        ):
             gateway.get_buildings(SMALL_BBOX)
 
-    @pytest.mark.xfail(strict=True, reason="P110: nothing checks the STAC index before the read")
-    def test_it_checks_the_index_before_reading(self) -> None:
-        """A probe through our own session would be rate-limited and guarded.
+        geodataframe.assert_not_called()
 
-        The gateway sets `service_key = None`, so nothing it does today is
-        visible to the rate limiter or to the outbound-call guard - the reads
-        happen inside pyarrow's S3 filesystem, not through `self.session`.
-        """
+    def test_it_proceeds_when_the_index_answers(self) -> None:
+        """The contrast, so the test above is not passing for the wrong reason."""
         gateway = OvertureMapsGateway()
-        with patch(_GEODATAFRAME) as geodataframe, patch.object(type(gateway), "session", create=True) as session:
+        with patch(_STAC_LOOKUP, return_value=["bucket/one.parquet"]), patch(_GEODATAFRAME) as geodataframe:
             gateway.get_buildings(SMALL_BBOX)
 
-        self.assertTrue(session.get.called or session.head.called, "nothing probed the STAC index before the read")
         geodataframe.assert_called_once()
+        self.assertTrue(geodataframe.call_args.kwargs.get("stac"))
+
+    def test_an_empty_result_is_not_a_refusal(self) -> None:
+        """ "No buildings here" is an answer; the library returns an empty frame for it."""
+        gateway = OvertureMapsGateway()
+        with patch(_STAC_LOOKUP, return_value=[]), patch(_GEODATAFRAME) as geodataframe:
+            gateway.get_buildings(SMALL_BBOX)
+
+        geodataframe.assert_called_once()
+
+
+class TheBreakerStopsTheLoopTests(SimpleTestCase):
+    """A refusal has to stop the next lookup, or the storm continues.
+
+    Every queued enrichment task probing an index that is refusing us is the
+    loop that earned the rate limit in the first place.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        _reset_breaker()
+        self.addCleanup(_reset_breaker)
+
+    def test_the_index_is_not_probed_again_during_the_cooldown(self) -> None:
+        gateway = OvertureMapsGateway()
+        with patch(_STAC_LOOKUP, return_value=None) as lookup:
+            for _ in range(5):
+                with pytest.raises(GatewayRateLimitedError):
+                    gateway.get_buildings(SMALL_BBOX)
+
+        self.assertEqual(lookup.call_count, 1, "each refusal probed again, which is the storm this is meant to stop")
+
+    def test_it_recovers_once_the_cooldown_passes(self) -> None:
+        """A breaker that never re-closes is an outage of our own making."""
+        from urbanlens.dashboard.services.apis.locations.boundaries import overture_maps
+
+        gateway = OvertureMapsGateway()
+        with patch(_STAC_LOOKUP, return_value=None), pytest.raises(GatewayRateLimitedError):
+            gateway.get_buildings(SMALL_BBOX)
+
+        overture_maps._stac_unavailable_until = 0.0  # noqa: SLF001 - as though the window had elapsed
+        with patch(_STAC_LOOKUP, return_value=["bucket/one.parquet"]), patch(_GEODATAFRAME) as geodataframe:
+            gateway.get_buildings(SMALL_BBOX)
+
+        geodataframe.assert_called_once()
+
+
+def _reset_breaker() -> None:
+    """Close the circuit, so one test's refusal does not silence the next."""
+    from urbanlens.dashboard.services.apis.locations.boundaries import overture_maps
+
+    overture_maps._stac_unavailable_until = 0.0  # noqa: SLF001
 
 
 def _bbox():
@@ -115,8 +171,3 @@ def _bbox():
     from overturemaps import core
 
     return core._coerce_bbox(SMALL_BBOX)  # noqa: SLF001
-
-
-def _unavailable_stac(*args: object, **kwargs: object) -> None:
-    """Stand in for the library's silent fallback: it returns data, just far too much."""
-    raise AssertionError("the gateway should have refused before calling the library")

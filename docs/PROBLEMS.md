@@ -4179,8 +4179,24 @@ outbound calls while this was reading from S3 throughout. That is the documented
 (`dashboard/CLAUDE.md`: "code that bypasses `self.session` — a bare `requests.*` call, an SDK
 client"), and it is worth knowing that the largest consumer of both memory and egress is on it.
 
-The fix has to make the narrowing a precondition rather than a preference: probe the STAC index first
-through our own guarded, rate-limited session and refuse the lookup when it is unavailable —
-`GatewayRateLimitedError` already exists for "the provider's budget is exhausted, stop early", and
-scheduled enrichment already catches it. Falling back to scanning the planet is never the behaviour
-we want, and today nothing can express that to the library.
+**Fixed 2026-09-10.** `OvertureMapsGateway._require_narrowing` resolves the file list itself before
+reading and raises `GatewayRateLimitedError` when the index cannot answer — the error that already
+means "the provider's budget is exhausted, stop early", which scheduled enrichment already catches.
+Falling back to scanning the planet is never what we want, and nothing in the library's API can
+express that to it.
+
+A refusal opens a **short per-process circuit** (120s). Without one, every queued enrichment task
+would keep probing an index that is refusing us, which is the loop that earned the rate limit — the
+breaker turns a self-amplifying failure into a self-limiting one. Per process rather than shared, so
+it still works when Valkey is down, which is exactly when a lookup storm is least welcome; a pool of
+four children probes at most four times a window instead of once per task.
+
+Known cost: one extra read of the (small) index on the healthy path, because the library re-resolves
+it and will not accept a resolved file list. Worth paying to never scan the theme, and it disappears
+if `overturemaps` grows a strict mode or takes the files.
+
+Still open in this entry, and the reason it is not archived: **the reads remain invisible to the rate
+limiter and to the outbound-call guard.** `service_key` is still `None` and the parquet reads still
+go through `pyarrow`/`S3FileSystem` rather than `self.session`, so nothing bounds how often
+enrichment reaches Overture in the first place. The circuit breaker bounds the *damage* of a refusal;
+it does not bound the request rate that earns one.

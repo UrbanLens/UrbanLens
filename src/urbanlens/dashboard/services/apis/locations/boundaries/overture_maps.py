@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import time
 from typing import Any, ClassVar
 
 from django.contrib.gis.geos import Point
@@ -41,17 +42,33 @@ from urbanlens.dashboard.services.apis.locations.base import (
 )
 
 # Adjust this import to wherever Gateway/Gateway actually live.
-from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError
 
 try:
     from overturemaps import geodataframe as _overture_geodataframe  # pyright: ignore[reportMissingImports]
 except ImportError:  # pragma: no cover
     _overture_geodataframe = None
 
+try:
+    from overturemaps import core as _overture_core  # pyright: ignore[reportMissingImports]
+except ImportError:  # pragma: no cover
+    _overture_core = None
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import Polygon
+
+#: Seconds to stop calling Overture after its STAC index refuses us.
+#:
+#: Per process, deliberately: each prefork child keeps its own, so a pool of
+#: four probes at most four times a window instead of once per task. In-process
+#: rather than in the shared cache so this still works when Valkey is down,
+#: which is exactly when a lookup storm is least welcome.
+_STAC_COOLDOWN_SECONDS = 120.0
+
+#: When the circuit re-closes. Module-level, one per worker child.
+_stac_unavailable_until = 0.0
 
 
 _EARTH_RADIUS_M = 6_371_000.0
@@ -127,6 +144,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             raise ImportError(
                 "OvertureMapsGateway requires the 'overturemaps' package: `pip install overturemaps[geopandas]`.",
             )
+        if bbox is not None:
+            self._require_narrowing(overture_type, bbox)
         return _overture_geodataframe(
             overture_type,
             bbox=bbox,
@@ -146,6 +165,54 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             # the kernel OOM killer - see docs/PROBLEMS.md.
             stac=True,
         )
+
+    def _require_narrowing(self, overture_type: str, bbox: BBox) -> None:
+        """Refuse the lookup unless the STAC index can narrow it first.
+
+        `stac=True` below is a request, not a guarantee. `overturemaps.core`
+        catches every exception from the index lookup, prints it, and returns
+        ``None``; the caller then opens the theme's whole path instead of the
+        intersecting partitions. So being rate-limited by Overture silently
+        converts a one-file read into a scan of the planet, which is the OOM
+        this gateway's `stac=True` was added to prevent (P110, and the entry it
+        recurs from). Nothing in the library's API can express "narrow it or
+        do not do it at all", so this asks first and refuses on its own.
+
+        A refusal opens a short circuit. Without one, every queued enrichment
+        task would keep probing an index that is refusing us, which is the loop
+        that earned the rate limit - the breaker turns a self-amplifying failure
+        into a self-limiting one.
+
+        The cost is one extra read of the (small) index on the healthy path,
+        because the library re-resolves it and will not accept a file list. That
+        is worth paying to never scan the theme, and it goes away if
+        `overturemaps` ever grows a strict mode or takes the resolved files.
+
+        Args:
+            overture_type: The Overture type being fetched.
+            bbox: The bounding box being looked up.
+
+        Raises:
+            GatewayRateLimitedError: The index is unavailable, now or recently.
+        """
+        global _stac_unavailable_until  # noqa: PLW0603
+
+        if _overture_core is None:  # pragma: no cover - import guard above covers the real case
+            return
+
+        now = time.monotonic()
+        if now < _stac_unavailable_until:
+            raise GatewayRateLimitedError(
+                f"Overture's STAC index refused us within the last {_STAC_COOLDOWN_SECONDS:.0f}s; not looking up buildings, because without it the read is the whole theme.",
+            )
+
+        theme = _overture_core.type_theme_map[overture_type]
+        resolved = _overture_core._get_files_from_stac(theme, overture_type, _overture_core._coerce_bbox(bbox), self.release)  # noqa: SLF001
+        if resolved is None:
+            _stac_unavailable_until = now + _STAC_COOLDOWN_SECONDS
+            raise GatewayRateLimitedError(
+                "Overture's STAC index is unavailable, so a lookup would read the entire theme rather than the files intersecting this bbox. Refusing instead; see P110.",
+            )
 
     # -- Building / property boundary relevant themes ------------------------
 
