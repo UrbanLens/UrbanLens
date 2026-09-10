@@ -77,6 +77,23 @@ before you run a load test on one:
 Containers are named `ul_<slug>_<service>`, so point the runner at
 `--provision-container ul_perf_app --db-container ul_perf_db`.
 
+**A `perf` environment already exists and is stopped**, not destroyed — its
+checkout, images and registry entry are intact, so it costs nothing while idle
+and starts in seconds:
+
+```bash
+cd /projects/environments/agents/perf/UrbanLens
+docker compose -p ul-perf -f docker-compose.yml -f docker-compose.agent.yml start
+```
+
+Building it from scratch took three attempts and about half an hour, so prefer
+starting this one. Stop it the same way when you are done. Two things it needs
+that are easy to forget: the host wants the `development_main` stack stopped
+during a run (the load generator, the target and 19 unrelated containers do not
+fit comfortably together — see the operational note in the repo's own memory),
+and `docker compose restart app` leaves nginx resolving a stale upstream, so
+restart `nginx` alongside it or every request 502s.
+
 ## What it still cannot tell you
 
 The load generator shares the host with the target, so its own CPU is part of
