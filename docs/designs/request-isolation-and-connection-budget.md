@@ -63,6 +63,35 @@ Rejected: capping `--worker-connections` and staying on gevent. It bounds connec
 worth shipping *immediately* as an interim, because it is one flag — but it leaves the
 kill-the-whole-worker failure mode, `psycogreen`, and the `post_worker_init` ordering hazard in place.
 
+### Measured 2026-09-10, and it qualifies the argument above
+
+The interim was shipped and then run under load on a staging-model environment (X15). Two of these
+claims now have measurements rather than source reading behind them, and they do not agree with each
+other.
+
+**The cap works exactly as specified.** Peak **61/100 backends, 60 of them web, 0% idle** during a
+60-user filter storm — `--worker-connections 20 × 3 workers`, to the connection. P104's mechanism
+cannot recur while the flag is set.
+
+**The kill-the-whole-worker failure mode did not occur.** Zero `WORKER TIMEOUT`, zero SIGKILL, across
+a 60-user filter storm *and* the most CPU-bound phase in the suite (four concurrent whole-account
+serialisations). The source reading is not wrong — the arbiter does kill a worker whose heartbeat
+stops — but the threshold matters and was never stated: starving the heartbeat for `-t 180`
+consecutive seconds requires a request that *runs* for 180 seconds. Ordinary heavy endpoints cost
+seconds, and the heartbeat is scheduled between them.
+
+Two known requests can run that long, and both have entries: **P108** (a 20,000-pin map page spends
+~7 minutes in a pairwise Haversine scan) and **P96** (a 20,000-pin import would run 78 minutes). So
+the collateral-kill argument is a property of those two defects, not of heavy endpoints in general.
+That is a materially weaker case for the move than this section originally made, and it should be
+weighed against P108 and P96 being fixable directly.
+
+**What the measurement did *not* weaken is decision 2.** The cap bounds the database's exposure and
+provides no fairness at all between users: during the storm the neighbour's *median* request did not
+complete and 94.8% of its requests could not be started, because all 60 slots belonged to one
+account. Whatever happens to the worker class, something has to stop one user owning the whole
+request pool.
+
 ## Decision 2: a second gunicorn pool, `app-heavy`, owns the endpoints that can legitimately cost seconds
 
 `sync` workers, own `cpus`/`mem_limit`, own Postgres role, own nginx `location` with
