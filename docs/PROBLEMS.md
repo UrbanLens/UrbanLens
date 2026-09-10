@@ -4114,3 +4114,73 @@ Two traps found while doing it, both recorded in
   explicit exemption every gateway in every test would have been disabled. Four rate-limiter tests
   failed exactly that way before `settings.TESTING` was added to the guard. Making the suite
   hermetic by force is worth doing and is a different change.
+
+## P110 — The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off
+
+`id: P110` · `status: open` · `updated: 2026-09-10`
+
+A recurrence of
+[the problem resolved 2026-08-31](archive/PROBLEMS-ARCHIVE.md), under a condition that resolution
+did not consider. That fix passes `stac=True` to `overturemaps.geodataframe()` so a bbox resolves
+against Overture's small STAC index to the handful of S3 partitions that intersect it, instead of
+opening the whole theme. It works — when the STAC index answers.
+
+**The library falls back to the unbounded path on any STAC failure, silently.**
+`overturemaps/core.py:185-187` catches every exception, prints, and returns `None`; the caller then
+does:
+
+```python
+dataset = ds.dataset(
+    intersecting_files if intersecting_files is not None else path,   # path = the entire theme
+```
+
+So `stac=True` is a request, not a guarantee, and the failure is a `print` rather than a raise.
+
+**The trigger is self-inflicted, which is what makes it a loop.** Enrichment tasks call Overture per
+location; enough of them earn `HTTP Error 429: Too Many Requests` from
+`https://stac.overturemaps.org/2026-08-19.0/collections.parquet`; the 429 disables the narrowing;
+the un-narrowed reads then allocate gigabytes each. The more enrichment is queued, the more certain
+the mitigation is to be off exactly when it is needed.
+
+Observed 2026-09-10 on the development stack, during the load suite's import phase:
+
+```
+Thread 327 (idle): "MainThread"
+    arrow_to_geopandas (geopandas/io/_geoarrow.py:476)
+    from_arrow (geopandas/geodataframe.py:952)
+    _fetch (urbanlens/dashboard/services/apis/locations/boundaries/overture_maps.py:130)
+    get_buildings (.../overture_maps.py:154)
+    generate_location_boundaries (urbanlens/dashboard/services/locations/boundaries.py:328)
+    enrich_wiki_location (urbanlens/dashboard/tasks.py:157)
+```
+
+with the worker's four children at **1,743 MB / 831 MB / 342 MB / 233 MB** against a 512 MiB
+`CELERY_WORKER_MAX_MEMORY_PER_CHILD` and a 3 GiB container limit. That setting is checked *between*
+tasks, so a single task that allocates 1.7 GB is never caught by it — the archived entry called it
+"defense in depth, not a fix", and this is the case it does not defend.
+
+**What it costs, measured.** The load suite's `import_confirmed` phase (X15) with this happening:
+
+| phase | neighbour p95 |
+|---|---|
+| idle | 241 ms |
+| during the import | 11.2 s |
+| **cooldown, after the import finished** | **60.0 s (timeout)** |
+
+Cooldown is worse than the acting phase. 19.2% of the neighbour's requests failed and
+`/health/ready` itself began timing out — *after* the user who ran the import had received their
+504 and gone.
+
+**Not fixed by the outbound guard added the same day.** `OvertureMapsGateway` sets
+`service_key = None` ("no HTTP endpoint of ours to rate-limit"), so `Gateway.__post_init__` never
+wraps its session, and the reads happen inside `pyarrow`/`S3FileSystem` rather than through
+`self.session` at all. Nothing in `rate_limiter` sees them: the guard reported zero successful
+outbound calls while this was reading from S3 throughout. That is the documented bypass
+(`dashboard/CLAUDE.md`: "code that bypasses `self.session` — a bare `requests.*` call, an SDK
+client"), and it is worth knowing that the largest consumer of both memory and egress is on it.
+
+The fix has to make the narrowing a precondition rather than a preference: probe the STAC index first
+through our own guarded, rate-limited session and refuse the lookup when it is unavailable —
+`GatewayRateLimitedError` already exists for "the provider's budget is exhausted, stop early", and
+scheduled enrichment already catches it. Falling back to scanning the planet is never the behaviour
+we want, and today nothing can express that to the library.

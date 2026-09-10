@@ -105,9 +105,24 @@ tier that reads as too lax, and is probably the wrong threshold.
 - **The load generator shared the host.** k6 reached 261 VUs on the same 8-core box, so the
   high-concurrency rows include the generator's own CPU. `map_init_1` and `map_search_1` are the
   clean rows: one actor VU, ~20 neighbour VUs, and still 3.4x and 19x.
-- **The run did not finish.** It was killed during `import_confirmed` when the host ran short of
-  memory, so that phase and `cooldown` have no data — the neighbour's latency during an import is
-  still unmeasured.
+- **The first run did not finish.** It was killed during `import_confirmed` when the host ran short
+  of memory. That phase was measured separately on 2026-09-10 with
+  `--phases import_confirmed,cooldown`, and it is the worst result in this document:
+
+  | phase | count | p50 | **p95** | max |
+  |---|---|---|---|---|
+  | `idle` | 250 | 70 ms | **241 ms** | 1.3 s |
+  | `import_confirmed` | 1,092 | 93 ms | **11.2 s** | 26.9 s |
+  | **`cooldown`** (import over) | 354 | 258 ms | **60.0 s (timeout)** | 60.0 s |
+
+  175 dropped iterations, **19.2% of the neighbour's requests failed**, and `/health/ready` itself
+  began timing out. **Cooldown is worse than the acting phase**, which is the finding: the damage
+  outlives the action, and the user who caused it received their 504 (P96) and left minutes earlier.
+
+  The cause is P110 — enrichment tasks reading Overture's whole buildings theme because Overture
+  rate-limited the STAC index that keeps those reads small. That is what "not decoration" in
+  `schedule.js`'s comment on the cooldown phase was written for, and it earned its place first time
+  out.
 
   The import endpoint itself was then measured directly instead, on an idle stack: **500 pins in
   116.6 s into a 20,000-pin account, and 504 at 120.0 s into an empty one** — 233 ms per imported
