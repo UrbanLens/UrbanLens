@@ -355,6 +355,93 @@ def check_provider_keys_are_not_on_the_app_tier(app_configs: Sequence[AppConfig]
     ]
 
 
+#: Hosts a development or local deployment may point REData at without comment:
+#: this machine, a container on this machine, a private network, or a dev
+#: environment. Anything else is somebody's real deployment.
+_LOCAL_REDATA_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+#: Host fragments that identify a non-production REData.
+_LOCAL_REDATA_MARKERS = (".dev.", "urbanlens_redata", "redata-", "_redata")
+
+
+def _redata_host_is_local(url: str) -> bool:
+    """Whether *url* names a REData that costs nobody anything to call.
+
+    Args:
+        url: The configured ``redata_api_url``.
+
+    Returns:
+        True when the host is this machine, a container beside it, a private
+        address, or a dev environment.
+    """
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower()
+    if not host:
+        return True  # Unparseable, so nothing useful to say about it.
+    if host in _LOCAL_REDATA_HOSTS or host.endswith(".local"):
+        return True
+    if any(marker in host for marker in _LOCAL_REDATA_MARKERS):
+        return True
+    # Container aliases and private ranges. A bare hostname with no dot is a
+    # Docker service name, which cannot leave the host's networks.
+    if "." not in host:
+        return True
+    return host.startswith(("10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20."))
+
+
+@register()
+def check_dev_is_not_pointed_at_a_real_redata(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """Warn when a development deployment's REData is somebody's real one.
+
+    REData is this project's own service, which is why the demo's spend guard
+    exempts it - calling our own instance costs only our own capacity. That
+    reasoning stops holding one hop later: REData reaches Google Places, which
+    bills. A development checkout configured with the production REData URL and
+    a live key is therefore one flag away from spending a real budget on work
+    nobody is watching, and a pin import enqueues thousands of such calls
+    (P109).
+
+    Deliberately a warning rather than an error, and deliberately still raised
+    while ``UL_ALLOW_OUTBOUND_APIS`` is off: the guard in
+    ``rate_limiter.outbound_calls_permitted`` is what makes this currently
+    harmless, and the point of saying so is that turning that flag on - which is
+    exactly what someone working on an integration does - makes it live against
+    production.
+
+    Args:
+        app_configs: Unused; part of Django's check signature.
+        **kwargs: Unused; part of Django's check signature.
+
+    Returns:
+        One warning, or an empty list.
+    """
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    environment = str(getattr(settings, "ENVIRONMENT_NAME", "")).lower()
+    if environment not in {"development", "local"}:
+        return []
+
+    url = getattr(app_settings, "redata_api_url", None)
+    if not url or _redata_host_is_local(str(url)):
+        return []
+
+    allowed = bool(getattr(app_settings, "allow_outbound_apis", False))
+    state = "UL_ALLOW_OUTBOUND_APIS is on, so these calls are going out right now" if allowed else "UL_ALLOW_OUTBOUND_APIS is off, so nothing is calling it yet - but turning that on, which is what working on an integration means, makes it live"
+    return [
+        CheckWarning(
+            f"This {environment} deployment's REData is {url}, which is not a local or dev instance.",
+            hint=(
+                f"{state}. REData reaches billable providers on our behalf, so a dev box pointed at a "
+                "real one spends a real budget on background work nobody is watching - one pin import "
+                "enqueues thousands of such calls. Point UL_REDATA_API_URL at your own instance "
+                "(dev_env.py --own-redata), or clear it (--no-redata) and accept empty panels."
+            ),
+            id="dashboard.W003",
+        ),
+    ]
+
+
 @register()
 def check_metrics_endpoint_is_guarded(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
     """Refuse to serve /metrics to anyone who asks.
