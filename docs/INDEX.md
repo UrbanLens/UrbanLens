@@ -100,7 +100,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P102 | open | 2026-09-10 | One Label edit re-serializes every pin carrying it, synchronously, inside the edit's own request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P103 | open | 2026-09-10 | `MEDIA_PIPELINE.md`'s "every parser is now guarded" was false; a label-icon resize decodes unsandboxed in-request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P104 | open | 2026-09-10 | Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P105 | open | 2026-09-10 | A Valkey outage locks every user out of logging in, while already-signed-in browsing keeps working | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P105 | open | 2026-09-10 | A Valkey outage 500s every request after 32 seconds, including the readiness probe | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P106 | open | 2026-09-10 | Reordering labels changes which icon a pin draws, but never tells the client | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P107 | open | 2026-09-10 | The saved-filter count badges read every pin in the account to draw a number | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P108 | open | 2026-09-10 | Opening the map compares every pin with every other pin, in Python, before the page renders | [`docs/PROBLEMS.md`](PROBLEMS.md) |

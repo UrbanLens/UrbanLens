@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import sys
@@ -59,17 +59,47 @@ class Expectation:
 
 @dataclass
 class Session:
-    """A signed-in browser, roughly."""
+    """A signed-in browser, roughly.
+
+    Carries its own cookies rather than using `http.cookiejar`, which appends
+    ``.local`` to a dotless host - so a cookie set by `localhost` is stored
+    under `localhost.local` and never sent back. Every request to a dev
+    environment by port would silently be unauthenticated.
+    """
 
     base_url: str
-    opener: urllib.request.OpenerDirector
-    csrf: str = ""
+    cookies: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def csrf(self) -> str:
+        """The current CSRF token."""
+        return self.cookies.get("csrftoken", "")
+
+    def absorb(self, response: object) -> None:
+        """Take any Set-Cookie headers from *response*."""
+        headers = getattr(response, "headers", None)
+        if headers is None:
+            return
+        for raw in headers.get_all("Set-Cookie") or []:
+            pair = raw.split(";", 1)[0].strip()
+            if "=" in pair:
+                name, _, value = pair.partition("=")
+                self.cookies[name.strip()] = value.strip()
+
+    def headers(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+        """Request headers, including the cookies this session holds."""
+        head = {"Referer": self.base_url}
+        if self.cookies:
+            head["Cookie"] = "; ".join(f"{name}={value}" for name, value in self.cookies.items())
+        head.update(extra or {})
+        return head
 
     def get(self, path: str) -> tuple[int, str]:
         """GET *path*, returning the status and body (empty on a transport error)."""
-        request = urllib.request.Request(f"{self.base_url}{path}", headers={"Referer": self.base_url})  # noqa: S310 - scheme validated in main()
+        request = urllib.request.Request(f"{self.base_url}{path}", headers=self.headers())  # noqa: S310 - scheme validated in main()
         try:
-            with self.opener.open(request, timeout=TIMEOUT_SECONDS) as response:
+            with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310 - scheme validated in main()
+                self.absorb(response)
                 return response.status, response.read(200_000).decode("utf-8", "replace")
         except urllib.error.HTTPError as error:
             return error.code, error.read(20_000).decode("utf-8", "replace")
@@ -141,8 +171,40 @@ SCENARIOS: dict[str, list[Expectation]] = {
 }
 
 
+def establish(base_url: str, manifest: Path, role: str, session_file: Path | None) -> Session:
+    """A signed-in session, from a saved one when there is one.
+
+    The saved path matters: every scenario here asks what an *already* signed-in
+    user still sees while something is broken. Signing in during a cache outage
+    answers a different question - it exercises the sign-in path, which needs
+    Valkey and is P105 - and it fails, so the probe never reaches the checks it
+    exists for.
+
+    Args:
+        base_url: Origin under test.
+        manifest: Provisioning manifest.
+        role: Which account.
+        session_file: Where cookies are kept. None signs in every time.
+
+    Returns:
+        A session with cookies loaded.
+    """
+    if session_file is not None and session_file.exists():
+        return Session(base_url, json.loads(session_file.read_text(encoding="utf-8")))
+
+    session = sign_in(base_url, manifest, role)
+    if session_file is not None:
+        session_file.write_text(json.dumps(session.cookies), encoding="utf-8")
+        session_file.chmod(0o600)
+    return session
+
+
 def sign_in(base_url: str, manifest: Path, role: str) -> Session:
     """Sign in as *role* from the provisioning manifest.
+
+    Redirects are deliberately not followed: a successful sign-in is a 302, and
+    following it without carrying the new session cookie lands back on the login
+    page and reads as a failure that did not happen.
 
     Raises:
         SystemExit: The manifest has no such role, or sign-in did not happen.
@@ -152,30 +214,47 @@ def sign_in(base_url: str, manifest: Path, role: str) -> Session:
     if account is None:
         raise SystemExit(f"The manifest has no '{role}' account; it has: {', '.join(a['role'] for a in accounts) or 'none'}.")
 
-    import http.cookiejar
-
-    jar = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-    session = Session(base_url, opener)
-
+    session = Session(base_url)
     login_url = f"{base_url}/accounts/login/"
-    with opener.open(login_url, timeout=TIMEOUT_SECONDS) as response:
-        response.read()
-    token = next((cookie.value for cookie in jar if cookie.name == "csrftoken"), "")
-    if not token:
+    status, _ = session.get("/accounts/login/")
+    if status != 200:
+        raise SystemExit(f"GET {login_url} answered {status}; the target is not serving the sign-in page.")
+    if not session.csrf:
         raise SystemExit(f"No csrftoken from {login_url}; something in front of the app is stripping Set-Cookie.")
 
     body = urllib.parse.urlencode(
-        {"csrfmiddlewaretoken": token, "username": account["username"], "password": account["password"]},
+        {"csrfmiddlewaretoken": session.csrf, "username": account["username"], "password": account["password"]},
     ).encode()
-    request = urllib.request.Request(login_url, data=body, headers={"Referer": login_url, "Origin": base_url})  # noqa: S310 - scheme validated in main()
-    with opener.open(request, timeout=TIMEOUT_SECONDS) as response:
-        landed = response.geturl()
-    if "/accounts/login" in landed:
-        raise SystemExit(f"Sign-in as {account['username']} did not happen; still at {landed}.")
+    request = urllib.request.Request(  # noqa: S310 - scheme validated in main()
+        login_url,
+        data=body,
+        headers=session.headers({"Referer": login_url, "Origin": base_url}),
+    )
+    try:
+        with _NO_REDIRECTS.open(request, timeout=TIMEOUT_SECONDS) as response:
+            session.absorb(response)
+            raise SystemExit(f"Sign-in as {account['username']} answered {response.status} rather than redirecting; the form was re-rendered, so the credentials were refused.")
+    except urllib.error.HTTPError as error:
+        session.absorb(error)
+        if error.code != 302:
+            # A finding rather than a crash: signing in is a thing that can break
+            # while the infrastructure is broken. A cache outage does this (P105).
+            raise SystemExit(f"Sign-in as {account['username']} was refused with HTTP {error.code}. If a cache outage is injected, that is P105.") from error
 
-    session.csrf = next((cookie.value for cookie in jar if cookie.name == "csrftoken"), "")
+    if "sessionid" not in session.cookies:
+        raise SystemExit(f"Sign-in as {account['username']} redirected but left no session cookie.")
     return session
+
+
+class _StopRedirects(urllib.request.HTTPRedirectHandler):
+    """Surface a 302 as an HTTPError instead of following it."""
+
+    def redirect_request(self, *args: object, **kwargs: object) -> None:
+        """Never follow."""
+        return
+
+
+_NO_REDIRECTS = urllib.request.build_opener(_StopRedirects)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -189,13 +268,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", required=True, type=Path, help="Manifest from provision_integration_env.")
     parser.add_argument("--scenario", required=True, choices=sorted(SCENARIOS), help="Which injection is running.")
     parser.add_argument("--role", default="secondary", help="Account to probe as (default: secondary).")
+    parser.add_argument(
+        "--session-file",
+        type=Path,
+        default=None,
+        help=(
+            "Where to keep the signed-in cookies. Written on first use and reused after, so the "
+            "session is established BEFORE the failure is injected - which is the premise every "
+            "scenario is written against. Signing in during a cache outage tests the sign-in path "
+            "instead, which is P105 and a different question."
+        ),
+    )
     args = parser.parse_args(argv)
 
     base_url = args.url.rstrip("/")
     scheme = urllib.parse.urlparse(base_url).scheme
     if scheme not in _PERMITTED_SCHEMES:
         raise SystemExit(f"--url must be http or https, not {scheme!r}.")
-    session = sign_in(base_url, args.manifest, args.role)
+    session = establish(base_url, args.manifest, args.role, args.session_file)
 
     print(f"\n{args.scenario}: what should still work")
     unexpected = 0

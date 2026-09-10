@@ -3830,13 +3830,47 @@ as the evidence that the connection ceiling, not CPU, is the resource that actua
 Not fixed: needs either a connection pooler (pgbouncer or equivalent) or per-role `CONNECTION
 LIMIT`s on Postgres roles, not a cgroup change. No decision recorded on which.
 
-## P105 — A Valkey outage locks every user out of logging in, while already-signed-in browsing keeps working
+## P105 — A Valkey outage 500s every request after 32 seconds, including the readiness probe
 
 `id: P105` · `status: open` · `updated: 2026-09-10`
 
-Found by reading the failure path while designing the Valkey split (D11), not by an incident. The
-chaos spec that demonstrates it is not yet written; treat the shape as verified from source and the
-user-visible consequence as predicted.
+**Measured 2026-09-10, and it is much worse than this entry originally claimed.** The heading used to
+read "locks every user out of logging in, while already-signed-in browsing keeps working". The
+source reading below is still correct about *which* code paths are wrapped. The conclusion drawn from
+it was wrong, because it reasoned about correctness and not about time.
+
+Valkey paused on a staging-model environment, requests made with an **already-established** session:
+
+```
+  /health/ready                    500 in 32.16s
+  /dashboard/map/pins/?limit=5     500 in 32.15s
+  /dashboard/map/                  500 in 32.17s
+```
+
+Not "keeps working". Not even a fast failure. **Every request 500s after about half a minute**, and
+that includes the readiness endpoint, which is supposed to be the thing that still answers when
+nothing else does.
+
+Two consequences that the source reading could not have produced:
+
+- **32 seconds is the number that matters, not the 500.** `socket_connect_timeout: 1` and
+  `socket_timeout: 2` are configured (`settings/base.py:320-321`), so one cache call fails in ~2s.
+  Reaching 32 means roughly sixteen cache operations per request, each waiting its own timeout —
+  serially. With `--worker-connections 20 × 3 workers`, whole-site throughput during a Valkey outage
+  is about two requests a second.
+- **`/health/ready` fails the same way.** It answers 500 after 32s, so a readiness probe with any
+  sane timeout records a timeout rather than a verdict, and orchestration removes the instance. This
+  is the concrete case behind the warning sent to infrastructure in N20: the failure mode is a
+  *timeout*, which a probe may treat differently from a non-200.
+
+The chaos probe that produced this is `bin/perf/chaos_probe.py`; it was run by pausing the container
+directly, because `chaos.py inject` cannot dispatch (N20).
+
+What the fix has to achieve is therefore larger than "wrap the unwrapped paths": a request that
+cannot reach the cache must give up in about the time one call takes, not sixteen. The session cache
+wrapper in D11 §2.6 is still right and is no longer sufficient on its own.
+
+The original reading, still accurate:
 
 `SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"` with `SESSION_CACHE_ALIAS =
 "default"` over the stock `django.core.cache.backends.redis.RedisCache`
