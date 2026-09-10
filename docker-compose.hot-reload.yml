@@ -1,30 +1,6 @@
 # Hot reload for development: host edits appear without a rebuild.
 #
 #   docker compose -f docker-compose.yml -f docker-compose.hot-reload.yml up -d
-#
-# The base stack bakes the source into the image (`COPY . /app`), so a running
-# container's code is whatever the image was built from. That is why the
-# documented workaround has been `docker cp` plus a chown - which is easy to
-# forget, and silently runs stale code when it is.
-#
-# Three things have to line up, and each one fails differently on its own:
-#
-#   1. The source is bind-mounted, so edits are visible. Django's autoreloader
-#      is *already* running in development (init.py runs `runserver` without
-#      --noreload); it has simply been watching the image's frozen copy.
-#   2. `.venv` and `node_modules` are shadowed by anonymous volumes. The host
-#      .venv is built against the host's Python and has no container GDAL, so
-#      letting the bind mount cover the container's own would break every
-#      GeoDjango import at startup.
-#   3. Logs are redirected out of the mounted tree. The host's
-#      src/urbanlens/logs is owned by a different uid than the container's
-#      appuser, and Django's logging config raises rather than degrading when
-#      it cannot open its file - which kills the process before it binds a
-#      port, with no log to say why.
-#
-# SCSS is watched by a sidecar rather than the app container: the base image
-# builds CSS once at start, and a watcher in the same container would be killed
-# and restarted by every Python autoreload.
 
 services:
   app:
@@ -36,16 +12,8 @@ services:
       - /app/src/urbanlens/logs
     environment:
       UL_ENVIRONMENT: development
-      # Outside the bind-mounted tree, so the container's own uid owns it.
       UL_LOG_DIR: /var/log/urbanlens
-      # Same reason, the other direction: the frontend build writes *into* the
-      # bind-mounted tree, whose directories belong to the host user, so it
-      # raises PermissionError and crash-loops the container unless the host uid
-      # happens to match the container's. The sass-watch sidecar below rebuilds
-      # on change, which is what a hot-reload environment wanted anyway.
       UL_SKIP_FRONTEND_BUILD: "1"
-      # Unbuffered, so a traceback reaches `docker compose logs` immediately
-      # rather than sitting in a pipe buffer while you wonder what happened.
       PYTHONUNBUFFERED: "1"
 
   app-ws:
@@ -58,9 +26,6 @@ services:
       UL_ENVIRONMENT: development
       UL_LOG_DIR: /var/log/urbanlens
 
-  # Celery does not autoreload, and a stale worker running last hour's task
-  # code is a confusing way to spend an afternoon. Mounted for parity so a
-  # restart picks up edits without a rebuild.
   celery-worker:
     volumes:
       - ./src:/app/src
@@ -78,10 +43,6 @@ services:
     volumes:
       - ./src:/app/src
       - ./package.json:/app/package.json:ro
-    # Writes compiled CSS straight into the bind-mounted tree, so the browser
-    # sees a save-to-refresh cycle without collectstatic. Whitespace-preserving
-    # output on purpose: minified CSS in a dev environment makes the browser's
-    # style inspector useless.
     command: >
       sh -c "bunx sass --watch --style=expanded --no-source-map
       src/urbanlens/dashboard/frontend/sass/style.scss

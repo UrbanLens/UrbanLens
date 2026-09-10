@@ -33,7 +33,10 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from django.db import DatabaseError
 
-from urbanlens.dashboard.models.direct_messages.location_mention import DirectMessageLocationMention, LocationMentionKind
+from urbanlens.dashboard.models.direct_messages.location_mention import (
+    DirectMessageLocationMention,
+    LocationMentionKind,
+)
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
@@ -48,12 +51,7 @@ logger = logging.getLogger(__name__)
 MAX_MENTIONS_PER_MESSAGE = 5
 
 #: Defense-in-depth cap on how much text the coordinate/address regexes below
-#: ever scan. DM bodies are already capped at MAX_DIRECT_MESSAGE_LENGTH by
-#: create_direct_message()/GroupMessage validation, so this should never
-#: actually trim anything in practice - it just guarantees these regexes
-#: never run over unbounded text if some other caller (or a future refactor)
-#: skips that validation. Independent of (not a substitute for) making the
-#: patterns themselves immune to catastrophic backtracking, below.
+#: ever scan. DM bodies are already capped at MAX_DIRECT_MESSAGE_LENGTH
 _MAX_SCAN_LENGTH = MAX_DIRECT_MESSAGE_LENGTH
 
 
@@ -109,7 +107,9 @@ _MAPS_URL_RE = re.compile(r"(?:[@]|[?&]q(?:uery)?=|geo:)(-?\d{1,2}\.\d+),(-?\d{1
 _STREET_SUFFIXES = "street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|court|ct|place|pl|circle|cir|highway|hwy|pike|parkway|pkwy|terrace|ter|trail|trl|turnpike|tpke|route|rte"
 # Words that never appear between a real house number and street suffix -
 # blocks prose like "walked 5 miles down the road" from address-matching.
-_ADDRESS_STOPWORDS = "the|a|an|of|to|down|up|along|off|on|for|per|about|around|miles?|mi|km|blocks?|minutes?|hours?|days?"
+_ADDRESS_STOPWORDS = (
+    "the|a|an|of|to|down|up|along|off|on|for|per|about|around|miles?|mi|km|blocks?|minutes?|hours?|days?"
+)
 _ADDRESS_RE = re.compile(
     rf"\b\d{{1,6}}\s+(?:(?!(?:{_ADDRESS_STOPWORDS})\s)[A-Za-z0-9'.-]+\s+){{1,4}}(?:{_STREET_SUFFIXES})\b\.?"
     rf"(?:\s*,\s*[A-Za-z][A-Za-z.'-]*(?: [A-Za-z.'-]+){{0,3}}){{0,2}}(?:\s*,\s*(?-i:[A-Z]{{2}})\b)?(?:\s+\d{{5}}(?:-\d{{4}})?)?",
@@ -204,7 +204,9 @@ def parse_addresses(text: str) -> list[str]:
     return results[:MAX_MENTIONS_PER_MESSAGE]
 
 
-def _record_mention(message: DirectMessage, location: Location, kind: str, matched_text: str) -> DirectMessageLocationMention | None:
+def _record_mention(
+    message: DirectMessage, location: Location, kind: str, matched_text: str
+) -> DirectMessageLocationMention | None:
     """Create the mention row (and, when it counts, the DM_DETECTED share) for one place.
 
     Applies the sharing dedup rule: the recipient already having their own
@@ -247,12 +249,18 @@ def _record_mention(message: DirectMessage, location: Location, kind: str, match
         return mention  # Already pinned - reference-only, never a share.
 
     share = None
-    already_shared = PinShare.objects.already_shared_with(recipient_id, location=location).exists() or profile_is_exposed_to(recipient_id, location)
+    already_shared = PinShare.objects.already_shared_with(
+        recipient_id, location=location
+    ).exists() or profile_is_exposed_to(recipient_id, location)
     if not already_shared:
         # The sender's own pin at the place (when they have one) makes the
         # share richer and ties it into their pin's lineage.
         sender_pin = find_profile_pin_near_location(message.sender_id, location)
-        parent = resolve_and_stamp_origin_share(sender_pin) if sender_pin is not None else resolve_origin_share(message.sender_id, location=location)
+        parent = (
+            resolve_and_stamp_origin_share(sender_pin)
+            if sender_pin is not None
+            else resolve_origin_share(message.sender_id, location=location)
+        )
         try:
             share = PinShare.objects.create(
                 pin=sender_pin,

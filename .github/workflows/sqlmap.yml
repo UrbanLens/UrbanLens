@@ -1,13 +1,6 @@
 name: sqlmap scan
 
-# Manual only, and deliberately NOT wired into integration.yml's bundle the way
-# nuclei.yml is (integration.yml's run_nuclei input has no run_sqlmap
-# equivalent). Nuclei detects; sqlmap exploits - a routine "run the integration
-# suite" dispatch should never fire something that actively sends SQL injection
-# payloads through a real deployment as a side effect of an unrelated checkbox.
-# This workflow exists only so `workflow_dispatch` can be used from CI instead
-# of a local/chiron shell when that is more convenient - it is exactly the same
-# manual trigger either way.
+# Manual only
 on:
   workflow_dispatch:
     inputs:

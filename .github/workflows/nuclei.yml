@@ -1,8 +1,6 @@
 name: Nuclei scan
 
-# Manual only, on purpose - same reasoning as integration.yml. This fires real
-# HTTP requests, some from templates tagged intrusive, at a live deployment;
-# nothing here should ever be triggered by a push or a PR.
+# Manual only
 #
 # Two ways in:
 #   - `workflow_dispatch`, to run it on its own.
@@ -63,10 +61,7 @@ jobs:
   nuclei:
     name: Nuclei scan
     runs-on: ubuntu-latest
-    # Same secret integration.yml uses (UL_E2E_ACCOUNTS_JSON): the manifest
-    # `manage.py provision_integration_env` writes. Reused rather than
-    # duplicated, since it is exactly the throwaway account this already
-    # exists to provide - see docs/INTEGRATION_TESTS.md's "The accounts".
+    # Same secret integration.yml uses (UL_E2E_ACCOUNTS_JSON)
     environment: staging
     timeout-minutes: 60
 

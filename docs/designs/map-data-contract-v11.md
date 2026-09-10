@@ -32,6 +32,8 @@ a mutable distributed data structure that four write paths must keep coherent.
 It also costs more than it looks: ~1.7 KB per pin plus a zset entry means a 10,000-pin profile
 occupies ~17-20 MB, so roughly 25 such profiles filled the old 512 MB instance shared with the
 broker and sessions.
+NOTE From Jess: This calculation overlooks that we could potentially store less data in the cache
+than 20 MB per profile.
 
 Replaced by `services/map_pins/touch.py` — one `UPDATE ... SET updated = now()` per event, wired
 from a table of payload-field → write-path. Two of the paths already do exactly this by hand

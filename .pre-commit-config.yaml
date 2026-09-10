@@ -1,37 +1,15 @@
 # See https://pre-commit.com for more information
 default_language_version:
-    python: python3.12
+  python: python3.12
 
 default_install_hook_types: [pre-commit]
-# `yml` as well as `yaml`: this repo has 16 of the former and 2 of the latter,
-# so listing only `yaml` meant docker-compose.yml was checked by nothing at all
-# - not check-yaml, not mixed-line-ending. That is how it was silently committed
-# with CRLF endings. Note `exclude` below still drops .github/ and .devcontainer/
-# (anything starting with `.` or `_`), so the workflow files remain unchecked.
-#
-# `json` for the same reason, found the same way: check-json was registered
-# below and this list did not admit a single file it could read, so it had never
-# run. Its first live run failed on a file that had been malformed the whole
-# time. `sh` for the 13 shell scripts under bin/, which reach the case-conflict,
-# merge-conflict, private-key and LF hooks - but *not* the autofix hook, whose
-# own TEXT_SUFFIXES set (bin/precommit_autofix.py:72) does not list `.sh`, so
-# trailing whitespace in a shell script is still nobody's business.
 files: '^(.+\.(py|ts|js|tsx|jsx|json|sh|yaml|yml|toml|html|txt))$'
-exclude: '(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)'
+exclude: "(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)"
 
-# AUTO-FIX
-# One hook, first in the chain, replacing five that rewrote files without
-# staging them (ruff --fix, ruff-format, end-of-file-fixer, trailing-whitespace,
-# mixed-line-ending). pre-commit calls a hook failed when the worktree stops
-# matching the index, so each of those cost a wasted commit: the first attempt
-# fixed and failed, the second succeeded. This one stages what it fixes, so a
-# normal commit passes on the first run with the fixes already in it.
-#
-# It deliberately leaves a partially staged file (`git add -p`) untouched:
+# deliberately leaves a partially staged file (`git add -p`) untouched:
 # staging a fix into one turns pre-commit's stash rollback into data loss.
-# See the module docstring, which records the experiment.
 repos:
--   repo: local
+  - repo: local
     hooks:
       - id: autofix
         name: auto-fix formatting, whitespace and safe lint fixes
@@ -39,35 +17,31 @@ repos:
         language: system
         types_or: [python, javascript, ts, tsx, jsx, yaml, toml, html, text]
 
-# GITHUB
-# See https://pre-commit.com/hooks.html for more hooks
--   repo: https://github.com/pre-commit/pre-commit-hooks
+  # GITHUB
+  # See https://pre-commit.com/hooks.html for more hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-    -   id: check-yaml
-    -   id: check-added-large-files
-    -   id: check-ast
-    -   id: check-json
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-ast
+      - id: check-json
         # pyright's config format is JSONC - the `//` comments in this one are
         # deliberate and pyright reads them. check-json only parses strict JSON.
         exclude: '^pyrightconfig\.json$'
-    -   id: check-case-conflict
-    -   id: check-merge-conflict
-    -   id: check-toml
-    -   id: detect-private-key
-    -   id: debug-statements
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: detect-private-key
+      - id: debug-statements
 
-# REPOSITORY CONSISTENCY - fast enough to run on every commit
--   repo: local
+  # REPOSITORY CONSISTENCY - fast enough to run on every commit
+  - repo: local
     hooks:
       - id: line-endings
         name: every tracked text file is stored with LF
         entry: python3 bin/check_line_endings.py
         language: system
-        # always_run, because the point is to see files the global `files:`
-        # pattern above does not match - which is exactly how the CRLF this
-        # guards against got in. Reads via `git ls-files --eol` and only
-        # reports; it never rewrites, so it cannot damage a binary.
         always_run: true
         pass_filenames: false
       - id: notification-choke-point
@@ -80,18 +54,12 @@ repos:
         name: every var() names a custom property something defines
         entry: python3 bin/check_css_variables.py
         language: system
-        # always_run: the failure is a stylesheet reading a token *another* file
-        # was supposed to define, so a `files:` pattern would miss the edit that
-        # removed the definition.
         always_run: true
         pass_filenames: false
       - id: typescript-coverage
         name: every TypeScript file belongs to a tsconfig project
         entry: python3 bin/check_typescript_coverage.py
         language: system
-        # always_run, not `files: \.tsx?$`: the failure this guards against is a
-        # file no project lists, and a `files:` pattern would only fire when one
-        # of them is edited - which is the case the tsc hook already mishandles.
         always_run: true
         pass_filenames: false
       - id: template-comments
@@ -101,23 +69,10 @@ repos:
         files: '\.(html|txt)$'
         pass_filenames: false
 
-# REPOSITORY CONSISTENCY - whole-tree scans, manual only
-# Each of these re-reads all ~3100 tracked files regardless of what changed, so
-# together they added ~27s to every commit - including a one-line one. They are
-# whole-repo invariants, so per-commit granularity bought nothing: a violation
-# is equally true before and after any single edit.
-#
-# `.github/workflows/ci.yml` runs every one of them as its own step, which is the
-# backstop that actually matters - a pre-commit hook is defeated by `--no-verify`
-# or by a checkout where nobody ran `pre-commit install`.
-#
-# Note what that backstop does NOT cover: ci.yml triggers only on `push` to
-# `main` and on `pull_request` targeting `main`. On a long-lived release branch
-# nothing runs these automatically until the PR to main is opened, so run
-# `bun run check` yourself before pushing work you want gated.
-#
-# Run them yourself with:  bun run check   (or: pre-commit run --hook-stage manual --all-files)
--   repo: local
+  # REPOSITORY CONSISTENCY
+  # re-reads all tracked files regardless of what changed
+  # Run them yourself with:  bun run check   (or: pre-commit run --hook-stage manual --all-files)
+  - repo: local
     hooks:
       - id: imports-tracked
         name: every urbanlens.* import resolves to a committed file
@@ -195,10 +150,6 @@ repos:
         entry: python3 bin/check_bem_modifiers.py
         language: system
         pass_filenames: false
-        # always_run, and manual: it compiles the Sass sources (~2.5s) because
-        # the checked-in style.css is a build artifact that is routinely behind
-        # them, and the answer depends on every template and every stylesheet at
-        # once - a `files:` pattern would miss the edit that deleted the rule.
         always_run: true
         stages: [manual]
       - id: doc-line-refs
@@ -230,13 +181,10 @@ repos:
         always_run: true
         stages: [manual]
 
-# CODEQL
-# Manual-only. It was a pre-push hook, which made `git push` fail: the analysis
-# is minutes long, exits non-zero on the repo's known-and-triaged findings, and
-# a GUI client (VS Code) shows none of that output - the push just fails.
-# CI still runs CodeQL on every PR (.github/workflows/security.yml).
-# Run it with: bun run codeql:gate   (or python bin/run_codeql.py --gate)
--   repo: local
+  # CODEQL
+  # Manual-only, and automatic on every PR (.github/workflows/security.yml).
+  # Run it with: bun run codeql:gate   (or python bin/run_codeql.py --gate)
+  - repo: local
     hooks:
       - id: codeql
         name: CodeQL analysis (manual)
@@ -247,13 +195,10 @@ repos:
         stages: [manual]
         verbose: true
 
-# TYPESCRIPT
-# Manual-only, same reasoning as CodeQL above: a full project typecheck and
-# the whole TS unit-test suite are the slow tail of the hook chain (minutes,
-# not seconds), which made every commit wait on them regardless of how small
-# the change was. Run with: bun run typecheck / bun run test:ts
-# (or `pre-commit run --hook-stage manual --all-files tsc`/`bun-test`).
--   repo: local
+  # TYPESCRIPT
+  # Manual-only. Run with: bun run typecheck / bun run test:ts
+  # (or `pre-commit run --hook-stage manual --all-files tsc`/`bun-test`).
+  - repo: local
     hooks:
       - id: tsc
         name: tsc (typescript typecheck, manual)

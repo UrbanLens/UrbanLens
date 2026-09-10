@@ -42,11 +42,6 @@ dependencies = [
     "pandas~=3.0.3",
     "pdf2image~=1.17.0",
     "pillow>=12.2,<12.4",
-    # HEIC/HEIF decoding for Pillow. Not optional: heic/heif are accepted
-    # uploads (the iPhone default), and without this Pillow cannot open them at
-    # all - so a GPS strip a user asked for failed silently and the file was
-    # stored with its coordinates intact. See dashboard.apps for where the
-    # opener is registered.
     "pillow-heif>=0.18",
     "psycogreen~=1.0.2",
     "psycopg2-binary~=2.9.12",
@@ -80,10 +75,6 @@ dependencies = [
     "drf-spectacular>=0.30.0",
     "django-oauth-toolkit>=3.3.0",
     "anthropic>=0.120,<0.130",
-    # A base dependency rather than an extra: UL_MEDIA_STORAGE_BACKEND=s3 is
-    # what the production deployment is heading for, and an extra our own
-    # image never installs would be a code path nothing exercises. Costs a
-    # self-host an unused boto3 and nothing else.
     "django-storages[s3]~=1.14",
 ]
 
@@ -114,22 +105,12 @@ exclude = [
     "logs/",
     "__pycache__",
 ]
-# Advanced configuration options
-# These are bare path components, so they match at any depth.
-# `tests` and `__init__.py` used to be here. They are linted now, under the
-# narrowed rule sets in [tool.ruff.lint.per-file-ignores] below. Excluding them
-# outright hid 1,077 files - 51% of the tree - from every rule, including import
-# order and dead noqa. (Measured as the difference in `ruff check --show-files .`
-# with and without those two entries: 2,030 files vs 953.)
 extend-exclude = [
     "migrations",
     "settings",
     "logs",
     "node_modules",
     "__pycache__",
-    # One-off benchmark and analysis scripts kept beside the reports they
-    # produced. They are records, not importable code, so the package rules
-    # (INP001 in particular) do not apply to them.
     "docs/reports",
 ]
 #max-complexity = 10
@@ -234,15 +215,15 @@ unfixable = ["RUF100"]
 "**/{tests/**,test_*.py,conftest.py}" = [
     # --- pytest/unittest idiom. The suite is unittest-style by choice; PT009
     # (assertEqual) is already globally ignored for exactly this reason.
-    "PT027",   # unittest-style assertRaises - 386 sites, i.e. a whole-suite rewrite
-    "PT019",   # false positive: these are @mock.patch args, not fixtures
-    "PT018",   # splitting a two-clause assert adds lines, not information
-    "PT011",   # forces match= on pytest.raises, i.e. asserting on message strings
+    "PT027", # unittest-style assertRaises - 386 sites, i.e. a whole-suite rewrite
+    "PT019", # false positive: these are @mock.patch args, not fixtures
+    "PT018", # splitting a two-clause assert adds lines, not information
+    "PT011", # forces match= on pytest.raises, i.e. asserting on message strings
     # --- fixtures and fakes
-    "S",       # bandit: assert (651), fake passwords (61), /tmp paths, SQL literals
-    "SLF001",  # reaching into privates is how you test internals
-    "DTZ",     # hypothesis st.datetimes() REQUIRES naive min/max, and a fixture date
-               # needs no zone; DTZ001/007/011 all fire on ordinary test setup
+    "S",      # bandit: assert (651), fake passwords (61), /tmp paths, SQL literals
+    "SLF001", # reaching into privates is how you test internals
+    "DTZ",    # hypothesis st.datetimes() REQUIRES naive min/max, and a fixture date
+    # needs no zone; DTZ001/007/011 all fire on ordinary test setup
     "FBT003",  # wrong on assertIs(x, True), where the bool is the expected value
     "ARG005",  # lambda signature is dictated by the callee being mocked
     "PLW0603", # a module-level counter handing fixtures unique coordinates is normal
@@ -257,10 +238,10 @@ unfixable = ["RUF100"]
     "PGH003",  # blanket type: ignore
     # --- nothing here deletes code. A binding kept for a future assertion and a
     # noqa comment explaining why something is suppressed are both information.
-    "RUF100",  # would delete a stale noqa AND the trailing comment explaining it
-    "RUF059",  # unused tuple slots document what a setup helper returns
-    "RET504",  # a named intermediate before return documents the value
-    "B007",    # unused loop variables name what is being iterated
+    "RUF100", # would delete a stale noqa AND the trailing comment explaining it
+    "RUF059", # unused tuple slots document what a setup helper returns
+    "RET504", # a named intermediate before return documents the value
+    "B007",   # unused loop variables name what is being iterated
     # --- already global; repeated so the scope stays correct if that changes
     "ANN",     # type annotation enforcement
     "PLR09",   # too-many-...
@@ -272,11 +253,11 @@ unfixable = ["RUF100"]
 # ORDER is deliberately still checked - it was verified safe by applying the
 # fixes and running `manage.py check` in the app container.
 "**/__init__.py" = [
-    "F401",    # every import here IS the re-export; 110 of 163 have no __all__
-    "F403",    # `from .x import *` - prospective re-export
-    "F405",    # a name possibly from a star import
-    "RUF100",  # a noqa here often documents a deliberate side-effect import
-    "TC001",   # moving a name into TYPE_CHECKING removes it from the re-export surface
+    "F401",   # every import here IS the re-export; 110 of 163 have no __all__
+    "F403",   # `from .x import *` - prospective re-export
+    "F405",   # a name possibly from a star import
+    "RUF100", # a noqa here often documents a deliberate side-effect import
+    "TC001",  # moving a name into TYPE_CHECKING removes it from the re-export surface
 ]
 "**/bin/**/*.py" = [
     # Fix issues and turn back on
@@ -287,8 +268,8 @@ unfixable = ["RUF100"]
 ]
 # Claude Code hook scripts: stdlib-only CLI entry points invoked by the harness.
 ".claude/**/*.py" = [
-    "T201",    # they report to the agent on stdout
-    "INP001",  # not a package
+    "T201",   # they report to the agent on stdout
+    "INP001", # not a package
 ]
 
 [tool.ruff.lint.isort]

@@ -51,10 +51,7 @@ jobs:
   integration:
     name: Integration suite
     runs-on: ubuntu-latest
-    # Holds UL_E2E_ACCOUNTS_JSON (the manifest written by
-    # `manage.py provision_integration_env`) and, optionally, UL_E2E_REDATA_URL.
-    # Environment rather than repository secrets so the credentials for a
-    # staging instance stay scoped to it.
+    # Holds UL_E2E_ACCOUNTS_JSON
     environment: staging
     timeout-minutes: 45
 

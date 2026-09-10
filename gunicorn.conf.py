@@ -1,9 +1,7 @@
 """Gunicorn configuration for the production ``app`` service.
 
 Loaded explicitly via ``-c gunicorn.conf.py`` in package.json's ``start``
-script. Worker count is not set here: gunicorn reads the ``WEB_CONCURRENCY``
-environment variable natively (see docker-compose.yml, where it defaults
-to 3).
+script.
 
 Why ``--worker-connections 20`` is on that command line, since package.json
 cannot carry a comment. gevent's default is **1000 greenlets per worker**, and
@@ -90,8 +88,7 @@ def child_exit(server, worker):
     revisits that file. An in-progress-request gauge stuck above zero forever is
     the shape that takes.
 
-    Two things it deliberately does not do, worth knowing before reading a
-    directory listing and concluding this is broken. It does not remove counter
+    It does not remove counter
     or histogram files: those must survive their process or a recycled worker
     would make the service's counters go backwards, which breaks ``rate()``. And
     so it does not bound the directory's growth - clearing at startup does that
@@ -103,8 +100,7 @@ def child_exit(server, worker):
     the obvious candidate - at which point it is load-bearing and its absence
     would be a slow, quiet drift rather than a visible failure.
 
-    Gunicorn calls this in the arbiter on child exit, the only place with both
-    the pid and the knowledge that it is gone.
+    Gunicorn calls this in the arbiter on child exit
 
     Args:
         server: The gunicorn Arbiter instance.
@@ -152,50 +148,6 @@ def post_fork(server, worker):
 def post_worker_init(worker):
     """Warm the URLconf - but only after gevent's own patching has run.
 
-    ``post_fork`` (above) looks like the obvious place for this, and it was
-    the first place it lived. It is the wrong hook, structurally, for
-    anything that touches Django's ORM under the gevent worker, and the
-    failure it produces is not a crash at boot - it is silent, and shows up
-    minutes later as every single request failing.
-
-    Gunicorn's own worker lifecycle (``Arbiter.spawn_worker``) calls
-    ``post_fork`` immediately after ``os.fork()``, THEN calls
-    ``worker.init_process()`` - which, for ``GeventWorker``, is where
-    ``gevent.monkey.patch_all()`` actually runs. ``post_worker_init`` fires
-    after ``init_process()`` completes, so anything here runs AFTER that
-    patch - the same ordering gunicorn gives an unpatched app importing its
-    WSGI module the normal way (``wsgi.py``, loaded even later than this).
-
-    Django's ``ConnectionHandler`` (``django.db.connections``) is
-    ``thread_critical = True``, which backs it with a genuine
-    ``threading.local()`` (see ``asgiref.local.Local.__init__``) captured
-    the FIRST TIME the handler is touched - not per-request, once, for the
-    life of the object. Warming the URLconf from ``post_fork`` (via
-    ``django.setup()``, which resolves ``django.db.connections`` as part of
-    app-registry setup) captured that ``threading.local()`` before
-    ``gevent.monkey.patch_all()`` had swapped ``threading.local`` for its
-    greenlet-aware replacement - so it stayed a REAL OS-thread-local for the
-    rest of the process, even though every real request runs in a greenlet
-    that gevent's patch gives its own synthetic thread identity.
-    ``connections.close_all()`` in that hook does not fix this: it closes
-    the DB-API socket underneath the existing wrapper object, but the
-    Python object itself - and the real-OS-thread storage slot Django
-    created it in - persists, so the SAME poisoned wrapper is what every
-    later greenlet's request finds. The result: EVERY request fails
-    ``close_old_connections`` (the ``request_started`` signal receiver) with
-    ``django.db.utils.DatabaseError: DatabaseWrapper objects created in a
-    thread can only be used in that same thread`` - a permanent,
-    100%-reproducible failure of every request the worker ever serves, not
-    an occasional race. Measured live against a real build, 2026-09-07:
-    ``urbanlens-ws`` (daphne, no gunicorn.conf.py, no gevent monkey-patching
-    at all) was healthy on the same pod network the whole time, which is
-    what pointed at this file rather than the database or a missing secret.
-
-    Running the identical warm-up here instead - after ``init_process()``'s
-    patching - means ``ConnectionHandler``'s first ``threading.local()`` is
-    already the gevent-aware one, and behaves exactly as it would if no
-    warm-up existed at all: correctly greenlet-scoped from the start.
-
     Args:
         worker: The freshly initialised worker, used for its logger.
     """
@@ -213,11 +165,6 @@ def _warm_urlconf(worker):
     duration, and nginx's proxy_read_timeout is being spent on a page that has
     not started rendering. Doing it here spends it during boot instead, before
     the arbiter routes anything to this process.
-
-    Called from ``post_worker_init``, not ``post_fork`` - see that hook's own
-    docstring for why the choice of hook is load-bearing here, not
-    cosmetic: this function itself is unchanged from when it lived in the
-    wrong one.
 
     Args:
         worker: The freshly forked worker, used for its logger.

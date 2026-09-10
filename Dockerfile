@@ -3,31 +3,15 @@ ARG PYTHON_BASE_IMAGE_VERSION=3.12-bookworm
 
 FROM python:${PYTHON_BASE_IMAGE_VERSION} AS base
 
-# Controls which dependency groups uv installs below. staging/production
-# install only [project.dependencies] (--no-dev, no linters/test tools/debug
-# toolbar); everything else (local, development, testing) also installs the
-# `dev` dependency-group from pyproject.toml.
 ARG UL_ENVIRONMENT=production
 
 # Ensure logging dir exists at /var/log/urbanlens
 RUN mkdir -p /var/log/urbanlens
 
-# Environment variables
-# Bytecode is compiled at build time (UV_COMPILE_BYTECODE for the venv,
-# compileall for the source tree below) and kept. PYTHONDONTWRITEBYTECODE is
-# deliberately NOT set here: staging and production bake the source into the
-# image, so discarding compiled bytecode only makes every worker recompile
-# whatever the build missed, on every import, forever. docker-entrypoint.sh
-# sets it for local/development instead, where the source is bind-mounted
-# from the host and __pycache__ would litter the developer's checkout.
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     PYTHONPATH=/app/src
 
-# Install system dependencies and PostgreSQL 17 client from PGDG.
-# The versioned binary at /usr/lib/postgresql/17/bin/pg_dump is used directly
-# (via UL_PG_DUMP_BIN) to avoid the pg_wrapper dispatcher requiring a running
-# local cluster.
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     apt-get install -y --no-install-recommends ca-certificates curl gcc pkg-config gnupg && \
     install -d /usr/share/postgresql-common/pgdg && \
@@ -36,20 +20,20 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
     echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-        build-essential \
-        locales \
-        unzip \
-        postgresql-client-17 \
-        git \
-        iputils-ping \
-        libgdal-dev \
-        wget \
-        gosu \
-        ffmpeg \
-        poppler-utils \
-        tesseract-ocr \
-        libreoffice-writer \
-        libreoffice-calc && \
+    build-essential \
+    locales \
+    unzip \
+    postgresql-client-17 \
+    git \
+    iputils-ping \
+    libgdal-dev \
+    wget \
+    gosu \
+    ffmpeg \
+    poppler-utils \
+    tesseract-ocr \
+    libreoffice-writer \
+    libreoffice-calc && \
     sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
     locale-gen && \
     pg_dump --version && \
@@ -61,28 +45,12 @@ ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
     LC_CTYPE=en_US.UTF-8
 
-# Install Bun (JS runtime + package manager) via the official Docker image.
-# This avoids the curl-to-bash NVM install and gives a reproducible binary.
-#
-# Pinned to an exact patch, not the floating `1` tag: bun 1.4.0 dropped
-# `bun build --format iife` ("Formats besides 'esm' are not implemented"), and
-# `bin/build-frontend.ts` needs it for the entries-classic bundles (the scripts
-# loaded without type=module - core.js and friends). The floating tag turned
-# that into a build failure with no local change to blame, in every container
-# built after bun 1.4 shipped. Bump deliberately, after checking iife still
-# builds, rather than letting the tag move on its own.
 COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
-
-# Install uv (Python package/dependency manager) the same way.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Create a non-root user before the source tree is copied in, so COPY --chown
-# below can set ownership at copy time instead of needing a separate `chown -R`
-# afterward.
 RUN groupadd --gid 1001 appuser && \
     useradd --uid 1001 --gid appuser --shell /bin/bash --create-home appuser
 
-# Set the working directory
 WORKDIR /app
 
 ENV PATH="/app/.venv/bin:$PATH"
@@ -92,115 +60,60 @@ ENV PATH="/app/.venv/bin:$PATH"
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     if [ "$UL_ENVIRONMENT" = "staging" ] || [ "$UL_ENVIRONMENT" = "production" ]; then \
-        uv sync --frozen --no-install-project --no-dev; \
+    uv sync --frozen --no-install-project --no-dev; \
     else \
-        uv sync --frozen --no-install-project; \
+    uv sync --frozen --no-install-project; \
     fi
 
-# Bake the BPE encodings services.ai.gateway.LLMGateway.calculate_tokens uses
-# (o200k_base for current models, cl100k_base as tiktoken's own fallback for
-# older ones) at build time, in this early layer so it is cached across every
-# source-only change below. Without this, tiktoken fetches the encoding from
-# its CDN on first use - fine for `app`, which has open egress, but ai-worker
-# runs this same image behind an egress-proxy with no such host on its
-# allowlist, so its first AI turn would hang until it timed out.
 ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken
-# --no-project: `uv run` without it re-syncs the project itself first, which
-# needs pyproject.toml's `readme = "README.md"` - not copied into the build
-# context until the full source COPY below, so this step failed outright
-# until it was scoped to just the already-installed dependency environment.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv run --no-project python -c "import tiktoken; tiktoken.get_encoding('o200k_base'); tiktoken.get_encoding('cl100k_base')"
 
-# Install JS/TS dependencies (sass, typescript, etc.) from the lockfile only,
-# so this layer is cached independently of unrelated source changes below.
 COPY package.json bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile
 
-# Copy all source files into the container, setting ownership at copy time
+# setting ownership at copy time
 # (avoids a slow recursive chown - see the useradd comment above).
 COPY --chown=appuser:appuser . /app
 
-# Install the package itself (editable) into the same venv
 RUN --mount=type=cache,target=/root/.cache/uv \
     if [ "$UL_ENVIRONMENT" = "staging" ] || [ "$UL_ENVIRONMENT" = "production" ]; then \
-        uv sync --frozen --no-dev; \
+    uv sync --frozen --no-dev; \
     else \
-        uv sync --frozen; \
+    uv sync --frozen; \
     fi
 
-# Precompile the source tree. Django resolves its URLconf on a worker's first
-# request, and that import reaches every controller; on staging it measured
-# 12.3s, 5.2s of which was `builtins.compile` turning .py into bytecode that
-# PYTHONDONTWRITEBYTECODE then refused to keep. Each of the WEB_CONCURRENCY
-# workers paid it separately, and under `-k gevent` that is CPU which never
-# yields, so the worker answers nothing else while it runs.
-#
-# Not fatal on error: a file that will not compile is worth seeing in the
-# build log, but this is an optimisation, not a correctness requirement.
-# Run as appuser, not root: the __pycache__ directories this creates live inside
-# an appuser-owned tree, and a root-owned one would silently reject any .pyc the
-# runtime still needs to add.
+# Precompile the source tree.
 RUN gosu appuser python -m compileall -q -j 0 /app/src || echo "compileall reported errors; continuing"
 
-# Pre-create every directory appuser writes to at runtime, so it never needs
-# write access to root-owned parent dirs (volume mounts are handled separately
-# by docker-entrypoint.sh):
-#   - AppSettings.ensure_paths() dirs: /app/src/urbanlens/ (capital-U, legacy
-#     runtime-data tree distinct from the lowercase source), /app/src/logs/,
-#     /app/src/backups/
-#   - bun build output: dashboard/frontend and core/frontend inside the source tree
-#
-# These are all gitignored (bun build output, logs, downloads, backups), so
-# git never tracks them and they don't exist after COPY --chown above
 RUN mkdir -p \
-        /app/src/urbanlens/downloads/downloads \
-        /app/src/urbanlens/downloads/exports \
-        /app/src/urbanlens/frontend/static \
-        /app/src/backups \
-        /app/src/logs \
-        /app/src/urbanlens/dashboard/frontend \
-        /app/src/urbanlens/core/frontend && \
+    /app/src/urbanlens/downloads/downloads \
+    /app/src/urbanlens/downloads/exports \
+    /app/src/urbanlens/frontend/static \
+    /app/src/backups \
+    /app/src/logs \
+    /app/src/urbanlens/dashboard/frontend \
+    /app/src/urbanlens/core/frontend && \
     touch \
-        /app/src/logs/app.log \
-        /app/src/logs/debugging.log \
-        /app/src/logs/test.log && \
+    /app/src/logs/app.log \
+    /app/src/logs/debugging.log \
+    /app/src/logs/test.log && \
     chown -R appuser:appuser \
-        /app/src/urbanlens/downloads \
-        /app/src/urbanlens/frontend \
-        /app/src/urbanlens/dashboard/frontend \
-        /app/src/urbanlens/core/frontend \
-        /app/src/backups \
-        /app/src/logs \
-        /var/log/urbanlens
+    /app/src/urbanlens/downloads \
+    /app/src/urbanlens/frontend \
+    /app/src/urbanlens/dashboard/frontend \
+    /app/src/urbanlens/core/frontend \
+    /app/src/backups \
+    /app/src/logs \
+    /var/log/urbanlens
 
-# Compile SCSS, bundle the TypeScript, and collect the result into STATIC_ROOT,
-# so the image is self-contained. Nothing else ever put these files in an image:
-# they are build output, they are .gitignore'd, and `COPY . /app` above is the
-# only step that has ever written to STATIC_ROOT - which is why every /static/
-# URL 404'd on a deployment that has no nginx in front of it.
-#
-# init.py runs the identical sequence at container start and still does, because
-# docker-compose mounts a named volume over STATIC_ROOT and a volume that
-# already has content is not re-seeded from the image. One definition of the
-# sequence, two callers: `--frontend-only` exists so this line cannot drift from
-# the runtime one.
-#
-# The dummy DJANGO_SECRET_KEY is scoped to this RUN and never becomes an ENV, so
-# it reaches no layer's environment. collectstatic imports settings, and
-# settings refuse to start without a key outside development; it opens no
-# database and no socket, which is why the rest of the runtime environment can
-# stay absent here. If this ever regresses the symptom is a build log saying
-# "0 static files copied" - check that number, not just the exit status.
 RUN DJANGO_SECRET_KEY=build-time-placeholder-not-used-at-runtime \
     gosu appuser python /app/src/bin/init.py --frontend-only
 
 # Git >= 2.35.2 refuses to run in directories not owned by the current user.
-# COPY . /app runs as root, so /app/.git is root-owned; the app runs as appuser.
-# Writing to /etc/gitconfig (--system) applies the exception to all users.
 RUN if [ "$UL_ENVIRONMENT" = "development" ] || [ "$UL_ENVIRONMENT" = "local" ]; then \
-        git config --system safe.directory /app; \
+    git config --system safe.directory /app; \
     fi
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
