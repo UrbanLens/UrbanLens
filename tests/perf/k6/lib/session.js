@@ -53,12 +53,22 @@ const LOGIN_PATH = "/accounts/login/";
  */
 export function signIn(baseUrl, account) {
     const loginUrl = `${baseUrl}${LOGIN_PATH}`;
-    const form = http.get(loginUrl, { tags: { endpoint: "login_form", phase: "setup" }, responseType: "text" });
+    // A jar of its own, so this always starts anonymous. Signing two roles in
+    // one after another through the shared VU jar does not sign the second one
+    // in at all: `/accounts/login/` redirects an already-authenticated request
+    // to the map, k6 follows the 302, and both the GET and the POST land
+    // somewhere that is not the login form - so the function returns the *first*
+    // role's session believing it minted the second's.
+    const jar = new http.CookieJar();
+    const form = http.get(loginUrl, { tags: { endpoint: "login_form", phase: "setup" }, responseType: "text", jar });
     if (form.status !== 200) {
         fail(`GET ${loginUrl} answered ${form.status}; the target is not serving the sign-in page.`);
     }
+    if (!form.url.includes(LOGIN_PATH)) {
+        fail(`GET ${loginUrl} was redirected to ${form.url}. That happens when the request is already authenticated, which means this jar is not the empty one it is supposed to be.`);
+    }
 
-    const token = csrfToken(baseUrl);
+    const token = csrfToken(baseUrl, jar);
     if (!token) {
         fail(`No csrftoken cookie after GET ${loginUrl}. Django sets it on that page, so this means something in front of the app is stripping Set-Cookie.`);
     }
@@ -68,28 +78,39 @@ export function signIn(baseUrl, account) {
         { csrfmiddlewaretoken: token, username: account.username, password: account.password },
         {
             headers: unsafeHeaders(baseUrl, loginUrl),
-            redirects: 5,
+            // Deliberately not followed. A successful sign-in is a 302 and a
+            // failed one is a 200 rendering the form again, so the status alone
+            // is the answer - and following it lands on the post-login page,
+            // which for the account this suite exists to make enormous means
+            // paying for a full map render inside `setup`. That took the heavy
+            // sign-in from under a second to over sixty, and timed setup out.
+            redirects: 0,
+            jar,
             tags: { endpoint: "login", phase: "setup" },
-            // Overrides the run's `discardResponseBodies`. Without the body
-            // there is no way to tell a successful sign-in from the form
-            // re-rendering with an error, since both are a 200 at this URL -
-            // so every failed login would be adopted as a working session and
-            // the whole run would measure the login page.
+            // Overrides the run's `discardResponseBodies`, for the failure path:
+            // a re-rendered form says why in its body, and a 403 page says
+            // whether this was CSRF.
             responseType: "text",
         },
     );
 
-    // A successful sign-in redirects away from the login page. A failed one
-    // renders the form again with an error, at 200, at the same URL - so status
-    // alone cannot tell them apart, and neither can the URL on its own.
-    const stillOnLoginForm = response.body && response.body.includes('id="password-login-form"');
-    if (response.status >= 400 || stillOnLoginForm) {
-        fail(`Sign-in as "${account.username}" failed (${response.status}). ${diagnose(response)}`);
+    if (response.status !== 302) {
+        fail(`Sign-in as "${account.username}" did not happen (HTTP ${response.status}). ${diagnose(response)}`);
+    }
+    const destination = response.headers.Location || "";
+    if (destination.includes(LOGIN_PATH)) {
+        fail(`Sign-in as "${account.username}" bounced back to ${destination}: the credentials were accepted but no session was kept.`);
     }
 
     // The token is rotated on login, so the pre-login one is stale for every
     // POST after this.
-    return { baseUrl, role: account.role, cookies: cookiesFor(baseUrl) };
+    const cookies = cookiesFor(baseUrl, jar);
+    if (!cookies.sessionid) {
+        fail(`Signing in as "${account.username}" left no session cookie, so nothing after this would be authenticated.`);
+    }
+    // Carries the jar as well as the cookies so a caller in `setup` can keep
+    // using this session directly without adopting it first.
+    return { baseUrl, role: account.role, cookies, jar };
 }
 
 /**
@@ -119,12 +140,12 @@ export function adopt(baseUrl, role, cookies) {
 const SESSION_COOKIES = ["sessionid", "csrftoken"];
 
 /** Both session cookies as a plain object, for handing to another VU. */
-export function cookiesFor(baseUrl) {
-    const jar = http.cookieJar().cookiesForURL(`${baseUrl}/`);
+export function cookiesFor(baseUrl, jar) {
+    const held = (jar || http.cookieJar()).cookiesForURL(`${baseUrl}/`);
     const cookies = {};
     for (const name of SESSION_COOKIES) {
-        if (jar[name]) {
-            cookies[name] = jar[name][0];
+        if (held[name]) {
+            cookies[name] = held[name][0];
         }
     }
     return cookies;

@@ -26,9 +26,10 @@ bin/run_perf_tests.sh --url http://localhost:21810 \
 jar between iterations, so a session installed once survives exactly one
 request; afterwards every request is redirected to `/accounts/login/`, k6
 follows the 302, and a fast 200 for the login page is recorded as a fast 200 for
-the map. That happened here: it reported p95 72ms, and the same run measured
-correctly reported 243ms. `checks{guard:signed_in}` is thresholded at `rate==1`
-so it can never happen quietly again.
+the map. That happened here: the broken harness reported p95 72ms against this
+dev stack, and a repeat of the same pass after the fix reported 243ms.
+`checks{guard:signed_in}` is thresholded at `rate==1` so it cannot happen
+quietly again.
 
 **Signing in per VU is itself the load.** Password verification is PBKDF2 and
 costs hundreds of milliseconds of CPU by design. Sixty VUs each signing in

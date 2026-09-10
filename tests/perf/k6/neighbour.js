@@ -109,6 +109,10 @@ export const options = {
     discardResponseBodies: true,
     summaryTrendStats: ["min", "med", "avg", "p(90)", "p(95)", "p(99)", "max", "count"],
     noConnectionReuse: false,
+    // Two sign-ins and a pre-flight against a deliberately enormous account.
+    // k6's default is 60s, which is not a lot of room for a pre-flight whose
+    // whole purpose is to touch the slow thing before the run commits to it.
+    setupTimeout: "180s",
 };
 
 /** Per-VU, because each VU is its own JS runtime with its own cookie jar. */
@@ -132,6 +136,15 @@ export function setup() {
 
     const heavy = accountFor("heavy");
     const session = signIn(BASE_URL, heavy);
+    // Two roles signed in one after another must end up with two sessions. When
+    // they do not, every later request attributed to the actor is really the
+    // neighbour, the actor does nothing, and the run passes - so this is checked
+    // rather than assumed. It has already happened once, from a shared cookie
+    // jar; `signIn` now uses its own, and this is the assertion that says so.
+    if (session.cookies.sessionid === secondary.cookies.sessionid) {
+        fail("The heavy and secondary sign-ins produced the same session. The second one did not happen, so the actor and the neighbour would be the same account.");
+    }
+
     const response = get(session, "/dashboard/map/pins/?limit=1&include_total=1", { endpoint: "preflight", phase: "setup" }, { responseType: "text" });
     if (response.status !== 200) {
         fail(`Pre-flight GET map.pins answered ${response.status} as ${heavy.username}; the run would measure an error page.`);
@@ -145,7 +158,10 @@ export function setup() {
     }
 
     if (FIXTURES.expectedPins && total !== null && total < FIXTURES.expectedPins) {
-        fail(`The heavy account holds ${total} pins, fewer than the ${FIXTURES.expectedPins} it was seeded to. Re-run provisioning before measuring.`);
+        fail(
+            `The heavy account holds ${total} pins, fewer than the ${FIXTURES.expectedPins} it was seeded to. ` +
+                "Either provisioning did not run against this target, or this request was not made as the heavy account.",
+        );
     }
     if (!FIXTURES.labelId) {
         fail("No heavy label id. Pass UL_PERF_LABEL_ID, or seed through provision_integration_env --heavy-pins so the manifest carries it.");

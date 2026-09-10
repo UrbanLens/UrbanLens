@@ -3917,3 +3917,73 @@ Not fixed, and not measured against a large account this session — the complex
 code. The fix is to count in the database (a `COUNT(*)` per filter, or one grouped query over the
 filter/pin join) rather than by intersecting Python sets, at which point the per-filter uuid cache
 this depends on may stop earning its keep too.
+
+## P108 — Opening the map compares every pin with every other pin, in Python, before the page renders
+
+`id: P108` · `status: open` · `updated: 2026-09-10`
+
+`Profile.compute_map_center` (`models/profile/model.py:873`) picks the densest cluster of an
+account's pins by asking, for every point, how many other points are within 1,000 km:
+
+```python
+best_idx = max(
+    range(len(pts)),
+    key=lambda i: sum(1 for other in pts if _haversine_km(pts[i], other) <= _CLUSTER_RADIUS_KM),
+)
+```
+
+That is one great-circle calculation per *pair* — O(n²), in pure Python, reached from `view_map`
+(`controllers/maps.py:250`) through `get_map_center_template_context`. It is on the critical path of
+the application's main page.
+
+Measured on chiron (plain `python3`, 1.04 µs per `haversine_km`):
+
+| pins | pairwise calls | projected |
+|---|---|---|
+| 1,000 | 1,001,000 | ~1 s |
+| 5,000 | 25,005,000 | ~26 s |
+| 10,000 | 100,010,000 | ~1.7 min |
+| 20,000 | 400,020,000 | ~7 min |
+
+**Observed, not projected.** A 20,000-pin load fixture on the development stack issued one
+`GET /dashboard/map/`. The container pinned a core at 102% and served nothing for nine minutes —
+`/health/ready` timed out at 120 s, the healthcheck went red, and daphne killed the application
+instance for that connection while the work continued. Every other request to that process waited
+behind one account's page load, which is the availability invariant failing on an ordinary action.
+`py-spy dump` named it exactly (`bin/perf/pyspy.sh`, added for this):
+
+```
+Thread 3435 (active+gil): "ThreadPoolExecutor-1575_0"
+    haversine_km (urbanlens/dashboard/services/geo/distance.py:63)
+    _haversine_km (urbanlens/dashboard/models/profile/model.py:111)
+    <genexpr> (urbanlens/dashboard/models/profile/model.py:875)
+    compute_map_center (urbanlens/dashboard/models/profile/model.py:873)
+    get_map_center_template_context (urbanlens/dashboard/models/profile/model.py:937)
+    view_map (urbanlens/dashboard/controllers/maps.py:250)
+```
+
+**What bounds it today, and what does not.** The result is written to `Profile.map_center_*`, so a
+profile pays this once rather than per page load — that is the only reason any large account has
+ever loaded its map. It is not a fix: the first load after the threshold is crossed is a request that
+does not return, and it is paid again whenever the stored centre is cleared. Nor does the process
+model help. Under gunicorn `gthread` this holds a worker thread and degrades its siblings through the
+GIL; under gevent it starves the arbiter heartbeat and the whole worker is SIGKILLed with every
+co-resident request on it (D11 §2.1).
+
+**Why nothing caught it.** Every existing instrument watches the *payload* path. R27's fix, the
+projection, `InstantiationScalingMixin` and `EndpointScalingMixin` all measure what `map.pins`
+builds; none of them measures what the map *page* computes before rendering. The cost is not queries
+(one `values_list`), not objects (none), not bytes (two floats) — it is arithmetic, and the only axis
+that sees it is how many times a pure function is called.
+
+Two fixes are available and they are not the same size. The cheap one moves the calculation off the
+request: compute it in a Celery task and let the page fall back to a bounding-box centre until it
+lands, which fixes availability and leaves the algorithm alone. The real one replaces the pairwise
+scan — a grid bucket at cluster resolution, or PostGIS doing the clustering in the database
+(`ST_ClusterDBSCAN` over `Location.point`, which already exists), either of which is linear-ish and
+runs where the data is.
+
+Reproduced by `dashboard/tests/hypothesis/test_map_center_scaling.py`, which counts pairwise calls
+rather than timing anything — a wall-clock assertion on a shared host is a flaky test that gets
+deleted, and the call count is exact, machine-independent, and is the defect itself. Its
+reproductions are `xfail(strict=True)` and turn red the day this is fixed.

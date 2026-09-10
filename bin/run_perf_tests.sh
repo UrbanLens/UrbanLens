@@ -107,10 +107,15 @@ if [[ -z "${BASE_URL}" ]]; then
 	exit 2
 fi
 
+# Allow-list, not a block-list. A block-list has to guess every hostname that
+# might one day be production; this only has to know the one shape that is
+# definitely safe. Anything on urbanlens.org that is not a dev environment is
+# refused whether or not anyone thought to name it here.
 case "${BASE_URL}" in
-	*urbanlens.org/*|*//urbanlens.org*|*www.urbanlens.org*) refuse "${BASE_URL} is the production hostname." ;;
 	*staging*) refuse "${BASE_URL} names staging." ;;
 	*prod*) refuse "${BASE_URL} names production." ;;
+	*.dev.urbanlens.org*) ;;
+	*urbanlens.org*) refuse "${BASE_URL} is on urbanlens.org but is not a *.dev.urbanlens.org environment." ;;
 esac
 
 for container in "${PROVISION_CONTAINER}" "${DB_CONTAINER}"; do
