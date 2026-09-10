@@ -1,7 +1,7 @@
 # The neighbour test runs, and what it measured changes what staging should expect
 
 - **Status: SENT, 2026-09-10.** Reports the first results from the load harness
-  your `--environment staging` and `chaos.py` work unblocked, and asks three
+  your `--environment staging` and `chaos.py` work unblocked, and asks four
   small questions. Nothing here is blocking; everything asked for in N16 was
   delivered and is in use.
 - **Direction: outbound.** This repo to whoever owns `UrbanLens/infrastructure`.
@@ -67,6 +67,25 @@ This is the same reasoning behind keeping `degraded` a field rather than a
 status code, which your reply already made — so the position is consistent;
 it just now has a measurement behind it, and the failure mode is a *timeout*
 rather than a non-200, which a probe may treat differently.
+
+## A second thing worth acting on: what is the request timeout in front of k8s?
+
+Measured separately, on an idle stack: the confirmed-pin-import endpoint costs
+**233 ms per imported pin**, synchronously, inside the request. 500 pins took
+116.6 s into one account and hit **nginx's 120 s `proxy_read_timeout`** into
+another — where it returned the 504 page to the client and then created all 500
+rows anyway. A fully successful import, reported to the user as a gateway error.
+
+In compose that timeout is ours (`src/urbanlens/config/nginx/django.conf:50`).
+In the k8s path it is not: whatever cloudflared and the ingress enforce is the
+real ceiling there, and we do not know what it is. **What is it?** The endpoint
+needs a cap, and the cap should be derived from the shortest timeout actually in
+front of it rather than picked. If the k8s ceiling is materially different from
+120 s, then the same import succeeds on one deployment and 504s on the other,
+which is the kind of difference that gets diagnosed as a code bug.
+
+(The real fix is PL7 phase 6 — the endpoint returns before the work does. The
+number above is what sizes the interim cap.)
 
 ## Three questions
 
