@@ -181,11 +181,11 @@ class RenderTimeScalingMixin(SeedScalingMixin):
 
         baseline = self.time_request(url, **extra)
 
-        self.seed_rows(self.first_batch)
+        self.seed(self.first_batch)
         small = self.time_request(url, **extra)
         small_queries = self.query_count(url, **extra)
 
-        self.seed_rows(self.second_batch)
+        self.seed(self.second_batch)
         large = self.time_request(url, **extra)
         large_queries = self.query_count(url, **extra)
 

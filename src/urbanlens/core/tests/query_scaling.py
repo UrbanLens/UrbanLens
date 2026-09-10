@@ -140,9 +140,9 @@ class QueryScalingMixin(SeedScalingMixin):
         if not expect_growth and not growth_waiver:
             raise AssertionError("expect_growth=False needs growth_waiver= explaining why the response cannot grow")
 
-        self.seed_rows(self.first_batch)
+        self.seed(self.first_batch)
         small_queries, small_body = self.measure(url, **extra)
-        self.seed_rows(self.second_batch)
+        self.seed(self.second_batch)
         large_queries, large_body = self.measure(url, **extra)
 
         total = self.first_batch + self.second_batch

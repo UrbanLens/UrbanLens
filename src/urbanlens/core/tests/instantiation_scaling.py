@@ -158,9 +158,9 @@ class InstantiationScalingMixin(SeedScalingMixin):
         if not expect_growth and not growth_waiver:
             raise AssertionError("expect_growth=False needs growth_waiver= explaining why the response cannot grow")
 
-        self.seed_rows(self.first_batch)
+        self.seed(self.first_batch)
         small = self.measure_instantiations(url, **extra)
-        self.seed_rows(self.second_batch)
+        self.seed(self.second_batch)
         large = self.measure_instantiations(url, **extra)
 
         self.assert_seed_exercised_endpoint(
