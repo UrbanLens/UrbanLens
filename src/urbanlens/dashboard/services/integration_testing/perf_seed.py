@@ -34,16 +34,14 @@ reuse this to test behaviour that a signal or `save` produces.
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from django.db import connection, transaction
 
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile
 
 #: Pins created per `bulk_create` round trip. Large enough that 20,000 rows is a
 #: score of statements rather than thousands, small enough that one statement's
@@ -107,7 +105,45 @@ def _grid(index: int) -> tuple[str, str]:
     return f"{latitude:.6f}", f"{longitude:.6f}"
 
 
-def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True) -> dict[str, Any]:
+def _precompute_map_center(profile: Profile, total: int) -> tuple[float, float] | None:
+    """Store the account's map centre without computing it the expensive way.
+
+    `Profile.compute_map_center` finds the densest cluster by comparing every
+    point with every other one — O(n^2) great-circle calculations in Python, on
+    the critical path of `view_map` (P108). At 20,000 pins that is around seven
+    minutes during which the process serves nothing, so a load run against a
+    seeded account would measure that one defect in every phase and nothing
+    else.
+
+    Holding it constant is not hiding it: P108 has its own reproduction in
+    `dashboard/tests/hypothesis/test_map_center_scaling.py`, and a harness that
+    cannot get past it cannot measure anything beside it.
+
+    The stored value is the same answer, not an approximation. The seeded grid
+    spans well under the 1,000 km cluster radius, so every point is in the one
+    cluster and the densest-cluster centroid *is* the arithmetic mean — which
+    this computes in one pass.
+
+    Args:
+        profile: The seeded account.
+        total: How many pins it now has.
+
+    Returns:
+        The stored ``(latitude, longitude)``, or None when there was nothing to
+        average.
+    """
+    if total <= 0:
+        return None
+    points = [_grid(index) for index in range(total)]
+    latitude = sum(float(lat) for lat, _ in points) / total
+    longitude = sum(float(lng) for _, lng in points) / total
+    Profile.objects.filter(pk=profile.pk).update(map_center_latitude=latitude, map_center_longitude=longitude)
+    profile.map_center_latitude = latitude
+    profile.map_center_longitude = longitude
+    return latitude, longitude
+
+
+def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True, precompute_map_center: bool = True) -> dict[str, Any]:
     """Give *profile* *pins* root pins, all carrying one shared label.
 
     Idempotent in the sense that matters for a fixture: it counts what the
@@ -119,6 +155,10 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True) -> 
         pins: How many root pins it should end up with.
         analyze: Refresh planner statistics afterwards. Only turn this off to
             demonstrate what skipping it costs.
+        precompute_map_center: Store the map centre directly instead of leaving
+            the first page load to derive it. On by default because deriving it
+            is P108, and a run that trips over P108 measures nothing else. Turn
+            it off to reproduce P108 against a seeded account.
 
     Raises:
         ValueError: ``pins`` is larger than the coordinate scheme can lay out.
@@ -174,7 +214,9 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True) -> 
         created += len(seeded_pins)
 
     analyzed = analyze and _analyze()
+    centre = _precompute_map_center(profile, existing + created) if precompute_map_center else None
     return {
+        "map_center": list(centre) if centre else None,
         "pins": existing + created,
         "created": created,
         "already_present": existing,

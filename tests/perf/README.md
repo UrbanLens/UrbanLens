@@ -36,6 +36,13 @@ costs hundreds of milliseconds of CPU by design. Sixty VUs each signing in
 completed zero iterations in fifty seconds while the same endpoints answered in
 under 250ms one at a time.
 
+**A known wedge has to be held constant or it is the only thing you measure.**
+`Profile.compute_map_center` is O(n^2) in pins and sits on the map page's
+critical path (P108). At 20,000 pins that is minutes during which the process
+serves nothing, so the seeder stores the centre directly — the same value, in
+one pass instead of n^2 — and `seed_heavy_account(..., precompute_map_center=False)`
+puts it back when you want to reproduce P108 rather than work around it.
+
 **A fixed millisecond budget is a claim about one machine on one day.** The
 budget comes from a baseline pass minutes earlier on the same host. When the
 baseline is already so slow that the absolute ceiling sets the budget instead of

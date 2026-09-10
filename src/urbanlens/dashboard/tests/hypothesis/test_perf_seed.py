@@ -269,3 +269,54 @@ class TheReportIsUsableByTheHarnessTests(TestCase):
         self.assertEqual(second["label_id"], first["label_id"])
         self.assertEqual(Label.objects.filter(profile=self.profile, name=HEAVY_LABEL_NAME).count(), 1)
         self.assertEqual(Pin.objects.filter(profile=self.profile, labels=second["label_id"]).count(), SEEDED * 2)
+
+
+class TheSeedHoldsP108ConstantTests(TestCase):
+    """The seed stores the map centre so a load run is not just a P108 reproduction.
+
+    `Profile.compute_map_center` is O(n^2) in pins and sits on the critical path
+    of the map page, so a seeded account that had not had its centre stored
+    would wedge the process on the run's first map request and every phase after
+    it would be measuring that. Held constant deliberately; P108 has its own
+    reproduction in `test_map_center_scaling.py`.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.profile: Profile = self.user.profile
+
+    def test_the_centre_is_stored_by_default(self) -> None:
+        report = seed_heavy_account(self.profile, pins=SEEDED)
+
+        self.profile.refresh_from_db()
+        self.assertIsNotNone(self.profile.map_center_latitude)
+        self.assertIsNotNone(self.profile.map_center_longitude)
+        self.assertIsNotNone(report["map_center"])
+
+    def test_the_stored_centre_is_the_answer_the_slow_path_would_give(self) -> None:
+        """Not an approximation, and this is what says so.
+
+        The seeded grid spans far less than the 1,000 km cluster radius, so every
+        point is in one cluster and the densest-cluster centroid is the plain
+        mean. If the grid ever grew past that radius this would fail, which is
+        the right outcome - the shortcut would no longer be equivalent.
+        """
+        seed_heavy_account(self.profile, pins=SEEDED)
+        self.profile.refresh_from_db()
+        stored = (float(self.profile.map_center_latitude), float(self.profile.map_center_longitude))
+
+        Profile.objects.filter(pk=self.profile.pk).update(map_center_latitude=None, map_center_longitude=None)
+        self.profile.refresh_from_db()
+        computed = self.profile.compute_map_center()
+
+        self.assertAlmostEqual(stored[0], computed[0], places=4)
+        self.assertAlmostEqual(stored[1], computed[1], places=4)
+
+    def test_it_can_be_left_unset_to_reproduce_p108(self) -> None:
+        report = seed_heavy_account(self.profile, pins=SEEDED, precompute_map_center=False)
+
+        self.profile.refresh_from_db()
+        self.assertIsNone(self.profile.map_center_latitude)
+        self.assertIsNone(report["map_center"])

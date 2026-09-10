@@ -26,7 +26,7 @@ on purpose until it lands. Each phase's acceptance is a measurement, not a revie
 | Phase | What | Status |
 |---|---|---|
 | 0 | Verify HEAD; record P105, P106, N15, D11, D12, PL7; archive P99 | **done 2026-09-10** |
-| 1 | The neighbour test (k6), per-endpoint pytest gates, chaos specs — all red | **partly done 2026-09-10** |
+| 1 | The neighbour test (k6), per-endpoint pytest gates, chaos specs — all red | **partly done 2026-09-10** — k6 built and run; chaos still blocked |
 | 2 | Config-only shedding and telemetry, deployable under today's gevent | **partly done 2026-09-10** |
 | 3 | `gthread`, per-role Postgres users, `app-heavy` pool (D11) | not started |
 | 4 | Valkey split + degradable session path (P105) | not started |
@@ -83,10 +83,47 @@ fan-out test written the obvious way passes against the broken code. The import
 tests were vacuous in their first draft for a third reason (wrong payload keys),
 caught by probing the live endpoint rather than by review.
 
-Still to do in this phase: the `EndpointScalingCase` generalisation with the
-bytes/row and rows-fetched/row axes (self-contained, here), the k6 neighbour
-scenario and its seed command, and the chaos scenarios. The last two block on the
-infra-repo asks in N16.
+**The neighbour test now exists and has been run** (`tests/perf/`,
+`bin/run_perf_tests.sh`, `bin/perf/`). One account acts, a different account
+browses at a fixed 5 requests a second, and the second account's latency is the
+verdict. `provision_integration_env --roles primary,secondary,heavy
+--heavy-pins N` seeds the fixture and puts the shared label's id in the manifest
+the harness reads.
+
+Writing it cost four defects in the instrument, every one of which made it
+report success while measuring nothing, and all four are worth knowing before
+building anything similar:
+
+- **k6 resets a VU's cookie jar between iterations.** A session installed once
+  survived one request; after that every request was redirected to the sign-in
+  page, k6 followed the 302, and a fast 200 for the login page was recorded as a
+  fast 200 for the map. It reported p95 72ms; corrected, the same pass reports
+  243ms. `checks{guard:signed_in}` is thresholded at `rate==1` now.
+- **Signing in per VU is itself the load.** PBKDF2 costs ~1.1s of CPU per login
+  here (the new slow-request middleware logged it: `cpu_ms=1068`). Sixty VUs
+  each signing in completed zero iterations in fifty seconds.
+- **Two roles cannot sign in through one jar.** `/accounts/login/` redirects an
+  already-authenticated request away, so the second POST never reaches the form
+  and the function returns the *first* role's session. The actor and the
+  neighbour were the same account, and the actor did nothing.
+- **The seeded grid moved between runs.** Its row width came from how many pins
+  were being created now, so a top-up laid a differently-shaped grid over the
+  first. The idempotence test seeded the same count twice, so it could not see
+  it.
+
+**It found P108 on its first honest run.** A 20,000-pin account's map page
+compares every pin with every other pin in Python — one `GET /dashboard/map/`
+pinned a core and served nothing for nine minutes, with `/health/ready` timing
+out behind it. `bin/perf/pyspy.sh` (added for this) named the frame. That is the
+invariant failing on an ordinary page load, and no existing instrument watched
+that path: they all measure the payload, and this cost is neither queries nor
+objects nor bytes.
+
+Still to do in this phase: the chaos scenarios, which block on the infra-repo
+asks in N16. Also worth naming: **a development environment runs `runserver`
+under daphne, not gunicorn**, so runs against one exercise the endpoints and the
+harness but not the process model the invariant depends on. That needs
+`dev_env.py create --environment staging`.
 
 ## Phase 2 — partly done 2026-09-10
 
