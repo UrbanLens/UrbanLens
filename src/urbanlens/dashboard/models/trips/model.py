@@ -511,6 +511,12 @@ class TripComment(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+    # Set by this model's own pre_delete signal (see signals.py) on every
+    # reply of a comment that's about to be deleted, before `parent` is
+    # nulled out by SET_NULL below. Without this, a reply to a deleted
+    # comment silently becomes an unexplained top-level comment - mirrors
+    # dashboard.Comment.parent_deleted (UL-219), ported here.
+    parent_deleted = BooleanField(default=False)
 
     objects = TripCommentManager()
 

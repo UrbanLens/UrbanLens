@@ -4,6 +4,7 @@ import logging
 from django.db import transaction
 from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
 from django.dispatch import receiver
+from redis.exceptions import RedisError
 
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
@@ -73,12 +74,12 @@ def _refresh_cached_pin(pin_id: int, profile_id: int) -> None:
         except (Profile.DoesNotExist, Pin.DoesNotExist):
             try:
                 MapPinCache(Profile(pk=profile_id)).delete_pin(pin_id)
-            except (ConnectionError, OSError, RuntimeError):
+            except (RedisError, ConnectionError, OSError, RuntimeError):
                 logger.debug("Unable to delete missing pin %s from map cache", pin_id, exc_info=True)
             return
         try:
             MapPinCache(profile).upsert_pin(pin)
-        except (ConnectionError, OSError, RuntimeError):
+        except (RedisError, ConnectionError, OSError, RuntimeError):
             logger.warning("Unable to refresh cached map pin %s", pin_id, exc_info=True)
 
     transaction.on_commit(_run)
@@ -91,7 +92,7 @@ def _delete_cached_pin(pin_id: int, profile_id: int) -> None:
 
         try:
             MapPinCache(Profile(pk=profile_id)).delete_pin(pin_id)
-        except (ConnectionError, OSError, RuntimeError):
+        except (RedisError, ConnectionError, OSError, RuntimeError):
             logger.warning("Unable to delete cached map pin %s", pin_id, exc_info=True)
 
     transaction.on_commit(_run)

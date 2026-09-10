@@ -1,31 +1,12 @@
 @use 'variables' as *;
 
 // -- Global search dialog (.gs-*) ---------------------------------------------
-// Opened from the navbar search icon (or Ctrl+K / "/"). A centered command-
-// palette style dialog: search input on top, HTMX-swapped panel below showing
-// recent searches when empty and grouped results while typing. Theme-aware via
-// the --ul-* custom properties (inverted automatically in dark mode).
-
-body.gs-no-scroll {
-    overflow: hidden;
-}
-
-.gs-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 1200; // above $z-nav
-    display: none;
-    justify-content: center;
-    align-items: flex-start;
-    padding: clamp(2rem, 9vh, 7rem) 1rem 2rem;
-    background: rgba(10, 14, 24, .45);
-    backdrop-filter: blur(4px);
-
-    &.is-open {
-        display: flex;
-        animation: gs-fade-in .14s ease-out;
-    }
-}
+// Opened from the navbar search icon (or Ctrl+K / "/"). A native <dialog> (see
+// dialog-backdrop.ts for the shared backdrop-click-to-close handler every
+// dialog on the site uses) styled as a top-anchored command palette rather
+// than the centered .ul-dialog shell every feature dialog gets - deliberately
+// narrower/shorter, and anchored near the top so a long result list grows
+// downward instead of the whole dialog recentering as it fills.
 
 @keyframes gs-fade-in {
     from { opacity: 0; }
@@ -38,15 +19,33 @@ body.gs-no-scroll {
 }
 
 .gs-dialog {
-    width: min(680px, 100%);
+    position: fixed;
+    top: clamp(2rem, 9vh, 7rem);
+    // Horizontal centering via left/right/auto-margin rather than
+    // left:50%+translateX(-50%), so gs-pop-in's own transform (below) can
+    // animate the vertical pop without a competing horizontal one to reset.
+    left: 0;
+    right: 0;
+    bottom: auto;
+    margin: 0 auto;
+    z-index: 1200; // above $z-nav
+    width: min(680px, calc(100vw - 2rem));
     max-height: min(72vh, 640px);
+    padding: 0;
     display: flex;
     flex-direction: column;
     @include surface($radius: 16px, $rung: 1);
     box-shadow: var(--ul-shadow-lg);
     overflow: hidden;
 
-    .gs-overlay.is-open & {
+    &::backdrop {
+        background: rgba(10, 14, 24, .45);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        animation: gs-fade-in .14s ease-out;
+    }
+
+    &[open] {
         animation: gs-pop-in .16s ease-out;
     }
 }
@@ -497,12 +496,10 @@ body.gs-no-scroll {
 // -- Mobile ---------------------------------------------------------------------------
 
 @media (max-width: 600px) {
-    .gs-overlay {
-        padding: 0;
-    }
-
     .gs-dialog {
+        top: 0;
         width: 100%;
+        max-width: 100%;
         max-height: 100%;
         height: 100%;
         border-radius: 0;

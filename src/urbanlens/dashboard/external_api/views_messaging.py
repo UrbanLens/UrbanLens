@@ -71,6 +71,7 @@ from urbanlens.dashboard.services.messaging.direct_message_shares import (
 )
 from urbanlens.dashboard.services.messaging.direct_messages import (
     THREAD_PAGE_SIZE,
+    BlockedParticipantError,
     DirectMessageTooLongError,
     DirectMessageValidationError,
     EmptyDirectMessageError,
@@ -518,6 +519,9 @@ class MessageReactionView(ExternalApiView):
         except NotConversationParticipantError as exc:
             logger.info("external API reaction toggle rejected: %s", exc)
             return Response({"error": "You aren't part of this conversation."}, status=403)
+        except BlockedParticipantError as exc:
+            logger.info("external API reaction toggle rejected: %s", exc)
+            return Response({"error": "You can't react to this message."}, status=403)
         return Response({"action": action, "reactions": build_direct_message_payload(message, profile)["reactions"]})
 
 

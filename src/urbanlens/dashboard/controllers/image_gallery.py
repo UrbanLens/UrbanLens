@@ -294,14 +294,14 @@ def _delete_owned_images(images: QuerySet[Image], *, unlink_from_pin_when_on_wik
         counted, or the response undercounts what the client asked for.
     """
     batch = list(images)
-    batch_pks = [image.pk for image in batch]
-    # Same reference rule as delete_stored_file: a shared photo's file backs
-    # several rows, and the whole batch is going, so rows inside it must not
-    # count as references.
     to_unlink_ids = [image.pk for image in batch if unlink_from_pin_when_on_wiki and image.wiki_id is not None]
     to_destroy = [image for image in batch if image.pk not in set(to_unlink_ids)]
-    for image in to_destroy:
-        delete_stored_file(image, also_deleting=batch_pks)
+    # No explicit per-row file cleanup here: Image's post_delete receiver
+    # (models/images/signals.py) does it for every delete path, and it runs
+    # after the rows are gone - so it asks the shared-file question with the
+    # single row's own pk rather than carrying the whole batch as an
+    # exclude(pk__in=...), which is what made deleting N photos cost N queries
+    # of N parameters each against a client-supplied, uncapped batch.
     Image.objects.filter(pk__in=[image.pk for image in to_destroy]).delete()
     if to_unlink_ids:
         Image.objects.filter(pk__in=to_unlink_ids).update(pin=None)

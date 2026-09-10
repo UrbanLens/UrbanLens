@@ -59,6 +59,7 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Im
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
+from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.sharing.share_provenance import find_profile_pin_near_location, record_share_exposure, resolve_and_stamp_origin_share
 from urbanlens.dashboard.services.social.connections import are_connections
@@ -134,18 +135,24 @@ def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: 
         base_message = f"{sender_name} shared {pin.display_label} with you."
         if already_pinned:
             base_message += " You already have this location pinned."
-        notification = NotificationLog.objects.notify(
-            profile=recipient,
-            source_profile=sender,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.PIN_SHARED,
-            title="Pin shared with you",
-            message=base_message,
-            url=reverse("pin.share.detail", kwargs={"share_id": share.pk}),
-        )
-        share.notification = notification
-        share.save(update_fields=["notification", "updated"])
+        title = "Pin shared with you"
+        url = reverse("pin.share.detail", kwargs={"share_id": share.pk})
+
+        if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+            notification = NotificationLog.objects.notify(
+                profile=recipient,
+                source_profile=sender,
+                status=Status.UNREAD,
+                importance=Importance.MEDIUM,
+                notification_type=NotificationType.PIN_SHARED,
+                title=title,
+                message=base_message,
+                url=url,
+            )
+            share.notification = notification
+            share.save(update_fields=["notification", "updated"])
+        if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
+            send_notification_email(recipient, title=title, body_text=base_message, url=url)
     return share
 
 

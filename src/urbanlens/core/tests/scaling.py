@@ -15,9 +15,15 @@ conversations properly found about eleven queries per row.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from urbanlens.core.tests.testcase import TestCase
 
     # Spelled this way so mypy sees the real assertion API inside the mixin
@@ -41,6 +47,14 @@ SECOND_BATCH = 10
 #: clear of the noise.
 MIN_GROWTH_BYTES = 200
 
+#: Statements that leave a table's planner statistics describing a table that no
+#: longer exists. ``INSERT`` is the one that matters for a seed; the other two are
+#: here because a seed that rewrites or prunes rows invalidates the same estimates.
+_WRITE_TARGET = re.compile(
+    r'\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+"?([a-zA-Z_][a-zA-Z0-9_$]*)"?',
+    re.IGNORECASE,
+)
+
 
 class SeedScalingMixin(_Base):
     """The seed contract, and the guard that the seed did something."""
@@ -48,6 +62,83 @@ class SeedScalingMixin(_Base):
     #: Overridable per test class - a slow seed may want smaller batches.
     first_batch: int = FIRST_BATCH
     second_batch: int = SECOND_BATCH
+
+    #: Tables to refresh statistics for beyond the ones the seed wrote to.
+    #: Only needed when something *else* changes the row counts a measured query
+    #: plans against - a trigger, or rows created by a signal through raw SQL.
+    extra_analyzed_tables: tuple[str, ...] = ()
+
+    def seed(self, count: int) -> None:
+        """Create *count* rows, then make the planner aware they exist.
+
+        Seeding through the ORM leaves ``pg_class.reltuples`` and ``pg_statistic``
+        describing the table as it was before - usually empty - so the planner
+        chooses for a table that no longer exists. That is not a small effect
+        and it looks exactly like the regression a scaling test is hunting:
+        measuring ``MapPinPayloadService.all()`` at 5,000 pins read **4.683s**
+        without this and **0.384s** with it (N10,
+        ``docs/notes/map-perf-measurement-and-test-gaps.md``), and the session
+        that hit it spent three rounds blaming its own change.
+
+        ``ANALYZE`` is legal inside a transaction, and ``pg_statistic`` is an
+        ordinary table, so the refresh rolls back with the test like everything
+        else.
+
+        Args:
+            count: How many rows to add.
+        """
+        with CaptureQueriesContext(connection) as captured:
+            self.seed_rows(count)
+        written = self._written_tables(query["sql"] for query in captured.captured_queries)
+        self.analyze(written | {name.lower() for name in self.extra_analyzed_tables})
+
+    @staticmethod
+    def _written_tables(statements: Iterable[str]) -> set[str]:
+        """The tables a batch of statements wrote to.
+
+        Derived from the seed's own SQL rather than declared per test class:
+        the set that needs re-analysing is exactly the set that was written, a
+        test cannot forget to update it, and it stays right when a signal
+        writes somewhere the test never mentions.
+
+        Args:
+            statements: The executed statements.
+
+        Returns:
+            Table names, lowercased.
+        """
+        written: set[str] = set()
+        for sql in statements:
+            match = _WRITE_TARGET.search(sql)
+            if match:
+                written.add(match.group(1).lower())
+        return written
+
+    def analyze(self, tables: set[str]) -> None:
+        """Refresh planner statistics for exactly *tables*.
+
+        Takes the complete set rather than deriving any of it, so a caller - or
+        a test watching this - sees the same list the database does.
+        :meth:`seed` is where the policy of what to include lives.
+
+        Deliberately never a bare ``ANALYZE``. Measured against this schema's
+        237 tables: whole-database ``ANALYZE`` costs 3.55s cold and 1.70s warm,
+        against 45ms for three named tables - and a scaling assertion seeds
+        twice, so the bare form would add several seconds to every one of them.
+
+        Args:
+            tables: Tables to analyse. Empty analyses nothing.
+        """
+        targets = sorted(tables)
+        if not targets or connection.vendor != "postgresql":
+            return
+        with connection.cursor() as cursor:
+            # Identifiers, so they are quoted rather than parameterised. Every
+            # name here came from Django's own generated SQL, not from a test's
+            # input, but quote them anyway so this cannot become an injection
+            # site if that ever stops being true.
+            quoted = ", ".join('"' + name.replace('"', '""') + '"' for name in targets)
+            cursor.execute(f"ANALYZE {quoted}")
 
     def seed_rows(self, count: int) -> None:
         """Create *count* more of whatever the endpoint under test lists.

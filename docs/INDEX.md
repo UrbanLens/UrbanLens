@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P95` · `T3` · `PL7` · `D11` · `X14` · `I5` · `R27` · `N10`
+**Next free id:** `P107` · `T3` · `PL8` · `D13` · `X15` · `I5` · `R29` · `N17`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -82,6 +82,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL4 | live | 2026-08-27 | Existence, not detail, is the oracle - so the gate conceals a wiki's contributions rather than degrading it | [`docs/designs/reputation-and-gating.md`](designs/reputation-and-gating.md) |
 | PL5 | live | 2026-08-27 | One row per (target, field, write) resolves a per-viewer view in one DISTINCT ON query, with no replay | [`docs/designs/versioned-content.md`](designs/versioned-content.md) |
 | PL6 | live | 2026-08-29 | Every test file is being reviewed for negative coverage; 73 of 832 done, resume at manifest line 94 | [`docs/notes/test-quality-audit.md`](notes/test-quality-audit.md) |
+| PL7 | live | 2026-09-10 | Making "no user can affect another user's availability" a property the tests can prove; phase 0 done, 1 underway | [`docs/notes/availability-isolation-programme.md`](notes/availability-isolation-programme.md) |
 | P82 | open | 2026-09-06 | At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P83 | open | 2026-09-06 | Over half of every page's HTML is inline `<script>`, re-sent uncached on every load | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P85 | open | 2026-09-06 | Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -90,6 +91,17 @@ still resolves after it is fixed, and the id is never handed out again.
 | P91 | open | 2026-09-08 | Seven of eight new security integration specs have never run against a live deployment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P92 | open | 2026-09-08 | `map-clusters.ts`'s cluster badge constants are duplicated, not shared, by the main map's inline script | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P93 | open | 2026-09-08 | Nine REData plugins declare no rate-limit defaults for their own gateway's service key | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P95 | open | 2026-09-10 | `ExtractionBudget` cannot bound a single file's decompression, and nothing prices what parsing one costs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P96 | open | 2026-09-10 | `import_confirmed`'s SSE import creates as many Pins as the client claims, synchronously in the web worker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P97 | open | 2026-09-10 | `dissolve_polygons` is O(n^3) GEOS work over an uncapped user-supplied polygon count | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P98 | open | 2026-09-10 | The site-admin system panel re-walks the whole media tree on every load, gated only by admin permission | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P101 | open | 2026-09-10 | `MapPinCache.rebuild` still drops concurrent writes and can release a lock it no longer holds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P102 | open | 2026-09-10 | One Label edit re-serializes every pin carrying it, synchronously, inside the edit's own request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P103 | open | 2026-09-10 | `MEDIA_PIPELINE.md`'s "every parser is now guarded" was false; a label-icon resize decodes unsandboxed in-request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P104 | open | 2026-09-10 | Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P105 | open | 2026-09-10 | A Valkey outage locks every user out of logging in, while already-signed-in browsing keeps working | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P106 | open | 2026-09-10 | Reordering labels changes which icon a pin draws, but never tells the client | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |
@@ -100,6 +112,8 @@ still resolves after it is fixed, and the id is never handed out again.
 | D8 | accepted | 2026-09-06 | Storage quotas are enforced generally, not exactly: an over-quota profile keeps its assets and is barred from uploading more | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
 | D9 | accepted | 2026-09-07 | A moderator's removal costs reputation slightly and reversibly - a per-event weight, not the binary retraction | [`docs/designs/reputation-removal-weighting.md`](designs/reputation-removal-weighting.md) |
 | D10 | accepted | 2026-09-08 | A block's incident history is its own paid flag, not `NEARBY_RESEARCH` - it is a distinct pricing lever, not a variant of one | [`docs/designs/incident-history-feature-gate.md`](designs/incident-history-feature-gate.md) |
+| D11 | accepted | 2026-09-10 | One user's expensive request must be unable to reach another user's request, and the way to guarantee that is bounded pools with named budgets | [`docs/designs/request-isolation-and-connection-budget.md`](designs/request-isolation-and-connection-budget.md) |
+| D12 | accepted | 2026-09-10 | The map cache becomes an accelerator the site can lose, and labels stop being copied into every pin | [`docs/designs/map-data-contract-v11.md`](designs/map-data-contract-v11.md) |
 | X1 | holds | 2026-08-27 | A release merge silently dropped --skip-undecryptable from DATA_ENCRYPTION.md; nothing else had drifted | [`docs/audits/DATA_ENCRYPTION_AUDIT.md`](audits/DATA_ENCRYPTION_AUDIT.md) |
 | X2 | holds | 2026-09-01 | A gate enforced in the web UI is repeatedly missing from the parallel external-API endpoint | [`docs/audits/FEATURES_CODE_AUDIT.md`](audits/FEATURES_CODE_AUDIT.md) |
 | X3 | holds | 2026-08-27 | GOALS.md contradicts the other docs on six points and states ten goals no other doc records at all | [`docs/audits/GOALS_AUDIT.md`](audits/GOALS_AUDIT.md) |
@@ -113,6 +127,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | X11 | holds | 2026-08-27 | The three designed REData follow-ups all shipped; the durable gap list is a route diff in PROBLEMS.md | [`docs/designs/redata-integration.md`](designs/redata-integration.md) |
 | X12 | holds | 2026-08-27 | 100 write handlers, 1,217 statements of data-mutating view code, never execute under any test | [`docs/reports/2026-08-14-view-coverage.md`](reports/2026-08-14-view-coverage.md) |
 | X13 | holds | 2026-07-30 | The self-hosted Overpass instance beats every mirror; three pool members were dead or Swiss-only | [`docs/reports/overpass-mirror-test.md`](reports/overpass-mirror-test.md) |
+| X14 | holds | 2026-09-10 | Switching the render mixin to a CPU clock separates the classes worse, not better; keep `perf_counter` | [`docs/notes/render-clock-calibration.md`](notes/render-clock-calibration.md) |
 | I1 | unvalidated | 2026-08-27 | Splitting into a near-zero-knowledge server and a data-holding agent was planned in full, then deferred | [`docs/designs/rejected-and-deferred/split-architecture.md`](designs/rejected-and-deferred/split-architecture.md) |
 | I2 | actionable | 2026-08-27 | Ten free/open APIs surveyed as integration candidates; several have since shipped as plugins, so re-check before using it | [`docs/reports/api-expansion-candidates.md`](reports/api-expansion-candidates.md) |
 | I3 | absorbed | 2026-07-30 | SpotGuessr's backend was sound and its frontend was the debt; all five recommendations shipped | [`docs/reports/spotguessr-audit.md`](reports/spotguessr-audit.md) |
@@ -125,11 +140,11 @@ still resolves after it is fixed, and the id is never handed out again.
 | R6 | current | 2026-09-08 | Every shipped UrbanLens feature is inventoried here, so a "new feature" request is usually already built | [`docs/FEATURES.md`](FEATURES.md) |
 | R7 | current | 2026-09-01 | A Playwright suite driving a deployed instance catches what a single-process pytest run structurally cannot | [`docs/INTEGRATION_TESTS.md`](INTEGRATION_TESTS.md) |
 | R8 | current | 2026-08-27 | A plausible boundary is not a sourced one, so the HRSH specs assert provenance and bounds, never values | [`docs/LOCATION_DATA_TESTS.md`](LOCATION_DATA_TESTS.md) |
-| R9 | current | 2026-09-02 | Uploads decode only in a network-isolated worker; served bytes are re-encoded, never the ones uploaded | [`docs/MEDIA_PIPELINE.md`](MEDIA_PIPELINE.md) |
+| R9 | current | 2026-09-10 | Uploads decode only in a network-isolated worker, except one unsandboxed label-icon resize (P103) | [`docs/MEDIA_PIPELINE.md`](MEDIA_PIPELINE.md) |
 | R10 | current | 2026-09-03 | /metrics is off by default and unrouted when off, and undercounts silently unless multiprocess mode is on | [`docs/METRICS.md`](METRICS.md) |
 | R11 | current | 2026-09-03 | Twenty-nine non-obvious behaviours that read as bugs until explained; eleven source files cite it by name | [`docs/NOTES.md`](NOTES.md) |
 | R12 | current | 2026-08-27 | Nothing is visible until both the container gate and the owner's settings gate say yes; three items still open | [`docs/PRIVACY_MODEL.md`](PRIVACY_MODEL.md) |
-| R13 | current | 2026-09-04 | Every diagnostic here exists because a specific defect got through without it; twelve checkers now run in CI | [`docs/TOOLING.md`](TOOLING.md) |
+| R13 | current | 2026-09-10 | Every diagnostic here exists because a specific defect got through without it; twelve checkers now run in CI | [`docs/TOOLING.md`](TOOLING.md) |
 | R14 | current | 2026-09-01 | Where a fallback exists, asserting the shape of the answer passes forever - assert provenance instead | [`docs/audits/TEST_COVERAGE_GAPS.md`](audits/TEST_COVERAGE_GAPS.md) |
 | R15 | current | 2026-09-01 | SpotGuessr's rules: pinned-by-everyone eligibility, Glicko-2 for players and locations, wiki-only photos | [`docs/designs/drafts/spotguessr.md`](designs/drafts/spotguessr.md) |
 | R16 | current | 2026-08-27 | Trivia reuses SpotGuessr eligibility and Glicko-2, funnelling all three question sources through one classifier | [`docs/designs/drafts/trivia.md`](designs/drafts/trivia.md) |
@@ -143,6 +158,8 @@ still resolves after it is fixed, and the id is never handed out again.
 | R24 | current | 2026-07-22 | The 120 raw Overpass rows the mirror verdicts were computed from | [`docs/reports/overpass_mirror_results.json`](reports/overpass_mirror_results.json) |
 | R25 | stale | 2026-08-27 | A generated 0-reference scan whose line numbers no longer resolve; regenerate instead of reading | [`docs/reports/unused_functions.txt`](reports/unused_functions.txt) |
 | R26 | current | 2026-09-05 | Restoring these plain-SQL dumps needs an empty target and psql from the app container; round trip verified | [`docs/BACKUPS.md`](BACKUPS.md) |
+| R27 | current | 2026-09-10 | The map payload's cost was 88% Python object construction, not SQL; the fix is query- and allocation-flat | [`docs/MAP_PERFORMANCE.md`](MAP_PERFORMANCE.md) |
+| R28 | current | 2026-09-10 | The WSGI tier runs gevent with no recorded rationale, contradicting reasoning the project applied everywhere else it chose a worker model | [`docs/notes/wsgi-worker-model-and-connections.md`](notes/wsgi-worker-model-and-connections.md) |
 | N1 | stale | 2026-09-03 | The Celery requeue loop was a two-request DoS; fixed, and the durable version now lives in NOTES.md | [`docs/archive/NOTES-celery-acks.md`](archive/NOTES-celery-acks.md) |
 | N2 | current | 2026-08-27 | 82 ways a gated wiki gives itself away collapse to eleven classes and three viewer-less chokepoints | [`docs/designs/reputation-gating-tells.md`](designs/reputation-gating-tells.md) |
 | N3 | stale | 2026-08-27 | A 631-chunk audit log whose fixes landed and whose open items were refiled into docs/PROBLEMS.md | [`docs/reports/2026-08-11-codebase-audit.md`](reports/2026-08-11-codebase-audit.md) |
@@ -152,3 +169,10 @@ still resolves after it is fixed, and the id is never handed out again.
 | N7 | current | 2026-09-06 | Two Django template traps that each shipped a 500: a filter argument has no failure tolerance, and `.image.url` raises | [`docs/notes/template-render-traps.md`](notes/template-render-traps.md) |
 | N8 | current | 2026-09-06 | Reply to the infrastructure repo's two open handoffs: /static/ 404s, media on Garage, and the 100 MB body cap | [`docs/handoffs/infrastructure-media-and-static.md`](handoffs/infrastructure-media-and-static.md) |
 | N9 | current | 2026-09-08 | Reply on migration 0054: its IntegrityError confirmed and fixed, and why a stub-driven test could not have caught it | [`docs/handoffs/infrastructure-0054-friendship-merge.md`](handoffs/infrastructure-0054-friendship-merge.md) |
+| N10 | current | 2026-09-10 | A seed-then-measure benchmark without ANALYZE measures the planner's ignorance, not the query - cost this investigation 3 rounds | [`docs/notes/map-perf-measurement-and-test-gaps.md`](notes/map-perf-measurement-and-test-gaps.md) |
+| N11 | current | 2026-09-10 | Query- and render-time scaling mixins are structurally blind to a per-row object-count regression; a third axis now exists | [`docs/notes/map-perf-measurement-and-test-gaps.md`](notes/map-perf-measurement-and-test-gaps.md) |
+| N12 | current | 2026-09-10 | `pyproject.toml`'s nplusone-rejection comment misdescribed `django-auto-prefetch`; it is wholly unwired | [`docs/notes/map-perf-doc-corrections.md`](notes/map-perf-doc-corrections.md) |
+| N13 | current | 2026-09-10 | The archived "map payload is already query-flat" claim was true and answered the wrong question | [`docs/notes/map-perf-doc-corrections.md`](notes/map-perf-doc-corrections.md) |
+| N14 | current | 2026-09-10 | Nothing in pytest or local dev exercises the shared-connection-pool topology that caused P104's outage | [`docs/notes/wsgi-worker-model-and-connections.md`](notes/wsgi-worker-model-and-connections.md) |
+| N15 | current | 2026-09-10 | `celery-metrics` has been crash-looping on staging since it was deployed, because nothing gates it on the flag it requires | [`docs/notes/celery-metrics-crash-loop.md`](notes/celery-metrics-crash-loop.md) |
+| N16 | current | 2026-09-10 | Asks infrastructure for a dev environment that runs gunicorn, and where availability chaos belongs given drills are explicitly not a test suite | [`docs/handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md`](handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md) |

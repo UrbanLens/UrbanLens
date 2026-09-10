@@ -328,7 +328,10 @@ class PinCommentsView(LoginRequiredMixin, View):
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
-            parent = get_object_or_404(Comment, id=parent_id, pin=pin)
+            # parent__isnull=True: replies render one level deep
+            # (visible_comment_tree never walks a reply's own .replies), so a
+            # reply-to-a-reply would persist but never appear anywhere.
+            parent = get_object_or_404(Comment, id=parent_id, pin=pin, parent__isnull=True)
         comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data, context=pin))
         if image:
             comment.image = image
@@ -511,6 +514,12 @@ class WikiCommentsView(LoginRequiredMixin, View):
         parent = None
         if parent_id:
             parent = _wiki_comment_addressable_by(wiki, profile, parent_id)
+            if parent.parent_id is not None:
+                # Replies render one level deep (visible_comment_tree never
+                # walks a reply's own .replies) - a reply-to-a-reply would
+                # persist but never appear anywhere, so refuse it the same
+                # way an unaddressable id already is.
+                raise Http404
         comment = Comment.objects.create(
             wiki=wiki,
             profile=profile,
@@ -605,14 +614,22 @@ class CommentReactionView(LoginRequiredMixin, View):
             Comment.objects.filter(Q(pin__profile=profile) | Q(wiki__isnull=False)).select_related("wiki__location", "profile"),
             id=comment_id,
         )
-        if comment.wiki_id and not location_visible_to(comment.wiki.location, profile):
-            raise Http404
+        if comment.wiki_id:
+            if not location_visible_to(comment.wiki.location, profile):
+                raise Http404
+            # Re-resolved through the same concealment-aware lookup every
+            # other by-id wiki-comment path uses (reply-parent resolution,
+            # delete) - the fetch above only established which wiki this is;
+            # it applies no concealment narrowing itself, so a concealed
+            # comment was otherwise still reachable (and reactable) by a
+            # guessed sequential id.
+            comment = _wiki_comment_addressable_by(comment.wiki, profile, comment_id)
         # Page-level visibility isn't enough on its own. comment_is_visible
         # applies the same per-comment gates the listing does: the author's
         # comment_visibility, a pending malware scan, and an @loc mention the
         # caller has not pinned. Checking only comment_visibility left the
         # other two reachable by sequential id.
-        if not comment_is_visible(comment, profile):
+        elif not comment_is_visible(comment, profile):
             raise Http404
         # The add/remove/notify sequence lives in the service, not here. It used
         # to be hand-rolled in this view as well, and the two copies agreeing was

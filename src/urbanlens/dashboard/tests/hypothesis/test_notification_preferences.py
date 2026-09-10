@@ -77,3 +77,36 @@ class NotificationChannelGatingTests(TestCase):
 
         self.assertFalse(response.context["has_whatsapp_number"])
         self.assertTrue(response.context["has_phone_number"])
+
+
+class EveryCategoryOffersAWorkingEmailColumnTests(TestCase):
+    """Every category's Email checkbox is a normal, uniformly interactive one.
+
+    All 13 categories now have a real email-sending path behind them (see
+    services.notifications.notification_delivery.send_notification_email),
+    so the settings page must not special-case any of them - a category-
+    specific "unavailable" cell used to exist here for eight of them; this
+    guards against that reappearing once it's no longer true.
+    """
+
+    def setUp(self) -> None:
+        self.user: User = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def test_no_email_column_is_marked_unavailable(self) -> None:
+        response = self.client.get(reverse("notifications.preferences"))
+
+        # Specific to the old per-category Email treatment - distinct from
+        # the WhatsApp/SMS columns' own (still-valid) unavailable tooltip
+        # text, which this fixture's no-number-connected profile does show.
+        self.assertNotIn(b"Email delivery isn't available for this yet", response.content)
+
+    def test_a_previously_unimplemented_categorys_email_checkbox_is_interactive(self) -> None:
+        response = self.client.get(reverse("notifications.preferences"))
+
+        body = response.content.decode()
+        idx = body.index('name="friend_request__email"')
+        cell_start = body.rindex("<label", 0, idx)
+        self.assertNotIn("unavailable", body[cell_start:idx])
+        self.assertIn('onchange="notifDelivery(this)"', body[idx : idx + 300])

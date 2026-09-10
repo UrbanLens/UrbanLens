@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.urls import reverse
 from django.utils import timezone
 
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS
@@ -16,6 +17,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
 from urbanlens.dashboard.services.social.connections import are_connections
 
 if TYPE_CHECKING:
@@ -426,17 +428,23 @@ def create_visit_suggestion(
     else:
         title = "Visit suggestion"
         message = f"{_suggester_name(suggested_to, suggested_by)} suggested you also visited {place} on {when}."
-    notification = NotificationLog.objects.notify(
-        profile=suggested_to,
-        source_profile=suggested_by,
-        status=Status.UNREAD,
-        importance=Importance.MEDIUM,
-        notification_type=NotificationType.VISIT_SUGGESTED,
-        title=title,
-        message=message,
-    )
-    suggestion.notification = notification
-    suggestion.save(update_fields=["notification", "updated"])
+    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+        notification = NotificationLog.objects.notify(
+            profile=suggested_to,
+            source_profile=suggested_by,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.VISIT_SUGGESTED,
+            title=title,
+            message=message,
+        )
+        suggestion.notification = notification
+        suggestion.save(update_fields=["notification", "updated"])
+    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
+        # No single deep link for this type - the accept/merge/reject actions
+        # live inline in the bell dropdown and history page, not on their own
+        # page, so point the email at whichever of those a viewer opens first.
+        send_notification_email(suggested_to, title=title, body_text=message, url=reverse("notifications.view"))
     return suggestion
 
 

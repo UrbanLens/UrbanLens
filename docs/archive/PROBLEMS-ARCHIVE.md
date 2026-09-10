@@ -11,6 +11,31 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-10: Bulk photo delete carried the whole batch into every row's queries
+
+`id: P99` · `status: fixed` · `resolved: 2026-09-10`
+
+`_delete_owned_images` built `batch_pks` from the whole delete batch and passed it as
+`also_deleting=batch_pks` into `delete_stored_file` once per image, so each call's reference check
+ran `file_still_referenced`'s `.exclude(pk__in=list(exclude_pks)).exists()` against a list that grew
+with the batch - O(n^2) parameters for n images, with `image_ids` parsed uncapped at
+`image_gallery.py:231` (`ImageGalleryBulkView`) and `:342` (`VaultGalleryBulkView`).
+
+**The original entry guessed at the wrong fix, and the measurement corrected it.** The first attempt
+kept the loop and narrowed the exclude list; it moved the cost from 2.0 to 1.0 queries per photo and
+stopped there. A diagnostic on the remainder showed the residual query came from `Image`'s own
+`post_delete` receiver - which already asks the shared-file question, per row, *after* the row is
+gone, and therefore already carries exactly the right `exclude`. The controller loop was not merely
+quadratic; it was redundant with a receiver that did the same job correctly. So the fix was a
+deletion, not a rewrite: the loop went, `images.py` was reverted to HEAD untouched, and the
+controller now issues one `Image.objects.filter(pk__in=[...]).delete()`.
+
+Fixed in `b4884f3ce` on `release/v_0_8_0`, guarded by
+`dashboard/tests/hypothesis/test_bulk_photo_delete_scaling.py`, which asserts the SQL parameter
+count grows sub-quadratically with batch size. The uncapped `image_ids` length is *not* addressed
+here - it is folded into the request-shedding work in D11 (`heavy_routes.txt` routes
+`vault/photos/bulk/` to the bounded pool) rather than left as its own open problem.
+
 ## RESOLVED 2026-09-06: the upload quota check is fail-open, and that is now a decision rather than a defect
 
 `id: P28` · `status: fixed` · `resolved: 2026-09-06`

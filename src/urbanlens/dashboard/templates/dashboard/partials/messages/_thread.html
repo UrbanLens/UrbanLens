@@ -59,13 +59,12 @@ live messages and fall back to the plain POST endpoint when the socket is down.
           <i class="material-symbols-outlined">{% if image_permission_status == 'rejected' %}image{% else %}hide_image{% endif %}</i>
           {% if image_permission_status == 'rejected' %}Allow images{% else %}Block images{% endif %}
         </button>
-        <form method="post" action="{% url 'friend.block' partner.id %}"
-              onsubmit="return confirm('Block {{ display_name }}? They will not be able to see your profile or message you.')">
-          {% csrf_token %}
-          <button type="submit" class="dm-bubble-menu__item dm-bubble-menu__item--danger">
-            <i class="material-symbols-outlined">block</i> Block
-          </button>
-        </form>
+        <button type="button" class="dm-bubble-menu__item dm-bubble-menu__item--danger"
+                hx-post="{% url 'friend.block' partner.id %}"
+                hx-target="#dm-thread-pane" hx-swap="innerHTML"
+                hx-confirm="Block {{ display_name }}? They will not be able to see your profile or message you.">
+          <i class="material-symbols-outlined">block</i> Block
+        </button>
       </div>
     </div>
     <button type="button" class="dm-thread__search-btn" id="dm-thread-search-btn"

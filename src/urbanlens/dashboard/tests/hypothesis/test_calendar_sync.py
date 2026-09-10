@@ -32,8 +32,8 @@ from urbanlens.dashboard.models.calendar_sync.model import (
 )
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
-from urbanlens.dashboard.models.notifications.meta import NotificationType
-from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
+from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
@@ -1372,3 +1372,62 @@ class CalendarInviteIdentityMaskingTests(TestCase):
 
         entry = NotificationLog.objects.get(profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP)
         self.assertEqual(entry.source_profile_id, self.importer.pk)
+
+
+class CalendarInviteRespectsNotificationPreferenceTests(TestCase):
+    """The calendar importer's invite must honor added_to_trip like the ordinary one does.
+
+    `_invite_participants` used to build its own ADDED_TO_TRIP notification
+    inline instead of calling `trip_membership.notify_added_to_trip` (the
+    canonical implementation, which does check the recipient's preference) -
+    so a recipient who turned this category off still got notified, purely
+    because they were invited via a calendar import rather than the ordinary
+    trip member picker.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.importer = baker.make(User, username="importer").profile
+        self.invitee = baker.make(User, username="invitee").profile
+        Friendship.objects.create(from_profile=self.importer, to_profile=self.invitee, status=FriendshipStatus.ACCEPTED)
+        self.trip = baker.make(Trip, creator=self.importer, name="Quarry run")
+        self.trip.profiles.add(self.importer)
+
+    def _invite(self) -> None:
+        from urbanlens.dashboard.services.trips.calendar_sync import _invite_participants
+
+        _invite_participants(self.trip, self.importer, [self.invitee.pk], [])
+
+    def test_none_preference_suppresses_the_notification(self) -> None:
+        prefs, _ = NotificationPreference.objects.get_or_create(profile=self.invitee)
+        prefs.added_to_trip = DeliveryPreference.NONE
+        prefs.save(update_fields=["added_to_trip"])
+
+        self._invite()
+
+        self.assertFalse(
+            NotificationLog.objects.filter(
+                profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP
+            ).exists()
+        )
+
+    def test_the_invite_still_happens_even_when_notified_preference_is_none(self) -> None:
+        """Anti-vacuity: suppressing the notification must not suppress the invite itself."""
+        prefs, _ = NotificationPreference.objects.get_or_create(profile=self.invitee)
+        prefs.added_to_trip = DeliveryPreference.NONE
+        prefs.save(update_fields=["added_to_trip"])
+
+        self._invite()
+
+        self.assertTrue(TripMembership.objects.filter(trip=self.trip, profile=self.invitee).exists())
+
+    def test_default_preference_still_notifies(self) -> None:
+        """Anti-vacuity: a profile with no preferences row yet still gets notified."""
+        self._invite()
+
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP
+            ).exists()
+        )

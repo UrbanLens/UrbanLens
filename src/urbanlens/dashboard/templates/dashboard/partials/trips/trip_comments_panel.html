@@ -20,6 +20,11 @@
         {% endif %}
       </div>
       <div class="comment-body">
+        {% if item.parent_was_deleted %}
+        <p class="comment-parent-deleted-indicator">
+          <i class="material-symbols-outlined">forum</i> Replying to a comment that was deleted
+        </p>
+        {% endif %}
         <div class="comment-meta">
           <span class="comment-author">{{ c.author.display_name|default:"Unknown" }}</span>
           <span class="comment-date">{{ c.created|human_timesince }}</span>

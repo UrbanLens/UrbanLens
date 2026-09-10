@@ -55,6 +55,7 @@ class _SyncRedis(Protocol):
     def set(self, name: str, value: str, *, nx: bool = ..., ex: int = ...) -> bool | None: ...
     def pipeline(self, transaction: bool = ...) -> _SyncPipeline: ...
     def hset(self, name: str, key: str | None = ..., value: str | None = ..., mapping: dict[str, Any] | None = ...) -> int: ...
+    def hget(self, name: str, key: str) -> str | None: ...
     def zadd(self, name: str, mapping: dict[str, Any]) -> int: ...
     def rename(self, src: str, dst: str) -> bool: ...
     def delete(self, *names: str) -> int: ...
@@ -129,14 +130,29 @@ class MapPinCache:
     def rebuild_queued_key(self) -> str:
         return f"{self._prefix}:rebuild-queued"
 
-    def get_or_build_page(self, query: QuerySet[Pin], *, cursor: int | None, limit: int | None, include_total: bool) -> CachedMapPinPage:
-        if not self.client:
+    def get_or_build_page(self, query: QuerySet[Pin], *, cursor: int | None, limit: int | None, include_total: bool, cacheable: bool = True) -> CachedMapPinPage:
+        """The requested page, from cache when this cache can answer it.
+
+        Args:
+            query: Pins to serialize on a miss.
+            cursor: Exclusive lower bound on pin pk, from a previous page.
+            limit: Page size, clamped by the payload service.
+            include_total: Also report how many rows match.
+            cacheable: Whether *query* is this profile's whole root-pin set.
+                What is stored is that one set, keyed by profile and ordered by
+                pk with no other predicate, so a narrowed query - a bounding
+                box, a filter - is not a question this cache holds the answer
+                to and is computed directly instead of being answered wrongly.
+
+        Returns:
+            The page, and whether it came from the cache.
+        """
+        if not self.client or not cacheable:
             return CachedMapPinPage(self.payload.page(query, cursor=cursor, limit=limit, include_total=include_total), hit=False)
         try:
-            if self.client.exists(self.meta_key):
-                page = self.get_page(cursor=cursor, limit=limit, include_total=include_total)
-                if page is not None:
-                    return CachedMapPinPage(page, hit=True)
+            page = self.get_page(cursor=cursor, limit=limit, include_total=include_total)
+            if page is not None:
+                return CachedMapPinPage(page, hit=True)
             self.enqueue_rebuild()
         except RedisError:
             logger.warning("Map pin cache unavailable for profile %s", self.profile_id, exc_info=True)
@@ -162,7 +178,18 @@ class MapPinCache:
                 self.client.delete(self.rebuild_queued_key)
 
     def get_page(self, *, cursor: int | None, limit: int | None, include_total: bool) -> MapPinPage | None:
-        if not self.client or not self.client.exists(self.meta_key):
+        """One page from the cache, or None when the cache cannot be trusted.
+
+        Args:
+            cursor: Exclusive lower bound on pin pk, from a previous page.
+            limit: Page size, clamped by the payload service.
+            include_total: Also report how many pins are cached.
+
+        Returns:
+            The page, or None to say "ask the database" - absent, incomplete, or
+            self-inconsistent all answer None rather than a partial page.
+        """
+        if not self.client or not self._is_intact():
             return None
         limit = min(max(int(limit or self.payload.DEFAULT_LIMIT), 1), self.payload.MAX_LIMIT)
         min_score: str | int = f"({cursor}" if cursor else "-inf"
@@ -170,11 +197,55 @@ class MapPinCache:
         has_more = len(ids) > limit
         ids = ids[:limit]
         raw = self.client.hmget(self.pins_key, ids) if ids else []
-        pins = [json.loads(item) for item in raw if item]
+        stored = [item for item in raw if item is not None]
+        if len(stored) != len(raw):
+            # The order index lists pins the payload hash no longer holds, so
+            # this page would silently be short. Drop the cache and rebuild
+            # rather than return part of an answer.
+            self._discard()
+            return None
+        pins = [json.loads(item) for item in stored]
         next_cursor = int(ids[-1]) if has_more and ids else None
         total = self.client.zcard(self.order_key) if include_total else None
         self._touch()
         return MapPinPage(pins=pins, next_cursor=next_cursor, total=total)
+
+    def _is_intact(self) -> bool:
+        """Whether the marker still describes data that is actually present.
+
+        The marker, the payloads and the order index are three keys under one
+        eviction policy, on an instance shared with sessions, Channels and the
+        Celery broker - and the marker is much the smallest, so it routinely
+        outlives what it vouches for. Reading it alone reported a profile with
+        no pins as a cache hit, and ``_touch`` then renewed it on the way out,
+        so the empty map persisted until something wrote the key again.
+
+        Returns:
+            True when the cache can be read. A profile with genuinely no pins
+            is intact with no data keys at all, which is why the recorded total
+            decides rather than the keys' presence.
+        """
+        if not self.client or not self.client.exists(self.meta_key):
+            return False
+        recorded = self.client.hget(self.meta_key, "total")
+        try:
+            total = int(recorded) if recorded is not None else -1
+        except (TypeError, ValueError):
+            total = -1
+        if total < 0:
+            self._discard()
+            return False
+        if total == 0:
+            return True
+        if self.client.exists(self.pins_key, self.order_key) != 2 or self.client.zcard(self.order_key) != total:
+            self._discard()
+            return False
+        return True
+
+    def _discard(self) -> None:
+        """Drop a cache that cannot be trusted, so the next read rebuilds it."""
+        with contextlib.suppress(RedisError):
+            self.clear()
 
     def rebuild(self, query: QuerySet[Pin]) -> None:
         if not self.client:

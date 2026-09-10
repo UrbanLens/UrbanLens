@@ -14,6 +14,7 @@ from django.db.models.fields import CharField, DateTimeField, DecimalField, Slug
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.location.queryset import LocationManager
+from urbanlens.dashboard.services.locations import display
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -143,12 +144,7 @@ class Location(abstract.PublicDashboardModel):
     @property
     def address_basic(self) -> str | None:
         """Street number and route only."""
-        parts = []
-        if self.street_number:
-            parts.append(self.street_number)
-        if self.route:
-            parts.append(self.route)
-        return " ".join(parts) or None
+        return display.street_address(street_number=self.street_number, route=self.route)
 
     @property
     def address_extended(self) -> str | None:
@@ -254,10 +250,6 @@ class Location(abstract.PublicDashboardModel):
         """
         return self.cached_place_name
 
-    # Country spellings reverse-geocoders commonly return for the USA, compared
-    # casefolded with periods stripped (so "U.S.A." matches too).
-    _USA_COUNTRY_NAMES: frozenset[str] = frozenset({"united states", "united states of america", "usa", "us"})
-
     @property
     def is_usa(self) -> bool:
         """Whether this location's country component identifies the USA.
@@ -269,8 +261,7 @@ class Location(abstract.PublicDashboardModel):
         Returns:
             True when the country is blank or a recognized USA spelling.
         """
-        country = (self.country or "").replace(".", "").strip().casefold()
-        return not country or country in self._USA_COUNTRY_NAMES
+        return display.is_usa(self.country)
 
     @property
     def area_label(self) -> str | None:
@@ -283,15 +274,7 @@ class Location(abstract.PublicDashboardModel):
         Returns:
             The area string, or None when no address components are available.
         """
-        city = (self.city or "").strip()
-        state = (self.state or "").strip()
-        country = (self.country or "").strip()
-        if self.is_usa:
-            parts = [city, state]
-        else:
-            parts = [city or state, country]
-        label = ", ".join(part for part in parts if part)
-        return label or None
+        return display.area_label(city=self.city, state=self.state, country=self.country)
 
     @property
     def display_name(self) -> str:
@@ -309,13 +292,13 @@ class Location(abstract.PublicDashboardModel):
             wiki = self.wiki
         except ObjectDoesNotExist:
             wiki = None
-        if wiki is not None and wiki.name:
-            return wiki.name
-        if self.official_name:
-            return self.official_name
-        if area := self.area_label:
-            return f"Unnamed Location in {area}"
-        return "Unnamed Location"
+        return display.display_name(
+            wiki_name=wiki.name if wiki is not None else None,
+            official_name=self.official_name,
+            city=self.city,
+            state=self.state,
+            country=self.country,
+        )
 
     def get_place_name(self) -> str | None:
         """Fetch the canonical place name from Google and cache it on GooglePlace.

@@ -565,6 +565,49 @@ message carries bytes-per-row and the query count instead.
 urlconf whose per-row cost is known, including one showing the query mixin
 calling the expensive page perfectly flat.
 
+### `InstantiationScalingMixin` (`core/tests/instantiation_scaling.py`)
+
+The third axis, and the one that caught the map 504. Counts Django model
+instances built per row of output, by receiving `post_init` — which
+`Model.__init__` sends unconditionally, so the count is exact and does not move
+with machine speed or load, unlike a timing.
+
+It exists because the other two were structurally blind to the defect. The map
+payload built **63,240 model objects to emit 10,000 flat dicts** (a
+`select_related` companion per row, and a fresh `Label` per pin-label pair — 128
+distinct labels became ~36,000 instances), and 88% of the endpoint's time was
+that construction. `QueryScalingMixin` read it as flat, correctly: `.all()`
+iterates in chunks of 1,000, so below that the query count is literally
+constant, and at 10,000 the 21 statements it does run were 6% of the wall time.
+`RenderTimeScalingMixin` reads a uniformly 6x-too-expensive row as a slow
+machine. Only the object count separates them — so a failure here reports the
+per-model breakdown *and* the query count, to say plainly that a query counter
+would call this fine.
+
+Reach for it on any endpoint that serialises a collection. `objects/row <= 1` is
+the target; a DRF view with nested serializers needs a per-endpoint number and a
+comment saying why.
+
+### What all three share: `SeedScalingMixin` and the `ANALYZE` it runs
+
+All three seed through `seed()`, which calls the test's `seed_rows()` and then
+refreshes the planner statistics for the tables that seed actually wrote to.
+
+Without it the measurement is of the planner's ignorance. Seeding through the
+ORM leaves `pg_class.reltuples` and `pg_statistic` describing an empty table, so
+every query the measurement then runs is planned for a table that no longer
+exists: `MapPinPayloadService.all()` at 5,000 pins read **4.683s** without the
+refresh and **0.384s** with it, and the session that hit it spent three rounds
+suspecting its own change (N10).
+
+The target list is derived from the seed's own SQL — the `INSERT`/`UPDATE`/
+`DELETE` targets captured while `seed_rows()` runs — rather than declared per
+test class, so no test can forget to update it and it stays correct when a
+signal writes somewhere the test never mentions. `extra_analyzed_tables` adds
+anything a trigger touches. It is deliberately never a bare `ANALYZE`: measured
+on this schema's 237 tables, whole-database is **3.55s cold / 1.70s warm**
+against **45ms** for three named tables, and every assertion seeds twice.
+
 ### `run_concurrently` (`core/tests/concurrency.py`)
 
 Runs callables on real threads released from a barrier. Necessary because a lock
@@ -609,11 +652,13 @@ grew by the same amount without any of their records explaining why.
 
 ## Evaluated, not adopted
 
-- **`nplusone`** — the obvious runtime N+1 detector, and rejected on two counts:
-  it has not shipped a release since 2019, and `django-auto-prefetch` (already a
-  dependency) suppresses exactly the access pattern it watches for, so it would
-  be quietest where this codebase's N+1s actually came from — model *properties*
-  that fall back to a query. `django-perf-rec` was adopted instead, above.
+- **`nplusone`** — the obvious runtime N+1 detector, rejected because it has not
+  shipped a release since 2019. `django-perf-rec` was adopted instead, above.
+  (Corrected 2026-09-10, N12: this used to also cite `django-auto-prefetch` as
+  already suppressing the access pattern such a detector watches for — false,
+  it is a listed dependency with zero imports anywhere in `src/urbanlens`, not
+  in `INSTALLED_APPS`, and no model inherits from it. The 2019 reason above
+  carries the decision on its own.)
 - **`django-linear-migrations`** — would subsume part of
   `check_migration_graph.py` and additionally prevent branching migration
   graphs. Worth adopting if migrations ever branch across parallel work.
@@ -629,7 +674,15 @@ grew by the same amount without any of their records explaining why.
 - **`testcontainers-python`** — an ephemeral PostGIS per run. `bin/run_tests.sh`
   already runs pytest inside the project's own compose stack against real
   PostGIS, so this would replace a working setup rather than add a capability.
-- **Load testing (Locust / k6)** — a genuine gap: the two scaling mixins prove
-  query counts and per-row render cost do not grow, which says nothing about
-  connection-pool exhaustion or gevent worker behaviour under concurrency. Wants its own scoped
-  effort against a deployment, not a bolt-on here.
+- **Load testing (k6)** — still a gap, now a scoped one rather than an open
+  question. The three scaling mixins prove query count, per-row render cost and
+  objects-per-row do not grow, which says nothing about connection-pool
+  exhaustion or worker behaviour under concurrency — the two things that
+  actually took the site down (P104, and the map 504s). PL7 §4.1 specifies the
+  replacement: a k6 *neighbour* scenario measuring one user's p95 under a fixed
+  arrival rate while another user runs each heavy action, with a
+  `pg_stat_activity` sampler alongside it. k6 rather than Locust because the
+  assertion is open-model: a closed-model tool lets a slowing server reduce the
+  probe's request rate, which hides exactly the degradation being measured.
+  Wants a deployment, so it lives in `tests/perf/` driven against a dev
+  environment, not in pytest.

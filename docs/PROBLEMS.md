@@ -3575,3 +3575,303 @@ fix, not rushed to close this entry out. `dashboard/tests/hypothesis/test_plugin
 catch this class of gap on its own: it asserts every key present in `all_service_defaults()` has *a* limit, but a
 key that was never registered at all - like these - is simply absent from that mapping rather than showing up
 `unlimited`, so the existing test passes today with all nine still ungoverned.
+
+## P95 — `ExtractionBudget` cannot bound a single file's decompression, and nothing prices what parsing one costs
+
+`id: P95` · `status: open` · `updated: 2026-09-10`
+
+Related to P2 (`parse_for_preview` runs archive/KML/GPX/OSM/WKT/shapefile parsing in the request,
+blocking `UL_UNTRUSTED_PARSE_POLICY=deny`) - cross-referenced rather than duplicated: P2 is about
+sandboxing that code path, this is about the resource cost of it regardless of sandboxing.
+
+`controllers/pin.py:1181` `parse_for_preview` builds one `ExtractionBudget()`
+(`services/import_export/archive_extractor.py:63-84`, 2 GB / 1000 files) shared across every
+uploaded file and every nested archive - closing the "an outer ZIP holding N nested bombs costs N
+x 2 GB" hole the budget's own docstring names. It does not close the shape one level up: the
+budget caps *total* uncompressed bytes across the whole upload, not what one file, one KML, one
+shapefile, or one `.docx` can cost by itself. `GoogleMapsGateway.parse_for_preview`'s CSV/geocode
+branches and `extract_pins_from_document`'s AI branch (`services/ai/document_import.py`) are
+separately capped by `MAX_PREVIEW_PINS = 20_000` (`services/apis/locations/google/maps.py:946`) -
+a pin-*count* backstop against the eventual output, not a cost bound on the parse that produces it.
+
+nginx bounds the compressed body to 200 MB (`config/nginx/django.conf:42`, `client_max_body_size
+200m`), which bounds bytes *in transit*, not bytes *after decompression* - up to the 2 GB
+`ExtractionBudget` ceiling, entirely inside one authenticated gunicorn worker, per POST. The only
+rate control on this endpoint is the global DRF `user` throttle at `600/minute`
+(`settings/base.py:1288`) - a request-*count* budget, not a cost-scoped one, so an account can
+submit 600 near-2GB extractions a minute exactly as cheaply as 600 single-KB ones, as far as the
+throttle is concerned.
+
+Not fixed: needs either a per-file byte/complexity cap inside `ExtractionBudget` or a cost-scoped
+throttle (e.g. keyed to declared upload size) alongside the existing count-based one. Not measured
+this session - no benchmark run against a 2 GB adversarial upload; the risk is by inspection of the
+cap values above, not an observed timeout.
+
+## P96 — `import_confirmed`'s SSE import creates as many Pins as the client claims, synchronously in the web worker
+
+`id: P96` · `status: open` · `updated: 2026-09-10`
+
+`controllers/pin.py:2051` `import_confirmed` reads `request.data["lists"]` with no length cap and
+streams `GoogleMapsGateway.import_preview_streaming` (`services/apis/locations/google/maps.py:1094`)
+back as an SSE response - each list's `pins` array (also uncapped at this layer) is created as a
+`Pin` row in the same request/worker that opened the stream. The only upstream limit is
+`parse_for_preview`'s `MAX_PREVIEW_PINS = 20_000` (`services/apis/locations/google/maps.py:946`) on
+the *preview* step. `import_confirmed` is a separate endpoint that trusts whatever JSON body the
+client posts back to it, not the server's own preview output, so nothing stops a client from
+replaying or hand-building a `lists` payload past that cap. A large confirmed import ties up one
+gunicorn worker (see P104/R28 on why that worker is gevent, not threads) for the duration of every
+`Pin.objects.create()` plus its `post_save` signal fan-out (`models/pin/signals.py`, including the
+O(pins carrying a label) work described in P102's sibling code path).
+
+Not fixed. Not measured this session - no benchmark run against an adversarially large `lists`
+payload.
+
+## P97 — `dissolve_polygons` is O(n^3) GEOS work over an uncapped user-supplied polygon count
+
+`id: P97` · `status: open` · `updated: 2026-09-10`
+
+`services/geo/geo.py:84` `dissolve_polygons` merges intersecting polygons by restarting an O(n^2)
+pairwise scan (`for i in range(len(clusters)): for j in range(i + 1, len(clusters))`,
+`geo.py:111-119`) after every merge found, so a fully-chained input (each polygon touches the next)
+costs O(n^3) `GEOSGeometry.intersects()`/`.union()` calls. `saved_filters.py:83`'s
+`_dissolve_regions` (`saved_filters.py:63-83`) calls it once per `include_regions`/`exclude_regions`
+key parsed from `SearchForm.parse_region_geojson`, with no cap on how many polygons that GeoJSON
+form field may contain. Reachable via the saved-filter create/update endpoints.
+
+**Measured 2026-09-10, and the severity does not hold.** In the app container: 400 disjoint
+polygons dissolve in 0.030s, 400 fully-chained overlapping polygons in 0.030s, and two overlapping
+200,000-vertex polygons in 0.026s (an 8.65 MB GeoJSON payload parses in 0.803s, which dominates).
+The restart converges much faster than the bound suggests, because each merge does `del clusters[j]`
+and breaks, shrinking the working set - a chain of n collapses in far fewer than n full scans.
+
+What was *not* tested is an adversarial ordering that forces the intersecting pair to be found last
+on every pass, which is what the O(n^3) bound actually requires. So the bound stands as a bound and
+the input remains uncapped, but no realistic or chained input reaches it, and the practical exposure
+is the GeoJSON payload size (bounded by nginx `client_max_body_size 200m`) rather than the polygon
+count. Downgraded from a hazard to a latent bound; not worth a rewrite at these numbers.
+
+Worth recording for whoever does revisit it: GEOS answers this natively.
+`MultiPolygon(polygons, srid=4326).unary_union` was verified to produce identical results on the
+cases this function's own tests cover - chained overlaps merge to one component, disjoint stay
+separate, touching merge, SRID preserved - in one call instead of the pairwise loop.
+
+## P98 — The site-admin system panel re-walks the whole media tree on every load, gated only by admin permission
+
+`id: P98` · `status: open` · `updated: 2026-09-10`
+
+`controllers/site_admin.py:1617` `SiteAdminStatsSystemPartialView.get` calls
+`_dir_size_mb(media_root)` (`site_admin.py:85-93`, called at `site_admin.py:1637`) - an uncached
+`os.walk` plus `os.path.getsize` per file - on every HTMX poll of that partial, gated only by
+`_AdminPermissionMixin` with no additional dev-only or rate gate. gevent's monkey-patching covers
+sockets, not filesystem syscalls, so `os.walk`/`os.path.getsize` block the worker's shared OS
+thread for their full duration regardless of the WSGI worker class (see P104/R28). Cost scales
+with total files under `MEDIA_ROOT` - the whole site's stored media - not with anything scoped to
+the admin viewing the page.
+
+Not fixed. Not measured this session - no timing taken against a production-sized media tree.
+
+## P100 — Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them
+
+`id: P100` · `status: open` · `updated: 2026-09-10`
+
+`services/map_pins/autocomplete.py:48` `search_local`'s pin branch (`autocomplete.py:87-100`) ORs
+nine `icontains`/leading-wildcard lookups (`name`, `aliases__name`, `description`,
+`labels__name`, `location__official_name`, `location__wiki__name`, `location__wiki__aliases__name`,
+`location__wiki__description`, plus `tag_match_q`) across a `select_related`/`prefetch_related`
+spanning `location__wiki`, `parent_pin`, `parent_pin__location`, and finishes with `.distinct()` -
+fired on every keystroke, scoped to `profile=profile` so cost scales with the viewer's own pin
+count. `pg_trgm` is installed (its `CREATE EXTENSION IF NOT EXISTS` appears in every dump per
+`docs/BACKUPS.md`), but no `GinIndex`/trigram index exists anywhere in the migration history
+(confirmed: zero matches for `GinIndex`/`trigram`/`pg_trgm` across
+`dashboard/migrations/*.py`) - a leading-wildcard `icontains` cannot use a plain b-tree index
+regardless, so every one of these OR branches is a sequential scan whether or not `pg_trgm` is
+present. **Measured 2026-09-10, and it is not the next 504.** Against a seeded 10,000-pin profile (with
+`ANALYZE` run), `search_local` costs 141-217ms per keystroke across four search terms, of which only
+0.070s is SQL across 4 queries; the slowest single query runs in 0.035s and its
+`EXPLAIN (ANALYZE, BUFFERS)` shows 394 buffer hits and 0.794ms actual time. The claim that every OR
+branch is a sequential scan is wrong: the planner serves it with an Incremental Sort off the
+presorted `dashboard_user_pins.id` key under the `Limit`, so it never materialises the full match
+set. The missing trigram index is real and would still be the right thing if this ever grows, but
+adding one now buys a fraction of 70ms at the cost of a migration. Left open as an accurate
+observation, downgraded from a hazard.
+
+Not fixed. Not measured this session.
+
+## P101 — `MapPinCache.rebuild` still drops concurrent writes and can release a lock it no longer holds
+
+`id: P101` · `status: open` · `updated: 2026-09-10`
+
+`112df3dab` fixed this class's bbox, intactness and `RedisError` defects; three remain in
+`services/map_pins/cache.py`.
+
+1. **Concurrent creates/deletes during a rebuild are silently lost or resurrected.** `rebuild()`
+   (`cache.py:250-286`) writes the freshly-queried payload into `tmp_pins`/`tmp_order` and only
+   renames them onto the live `self.pins_key`/`self.order_key` at the end (`cache.py:271-272`).
+   `upsert_pin`/`delete_pin` (`cache.py:288-327`) write straight into the *live* keys, gated only
+   on `self.client.exists(self.meta_key)` - which still holds the previous generation's value for
+   the whole rebuild window, since `meta_key` is not touched until `cache.py:278`. A pin created
+   during that window (write lands in the old live hash) is discarded the instant the rename
+   replaces it; a pin deleted during that window (removed from the old live hash) reappears once
+   the rename restores the pre-delete snapshot the rebuild's own query already captured -
+   resurrected as a ghost until the next rebuild or a later individual write touches that pin
+   again.
+2. **The two-key rename is not atomic.** `cache.py:271-272` renames `tmp_pins` then `tmp_order` as
+   two separate Redis commands, not a `MULTI`/Lua transaction - a reader between them sees a pins
+   hash and an order zset from two different generations.
+3. **The lock is released without checking its own token.** `rebuild()` sets `self.lock_key` to a
+   fresh `lock_token` with `nx=True, ex=LOCK_SECONDS` (`cache.py:253-256`; `LOCK_SECONDS = 30`,
+   `cache.py:87`), but its `finally` block unconditionally deletes `self.lock_key` (`cache.py:284`)
+   with no compare-and-delete against `lock_token`. If a rebuild runs longer than 30s - plausible
+   at 10k pins, where this investigation measured `MapPinCache.rebuild(10k)` at 6.79s cold but did
+   not measure it under load or Redis contention - its lock can expire, let a second rebuild
+   acquire it, and then the first rebuild's `finally` deletes the *second* rebuild's lock, opening
+   the door to a third concurrent rebuild.
+
+Not fixed. Not re-measured this session against a real concurrent-write race - findings 1 and 3 are
+by code inspection of the sequence above; the 30s/6.79s figures are this session's own measurements
+(see R27).
+
+## P102 — One Label edit re-serializes every pin carrying it, synchronously, inside the edit's own request
+
+`id: P102` · `status: open` · `updated: 2026-09-10`
+
+`models/pin/signals.py:165` `refresh_map_pin_cache_for_label` (a `post_save` receiver on `Label`)
+calls `refresh_map_pin_cache_for_label_ids` (`signals.py:143-159`), which iterates every `Pin`
+carrying the label (`Pin.objects.filter(labels__in=ids).distinct()`) and calls
+`_refresh_cached_pin` (`signals.py:64-84`) per pin. `_refresh_cached_pin` schedules its work via
+`transaction.on_commit(_run)`, which runs `_run` synchronously, in-process, immediately after the
+request's transaction commits - not on Celery. So one label edit costs O(pins carrying that label)
+`MapPinCache.upsert_pin` calls (`cache.py:288`, itself a `Pin` re-fetch plus
+`MapPinPayloadService.all()` per pin), all inside the request/response cycle that saved the label,
+for every profile that has that pin's map cached. `refresh_map_pin_cache_for_label_customization`
+(`signals.py:181`), the per-profile icon/color override path, pays the identical cost shape.
+
+Not fixed. Not measured this session - no timing taken against a label with a large carrying-pin
+count; the O(n), in-request, non-Celery shape is confirmed by reading `transaction.on_commit` and
+the receiver chain above.
+
+## P103 — `MEDIA_PIPELINE.md`'s "every parser is now guarded" was false; a label-icon resize decodes unsandboxed in-request
+
+`id: P103` · `status: open` · `updated: 2026-09-10`
+
+`docs/MEDIA_PIPELINE.md:46` stated "Every parser is now guarded" - corrected in place this session
+(see `MEDIA_PIPELINE.md`'s guard table and N-record on doc corrections). It was false:
+`controllers/labels.py:253` `_resize_custom_icon` imports `PIL.Image` directly and calls
+`Image.open(uploaded_file)` with no `@untrusted_parse` decorator, no sandbox routing, and no
+size/pixel-bomb guard beyond Pillow's own defaults - it runs inline in whatever request calls it
+(`_apply_custom_icon_upload`, `labels.py:556`), decoding and re-encoding any icon file over
+`_ICON_MAX_PX` on the label create/edit path. Two further undecorated Pillow call sites were named
+by this investigation but not re-confirmed independently this session - re-grep
+`dashboard/services`/`dashboard/controllers` for `from PIL import`/`PIL.Image` sites lacking
+`@untrusted_parse` before trusting the count is still exactly three.
+
+Not fixed: `_resize_custom_icon` needs the same `@untrusted_parse`/sandbox routing as the other
+Pillow call sites, or an explicit, documented reason it is exempt.
+
+## P104 — Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage
+
+`id: P104` · `status: open` · `updated: 2026-09-10`
+
+See R28 (`docs/notes/wsgi-worker-model-and-connections.md`) for the WSGI-worker-model history this
+sits alongside - that reference frames a decision still open; this records a defect already proven
+live.
+
+No `cpu_shares`, `cpuset`, or reservation exists anywhere in `docker-compose.yml` - every service's
+`cpus:` is a CFS *ceiling*, not a floor, and the ceilings sum to ~20.75 CPU across `app` (2,
+`docker-compose.yml:325`), `app-ws` (1, `:411`), `nginx` (2, `:458`), `media-nginx` (2, `:518`),
+`db` (2, `:564`), `celery-worker` (2, `:618`), `celery-worker-panels` (1, `:668`), `media-worker`
+(2, `:734`), `media-worker-batch` (1, `:766`), `celery-beat` (0.5, `:808`), `celery-metrics` (0.5,
+`:867`), `clamav` (2, `:903`), `valkey` (1, `:951`), `egress-proxy` (0.25, `:997`), `ai-inference`
+(0.5, `:1082`), `ai-worker` (1, `:1150`). A CPU limit on Celery would not have prevented the
+incident below, because CPU was never the shared, exhaustible resource - **Postgres connections
+are**: `max_connections` is the stock 100 (no override anywhere in the tree - confirmed via the
+`db` service's environment block, `docker-compose.yml:544-546`, and `settings/base.py`),
+`CONN_MAX_AGE=0` (`settings/base.py:272`), there is no connection pooler anywhere in the tree, and
+every container connects as the same `POSTGRES_USER` role (`docker-compose.yml:544`), so there is
+no per-role cap even in principle. `docker-compose.yml`'s own comment on the `db` service
+(`:560-563`) estimates "~25-30 simultaneous backends" against `WEB_CONCURRENCY` gunicorn workers
+plus daphne plus both Celery workers; the web tier is additionally unbounded on top of that because
+gevent's per-worker greenlet count is not itself capped by `WEB_CONCURRENCY` (that variable sets
+*worker process* count, not concurrent-request count within a worker).
+
+**This already happened**: an 11-hour production outage with the database reporting 97/100
+connections idle and 3,360 `FATAL: sorry, too many clients already` (Postgres error 53300) events
+logged. Not re-investigated this session for the incident's own postmortem/timeline - recorded here
+as the evidence that the connection ceiling, not CPU, is the resource that actually ran out.
+
+Not fixed: needs either a connection pooler (pgbouncer or equivalent) or per-role `CONNECTION
+LIMIT`s on Postgres roles, not a cgroup change. No decision recorded on which.
+
+## P105 — A Valkey outage locks every user out of logging in, while already-signed-in browsing keeps working
+
+`id: P105` · `status: open` · `updated: 2026-09-10`
+
+Found by reading the failure path while designing the Valkey split (D11), not by an incident. The
+chaos spec that demonstrates it is not yet written; treat the shape as verified from source and the
+user-visible consequence as predicted.
+
+`SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"` with `SESSION_CACHE_ALIAS =
+"default"` over the stock `django.core.cache.backends.redis.RedisCache`
+(`settings/base.py:289-307`). The settings comment there says "cached_db writes through to the
+database so sessions survive a cache flush", which is true for a *flush* and, it turns out, for
+most of an *outage* too - but not all of it.
+
+Django wraps the two paths people assume break, and leaves three unwrapped
+(`django/contrib/sessions/backends/cached_db.py`, Django 6.0.6):
+
+- `load()` catches bare `Exception` and falls through to `_get_session_from_db()`. A signed-in
+  request therefore keeps working with Valkey down.
+- `save()` catches bare `Exception` and logs. Session writes keep working.
+- `exists()` does `(prefix + session_key) in self._cache` with **no** guard. `_get_new_session_key()`
+  calls it in a loop, and `create()` calls that - so `cycle_key()`, which Django's login does, raises.
+- `delete()` calls `self._cache.delete(...)` with **no** guard, and `flush()` calls `delete()` - so
+  logout raises.
+
+The login path fails even earlier, in this codebase's own code rather than Django's: `LoginView`
+calls `_is_locked_out()` (`controllers/account.py:873` → `:67-68`), which is a bare `cache.get()`.
+The brute-force counters around it (`:92-97`, `:197`, `:261`, `:286`, `:310`, `:343`) and the
+passphrase/password rate limiters (`:1395-1398`, `:1441-1444`) are the same shape. Other unguarded
+request-path callers: `controllers/immich.py:96,100,286,295` (scan status, thumbnail proxy) and
+`controllers/flickr.py:126` (OAuth request token).
+
+So the outage profile is: **existing sessions browse fine; nobody can log in or out; a signed-out
+user cannot get in at all.** Worth stating because the intuition ("Valkey is a cache, the site
+degrades") is right about pages and wrong about the door.
+
+Note before fixing: `_is_locked_out` failing *open* would be worse than failing closed - it is the
+brute-force gate. A wrapper that turns cache errors into misses must not be applied blindly to the
+lockout keys; those want an explicit decision (fail closed with a 503, or fall back to a DB-backed
+counter), not a silent miss.
+
+Not fixed. See D11 for the Valkey split this sits inside; the chaos spec is the reproduction.
+
+## P106 — Reordering labels changes which icon a pin draws, but never tells the client
+
+`id: P106` · `status: open` · `updated: 2026-09-10`
+
+`_winning_display_label` sorts a pin's labels by `-order`, so a label's `order` decides which label
+supplies the pin's icon and colour when the pin has none of its own
+(`services/map_pins/payload.py`). Every reorder path knows this and invalidates the *server* cache
+for it - and every one of them stops there:
+
+- `controllers/labels.py:918-923` (`LabelReorderView`)
+- `controllers/organize.py:238-243`
+- `external_api/views_labels_bulk.py:80-85` and `:174-182`
+
+All four do `Label.objects.bulk_update(..., ["order"])` then
+`refresh_map_pin_cache_for_label_ids(...)`, each with a comment explaining that `bulk_update` fires
+no `post_save` so the receiver would otherwise not run. Correct as far as it goes. But the *client*
+does not read that cache - it polls `map.pins.meta`, which is `Max(Pin.updated)` over the profile's
+root pins (`controllers/maps.py:766`), and `bulk_update` does not touch `auto_now` columns, so no
+pin's `updated` moves. The poll sees nothing, `_refreshAllPins` never runs, and the browser keeps
+drawing the old icon from its own cache until that expires (6 h) or the user hard-refreshes.
+
+Every *other* label write does bump it, which is what makes the omission easy to miss:
+`controllers/labels.py:843` (edit) and `services/labels/customization.py:99,118` both run
+`Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())` with a comment
+saying exactly why.
+
+Not measured against a browser this session - the mechanism is read from source. The fix is not a
+fourth copy of that `UPDATE`: D12 replaces `Max(updated)` with a derived fingerprint and routes
+every one of these sites through a single `services/map_pins/touch.py`, so the next write path that
+forgets is a missing call to one named function rather than a silently absent statement.
