@@ -1,0 +1,188 @@
+"""Finding the densest group of points without comparing every pair.
+
+The map centres itself on the largest regional concentration of an account's
+pins rather than on their average, because an average puts someone with pins in
+Detroit and Berlin in the middle of the Atlantic.
+
+Written as a spatial histogram because the obvious formulation is quadratic.
+Asking "which point has the most neighbours within R" reads as one line and
+costs one great-circle calculation per *pair*: at 20,000 pins that is 400
+million of them, which was measured at about seven minutes of pure Python with
+the process serving nothing else (P108). The histogram answers the same question
+by counting occupancy of fixed cells, so the cost is one pass over the points
+plus a bounded number of dictionary lookups, and the number of cells depends on
+the radius and the size of the planet rather than on how many pins the account
+has.
+
+The seed cell is an approximation - the densest *cell neighbourhood* rather than
+the exact point of maximum local density - while cluster membership and the
+returned centroid are exact. Compared against the pairwise scan over clustered,
+polar, antimeridian-straddling and tied point sets, the two agree exactly
+wherever the points have a densest region at all. They diverge only where the
+question has no single answer: two concentrations of equal size, or points
+spread evenly enough that every one of them has the same number of neighbours.
+The pairwise scan resolved those by returning whichever point the database
+listed first, so there is nothing there to preserve; this at least resolves them
+the same way every time, on the cell index.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+import math
+from typing import TYPE_CHECKING
+
+from urbanlens.dashboard.services.geo import distance
+from urbanlens.dashboard.services.geo.longitude import circular_mean_longitude
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+
+#: Mean Earth radius in kilometres, matching ``distance.EARTH_RADIUS_METERS``.
+EARTH_RADIUS_KM = distance.EARTH_RADIUS_METERS / 1000.0
+
+#: Cell side as a fraction of the radius' chord length. Half means the block
+#: summed below spans roughly one and a half radii, so a concentration sitting
+#: across a cell boundary is still counted as one.
+_CELL_FRACTION = 0.5
+
+#: Cell offsets summed around a candidate, per axis. One is enough to make the
+#: histogram boundary-insensitive; more would widen the neighbourhood past the
+#: radius it is meant to approximate.
+_BLOCK_RADIUS = 1
+
+#: Passes of "take the points within the radius, move to their centre". Two is
+#: enough to leave the histogram's cell geometry behind; the cost is one
+#: great-circle calculation per point per pass, so this is the constant the
+#: scaling test in ``test_map_center_scaling.py`` measures.
+_REFINEMENT_PASSES = 2
+
+Point = tuple[float, float]
+
+
+def densest_cluster_centroid(points: Sequence[Point], radius_km: float) -> Point | None:
+    """Centre of the largest concentration of points within ``radius_km``.
+
+    Args:
+        points: ``(latitude, longitude)`` pairs in degrees. May be empty.
+        radius_km: How far apart two points can be and still count as part of
+            the same concentration. Must be positive.
+
+    Returns:
+        The concentration's ``(latitude, longitude)`` centroid, or None when
+        ``points`` is empty. Latitude is averaged arithmetically and longitude
+        as a direction, so a cluster straddling the antimeridian centres on the
+        cluster rather than in the Atlantic.
+
+    Raises:
+        ValueError: If ``radius_km`` is not positive.
+    """
+    if radius_km <= 0:
+        raise ValueError(f"radius_km must be positive, got {radius_km}")
+    if not points:
+        return None
+    if len(points) == 1:
+        return points[0]
+
+    cells = [_cell_of(point, radius_km) for point in points]
+    # Falls back to the block itself rather than to every point: if refinement
+    # never lands on anything, the answer should still be "where the pins are"
+    # and not the average of two continents.
+    cluster = _densest_block(points, cells)
+    seed = _centroid(cluster)
+
+    for _ in range(_REFINEMENT_PASSES):
+        nearby = [point for point in points if distance.haversine_km(seed[0], seed[1], point[0], point[1]) <= radius_km]
+        if not nearby:
+            # The seed drifted off every point. Keep the previous membership
+            # rather than returning a centre no pin is anywhere near.
+            break
+        cluster = nearby
+        seed = _centroid(cluster)
+
+    return _centroid(cluster)
+
+
+def _densest_block(points: Sequence[Point], cells: Sequence[tuple[int, int, int]]) -> list[Point]:
+    """The points in the most occupied cell neighbourhood.
+
+    Args:
+        points: The points being clustered.
+        cells: Each point's cell index, in the same order.
+
+    Returns:
+        Every point in the winning block. Never empty, since the winning cell
+        is one that holds at least one point.
+    """
+    occupancy = Counter(cells)
+    # Ties broken on the cell index so the answer does not depend on the order
+    # the database happened to return the rows in.
+    best = max(occupancy, key=lambda cell: (_block_total(occupancy, cell), cell))
+    block = {(best[0] + dx, best[1] + dy, best[2] + dz) for dx in range(-_BLOCK_RADIUS, _BLOCK_RADIUS + 1) for dy in range(-_BLOCK_RADIUS, _BLOCK_RADIUS + 1) for dz in range(-_BLOCK_RADIUS, _BLOCK_RADIUS + 1)}
+    return [point for point, cell in zip(points, cells, strict=True) if cell in block]
+
+
+def _block_total(occupancy: Counter[tuple[int, int, int]], cell: tuple[int, int, int]) -> int:
+    """How many points sit in ``cell`` and the cells immediately around it.
+
+    Args:
+        occupancy: Point count per cell.
+        cell: The cell at the centre of the block.
+
+    Returns:
+        The block's total occupancy.
+    """
+    x, y, z = cell
+    return sum(occupancy.get((x + dx, y + dy, z + dz), 0) for dx in range(-_BLOCK_RADIUS, _BLOCK_RADIUS + 1) for dy in range(-_BLOCK_RADIUS, _BLOCK_RADIUS + 1) for dz in range(-_BLOCK_RADIUS, _BLOCK_RADIUS + 1))
+
+
+def _cell_of(point: Point, radius_km: float) -> tuple[int, int, int]:
+    """Which cell of the lattice a point falls in.
+
+    Cells are cut from a cubic lattice in the unit sphere's own coordinates
+    rather than from a latitude/longitude grid, because lat/lng cells shrink
+    towards the poles and would make polar accounts look artificially dense.
+
+    Args:
+        point: ``(latitude, longitude)`` in degrees.
+        radius_km: The clustering radius, which sets the cell size.
+
+    Returns:
+        The cell's integer index on each axis.
+    """
+    side = _CELL_FRACTION * _chord_length(radius_km)
+    latitude, longitude = math.radians(point[0]), math.radians(point[1])
+    cos_latitude = math.cos(latitude)
+    return (
+        math.floor(cos_latitude * math.cos(longitude) / side),
+        math.floor(cos_latitude * math.sin(longitude) / side),
+        math.floor(math.sin(latitude) / side),
+    )
+
+
+def _chord_length(radius_km: float) -> float:
+    """Straight-line distance across the sphere for a given surface distance.
+
+    Args:
+        radius_km: Surface distance in kilometres.
+
+    Returns:
+        The corresponding chord on a unit sphere, capped at 2 (the diameter),
+        which is what a radius past the far side of the planet amounts to.
+    """
+    angle = min(radius_km / EARTH_RADIUS_KM, math.pi)
+    return 2.0 * math.sin(angle / 2.0)
+
+
+def _centroid(points: Iterable[Point]) -> Point:
+    """Average a set of points, treating longitude as a direction.
+
+    Args:
+        points: ``(latitude, longitude)`` pairs. Must not be empty.
+
+    Returns:
+        The average ``(latitude, longitude)``.
+    """
+    collected = list(points)
+    latitude = sum(point[0] for point in collected) / len(collected)
+    return latitude, circular_mean_longitude([point[1] for point in collected])

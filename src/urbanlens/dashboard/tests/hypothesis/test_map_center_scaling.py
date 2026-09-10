@@ -1,9 +1,8 @@
-"""The map page's own centre calculation compares every pin with every other one.
+"""The map page's centre calculation stays linear in the size of the account.
 
-`Profile.compute_map_center` picks the densest cluster by asking, for each
-point, how many other points are within `_CLUSTER_RADIUS_KM` — which is one
-great-circle calculation per *pair*, in Python, on the critical path of
-`view_map`. That is O(n^2), and it is not a theoretical concern:
+`Profile.compute_map_center` picks the densest cluster of pins, and the obvious
+way to do that compares every point with every other one. That is what it did,
+on the critical path of `view_map`:
 
 | pins | haversine calls | measured on chiron |
 |---|---|---|
@@ -14,16 +13,16 @@ great-circle calculation per *pair*, in Python, on the critical path of
 Found by a 20,000-pin load fixture, where a single `GET /dashboard/map/` pinned
 one core and served nothing for nine minutes; every other request to that
 process waited behind it, which is the availability invariant failing on one
-account's ordinary page load.
+account's ordinary page load (P108). `services.geo.clustering` replaced the
+pairwise scan with a spatial histogram plus a fixed number of refinement passes,
+so the work per pin is now a constant.
 
 **Counted, not timed.** A wall-clock assertion on a shared host is a flaky test
 that gets deleted; the number of pairwise comparisons is exact, machine
-independent, and is the actual defect.
+independent, and is the actual property worth holding.
 
-The reproductions are `xfail(strict=True)`: green while the defect stands, and
-failing as XPASS the day it is fixed, so the fix cannot land without this being
-revisited. The guards beside them are not xfail — they assert the test is
-exercising the real path, because a reproduction that silently stopped calling
+The guards below are what distinguish "the calculation is cheap" from "the test
+stopped reaching the calculation" - a reproduction that silently stopped calling
 the code under test would look exactly like a fix.
 """
 
@@ -34,7 +33,6 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.integration_testing.perf_seed import (
@@ -90,15 +88,14 @@ def count_haversine_calls(profile: Profile) -> int:
     return calls
 
 
-class TheMapCentreComparesEveryPairTests(TestCase):
-    """The defect itself, asserted on call counts."""
+class TheMapCentreDoesNotComparePairsTests(TestCase):
+    """The cost per pin, asserted on call counts."""
 
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.profile: Profile = baker.make(User).profile
 
-    @pytest.mark.xfail(strict=True, reason="P108: compute_map_center compares every pin with every other one")
     def test_it_does_not_compare_every_pin_with_every_other_one(self) -> None:
         seed_heavy_account(self.profile, pins=SMALL, analyze=False)
 
@@ -110,7 +107,6 @@ class TheMapCentreComparesEveryPairTests(TestCase):
             f"{calls} great-circle calculations for {SMALL} pins is {calls / SMALL:.1f} per pin, which is a pairwise scan",
         )
 
-    @pytest.mark.xfail(strict=True, reason="P108: doubling the account quadruples the work")
     def test_doubling_the_account_does_not_quadruple_the_work(self) -> None:
         seed_heavy_account(self.profile, pins=SMALL, analyze=False)
         small = count_haversine_calls(self.profile)
@@ -125,12 +121,12 @@ class TheMapCentreComparesEveryPairTests(TestCase):
         )
 
 
-class TheReproductionIsRealTests(TestCase):
-    """Guards, deliberately not xfail.
+class TheMeasurementIsRealTests(TestCase):
+    """Guards.
 
-    Each of these would pass just as happily against a broken reproduction, so
-    they are what distinguishes "the defect is gone" from "the test stopped
-    reaching the code".
+    Each of these would pass just as happily against a test that had stopped
+    calling the code under test, which is the way a scaling assertion goes
+    quietly wrong.
     """
 
     def setUp(self) -> None:
@@ -139,7 +135,7 @@ class TheReproductionIsRealTests(TestCase):
         self.profile: Profile = baker.make(User).profile
 
     def test_the_counter_sees_the_real_call_path(self) -> None:
-        """If this reaches zero, the xfail tests above are asserting nothing."""
+        """If this reaches zero, the counts asserted above are asserting nothing."""
         seed_heavy_account(self.profile, pins=SMALL, analyze=False)
 
         self.assertGreater(

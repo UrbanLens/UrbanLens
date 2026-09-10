@@ -849,39 +849,30 @@ class Profile(abstract.PublicDashboardModel):
         """Find the densest geographic cluster of pins and return its centroid.
 
         A naive average breaks when the user has pins on multiple continents -
-        the centre point ends up in the ocean between them.  Instead we find the
-        "seed" point with the most neighbours within _CLUSTER_RADIUS_KM, then
-        return the centroid of those neighbours.  For a single tight collection
-        this equals the regular centroid; for intercontinental spreads the
-        largest regional cluster wins.
+        the centre point ends up in the ocean between them. The largest regional
+        concentration wins instead, which for a single tight collection is the
+        ordinary centroid.
+
+        The clustering itself is in ``services.geo.clustering``, which finds that
+        concentration in a single pass. This sits on the critical path of the map
+        page, so its cost has to depend on the radius rather than on how many
+        pins the account holds.
 
         Returns:
             (latitude, longitude) as floats, or None if the user has no pins
             with resolvable coordinates.
         """
         from urbanlens.dashboard.models.pin.model import Pin
-        from urbanlens.dashboard.services.geo.longitude import circular_mean_longitude
+        from urbanlens.dashboard.services.geo.clustering import densest_cluster_centroid
 
         # A Pin's coordinates live on its linked Location (see AddressableModel).
-        rows = list(Pin.objects.filter(profile=self).values_list("location__latitude", "location__longitude"))
+        rows = Pin.objects.filter(profile=self).values_list("location__latitude", "location__longitude")
         pts = [(float(lat), float(lng)) for lat, lng in rows if lat is not None and lng is not None]
-        if not pts:
+
+        centre = densest_cluster_centroid(pts, _CLUSTER_RADIUS_KM)
+        if centre is None:
             return None
-
-        # For each point count how many other points fall within the cluster radius.
-        # The point with the highest count is the cluster seed.
-        best_idx = max(
-            range(len(pts)),
-            key=lambda i: sum(1 for other in pts if _haversine_km(pts[i], other) <= _CLUSTER_RADIUS_KM),
-        )
-
-        seed = pts[best_idx]
-        cluster = [p for p in pts if _haversine_km(seed, p) <= _CLUSTER_RADIUS_KM]
-        avg_lat = sum(p[0] for p in cluster) / len(cluster)
-        # Circular mean: the cluster is found with haversine (which handles the
-        # wrap), but averaging its longitudes arithmetically put a user whose
-        # pins straddle the date line at longitude 0 - in the Atlantic.
-        avg_lng = circular_mean_longitude([p[1] for p in cluster])
+        avg_lat, avg_lng = centre
 
         Profile.objects.filter(pk=self.pk).update(
             map_center_latitude=avg_lat,
