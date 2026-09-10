@@ -27,7 +27,7 @@ on purpose until it lands. Each phase's acceptance is a measurement, not a revie
 |---|---|---|
 | 0 | Verify HEAD; record P105, P106, N15, D11, D12, PL7; archive P99 | **done 2026-09-10** |
 | 1 | The neighbour test (k6), per-endpoint pytest gates, chaos specs — all red | **partly done 2026-09-10** |
-| 2 | Config-only shedding and telemetry, deployable under today's gevent | not started |
+| 2 | Config-only shedding and telemetry, deployable under today's gevent | **partly done 2026-09-10** |
 | 3 | `gthread`, per-role Postgres users, `app-heavy` pool (D11) | not started |
 | 4 | Valkey split + degradable session path (P105) | not started |
 | 5 | Map data contract v11 (D12) | not started |
@@ -68,6 +68,12 @@ Landed (`57b234277`, `c03618f6b`), all verified in the app container:
   `RenderTimeScalingMixin` was measured and **rejected** — CPU separates the
   classes worse (41.2x against 48.5x) and leaves less margin before a false
   failure. The mixin keeps its calibrated clock.
+- **`EndpointScalingMixin`** with the bytes/row, rows-fetched/row and
+  payload-ceiling axes, plus six known-cost views to prove each can fail. It
+  found **P107** on its first real use: `SavedFilterMatchCountsView` reads every
+  root pin's uuid to draw one number per saved filter, which all three older
+  instruments correctly call flat. `map.pins.children` is gated too — it was
+  never moved to the projection path when the main map was.
 
 Two traps found while writing those, both now documented in the test files
 because the next person will hit them the same way: a reproduction whose work
@@ -81,6 +87,40 @@ Still to do in this phase: the `EndpointScalingCase` generalisation with the
 bytes/row and rows-fetched/row axes (self-contained, here), the k6 neighbour
 scenario and its seed command, and the chaos scenarios. The last two block on the
 infra-repo asks in N16.
+
+## Phase 2 — partly done 2026-09-10
+
+Four config changes, all deployable under today's gevent and none of them
+requiring D11's process-model move first:
+
+- **`--worker-connections 20 --backlog 256`** (`package.json`, reasoning in
+  `gunicorn.conf.py`'s docstring since a JSON file cannot carry one). gevent
+  defaults to 1000 greenlets per worker and each can hold its own backend under
+  `CONN_MAX_AGE=0`, so three workers could demand 3,000 connections against 100.
+  Arithmetic: ~32 of the 97 usable slots belong to daphne, the four Celery
+  workers and beat, leaving ~65 for the web tier, and 3 × 20 = 60 fits.
+  **It bounds the steady state, not the peak** — `timeout_utils.py` holds a
+  module-level `ThreadPoolExecutor(max_workers=64)` per worker process whose
+  threads can touch the ORM, and nothing caps its connection use. Per-role
+  `CONNECTION LIMIT`s (phase 3) are what actually fence that, because a role
+  limit makes the web tier fail its own connections rather than starving Celery.
+- **`profiles: ["metrics"]` on `celery-metrics`** — N15's fix. The precondition
+  was stated in a comment and implemented nowhere.
+- **nginx timing fields** in `log_format main`: `rt`, `urt`, `ust`, `uct`, `up`.
+  A 504 nginx generated while the worker was still computing was previously
+  indistinguishable in the log from one the application returned; `ust=-` versus
+  `ust=504` is that distinction.
+- **`application_name` per process role** in `DATABASES.OPTIONS`. When P104's
+  outage showed 97 of 100 connections idle, nothing recorded which tier held
+  them.
+
+Guarded by `test_connection_budget_wiring.py`, which computes the connection
+budget from the compose file rather than hardcoding it — so raising
+`WEB_CONCURRENCY` or the per-worker cap fails there instead of in production.
+
+Not done in this phase: `RequestTelemetryMiddleware` and the slow-request log,
+`pg_stat_statements` on the `db` service, `/health/ready` connection headroom,
+`cpu_shares`/`mem_reservation`, and the nginx `limit_req`/`limit_conn` zones.
 
 ## Phase 1 — the tests that state the invariant
 

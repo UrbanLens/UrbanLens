@@ -842,9 +842,20 @@ services:
       # variable set silently put it in the other mode.
       PROMETHEUS_MULTIPROC_DIR:
       # Follows `app`. The command exits rather than binding an unguarded port,
-      # so this service simply restarts in a loop if metrics are off - hence
-      # deploying it is conditional on the same flag.
+      # so this service would restart in a loop if metrics were off - which is
+      # what `profiles:` below now prevents.
       UL_METRICS_ENABLED: ${UL_METRICS_ENABLED:-false}
+    # The condition above used to be stated only in a comment, and a comment does
+    # not gate anything: `docker compose up` started this unconditionally and
+    # `restart: unless-stopped` retried forever. Measured on staging 2026-09-10 -
+    # 2,578 restarts and still going, each one paying a full `django.setup()`
+    # (178 MiB), and staging had therefore never had Celery task metrics at all.
+    # A crash-looping container reads as a running one at a glance, which is what
+    # made it survive that long. Set COMPOSE_PROFILES=metrics alongside
+    # UL_METRICS_ENABLED=true to deploy it; the CommandError stays, because
+    # refusing to serve without the flag is correct - it just should not be
+    # reachable. See N15.
+    profiles: ["metrics"]
     labels:
       prometheus_scrape: "${UL_METRICS_ENABLED:-false}"
       prometheus_port: "8002"

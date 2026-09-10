@@ -4,6 +4,37 @@ Loaded explicitly via ``-c gunicorn.conf.py`` in package.json's ``start``
 script. Worker count is not set here: gunicorn reads the ``WEB_CONCURRENCY``
 environment variable natively (see docker-compose.yml, where it defaults
 to 3).
+
+Why ``--worker-connections 20`` is on that command line, since package.json
+cannot carry a comment. gevent's default is **1000 greenlets per worker**, and
+under ``CONN_MAX_AGE=0`` each greenlet serving a request can hold its own
+Postgres backend - so three workers could demand three thousand connections
+against ``max_connections=100``. That is the mechanism behind P104's outage,
+which read 97 of 100 connections *idle*: 97 is exactly
+``max_connections - superuser_reserved_connections``, and idle means a
+connection object still alive in some process.
+
+The arithmetic, against 97 usable slots. Everything that is not the web tier
+comes to about 32 at full tilt: daphne ~2, celery-worker 4, the panels worker's
+20 threads, the two media workers 3, ai-worker 2, beat 1. That leaves ~65 for
+the web tier, and 3 x 20 = 60 fits with a little room.
+
+**This bounds the steady state, not the peak, and the difference is worth
+knowing.** ``services/core/timeout_utils.py`` holds a module-level
+``ThreadPoolExecutor(max_workers=64)`` for external-call deadlines - one per
+worker *process* - and its threads can touch the ORM (they call
+``close_old_connections`` in a ``finally`` precisely because of that). It is
+described there as rarely reached on the request path now that the panels fetch
+in Celery, but nothing caps its connection use, so a burst can exceed the
+budget above. Per-role ``CONNECTION LIMIT``s are what actually fence that (D11):
+a role limit makes the web tier fail its own connections rather than starving
+Celery of theirs. This flag removes the unbounded term; it does not make the
+number exact.
+
+``--backlog 256`` so overflow queues in the kernel rather than opening a
+connection, and D11 replaces both of these with ``gthread``, where in-process
+concurrency - and therefore the connection population - is ``workers x threads``
+by construction rather than by flag.
 """
 
 import os

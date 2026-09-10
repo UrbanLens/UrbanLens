@@ -275,7 +275,24 @@ DATABASES = {
         # unreachable: during a site failover it is unreachable by definition,
         # and a request that errors immediately is a better outcome than one
         # that occupies a worker until the client gives up.
-        "OPTIONS": {"connect_timeout": int(os.getenv("UL_DB_CONNECT_TIMEOUT", "10"))},
+        "OPTIONS": {
+            "connect_timeout": int(os.getenv("UL_DB_CONNECT_TIMEOUT", "10")),
+            # Names this process's tier in `pg_stat_activity.application_name`
+            # and in the server log's line prefix. Every container connects as
+            # the same role today, so when P104's outage showed 97 of 100
+            # connections idle, nothing recorded *which* of them held them - the
+            # postmortem could say the pool was exhausted and not by whom.
+            #
+            #   SELECT application_name, state, count(*)
+            #     FROM pg_stat_activity WHERE backend_type = 'client backend'
+            #    GROUP BY 1, 2;
+            #
+            # Costs nothing, is accepted by psycopg2 and psycopg3 alike, and is
+            # useful before D11's per-role users exist - after which the role
+            # name answers the same question and this still separates, say, the
+            # web tier from a `manage.py` run using the same credentials.
+            "application_name": f"urbanlens-{os.getenv('UL_PROCESS_ROLE', 'unknown')}",
+        },
         # UL_TEST_DB_NAME lets concurrent test runs (e.g. two working copies
         # or agent sessions on one machine) use separate test databases
         # instead of fighting over the default "test_<NAME>".
