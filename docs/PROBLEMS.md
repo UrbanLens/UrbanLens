@@ -4343,3 +4343,47 @@ Also worth fixing regardless of any of that: the "~140MB/worker idle" comment, w
 the current limit was reasoned from.
 
 Found while trying to run the neighbour suite on the real process model.
+
+## P112 — `bun run codeql:gate` fails with 26 untriaged findings, so nobody runs it
+
+`id: P112` · `status: open` · `updated: 2026-09-10`
+
+`bun run codeql:gate` exits 1. Not from any recent change: **0 of the 26 findings are in the 45 files
+touched by the availability programme** — every one predates it. Which is the problem. A gate that has
+been red long enough that its redness carries no information is a gate that gets skipped, and
+`CLAUDE.md` lists it among the manual checks to run before a PR.
+
+By rule:
+
+| n | rule |
+|---|---|
+| 6 | `py/bad-tag-filter` |
+| 4 | `js/insecure-randomness` |
+| 3 | `js/xss-through-dom` |
+| 3 | `py/path-injection` |
+| 2 | `py/clear-text-logging-sensitive-data` |
+| 1 each | `js/xss`, `js/incomplete-multi-character-sanitization`, `js/client-side-unvalidated-url-redirection`, and 5 others |
+
+The ones worth looking at first, because of what they touch rather than what CodeQL scores them:
+
+```
+py/path-injection                    controllers/media.py:249, :377, :385
+js/xss + client-side-url-redirection templates/.../messages/index.html:765
+py/clear-text-logging-sensitive-data services/undo/handlers/pin_mutation.py:37
+js/xss-through-dom                   templates/.../saved_filter_detail.html:95
+                                     templates/.../themes/base.html:1382
+                                     ts/entries/floorplan-editor.ts:4106
+```
+
+`media.py` is the one that parses user-supplied bytes and serves them back (`docs/MEDIA_PIPELINE.md`),
+so three path-injection findings there are worth reading properly even if they turn out to be
+false positives — and one `index.html` line carrying both an XSS and an open-redirect finding is
+worth reading before assuming either is.
+
+**Untriaged is the honest status.** None of these has been confirmed or dismissed; CodeQL has false
+positives and the counts above are what the tool says, not what is true. The work is per-finding:
+read it, decide, and where it is real write the exploit test before the fix — this repo's convention
+is that a vulnerability gets a failing test reproducing the attack first, always.
+
+Recorded rather than fixed because 26 findings across five rule families is its own piece of work,
+and doing it badly — dismissing in bulk to make a gate green — is worse than leaving it red.
