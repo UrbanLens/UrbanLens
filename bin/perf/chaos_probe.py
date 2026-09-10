@@ -126,6 +126,30 @@ def _authenticated_page_renders(session: Session) -> tuple[bool, str]:
     return True, "rendered"
 
 
+def _uncached_pins_answer(session: Session) -> tuple[bool, str]:
+    """The pins endpoint on a path the cache cannot serve.
+
+    `map_pins_json` only caches the profile's whole unbounded root-pin set, so a
+    `bbox` request is explicitly `cacheable=False` and must reach Postgres. The
+    plain endpoint answers `cache=hit` and touches no connection at all, which
+    makes it useless for a connection-exhaustion scenario — it passed against 97
+    of 100 backends held, having queried nothing.
+    """
+    status, body = session.get("/dashboard/map/pins/?bbox=-31,-141,-28,-138&limit=5")
+    if status == 0:
+        return False, f"no answer ({body[:60]})"
+    if status in {503, 429}:
+        # Refusing under pressure is the wanted behaviour, not a failure.
+        return True, f"refused cleanly with HTTP {status}"
+    if status != 200:
+        return False, f"HTTP {status}"
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        return False, "not JSON"
+    return "pins" in payload, f"cache={payload.get('cache', '?')}"
+
+
 def _pins_endpoint_answers(session: Session) -> tuple[bool, str]:
     status, body = session.get("/dashboard/map/pins/?limit=5")
     if status != 200:
@@ -139,7 +163,7 @@ def _pins_endpoint_answers(session: Session) -> tuple[bool, str]:
 
 def _no_traceback_leaked(session: Session) -> tuple[bool, str]:
     """A failure should be a status code, not a stack trace on the page."""
-    _, body = session.get("/dashboard/map/pins/?limit=5")
+    _, body = session.get("/dashboard/map/pins/?bbox=-31,-141,-28,-138&limit=5")
     leaked = "Traceback (most recent call last)" in body
     return not leaked, "traceback in the response body" if leaked else "clean"
 
@@ -153,8 +177,9 @@ SCENARIOS: dict[str, list[Expectation]] = {
     ],
     "connection-exhaustion": [
         Expectation("readiness answers", _health_answers),
-        # P104's shape: the endpoint should refuse quickly rather than raise.
-        Expectation("map pins answer or refuse cleanly", _pins_endpoint_answers, known="P104"),
+        # Deliberately the bbox path: the cached one answers without a
+        # connection, so it reports a pass for something it never exercised.
+        Expectation("uncached pins answer or refuse cleanly", _uncached_pins_answer, known="P104"),
         Expectation("no traceback leaked", _no_traceback_leaked, known="P104"),
     ],
     "cpu-saturation": [
