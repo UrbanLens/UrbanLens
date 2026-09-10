@@ -26,7 +26,7 @@ on purpose until it lands. Each phase's acceptance is a measurement, not a revie
 | Phase | What | Status |
 |---|---|---|
 | 0 | Verify HEAD; record P105, P106, N15, D11, D12, PL7; archive P99 | **done 2026-09-10** |
-| 1 | The neighbour test (k6), per-endpoint pytest gates, chaos specs — all red | **partly done 2026-09-10** — k6 built and run; chaos still blocked |
+| 1 | The neighbour test (k6), per-endpoint pytest gates, chaos specs — all red | **done 2026-09-10** — all three built and run, on both process models |
 | 2 | Config-only shedding and telemetry, deployable under today's gevent | **partly done 2026-09-10** |
 | 3 | `gthread`, per-role Postgres users, `app-heavy` pool (D11) | not started |
 | 4 | Valkey split + degradable session path (P105) | not started |
@@ -119,11 +119,30 @@ invariant failing on an ordinary page load, and no existing instrument watched
 that path: they all measure the payload, and this cost is neither queries nor
 objects nor bytes.
 
-Still to do in this phase: the chaos scenarios, which block on the infra-repo
-asks in N16. Also worth naming: **a development environment runs `runserver`
-under daphne, not gunicorn**, so runs against one exercise the endpoints and the
-harness but not the process model the invariant depends on. That needs
-`dev_env.py create --environment staging`.
+**Phase 1 is done.** The chaos scenarios ran too (X16), and everything was
+re-run on the real process model — `dev_env.py create --environment staging`,
+gunicorn + gevent with the phase-2 caps.
+
+The headline is that **the process model changes the answer**. On daphne, one
+user pressing a filter button cost the neighbour 4.4 seconds; on gunicorn it
+costs 221 ms against a 183 ms baseline. Every single-user phase now passes its
+budget. What still fails is concurrency — four or eight users doing the same
+expensive thing — and the 60-user storm, where the neighbour is starved outright
+because all 60 connection slots belong to one account. X15 carries the full
+table and the correction.
+
+Two of this programme's own predictions did not survive contact:
+
+- **D11 §2.1's collateral kill did not occur**, under the storm or under the most
+  CPU-bound phase. Starving gevent's heartbeat for `-t 180` needs a request that
+  *runs* for 180 seconds; ordinary heavy endpoints cost seconds. The only two
+  known candidates are P108 and P96, both fixable directly, which makes the case
+  for the gthread move materially weaker than D11 argued. Recorded there.
+- **P105 was understated.** A Valkey outage does not leave signed-in browsing
+  working — every request 500s after ~32 seconds, readiness included (X16).
+
+And one held exactly: `--worker-connections 20` capped the pool at 61/100
+backends during the storm, 60 of them web, to the connection.
 
 ## Phase 2 — partly done 2026-09-10
 
