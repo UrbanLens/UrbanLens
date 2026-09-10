@@ -4081,3 +4081,36 @@ The fix is PL7 phase 6's queue classes: `interactive` / `bulk` / `maintenance` w
 so an import's fan-out cannot delay a safety escalation, plus a bound on how many tasks one request
 may enqueue. Until then the mitigation is operational — an import of any size should be assumed to
 cost hours of background work on a shared queue.
+
+**Half of it is fixed for development, 2026-09-10.** `rate_limiter.outbound_calls_permitted` now
+refuses outbound provider calls on `development` and `local` deployments unless
+`UL_ALLOW_OUTBOUND_APIS=true`. Same code path everywhere — a refused call raises
+`ServiceDisabledError` from the same place a rate limit does, which every caller already handles,
+so nothing is mocked and no fixture has to track a provider's real response shape.
+
+Measured before and after, importing 50 pins on the same stack:
+
+| | before | after |
+|---|---|---|
+| tasks enqueued | 141 | 150 |
+| successful outbound calls | many | **0** of 247 attempts |
+| drain rate | 0.2/s | **≥2.5/s** |
+| queue cleared | ~220 min (never observed to finish) | **under 60 s** |
+
+That does *not* fix the shape of the problem, and it does nothing for staging or production, where
+the calls are supposed to happen: one queue, no class of service, and one action able to fill it are
+all still true. What it removes is a development box quietly spending a real budget, and the
+several-hour tail that made a dev stack unusable after any import.
+
+Two traps found while doing it, both recorded in
+`dashboard/tests/hypothesis/test_outbound_api_policy.py` as tests rather than comments:
+
+- **`app_settings.environment_name` is not `UL_ENVIRONMENT`.** It is a separate Pydantic field
+  defaulting to `local`, and the dev stack reports `development` for one and `local` for the other.
+  A production deployment that never sets `UL_ENVIRONMENT_NAME` reports `local` too, so a guard
+  reading it would have refused every outbound call in production. The guard reads
+  `django.conf.settings.ENVIRONMENT_NAME`, which `settings/base.py` already branches on.
+- **The suite inherits its container's `UL_ENVIRONMENT`**, which is a development one, so without an
+  explicit exemption every gateway in every test would have been disabled. Four rate-limiter tests
+  failed exactly that way before `settings.TESTING` was added to the guard. Making the suite
+  hermetic by force is worth doing and is a different change.

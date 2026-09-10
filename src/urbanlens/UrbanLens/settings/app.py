@@ -393,6 +393,19 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "UL_METRICS_TOKEN for defense in depth; either alone satisfies the startup check."
         ),
     )
+    allow_outbound_apis: bool = Field(
+        default=False,
+        description=(
+            "Permit outbound calls to external providers from a development or local deployment. "
+            "Off by default because those calls are a side effect of work nobody is watching: one "
+            "load run's pin import enqueued 2,644 background tasks that spent hours on the wire "
+            "against the production REData, which bills a step later (P109). Turn it on while "
+            "working on an integration itself. No effect outside development/local - staging and "
+            "production always call out, and the demo has its own narrower rule. Enforced in "
+            "services.core.rate_limiter.outbound_calls_permitted, the one point every gateway call "
+            "passes through."
+        ),
+    )
     demo_mode: bool = Field(
         default=False,
         description=(

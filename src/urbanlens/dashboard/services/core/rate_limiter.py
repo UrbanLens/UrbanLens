@@ -32,6 +32,7 @@ from django.db import DatabaseError, transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.exceptions import DashboardError
+from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 logger = logging.getLogger(__name__)
 
@@ -407,26 +408,73 @@ def service_is_permitted(service: str) -> bool:
     return service_is_enabled(service) and check_rate_limit(service)
 
 
-def service_is_permitted_on_demo(service: str) -> bool:
-    """Whether a demo instance may call ``service`` at all.
+#: Environments whose calls are nobody's budget to spend. A developer working on
+#: an integration sets ``UL_ALLOW_OUTBOUND_APIS=true``; everyone else, and every
+#: background task on their machine, stays off the wire.
+#:
+#: Matched against ``django.conf.settings.ENVIRONMENT_NAME``, which is
+#: ``UL_ENVIRONMENT`` - **not** ``app_settings.environment_name``, which is a
+#: separate Pydantic field that is not wired to it (see the comment at
+#: ``settings/app.py``'s ``environment_name``). The dev stack reports
+#: ``development`` for the first and ``local`` for the second, and a production
+#: deployment that never sets ``UL_ENVIRONMENT_NAME`` reports ``local`` for the
+#: second too - so reading that one here would have refused every outbound call
+#: in production. ``settings/base.py`` already branches on the same variable and
+#: the same two values.
+_UNBUDGETED_ENVIRONMENTS = frozenset({EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL})
 
-    The demo runs on somebody else's budget: every visitor is anonymous, the
+
+def outbound_calls_permitted(service: str) -> bool:
+    """Whether this deployment may call ``service`` at all.
+
+    Two separate guards, for two separate budgets, neither overriding the other.
+
+    **The demo** runs on somebody else's budget: every visitor is anonymous, the
     accounts are throwaway, and a keyed provider bills per call whether or not
-    the caller was a real prospect. REData is exempt because it is this
+    the caller was a real prospect. REData is exempt there because it is this
     project's own service - the demo is the thing it exists to show off, and
-    calling it costs nothing but our own capacity.
+    calling our own instance costs nothing but our own capacity.
+
+    **A development box** is not spending anyone's budget deliberately, which is
+    worse: the calls are a side effect of work nobody is watching. A load run
+    imported 1,000 pins and the `Pin` post_save chain enqueued 2,644 tasks, most
+    of them wiki enrichment, which then spent hours on the wire (P109). REData is
+    *not* exempt here, and that is the substantive difference from the demo rule:
+    a dev checkout's ``UL_REDATA_API_URL`` points at the production instance with
+    a live key, and REData reaches Google Places one hop later - which answered
+    ``429 ... request budget is exhausted`` during that run. "Only our own
+    capacity" stops being true at a boundary the demo guard never had to consider.
+
+    Refusing rather than mocking is deliberate. A refused call raises
+    ``ServiceDisabledError`` from the same place a rate limit does, so every
+    caller takes a path it already has to handle - providers do fail - and there
+    is no fixture to keep in step with a provider's real response shape. It also
+    means development and production run the same code down to the socket.
 
     Args:
         service: The service key.
 
     Returns:
-        True when the call is allowed. Always True off a demo instance.
+        True when the call is allowed.
     """
+    from django.conf import settings as django_settings
+
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-    if not app_settings.demo_mode:
+    if app_settings.demo_mode:
+        return service.startswith("redata")
+    # The suite runs with UL_ENVIRONMENT inherited from whatever container it is
+    # in, which is a development one - so without this every gateway in every
+    # test would be disabled, and thousands of tests would be asserting against a
+    # refusal rather than against the code they name. Tests keep themselves off
+    # the network by mocking the session, which is a separate property from this
+    # one; making the suite hermetic by force is worth doing and is not this
+    # change.
+    if getattr(django_settings, "TESTING", False):
         return True
-    return service.startswith("redata")
+    if str(getattr(django_settings, "ENVIRONMENT_NAME", "")).lower() in _UNBUDGETED_ENVIRONMENTS:
+        return bool(app_settings.allow_outbound_apis)
+    return True
 
 
 def service_is_enabled(service: str, config: Any = None) -> bool:
@@ -446,8 +494,8 @@ def service_is_enabled(service: str, config: Any = None) -> bool:
     # Checked before the config, and before the cached-config fast path, so it
     # cannot be skipped by a caller that already holds a row. This is the one
     # place every outbound call passes through (``_reserve_call``), which is why
-    # the demo's spend guard lives here rather than in each gateway.
-    if not service_is_permitted_on_demo(service):
+    # the deployment spend guards live here rather than in each of 58 gateways.
+    if not outbound_calls_permitted(service):
         return False
     if config is not None:
         return bool(config.enabled)
