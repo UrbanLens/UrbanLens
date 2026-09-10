@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P109` · `T3` · `PL8` · `D13` · `X16` · `I5` · `R29` · `N21`
+**Next free id:** `P110` · `T3` · `PL8` · `D13` · `X16` · `I5` · `R29` · `N21`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -104,6 +104,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P106 | open | 2026-09-10 | Reordering labels changes which icon a pin draws, but never tells the client | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P107 | open | 2026-09-10 | The saved-filter count badges read every pin in the account to draw a number | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P108 | open | 2026-09-10 | Opening the map compares every pin with every other pin, in Python, before the page renders | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P109 | open | 2026-09-10 | One import's task fan-out fills the only Celery queue for hours, and a safety task waits behind it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |
