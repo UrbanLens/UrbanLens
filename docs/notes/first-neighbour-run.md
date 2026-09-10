@@ -135,10 +135,50 @@ Three further things the run settles:
   starvation predicted in D11 §2.1 did not appear at this load — which is not the same as it not
   existing; `search_storm`, `map_init` and the import phases have not yet run on this model.
 
-What has *not* been re-measured on the real process model: `map_init_1/4`, `label_edit`,
-`search_storm`, `import_confirmed` and `cooldown`. Every figure for those below is still a
-development-server figure. P108 and P110 are properties of the code and are unaffected; P111 was
-found on this environment and is a property of the deployment.
+### `search_storm` on the real process model: the cap works, and the invariant fails anyway
+
+Run separately, same environment, budget 567 ms:
+
+| phase | count | p50 | p95 | max |
+|---|---|---|---|---|
+| `idle` | 250 | 69 ms | 189 ms | 427 ms |
+| `search_storm` — 60 users filtering | 148 | **60,000 ms** | 60,001 ms | 60,006 ms |
+
+**The neighbour's median request did not complete.** p50 is the harness's own 60-second timeout, and
+**173 dropped iterations — 94.8% of the arrival schedule** could not be started at all. 31% of what
+did start failed.
+
+Three things settled at once, and they do not all point the same way:
+
+- **`--worker-connections 20` does exactly what it was written to do.** Peak **61/100 backends, 60 of
+  them web, 0% idle** — `20 x 3 workers`, to the connection. Under daphne the same work reached 75
+  with nothing bounding it. P104's mechanism cannot recur while this flag is set.
+- **D11 §2.1's prediction did not happen.** Zero `WORKER TIMEOUT`, zero SIGKILL, no worker died. The
+  reasoning was that a CPU-bound request starves gevent's heartbeat greenlet and the arbiter then
+  kills the whole worker at `-t 180`. These requests are database-bound rather than CPU-bound, so the
+  heartbeat kept being scheduled. The prediction is not disproved in general — `map_init` and the
+  import phases are the CPU-bound ones and have not been run here — but it is not what happens under
+  a filter storm.
+- **And the neighbour is starved completely.** Not degraded: starved. Every one of the 60 slots is
+  held by one account's requests, and the other account's queue behind them in the backlog.
+
+**The cap bounds the blast radius, not the fairness.** It protects Postgres — and therefore every
+other tier sharing it — from one user's storm. It does nothing whatsoever to stop that user
+occupying the entire request pool. That is precisely the gap D11 §2.2's `app-heavy` bulkhead and the
+per-session `limit_conn` exist to close, and this is the first measurement showing the connection cap
+alone is not enough.
+
+Worth naming honestly: on this metric gunicorn looks *worse* than daphne, whose storm p50 was 4.3 s
+against 60 s here. That is the trade the cap makes. Unbounded threads let every request trickle
+through slowly; a bounded pool serves 60 requests properly and queues the rest absolutely. The second
+is better for the database and worse for the starved user, and neither satisfies the invariant.
+
+### Still not measured on the real process model
+
+`map_init_1/4`, `label_edit`, `import_confirmed` and `cooldown`. Every figure for those below is a
+development-server figure. The CPU-bound phases are the ones that would test D11 §2.1's prediction
+properly. P108 and P110 are properties of the code and are unaffected; P111 was found on this
+environment and is a property of the deployment.
 
 ## What this cannot tell you
 
