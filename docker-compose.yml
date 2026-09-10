@@ -323,7 +323,32 @@ services:
     # GDAL/GeoPandas/Shapely and per-worker DB/valkey pools all run in the
     # request path and push real traffic well above that
     cpus: ${CPU_LIMIT__APP:-${CPU_LIMIT:-2}}
+    # cpu_shares is the other half of `cpus:`, and the two answer different
+    # questions. `cpus:` is a CFS *ceiling* - it caps a service and reserves
+    # nothing - so with every service capped and none weighted, a busy Celery
+    # worker and the request path compete as equals for whatever the host has
+    # left. The ceilings here sum to roughly 20 CPU against 16 cores, and
+    # production and staging both run on damballa, so that competition is real
+    # rather than theoretical.
+    #
+    # A weight only bites under contention: when the host is not short, nothing
+    # changes. When it is, this decides who yields. Roughly 8:1 between the
+    # request path and a background worker, which is a preference rather than a
+    # guarantee - a cgroup weight cannot promise latency, and the thing that
+    # actually stops one user's work reaching another's is the bounded pools in
+    # D11. Docker maps this to cgroup v2's cpu.weight (damballa is v2; check
+    # with `docker info | grep -i cgroup` before assuming elsewhere).
+    #
+    # No entry for the test-* services: they are not production contenders, and
+    # a weight on the test runner would only slow the suite.
+    #
+    # the request path; nothing else on this host matters more
+    cpu_shares: ${CPU_SHARES__APP:-2048}
     mem_limit: ${MEM_LIMIT__APP:-${MEM_LIMIT:-2g}}
+    # A soft floor, unlike mem_limit's hard ceiling: under host memory pressure
+    # the kernel reclaims from services above their reservation before this one.
+    # Set here and on db only - a reservation on everything reserves nothing.
+    mem_reservation: ${MEM_RESERVATION__APP:-768m}
 
   # Dedicated ASGI (Daphne) process for WebSocket traffic only (safety check-in
   # chat, etc).
@@ -409,6 +434,8 @@ services:
     # registry import, unamortized). An OOM-kill here drops every open
     # WebSocket at once, so this gets generous headroom
     cpus: ${CPU_LIMIT__APP_WS:-${CPU_LIMIT:-1}}
+    # a dropped WebSocket is a user-visible failure, not a delay
+    cpu_shares: ${CPU_SHARES__APP_WS:-2048}
     mem_limit: ${MEM_LIMIT__APP_WS:-${MEM_LIMIT:-1g}}
 
   nginx:
@@ -456,6 +483,8 @@ services:
     # ~3MB. cpus matches the hardcoded worker count exactly; a third core
     # would go unused
     cpus: ${CPU_LIMIT__NGINX:-${CPU_LIMIT:-2}}
+    # cheap, and everything upstream is behind it
+    cpu_shares: ${CPU_SHARES__NGINX:-1024}
     mem_limit: ${MEM_LIMIT__NGINX:-${MEM_LIMIT:-128m}}
 
   # The media origin (media.urbanlens.org). Point NGINX Proxy Manager at
@@ -516,6 +545,8 @@ services:
     # Same profile as `nginx`: worker_processes is 2 in the shared nginx.conf,
     # and this vhost does strictly less than that one.
     cpus: ${CPU_LIMIT__MEDIA_NGINX:-${CPU_LIMIT:-2}}
+    # same, for the media path
+    cpu_shares: ${CPU_SHARES__MEDIA_NGINX:-1024}
     mem_limit: ${MEM_LIMIT__MEDIA_NGINX:-${MEM_LIMIT:-128m}}
 
   db:
@@ -562,7 +593,12 @@ services:
     # gunicorn+daphne+both celery workers - a plausible ~25-30 simultaneous
     # backends against default shared_buffers/work_mem.
     cpus: ${CPU_LIMIT__DB:-${CPU_LIMIT:-2}}
+    # starving Postgres slows every other service at once
+    cpu_shares: ${CPU_SHARES__DB:-2048}
     mem_limit: ${MEM_LIMIT__DB:-${MEM_LIMIT:-2g}}
+    # Postgres degrades badly when its page cache is reclaimed out from under it,
+    # and every other service waits on it when it does.
+    mem_reservation: ${MEM_RESERVATION__DB:-1g}
 
   celery-worker:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_worker
@@ -616,6 +652,8 @@ services:
     # recycling. This container-level ceiling is the fast circuit breaker for
     # exactly that case. Should re-assess with time and code changes.
     cpus: ${CPU_LIMIT__CELERY_WORKER:-${CPU_LIMIT:-2}}
+    # interactive tasks: a user is usually waiting
+    cpu_shares: ${CPU_SHARES__CELERY_WORKER:-256}
     mem_limit: ${MEM_LIMIT__CELERY_WORKER:-${MEM_LIMIT:-3g}}
 
   celery-worker-panels:
@@ -666,6 +704,8 @@ services:
     # task the way celery-worker's prefork pool is - idle is ~242MB with
     # GDAL/GeoPandas/Pillow already resident.
     cpus: ${CPU_LIMIT__CELERY_PANELS:-${CPU_LIMIT:-1}}
+    # fetches panels a page is waiting on
+    cpu_shares: ${CPU_SHARES__CELERY_WORKER_PANELS:-256}
     mem_limit: ${MEM_LIMIT__CELERY_PANELS:-${MEM_LIMIT:-1g}}
 
   # The sandbox tier: every task that points a parser at bytes a user uploaded
@@ -732,6 +772,8 @@ services:
     # and comes out of this same number, so this is ~2g of processes and 1g of
     # scratch rather than 3g of processes.
     cpus: ${CPU_LIMIT__MEDIA_WORKER:-${CPU_LIMIT:-2}}
+    # background media work, progress-tracked
+    cpu_shares: ${CPU_SHARES__MEDIA_WORKER:-128}
     mem_limit: ${MEM_LIMIT__MEDIA_WORKER:-3g}
 
   # Same sandbox, different pool. Batch imports (`run_user_data_import`, and any
@@ -764,6 +806,8 @@ services:
       # than holding the archive in memory.
       - /tmp:size=2g,mode=1777,noexec,nosuid,nodev
     cpus: ${CPU_LIMIT__MEDIA_WORKER_BATCH:-${CPU_LIMIT:-1}}
+    # long archive walks; the most yielding thing here
+    cpu_shares: ${CPU_SHARES__MEDIA_WORKER_BATCH:-64}
     mem_limit: ${MEM_LIMIT__MEDIA_WORKER_BATCH:-3g}
 
   celery-beat:
@@ -806,6 +850,8 @@ services:
     # per-task-type lazy imports (GeoPandas/Shapely/Pillow/...) that inflate
     # the actual workers ever trigger here.
     cpus: ${CPU_LIMIT__CELERY_BEAT:-${CPU_LIMIT:-0.5}}
+    # tiny, and late scheduling cascades
+    cpu_shares: ${CPU_SHARES__CELERY_BEAT:-256}
     mem_limit: ${MEM_LIMIT__CELERY_BEAT:-${MEM_LIMIT:-512m}}
 
   # Consumes the Celery event stream and exposes it as Prometheus metrics.
@@ -876,6 +922,8 @@ services:
     # state can cross; the earlier figure only counted what the exporter adds on
     # top of Django rather than the total.
     cpus: ${CPU_LIMIT__CELERY_METRICS:-${CPU_LIMIT:-0.5}}
+    # observability must never cost the thing it observes
+    cpu_shares: ${CPU_SHARES__CELERY_METRICS:-64}
     mem_limit: ${MEM_LIMIT__CELERY_METRICS:-${MEM_LIMIT:-512m}}
 
   # clamd daemon every upload is scanned through before
@@ -912,6 +960,8 @@ services:
     # with zero headroom for the ~2x transient spike SelfCheck's daily
     # signature reload can cause while the old DB is still resident.
     cpus: ${CPU_LIMIT__CLAMAV:-${CPU_LIMIT:-2}}
+    # uploads wait on it, but nothing user-facing blocks
+    cpu_shares: ${CPU_SHARES__CLAMAV:-128}
     mem_limit: ${MEM_LIMIT__CLAMAV:-${MEM_LIMIT:-2g}}
 
   valkey:
@@ -960,6 +1010,8 @@ services:
     # 1g covers allocator
     # fragmentation and fork()-based COW headroom above the internal cap
     cpus: ${CPU_LIMIT__VALKEY:-${CPU_LIMIT:-1}}
+    # sessions and the broker; single-threaded, so a slice matters
+    cpu_shares: ${CPU_SHARES__VALKEY:-1024}
     mem_limit: ${MEM_LIMIT__VALKEY:-${MEM_LIMIT:-1g}}
 
   # --- AI sandbox tier (docs/AI_PIPELINE.md) ----------------------------------
@@ -1006,6 +1058,8 @@ services:
         max-size: "200k"
         max-file: "10"
     cpus: ${CPU_LIMIT__EGRESS_PROXY:-0.25}
+    # in the path of any outbound call
+    cpu_shares: ${CPU_SHARES__EGRESS_PROXY:-256}
     mem_limit: ${MEM_LIMIT__EGRESS_PROXY:-128m}
     pids_limit: 32
 
@@ -1091,6 +1145,8 @@ services:
     # gevent - see the plan's architecture note. Memory stays low with nothing
     # cached between requests.
     cpus: ${CPU_LIMIT__AI_INFERENCE:-0.5}
+    # user-facing but degradable
+    cpu_shares: ${CPU_SHARES__AI_INFERENCE:-512}
     mem_limit: ${MEM_LIMIT__AI_INFERENCE:-512m}
     pids_limit: 64
 
@@ -1159,6 +1215,8 @@ services:
     # Two prefork children, each a full Django import plus HTTP-bound work -
     # no transcoding, no tmpfs scratch, so well below media-worker's profile.
     cpus: ${CPU_LIMIT__AI_WORKER:-${CPU_LIMIT:-1}}
+    # background inference, progress-tracked
+    cpu_shares: ${CPU_SHARES__AI_WORKER:-128}
     mem_limit: ${MEM_LIMIT__AI_WORKER:-${MEM_LIMIT:-1g}}
 
   # --- Test topology (opt-in: docker compose --profile test ...) -------------

@@ -143,8 +143,19 @@ budget from the compose file rather than hardcoding it — so raising
   probe that fails closed on a missing read privilege takes the site down over a
   permissions choice.
 
-Not done in this phase: `pg_stat_statements` on the `db` service,
-`cpu_shares`/`mem_reservation`, and the nginx `limit_req`/`limit_conn` zones.
+- **`cpu_shares` on all 16 production services**, plus `mem_reservation` floors
+  for `app` and `db`. `cpus:` is a ceiling and reserves nothing, so with every
+  service capped and none weighted a busy Celery worker and the request path
+  compete as equals — and the ceilings sum to ~20 CPU against damballa's 16
+  cores with production and staging both on it. Roughly 8:1 foreground to
+  background. Stated as a preference, not a guarantee: a cgroup weight cannot
+  promise latency, and the bounded pools in D11 are what actually stop one
+  user's work reaching another's. Test services deliberately unweighted.
+  Validated with `docker compose config`, not just the schema.
+
+Not done in this phase: `pg_stat_statements` on the `db` service, and the nginx
+`limit_req`/`limit_conn` zones (the latter pairs with D11's heavy pool, so it is
+better done with it than before it).
 
 ## Phase 1 — the tests that state the invariant
 

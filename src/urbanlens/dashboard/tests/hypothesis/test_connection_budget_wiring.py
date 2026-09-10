@@ -158,3 +158,65 @@ class TheDatabaseSaysWhoIsConnectedTests(SimpleTestCase):
             str(options["application_name"]).startswith("urbanlens-"),
             f"expected an urbanlens- prefixed name, got {options['application_name']!r}",
         )
+
+
+class TheRequestPathOutweighsBackgroundWorkTests(SimpleTestCase):
+    """Ceilings alone let a Celery worker and the request path compete as equals.
+
+    `cpus:` is a CFS ceiling and reserves nothing, and the ceilings in this file
+    sum to roughly 20 CPU against damballa's 16 cores - with production and
+    staging both on it. A weight decides who yields when that runs short.
+
+    Asserted as an ordering rather than as literal numbers, so retuning the
+    weights does not require editing this, but inverting them does.
+    """
+
+    #: Services whose weight must exceed every background worker's.
+    FOREGROUND = ("app", "app-ws", "db")
+
+    #: Background work: progress-tracked, and nobody is watching a spinner for it.
+    BACKGROUND = ("media-worker", "media-worker-batch", "celery-metrics", "ai-worker")
+
+    def _weights(self) -> dict[str, int]:
+        """Each service's default cpu_shares, read out of its `${VAR:-N}` form."""
+        services = _compose()["services"]
+        weights = {}
+        for name, service in services.items():
+            raw = service.get("cpu_shares")
+            if raw is None:
+                continue
+            weights[name] = int(str(raw).split(":-")[-1].rstrip("}"))
+        return weights
+
+    def test_the_foreground_services_carry_a_weight(self) -> None:
+        weights = self._weights()
+        for name in self.FOREGROUND:
+            self.assertIn(name, weights, f"{name} has no cpu_shares, so it yields to background work equally")
+
+    def test_every_foreground_service_outweighs_every_background_one(self) -> None:
+        weights = self._weights()
+        for foreground in self.FOREGROUND:
+            for background in self.BACKGROUND:
+                self.assertGreater(
+                    weights[foreground],
+                    weights.get(background, 1024),
+                    f"{background} is weighted at or above {foreground}; under contention the "
+                    "request path would yield to background work",
+                )
+
+    def test_the_test_services_are_left_unweighted(self) -> None:
+        """They are not production contenders, and weighting them only slows the suite."""
+        weights = self._weights()
+        for name in _compose()["services"]:
+            if name.startswith("test-"):
+                self.assertNotIn(name, weights)
+
+    def test_the_database_and_app_have_a_memory_floor(self) -> None:
+        """`mem_limit` is a ceiling; under host pressure a floor is what protects them."""
+        services = _compose()["services"]
+        for name in ("app", "db"):
+            self.assertIn(
+                "mem_reservation",
+                services[name],
+                f"{name} has a memory ceiling but no floor, so the kernel may reclaim from it first",
+            )
