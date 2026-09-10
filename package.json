@@ -13,7 +13,7 @@
     "sass:watch": "bun node_modules/sass/sass.js --watch --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
     "build": "bun run bin/build-frontend.ts",
     "deploy": "bun run bin/build-frontend.ts --minify",
-    "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent -c gunicorn.conf.py",
+    "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 180 -k gevent --max-requests 1000 --max-requests-jitter 100 -c gunicorn.conf.py",
     "up": "git pull && sudo docker compose build && sudo docker compose up",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tests/integration/tsconfig.json",
     "lint": "ruff check --fix src/urbanlens",
