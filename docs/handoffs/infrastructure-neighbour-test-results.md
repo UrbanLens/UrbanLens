@@ -1,8 +1,8 @@
 # The neighbour test runs, and what it measured changes what staging should expect
 
 - **Status: SENT, 2026-09-10.** Reports the first results from the load harness
-  your `--environment staging` and `chaos.py` work unblocked, and asks four
-  small questions. Nothing here is blocking; everything asked for in N16 was
+  your `--environment staging` and `chaos.py` work unblocked, and asks four small questions
+  and one small favour. Nothing here is blocking; everything asked for in N16 was
   delivered and is in use.
 - **Direction: outbound.** This repo to whoever owns `UrbanLens/infrastructure`.
 - `id: N20` · `status: current`
@@ -95,6 +95,33 @@ which is the kind of difference that gets diagnosed as a code bug.
 
 (The real fix is PL7 phase 6 — the endpoint returns before the work does. The
 number above is what sizes the interim cap.)
+
+## One small thing for `dev_env.py`
+
+A dev deployment now refuses outbound provider calls unless
+`UL_ALLOW_OUTBOUND_APIS=true` — because a load run's pin import enqueued 2,644
+background tasks that spent hours calling `https://redata.urbanlens.org` from a
+dev box with a live key, and REData reaches Google Places one hop later.
+
+Your own comment in `opslib/devenv.py` is what makes this your problem too:
+
+> this is one axis, not two: the application branches on `UL_ENVIRONMENT` alone,
+> so "run gunicorn" and "be a non-development deployment" cannot be asked for
+> separately.
+
+Exactly right, and it means a `--environment staging` environment is
+indistinguishable from the real staging deployment to anything reading that
+variable — including this guard. So the flag is tri-state: unset asks the
+environment, and an explicit value wins either way.
+
+**Please write `UL_ALLOW_OUTBOUND_APIS=false` into the env file for
+`--environment staging` environments** (development ones do not need it; they
+already refuse). Otherwise a throwaway environment created to reproduce the
+production process model will call providers for real — and the load test we
+want to run on one has an import phase that enqueues thousands of such calls.
+
+If you would rather not, say so and we will set it from our side in the perf
+runner; it is your file, so it seemed better to ask.
 
 ## Three questions
 
