@@ -61,6 +61,19 @@ COORDINATE_STEP = 0.01
 ORIGIN_LATITUDE = -30.0
 ORIGIN_LONGITUDE = -140.0
 
+#: Pins per row of the grid. A constant, and it has to be: the mapping from
+#: index to coordinate must be the same in every run against the same account,
+#: or a top-up lays a differently-shaped grid over the first one and collides on
+#: the `(latitude, longitude)` unique constraint. Deriving it from the run's own
+#: batch size looked reasonable and failed the first time a top-up asked for a
+#: different number than the run before it.
+GRID_SIDE = 200
+
+#: Largest seed this coordinate scheme can lay out without leaving valid
+#: latitudes. `GRID_SIDE` columns per row, `COORDINATE_STEP` degrees per row,
+#: starting at `ORIGIN_LATITUDE` and running north.
+MAX_SEEDED_PINS = int((90.0 - ORIGIN_LATITUDE) / COORDINATE_STEP) * GRID_SIDE
+
 #: Name of the label every seeded pin carries. One shared label is what makes a
 #: label edit expensive; see this module's docstring.
 HEAVY_LABEL_NAME = "Perf Heavy"
@@ -74,22 +87,23 @@ PIN_NAME_PREFIX = "Perf Pin"
 _ANALYZED_TABLES = ("dashboard_locations", "dashboard_user_pins", "dashboard_labels")
 
 
-def _grid(index: int, side: int) -> tuple[str, str]:
-    """One pin's coordinates, laid out on a square grid.
+def _grid(index: int) -> tuple[str, str]:
+    """One pin's coordinates, laid out on a fixed grid.
 
     A grid rather than a line so a bounding-box query over the seeded block
-    returns a realistic subset rather than everything or nothing.
+    returns a realistic subset rather than everything or nothing. A *fixed*
+    grid because this must be a pure function of ``index`` and nothing else -
+    two runs against the same account have to agree about where pin 8,000 goes.
 
     Args:
         index: Which pin, zero-based.
-        side: Pins per row of the grid.
 
     Returns:
         ``(latitude, longitude)`` as strings, since the columns are decimals and
         a float would round differently on the way in.
     """
-    latitude = ORIGIN_LATITUDE + (index // side) * COORDINATE_STEP
-    longitude = ORIGIN_LONGITUDE + (index % side) * COORDINATE_STEP
+    latitude = ORIGIN_LATITUDE + (index // GRID_SIDE) * COORDINATE_STEP
+    longitude = ORIGIN_LONGITUDE + (index % GRID_SIDE) * COORDINATE_STEP
     return f"{latitude:.6f}", f"{longitude:.6f}"
 
 
@@ -106,6 +120,9 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True) -> 
         analyze: Refresh planner statistics afterwards. Only turn this off to
             demonstrate what skipping it costs.
 
+    Raises:
+        ValueError: ``pins`` is larger than the coordinate scheme can lay out.
+
     Returns:
         What was done, for the provisioning manifest: the final pin count, how
         many were created now, the shared label's id and name, whether `ANALYZE`
@@ -115,6 +132,9 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True) -> 
         harness edits that label by id - looking it up by name would break the
         moment a run renamed it.
     """
+    if pins > MAX_SEEDED_PINS:
+        raise ValueError(f"{pins} pins would run the grid past the north pole; this coordinate scheme tops out at {MAX_SEEDED_PINS}.")
+
     started = time.perf_counter()
     existing = Pin.objects.filter(profile=profile).root_pins().count()
     wanted = max(pins - existing, 0)
@@ -126,22 +146,12 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True) -> 
         defaults={"color": "#b34747", "description": "Every pin in a seeded performance account carries this."},
     )
 
-    side = max(int(wanted**0.5) + 1, 1)
     created = 0
     for start in range(0, wanted, BATCH_SIZE):
         count = min(BATCH_SIZE, wanted - start)
         with transaction.atomic():
-            locations = Location.objects.bulk_create(
-                [
-                    Location(
-                        latitude=lat,
-                        longitude=lng,
-                        official_name=f"Perf Place {existing + start + offset}",
-                    )
-                    for offset in range(count)
-                    for lat, lng in [_grid(existing + start + offset, side)]
-                ],
-            )
+            coordinates = [_grid(existing + start + offset) for offset in range(count)]
+            locations = _locations_for(coordinates, first_index=existing + start)
             seeded_pins = Pin.objects.bulk_create(
                 [
                     Pin(
@@ -175,6 +185,44 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True) -> 
         "analyzed": analyzed,
         "seconds": round(time.perf_counter() - started, 1),
     }
+
+
+def _locations_for(coordinates: list[tuple[str, str]], *, first_index: int) -> list[Location]:
+    """The `Location` rows for *coordinates*, creating only the missing ones.
+
+    `Location` is unique on ``(latitude, longitude)`` **globally**, not per
+    profile, so the grid is a shared resource: a second seeded account lands on
+    the same coordinates as the first and cannot simply create them. Reusing the
+    existing row is also the truthful thing to do - it is what the importer does
+    when two users pin the same place - and it makes the seeder idempotent
+    against a previous run that failed halfway.
+
+    Args:
+        coordinates: ``(latitude, longitude)`` string pairs, in pin order.
+        first_index: Index of the first coordinate, for naming new rows.
+
+    Returns:
+        One `Location` per coordinate, in the same order.
+
+    Raises:
+        RuntimeError: A coordinate was neither found nor created, which would
+            mean the grid produced a value the database rounded differently -
+            silently pairing pins with the wrong places.
+    """
+    Location.objects.bulk_create(
+        [Location(latitude=lat, longitude=lng, official_name=f"Perf Place {first_index + offset}") for offset, (lat, lng) in enumerate(coordinates)],
+        ignore_conflicts=True,
+    )
+    # Re-read rather than trusting `bulk_create`'s return: with
+    # `ignore_conflicts` it does not set primary keys, and the rows that already
+    # existed are not in it at all.
+    latitudes = {lat for lat, _ in coordinates}
+    longitudes = {lng for _, lng in coordinates}
+    found = {(f"{row.latitude:f}", f"{row.longitude:f}"): row for row in Location.objects.filter(latitude__in=latitudes, longitude__in=longitudes)}
+    try:
+        return [found[coordinate] for coordinate in coordinates]
+    except KeyError as error:
+        raise RuntimeError(f"No Location at {error.args[0]} after creating it; the grid and the column's rounding disagree.") from error
 
 
 def _analyze() -> bool:

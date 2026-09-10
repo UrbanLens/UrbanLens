@@ -30,6 +30,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.integration_testing.perf_seed import (
     BATCH_SIZE,
     HEAVY_LABEL_NAME,
+    MAX_SEEDED_PINS,
     PIN_NAME_PREFIX,
     seed_heavy_account,
 )
@@ -148,6 +149,50 @@ class TheSeedIsIdempotentTests(TestCase):
 
         coordinates = Location.objects.filter(pins__profile=self.profile).values_list("latitude", "longitude")
         self.assertEqual(len(set(coordinates)), SEEDED * 2)
+
+    def test_topping_up_by_a_different_amount_does_not_collide(self) -> None:
+        """Three runs, each creating a different number of pins.
+
+        The test above passes without exercising the defect it is named for: it
+        creates `SEEDED` twice, so anything derived from "how many are being
+        created now" comes out the same both times. The grid geometry was
+        derived from exactly that, and this is the shape that found it — a
+        200-then-20,000 top-up raised `IntegrityError` on the unique constraint
+        while the doubling test stayed green.
+        """
+        seed_heavy_account(self.profile, pins=3)
+        seed_heavy_account(self.profile, pins=17)
+        seed_heavy_account(self.profile, pins=40)
+
+        coordinates = Location.objects.filter(pins__profile=self.profile).values_list("latitude", "longitude")
+        self.assertEqual(len(set(coordinates)), 40)
+        self.assertEqual(Pin.objects.filter(profile=self.profile).root_pins().count(), 40)
+
+    def test_a_pin_index_always_lands_on_the_same_coordinate(self) -> None:
+        """The property the collision was a symptom of, asserted directly.
+
+        Two accounts seeded to different sizes must agree about where pin *n*
+        goes, because that is what makes a top-up safe. Asserted across profiles
+        rather than across runs, so the grid stays pinned even if the top-up
+        path is later rewritten.
+        """
+        other = baker.make(User).profile
+
+        seed_heavy_account(self.profile, pins=5)
+        seed_heavy_account(other, pins=45)
+
+        mine = sorted(Location.objects.filter(pins__profile=self.profile).values_list("latitude", "longitude"))
+        theirs = sorted(Location.objects.filter(pins__profile=other).values_list("latitude", "longitude"))
+        self.assertEqual(
+            mine, theirs[: len(mine)], "the same pin index landed on different coordinates in differently-sized seeds"
+        )
+
+    def test_a_seed_too_large_for_the_grid_is_refused(self) -> None:
+        """Better than silently laying pins past the north pole."""
+        with self.assertRaises(ValueError) as caught:
+            seed_heavy_account(self.profile, pins=MAX_SEEDED_PINS + 1)
+
+        self.assertIn(str(MAX_SEEDED_PINS), str(caught.exception))
 
 
 class TheSeedTellsThePlannerTests(TestCase):

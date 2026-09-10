@@ -641,6 +641,37 @@ anything a trigger touches. It is deliberately never a bare `ANALYZE`: measured
 on this schema's 237 tables, whole-database is **3.55s cold / 1.70s warm**
 against **45ms** for three named tables, and every assertion seeds twice.
 
+### `bin/run_perf_tests.sh` — the neighbour load test (k6)
+
+What the scaling mixins cannot answer. They prove query count, per-row render
+cost and objects-per-row do not grow, which says nothing about connection-pool
+exhaustion or worker behaviour under concurrency — the two things that actually
+took the site down (P104, and the map 504s). This asks the owner's question
+directly: one account acts, a *different* account browses at a fixed rate, and
+the second account's latency is the verdict.
+
+```bash
+bin/run_perf_tests.sh --url http://localhost:21810 \
+    --provision-container urbanlens_development_main_app \
+    --db-container urbanlens_development_main_db --heavy-pins 20000
+```
+
+Seeds the target, derives a budget from a baseline pass on the same host,
+samples `pg_stat_activity` at 1 Hz throughout, and returns a per-phase table.
+`tests/perf/README.md` has the layout and the three things that are easy to get
+wrong; `bin/perf/` has the sampler and the budget derivation.
+
+k6 rather than Locust because the assertion is open-model: a closed-model tool
+lets a slowing server reduce the probe's own request rate, hiding exactly the
+degradation being measured. Runs against a deployment, so it is not in pytest.
+
+Two things it will not tell you. A development environment runs `runserver`
+rather than gunicorn, so **no dev target reproduces the process model the
+invariant depends on** — runs against one exercise the endpoints and the
+harness, not the topology; that needs `dev_env.py create --environment
+staging`. And the load generator shares the host with the target, so its own
+CPU is part of what the target is competing with.
+
 ### `run_concurrently` (`core/tests/concurrency.py`)
 
 Runs callables on real threads released from a barrier. Necessary because a lock
@@ -707,15 +738,3 @@ grew by the same amount without any of their records explaining why.
 - **`testcontainers-python`** — an ephemeral PostGIS per run. `bin/run_tests.sh`
   already runs pytest inside the project's own compose stack against real
   PostGIS, so this would replace a working setup rather than add a capability.
-- **Load testing (k6)** — still a gap, now a scoped one rather than an open
-  question. The three scaling mixins prove query count, per-row render cost and
-  objects-per-row do not grow, which says nothing about connection-pool
-  exhaustion or worker behaviour under concurrency — the two things that
-  actually took the site down (P104, and the map 504s). PL7 §4.1 specifies the
-  replacement: a k6 *neighbour* scenario measuring one user's p95 under a fixed
-  arrival rate while another user runs each heavy action, with a
-  `pg_stat_activity` sampler alongside it. k6 rather than Locust because the
-  assertion is open-model: a closed-model tool lets a slowing server reduce the
-  probe's request rate, which hides exactly the degradation being measured.
-  Wants a deployment, so it lives in `tests/perf/` driven against a dev
-  environment, not in pytest.
