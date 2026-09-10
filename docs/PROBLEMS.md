@@ -3827,8 +3827,26 @@ connections idle and 3,360 `FATAL: sorry, too many clients already` (Postgres er
 logged. Not re-investigated this session for the incident's own postmortem/timeline - recorded here
 as the evidence that the connection ceiling, not CPU, is the resource that actually ran out.
 
-Not fixed: needs either a connection pooler (pgbouncer or equivalent) or per-role `CONNECTION
-LIMIT`s on Postgres roles, not a cgroup change. No decision recorded on which.
+**Half of it is measured as fixed, 2026-09-10.** This entry names the web tier's unbounded greenlet
+count as what makes the demand "additionally unbounded" on top of the ~25-30 estimate. That is now
+bounded and the bound was measured, not assumed: under a 60-user filter storm on a staging-model
+environment, Postgres peaked at **61/100 backends, 60 of them `urbanlens-web`, 0% idle** — exactly
+`--worker-connections 20 × 3 workers`, to the connection (X15). The same work on the unbounded
+development server reached 75. The web tier can no longer be the thing that fills the pool.
+
+`cpu_shares` weights landed at the same time, which this entry correctly says would not have
+prevented the incident; they are there for a different reason and are not a fix for this.
+
+**Still not fixed, and the entry's conclusion stands for the rest:** there is no pooler, no per-role
+`CONNECTION LIMIT`, and every container still connects as the same role, so the remaining ~40 slots
+are shared by daphne, four Celery workers, beat and the AI tier with no budget between them. One of
+them can still starve another; the web tier just is not the one doing it any more.
+
+**And the outage's own shape has not been reproduced.** The chaos run that tried (X16) held slots as
+an external superuser rather than as the application's own role, so the app's existing connections
+were never the ones taken and it kept serving at 100/100. `chaos.py`'s `connection-exhaustion`
+scenario holds them *as the application's role*, which is the faithful version; it could not be run
+because that tool cannot dispatch (N20).
 
 ## P105 — A Valkey outage 500s every request after 32 seconds, including the readiness probe
 
