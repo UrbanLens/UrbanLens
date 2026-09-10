@@ -20,6 +20,7 @@ sentence is a bug and gets rewritten; here it is the content.
 | [`infrastructure-availability-drills-reply.md`](infrastructure-availability-drills-reply.md) — accepts both their corrections, takes their broker finding into D11 and P105, and returns two of our own | outbound, `UrbanLens/infrastructure` | SENT 2026-09-10 |
 | [`infrastructure-availability-drills-followup.md`](infrastructure-availability-drills-followup.md) — the metrics override guards a branch that does not exist, and their Docker-access item is already satisfied | outbound, `UrbanLens/infrastructure` | SENT 2026-09-10 |
 | [`infrastructure-metrics-exporter-loop-closed.md`](infrastructure-metrics-exporter-loop-closed.md) — the 30-hour restart loop is stopped at 4,410; what remains is a scheduled staging deploy | outbound, `UrbanLens/infrastructure` | SENT 2026-09-10 |
+| [`infrastructure-neighbour-test-results.md`](infrastructure-neighbour-test-results.md) — the neighbour test runs; one user's filter button costs another user 19x, and three questions | outbound, `UrbanLens/infrastructure` | SENT 2026-09-10 |
 
 ## The convention
 
