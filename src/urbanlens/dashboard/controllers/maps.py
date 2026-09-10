@@ -671,7 +671,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
 
-        if bbox := _parse_bbox(request.GET.get("bbox", "")):
+        bbox = _parse_bbox(request.GET.get("bbox", ""))
+        if bbox:
             query = query.within_bounds(*bbox)
 
         cursor = _safe_positive_int(request.GET.get("cursor"))
@@ -682,6 +683,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             cursor=cursor,
             limit=limit,
             include_total=include_total,
+            # The cache holds every root pin for this profile ordered by pk and
+            # nothing narrower, so a bounded request is not a question it can
+            # answer - see get_or_build_page.
+            cacheable=bbox is None,
         )
         _with_view_urls(cached_page.page.pins)
 
