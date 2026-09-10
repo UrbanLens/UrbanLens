@@ -26,7 +26,7 @@ on purpose until it lands. Each phase's acceptance is a measurement, not a revie
 | Phase | What | Status |
 |---|---|---|
 | 0 | Verify HEAD; record P105, P106, N15, D11, D12, PL7; archive P99 | **done 2026-09-10** |
-| 1 | The neighbour test (k6), per-endpoint pytest gates, chaos specs — all red | not started |
+| 1 | The neighbour test (k6), per-endpoint pytest gates, chaos specs — all red | **partly done 2026-09-10** |
 | 2 | Config-only shedding and telemetry, deployable under today's gevent | not started |
 | 3 | `gthread`, per-role Postgres users, `app-heavy` pool (D11) | not started |
 | 4 | Valkey split + degradable session path (P105) | not started |
@@ -51,6 +51,36 @@ docker exec -e UL_TEST_DB_NAME=<unique> "$APP" /app/.venv/bin/python -m pytest -
   src/urbanlens/dashboard/tests/hypothesis/test_bulk_photo_delete_scaling.py
 ```
 
+## Phase 1 — partly done 2026-09-10
+
+Landed (`57b234277`, `c03618f6b`), all verified in the app container:
+
+- **The N10 fix.** `SeedScalingMixin.seed()` refreshes planner statistics for
+  exactly the tables the seed's own SQL wrote to. Never a bare `ANALYZE`:
+  measured 3.55s cold / 1.70s warm across 237 tables against 45ms for three
+  named ones, twice per assertion. `test_seed_scaling_analyze.py` proves
+  `pg_class.reltuples` actually moves.
+- **Ten reproductions**, all `xfail(strict=True)` so the suite is green now and
+  turns red the day each fix lands: P102's label fan-out (3), P96's uncapped
+  import (4), and the unbounded map document (3). Each group is paired with
+  non-xfail guards asserting the seed and the response shape are real.
+- **X14**: the proposed `perf_counter` → `process_time` switch for
+  `RenderTimeScalingMixin` was measured and **rejected** — CPU separates the
+  classes worse (41.2x against 48.5x) and leaves less margin before a false
+  failure. The mixin keeps its calibrated clock.
+
+Two traps found while writing those, both now documented in the test files
+because the next person will hit them the same way: a reproduction whose work
+happens in `transaction.on_commit` does nothing under a `TestCase`, and
+`MapPinCache` declines to act at all without an injected client — so a
+fan-out test written the obvious way passes against the broken code. The import
+tests were vacuous in their first draft for a third reason (wrong payload keys),
+caught by probing the live endpoint rather than by review.
+
+Still to do in this phase: the k6 neighbour scenario and its seed command, the
+`EndpointScalingCase` generalisation with the bytes/row and rows-fetched/row
+axes, and the chaos specs. The first and last need the infra-repo work in T3.
+
 ## Phase 1 — the tests that state the invariant
 
 **The neighbour test.** k6, because the assertion is user B's latency *under a fixed arrival rate*
@@ -74,10 +104,15 @@ axes they are blind to: bytes per row, and *rows fetched* per row (via `execute_
 query count stays flat. Plus a document-cap axis: seed cap+1, assert the response carries at most
 cap rows and a continuation marker.
 
-Two harness corrections go in here: `SeedScalingMixin` gains an `ANALYZE` after seeding (N10 — a
-missing `ANALYZE` produced a 12× artifact that cost the previous session three rounds), and
-`RenderTimeScalingMixin` switches from `perf_counter` to `process_time`, since CPU time does not
-inflate under host contention and is exactly the defect class R27 found.
+One harness correction goes in here: `SeedScalingMixin` gains an `ANALYZE` after seeding (N10 — a
+missing `ANALYZE` produced a 12× artifact that cost the previous session three rounds). **Done.**
+
+`RenderTimeScalingMixin` keeps `perf_counter`. Switching it to `process_time` was this programme's
+design recommendation and did not survive being measured — X14 has the numbers: CPU separates the
+benign and pathological classes *worse* (41.2x against 48.5x) and leaves a third of the margin
+before a loaded host produces a false failure. Neither clock is quiet at these batch sizes; the
+instrument that answers N11's concern precisely is `InstantiationScalingMixin`'s object count, which
+does not move with load at all.
 
 **Chaos specs.** A Playwright project gated on an environment flag, with injection from the infra
 repo (guarded against production and staging container prefixes). Valkey paused, Postgres at its

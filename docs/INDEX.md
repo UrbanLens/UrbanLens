@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P107` · `T3` · `PL8` · `D13` · `X14` · `I5` · `R29` · `N16`
+**Next free id:** `P107` · `T3` · `PL8` · `D13` · `X15` · `I5` · `R29` · `N16`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -82,7 +82,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL4 | live | 2026-08-27 | Existence, not detail, is the oracle - so the gate conceals a wiki's contributions rather than degrading it | [`docs/designs/reputation-and-gating.md`](designs/reputation-and-gating.md) |
 | PL5 | live | 2026-08-27 | One row per (target, field, write) resolves a per-viewer view in one DISTINCT ON query, with no replay | [`docs/designs/versioned-content.md`](designs/versioned-content.md) |
 | PL6 | live | 2026-08-29 | Every test file is being reviewed for negative coverage; 73 of 832 done, resume at manifest line 94 | [`docs/notes/test-quality-audit.md`](notes/test-quality-audit.md) |
-| PL7 | live | 2026-09-10 | Making "no user can affect another user's availability" a property the tests can prove; phase 0 of 7 done | [`docs/notes/availability-isolation-programme.md`](notes/availability-isolation-programme.md) |
+| PL7 | live | 2026-09-10 | Making "no user can affect another user's availability" a property the tests can prove; phase 0 done, 1 underway | [`docs/notes/availability-isolation-programme.md`](notes/availability-isolation-programme.md) |
 | P82 | open | 2026-09-06 | At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P83 | open | 2026-09-06 | Over half of every page's HTML is inline `<script>`, re-sent uncached on every load | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P85 | open | 2026-09-06 | Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -127,6 +127,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | X11 | holds | 2026-08-27 | The three designed REData follow-ups all shipped; the durable gap list is a route diff in PROBLEMS.md | [`docs/designs/redata-integration.md`](designs/redata-integration.md) |
 | X12 | holds | 2026-08-27 | 100 write handlers, 1,217 statements of data-mutating view code, never execute under any test | [`docs/reports/2026-08-14-view-coverage.md`](reports/2026-08-14-view-coverage.md) |
 | X13 | holds | 2026-07-30 | The self-hosted Overpass instance beats every mirror; three pool members were dead or Swiss-only | [`docs/reports/overpass-mirror-test.md`](reports/overpass-mirror-test.md) |
+| X14 | holds | 2026-09-10 | Switching the render mixin to a CPU clock separates the classes worse, not better; keep `perf_counter` | [`docs/notes/render-clock-calibration.md`](notes/render-clock-calibration.md) |
 | I1 | unvalidated | 2026-08-27 | Splitting into a near-zero-knowledge server and a data-holding agent was planned in full, then deferred | [`docs/designs/rejected-and-deferred/split-architecture.md`](designs/rejected-and-deferred/split-architecture.md) |
 | I2 | actionable | 2026-08-27 | Ten free/open APIs surveyed as integration candidates; several have since shipped as plugins, so re-check before using it | [`docs/reports/api-expansion-candidates.md`](reports/api-expansion-candidates.md) |
 | I3 | absorbed | 2026-07-30 | SpotGuessr's backend was sound and its frontend was the debt; all five recommendations shipped | [`docs/reports/spotguessr-audit.md`](reports/spotguessr-audit.md) |
