@@ -106,7 +106,15 @@ tier that reads as too lax, and is probably the wrong threshold.
   high-concurrency rows include the generator's own CPU. `map_init_1` and `map_search_1` are the
   clean rows: one actor VU, ~20 neighbour VUs, and still 3.4x and 19x.
 - **The run did not finish.** It was killed during `import_confirmed` when the host ran short of
-  memory, so that phase and `cooldown` have no data. P96 is therefore still unmeasured.
+  memory, so that phase and `cooldown` have no data — the neighbour's latency during an import is
+  still unmeasured.
+
+  The import endpoint itself was then measured directly instead, on an idle stack: **500 pins in
+  116.6 s into a 20,000-pin account, and 504 at 120.0 s into an empty one** — 233 ms per imported
+  pin either way, so the cost is per imported pin rather than per existing one. nginx's
+  `proxy_read_timeout 120s` therefore caps a *successful* import at about 510 pins, and the
+  empty-account run returned the 504 page to the client and then created all 500 rows anyway. See
+  P96, which now carries those numbers.
 
 ## Re-running it
 

@@ -3623,8 +3623,36 @@ gunicorn worker (see P104/R28 on why that worker is gevent, not threads) for the
 `Pin.objects.create()` plus its `post_save` signal fan-out (`models/pin/signals.py`, including the
 O(pins carrying a label) work described in P102's sibling code path).
 
-Not fixed. Not measured this session - no benchmark run against an adversarially large `lists`
-payload.
+**Measured 2026-09-10, and the number is worse than "ties up a worker".** Against the development
+stack, otherwise idle:
+
+| import | account it went into | result |
+|---|---|---|
+| 500 pins | 20,000 existing | **200, 116.6 s** |
+| 500 pins | empty | **504 at 120.0 s** — while the server finished all 500 anyway |
+
+**233 ms per pin, and the cost does not come from the account.** Two imports of the same size into a
+20,000-pin account and an empty one both took about two minutes, so this is per *imported* pin, not
+per existing one. There is no size at which it is fast.
+
+**nginx cuts it off before any realistic import can finish.** `config/nginx/django.conf:50` sets
+`proxy_read_timeout 120s` on the app location, so at 233 ms/pin the ceiling is about **510 pins** -
+and the failure is silent in the worst direction. The empty-account run above returned nginx's 504
+page to the client and *then went on to create all 500 rows*: a fully successful import that reports
+a gateway error. A user would reasonably retry, spending another two minutes re-matching the pins
+they already have, and get another 504.
+
+For scale, `parse_for_preview`'s own cap is `MAX_PREVIEW_PINS = 20_000`. At this rate that is
+**78 minutes in one request** - which nginx would end at two minutes, twenty times over, while the
+work continued.
+
+So the cap this needs is not only a guard against an adversarial payload; the ordinary path is
+already past the point where the endpoint can report its own success. Whatever replaces it has to
+return before the work does - the task-plus-progress shape in PL7 phase 6 - rather than being made
+faster.
+
+Reproductions in `dashboard/tests/hypothesis/test_import_confirmed_cap.py` are `xfail(strict=True)`
+and turn red when a cap lands.
 
 ## P97 — `dissolve_polygons` is O(n^3) GEOS work over an uncapped user-supplied polygon count
 
