@@ -472,9 +472,17 @@ def outbound_calls_permitted(service: str) -> bool:
     # change.
     if getattr(django_settings, "TESTING", False):
         return True
-    if str(getattr(django_settings, "ENVIRONMENT_NAME", "")).lower() in _UNBUDGETED_ENVIRONMENTS:
-        return bool(app_settings.allow_outbound_apis)
-    return True
+    # An explicit answer wins over the environment's default, in both
+    # directions. The direction that matters is `false` on a deployment the
+    # environment would otherwise trust: `dev_env.py --environment staging` sets
+    # UL_ENVIRONMENT=staging purely to get gunicorn, and the application branches
+    # on that one variable, so a throwaway environment is otherwise
+    # indistinguishable from the real staging deployment. It also gives a real
+    # deployment a way to take a provider out of the path during an incident.
+    explicit = app_settings.allow_outbound_apis
+    if explicit is not None:
+        return bool(explicit)
+    return str(getattr(django_settings, "ENVIRONMENT_NAME", "")).lower() not in _UNBUDGETED_ENVIRONMENTS
 
 
 def service_is_enabled(service: str, config: Any = None) -> bool:

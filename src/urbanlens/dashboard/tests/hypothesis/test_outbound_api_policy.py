@@ -45,7 +45,7 @@ OWN = "redata_place_details"
 
 @contextlib.contextmanager
 def _deployment(
-    environment: str = EnvironmentTypes.PRODUCTION, *, demo: bool = False, allow: bool = False
+    environment: str = EnvironmentTypes.PRODUCTION, *, demo: bool = False, allow: bool | None = None
 ) -> Iterator[None]:
     """Pretend to be one deployment.
 
@@ -54,6 +54,9 @@ def _deployment(
     needs both mechanisms. `TESTING` is forced off because the suite itself sets
     it, and with it on the guard permits everything by design - leaving it alone
     would make every assertion below vacuous.
+
+    ``allow=None`` is the real default and means the variable is unset, which is
+    what almost every deployment looks like.
     """
     with (
         override_settings(ENVIRONMENT_NAME=str(environment), TESTING=False),
@@ -194,3 +197,40 @@ class TheGuardIsWiredAtTheChokePointTests(TestCase):
         enabled_row = mock.Mock(enabled=True)
         with _deployment(EnvironmentTypes.DEVELOPMENT):
             self.assertFalse(service_is_enabled(PAID, config=enabled_row))
+
+
+class AnExplicitAnswerWinsTests(TestCase):
+    """`UL_ALLOW_OUTBOUND_APIS` overrides the environment's default both ways.
+
+    The direction that matters is `false` on a deployment the environment would
+    otherwise trust. `dev_env.py --environment staging` sets
+    `UL_ENVIRONMENT=staging` purely to get gunicorn - infra's own comment says
+    "this is one axis, not two: the application branches on UL_ENVIRONMENT
+    alone" - so a throwaway environment is otherwise indistinguishable from the
+    real staging deployment and would call providers for real.
+    """
+
+    def test_a_throwaway_staging_environment_can_refuse(self) -> None:
+        with _deployment(EnvironmentTypes.STAGING, allow=False):
+            self.assertFalse(outbound_calls_permitted(PAID))
+
+    def test_a_real_deployment_can_be_switched_off_during_an_incident(self) -> None:
+        """Taking a provider out of the path should not need a code change."""
+        with _deployment(EnvironmentTypes.PRODUCTION, allow=False):
+            self.assertFalse(outbound_calls_permitted(PAID))
+
+    def test_unset_still_means_ask_the_environment(self) -> None:
+        with _deployment(EnvironmentTypes.PRODUCTION, allow=None):
+            self.assertTrue(outbound_calls_permitted(PAID))
+        with _deployment(EnvironmentTypes.DEVELOPMENT, allow=None):
+            self.assertFalse(outbound_calls_permitted(PAID))
+
+    def test_it_cannot_reopen_the_demo(self) -> None:
+        """The demo's budget is a different question, asked first."""
+        with _deployment(EnvironmentTypes.PRODUCTION, demo=True, allow=True):
+            self.assertFalse(outbound_calls_permitted(PAID))
+
+    def test_it_cannot_close_the_demos_own_service(self) -> None:
+        """Nor should the flag be able to break the demo by switching REData off."""
+        with _deployment(EnvironmentTypes.PRODUCTION, demo=True, allow=False):
+            self.assertTrue(outbound_calls_permitted(OWN))

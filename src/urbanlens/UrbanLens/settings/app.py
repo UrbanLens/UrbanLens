@@ -393,15 +393,22 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "UL_METRICS_TOKEN for defense in depth; either alone satisfies the startup check."
         ),
     )
-    allow_outbound_apis: bool = Field(
-        default=False,
+    allow_outbound_apis: bool | None = Field(
+        default=None,
         description=(
-            "Permit outbound calls to external providers from a development or local deployment. "
-            "Off by default because those calls are a side effect of work nobody is watching: one "
-            "load run's pin import enqueued 2,644 background tasks that spent hours on the wire "
-            "against the production REData, which bills a step later (P109). Turn it on while "
-            "working on an integration itself. No effect outside development/local - staging and "
-            "production always call out, and the demo has its own narrower rule. Enforced in "
+            "Whether this deployment may call external providers. Unset means 'decide from the "
+            "environment': development and local refuse, everything else calls out. Setting it "
+            "explicitly overrides that in either direction, which is what makes it useful twice. "
+            "True on a development box while working on an integration itself. **False on a "
+            "throwaway environment that is not a development one** - `dev_env.py --environment "
+            "staging` sets UL_ENVIRONMENT=staging to get gunicorn, and the application branches on "
+            "that one variable, so a disposable environment is otherwise indistinguishable from a "
+            "real deployment and would call providers for real. False also works as an incident "
+            "switch on a real deployment when a provider needs to be taken out of the path. "
+            "Off-by-default for development exists because those calls are a side effect of work "
+            "nobody is watching: one load run's pin import enqueued 2,644 background tasks that "
+            "spent hours on the wire against the production REData, which bills a step later "
+            "(P109). The demo has its own narrower rule that this cannot reopen. Enforced in "
             "services.core.rate_limiter.outbound_calls_permitted, the one point every gateway call "
             "passes through."
         ),
