@@ -3987,3 +3987,18 @@ Reproduced by `dashboard/tests/hypothesis/test_map_center_scaling.py`, which cou
 rather than timing anything — a wall-clock assertion on a shared host is a flaky test that gets
 deleted, and the call count is exact, machine-independent, and is the defect itself. Its
 reproductions are `xfail(strict=True)` and turn red the day this is fixed.
+
+`services/integration_testing/perf_seed.py` stores the centre directly when it seeds, so a load run
+measures something other than this. That is not hiding it: the stored value is the same answer (the
+seeded grid is well inside the cluster radius, so the densest-cluster centroid is the arithmetic
+mean), and `precompute_map_center=False` puts the defect back.
+
+**The rest of the codebase was swept for the same shape and is clean.** An AST pass over
+`dashboard/` and `core/` for a loop, comprehension or `max`/`min`/`sorted(key=…)` whose inner
+iterable is the *same* collection as the outer one — first checked against this function, since a
+detector that cannot find the known instance is not finding anything — returns five hits. The other
+four are all bounded by human-scale collections and none takes pin-scale input:
+`controllers/memories.py:630` and `controllers/visits.py:383` (participants tagged on one visit),
+`services/trips/trip_activities.py:334` (trip members who said yes), and
+`models/custom_fields/model.py:352` (a seven-element module constant, evaluated once at import).
+Not worth a CI check at four false positives out of five, but worth not repeating.
