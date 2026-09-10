@@ -132,8 +132,18 @@ prefork children.
 Valkey splits into a broker (`noeviction`, persistent, deliberately capped ~1 GB so a runaway
 producer is loud rather than silent) and a cache (`allkeys-lru`, 8 GB of the 10 GB Jess allocated on
 2026-09-10, no persistence). Today one 512 MB `volatile-lru` instance holds the broker, the channel
-layer, sessions, the Django cache and the map cache; when it fills, the TTL'd population — map cache
-and Channels keys — is evicted first, and once only broker keys remain every write fails with OOM.
+layer, sessions, the Django cache and the map cache.
+
+Two failure modes, and the second is the sharper one. **On fill**, the TTL'd population — the map
+cache and the Channels keys — is evicted first, and once only broker keys remain every write fails
+with OOM. **On outage**, there is no such thing as losing only the cache:
+`CELERY_BROKER_URL = os.getenv("UL_CELERY_BROKER_URL") or VALKEY_URL` (`settings/base.py:374`), and
+`UL_CELERY_BROKER_URL` is unset by default, so the instance that holds the cache *is* the broker.
+Pausing it takes the session store, the channel layer, the result backend and task enqueueing with
+it. There is no configuration in which that coupling is intended; it is what a shared default
+produced. Found by the infrastructure repo while implementing the chaos scenarios (N16/N17), which
+is also why the "Valkey paused" and "worker paused" scenarios in that ask are not independent tests.
+
 Sizing is generous because the memory exists, but the architecture does not assume it: see D12 on
 why the database path must stay correct with the cache empty.
 

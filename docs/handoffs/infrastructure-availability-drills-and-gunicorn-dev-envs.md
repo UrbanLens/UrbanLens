@@ -1,8 +1,11 @@
 # Ask: a dev environment that runs gunicorn, and somewhere to put availability chaos
 
-- **Status: OPEN as of 2026-09-10.** Two asks and one correction. Neither ask is
-  urgent this week; both block the verification half of PL7, which is the work
-  that would have caught the 11-hour connection outage before a user did.
+- **Status: ANSWERED, 2026-09-10.** All three asks implemented; see the reply at
+  [`infrastructure-availability-drills-reply.md`](infrastructure-availability-drills-reply.md).
+  Two of the asks below were corrected in the answering: `--gunicorn` promised an
+  axis the app does not have, and the ask omitted `DJANGO_SECRET_KEY`, without
+  which every container in a staging-flavoured environment restart-loops. The
+  body is unchanged, per this directory's convention.
 - **Direction: outbound.** This repo to whoever owns `UrbanLens/infrastructure`.
 - `id: N16` · `status: current`
 

@@ -3843,7 +3843,15 @@ brute-force gate. A wrapper that turns cache errors into misses must not be appl
 lockout keys; those want an explicit decision (fail closed with a 503, or fall back to a DB-backed
 counter), not a silent miss.
 
-Not fixed. See D11 for the Valkey split this sits inside; the chaos spec is the reproduction.
+One thing to know before reproducing this by pausing Valkey: that does not isolate the cache.
+`CELERY_BROKER_URL` falls back to `VALKEY_URL` (`settings/base.py:374`) and `UL_CELERY_BROKER_URL` is
+unset by default, so the same instance is the cache, the session store, the channel layer, the
+result backend *and* the broker. Pausing it exercises task enqueueing as well, and a run that reads
+as "P105 plus something else" is that coupling rather than a second defect. Found by the
+infrastructure repo while building the chaos scenarios (N17); it is the sharper half of the argument
+for D11's Valkey split, which had been justified on the fill case alone.
+
+Not fixed. See D11 for the Valkey split this sits inside; the chaos scenario is the reproduction.
 
 ## P106 — Reordering labels changes which icon a pin draws, but never tells the client
 

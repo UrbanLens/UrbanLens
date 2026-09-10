@@ -209,7 +209,14 @@ sibling directory is the infra team's decision, not ours.
   deliberate — it is what gives hot reload without a bind mount — so the ask is an opt-in flag, not a
   change. N14 says pytest and local dev never build P104's topology; the dev-env tool does not
   either. Phase 1's k6 and chaos halves both block on it. Asked for in
-  [`../handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md`](../handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md).
+  [`../handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md`](../handoffs/infrastructure-availability-drills-and-gunicorn-dev-envs.md)
+  and reported implemented in the reply thread (N17) as
+  `dev_env.py create --environment {development,staging}`, with the
+  `pg_stat_activity`/`53300` sampler as `chaos.py sample` — so the sampler this
+  plan plans to build is deleted from it. **Not reachable from chiron as of
+  2026-09-10**: neither checkout of that repo has the flag or the script, so the
+  k6 and chaos halves stay blocked in practice until someone says where it is
+  pushed.
 - Both production and staging currently run `-t 600 -k gevent` with no `--max-requests`: the
   timeout work in `f2623a5d4` is committed but not deployed. Nothing on `release/v_0_8_0` is live.
 - Do not deploy to staging as part of this work. Use a dev environment; staging is Jess's call.
