@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.import_export.export import (
     REGISTERED_EXPORT_TYPES,
     VALID_EXPORT_TYPES,
@@ -117,6 +118,36 @@ class ToolsIndexView(LoginRequiredMixin, View):
         )
 
 
+#: Must outlive the export task's own hard limit (CELERY_TASK_TIME_LIMIT, 3600s),
+#: or a second export could start while the first is still copying photos.
+_EXPORT_GUARD_TTL = 60 * 75
+
+#: Statuses that mean the job is over, whichever way it went. Read off the
+#: writers in `services/import_export/export.py` and `tasks.py`, which use
+#: exactly "running", "done" and "error" - a guessed vocabulary here would leave
+#: the guard held for the whole TTL after a successful export.
+_EXPORT_TERMINAL_STATES = frozenset({"done", "error"})
+
+
+def _export_guard_key(user_id: int | None) -> str:
+    """One in-flight export per account.
+
+    Args:
+        user_id: The exporting account. `None` only if these views lose their
+            `LoginRequiredMixin`, which would otherwise give every anonymous
+            caller the same guard key and let one of them block all the others.
+
+    Returns:
+        The cache key holding that account's in-flight export.
+
+    Raises:
+        ValueError: There is no authenticated user.
+    """
+    if user_id is None:
+        raise ValueError("an export guard needs an authenticated user")
+    return f"ul:single-flight:export:{user_id}"
+
+
 class ExportStartView(LoginRequiredMixin, View):
     """Start a data export job in Celery."""
 
@@ -143,6 +174,17 @@ class ExportStartView(LoginRequiredMixin, View):
 
         email_to_user = bool(request.POST.get("email_export"))
 
+        # Claimed before anything is created, so a double-click cannot get two
+        # exports past a read-then-write check. An export copies every photo the
+        # account owns, twice, onto the shared media volume.
+        guard = _export_guard_key(request.user.pk)
+        if not single_flight.claim(guard, _EXPORT_GUARD_TTL):
+            return render(
+                request,
+                "dashboard/partials/tools/export_progress.html",
+                {"job_id": single_flight.holder(guard), "status": "pending", "progress": 0, "message": "An export is already running."},
+            )
+
         job_id = str(uuid.uuid4())
         exp_dir = _export_dir(job_id)
         os.makedirs(exp_dir, exist_ok=True)
@@ -154,6 +196,7 @@ class ExportStartView(LoginRequiredMixin, View):
 
         result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url, job_id, email_to_user)
         if result is None:
+            single_flight.release(guard)
             ExportJobStatus(job_id).write("error", 0, "Export queue is unavailable. Please try again later.", user_id=request.user.pk)
             return render(
                 request,
@@ -162,6 +205,7 @@ class ExportStartView(LoginRequiredMixin, View):
                 status=503,
             )
 
+        single_flight.adopt(guard, job_id, _EXPORT_GUARD_TTL)
         logger.info("Export task %s started for user %s", result.id, request.user.pk)
 
         return render(
@@ -204,6 +248,11 @@ class ExportStatusView(LoginRequiredMixin, View):
                     job_id,
                     "Could not verify export ownership. Please start a new export.",
                 )
+
+            # The guard is released the moment the job stops, so the next export
+            # does not wait out the TTL. A user who never polls waits it out.
+            if data.get("status") in _EXPORT_TERMINAL_STATES:
+                single_flight.release(_export_guard_key(request.user.pk))
 
             return render(request, "dashboard/partials/tools/export_progress.html", {"job_id": job_id, **data})
         except Exception:

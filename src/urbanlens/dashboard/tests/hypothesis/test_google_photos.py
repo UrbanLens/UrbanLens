@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
 from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.photos.google import (
+    PREVIEW_MAX_DIMENSION,
     GooglePhotosGateway,
     PickedMediaItem,
     PickerSession,
@@ -138,6 +139,25 @@ class GooglePhotosGatewayTests(TestCase):
         gw.download_media_item("https://x/a", original=False)
         called_url = gw.session.get.call_args[0][0]
         self.assertIn("=w", called_url)
+
+    def test_the_preview_is_a_thumbnail_not_a_full_size_image(self) -> None:
+        """The proxied preview URL is used in exactly one place - an `<img>` in
+        `_google_photos_picker_grid.html`. It used to ask for `=w2048-h2048`, so
+        every tile scrolled past cost about a megabyte of Google's bandwidth and
+        a megabyte of the shared 512MB Valkey to draw a small square. The test
+        above passes for any `=w`, which is why it did not catch that."""
+        gw = self._gateway()
+        gw.session.get.return_value = _mock_response(content=b"bytes")
+        gw.download_media_item("https://x/a", original=False)
+        called_url = gw.session.get.call_args[0][0]
+
+        self.assertNotIn("2048", called_url)
+        self.assertIn(f"=w{PREVIEW_MAX_DIMENSION}-h{PREVIEW_MAX_DIMENSION}", called_url)
+
+    def test_the_preview_dimension_stays_a_thumbnail(self) -> None:
+        """Guards the constant: raising it back would leave the assertion above
+        passing while restoring the defect it exists to prevent."""
+        self.assertLessEqual(PREVIEW_MAX_DIMENSION, 1024)
 
 
 # -- Settings: connect / disconnect -------------------------------------------

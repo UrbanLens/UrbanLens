@@ -147,6 +147,15 @@ class PickedMediaItem:
     create_time: datetime.datetime | None
 
 
+#: Longest edge asked of Google for a picker-grid tile. The proxied URL is used
+#: in exactly one place - an `<img>` in `_google_photos_picker_grid.html` - so
+#: the 2048 this used to request was around a megabyte per tile, of provider
+#: bandwidth and of the shared Valkey, to draw a small square. Raising it past a
+#: thumbnail reintroduces that; the import path is unaffected and still takes the
+#: original file.
+PREVIEW_MAX_DIMENSION = 512
+
+
 @dataclass(slots=True, kw_only=True)
 class GooglePhotosGateway(Gateway):
     """Picker API client bound to one user's connected Google Photos account.
@@ -284,7 +293,7 @@ class GooglePhotosGateway(Gateway):
             base_url: The item's ``base_url`` from :meth:`list_session_media_items`.
             original: When True (default), request the original file (``=d``
                 suffix per Google's documented download convention); when
-                False, request a reasonably large preview instead.
+                False, request a :data:`PREVIEW_MAX_DIMENSION` preview instead.
 
         Returns:
             The file bytes.
@@ -292,7 +301,7 @@ class GooglePhotosGateway(Gateway):
         Raises:
             GatewayRequestError: On a network error or non-2xx response.
         """
-        suffix = "=d" if original else "=w2048-h2048"
+        suffix = "=d" if original else f"=w{PREVIEW_MAX_DIMENSION}-h{PREVIEW_MAX_DIMENSION}"
         response = self.session.get(f"{base_url}{suffix}", headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
         if not response.ok:
             raise GatewayRequestError(f"Downloading the Google Photos item failed (status {response.status_code}).")

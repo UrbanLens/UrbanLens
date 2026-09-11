@@ -43,6 +43,7 @@ from urbanlens.dashboard.services.apis.photos.google import (
     session_items_cache_key,
 )
 from urbanlens.dashboard.services.auth.google_oauth import extract_email_from_id_token, revoke_token
+from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
@@ -287,7 +288,11 @@ class PinGooglePhotosThumbnailView(LoginRequiredMixin, View):
         except GatewayRequestError:
             return HttpResponse(status=502)
         content_type = item.get("mime_type", "image/jpeg")
-        cache.set(cache_key, (content, content_type), _SESSION_ITEMS_CACHE_TTL)
+        # A backstop, not the mechanism: the gateway now asks Google for a
+        # thumbnail, so an oversized body here means the provider ignored the
+        # size hint. Serve it, do not store it - one 512MB Valkey holds sessions,
+        # the Channels layer and the Celery broker alongside this.
+        bounded_cache.set_if_small(cache_key, content, content_type, _SESSION_ITEMS_CACHE_TTL, label=f"Google Photos preview {item_id}")
         return mark_private_media(HttpResponse(content, content_type=content_type))
 
 

@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
 from urbanlens.dashboard.services.apis.immich.nearby import NEARBY_ASSET_LIMIT, nearby_assets, within_radius
+from urbanlens.dashboard.services.core import bounded_cache, single_flight
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
@@ -49,7 +50,11 @@ _THUMBNAIL_CACHE_TTL = 60 * 60 * 24
 #: navigating away from Tools and coming back later resumes the progress bar
 #: instead of losing track of an already-running scan. Generous relative to
 #: how long even a very large library sweep should realistically take.
-_SCAN_TASK_ID_TTL = 60 * 60 * 6
+# Must outlive the task's own hard limit (CELERY_TASK_TIME_LIMIT, 3600s) or a
+# second sweep could start while the first is still running. The margin is the
+# whole reason it is not simply equal to it. Six hours used to be the value; that
+# stranded the button for five hours after a crash.
+_SCAN_TASK_ID_TTL = 60 * 75
 _RADIUS_CHOICES_M = ((100, "100 m"), (250, "250 m"), (500, "500 m"), (1000, "1 km"), (2000, "2 km"), (5000, "5 km"))
 _DEFAULT_RADIUS_M = 500
 _EMPTY_MESSAGES: dict[str, str] = {
@@ -97,11 +102,11 @@ def get_active_scan_task_id(profile_id: int) -> str | None:
 
 
 def _set_active_scan_task_id(profile_id: int, task_id: str) -> None:
-    cache.set(_scan_task_cache_key(profile_id), task_id, timeout=_SCAN_TASK_ID_TTL)
+    single_flight.adopt(_scan_task_cache_key(profile_id), task_id, _SCAN_TASK_ID_TTL)
 
 
 def _clear_active_scan_task_id(profile_id: int) -> None:
-    cache.delete(_scan_task_cache_key(profile_id))
+    single_flight.release(_scan_task_cache_key(profile_id))
 
 
 # -- Settings: connect / disconnect -------------------------------------------
@@ -166,8 +171,19 @@ class ImmichLibraryScanStartView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.tasks import sweep_immich_library_locations
 
+        # Claimed before the enqueue, not after: a double-click that got past a
+        # read-then-write check would enqueue two full-library sweeps.
+        if not single_flight.claim(_scan_task_cache_key(profile.pk), _SCAN_TASK_ID_TTL):
+            running = get_active_scan_task_id(profile.pk)
+            return render(
+                request,
+                _SCAN_PROGRESS_PARTIAL,
+                {"task_id": running, "state": "PENDING", "percent": 0, "message": "A scan is already running."},
+            )
+
         result = safely_enqueue_task(sweep_immich_library_locations, profile.pk)
         if result is None:
+            _clear_active_scan_task_id(profile.pk)
             return render(request, _SCAN_PROGRESS_PARTIAL, {"state": "FAILURE", "message": "Scan queue is unavailable. Please try again later."}, status=503)
         _set_active_scan_task_id(profile.pk, result.id)
         return render(request, _SCAN_PROGRESS_PARTIAL, {"task_id": result.id, "state": "PENDING", "percent": 0, "message": "Starting scan..."})
@@ -292,7 +308,9 @@ class PinImmichThumbnailView(LoginRequiredMixin, View):
             content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
         except GatewayRequestError:
             return HttpResponse(status=502)
-        cache.set(cache_key, (content, content_type), _THUMBNAIL_CACHE_TTL)
+        # The server is the user's own, so its response size is not ours to
+        # assume - `size=thumbnail` is a request, not a guarantee.
+        bounded_cache.set_if_small(cache_key, content, content_type, _THUMBNAIL_CACHE_TTL, label=f"Immich thumbnail {asset_id}")
         return mark_private_media(HttpResponse(content, content_type=content_type))
 
 

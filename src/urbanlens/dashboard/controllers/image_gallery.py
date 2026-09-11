@@ -212,6 +212,15 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
         return JsonResponse({"images": data})
 
 
+#: Most photos one bulk request may name. The same number `pin_bulk.py` uses for
+#: pins, for the same reason: `_delete_owned_images` does bounded work per batch
+#: but the batch itself was unbounded, so one request could name a whole library.
+MAX_BULK_IMAGES = 500
+
+#: Shared wording so both gallery endpoints refuse identically.
+_TOO_MANY_IMAGES = f"Select at most {MAX_BULK_IMAGES} photos at a time."
+
+
 class PinGalleryBulkView(LoginRequiredMixin, View):
     """Bulk actions over a pin's own gallery photos: delete, or send to wiki.
 
@@ -231,6 +240,9 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
             image_ids = [int(i) for i in data.get("image_ids", [])]
         except (KeyError, ValueError, TypeError, json.JSONDecodeError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
+
+        if len(image_ids) > MAX_BULK_IMAGES:
+            return JsonResponse({"error": _TOO_MANY_IMAGES}, status=400)
 
         images = Image.objects.filter(pk__in=image_ids, pin=pin, profile=profile)
 
@@ -342,6 +354,9 @@ class VaultGalleryBulkView(LoginRequiredMixin, View):
             image_ids = [int(i) for i in data.get("image_ids", [])]
         except (KeyError, ValueError, TypeError, json.JSONDecodeError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
+
+        if len(image_ids) > MAX_BULK_IMAGES:
+            return JsonResponse({"error": _TOO_MANY_IMAGES}, status=400)
 
         if action == "send_to_wiki":
             return JsonResponse({"error": "A Vault photo has no place to infer which wiki to send it to - send it from the photo's own lightbox instead."}, status=400)

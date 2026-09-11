@@ -170,6 +170,12 @@ class PinBulkMergeView(LoginRequiredMixin, View):
             return HttpResponse("target_uuid is required.", status=400)
         if not source_uuids:
             return HttpResponse("At least one source_uuid is required.", status=400)
+        # Before any database work: a request that is too large should not first
+        # pay for being too large. This endpoint is the sharpest of the bulk set -
+        # every source is re-saved individually, and each save re-hulls the
+        # target's whole child set, so the per-source cost grows as it runs.
+        if _too_many(source_uuids):
+            return HttpResponse(_TOO_MANY_PINS, status=400)
 
         profile = _request_profile(request)
         target = get_object_or_404(Pin.objects.filter(profile=profile), uuid=target_uuid)
