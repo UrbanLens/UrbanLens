@@ -222,6 +222,22 @@ def _external_bytes_cached_today(profile: Profile) -> int:
     return int(total or 0)
 
 
+def _refuse_over_the_daily_ceiling(profile: Profile) -> None:
+    """Stop *profile* caching more external media than one account may in a day.
+
+    Args:
+        profile: Whose allowance to check.
+
+    Raises:
+        MaterializeError: The allowance is spent.
+    """
+    ceiling = daily_external_media_bytes()
+    cached = _external_bytes_cached_today(profile)
+    if cached >= ceiling:
+        logger.info("Profile %s has cached %s bytes of external media today, at a ceiling of %s", profile.pk, cached, ceiling)
+        raise MaterializeError("You have cached as much external media as one account may in a day. Try again tomorrow.")
+
+
 def materialize_media_item(
     *,
     location: Location,
@@ -303,13 +319,8 @@ def materialize_media_item(
 
     # After the dedupe lookup, so re-voting a photo already in the cache stores
     # nothing and is never refused, and before the download, so a refusal does
-    # not happen with the bytes already spent.
-    if profile is not None:
-        ceiling = daily_external_media_bytes()
-        cached = _external_bytes_cached_today(profile)
-        if cached >= ceiling:
-            logger.info("Profile %s has cached %s bytes of external media today, at a ceiling of %s", profile.pk, cached, ceiling)
-            raise MaterializeError("You have cached as much external media as one account may in a day. Try again tomorrow.")
+    # not arrive with the bytes already spent.
+    _refuse_over_the_daily_ceiling(profile)
 
     try:
         response = fetch_with_revalidated_redirects(url, max_redirects=_MAX_REDIRECTS, timeout=_DOWNLOAD_TIMEOUT, headers=_DOWNLOAD_HEADERS)
@@ -322,6 +333,18 @@ def materialize_media_item(
         raise MaterializeError(f"{url} is larger than the {_MAX_DOWNLOAD_BYTES // (1024 * 1024)}MB limit for Media gallery photos.")
     if not content:
         raise MaterializeError(f"{url} returned no image data.")
+
+    # Again, immediately before the write. The check above reads the total and
+    # the download then takes seconds, so concurrent calls all pass it while none
+    # of them has stored anything yet - and the ceiling would bound one request
+    # at a time rather than an account. Re-reading here narrows that window to
+    # the create itself. It does not close it: two calls can still interleave
+    # between this read and their own writes, so the ceiling bounds an account's
+    # caching to the ceiling plus whatever one burst of concurrency fits in a few
+    # milliseconds, rather than exactly to the ceiling. Closing it properly needs
+    # a reservation the writer holds, which is worth doing when this is the
+    # binding constraint and is not today.
+    _refuse_over_the_daily_ceiling(profile)
 
     file_obj = ContentFile(content, name=_filename_from_url(url))
     checksum = compute_checksum(file_obj)

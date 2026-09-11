@@ -183,6 +183,41 @@ class TheCeilingIsEnforcedTests(_MaterializeCase):
 
         self.assertIsNotNone(self.materialize().pk)
 
+    def test_the_allowance_is_rechecked_before_the_write(self) -> None:
+        """A download takes seconds, and the ceiling is read before it starts.
+
+        Concurrent calls therefore all pass that first check while none of them
+        has stored anything, which would make the ceiling bound one request
+        rather than an account. Simulated here by spending the allowance while
+        the download is in flight - the write must still be refused.
+        """
+        spend = self.spend
+
+        def _spend_then_return(_size: int, decode_content: bool = False) -> bytes:
+            del decode_content
+            spend(TEST_CEILING + 1)
+            return b"x" * 100
+
+        response = _ok_response()
+        response.raw.read = _spend_then_return
+
+        with (
+            mock.patch("urbanlens.dashboard.services.media.media_materialize.requests.get", return_value=response),
+            self.assertRaises(MaterializeError),
+        ):
+            materialize_media_item(
+                location=self.location,
+                profile=self.profile,
+                source="wikimedia",
+                url="https://example.test/race.jpg",
+                caption="",
+            )
+
+        self.assertFalse(
+            Image.objects.filter(profile=self.profile, source_url="https://example.test/race.jpg").exists(),
+            "the row was written even though the allowance was spent while the download ran",
+        )
+
     def test_a_dedupe_hit_is_free(self) -> None:
         """Re-voting the same photo stores nothing, so it must not be refused -
         and the refusal must not run before the dedupe check finds it."""
