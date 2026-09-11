@@ -100,6 +100,22 @@ test.describe("map document", () => {
         expect(lines.at(-1)).toEqual({ t: "end", sent: pins.length });
     });
 
+    test("the head defines every label its pins name", async ({ page, api }) => {
+        // A pin carries label ids, not its labels, so a head that does not define
+        // one draws that pin with a chip missing and no error anywhere.
+        await api.createPin();
+
+        const lines = documentLines(await (await timedGet(page)).response.text());
+
+        const defined = new Set(Object.keys((lines.at(0)?.labels ?? {}) as Record<string, unknown>));
+        const named = new Set(
+            lines
+                .filter((line) => line.t === "pin")
+                .flatMap((line) => ((line.p as { label_ids?: unknown[] }).label_ids ?? []).map(String)),
+        );
+        expect([...named].filter((id) => !defined.has(id))).toEqual([]);
+    });
+
     test("what Valkey hands back is what the database produced", async ({ page, api }) => {
         // Creating a pin moves the collection's fingerprint, so the next request
         // is a miss against a key nothing has written - which is the only way to

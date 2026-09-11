@@ -2195,6 +2195,10 @@
             }
             if (cache.tiles) cache.tiles.forEach(k => _fetchedTiles.add(k));
             if (layers.length) clusterGroup.addLayers(layers);
+            // Every marker was just built against this dictionary, so nothing in
+            // it is outstanding. Without this the first merge - which sees every
+            // entry as new - would make the next refresh rebuild all of them.
+            _changedLabelIds.clear();
             updatePinCounter();
             _suppressPinOverlay();   // cache hit - overlay is not needed
             hideLoadingMessage();

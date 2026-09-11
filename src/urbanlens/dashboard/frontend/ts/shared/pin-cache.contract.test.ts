@@ -70,4 +70,21 @@ describe("pin cache contract with the map page's inline writer", () => {
             expect(cachedFields).toContain(field);
         }
     });
+
+    /**
+     * `_CACHE_FIELDS` covers what is kept per pin. The label dictionary sits
+     * beside the pins at the top of the blob instead, because a pin names its
+     * labels by id and nothing can resolve those without it -
+     * `readCachedPinsForSearch` would go back to returning no tags at all, which
+     * is exactly how it failed before and why nobody noticed.
+     */
+    test("the writer still stores the label dictionary the reader resolves ids against", () => {
+        const written = template.match(/localStorage\.setItem\(_CACHE_KEY[\s\S]{0,80}/);
+        expect(written, "the writer's setItem call moved").not.toBeNull();
+
+        const payload = template.match(/const payload = JSON\.stringify\(\{([\s\S]*?)\}\);/)?.[1];
+        expect(payload, "could not find the cache payload literal").toBeDefined();
+        expect(payload).toContain("labels:");
+        expect(payload).toContain("pins:");
+    });
 });

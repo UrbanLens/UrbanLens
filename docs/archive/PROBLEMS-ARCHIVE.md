@@ -91,7 +91,7 @@ edit of M labels still drops the cache M times, because each `label.save()` fire
 separately. That is bounded by how many labels a person edits at once rather than by how many pins
 they own, which was the point.
 
-## RESOLVED 2026-09-11: Seven writes changed what a pin draws and none of them told the client
+## RESOLVED 2026-09-11: Nine writes changed what a pin draws and none of them told the client
 
 `id: P106` · `status: fixed` · `resolved: 2026-09-11`
 
@@ -128,7 +128,7 @@ stayed on the map. It now reports a fingerprint pairing that maximum with the ro
 lowers the count. `last_updated` is still reported, and still a timestamp, but it is no longer what
 the page compares.
 
-Fixed by `services/map_pins/touch.py`, through which all seven now run. Both obligations follow from
+Fixed by `services/map_pins/touch.py`, through which they all now run. Both obligations follow from
 one call, so the next write path that forgets is missing a function call rather than missing a
 statement nobody knew about. Three hand-written copies of the `UPDATE` went with it.
 
@@ -136,6 +136,35 @@ Regression tests in `dashboard/tests/hypothesis/test_map_touch.py` and
 `test_map_pins_meta_fingerprint.py`, both written before the fix and both exercising the real entry
 points - because "every one of them calls the shared helper" was already true while the bug was
 live.
+
+### Two more, found later the same day, and why the first pass missed them
+
+This entry originally said "all seven". Two more turned up during the review of the payload change
+that followed, both of them writes the audit's method could not reach:
+
+| trigger | told the client |
+|---|---|
+| Delete a label | **no** |
+| Delete a `LabelCustomization` row without going through `clear_label_customization` | **no** |
+| `label.pins.add(pin)` - the relation written from the label's side | **no**, and it wrote to the wrong row |
+
+The audit worked by changing a thing and asking `map.pins.meta` whether it noticed. That finds any
+trigger you think to perform, and **deletion is the one nobody performs when checking that an edit
+propagates.** Deleting a label cascades its through rows in SQL: no `m2m_changed` fires, no
+`auto_now` column is written, and the pins that carried it look untouched. The fix is a `pre_delete`
+receiver rather than `post_delete`, because afterwards there is no way left to ask which pins carried
+it.
+
+The third is older and sharper. `m2m_changed` hands the receiver the *Label* as `instance` when the
+relation is written from the label's side, with the pin ids in `pk_set`. The receiver read
+`instance.pk` as a pin id, so it bumped whichever pin happened to share the label's number and left
+the pins that actually changed alone. Two live callers write this way - `services.labels.merge`
+moving a source label's pins onto the target, and the undo handler restoring a deleted label's
+assignments. The asymmetry was already documented three receivers further down the same file, in a
+docstring that said "unlike the map cache one above, `reverse` matters here"; it mattered there too.
+
+The reproduction for that one creates a pin at exactly the label's primary key, which is the only way
+to tell "touched the wrong row" apart from "touched nothing".
 
 ## RESOLVED 2026-09-11: Opening the map compared every pin with every other pin, in Python
 

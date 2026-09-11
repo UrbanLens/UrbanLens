@@ -1,7 +1,7 @@
 import logging
 
 from django.db import transaction
-from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete, pre_save
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
@@ -84,15 +84,29 @@ def record_pin_tombstone(sender: type[Pin], instance: Pin, **kwargs) -> None:
 
 
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_touch_pin")
-def touch_pin_for_labels(sender, instance: Pin, action: str, **kwargs) -> None:
+def touch_pin_for_labels(sender, instance, action: str, *, reverse: bool = False, pk_set: set[int] | None = None, **kwargs) -> None:
     """A pin gaining or losing a label changes its chips, and can change its icon.
 
     Writing ``Pin.labels.through`` does not write the pin row, so ``auto_now``
     does not fire and the client's poll sees nothing.
-    """
-    from urbanlens.dashboard.services.map_pins.touch import touch_pin
 
-    if action in {"post_add", "post_remove", "post_clear"} and instance.profile_id:
+    ``reverse`` decides what ``instance`` is. Written from the label's side -
+    ``label.pins.add(pin)``, which ``services.labels.merge`` and the undo handler
+    both use - it is the *Label*, and the pin ids are in ``pk_set``. Reading
+    ``instance.pk`` as a pin there writes to whichever pin shares the label's
+    number and leaves the pins that actually changed alone.
+    """
+    from urbanlens.dashboard.services.map_pins.touch import touch_pin, touch_pins
+
+    if action not in {"post_add", "post_remove", "post_clear"}:
+        return
+    if reverse:
+        # post_clear arrives with the rows already gone and no pk_set, so there
+        # is nothing left to identify; no caller clears from this side today.
+        if pk_set:
+            touch_pins(Pin.objects.filter(pk__in=pk_set))
+        return
+    if instance.profile_id:
         touch_pin(instance.pk)
 
 
@@ -110,12 +124,33 @@ def touch_pins_for_edited_label(sender: type[Label], instance: Label, created: b
     touch_pins_for_labels([instance.pk])
 
 
+@receiver(pre_delete, sender=Label, dispatch_uid="label_delete_touch_carrying_pins")
+def touch_pins_for_deleted_label(sender: type[Label], instance: Label, **kwargs) -> None:
+    """A deleted label takes a chip off every pin that carried it.
+
+    ``pre_delete`` because the through rows go with the row: afterwards there is
+    no way left to ask which pins carried it. Deleting them is a cascade in SQL,
+    so no ``m2m_changed`` fires and nothing else here would notice.
+    """
+    from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_labels
+
+    touch_pins_for_labels([instance.pk])
+
+
 @receiver(post_save, sender=LabelCustomization, dispatch_uid="label_customization_refresh_map_pin_cache")
 def touch_pins_for_customized_label(sender: type[LabelCustomization], instance: LabelCustomization, **kwargs) -> None:
-    """Per-profile icon/colour overrides need the same treatment as editing the label.
+    """Per-profile icon/colour overrides need the same treatment as editing the label."""
+    from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_label_customization
 
-    Saves only. Clearing an override deletes the row, which fires nothing here -
-    ``services.labels.customization`` calls the same function directly for that.
+    touch_pins_for_label_customization(instance.profile_id, instance.label_id)
+
+
+@receiver(post_delete, sender=LabelCustomization, dispatch_uid="label_customization_delete_touch_pins")
+def touch_pins_for_cleared_customization(sender: type[LabelCustomization], instance: LabelCustomization, **kwargs) -> None:
+    """Dropping an override changes what the pin draws as surely as setting one.
+
+    ``services.labels.customization`` also calls this directly, because it needs
+    the count; a row deleted any other way has only this.
     """
     from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_label_customization
 
@@ -154,9 +189,9 @@ def sync_redata_assignments_for_pin_labels(sender, instance, action: str, revers
     forward (``pin.labels.add(label)``) and reverse
     (``label.pins.add(pin)``, used by ``services.labels.merge``) alike.
 
-    Unlike ``refresh_map_pin_cache_for_labels`` above, ``reverse`` matters
-    here: in the reverse direction ``instance`` is the *Label*, not a Pin,
-    and ``pk_set`` holds the affected *pin* ids rather than label ids.
+    ``reverse`` matters here, as it does in ``touch_pin_for_labels`` above: in
+    the reverse direction ``instance`` is the *Label*, not a Pin, and ``pk_set``
+    holds the affected *pin* ids rather than label ids.
     """
     if action not in {"post_add", "post_remove", "post_clear"}:
         return

@@ -240,6 +240,162 @@ class TouchingOnlyReachesTheRightPinsTests(TestCase):
         self.assertEqual(Pin.objects.filter(pk=pin.pk).values_list("updated", flat=True).first(), before)
 
 
+class DeletingALabelTellsTheClientTests(TestCase):
+    """A deleted label leaves a chip on the map until something says otherwise.
+
+    Deleting a `Label` cascades its through rows in SQL, which fires no
+    `m2m_changed` and writes no `auto_now` column - so the pins that carried it
+    look untouched, the fingerprint the client polls does not move, and the
+    browser goes on drawing a chip for a label that no longer exists. The same
+    hole as P106's seven, found while normalising labels out of the payload.
+
+    `pre_delete` rather than `post_delete`: by the time the row is gone so are
+    the through rows, and there is no longer any way to ask which pins carried
+    it.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.label = baker.make(Label, profile=self.profile, kind="tag", name="Doomed", order=1)
+        self.carrying = baker.make(
+            Pin, profile=self.profile, location=baker.make(Location, latitude=1.0, longitude=1.0)
+        )
+        self.carrying.labels.add(self.label)
+
+    def _updated(self, pin: Pin) -> object:
+        """The pin's stored `updated`, read fresh.
+
+        Args:
+            pin: Whose stamp to read.
+
+        Returns:
+            The timestamp the client's poll is derived from.
+        """
+        return Pin.objects.filter(pk=pin.pk).values_list("updated", flat=True).first()
+
+    def test_deleting_a_label_moves_it(self) -> None:
+        before = self._updated(self.carrying)
+
+        self.label.delete()
+
+        self.assertGreater(
+            self._updated(self.carrying), before, "the pin kept a chip for a label that no longer exists"
+        )
+
+    def test_deleting_through_a_queryset_moves_it_too(self) -> None:
+        """The bulk paths delete without ever holding an instance."""
+        before = self._updated(self.carrying)
+
+        Label.objects.filter(pk=self.label.pk).delete()
+
+        self.assertGreater(self._updated(self.carrying), before)
+
+    def test_a_pin_that_never_carried_it_is_left_alone(self) -> None:
+        other = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=2.0, longitude=2.0))
+        before = self._updated(other)
+
+        self.label.delete()
+
+        self.assertEqual(self._updated(other), before)
+
+    def test_the_fingerprint_the_client_polls_moves(self) -> None:
+        """End to end: it has to be visible in what the browser actually reads."""
+        before = self.client.get(reverse("map.pins.meta")).json()["fingerprint"]
+
+        self.label.delete()
+
+        self.assertNotEqual(self.client.get(reverse("map.pins.meta")).json()["fingerprint"], before)
+
+    def test_deleting_a_customization_row_directly_moves_it(self) -> None:
+        """`clear_label_customization` says so for itself; a raw delete did not."""
+        from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
+        from urbanlens.dashboard.services.labels.customization import upsert_label_customization
+
+        upsert_label_customization(self.profile, self.label, name=None, icon="star", color=None)
+        before = self._updated(self.carrying)
+
+        LabelCustomization.objects.filter(profile=self.profile, label=self.label).delete()
+
+        self.assertGreater(self._updated(self.carrying), before)
+
+
+class WritingTheLabelSideOfTheRelationTellsTheClientTests(TestCase):
+    """`label.pins.add(pin)` is the same write as `pin.labels.add(label)`.
+
+    In the reverse direction `m2m_changed` hands the receiver the *Label* as
+    `instance` and the *pin* ids in `pk_set`. A receiver that reads
+    `instance.pk` as a pin therefore touches whichever pin happens to share that
+    number, and never touches the pins that actually changed.
+
+    Two live callers write this way: `services.labels.merge` moving a source
+    label's pins onto the target, and the undo handler restoring a deleted
+    label's assignments.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+
+    def _updated(self, pin: Pin) -> object:
+        """The pin's stored `updated`, read fresh.
+
+        Args:
+            pin: Whose stamp to read.
+
+        Returns:
+            The timestamp the client's poll is derived from.
+        """
+        return Pin.objects.filter(pk=pin.pk).values_list("updated", flat=True).first()
+
+    def test_adding_pins_from_the_label_side_moves_them(self) -> None:
+        label = baker.make(Label, profile=self.profile, kind="tag", name="Reverse", order=1)
+        pin = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=1.0, longitude=1.0))
+        before = self._updated(pin)
+
+        label.pins.add(pin)
+
+        self.assertGreater(self._updated(pin), before, "the pin gained a chip the client will never fetch")
+
+    def test_it_does_not_touch_the_pin_that_shares_the_labels_number(self) -> None:
+        """The sharp edge: reading `instance.pk` as a pin id in this direction.
+
+        A pin is created at exactly the label's primary key, so a receiver making
+        that mistake writes to it and this sees it.
+        """
+        label = baker.make(Label, profile=self.profile, kind="tag", name="Collider", order=1)
+        impostor = Pin.objects.create(
+            pk=label.pk,
+            profile=self.profile,
+            location=baker.make(Location, latitude=5.0, longitude=5.0),
+            name="Shares the label's number",
+        )
+        target = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=6.0, longitude=6.0))
+        before = self._updated(impostor)
+
+        label.pins.add(target)
+
+        self.assertEqual(self._updated(impostor), before, "a pin that gained nothing was marked as changed")
+
+    def test_merging_two_labels_moves_the_pins_that_moved(self) -> None:
+        from urbanlens.dashboard.services.labels.merge import merge_labels
+
+        source = baker.make(Label, profile=self.profile, kind="tag", name="Source", order=1)
+        target = baker.make(Label, profile=self.profile, kind="tag", name="Target", order=2)
+        pin = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=3.0, longitude=3.0))
+        pin.labels.add(source)
+        before = self._updated(pin)
+
+        merge_labels(target=target, sources=[source], profile=self.profile)
+
+        self.assertGreater(self._updated(pin), before, "the pin's chips changed and the client is not told")
+
+
 class TheOtherWritesThatChangeAPinsAppearanceTests(TestCase):
     """The same obligation, for the triggers that are not label edits.
 
