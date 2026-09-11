@@ -143,12 +143,17 @@ def refusal(scope: str, identity: str, rate: Rate) -> HttpResponse:
     return response
 
 
-def throttled(scope: str, rate: Rate) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def throttled(scope: str, rate: Rate, methods: frozenset[str] = COUNTED_METHODS) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Limit how often one caller may reach the decorated view.
 
     Args:
         scope: What is being limited.
         rate: The limit and its window.
+        methods: Which HTTP methods to count. Defaults to the unsafe ones,
+            because throttling every GET by default would put a limiter in
+            front of every page on the site. A view whose *expensive* method is
+            GET - a proxy that downloads somebody else's bytes, say - passes its
+            own set, at the call site where that is visible.
 
     Returns:
         The decorator.
@@ -161,7 +166,7 @@ def throttled(scope: str, rate: Rate) -> Callable[[Callable[..., Any]], Callable
         # them off the callable the URLconf holds.
         @functools.wraps(view)
         def guarded(request: HttpRequest, *args: Any, **kwargs: Any) -> Any:
-            if request.method not in COUNTED_METHODS:
+            if request.method not in methods:
                 return view(request, *args, **kwargs)
             identity = client_ip(request) or "unknown"
             if not allow(scope, identity, rate):
@@ -169,6 +174,13 @@ def throttled(scope: str, rate: Rate) -> Callable[[Callable[..., Any]], Callable
                 return refusal(scope, identity, rate)
             return view(request, *args, **kwargs)
 
+        # Readable off the URLconf, so a test can ask whether a route is
+        # actually guarded rather than inferring it from behaviour - which for a
+        # limit of several hundred means several hundred requests, and for a
+        # route somebody forgot to wrap means a test that passes.
+        guarded.throttle_scope = scope  # type: ignore[attr-defined]
+        guarded.throttle_rate = rate  # type: ignore[attr-defined]
+        guarded.throttle_methods = methods  # type: ignore[attr-defined]
         return guarded
 
     return decorate

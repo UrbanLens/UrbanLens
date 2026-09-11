@@ -99,6 +99,7 @@ from urbanlens.dashboard.controllers.index import HomeOverviewView, HomeWidgetLa
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.pin import PinViewSet
 from urbanlens.dashboard.models.reviews import ReviewViewSet
+from urbanlens.dashboard.services.security.throttle import throttled
 
 logger = logging.getLogger(__name__)
 
@@ -419,22 +420,22 @@ urlpatterns = [
                             # so there's no pin_slug segment for them to nest under at all.
                             path(
                                 "loopnet/photo/<str:listing_uuid>/<int:photo_id>/",
-                                pin.PinLoopnetPhotoView.as_view(),
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS)(pin.PinLoopnetPhotoView.as_view()),
                                 name="pin.loopnet.photo",
                             ),
                             path(
                                 "cris/attachment/<str:resource_uuid>/<int:attachment_id>/",
-                                pin.PinCrisAttachmentView.as_view(),
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS)(pin.PinCrisAttachmentView.as_view()),
                                 name="pin.cris.attachment",
                             ),
                             path(
                                 "cris/attachment/<str:resource_uuid>/<int:attachment_id>/extracted/<int:image_id>/",
-                                pin.PinCrisExtractedImageView.as_view(),
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS)(pin.PinCrisExtractedImageView.as_view()),
                                 name="pin.cris.extracted_image",
                             ),
                             path(
                                 "place-cid/media/<int:cid>/<int:media_id>/",
-                                pin.PinPlaceCidMediaView.as_view(),
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS)(pin.PinPlaceCidMediaView.as_view()),
                                 name="pin.place_cid.media",
                             ),
                             path("<slug:pin_slug>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),

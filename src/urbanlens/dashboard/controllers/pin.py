@@ -29,11 +29,13 @@ from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.core.bounded_cache import set_if_small
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
 from urbanlens.dashboard.services.search.search import format_search_date, search_web
 from urbanlens.dashboard.services.security.redact import redact_coordinate
+from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -2110,6 +2112,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
 _REDATA_MEDIA_CACHE_TTL = 3600
 
+#: Largest proxied REData body worth putting in the shared Valkey. Larger than
+#: ``bounded_cache.MAX_CACHED_BODY_BYTES``, deliberately and at the call site:
+#: that ceiling is sized for thumbnails, and these are scanned PDFs and TIFFs, so
+#: inheriting it would refuse to cache almost all of them and turn every view
+#: into a fresh REData download - a different resource spent, not a saving.
+REDATA_MEDIA_MAX_CACHED_BYTES = 4 * 1024 * 1024
+
+#: How often one address may pull these proxies. Generous, because a gallery page
+#: is many requests and a limit tight enough to break ordinary browsing would be
+#: reverted rather than tuned - two a second sustained, against four endpoints
+#: that need no login and write what they fetch into the instance everything else
+#: shares.
+REDATA_MEDIA_RATE = Rate(limit=600, window_seconds=300)
+
+#: GET is the expensive method here, which the throttle's default set excludes.
+REDATA_MEDIA_METHODS = frozenset({"GET"})
+
 
 class RedataMediaProxyMixin:
     """Shared caching + preview handling for the REData-backed media proxies.
@@ -2172,7 +2191,17 @@ class RedataMediaProxyMixin:
                 original = download()
             except unavailable_errors:
                 return HttpResponse(status=404)
-            cache.set(cache_key, original, _REDATA_MEDIA_CACHE_TTL)
+            # Refusing to cache never means refusing to answer - the body is
+            # served below either way. What it stops is one oversized document
+            # evicting other people's sessions out of the shared instance.
+            set_if_small(
+                cache_key,
+                original[0],
+                original[1],
+                _REDATA_MEDIA_CACHE_TTL,
+                label=f"REData media {cache_key}",
+                max_bytes=REDATA_MEDIA_MAX_CACHED_BYTES,
+            )
 
         content, content_type = original
         # A JPEG needs no conversion, and re-encoding it would only cost
