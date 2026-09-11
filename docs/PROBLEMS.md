@@ -4346,6 +4346,34 @@ client-supplied thing comes through.
   counted only unsafe methods, which was right for the signup POSTs it was written for and useless
   for a download proxy.
 
+**H10 is fixed** (2026-09-11), in two places because one cannot cover the other.
+
+`InboundVolumeMixin` bounds how fast an account may *send* on a socket, and its docstring said the
+shared tier "is what stops one account opening fifty sockets" - which is true of flooding from fifty
+and not of holding them. An idle socket sends nothing, so it was charged nothing, while occupying one
+of nginx's `worker_connections` (1024 per worker, shared with every HTTP request) and a slot in the
+single daphne behind them. Holding them is the cheap attack; sending on them was the one already
+bounded.
+
+`services/security/socket_budget.py` caps connections per *account* -
+`WEBSOCKET_MAX_SOCKETS_PER_ACCOUNT`, default 20 - claimed before any group is joined, because
+Channels fires `disconnect()` only for a connection that reached `accept()` and a refusal after
+`group_add` would leak the membership permanently. Two properties matter more than the number:
+
+- **It fails open.** A cap that cannot read its counter allows, exactly as the request throttle does.
+  A Valkey outage already degrades the site; turning it into "nobody may open a socket" makes an
+  outage worse rather than safer. This is the opposite of the single-flight guard, and the difference
+  is which way the failure hurts.
+- **A crashed worker must not lock an account out.** A plain counter would be incremented and never
+  decremented. The claims are a sorted set scored by time, so a dead worker's leftovers age out on
+  their own; the worst a crash costs is a smaller allowance until `STALE_AFTER_SECONDS`.
+
+The application cap runs *after* authentication, so it cannot see the cheapest attack of all: a
+handshake that never authenticates still occupies a connection and a daphne slot before Django closes
+it. `limit_conn ws_conn 60` on the `/ws/` location is what bounds that, keyed on the real address the
+vhost establishes first - and the test asserts that ordering, since keying on the front door's
+address would give every visitor behind the tunnel one shared budget.
+
 **H16 is overstated.** The audit says "every wiki/photo access check re-reads the whole site-wide
 Place aggregate table, so each media-file fetch costs a full-table scan". The scan is real -
 `_earn_aggregates` reads every aggregate `Place` and then every member of those - but the media path

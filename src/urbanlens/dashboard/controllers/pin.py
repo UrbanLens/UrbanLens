@@ -2119,11 +2119,12 @@ _REDATA_MEDIA_CACHE_TTL = 3600
 #: into a fresh REData download - a different resource spent, not a saving.
 REDATA_MEDIA_MAX_CACHED_BYTES = 4 * 1024 * 1024
 
-#: How often one address may pull these proxies. Generous, because a gallery page
-#: is many requests and a limit tight enough to break ordinary browsing would be
-#: reverted rather than tuned - two a second sustained, against four endpoints
-#: that need no login and write what they fetch into the instance everything else
-#: shares.
+#: How often one caller may pull these proxies. Charged to the account when there
+#: is one and to the address otherwise: an address is a poor identity behind NAT,
+#: where an office would share one budget, and a poor isolation boundary, since
+#: the requirement is that one account cannot spend everyone else's. Generous
+#: either way - a panel is many requests, and a limit tight enough to break
+#: ordinary browsing would be reverted rather than tuned.
 REDATA_MEDIA_RATE = Rate(limit=600, window_seconds=300)
 
 #: GET is the expensive method here, which the throttle's default set excludes.

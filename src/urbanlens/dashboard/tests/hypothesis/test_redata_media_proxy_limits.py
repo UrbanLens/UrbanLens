@@ -159,3 +159,52 @@ class TheDecoratorCanCountSafeMethodsTests(TestCase):
         self.assertEqual(view(factory.get("/probe/")).status_code, 200)
         self.assertEqual(view(factory.get("/probe/")).status_code, 429)
         self.assertEqual(len(calls), 1)
+
+
+class TheBudgetIsChargedPerAccountTests(TestCase):
+    """An address is a poor identity and a poor isolation boundary.
+
+    Behind NAT one office shares one budget, so a limit sized for a person
+    refuses a team. And the requirement these limits exist for is that one
+    *account* cannot spend everyone else's - which a per-address budget does not
+    express at all.
+    """
+
+    def test_a_signed_in_caller_is_charged_to_their_account(self) -> None:
+        from django.contrib.auth.models import User
+        from django.test import RequestFactory
+        from model_bakery import baker
+
+        from urbanlens.dashboard.services.security.throttle import account_or_address
+
+        user = baker.make(User)
+        request = RequestFactory().get("/anything/")
+        request.user = user
+
+        self.assertEqual(account_or_address(request), f"user:{user.pk}")
+
+    def test_an_anonymous_caller_is_charged_to_their_address(self) -> None:
+        from django.contrib.auth.models import AnonymousUser
+        from django.test import RequestFactory
+
+        from urbanlens.dashboard.services.security.throttle import account_or_address
+
+        request = RequestFactory().get("/anything/", REMOTE_ADDR="203.0.113.7")
+        request.user = AnonymousUser()
+
+        self.assertEqual(account_or_address(request), "203.0.113.7")
+
+    def test_the_two_namespaces_cannot_collide(self) -> None:
+        """A budget shared by accident between an account and an address would
+        be one that could be spent on the other's behalf."""
+        from django.contrib.auth.models import User
+        from django.test import RequestFactory
+        from model_bakery import baker
+
+        from urbanlens.dashboard.services.security.throttle import account_or_address
+
+        user = baker.make(User)
+        signed_in = RequestFactory().get("/anything/")
+        signed_in.user = user
+
+        self.assertTrue(account_or_address(signed_in).startswith("user:"))

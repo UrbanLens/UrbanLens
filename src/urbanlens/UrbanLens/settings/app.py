@@ -266,6 +266,16 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "first marker, not server memory - the document is streamed in batches either way."
         ),
     )
+    websocket_max_sockets_per_account: int = Field(
+        default=20,
+        description=(
+            "How many WebSocket connections one account may hold open at once. An idle socket sends nothing, so the "
+            "inbound-volume limits charge it nothing, while it still occupies one of nginx's worker_connections "
+            "(shared with every HTTP request) and a slot in the single daphne behind them. Generous enough for many "
+            "tabs and several live features at once; far below what exhausting the pool takes. The cap fails open - "
+            "a Valkey outage must not become 'nobody may open a socket'."
+        ),
+    )
     external_media_daily_bytes: int = Field(
         default=512 * 1024 * 1024,
         description=(

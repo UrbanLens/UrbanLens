@@ -143,7 +143,31 @@ def refusal(scope: str, identity: str, rate: Rate) -> HttpResponse:
     return response
 
 
-def throttled(scope: str, rate: Rate, methods: frozenset[str] = COUNTED_METHODS) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def _address_identity(request: HttpRequest) -> str:
+    """The default identity: the caller's address."""
+    return client_ip(request)
+
+
+def account_or_address(request: HttpRequest) -> str:
+    """The signed-in account, falling back to the address.
+
+    Args:
+        request: The incoming request.
+
+    Returns:
+        ``"user:<pk>"`` for an authenticated caller, else the address. Prefixed
+        so the two namespaces cannot collide - an address is never ``user:``
+        anything, but a budget shared by accident between an account and an
+        address would be a budget one could spend on the other's behalf.
+    """
+    user = getattr(request, "user", None)
+    user_id = getattr(user, "pk", None)
+    if user_id and getattr(user, "is_authenticated", False):
+        return f"user:{user_id}"
+    return client_ip(request)
+
+
+def throttled(scope: str, rate: Rate, methods: frozenset[str] = COUNTED_METHODS, identify: Callable[[HttpRequest], str] | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Limit how often one caller may reach the decorated view.
 
     Args:
@@ -154,6 +178,12 @@ def throttled(scope: str, rate: Rate, methods: frozenset[str] = COUNTED_METHODS)
             front of every page on the site. A view whose *expensive* method is
             GET - a proxy that downloads somebody else's bytes, say - passes its
             own set, at the call site where that is visible.
+        identify: Who to charge. Defaults to the address, which is the only
+            thing an anonymous caller has. A route that is usually reached by a
+            signed-in user should pass :func:`account_or_address` instead: an
+            address is a poor identity behind NAT, where one office shares one
+            budget, and a poor isolation boundary too, since the requirement is
+            that one *account* cannot spend everyone else's.
 
     Returns:
         The decorator.
@@ -168,7 +198,7 @@ def throttled(scope: str, rate: Rate, methods: frozenset[str] = COUNTED_METHODS)
         def guarded(request: HttpRequest, *args: Any, **kwargs: Any) -> Any:
             if request.method not in methods:
                 return view(request, *args, **kwargs)
-            identity = client_ip(request) or "unknown"
+            identity = (identify or _address_identity)(request) or "unknown"
             if not allow(scope, identity, rate):
                 logger.warning("throttled %s for %s at %s/%ss", scope, identity, rate.limit, rate.window_seconds)
                 return refusal(scope, identity, rate)

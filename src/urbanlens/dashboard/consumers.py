@@ -196,6 +196,72 @@ class CredentialScopeMixin(_CredentialScopeBase):
         return _credential_is_still_valid(self.credential)
 
 
+class SocketAllowanceMixin(_CredentialScopeBase):
+    """Bounds how many connections one account may hold open at once.
+
+    ``InboundVolumeMixin`` bounds how fast a connection may send. It charges an
+    idle socket nothing, because an idle socket sends nothing - while it still
+    occupies one of nginx's ``worker_connections``, shared with every HTTP
+    request, and a slot in the single daphne behind them. Holding them is the
+    cheap attack; sending on them is the one that was already bounded.
+
+    Charged per *account*, not per session or per feature, because the resource
+    being protected is site-wide. ``volume_identity`` deliberately scopes some
+    consumers more narrowly than that (a player in two games at once is doing
+    something legitimate), which is why this does not reuse it.
+
+    See ``services.security.socket_budget`` for the shape and for why it fails
+    open.
+    """
+
+    def connection_identity(self) -> str:
+        """Who this connection is charged to.
+
+        Returns:
+            A stable per-account key, or "" when the connection cannot be
+            attributed to one - in which case it is not counted, because a
+            shared bucket for "unattributable" would let one caller spend
+            everybody else's allowance.
+        """
+        user = self.scope.get("user")
+        user_id = getattr(user, "pk", None)
+        return f"user:{user_id}" if user_id else ""
+
+    async def claim_socket_slot(self) -> bool:
+        """Take a place in this account's allowance, if there is one.
+
+        Call after authenticating and before ``accept()``: a refused connection
+        should never have joined a group.
+
+        Returns:
+            Whether the connection may proceed. True when the account cannot be
+            identified, and true when the store cannot answer.
+        """
+        from urbanlens.dashboard.services.security import socket_budget
+
+        identity = self.connection_identity()
+        if not identity:
+            return True
+        # database_sync_to_async for a call that touches Valkey rather than the
+        # database: it is the hop every other blocking call in this file uses,
+        # and matching its thread-sensitivity is worth more here than naming the
+        # store precisely.
+        allowed = await database_sync_to_async(socket_budget.claim)(identity, self.channel_name)
+        if allowed:
+            self._socket_slot_identity = identity
+        return allowed
+
+    async def release_socket_slot(self) -> None:
+        """Give this connection's place back. Safe to call when none was taken."""
+        from urbanlens.dashboard.services.security import socket_budget
+
+        identity = getattr(self, "_socket_slot_identity", "")
+        if not identity:
+            return
+        self._socket_slot_identity = ""
+        await database_sync_to_async(socket_budget.release)(identity, self.channel_name)
+
+
 class InboundVolumeMixin(_CredentialScopeBase):
     """Bounds how large and how fast one connection's inbound frames may be.
 
@@ -214,7 +280,10 @@ class InboundVolumeMixin(_CredentialScopeBase):
     2. A per-connection counter, in this process, off a monotonic clock. It
        needs no I/O, so a flood cannot knock out its own limiter.
     3. A shared counter keyed by sender, which the per-connection tier cannot
-       substitute for: it is what stops one account opening fifty sockets.
+       substitute for: it is what stops one account *sending* from fifty sockets
+       at once. How many it may hold is a different question and a different
+       limit - see :class:`SocketAllowanceMixin`, because an idle socket sends
+       nothing and so is charged nothing here.
 
     Subclasses give :meth:`volume_identity` and may tighten
     :attr:`max_frame_chars`; everything else is inherited.
@@ -328,7 +397,7 @@ class InboundVolumeMixin(_CredentialScopeBase):
         await self.send(text_data=json.dumps({"type": "error", "detail": detail}))
 
 
-class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
+class UserNotificationConsumer(SocketAllowanceMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
     """Pushes on-site notifications to a logged-in user's open tabs as they are created.
 
     Mounted at ``ws/notifications/``. Authentication comes from the session
@@ -371,6 +440,13 @@ class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             await self.close(code=4404)
             return
 
+        # Before any group is joined: Channels only reliably fires disconnect()
+        # for a connection that reached accept(), so a refusal after group_add
+        # would leak the membership the cleanup below exists to prevent.
+        if not await self.claim_socket_slot():
+            await self.close(code=4429)
+            return
+
         try:
             profile_id = await self._get_profile_id()
             from urbanlens.dashboard.models.notifications.signals import notification_group_name
@@ -393,6 +469,7 @@ class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         """Leave the notification group, if we ever joined one, and stop re-validating the credential."""
+        await self.release_socket_slot()
         self.stop_credential_revalidation()
         if hasattr(self, "group_name"):
             try:
@@ -433,7 +510,7 @@ class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         return profile.pk
 
 
-class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
+class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
     """Real-time direct-message channel for a logged-in user.
 
     Mounted at ``ws/messages/``. Authentication comes from the session cookie
@@ -482,6 +559,13 @@ class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebso
             await self.close(code=4404)
             return
 
+        # Before any group is joined: Channels only reliably fires disconnect()
+        # for a connection that reached accept(), so a refusal after group_add
+        # would leak the membership the cleanup below exists to prevent.
+        if not await self.claim_socket_slot():
+            await self.close(code=4429)
+            return
+
         try:
             self.profile_id = await self._get_profile_id()
             from urbanlens.dashboard.services.messaging.direct_messages import direct_message_group_name, mark_profile_online
@@ -505,6 +589,7 @@ class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebso
 
     async def disconnect(self, close_code):
         """Leave the direct-message group, mark one fewer live connection, and stop re-validating the credential."""
+        await self.release_socket_slot()
         self.stop_credential_revalidation()
         if hasattr(self, "group_name"):
             try:
@@ -782,7 +867,7 @@ class DirectMessageConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebso
         )
 
 
-class SafetyCheckinChatConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
+class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
     """Real-time chat for a safety check-in, shared by the owner, every accepted partner, and every emergency contact.
 
     Mounted under two routes (see ``dashboard/routing.py``):
@@ -889,6 +974,13 @@ class SafetyCheckinChatConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncW
         # (owner or an accepted partner, both already verified by _resolve()) joins
         # the location group.
         self.location_group_name = safety_checkin_location_group_name(self.checkin.pk) if self.contact is None else None
+        # Before any group is joined: Channels only reliably fires disconnect()
+        # for a connection that reached accept(), so a refusal after group_add
+        # would leak the membership the cleanup below exists to prevent.
+        if not await self.claim_socket_slot():
+            await self.close(code=4429)
+            return
+
         joined_groups = []
         try:
             await self.channel_layer.group_add(self.group_name, self.channel_name)
@@ -935,6 +1027,7 @@ class SafetyCheckinChatConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncW
 
     async def disconnect(self, close_code):
         """Leave the check-in's group(s), if we ever joined any, and stop re-validating."""
+        await self.release_socket_slot()
         task = getattr(self, "_revalidation_task", None)
         if task is not None:
             task.cancel()
@@ -1257,7 +1350,7 @@ class SafetyCheckinChatConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncW
         }
 
 
-class _ParticipantSessionConsumer(InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
+class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
     """Shared real-time sync for one participant-based game session.
 
     Both ``GameSessionConsumer`` (SpotGuessr) and ``TriviaSessionConsumer``
@@ -1386,6 +1479,13 @@ class _ParticipantSessionConsumer(InboundVolumeMixin, CredentialScopeMixin, Asyn
         self.session_id = session_id
         self.group_name = self._group_name(session_id)
         self.profile_id = await self._connection_profile_id(user)
+        # Before any group is joined: Channels only reliably fires disconnect()
+        # for a connection that reached accept(), so a refusal after group_add
+        # would leak the membership the cleanup below exists to prevent.
+        if not await self.claim_socket_slot():
+            await self.close(code=4429)
+            return
+
         try:
             await self.channel_layer.group_add(self.group_name, self.channel_name)
             await self.accept()
@@ -1403,6 +1503,7 @@ class _ParticipantSessionConsumer(InboundVolumeMixin, CredentialScopeMixin, Asyn
 
     async def disconnect(self, close_code):
         """Leave the session's group, if we ever joined one, and stop re-validating the credential."""
+        await self.release_socket_slot()
         self.stop_credential_revalidation()
         if hasattr(self, "group_name"):
             try:

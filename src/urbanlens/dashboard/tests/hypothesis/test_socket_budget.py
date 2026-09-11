@@ -1,0 +1,264 @@
+"""One account must not be able to hold every WebSocket slot on the site.
+
+Authorization on these sockets is thorough, and `InboundVolumeMixin` bounds how
+fast an account may *send* on them - its docstring even says the shared tier "is
+what stops one account opening fifty sockets", which is true of flooding from
+fifty and not of holding them. An idle socket sends nothing, so it is charged
+nothing, while still occupying one of nginx's `worker_connections` (1024 per
+worker, shared with every HTTP request) and a slot in the single daphne behind
+them (N21 H10).
+
+Two properties matter more than the count itself:
+
+* **it fails open.** A cap that cannot read its counter must allow, exactly as
+  the request throttle does - a Valkey outage already degrades the site, and
+  turning it into "nobody may open a socket" makes an outage worse rather than
+  safer. This is the opposite of the single-flight guard, where proceeding blind
+  starts a second copy of the most expensive work, and the difference is which
+  way the failure hurts.
+* **a crashed worker must not lock an account out.** A plain counter would be
+  incremented and never decremented. The claims are a sorted set scored by time,
+  so leftovers age out on their own.
+"""
+
+from __future__ import annotations
+
+import pathlib
+import time
+from unittest import mock
+
+from asgiref.sync import async_to_sync
+from channels.testing import WebsocketCommunicator
+from django.test import TransactionTestCase, override_settings
+from model_bakery import baker
+
+from urbanlens.core.tests.fake_redis import FakeRedis
+from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.dashboard.consumers import UserNotificationConsumer
+from urbanlens.dashboard.services.security import socket_budget
+
+SETTING_NAME = "WEBSOCKET_MAX_SOCKETS_PER_ACCOUNT"
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
+
+
+class _BudgetCase(SimpleTestCase):
+    """A budget backed by an in-memory store rather than a real socket."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.store = FakeRedis()
+        patch = mock.patch.object(socket_budget, "_client", return_value=self.store)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+
+class TheCeilingExistsTests(_BudgetCase):
+    """An override_settings of a name nothing reads configures nothing."""
+
+    def test_a_setting_names_the_maximum(self) -> None:
+        from django.conf import settings
+
+        self.assertTrue(hasattr(settings, SETTING_NAME))
+
+    def test_the_name_is_one_production_reads(self) -> None:
+        with override_settings(**{SETTING_NAME: 3}):
+            self.assertEqual(socket_budget.max_sockets_per_account(), 3)
+
+
+@override_settings(**{SETTING_NAME: 3})
+class TheAllowanceIsEnforcedTests(_BudgetCase):
+    """The rule, from both sides - a cap nothing accepts is not a cap."""
+
+    def test_connections_within_the_allowance_are_claimed(self) -> None:
+        for index in range(3):
+            self.assertTrue(socket_budget.claim("user:1", f"chan-{index}"), f"connection {index} was refused")
+
+        self.assertEqual(socket_budget.open_count("user:1"), 3)
+
+    def test_the_one_past_the_allowance_is_refused(self) -> None:
+        for index in range(3):
+            socket_budget.claim("user:1", f"chan-{index}")
+
+        self.assertFalse(socket_budget.claim("user:1", "chan-3"))
+
+    def test_a_refused_connection_does_not_occupy_the_allowance(self) -> None:
+        """Or the refusal would cost the account the slot it was refused."""
+        for index in range(3):
+            socket_budget.claim("user:1", f"chan-{index}")
+        socket_budget.claim("user:1", "chan-3")
+
+        self.assertEqual(socket_budget.open_count("user:1"), 3)
+
+    def test_releasing_one_makes_room_for_the_next(self) -> None:
+        for index in range(3):
+            socket_budget.claim("user:1", f"chan-{index}")
+
+        socket_budget.release("user:1", "chan-1")
+
+        self.assertTrue(socket_budget.claim("user:1", "chan-3"))
+
+    def test_one_account_cannot_spend_another_s_allowance(self) -> None:
+        """The whole point: the isolation is per account."""
+        for index in range(3):
+            socket_budget.claim("noisy:1", f"chan-{index}")
+
+        self.assertTrue(socket_budget.claim("quiet:2", "chan-0"))
+
+    def test_reclaiming_the_same_connection_is_not_a_second_one(self) -> None:
+        """A reconnect that reuses a channel name must not count twice."""
+        for _ in range(5):
+            self.assertTrue(socket_budget.claim("user:1", "chan-0"))
+
+        self.assertEqual(socket_budget.open_count("user:1"), 1)
+
+
+@override_settings(**{SETTING_NAME: 3})
+class ACrashedWorkerDoesNotLockAnAccountOutTests(_BudgetCase):
+    """The failure mode a plain counter would have, and the reason for the shape."""
+
+    def test_stale_claims_age_out(self) -> None:
+        stale = time.time() - socket_budget.STALE_AFTER_SECONDS - 1
+        self.store.zsets["ul_ws_open:user:1"] = {f"dead-{index}": stale for index in range(3)}
+
+        self.assertTrue(socket_budget.claim("user:1", "fresh"), "an account was locked out by a worker that went away")
+
+    def test_a_live_claim_is_not_swept(self) -> None:
+        """The sweep must not be a cap that quietly stops counting."""
+        for index in range(3):
+            socket_budget.claim("user:1", f"chan-{index}")
+
+        self.assertFalse(socket_budget.claim("user:1", "chan-3"))
+
+
+class TheCapFailsOpenTests(SimpleTestCase):
+    """A counter it cannot read must not become a site-wide refusal."""
+
+    def test_a_store_that_raises_allows_the_connection(self) -> None:
+        broken = mock.Mock()
+        broken.pipeline.side_effect = ConnectionError("gone")
+
+        with mock.patch.object(socket_budget, "_client", return_value=broken):
+            self.assertTrue(socket_budget.claim("user:1", "chan-0"))
+
+    def test_no_configured_store_allows_the_connection(self) -> None:
+        with mock.patch.object(socket_budget, "_client", return_value=None):
+            self.assertTrue(socket_budget.claim("user:1", "chan-0"))
+
+    def test_a_release_that_raises_does_not_propagate(self) -> None:
+        """Raising here would turn a store blip into a failed disconnect."""
+        broken = mock.Mock()
+        broken.zrem.side_effect = ConnectionError("gone")
+
+        with mock.patch.object(socket_budget, "_client", return_value=broken):
+            socket_budget.release("user:1", "chan-0")
+
+
+class TheConsumersHonourTheAllowanceTests(TransactionTestCase):
+    """The service is only worth having if the sockets actually ask it.
+
+    Through a real consumer rather than by reading the source: the claim has to
+    happen on the connect path, before any group is joined, and a unit test of
+    `socket_budget` alone would pass just as well against a consumer that never
+    called it.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make("auth.User")
+        self.store = FakeRedis()
+        patch = mock.patch.object(socket_budget, "_client", return_value=self.store)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def _communicator(self) -> WebsocketCommunicator:
+        comm = WebsocketCommunicator(UserNotificationConsumer.as_asgi(), "/ws/notifications/")
+        comm.scope["user"] = self.user
+        return comm
+
+    @override_settings(**{SETTING_NAME: 2})
+    def test_a_third_socket_is_refused(self) -> None:
+        async_to_sync(self._third_socket_is_refused)()
+
+    async def _third_socket_is_refused(self) -> None:
+        opened = []
+        try:
+            for index in range(2):
+                comm = self._communicator()
+                connected, _ = await comm.connect()
+                self.assertTrue(connected, f"socket {index} was refused while under the allowance")
+                opened.append(comm)
+
+            extra = self._communicator()
+            connected, _ = await extra.connect()
+            self.assertFalse(connected, "the account opened more sockets than its allowance")
+            await extra.disconnect()
+        finally:
+            for comm in opened:
+                await comm.disconnect()
+
+    @override_settings(**{SETTING_NAME: 1})
+    def test_a_refused_socket_joined_no_group(self) -> None:
+        """Channels fires disconnect() only for a connection that accepted, so a
+        refusal after group_add would leak the membership permanently."""
+        async_to_sync(self._refused_socket_joined_no_group)()
+
+    async def _refused_socket_joined_no_group(self) -> None:
+        first = self._communicator()
+        connected, _ = await first.connect()
+        self.assertTrue(connected)
+
+        with mock.patch("channels.layers.InMemoryChannelLayer.group_add") as joined:
+            refused = self._communicator()
+            await refused.connect()
+            await refused.disconnect()
+
+        joined.assert_not_called()
+        await first.disconnect()
+
+    @override_settings(**{SETTING_NAME: 1})
+    def test_disconnecting_gives_the_place_back(self) -> None:
+        async_to_sync(self._disconnecting_gives_the_place_back)()
+
+    async def _disconnecting_gives_the_place_back(self) -> None:
+        first = self._communicator()
+        connected, _ = await first.connect()
+        self.assertTrue(connected)
+        await first.disconnect()
+
+        second = self._communicator()
+        connected, _ = await second.connect()
+        self.assertTrue(connected, "a closed socket went on occupying the allowance")
+        await second.disconnect()
+
+
+class TheEdgeBoundsWhatTheAppCannotTests(SimpleTestCase):
+    """The per-account cap runs after authentication, so it cannot see the case
+    that costs the least to mount: a handshake that never authenticates still
+    occupies an nginx connection and a daphne slot before Django closes it.
+
+    Read off the config rather than exercised, because what is being asserted is
+    that the directive is present and in the right place - nginx itself is not
+    under test here.
+    """
+
+    ZONE = "ws_conn"
+
+    def test_the_zone_is_declared(self) -> None:
+        text = (REPO_ROOT / "src" / "urbanlens" / "config" / "nginx" / "nginx.conf").read_text(encoding="utf-8")
+
+        self.assertIn(f"limit_conn_zone $binary_remote_addr zone={self.ZONE}:", text)
+
+    def test_the_socket_location_uses_it(self) -> None:
+        text = (REPO_ROOT / "src" / "urbanlens" / "config" / "nginx" / "django.conf").read_text(encoding="utf-8")
+        block = text.split("location /ws/ {", 1)[1].split("}", 1)[0]
+
+        self.assertIn(f"limit_conn {self.ZONE} ", block, "the /ws/ location does not apply the connection zone")
+
+    def test_the_real_address_is_established_before_the_limit(self) -> None:
+        """Keyed on `$binary_remote_addr`, which is the front door's address
+        unless real_ip has already rewritten it - in which case every visitor
+        behind the tunnel would share one budget."""
+        text = (REPO_ROOT / "src" / "urbanlens" / "config" / "nginx" / "django.conf").read_text(encoding="utf-8")
+
+        self.assertLess(text.index("real_ip_header"), text.index("limit_conn ws_conn"))

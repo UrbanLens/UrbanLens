@@ -10,8 +10,9 @@ Deliberately not a Redis emulator. It implements the commands
 `services.map_pins.cache._SyncRedis` declares and no others, with the semantics
 those calls depend on: `rename` carries the source key's TTL, `set(nx=True)`
 returns None when the key exists, `get` returns exactly what `set` stored
-(bytes stay bytes, which is what the gzipped map document needs), and `zrangebyscore` understands ``-inf``,
-``+inf`` and the ``(score`` exclusive form the keyset pager uses. Anything it
+(bytes stay bytes, which is what the gzipped map document needs), and the
+range-by-score commands understand ``-inf``, ``+inf`` and the ``(score``
+exclusive form the keyset pager and the socket allowance use. Anything it
 does not implement should fail loudly instead of quietly returning a default.
 """
 
@@ -133,6 +134,19 @@ class FakeRedis:
 
     def zcard(self, name: str) -> int:
         return len(self.zsets.get(name, {}))
+
+    def zremrangebyscore(self, name: str, min_score: str | int, max_score: str | int) -> int:
+        low, low_exclusive = _bound(min_score, float("-inf"))
+        high, high_exclusive = _bound(max_score, float("inf"))
+        bucket = self.zsets.get(name, {})
+        doomed = [
+            member
+            for member, score in bucket.items()
+            if (score > low if low_exclusive else score >= low) and (score < high if high_exclusive else score <= high)
+        ]
+        for member in doomed:
+            del bucket[member]
+        return len(doomed)
 
     def zrangebyscore(
         self, name: str, min_score: str | int, max_score: str | int, start: int = 0, num: int | None = None
