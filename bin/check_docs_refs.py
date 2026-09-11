@@ -91,7 +91,10 @@ def _resolves(citation: str, root: pathlib.Path, citing: pathlib.Path) -> bool:
     A path into a sibling checkout counts as resolved when that checkout is
     absent: this repository cannot vouch for what it does not have, and failing
     on it would make the check depend on how a developer laid out their
-    workspace.
+    workspace. Such a path is judged from the repository root whatever cites it -
+    ``../REData/docs/x.md`` means "beside this repository", and resolving it from
+    a file six directories down lands it back inside the tree instead, where it
+    reads as an ordinary broken pointer.
     """
     if (root / citation).exists():
         return True
@@ -100,12 +103,45 @@ def _resolves(citation: str, root: pathlib.Path, citing: pathlib.Path) -> bool:
     resolved = ((root / citing).parent / citation).resolve()
     if resolved.exists():
         return True
-    if resolved.is_relative_to(root.resolve()):
-        return False
-    # Outside this repository: a sibling checkout, which can only be verified
-    # when it happens to be present next to this one.
-    relative = resolved.relative_to(root.parent.resolve())
-    return not (root.parent / relative.parts[0]).is_dir()
+    # Both spellings are tried for existence before this, so reaching here with
+    # a sibling-shaped path means the sibling is the only reading left.
+    for candidate in ((root / citation).resolve(), resolved):
+        if _names_a_sibling(candidate, root):
+            return _sibling_is_absent(candidate, root)
+    return False
+
+
+def _names_a_sibling(resolved: pathlib.Path, root: pathlib.Path) -> bool:
+    """Whether `resolved` points into a directory beside this repository.
+
+    Args:
+        resolved: An absolute path.
+        root: Repository root.
+
+    Returns:
+        True for a path inside the workspace but outside this repository.
+        Anything further afield - the `../../../../../../docs/...` a test writes
+        relative to its own file, which climbs past the workspace - is not a
+        sibling citation and is judged as an ordinary one.
+    """
+    workspace = root.parent.resolve()
+    return resolved.is_relative_to(workspace) and not resolved.is_relative_to(root.resolve())
+
+
+def _sibling_is_absent(resolved: pathlib.Path, root: pathlib.Path) -> bool:
+    """Whether the sibling checkout `resolved` names is missing from the workspace.
+
+    Args:
+        resolved: An absolute path into a sibling checkout.
+        root: Repository root.
+
+    Returns:
+        True when the sibling directory does not exist, so the citation cannot be
+        judged either way. False when it exists and the file does not - the check
+        is skipped for want of evidence, not waived.
+    """
+    workspace = root.parent.resolve()
+    return not (workspace / resolved.relative_to(workspace).parts[0]).is_dir()
 
 
 def broken_citations(root: pathlib.Path) -> tuple[dict[str, list[str]], dict[str, list[str]]]:

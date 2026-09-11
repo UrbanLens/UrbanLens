@@ -106,6 +106,14 @@ sync_tree_into() {
     fi
     docker cp sample_data/. "$container":/app/sample_data/ 2>/dev/null || true
 
+    # The workflow files, for the same reason and by the same argument as the
+    # root files above: they are baked into the image, a test reads them
+    # (test_typecheck_dependencies_are_installed), and a stale copy makes the
+    # run look verified while asserting against whatever the image was built
+    # with. Whole directory rather than a list, because picking the file a
+    # future test will read is the judgement that keeps being got wrong.
+    docker cp .github/. "$container":/app/.github/ 2>/dev/null || true
+
     # Not optional - see the header. /app/src recursively, which is what covers
     # both the logs directory and the compiled frontend output underneath it.
     docker exec -u root "$container" chown -R appuser:appuser /app/src /app/bin

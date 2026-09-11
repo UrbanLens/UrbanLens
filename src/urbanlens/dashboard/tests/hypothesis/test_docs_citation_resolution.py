@@ -11,6 +11,14 @@ That was harmless while every citation carried a `docs/` prefix. Matching bare
 capitalised filenames - which is what lets a root `TODO.md` citation be seen at
 all - makes basenames that recur in several directories the normal case.
 
+The second class covers the other spelling the checker promises to handle: a
+path into a sibling checkout. Its docstring says such a path "counts as resolved
+when that checkout is absent ... failing on it would make the check depend on how
+a developer laid out their workspace" - and that is exactly what it did. CI, which
+checks out this repository alone, failed on five `../REData/docs/...` citations and
+one `../infrastructure/docs/...` that every developer with the siblings beside them
+saw pass.
+
 These run the checker against throwaway repositories rather than this one, so a
 regression fails here instead of waiting for a filename to collide in the tree.
 """
@@ -108,3 +116,82 @@ class CitationResolutionTests(SimpleTestCase):
         broken_code, broken_docs = self.checker.broken_citations(root)
         self.assertEqual(broken_code, {})
         self.assertEqual(broken_docs, {"docs/gone.md": ["docs/a.md"]})
+
+
+class SiblingCheckoutCitationTests(SimpleTestCase):
+    """A path into a sibling repository is verified only when it is there.
+
+    Each repository here is built *inside* a workspace directory, so its parent
+    is somewhere siblings can be created - which is the layout the citations
+    describe and the one the checker resolves against.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.checker = _load_checker()
+
+    def _workspace(self, files: dict[str, str]) -> tuple[pathlib.Path, pathlib.Path]:
+        """Build `<workspace>/UrbanLens` holding `files`, tracked in git.
+
+        Args:
+            files: Repo-relative path to contents.
+
+        Returns:
+            ``(workspace, root)``.
+        """
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        workspace = pathlib.Path(directory.name)
+        root = workspace / "UrbanLens"
+        root.mkdir()
+        for name, content in files.items():
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        for command in (["git", "init", "-q"], ["git", "add", "-A"]):
+            subprocess.run(command, cwd=root, check=True, capture_output=True)
+        return workspace, root
+
+    def test_an_absent_sibling_is_not_a_broken_citation(self) -> None:
+        """What CI sees: this repository alone, and no siblings anywhere."""
+        _workspace, root = self._workspace({"src/app.py": '"""see ../REData/docs/api-reference.md."""\n'})
+
+        broken_code, _ = self.checker.broken_citations(root)
+
+        self.assertEqual(broken_code, {}, "a citation into an absent sibling checkout was treated as broken")
+
+    def test_a_present_sibling_missing_the_file_still_fails(self) -> None:
+        """The check is skipped for want of evidence, not waived."""
+        workspace, root = self._workspace({"src/app.py": '"""see ../REData/docs/api-reference.md."""\n'})
+        (workspace / "REData" / "docs").mkdir(parents=True)
+
+        broken_code, _ = self.checker.broken_citations(root)
+
+        self.assertEqual(broken_code, {"../REData/docs/api-reference.md": ["src/app.py"]})
+
+    def test_a_present_sibling_holding_the_file_resolves(self) -> None:
+        workspace, root = self._workspace({"src/app.py": '"""see ../REData/docs/api-reference.md."""\n'})
+        (workspace / "REData" / "docs").mkdir(parents=True)
+        (workspace / "REData" / "docs" / "api-reference.md").write_text("# api\n", encoding="utf-8")
+
+        broken_code, _ = self.checker.broken_citations(root)
+
+        self.assertEqual(broken_code, {})
+
+    def test_a_deep_citing_file_is_judged_from_the_repository_root(self) -> None:
+        """`../REData/...` means "beside this repository", wherever it is written.
+
+        Resolved from the citing file's own directory instead, the same string
+        lands back *inside* the repository - which is how a test six directories
+        down turned one sibling citation into a fatal one.
+        """
+        _workspace, root = self._workspace(
+            {
+                "src/urbanlens/dashboard/tests/hypothesis/test_ops.py": '"""see ../infrastructure/docs/OPS_TOOLING.md."""\n'
+            },
+        )
+
+        broken_code, _ = self.checker.broken_citations(root)
+
+        self.assertEqual(broken_code, {})
