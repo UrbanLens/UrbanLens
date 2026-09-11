@@ -19,14 +19,24 @@ import { ChatComposer, toastRefusal } from "./chat-composer";
 
 const toasted: string[] = [];
 
-mock.module("./dialogs", () => ({
-    toast: {
+// Observed through `window.toastr`, which is the seam `toast` itself routes
+// through, rather than through `mock.module("./dialogs")`. A module mock in bun
+// is installed on the process registry and is never taken down, so every file
+// that runs after this one in the same `bun test` invocation imports the stub -
+// including dialogs.test.ts, whose whole subject is the real implementation.
+// This observes the same messages and exercises the real path.
+function collectToasts(): void {
+    (window as { toastr?: unknown }).toastr = {
         error: (message: string) => toasted.push(message),
         success: () => {},
         info: () => {},
         warning: () => {},
-    },
-}));
+    };
+}
+
+function stopCollectingToasts(): void {
+    delete (window as { toastr?: unknown }).toastr;
+}
 
 function makeInput(value = ""): HTMLInputElement {
     document.body.innerHTML = '<input id="composer">';
@@ -38,7 +48,10 @@ function makeInput(value = ""): HTMLInputElement {
 describe("ChatComposer", () => {
     beforeEach(() => {
         toasted.length = 0;
+        collectToasts();
     });
+
+    afterEach(stopCollectingToasts);
 
     afterEach(() => {
         document.body.innerHTML = "";
@@ -207,7 +220,10 @@ describe("ChatComposer", () => {
 describe("toastRefusal", () => {
     beforeEach(() => {
         toasted.length = 0;
+        collectToasts();
     });
+
+    afterEach(stopCollectingToasts);
 
     test("reports when there is no composer to give the text back to", () => {
         toastRefusal("This credential isn't allowed to send here.");

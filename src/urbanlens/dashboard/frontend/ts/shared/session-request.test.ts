@@ -19,14 +19,24 @@ import { getJson, postForm, postMultipart } from "./session-request";
 
 const toasted: string[] = [];
 
-mock.module("./dialogs", () => ({
-    toast: {
+// Observed through `window.toastr`, which is the seam `toast` itself routes
+// through, rather than through `mock.module("./dialogs")`. A module mock in bun
+// is installed on the process registry and is never taken down, so every file
+// that runs after this one in the same `bun test` invocation imports the stub -
+// including dialogs.test.ts, whose whole subject is the real implementation.
+// This observes the same messages and exercises the real path.
+function collectToasts(): void {
+    (window as { toastr?: unknown }).toastr = {
         error: (message: string) => toasted.push(message),
         success: () => {},
         info: () => {},
         warning: () => {},
-    },
-}));
+    };
+}
+
+function stopCollectingToasts(): void {
+    delete (window as { toastr?: unknown }).toastr;
+}
 
 const realFetch = globalThis.fetch;
 
@@ -37,7 +47,10 @@ function respond(body: string, init: ResponseInit): void {
 describe("session-request", () => {
     beforeEach(() => {
         toasted.length = 0;
+        collectToasts();
     });
+
+    afterEach(stopCollectingToasts);
 
     afterEach(() => {
         globalThis.fetch = realFetch;
