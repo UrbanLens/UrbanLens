@@ -157,7 +157,15 @@ jobs:
       # typecheck's dependencies, not the suite's.
       - name: Install integration-suite dependencies
         working-directory: tests/integration
-        run: npm ci --no-audit --no-fund --ignore-scripts
+        # The same conditional integration.yml uses: no package-lock.json is
+        # committed there yet, so `npm ci` has nothing to read. Direct
+        # dependencies are pinned exactly; only transitives float.
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund --ignore-scripts
+          else
+            npm install --no-audit --no-fund --ignore-scripts
+          fi
       - name: TypeScript typecheck
         run: bun run typecheck
 
