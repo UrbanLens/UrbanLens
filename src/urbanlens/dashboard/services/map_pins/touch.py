@@ -1,34 +1,14 @@
 """Recording that a pin's map appearance changed.
 
-A pin can start drawing differently without the pin row being written at all:
-its label's colour changed, or the order of its labels changed and a different
-one now supplies the icon (`_winning_display_label` sorts by `-order`). Two
-things have to follow, and they are easy to do one of.
+Two things must follow, and it is easy to do only one: drop the server's cached
+copy, and move `Pin.updated` so the client's poll of `map.pins.meta` sees it.
+Seven write paths did only the first (P106) - a pin can change what it draws
+without its own row being written, and `bulk_update` never touches `auto_now`
+columns.
 
-**Drop the server's cached copy.** Every bulk label write already did this, each
-with its own comment explaining that `bulk_update` fires no `post_save`.
-
-**Move `Pin.updated`.** The browser never reads the server's cache. It polls
-`map.pins.meta`, which is `Max(Pin.updated)` over the profile's root pins, and
-refetches only when that moves. `bulk_update` does not touch `auto_now` columns,
-so three of the four label-reorder paths left the client drawing the old icon
-until its own cache expired six hours later (P106). The one path that got it
-right did so with a hand-written `UPDATE` and a comment - which is what made the
-other three easy to miss.
-
-Both live here now, behind one call, so the next write path that forgets is
-missing a function call rather than missing a statement nobody knew about.
-
-Four more triggers turned out to have the same omission, found by asking each of
-them rather than by reading the code: adding a label to a pin, removing one,
-rating a pin, and deleting a rating. All four dropped the server's cached copy
-and none moved `Pin.updated`, so a pin could gain a chip or lose its stars and
-say nothing about it. They go through `touch_pin` now.
-
-What is still not routed through here is anything that changes a pin's payload
-by writing a *related* row this module does not know about. The way to find the
-next one is the way these four were found: change the thing, then ask
-`map.pins.meta` whether it noticed.
+Caches are dropped per *profile*, not per pin: rewriting each carrying pin's
+payload cost a round trip, two queries and a fresh client each, inside the
+editing user's request (P102).
 """
 
 from __future__ import annotations
@@ -61,9 +41,8 @@ def touch_pins(pins: QuerySet[Pin]) -> int:
     """
     from urbanlens.dashboard.models.pin.model import Pin
 
-    # Through a subquery on the primary key rather than updating `pins` directly:
-    # the callers' queries join through `labels`, and a join makes `.update()`
-    # either illegal or - with `distinct()` - a write repeated per matching row.
+    # Subquery on the pk: callers join through `labels`, and `.update()` across a
+    # join is either illegal or, with distinct(), repeated per matching row.
     return Pin.objects.filter(pk__in=pins.values("pk")).update(updated=timezone.now())
 
 
@@ -153,9 +132,8 @@ def _drop_cached_pins_of(pins: QuerySet[Pin]) -> None:
 
     from urbanlens.dashboard.services.map_pins import MapPinCache
 
-    # distinct() in the database, not a set() in Python: without it this reads one
-    # row per *pin* to learn a handful of profile ids, which is the shape the whole
-    # change exists to remove.
+    # distinct() in SQL, not set() in Python: otherwise this reads a row per pin to
+    # learn a handful of profile ids.
     profile_ids = set(pins.exclude(profile_id=None).values_list("profile_id", flat=True).distinct())
     if not profile_ids:
         return
@@ -164,13 +142,9 @@ def _drop_cached_pins_of(pins: QuerySet[Pin]) -> None:
         try:
             MapPinCache.clear_for_profiles(profile_ids)
         except (RedisError, ConnectionError, OSError, RuntimeError) as error:
-            # A cache that cannot be dropped is stale, not broken: entries carry
-            # a TTL, and the client is told to refetch by the `updated` bump that
-            # has already been committed above. RuntimeError is in the list
-            # because the test suite's network guard raises it rather than a
-            # connection error, and a receiver that dies there fails tests about
-            # something else entirely - which is what the rest of
-            # `models/pin/signals.py` already catches it for.
+            # Stale, not broken: entries carry a TTL and the `updated` bump above is
+            # already committed. RuntimeError because the test suite's network guard
+            # raises that rather than a connection error.
             logger.warning("Unable to drop cached map pins for %s profile(s): %s", len(profile_ids), error)
 
     transaction.on_commit(drop)

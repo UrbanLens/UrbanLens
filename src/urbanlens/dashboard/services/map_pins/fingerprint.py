@@ -1,23 +1,13 @@
 """A value that changes whenever a profile's map would draw differently.
 
-The client refetches its pins when this changes, so it has to move for every
-create, edit and delete. `Max(Pin.updated)` alone does not: deleting any pin
-other than the most recently updated one leaves the maximum exactly where it
-was, so a pin deleted in another tab stays on the map until the browser's own
-cache expires. Pairing the maximum with the row count closes that, because a
-delete either removes the maximum or lowers the count, and a delete paired with
-a create raises the maximum.
+`Max(Pin.updated)` alone cannot see a deletion - remove any pin but the most
+recently updated one and it is unchanged - so a pin deleted in another tab stayed
+on the map. Pairing it with the row count closes that.
 
-Everything that changes a pin's appearance without writing the pin row -
-a label's colour, a label's order, a per-profile override - moves `Pin.updated`
-through `services.map_pins.touch`, which is why this does not also need to
-aggregate over the label tables. That is a real coupling: if a write path is
-ever added that changes what a pin draws *without* touching it, this will not
-notice, and the place to fix that is `touch`, not here.
-
-One aggregate, on indexed columns. It is computed on every poll of
-`map.pins.meta`, so its cost is paid per user per interval and nothing more
-expensive belongs in it.
+Everything that changes a pin's appearance without writing the pin row moves
+`Pin.updated` through `services.map_pins.touch`, which is why this does not also
+aggregate over the label tables. A write path that changes what a pin draws
+without touching it would go unnoticed here; fix that in `touch`.
 """
 
 from __future__ import annotations

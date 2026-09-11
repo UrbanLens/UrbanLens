@@ -1,29 +1,14 @@
 """Finding the densest group of points without comparing every pair.
 
-The map centres itself on the largest regional concentration of an account's
-pins rather than on their average, because an average puts someone with pins in
-Detroit and Berlin in the middle of the Atlantic.
+The obvious formulation - "which point has the most neighbours within R" - is one
+great-circle calculation per *pair*, which at 20,000 pins was about seven minutes
+of a process serving nothing (P108). A spatial histogram answers the same
+question in one pass plus a bounded number of dictionary lookups.
 
-Written as a spatial histogram because the obvious formulation is quadratic.
-Asking "which point has the most neighbours within R" reads as one line and
-costs one great-circle calculation per *pair*: at 20,000 pins that is 400
-million of them, which was measured at about seven minutes of pure Python with
-the process serving nothing else (P108). The histogram answers the same question
-by counting occupancy of fixed cells, so the cost is one pass over the points
-plus a bounded number of dictionary lookups, and the number of cells depends on
-the radius and the size of the planet rather than on how many pins the account
-has.
-
-The seed cell is an approximation - the densest *cell neighbourhood* rather than
-the exact point of maximum local density - while cluster membership and the
-returned centroid are exact. Compared against the pairwise scan over clustered,
-polar, antimeridian-straddling and tied point sets, the two agree exactly
-wherever the points have a densest region at all. They diverge only where the
-question has no single answer: two concentrations of equal size, or points
-spread evenly enough that every one of them has the same number of neighbours.
-The pairwise scan resolved those by returning whichever point the database
-listed first, so there is nothing there to preserve; this at least resolves them
-the same way every time, on the cell index.
+The seed cell is an approximation; cluster membership and the centroid are exact.
+Compared against the pairwise scan they agree wherever the points have a densest
+region at all, and diverge only where the question has no single answer - two
+equal concentrations, or points spread evenly. See `test_geo_clustering.py`.
 """
 
 from __future__ import annotations
@@ -85,17 +70,15 @@ def densest_cluster_centroid(points: Sequence[Point], radius_km: float) -> Point
         return points[0]
 
     cells = [_cell_of(point, radius_km) for point in points]
-    # Falls back to the block itself rather than to every point: if refinement
-    # never lands on anything, the answer should still be "where the pins are"
-    # and not the average of two continents.
+    # The block, not every point: an unrefined answer should still be where the
+    # pins are, not the average of two continents.
     cluster = _densest_block(points, cells)
     seed = _centroid(cluster)
 
     for _ in range(_REFINEMENT_PASSES):
         nearby = [point for point in points if distance.haversine_km(seed[0], seed[1], point[0], point[1]) <= radius_km]
         if not nearby:
-            # The seed drifted off every point. Keep the previous membership
-            # rather than returning a centre no pin is anywhere near.
+            # Seed drifted off every point; keep the previous membership.
             break
         cluster = nearby
         seed = _centroid(cluster)
@@ -115,8 +98,7 @@ def _densest_block(points: Sequence[Point], cells: Sequence[tuple[int, int, int]
         is one that holds at least one point.
     """
     occupancy = Counter(cells)
-    # Ties broken on the cell index so the answer does not depend on the order
-    # the database happened to return the rows in.
+    # Tie-break on the cell index, so row order cannot change the answer.
     best = max(occupancy, key=lambda cell: (_block_total(occupancy, cell), cell))
     block = {(best[0] + dx, best[1] + dy, best[2] + dz) for dx in range(-_BLOCK_RADIUS, _BLOCK_RADIUS + 1) for dy in range(-_BLOCK_RADIUS, _BLOCK_RADIUS + 1) for dz in range(-_BLOCK_RADIUS, _BLOCK_RADIUS + 1)}
     return [point for point, cell in zip(points, cells, strict=True) if cell in block]
