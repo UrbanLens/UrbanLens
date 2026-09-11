@@ -20,6 +20,7 @@ from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.text_limits import column_length_error, column_max_length
 from urbanlens.dashboard.services.geo.geo import dissolve_polygons
+from urbanlens.dashboard.services.geo.sampling import select_spread
 from urbanlens.dashboard.services.pins.pin_list_membership import resync_lists_for_saved_filter
 from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
 from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
@@ -383,6 +384,26 @@ class SavedFilterDeleteView(LoginRequiredMixin, View):
 _PREVIEW_MAP_PIN_LIMIT = 500
 
 
+def _preview_pins(query, total: int) -> list[dict]:
+    """The preview map's markers, capped for coverage rather than for order.
+
+    Over the cap, a slice keeps whichever pins sort first, which for a filter
+    over a whole account is arbitrary and usually clustered - the preview then
+    shows one region and claims to show the filter. See
+    ``services/geo/sampling.py``.
+
+    Args:
+        query: The filter's matching pins.
+        total: How many matched, already counted by the caller.
+
+    Returns:
+        One payload per plotted pin.
+    """
+    if total > _PREVIEW_MAP_PIN_LIMIT:
+        query = select_spread(query, _PREVIEW_MAP_PIN_LIMIT, latitude_field="location__latitude", longitude_field="location__longitude")
+    return _serialize_preview_pins(query)
+
+
 def _serialize_preview_pins(pins) -> list[dict]:
     """Minimal per-pin payload for the live preview map (not the full map_data shape)."""
     rows = []
@@ -406,13 +427,14 @@ class SavedFilterDetailView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         context = _build_filter_form_context(profile, filter_uuid)
         query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(context["criteria"]).select_related("location")
+        matched = query.count()
         context.update(
             {
                 # Raw list, not pre-serialized - the template's |json_script
                 # filter does its own json.dumps(); passing an already-dumped
                 # string here would double-encode it.
-                "initial_pins": _serialize_preview_pins(query[:_PREVIEW_MAP_PIN_LIMIT]),
-                "initial_match_count": query.count(),
+                "initial_pins": _preview_pins(query, matched),
+                "initial_match_count": matched,
                 "preview_pin_limit": _PREVIEW_MAP_PIN_LIMIT,
                 **profile.get_map_center_template_context(),
             },
@@ -448,4 +470,5 @@ class SavedFilterPreviewView(LoginRequiredMixin, View):
         cleaned["exclude_regions"] = regions["exclude_regions"]
 
         query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(cleaned).select_related("location")
-        return JsonResponse({"pins": _serialize_preview_pins(query[:_PREVIEW_MAP_PIN_LIMIT]), "count": query.count()})
+        matched = query.count()
+        return JsonResponse({"pins": _preview_pins(query, matched), "count": matched})

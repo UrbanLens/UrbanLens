@@ -35,6 +35,14 @@ MAX_MAP_PHOTOS = 500
 #: A point as the callers have it: an identifier and its coordinates.
 Point = tuple[int, float, float]
 
+#: How many coordinate rows a spread reads before it stops. Choosing for
+#: coverage means looking at every candidate, which is three columns and no
+#: joins - cheap per row, and still O(account) if nothing stops it. Far above
+#: any cap a map applies, so the spread is over the real extent in every case
+#: anyone has; a set larger than this already holds more distinct places than a
+#: few hundred markers can show.
+MAX_SAMPLE_POINTS = 50_000
+
 
 def _grid_size(count: int, limit: int) -> int:
     """How many cells per axis to lay over the points.
@@ -108,6 +116,26 @@ def spread_across_space(points: Sequence[Point], limit: int) -> list[int]:
     return chosen
 
 
+def select_spread[Rows: QuerySet[Any]](rows: Rows, limit: int, *, latitude_field: str = "latitude", longitude_field: str = "longitude") -> Rows:
+    """Narrow *rows* to at most *limit* of them, spread over the area they cover.
+
+    Args:
+        rows: Anything with coordinates reachable by field path.
+        limit: The most to keep.
+        latitude_field: Field path to the latitude, relative to *rows*.
+        longitude_field: Field path to the longitude.
+
+    Returns:
+        The same queryset, restricted to the chosen rows. Ordering and prefetches
+        survive, because this narrows rather than replaces.
+    """
+    # The None checks are not only for the type checker: they also mean a caller
+    # that forgot to filter for coordinates drops unplottable rows rather than
+    # crashing.
+    points = [(pk, float(lat), float(lon)) for pk, lat, lon in rows.values_list("pk", latitude_field, longitude_field)[:MAX_SAMPLE_POINTS] if lat is not None and lon is not None]
+    return rows.filter(pk__in=spread_across_space(points, limit))
+
+
 def bound_map_layer[Images: QuerySet[Any]](images: Images, limit: int | None = None) -> tuple[Images, bool, int]:
     """Cap what a map layer plots, keeping the area covered.
 
@@ -129,9 +157,4 @@ def bound_map_layer[Images: QuerySet[Any]](images: Images, limit: int | None = N
     total = images.count()
     if total <= limit:
         return images, False, total
-
-    # The None check is not only for the type checker: it also means a caller
-    # that forgot to filter for coordinates drops unplottable rows rather than
-    # crashing.
-    points = [(pk, float(lat), float(lon)) for pk, lat, lon in images.values_list("pk", "latitude", "longitude") if lat is not None and lon is not None]
-    return images.filter(pk__in=spread_across_space(points, limit)), True, total
+    return select_spread(images, limit), True, total

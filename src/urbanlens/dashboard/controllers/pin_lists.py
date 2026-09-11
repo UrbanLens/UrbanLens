@@ -24,6 +24,7 @@ from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, column_length_error, text_length_error
+from urbanlens.dashboard.services.geo.sampling import select_spread
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
 from urbanlens.dashboard.services.pins.pin_list_membership import add_pins_to_list, reorder_list_items, resync_smart_list
@@ -171,20 +172,27 @@ def _paginated_items_context(request: HttpRequest, pin_list: PinList) -> dict[st
     anyway, and each marker here carries far more than that one does: name,
     address, description, rating, last-visited and every tag chip.
 
-    Both the page of rows and the map's slice are taken at the database level.
-    This used to materialize every item on the list to serve either.
+    Over the cap, which 500 is chosen for coverage rather than for order: a list
+    sorted by hand puts whatever the owner dragged to the top first, and its
+    first 500 can easily be one city while the map claims to show the list. See
+    ``services/geo/sampling.py``. The payload read stays bounded either way -
+    the coordinates are read without joins or prefetches, and the rows that are
+    serialized are only the chosen ones.
     """
     items = _list_items_queryset(pin_list)
     page_obj = get_page(request, items, _ITEMS_PAGE_SIZE)
+    # The count is the list's, not the map's: a pin with no coordinates is not
+    # plotted either way, and saying "showing 500 of 600" on a list where 200
+    # have no coordinates is closer to true than silence.
+    truncated = page_obj.paginator.count > _MAP_PIN_LIMIT
+    map_items = select_spread(items, _MAP_PIN_LIMIT, latitude_field="pin__location__latitude", longitude_field="pin__location__longitude") if truncated else items
     return {
         "items": list(page_obj.object_list),
         "page_obj": page_obj,
-        "items_map_data": _items_map_data(items[:_MAP_PIN_LIMIT]),
+        "items_map_data": _items_map_data(map_items),
         "map_pin_limit": _MAP_PIN_LIMIT,
-        # The count is the list's, not the map's: a pin with no coordinates is
-        # not plotted either way, and saying "showing the first 500" on a list
-        # of 600 where 200 have no coordinates is closer to true than silence.
-        "items_map_truncated": page_obj.paginator.count > _MAP_PIN_LIMIT,
+        "items_map_total": page_obj.paginator.count,
+        "items_map_truncated": truncated,
     }
 
 

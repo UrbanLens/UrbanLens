@@ -16,7 +16,7 @@ behind in the page would go stale the moment a list dropped under the cap.
     {% if items_map_truncated %}
     <p class="pin-list-map-truncated settings-help">
         <i class="material-symbols-outlined">info</i>
-        Showing the first {{ map_pin_limit }} pins on the map. Every pin is still listed below.
+        Showing {{ map_pin_limit }} of {{ items_map_total }} pins on the map, spread across the area. Every pin is still listed below.
     </p>
     {% endif %}
     {% if items %}

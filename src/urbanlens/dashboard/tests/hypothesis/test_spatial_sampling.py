@@ -16,7 +16,17 @@ marker moves every time the layer reloads.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
+from django.contrib.auth.models import User
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+from model_bakery import baker
+
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.services.geo import sampling
 from urbanlens.dashboard.services.geo.sampling import spread_across_space
 
 
@@ -65,3 +75,54 @@ class TheSamplerTests(TestCase):
 
     def test_a_limit_of_zero_keeps_nothing(self) -> None:
         self.assertEqual(spread_across_space(_clustered(5), 0), [])
+
+
+class TheCoordinateReadIsBoundedTests(TestCase):
+    """Choosing for coverage means looking at every candidate, which is the one
+    unbounded read the sampler introduces.
+
+    Three columns and no joins is cheap per row and still O(account) if nothing
+    stops it, which is the shape this whole programme exists to remove. So the
+    read carries a ceiling of its own, and this is what holds it there - a
+    constant nothing enforces is a comment.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        for index in range(8):
+            location = baker.make(Location, latitude=f"{45 + index * 0.01:.6f}", longitude=f"{-80 + index * 0.01:.6f}")
+            baker.make(Pin, profile=self.profile, location=location)
+
+    def test_the_spread_reads_no_more_points_than_the_ceiling(self) -> None:
+        pins = Pin.objects.filter(profile=self.profile)
+
+        with patch.object(sampling, "MAX_SAMPLE_POINTS", 3), CaptureQueriesContext(connection) as queries:
+            list(
+                sampling.select_spread(
+                    pins, 2, latitude_field="location__latitude", longitude_field="location__longitude"
+                )
+            )
+
+        coordinate_reads = [
+            query["sql"]
+            for query in queries.captured_queries
+            if "latitude" in query["sql"] and "LIMIT 3" in query["sql"]
+        ]
+        self.assertTrue(coordinate_reads, [query["sql"][-160:] for query in queries.captured_queries])
+
+    def test_the_ceiling_is_the_one_select_spread_reads(self) -> None:
+        """Guards the patch target: a ceiling nothing reads would make the test
+        above assert against an unbounded query and still pass."""
+        pins = Pin.objects.filter(profile=self.profile)
+
+        with patch.object(sampling, "MAX_SAMPLE_POINTS", 4):
+            kept = list(
+                sampling.select_spread(
+                    pins, 8, latitude_field="location__latitude", longitude_field="location__longitude"
+                )
+            )
+
+        self.assertEqual(len(kept), 4, "the spread kept more rows than its coordinate read was allowed to see")

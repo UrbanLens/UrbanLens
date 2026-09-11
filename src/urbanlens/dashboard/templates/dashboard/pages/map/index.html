@@ -2191,13 +2191,26 @@
     // An identifier the store cannot resolve means the claim was wrong - the
     // store is behind what the server just filtered. Ask again for payloads
     // rather than drawing a map that is quietly missing pins.
+    //
+    // Bounded at one recovery, because this reaches the server by re-submitting
+    // the form the identifier response came from: a store that stays behind
+    // would otherwise turn one filter change into an unbounded series of them,
+    // which is the shape of cost this programme exists to remove. A second miss
+    // means the handshake is wrong rather than the store stale, so trust is not
+    // restored again and this page asks for payloads from then on.
+    let _filterStoreMisses = 0;
+
     function _refilterWithPayloads(missing) {
+        _filterStoreMisses += 1;
+        if (_filterStoreMisses > 2) return;
         console.warn('[UL] %d filtered pin(s) missing from the store - refetching payloads', missing);
         _filterStoreTrusted = false;
         _syncFilterStoreClaim();
         const form = document.getElementById('filter-form');
         if (form) htmx.trigger(form, 'change');
-        _refreshAllPins().then(function () { _filterStoreTrusted = true; _syncFilterStoreClaim(); }).catch(function () {});
+        if (_filterStoreMisses === 1) {
+            _refreshAllPins().then(function () { _filterStoreTrusted = true; _syncFilterStoreClaim(); }).catch(function () {});
+        }
     }
 
     // Called when search/filter results arrive (see data.html).

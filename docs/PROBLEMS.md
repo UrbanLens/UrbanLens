@@ -4279,7 +4279,7 @@ sources that had opted out of the thread pool by naming the *default* queue; tha
 pool, so they name `Queue.INTERACTIVE` instead, which is the pool they were always asking for. See
 D13 for the table and for what the split deliberately does not do.
 
-**Family 4 is being worked through per endpoint.** Five done:
+**Family 4 is being worked through per endpoint.** Six done:
 
 | endpoint | was | now |
 |---|---|---|
@@ -4288,12 +4288,24 @@ D13 for the table and for what the split deliberately does not do.
 | memories feed | "All time" built an event per route, trip, visit and geotagged photo ever recorded | `MAX_FEED_EVENTS = 500`, every source ordered newest-first and islice'd, paginated on a timestamp cursor |
 | `map.search` | every matching pin's full payload, 11.45MB for 10,000 pins, per filter change | identifiers only when the client can prove its store is current, and `MAP_DOCUMENT_MAX_PINS` over both answers |
 | `map.init` | the same unbounded document | bounded by the same ceiling, via `map_data_context` |
+| pin-list and saved-filter maps | capped at 500 by a slice of the list's own order | the same spatial sampler, and a note saying how many of how many |
 
 Each carries its own regression test, and the ceiling tests assert that the constant under test is
 the one the serving code reads — the failure mode found in `test_map_document_cap.py`'s first draft,
 where an `override_settings` invented a name nothing looked at.
 
-Still open in family 4: `pin_lists` and the saved-filter preview cap their maps with a first-N slice
-(`_MAP_PIN_LIMIT`, `_PREVIEW_MAP_PIN_LIMIT`), which is bounded but keeps whichever 500 pins sort
-first rather than a spread — the same defect the photo maps had. Moving both to
-`services/geo/sampling.spread_across_space` is the next one.
+`pin_lists` and the saved-filter preview are done too. Both capped their maps with a first-N slice,
+which is bounded but keeps whichever 500 pins sort first — and a pin list's order is whatever the
+owner dragged to the top, so a 5,000-pin list whose first 500 entries are one city drew a map of
+that city and offered it as a map of the list. Both now use the same sampler the photo maps do.
+
+That sampler gained a ceiling of its own in the process (`MAX_SAMPLE_POINTS = 50,000`). Choosing for
+coverage means reading every candidate's coordinates, which is three columns and no joins — cheap
+per row, and still O(account) if nothing stops it, which is precisely the shape this family is
+about. The read that carries the marker payload stays restricted to the chosen rows either way, and
+`test_pin_list_map_cap.py` asserts the two by their columns rather than by the presence of a
+`LIMIT`: the coordinate read carries one now, so a test keyed on that would pass against either
+query and mean nothing.
+
+Still open in family 4: the ~25 findings N21 lists beyond these, most of which are request-path
+loops over one account's data in surfaces nobody has measured yet.

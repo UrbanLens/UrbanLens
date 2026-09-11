@@ -8,6 +8,12 @@ address, description, rating, last-visited and every tag chip.
 The cap is on the fetch as well as the payload. `_paginated_items_context`
 used to materialize every item on the list to serve both the map and one page
 of rows, so a payload-only cap would have left the expensive half in place.
+
+Which 500 matters as much as how many. The cap was a slice of the list's own
+order - and that order is whatever the owner dragged to the top - so a 5,000-pin
+list whose first 500 entries are one city drew a map of that city and offered it
+as a map of the list. It is now chosen for coverage (`services/geo/sampling.py`),
+and the marker payload is still built for only the chosen rows.
 """
 
 from __future__ import annotations
@@ -77,7 +83,7 @@ class PinListOverviewMapCapTests(TestCase):
         response = self.client.get(reverse("lists.detail", kwargs={"list_slug": self.pin_list.slug}))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, f"Showing the first {_MAP_PIN_LIMIT} pins on the map")
+        self.assertContains(response, f"Showing {_MAP_PIN_LIMIT} of {_MAP_PIN_LIMIT + 5} pins on the map")
 
     def test_the_rows_are_still_only_one_page(self) -> None:
         self._add_pins(_MAP_PIN_LIMIT + 5)
@@ -87,24 +93,56 @@ class PinListOverviewMapCapTests(TestCase):
         self.assertEqual(len(context["items"]), 50)
         self.assertEqual(context["page_obj"].paginator.count, _MAP_PIN_LIMIT + 5)
 
-    def test_the_fetch_is_capped_too_not_just_the_payload(self) -> None:
-        # The map's slice is taken in SQL. Building it in Python from every item
-        # on the list would leave the expensive half of this exactly as it was.
+    def _item_reads(self) -> list[str]:
+        """Every statement the context builder runs against the items table."""
         self._add_pins(_MAP_PIN_LIMIT + 5)
-
         with CaptureQueriesContext(connection) as queries:
             self._context()
-
-        item_reads = [
+        return [
             query["sql"]
             for query in queries.captured_queries
             if "dashboard_pin_list_items" in query["sql"] and "COUNT" not in query["sql"]
         ]
-        self.assertTrue(item_reads)
+
+    def test_the_marker_payload_is_read_for_the_chosen_rows_only(self) -> None:
+        """Building the markers in Python from every item on the list would
+        leave the expensive half of this exactly as it was.
+
+        Identified by the columns rather than by the absence of a LIMIT: the
+        coordinate read carries one too (`MAX_SAMPLE_POINTS`), so a test keyed on
+        that would pass against either query and mean nothing.
+        """
+        payload_reads = [sql for sql in self._item_reads() if "description" in sql]
+
+        self.assertTrue(payload_reads, "no statement read the marker payload; this test is measuring nothing")
+        for sql in payload_reads:
+            self.assertTrue(" IN (" in sql or "LIMIT 50" in sql, sql[-200:])
+
+    def test_the_coordinate_read_carries_no_payload_columns(self) -> None:
+        """The read that is not restricted to 500 rows has to be the cheap one."""
+        coordinate_reads = [sql for sql in self._item_reads() if "latitude" in sql and "description" not in sql]
+
         self.assertTrue(
-            all(f"LIMIT {_MAP_PIN_LIMIT}" in sql or "LIMIT 50" in sql for sql in item_reads),
-            [sql[-120:] for sql in item_reads],
+            coordinate_reads, "nothing read coordinates on their own, so the spread is not happening in SQL"
         )
+        for sql in coordinate_reads:
+            self.assertNotIn(
+                "dashboard_reviews", sql, "the coordinate read is dragging the marker payload's joins with it"
+            )
+
+    def test_the_map_covers_the_area_rather_than_the_first_rows(self) -> None:
+        """The defect the slice had: a list ordered by hand maps one cluster."""
+        self._add_pins(_MAP_PIN_LIMIT + 5)
+        outliers = []
+        for index in range(3):
+            location = baker.make(Location, latitude=f"{60 + index}.000000", longitude=f"{20 + index}.000000")
+            pin = baker.make(Pin, profile=self.profile, location=location)
+            baker.make(PinListItem, pin_list=self.pin_list, pin=pin)
+            outliers.append(str(pin.uuid))
+
+        plotted = {row["uuid"] for row in self._context()["items_map_data"]}
+
+        self.assertTrue(set(outliers).issubset(plotted), "an outlying pin was dropped by the cap")
 
 
 class PinListItemOrderingTests(TestCase):

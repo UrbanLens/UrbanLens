@@ -126,7 +126,7 @@
     function updateCount(count, truncated) {
         if (!countEl) return;
         const label = count + ' matching pin' + (count === 1 ? '' : 's');
-        countEl.textContent = truncated ? label + ' (showing first {{ preview_pin_limit }} on the map)' : label;
+        countEl.textContent = truncated ? label + ' (showing {{ preview_pin_limit }} on the map, spread across the area)' : label;
     }
 
     // Initial paint from the server-rendered snapshot - no extra round trip
