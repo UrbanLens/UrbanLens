@@ -431,26 +431,55 @@ class TheCacheIsAnAcceleratorTests(TestCase):
         """Several tabs missing at once should schedule one build, not one each."""
         with mock.patch.object(map_document, "make_binary_client", return_value=self.redis):
             cache = map_document.MapDocumentCache(self.profile.pk)
-            etag, _total = map_document.document_etag(self.profile)
-
-            claims = [cache.claim_build(etag) for _ in range(5)]
+            claims = [cache.claim_build() for _ in range(5)]
 
         self.assertEqual(claims, [True, False, False, False, False])
 
-    def test_a_different_version_is_claimed_separately(self) -> None:
+    def test_a_new_version_within_the_window_does_not_claim_again(self) -> None:
+        """The claim bounds worker time per account, not per version.
+
+        Keyed on the version, one person editing their own map enqueued a build
+        per edit - each of them a multi-second rebuild of the whole document on a
+        large account, and each one discarded if another edit landed while it
+        ran. Whoever claims next builds whatever version is current by then.
+        """
         with mock.patch.object(map_document, "make_binary_client", return_value=self.redis):
             cache = map_document.MapDocumentCache(self.profile.pk)
 
-            self.assertTrue(cache.claim_build("aaaa"))
-            self.assertTrue(cache.claim_build("bbbb"))
+            self.assertTrue(cache.claim_build())
+            self.assertFalse(cache.claim_build())
+
+    def test_a_different_account_claims_independently(self) -> None:
+        """Or one busy account would stop everyone else's document being built."""
+        with mock.patch.object(map_document, "make_binary_client", return_value=self.redis):
+            self.assertTrue(map_document.MapDocumentCache(self.profile.pk).claim_build())
+            self.assertTrue(map_document.MapDocumentCache(self.profile.pk + 1).claim_build())
+
+    def test_editing_repeatedly_does_not_enqueue_a_build_per_edit(self) -> None:
+        """The endpoint, not the helper: this is the path a user actually drives."""
+        with (
+            mock.patch.object(map_document, "make_binary_client", return_value=self.redis),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+        ):
+            for index in range(4):
+                self.client.get(reverse("map.document")).getvalue()
+                baker.make(
+                    Pin, profile=self.profile, location=baker.make(Location, latitude=20.0 + index, longitude=8.0)
+                )
+
+        self.assertEqual(
+            enqueue.call_count,
+            1,
+            f"four edits enqueued {enqueue.call_count} document builds; on a large account each is several seconds of worker time",
+        )
 
     def test_without_a_cache_the_build_is_never_suppressed(self) -> None:
         """One task is better than none when there is nothing to co-ordinate through."""
         with mock.patch.object(map_document, "make_binary_client", return_value=None):
             cache = map_document.MapDocumentCache(self.profile.pk)
 
-            self.assertTrue(cache.claim_build("aaaa"))
-            self.assertTrue(cache.claim_build("aaaa"))
+            self.assertTrue(cache.claim_build())
+            self.assertTrue(cache.claim_build())
 
     def test_a_second_build_does_not_overwrite_the_first(self) -> None:
         """Content-addressed, so concurrent builders write identical bytes."""

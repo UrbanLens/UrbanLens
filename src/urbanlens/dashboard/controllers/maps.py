@@ -729,7 +729,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         # nginx buffering is deliberately left on: a streamed response holds its
         # database connection to the last byte, so unbuffered a slow client would
         # decide how long a worker and a backend are occupied. See D12.
-        if map_document.MapDocumentCache.ttl() > 0 and documents.claim_build(etag):
+        if map_document.MapDocumentCache.ttl() > 0 and documents.claim_build():
             # Claimed, so several tabs missing at once schedule one build rather
             # than one each; and skipped entirely when there is no cache to fill.
             safely_enqueue_task(build_map_document, profile.pk)

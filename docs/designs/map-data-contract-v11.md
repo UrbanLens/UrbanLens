@@ -172,6 +172,16 @@ than it was at 512 MB, not less.
 Prewarm is a debounced rebuild on touch, for profiles that opened the map in the last 24 hours. That
 is the only prewarming this design has, and it exists to make a fast page faster.
 
+**The build claim is per account, not per version, and the first version of it was wrong.** Keyed on
+the version - which is what "several tabs must not each build the same document" suggests - every
+edit makes a new key, so one person editing their own map enqueued one full rebuild per edit.
+Measured at four edits, four builds; on a 30,000-pin account that is around sixteen seconds of
+worker time for four clicks, and each build is discarded anyway if the next edit lands while it
+runs. Keyed on the account it is at most one rebuild per account per window, and whoever claims next
+builds whatever version is current by then, which is the one worth having. The cost is that a rapidly
+edited account is cached less often - which is the correct trade for a cache whose uncached path is
+the baseline.
+
 ## Decision 6: no vector tiles for the per-user map
 
 `ST_AsMVT` plus Leaflet.VectorGrid was assessed and rejected here. The per-user map is a client-side
@@ -185,6 +195,9 @@ real account lives above the ceiling in viewport mode.
 
 ## Deferred, with the trigger that would reopen each
 
+- Collapsing the fallback-photo lookup further: it is now one `JSONObject` subquery instead of two
+  scalar ones (measured 224 ms against 136 ms at 5,000 pins with two photos each, a 39% saving on
+  the projection). A maintained column would remove it entirely; see the deferred entry below.
 - Caching the label dictionary separately from the pin lines, so a label edit invalidates only the
   dictionary: reconsider if label edits are frequent enough on a large account that document
   rebuilds show up in worker time. Today one rebuild is a few seconds on a 30,000-pin account and

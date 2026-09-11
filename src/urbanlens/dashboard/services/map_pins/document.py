@@ -58,8 +58,10 @@ CHUNK_BYTES = 64 * 1024
 #: suite's network guard.
 _CACHE_ERRORS = (RedisError, ConnectionError, OSError, RuntimeError)
 
-#: How long one claim to build a version suppresses other callers' tasks. Long
-#: enough to cover a build, short enough that a lost one is retried promptly.
+#: How long one account's claim suppresses further build tasks for it. Long
+#: enough to cover a build, short enough that a lost one is retried promptly -
+#: and it is what bounds the worker time an editing user can cost: at most one
+#: rebuild per account per window, however often they edit.
 _BUILD_CLAIM_SECONDS = 120
 
 
@@ -256,25 +258,28 @@ class MapDocumentCache:
             return None
         return self._decoded(stored)
 
-    def claim_build(self, etag: str) -> bool:
+    def claim_build(self) -> bool:
         """Whether this caller should be the one to enqueue a build.
 
-        Without it every concurrent miss enqueues its own task, so an account
-        open in several tabs schedules several identical multi-megabyte builds.
-        The marker expires on its own, so a build that dies simply lets the next
-        reader try again.
+        Without it every miss enqueues its own task: an account open in several
+        tabs schedules several identical multi-megabyte builds, and - because
+        every edit makes a new version - one person editing their own map
+        schedules one per edit, each of them seconds of worker time on a large
+        account and each discarded if the next edit lands while it runs.
 
-        Args:
-            etag: The version a build would produce.
+        Keyed on the account rather than the version for that reason. Whoever
+        claims next builds whatever version is current by then, which is the one
+        worth having. The marker expires on its own, so a build that dies simply
+        lets the next reader try again.
 
         Returns:
-            True at most once per version per window, and True whenever there is
+            True at most once per account per window, and True whenever there is
             no cache to co-ordinate through - one task is better than none.
         """
         if not self.client or self.ttl() <= 0:
             return True
         try:
-            return bool(self.client.set(f"{self.key(etag)}:building", b"1", nx=True, ex=_BUILD_CLAIM_SECONDS))
+            return bool(self.client.set(f"{self.PREFIX}:{FORMAT_VERSION}:{self.profile_id}:building", b"1", nx=True, ex=_BUILD_CLAIM_SECONDS))
         except _CACHE_ERRORS:
             return True
 
