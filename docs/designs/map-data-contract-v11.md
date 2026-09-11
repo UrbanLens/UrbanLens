@@ -1,4 +1,4 @@
-# D12 — The map cache becomes an accelerator the site can lose, and labels stop being copied into every pin
+# D12 — The map cache becomes an accelerator the site can lose, and labels stop being copied into every pin; built, with the delta and viewport mode deferred
 
 > **Written by a Claude agent. Not authoritative.**
 >
@@ -193,8 +193,41 @@ It is the right architecture for the thing that is genuinely unbounded: the D3 p
 where the dataset is not per-user and cannot be shipped whole. Revisit for the per-user map only if a
 real account lives above the ceiling in viewport mode.
 
+## Status, 2026-09-11
+
+Decisions 1, 2, 5 and 6 are built, and the residual SQL of 3.6 with them. Decision 3's streamed
+document and derived ETag are built; its **delta and viewport mode are deferred**, and Decision 4 is
+deferred at Jess's request. What follows is why the two halves of 3 were left, because "not built
+yet" and "decided against for now" read the same in a diff and are not the same thing.
+
+**The delta and the prewarm both optimise account sizes that do not exist yet.** The miss costs
+about 95 ms per 1,000 pins, so a realistic 500-2,000-pin account misses in 50-190 ms - close enough
+to a cached hit that the cache barely earns its place there, let alone a delta. Both only start to
+pay at 10,000-30,000 pins, where a miss is one to four seconds. The document endpoint, the paged
+fallback and the client all already work at that size; what is missing is an optimisation nobody can
+currently feel.
+
+**Prewarming on write is also the wrong shape as designed**, which is worth recording because
+Decision 5 says to do it. Driving it from `touch.py` - the one place that sees every "this pin looks
+different" - means resolving which profiles were touched, and a single edit to a *global* label
+touches every profile carrying it. That would enqueue a full document rebuild per affected account:
+the exact fan-out this whole design removed, reintroduced by the prewarm meant to make it faster. A
+prewarm that is safe has to be driven from somewhere that already knows it is dealing with one
+account's own change, and no such choke point exists today.
+
 ## Deferred, with the trigger that would reopen each
 
+- The `?since=` delta over `PinTombstone` (Decision 3): reconsider when a real account is large
+  enough that a refetch after its owner's own edit is noticeable - a 30,000-pin document is 400 KB
+  gzipped and about four seconds uncached, against roughly a kilobyte for the change itself. The
+  machinery to build it on already exists and is proven: `services/pins/pin_sync.py` does exactly
+  this for the external API, including the 410-to-full-resync fallback when `since` predates
+  tombstone retention.
+- Viewport/`bbox` mode above the ceiling (Decision 3): reconsider when a real account approaches
+  `UL_MAP_DOCUMENT_MAX_PINS`. Until one does, the over-ceiling path is the paged fallback, which is
+  tested and correct.
+- Prewarming the document on write (Decision 5): reconsider alongside the delta, and only with a
+  per-account trigger that cannot fan out across profiles - see the status note above.
 - Collapsing the fallback-photo lookup further: it is now one `JSONObject` subquery instead of two
   scalar ones (measured 224 ms against 136 ms at 5,000 pins with two photos each, a 39% saving on
   the projection). A maintained column would remove it entirely; see the deferred entry below.
