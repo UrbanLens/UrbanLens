@@ -38,12 +38,21 @@ logger = logging.getLogger(__name__)
 #: suite's own network guard, which must read as "no counter", not as an error.
 _STORE_ERRORS = (RedisError, ConnectionError, OSError, RuntimeError)
 
-#: How long a claim counts before it is treated as a worker that went away. Long
-#: enough that an ordinary session is never miscounted; short enough that a crash
-#: does not cost the account its allowance for a working day. A socket open
-#: longer than this stops counting, which is the lenient direction - it can only
-#: let a connection through, never refuse one.
-STALE_AFTER_SECONDS = 2 * 60 * 60
+#: How long a claim counts without being renewed. A live socket renews every
+#: :data:`REFRESH_INTERVAL_SECONDS`, so this only ever expires the claims of a
+#: worker that went away - and it is deliberately short, because until it does
+#: those claims cost the account part of its allowance.
+#:
+#: These sockets live as long as their tab, which is hours. Without the renewal
+#: this would have to be hours too, and then a crash would cost an account most
+#: of its allowance for most of a day; with it, three renewals fit inside the
+#: window, so a missed tick is survivable and a dead worker clears in minutes.
+STALE_AFTER_SECONDS = 15 * 60
+
+#: How often a live connection renews its claim. Comfortably inside
+#: :data:`STALE_AFTER_SECONDS` - one ZADD per socket per interval, which for a
+#: thousand sockets is a few writes a second.
+REFRESH_INTERVAL_SECONDS = 5 * 60
 
 
 def max_sockets_per_account() -> int:
@@ -150,6 +159,27 @@ def release(identity: str, connection_id: str) -> None:
         # Left to age out. Nothing to recover here, and raising would turn a
         # store blip into a failed disconnect.
         logger.warning("Could not release the socket claim for %s", identity, exc_info=True)
+
+
+def refresh(identity: str, connection_id: str) -> None:
+    """Renew a live connection's claim so it is not swept as abandoned.
+
+    Only renews what is already there: a claim that has already been swept is
+    not re-added, because re-adding it would let a connection that lost its place
+    take a new one without being counted against the allowance.
+
+    Args:
+        identity: Who it is charged to.
+        connection_id: The same value :func:`claim` was given.
+    """
+    client = _client()
+    if client is None:
+        return
+    try:
+        client.zadd(_key(identity), {connection_id: time.time()}, xx=True)
+        client.expire(_key(identity), STALE_AFTER_SECONDS * 2)
+    except _STORE_ERRORS:
+        logger.warning("Could not renew the socket claim for %s", identity, exc_info=True)
 
 
 def open_count(identity: str) -> int:

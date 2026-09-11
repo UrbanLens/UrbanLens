@@ -44,6 +44,25 @@ const RECONNECT_JITTER = 0.25;
  */
 const CLOSE_UNAUTHORIZED = 4404;
 
+/**
+ * The close code the consumers use for "this account already holds as many
+ * sockets as it may" (``services/security/socket_budget.py``).
+ *
+ * Unlike 4404 this is not permanent - closing a tab frees a place - so the
+ * socket must keep trying. But it must not try *eagerly*: the ordinary backoff
+ * starts at a second, and ``retryNow`` resets it to that on every tab focus and
+ * every ``online`` event, so a browser sitting one socket over the allowance
+ * would hammer a refusal every time the user switched windows. Each attempt is a
+ * full handshake, an auth resolution and a store round trip, which is the cost
+ * the cap exists to bound - a limiter that provokes the load it prevents is not
+ * a limiter.
+ *
+ * So a capacity refusal waits the full ceiling, and the triggers that normally
+ * shortcut the wait do not apply: coming back online does not free somebody
+ * else's socket.
+ */
+const CLOSE_OVER_LIMIT = 4429;
+
 export interface LiveSocketOptions {
     /** Same-origin path, e.g. ``/ws/notifications/``; the scheme and host are this page's. */
     path: string;
@@ -80,6 +99,7 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
     let heartbeat: ReturnType<typeof setInterval> | null = null;
     let reconnect: ReturnType<typeof setTimeout> | null = null;
     let backoffMs = RECONNECT_MIN_MS;
+    let refusedForCapacity = false;
     let stopped = false;
 
     function clearHeartbeat(): void {
@@ -140,6 +160,10 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
             onPermanentClose?.();
             return;
         }
+        if (event.code === CLOSE_OVER_LIMIT) {
+            refusedForCapacity = true;
+            backoffMs = RECONNECT_MAX_MS;
+        }
         scheduleReconnect();
     }
 
@@ -159,6 +183,10 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
         }
         socket.addEventListener("open", () => {
             backoffMs = RECONNECT_MIN_MS;
+            // A place came free, so the eager retries are useful again. Left set,
+            // one refusal would make this socket slow to recover for the life of
+            // the page.
+            refusedForCapacity = false;
             startHeartbeat();
             onOpen?.();
         });
@@ -168,7 +196,10 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
 
     /** Coming back online, or back to the tab, beats waiting out the backoff. */
     function retryNow(): void {
-        if (stopped || socket !== null) return;
+        // A capacity refusal is left on its own schedule: the pending attempt is
+        // already queued at the ceiling, and neither coming back online nor
+        // returning to the tab frees a socket somebody else is holding.
+        if (stopped || socket !== null || refusedForCapacity) return;
         backoffMs = RECONNECT_MIN_MS;
         clearReconnect();
         connect();

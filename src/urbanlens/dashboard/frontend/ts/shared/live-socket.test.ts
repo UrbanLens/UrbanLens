@@ -582,3 +582,63 @@ describe("onOpen", () => {
         expect(opened).toBe(2);
     });
 });
+
+describe("a connection refused for capacity", () => {
+    // 4429 is the consumers' "this account already holds as many sockets as it
+    // may" (services/security/socket_budget.py). Unlike 4404 it is temporary -
+    // closing a tab frees a place - so the socket keeps trying. What it must not
+    // do is try eagerly: every attempt is a handshake, an auth resolution and a
+    // store round trip, which is the cost the cap exists to bound.
+    test("keeps trying, unlike an unauthorized one", () => {
+        open();
+        current().accept();
+        current().drop(4429);
+
+        advance(600000);
+        expect(sockets.length).toBeGreaterThan(1);
+    });
+
+    test("waits the full ceiling rather than the shortest delay", () => {
+        open();
+        current().accept();
+        current().drop(4429);
+
+        advance(29000);
+        expect(sockets.length).toBe(1);
+        advance(10000);
+        expect(sockets.length).toBe(2);
+    });
+
+    test("is not brought forward by coming back online", () => {
+        open();
+        current().accept();
+        current().drop(4429);
+
+        window.dispatchEvent(new Event("online"));
+        expect(sockets.length).toBe(1);
+    });
+
+    test("is not brought forward by returning to the tab", () => {
+        // The one that would bite hardest: a browser one socket over the
+        // allowance would otherwise retry on every window switch.
+        open();
+        current().accept();
+        current().drop(4429);
+
+        document.dispatchEvent(new Event("visibilitychange"));
+        document.dispatchEvent(new Event("visibilitychange"));
+        expect(sockets.length).toBe(1);
+    });
+
+    test("goes back to retrying eagerly once a place comes free", () => {
+        open();
+        current().accept();
+        current().drop(4429);
+        advance(40000);
+        current().accept();
+        current().drop(1006);
+
+        window.dispatchEvent(new Event("online"));
+        expect(sockets.length).toBe(3);
+    });
+});

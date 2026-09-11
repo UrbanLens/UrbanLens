@@ -4374,6 +4374,21 @@ it. `limit_conn ws_conn 60` on the `/ws/` location is what bounds that, keyed on
 vhost establishes first - and the test asserts that ordering, since keying on the front door's
 address would give every visitor behind the tunnel one shared budget.
 
+Reviewing the first version turned up the defect that would have mattered most, and it was on the
+client. `live-socket.ts` stopped for good on 4404 and reconnected on everything else, so a 4429
+became a retry - at a one-second backoff that `retryNow` reset on every tab focus and every `online`
+event. A browser one socket over the allowance would have hammered the refusal on every window
+switch, each attempt a handshake, an auth resolution and a store round trip. A limiter that provokes
+the load it prevents is not a limiter. A capacity refusal now waits the full ceiling and is not
+brought forward by those triggers, and clears once a place comes free; three of the five new tests
+fail against the previous version.
+
+The claims also renew. They expire so a worker that went away stops costing an account part of its
+allowance, but these sockets live as long as their tab - hours - so without a renewal a long-lived
+one would quietly stop counting, which is lenient rather than dangerous but would make the cap
+meaningless for exactly the connections it bounds. With a renewal every 5 minutes the window can be
+15 rather than the 2 hours it would otherwise need, so a dead worker's claims clear in minutes.
+
 **H16 is overstated.** The audit says "every wiki/photo access check re-reads the whole site-wide
 Place aggregate table, so each media-file fetch costs a full-table scan". The scan is real -
 `_earn_aggregates` reads every aggregate `Place` and then every member of those - but the media path

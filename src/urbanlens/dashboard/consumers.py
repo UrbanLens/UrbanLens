@@ -214,6 +214,14 @@ class SocketAllowanceMixin(_CredentialScopeBase):
     open.
     """
 
+    #: Who this connection's place is charged to, once one has been taken. Empty
+    #: until then, and emptied again on release, so the release is idempotent.
+    _socket_slot_identity: str = ""
+
+    #: The renewal loop, cancelled on disconnect. Declared here rather than left
+    #: to be inferred from its first assignment, which typed it as never-None.
+    _socket_slot_task: asyncio.Task[None] | None = None
+
     def connection_identity(self) -> str:
         """Who this connection is charged to.
 
@@ -249,17 +257,43 @@ class SocketAllowanceMixin(_CredentialScopeBase):
         allowed = await database_sync_to_async(socket_budget.claim)(identity, self.channel_name)
         if allowed:
             self._socket_slot_identity = identity
+            self._socket_slot_task = asyncio.create_task(self._renew_socket_slot_periodically())
         return allowed
 
     async def release_socket_slot(self) -> None:
         """Give this connection's place back. Safe to call when none was taken."""
         from urbanlens.dashboard.services.security import socket_budget
 
-        identity = getattr(self, "_socket_slot_identity", "")
+        task = self._socket_slot_task
+        if task is not None:
+            task.cancel()
+            self._socket_slot_task = None
+        identity = self._socket_slot_identity
         if not identity:
             return
         self._socket_slot_identity = ""
         await database_sync_to_async(socket_budget.release)(identity, self.channel_name)
+
+    async def _renew_socket_slot_periodically(self) -> None:
+        """Keep this connection's claim from being swept while it is still live.
+
+        A claim expires so that a worker which went away stops costing the
+        account part of its allowance. These sockets outlive that window by
+        hours, so without this a long-lived one would quietly stop counting -
+        the lenient direction, but it would make the cap meaningless for exactly
+        the connections it is meant to bound.
+        """
+        from urbanlens.dashboard.services.security import socket_budget
+
+        try:
+            while True:
+                await asyncio.sleep(socket_budget.REFRESH_INTERVAL_SECONDS)
+                identity = self._socket_slot_identity
+                if not identity:
+                    return
+                await database_sync_to_async(socket_budget.refresh)(identity, self.channel_name)
+        except asyncio.CancelledError:
+            pass
 
 
 class InboundVolumeMixin(_CredentialScopeBase):

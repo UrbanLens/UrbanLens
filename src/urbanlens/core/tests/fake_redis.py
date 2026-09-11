@@ -122,8 +122,14 @@ class FakeRedis:
         bucket = self.hashes.get(name, {})
         return sum(1 for key in keys if bucket.pop(key, _UNSET) is not _UNSET)
 
-    def zadd(self, name: str, mapping: dict[str, Any]) -> int:
+    def zadd(self, name: str, mapping: dict[str, Any], *, xx: bool = False) -> int:
         bucket = self.zsets.setdefault(name, {})
+        # `xx=True` updates the members that are there and adds none, which is
+        # what makes renewing a claim different from taking one.
+        if xx:
+            present = {member: float(score) for member, score in mapping.items() if member in bucket}
+            bucket.update(present)
+            return 0
         added = sum(1 for member in mapping if member not in bucket)
         bucket.update({member: float(score) for member, score in mapping.items()})
         return added

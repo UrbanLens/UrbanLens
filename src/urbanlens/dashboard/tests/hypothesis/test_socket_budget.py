@@ -131,6 +131,45 @@ class ACrashedWorkerDoesNotLockAnAccountOutTests(_BudgetCase):
         self.assertFalse(socket_budget.claim("user:1", "chan-3"))
 
 
+@override_settings(**{SETTING_NAME: 3})
+class ALiveConnectionKeepsItsPlaceTests(_BudgetCase):
+    """The other half of the sweep: it must expire the dead, not the living.
+
+    These sockets live as long as their tab, which is hours - far past the sweep
+    window. Without a renewal a long-lived connection would quietly stop
+    counting, which is the lenient direction but would make the cap meaningless
+    for exactly the connections it exists to bound.
+    """
+
+    def test_a_renewed_claim_survives_the_sweep(self) -> None:
+        socket_budget.claim("user:1", "chan-0")
+        self.store.zsets["ul_ws_open:user:1"]["chan-0"] = time.time() - socket_budget.STALE_AFTER_SECONDS + 1
+
+        socket_budget.refresh("user:1", "chan-0")
+        self.store.zsets["ul_ws_open:user:1"]["chan-1"] = time.time()
+
+        self.assertEqual(socket_budget.open_count("user:1"), 2, "a renewed claim was swept as abandoned")
+
+    def test_an_unrenewed_claim_does_not_survive(self) -> None:
+        """The negative half - otherwise the test above would pass against a
+        sweep that never removed anything."""
+        socket_budget.claim("user:1", "chan-0")
+        self.store.zsets["ul_ws_open:user:1"]["chan-0"] = time.time() - socket_budget.STALE_AFTER_SECONDS - 1
+
+        self.assertEqual(socket_budget.open_count("user:1"), 0)
+
+    def test_renewing_a_swept_claim_does_not_resurrect_it(self) -> None:
+        """It would let a connection that lost its place take a new one without
+        being counted against the allowance."""
+        socket_budget.refresh("user:1", "never-claimed")
+
+        self.assertEqual(socket_budget.open_count("user:1"), 0)
+
+    def test_the_renewal_fits_inside_the_sweep_window(self) -> None:
+        """A renewal interval at or past the window would renew nothing."""
+        self.assertLess(socket_budget.REFRESH_INTERVAL_SECONDS * 2, socket_budget.STALE_AFTER_SECONDS)
+
+
 class TheCapFailsOpenTests(SimpleTestCase):
     """A counter it cannot read must not become a site-wide refusal."""
 
