@@ -25,6 +25,7 @@ from urbanlens.dashboard.services.undo.service import (
 )
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger(__name__)
@@ -52,12 +53,29 @@ def _stack_response(profile: Profile, *, ok: bool = True, error: str | None = No
     return JsonResponse(payload, status=status)
 
 
+def _history_for_panel(profile: Profile) -> QuerySet[UndoAction]:
+    """The history the panel renders, without the column it never shows.
+
+    `payload` carries the whole snapshot needed to reverse an action - for a bulk
+    delete, the entire stashed subtree. Deferred here rather than in
+    `get_undo_history` because the external API shares that function and does
+    serialize the payload, where a defer would cost one query per row.
+
+    Args:
+        profile: Whose history to list.
+
+    Returns:
+        The profile's undoable actions, payload deferred.
+    """
+    return get_undo_history(profile).defer("payload")
+
+
 class UndoHistoryView(LoginRequiredMixin, View):
     """GET /settings/undo-history/ - HTMX partial listing a profile's undo history."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
         profile = _request_profile(request)
-        return render(request, _PARTIAL, {"actions": list(get_undo_history(profile))})
+        return render(request, _PARTIAL, {"actions": list(_history_for_panel(profile))})
 
 
 class UndoStackView(LoginRequiredMixin, View):
@@ -105,10 +123,10 @@ class UndoRestoreView(LoginRequiredMixin, View):
         try:
             restore_undo_action(undo_action)
         except UndoExpiredError:
-            response = render(request, _PARTIAL, {"actions": list(get_undo_history(profile))})
+            response = render(request, _PARTIAL, {"actions": list(_history_for_panel(profile))})
             return _with_toast(response, "That undo has expired.", level="error")
 
-        response = render(request, _PARTIAL, {"actions": list(get_undo_history(profile))})
+        response = render(request, _PARTIAL, {"actions": list(_history_for_panel(profile))})
         return _with_toast(response, "Restored.")
 
 
