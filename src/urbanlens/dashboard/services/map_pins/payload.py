@@ -347,19 +347,27 @@ class MapPinPayloadService:
 
     def __init__(self, profile: Profile):
         self.profile = profile
-        self._irrelevant_item_keys: set[str] | None = None
         self._label_views: dict[int, LabelView] = {}
 
-    def _irrelevant_item_keys_for_profile(self) -> set[str]:
-        """This profile's own "not relevant" votes, computed once and cached on this instance.
+    def _irrelevant_item_keys_for_profile(self) -> QuerySet[MediaRelevance, dict[str, Any]]:
+        """This profile's own "not relevant" votes, as a subquery to embed.
 
         Only a materialized community-gallery photo (``media_item_key`` set)
         can appear here - see ``services.media.media_relevance.effective_relevance``'s
         own docs on why a plain personal upload is trusted by default instead.
+
+        A subquery rather than the keys themselves. Read into Python and inlined
+        as a literal ``IN (...)``, they put roughly 88 bytes of statement text
+        into every batch per vote the profile has ever cast - twice, once per
+        fallback-photo subquery - so a user's own history decided how large a
+        statement their map sent, without bound. Not *correlated*: `MediaRelevance`
+        is indexed on ``(profile, location)``, and an `EXISTS` resolved per pin row
+        would have no index to use, where this is evaluated once and hashed.
+
+        Returns:
+            The profile's not-relevant item keys, as a queryset to embed.
         """
-        if self._irrelevant_item_keys is None:
-            self._irrelevant_item_keys = set(MediaRelevance.objects.filter(profile=self.profile, is_relevant=False).values_list("item_key", flat=True))
-        return self._irrelevant_item_keys
+        return MediaRelevance.objects.filter(profile=self.profile, is_relevant=False).values("item_key")
 
     def _annotations(self) -> dict[str, Any]:
         """The computed columns both paths select.
