@@ -16,12 +16,14 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.urls import path
 
 from urbanlens.dashboard.models.achievements.model import Achievement
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from django.http import HttpRequest
 
 #: Bytes of filler the wasteful view attaches to each row. Comfortably past
@@ -138,6 +140,45 @@ def uncapped(request: HttpRequest) -> HttpResponse:
     return HttpResponse(json.dumps({"rows": rows, "truncated": False}), content_type="application/json")
 
 
+def streams_too_much(request: HttpRequest) -> StreamingHttpResponse:
+    """The wasteful view again, streamed - the shape `map.document` serves.
+
+    A `StreamingHttpResponse` has no `.content`, so an instrument that reads the
+    body the obvious way cannot measure the largest endpoint in the application
+    at all. This exists so that blind spot fails a test rather than passing one.
+
+    Args:
+        request: The HTTP request.
+
+    Returns:
+        One NDJSON line per achievement, each carrying the same filler.
+    """
+    filler = "x" * FILLER_BYTES
+
+    def lines() -> Iterator[bytes]:
+        for row in Achievement.objects.order_by("pk").values("id"):
+            yield json.dumps({"id": row["id"], "blob": filler}).encode() + b"\n"
+
+    return StreamingHttpResponse(lines(), content_type="application/x-ndjson")
+
+
+def streams_bounded(request: HttpRequest) -> StreamingHttpResponse:
+    """The same transport, honest per-row cost - the negative half.
+
+    Args:
+        request: The HTTP request.
+
+    Returns:
+        One small NDJSON line per achievement.
+    """
+
+    def lines() -> Iterator[bytes]:
+        for row in Achievement.objects.order_by("pk").values("id", "name"):
+            yield json.dumps(row).encode() + b"\n"
+
+    return StreamingHttpResponse(lines(), content_type="application/x-ndjson")
+
+
 urlpatterns = [
     path("bounded/", bounded, name="endpoint_scaling.bounded"),
     path("objects/", builds_objects, name="endpoint_scaling.objects"),
@@ -145,4 +186,6 @@ urlpatterns = [
     path("bytes/", ships_too_much, name="endpoint_scaling.bytes"),
     path("capped/", capped, name="endpoint_scaling.capped"),
     path("uncapped/", uncapped, name="endpoint_scaling.uncapped"),
+    path("streams/", streams_too_much, name="endpoint_scaling.streams"),
+    path("streams-bounded/", streams_bounded, name="endpoint_scaling.streams_bounded"),
 ]

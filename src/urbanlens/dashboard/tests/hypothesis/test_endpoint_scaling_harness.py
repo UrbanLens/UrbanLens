@@ -145,6 +145,45 @@ class BytesPerRowIsCaughtTests(_AchievementSeedMixin, TestCase):
 
 
 @override_settings(ROOT_URLCONF=_URLCONF)
+class AStreamedResponseIsMeasurableTests(_AchievementSeedMixin, TestCase):
+    """The transport `map.document` uses must not be a hole in the instrument.
+
+    `StreamingHttpResponse` has no `.content`. An instrument that reads the body
+    the obvious way raises rather than measuring, which means the largest
+    endpoint in the application is outside the reach of the most complete gate in
+    the repo - and silently, because nobody points a gate at it and sees it fail.
+    """
+
+    #: Bigger than the classes above: an honest NDJSON row is ~40 bytes, and the
+    #: mixin refuses a seed whose growth is inside its own noise floor.
+    first_batch = 4
+    second_batch = 8
+
+    def count_payload_rows(self, response: HttpResponse) -> int | None:
+        """NDJSON has one record per line, not a `rows` key."""
+        return len([line for line in self._body(response).splitlines() if line.strip()])
+
+    @staticmethod
+    def _body(response: HttpResponse) -> str:
+        if getattr(response, "streaming", False):
+            return b"".join(response.streaming_content).decode()
+        return response.content.decode()
+
+    def test_a_streamed_endpoint_can_be_measured_at_all(self) -> None:
+        """Reading the body must not raise, whatever the verdict turns out to be."""
+        self.seed(self.first_batch)
+        sample = self.measure_endpoint("/streams-bounded/")
+        self.assertGreater(sample.body_bytes, 0, "a streamed body measured as zero bytes")
+
+    def test_a_streamed_endpoint_shipping_kilobytes_per_row_fails(self) -> None:
+        with pytest.raises(AssertionError, match="bytes/row"):
+            self.assert_endpoint_scaling("/streams/")
+
+    def test_a_streamed_endpoint_with_an_honest_per_row_cost_passes(self) -> None:
+        self.assert_endpoint_scaling("/streams-bounded/", max_objects_per_row=0.0)
+
+
+@override_settings(ROOT_URLCONF=_URLCONF)
 class ThePayloadCeilingIsCheckedTests(_AchievementSeedMixin, TestCase):
     """A per-row budget cannot express "and never more than N records"."""
 

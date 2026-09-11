@@ -216,18 +216,26 @@ run_k6 "measured.json" \
 	-e UL_PERF_BUDGET_MS="${BUDGET_MS}" \
 	-e UL_PERF_EXPECTED_PINS="${HEAVY_PINS}" || STATUS=$?
 
+POOL_STATUS=0
 if [[ -n "${SAMPLER_PID}" ]]; then
 	kill "${SAMPLER_PID}" 2>/dev/null || true
 	wait "${SAMPLER_PID}" 2>/dev/null || true
 	trap - EXIT
-	python3 "${REPO_ROOT}/bin/perf/report_activity.py" "${OUT_DIR}/pg_activity.csv" || true
+	# The pool is the other half of the verdict. Latency can look survivable
+	# while one account holds every connection - that is what P104 was.
+	docker logs "${DB_CONTAINER}" >"${OUT_DIR}/db.log" 2>&1 || true
+	python3 "${REPO_ROOT}/bin/perf/report_activity.py" "${OUT_DIR}/pg_activity.csv" \
+		--fail-on-pressure --db-log "${OUT_DIR}/db.log" || POOL_STATUS=$?
 fi
 
 echo
-if [[ ${STATUS} -eq 0 ]]; then
-	echo "PASS - the neighbour stayed inside ${BUDGET_MS}ms in every phase."
-else
+if [[ ${STATUS} -eq 0 && ${POOL_STATUS} -eq 0 ]]; then
+	echo "PASS - the neighbour stayed inside ${BUDGET_MS}ms in every phase, and the connection pool held."
+elif [[ ${STATUS} -ne 0 ]]; then
 	echo "FAIL - see the per-phase table above. k6 exited ${STATUS}."
+else
+	echo "FAIL - latency held but the connection pool did not. See the pg_stat_activity lines above."
+	STATUS="${POOL_STATUS}"
 fi
 echo "Summaries: ${OUT_DIR}"
 exit "${STATUS}"

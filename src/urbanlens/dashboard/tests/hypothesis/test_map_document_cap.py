@@ -13,14 +13,22 @@ and the *keyset-paginated* sibling endpoint (`map.pins`, clamped to
 `MAX_LIMIT = 1000`) exists precisely because that is not an acceptable shape for a
 request path.
 
-**These tests fail today, deliberately** - the TDD reproduction, under
-`xfail(strict=True)` so they turn red the day a ceiling lands and prompt the
-markers' removal.
+D12 gave `map.document` that ceiling: `MAP_DOCUMENT_MAX_PINS`, read by
+`services/map_pins/document.max_pins()`, which hands an over-ceiling account the
+paged mode instead. `test_map_document.py` covers it. **`map.search` was left
+out**, and it is the one a user triggers repeatedly by changing a filter, so the
+reproduction below stays red under `xfail(strict=True)` until it is capped too.
 
-The first test asserts the setting *exists* before anything overrides it, and that
-ordering is load-bearing rather than pedantic: `override_settings` will happily
-invent a name production does not have, so a test that goes straight to
-overriding `UL_MAP_DOCUMENT_MAX_PINS` would configure a ceiling nothing reads and
+The first version of this file could never have turned red. It asserted
+`hasattr(settings, "UL_MAP_DOCUMENT_MAX_PINS")` - the environment variable's
+name, not the Django setting's - so it went on xfailing after the ceiling landed
+and reported nothing. That is precisely the trap the paragraph below describes,
+committed by the file that describes it, which is why
+`test_the_name_is_one_production_reads` now exercises the override rather than
+trusting it.
+
+`override_settings` will happily invent a name production does not have, so a
+test that goes straight to overriding would configure a ceiling nothing reads and
 then pass against code that has none.
 """
 
@@ -41,10 +49,11 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.map_pins import document as map_document
 
-#: The setting the ceiling should live behind. Named here rather than imported so
-#: this module states the requirement even while the name does not exist.
-SETTING_NAME = "UL_MAP_DOCUMENT_MAX_PINS"
+#: The Django setting the ceiling lives behind. `UL_MAP_DOCUMENT_MAX_PINS` is the
+#: environment variable that feeds it and is not what `override_settings` takes.
+SETTING_NAME = "MAP_DOCUMENT_MAX_PINS"
 
 #: Stand-in ceiling, so the test states the rule without seeding 30,001 pins.
 TEST_CAP = 4
@@ -107,9 +116,12 @@ class _SeededMapCase(TestCase):
 
 
 class TheCeilingMustExistTests(_SeededMapCase):
-    """Before anything can be bounded, something has to name the bound."""
+    """Before anything can be bounded, something has to name the bound.
 
-    @pytest.mark.xfail(strict=True, reason="P96-adjacent: the map document has no ceiling yet; D12 adds one")
+    Not xfail: D12 landed this half. It stays as the tripwire for the name, which
+    is what the mis-wired first draft of this file got wrong.
+    """
+
     def test_a_setting_names_the_maximum_pins_in_one_document(self) -> None:
         self.assertTrue(
             hasattr(settings, SETTING_NAME),
@@ -117,12 +129,24 @@ class TheCeilingMustExistTests(_SeededMapCase):
             "and an override_settings of that name would silently configure a ceiling no code reads.",
         )
 
+    def test_the_name_is_one_production_reads(self) -> None:
+        """Overriding it must move the number the serving code actually asks for."""
+        with override_settings(**{SETTING_NAME: 7}):
+            self.assertEqual(
+                map_document.max_pins(),
+                7,
+                f"overriding {SETTING_NAME} did not change document.max_pins(), so every ceiling "
+                "assertion in this file would be configuring something nothing reads.",
+            )
+
 
 @override_settings(**{SETTING_NAME: TEST_CAP})
 class TheFilterPostMustRespectItTests(_SeededMapCase):
     """`map.search` is the one a user triggers repeatedly, by changing a filter."""
 
-    @pytest.mark.xfail(strict=True, reason="P96-adjacent: the map document has no ceiling yet; D12 adds one")
+    @pytest.mark.xfail(
+        strict=True, reason="map.search still ships the whole account; D12 capped map.document and left this one"
+    )
     def test_it_ships_no_more_pins_than_the_ceiling(self) -> None:
         response = self.client.post(reverse("map.search"), {})
 
@@ -135,7 +159,9 @@ class TheFilterPostMustRespectItTests(_SeededMapCase):
             "is O(account), so its cost is set by how many pins the requester owns.",
         )
 
-    @pytest.mark.xfail(strict=True, reason="P96-adjacent: the map document has no ceiling yet; D12 adds one")
+    @pytest.mark.xfail(
+        strict=True, reason="map.search still ships the whole account; D12 capped map.document and left this one"
+    )
     def test_a_truncated_document_says_so(self) -> None:
         """Silently dropping pins would be worse than shipping them all.
 

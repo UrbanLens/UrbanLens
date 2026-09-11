@@ -616,10 +616,27 @@ Failures report every axis that moved, not the first, because an endpoint
 building objects per row usually also fetches rows per row and fixing one at a
 time means measuring three times.
 
-`test_endpoint_scaling_harness.py` points it at six views whose per-row cost is
+`test_endpoint_scaling_harness.py` points it at eight views whose per-row cost is
 known — one broken per axis, so a harness failure is unambiguous about which axis
 caught it — and includes a negative control for the *axis* rather than the
 fixture: `/bounded/` reads the identical one row per row and must pass.
+
+**Streamed responses are in scope** (2026-09-11). They were not: the mixin read
+`len(response.content)`, which raises on a `StreamingHttpResponse`, so
+`map.document` — the largest response the application serves — could not be
+measured by the most complete instrument in the repo, and nothing said so because
+nobody had pointed a gate at it. `read_body()` drains either shape *inside* the
+counting wrappers, which matters: a streamed response has done none of its work
+when the view returns, so reading it afterwards reports zero rows and zero objects
+for exactly the endpoint that builds the most of both. `/streams/` and
+`/streams-bounded/` are the fixtures holding that honest.
+
+`test_map_document_scaling.py` is the gate that extension exists for:
+0 objects/pin, **444 bytes/pin measured 2026-09-11**, and rows-fetched budgeted as
+one pin row plus one through-row per label the pin names — derived rather than
+chosen, so anything reading beyond a pin and its own labels trips it. The mixin's
+default of 1.5 is simply the wrong budget for a payload carrying an m2m list, and
+a gate whose budget is wrong teaches people to raise budgets.
 
 ### What all four share: `SeedScalingMixin` and the `ANALYZE` it runs
 
@@ -660,6 +677,16 @@ Seeds the target, derives a budget from a baseline pass on the same host,
 samples `pg_stat_activity` at 1 Hz throughout, and returns a per-phase table.
 `tests/perf/README.md` has the layout and the three things that are easy to get
 wrong; `bin/perf/` has the sampler and the budget derivation.
+
+**The verdict is latency and the pool, not latency alone** (2026-09-11). It used
+to be latency alone: `report_activity.py` returned zero whatever it found, the
+runner called it with `|| true`, and nothing grepped the database log for
+`53300`. So the one harness built to catch P104 could not fail on P104's own
+mechanism — one tier holding every connection while every latency number still
+looks survivable. It now runs with `--fail-on-pressure --db-log`, and **a missing
+sampler CSV fails the run**: a sampler that never ran is a broken harness, not a
+healthy pool, and reading absence as success is how an instrument comes to report
+green forever.
 
 k6 rather than Locust because the assertion is open-model: a closed-model tool
 lets a slowing server reduce the probe's own request rate, hiding exactly the

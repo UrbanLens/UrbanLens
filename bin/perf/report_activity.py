@@ -35,6 +35,10 @@ import sys
 #: looks at it yet.
 PRESSURE_FRACTION = 0.8
 
+#: What Postgres says when the pool refuses a client. Both spellings, because
+#: `log_error_verbosity` decides whether the English text appears beside the code.
+REFUSAL_MARKERS = ("53300", "too many clients already")
+
 
 @dataclass(frozen=True)
 class ActivitySummary:
@@ -144,6 +148,41 @@ def render(summary: ActivitySummary) -> str:
     return "\n".join(lines)
 
 
+def count_refusals(path: Path) -> int:
+    """How many times the database refused a connection, per its log.
+
+    Args:
+        path: A file holding the database container's log.
+
+    Returns:
+        Matching lines.
+    """
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return sum(1 for line in text.splitlines() if any(marker in line for marker in REFUSAL_MARKERS))
+
+
+def failures(summary: ActivitySummary, refusals: int) -> list[str]:
+    """Why this run should fail, if it should.
+
+    Args:
+        summary: What :func:`summarise` produced.
+        refusals: Connection refusals counted in the database log.
+
+    Returns:
+        One line per reason. Empty means the pool held.
+    """
+    reasons = []
+    if not summary.peak:
+        reasons.append("the sampler produced no samples, so this run is not evidence that the pool held")
+    elif summary.under_pressure:
+        reasons.append(
+            f"the pool reached {summary.peak}/{summary.max_connections} backends ({summary.peak_fraction:.0%}) and spent {summary.pressured_seconds}s at or above {PRESSURE_FRACTION:.0%} of max_connections",
+        )
+    if refusals:
+        reasons.append(f"the database refused {refusals} connection(s) - one account's work reached another's")
+    return reasons
+
+
 def main(argv: list[str] | None = None) -> int:
     """Print a summary of one sampler CSV.
 
@@ -151,19 +190,48 @@ def main(argv: list[str] | None = None) -> int:
         argv: Command-line arguments, for testing.
 
     Returns:
-        Process exit status. Zero even when the pool was pressured: this
-        reports, and k6 decides.
+        Process exit status. Without ``--fail-on-pressure`` this only reports,
+        which is how it was first used and how a one-off inspection still uses it.
+
+    Raises:
+        SystemExit: The arguments did not parse.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("csv", type=Path, help="CSV written by pg_activity_sampler.sh.")
+    parser.add_argument(
+        "--fail-on-pressure",
+        action="store_true",
+        help="Exit non-zero when the pool was pressured, refused a client, or was never sampled.",
+    )
+    parser.add_argument("--db-log", type=Path, help="Database log to grep for connection refusals.")
     args = parser.parse_args(argv)
 
     if not args.csv.exists():
         print(f"no sampler CSV at {args.csv}", file=sys.stderr)
+        if args.fail_on_pressure:
+            print("refusing to call that a pass: an absent sampler is a broken harness, not a healthy pool.", file=sys.stderr)
+            return 1
         return 0
 
-    print(render(summarise(load(args.csv))))
-    return 0
+    summary = summarise(load(args.csv))
+    print(render(summary))
+
+    refusals = 0
+    if args.db_log is not None:
+        if not args.db_log.exists():
+            print(f"no database log at {args.db_log}", file=sys.stderr)
+            if args.fail_on_pressure:
+                return 1
+        else:
+            refusals = count_refusals(args.db_log)
+
+    if not args.fail_on_pressure:
+        return 0
+
+    reasons = failures(summary, refusals)
+    for reason in reasons:
+        print(f"FAIL - {reason}", file=sys.stderr)
+    return 1 if reasons else 0
 
 
 if __name__ == "__main__":

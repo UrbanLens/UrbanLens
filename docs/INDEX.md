@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P113` · `T3` · `PL8` · `D13` · `X18` · `I5` · `R29` · `N21`
+**Next free id:** `P114` · `T3` · `PL8` · `D13` · `X18` · `I5` · `R29` · `N22`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -104,6 +104,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P110 | open | 2026-09-10 | The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P111 | open | 2026-09-10 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P112 | open | 2026-09-10 | `bun run codeql:gate` fails with 26 untriaged findings, so nobody runs it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P113 | open | 2026-09-11 | 54 verified places where one account's ordinary use can degrade the site for everyone else | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |
@@ -185,3 +186,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | N18 | current | 2026-09-10 | Follow-up to infrastructure: the metrics override guards a branch that does not exist, and their Docker-access plan item is already satisfied | [`docs/handoffs/infrastructure-availability-drills-followup.md`](handoffs/infrastructure-availability-drills-followup.md) |
 | N19 | current | 2026-09-10 | The staging metrics exporter's 30-hour restart loop is stopped at 4,410; the permanent fix is a 52-commit staging deploy, not a container fix | [`docs/handoffs/infrastructure-metrics-exporter-loop-closed.md`](handoffs/infrastructure-metrics-exporter-loop-closed.md) |
 | N20 | current | 2026-09-10 | The neighbour test runs, and what it measured changes what staging should expect | [`docs/handoffs/infrastructure-neighbour-test-results.md`](handoffs/infrastructure-neighbour-test-results.md) |
+| N21 | current | 2026-09-11 | The availability audit of 2026-09-11, and what it found | [`docs/notes/availability-audit-2026-09-11.md`](notes/availability-audit-2026-09-11.md) |

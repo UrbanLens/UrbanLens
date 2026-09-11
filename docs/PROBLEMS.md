@@ -4219,3 +4219,36 @@ is that a vulnerability gets a failing test reproducing the attack first, always
 
 Recorded rather than fixed because 26 findings across five rule families is its own piece of work,
 and doing it badly — dismissing in bulk to make a gate green — is worse than leaving it red.
+
+## P113 — 54 verified places where one account's ordinary use can degrade the site for everyone else
+
+`id: P113` · `status: open` · `updated: 2026-09-11`
+
+A sixteen-dimension sweep of the application, re-judged by hostile reviewers who were given the
+claim but not the finder's evidence, returned **54 real findings**: 10 critical, 41 high, 3 medium.
+Six need no account at all. The full table, the method, and the four findings that were downgraded
+on review are in [`notes/availability-audit-2026-09-11.md`](notes/availability-audit-2026-09-11.md)
+(N21).
+
+The count is the least interesting part. They fall into five families, and the fixes are per family:
+
+| family | findings | already designed as |
+|---|---|---|
+| Unauthenticated expensive endpoints with no throttle | 6 | — nothing; there is no inbound throttle in the web tier at all |
+| One account's work fills the only Celery queue | ~8 | PL7 phase 6 (queue classes) |
+| Unbounded writes into the shared 512MB Valkey | ~7 | PL7 phase 4 (Valkey split) |
+| Request-path loops over one account's data, no ceiling | ~25 | per-endpoint caps; the map's own shape (R27, D12) |
+| No per-role DB limits and no `statement_timeout` | ~8 | D11 phase 3 |
+
+Three of those five already have a written design that has not been built. That is the finding worth
+acting on: this is not 54 unrelated bugs, it is mostly three unbuilt phases, measured.
+
+**The one with no existing design** is the first. `external_api/throttling.py` is rich and
+DRF-only; `services/core/rate_limiter.py` caps *outbound* third-party spend, not inbound load. So
+`POST /signup/` and `POST /demo/start/` spend PBKDF2 CPU per request — measured at ~1.1s each, and
+`/demo/start/` does five — with nothing in front of them, and nginx carries no `limit_req` zone
+either. An anonymous caller can occupy the web tier with a loop.
+
+**Not fixed here.** Each family needs its own decision about where the ceiling goes, and several
+change what a user sees when they hit it — which is a product call, not a technical one. Recorded
+so the choices are made deliberately rather than discovered during an outage.

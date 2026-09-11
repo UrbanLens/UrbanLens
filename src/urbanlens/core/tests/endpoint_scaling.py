@@ -32,19 +32,16 @@ machine. See X14 for what happened when a timing was re-examined.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from django.db import connection
+from django.http import HttpResponse, HttpResponseBase, StreamingHttpResponse
 from django.test.utils import CaptureQueriesContext
 
 from urbanlens.core.tests.instantiation_scaling import InstantiationScalingMixin, count_instantiations
 from urbanlens.core.tests.query_scaling import DEFAULT_TOLERANCE, queries_that_grew
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
-    from django.http import HttpResponse
 
 #: Model instances one row of output may cost. A projection path builds none; a
 #: DRF view with nested serializers legitimately builds some and should say how
@@ -68,6 +65,38 @@ MAX_ROWS_FETCHED_PER_ROW_WHEN_CAPPED = 0.5
 #: Response bytes one row may add. Generous: this catches an endpoint shipping a
 #: whole serialized graph per row, not one with a verbose field.
 MAX_BYTES_PER_ROW = 4_000
+
+
+def read_body(response: HttpResponseBase) -> bytes:
+    """The whole body, whether or not it was streamed.
+
+    `StreamingHttpResponse` raises on `.content`, so reading a body the obvious
+    way put `map.document` - the largest endpoint in the application - outside
+    the reach of every gate built on this mixin.
+
+    Args:
+        response: The response to read.
+
+    Returns:
+        The body as bytes. A streamed response is cached back onto itself so a
+        caller reading it again, such as `count_payload_rows`, does not find the
+        generator already exhausted.
+
+    Raises:
+        TypeError: The response carries a body in neither of the two shapes
+            Django defines, or it streams asynchronously, which cannot be drained
+            from a synchronous test.
+    """
+    if isinstance(response, StreamingHttpResponse):
+        chunks = response.streaming_content
+        if not isinstance(chunks, Iterator):
+            raise TypeError("an async streamed response cannot be drained synchronously")
+        body = b"".join(chunks)
+        response.streaming_content = iter([body])
+        return body
+    if isinstance(response, HttpResponse):
+        return bytes(response.content)
+    raise TypeError(f"cannot read a body from {type(response).__name__}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,13 +183,18 @@ class EndpointScalingMixin(InstantiationScalingMixin):
         rows: list[int] = [0]
         with connection.execute_wrapper(_row_counting_wrapper(rows)), count_instantiations() as counted:
             response = self.request(url, **extra)
+            # Drained inside the wrappers, not after them: a streamed response has
+            # done none of its work yet at this point, so reading it outside would
+            # report zero rows and zero objects for the endpoint that builds the
+            # most of both.
+            body = read_body(response)
         self.assertEqual(response.status_code, 200, f"{url} returned {response.status_code}")
         return EndpointSample(
             queries=(),
             objects=counted.total,
             by_model=dict(counted.by_model),
             rows_fetched=rows[0],
-            body_bytes=len(response.content),
+            body_bytes=len(body),
             payload_rows=self.count_payload_rows(response),
         )
 

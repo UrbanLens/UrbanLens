@@ -8,7 +8,7 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: PL7` · `status: live` · `updated: 2026-09-10`
+`id: PL7` · `status: live` · `updated: 2026-09-11`
 
 Executes D11 (process isolation and the connection budget) and D12 (the map data contract). R27
 recorded the map-payload fix that preceded both. Full plan text, including the parts not summarised
@@ -30,9 +30,38 @@ on purpose until it lands. Each phase's acceptance is a measurement, not a revie
 | 2 | Config-only shedding and telemetry, deployable under today's gevent | **partly done 2026-09-10** |
 | 3 | `gthread`, per-role Postgres users, `app-heavy` pool (D11) | not started |
 | 4 | Valkey split + degradable session path (P105) | not started |
-| 5 | Map data contract v11 (D12) | **underway 2026-09-11** — write paths, freshness signal, the single-document fetch and the cache shape change done (P101, P102, P106, P108 closed); payload v11, deltas and the IndexedDB store not started |
+| 5 | Map data contract v11 (D12) | **built 2026-09-11** — payload v11, the per-pin cache deleted, labels normalised, the streamed document and its per-account build claim (P101, P102, P106, P108 closed). The `?since=` delta, viewport mode and the IndexedDB store are deferred with triggers in D12 |
 | 6 | Celery queue classes; move P96/P98/P2 work off the request | not started |
 | 7 | Observability completion, profiling harness, k8s parity | not started |
+
+## 2026-09-11 — the instruments were audited, and three of them could not fail
+
+Asked to prove there are no regressions going forward, the first thing worth checking is whether the
+gates can go red at all. Three could not, and all three are now fixed. None of this changes the
+application; it changes what the suite can detect.
+
+- **The neighbour run could not fail on connection exhaustion** — P104's own mechanism, the
+  eleven-hour outage. `bin/perf/report_activity.py` returned zero whatever it found ("this reports,
+  and k6 decides"), `run_perf_tests.sh` called it with `|| true`, and nothing grepped the database
+  log for `53300`, although the phase-1 text above says both are hard failures. It now takes
+  `--fail-on-pressure` and `--db-log`, and the runner's verdict is latency **and** pool. A missing
+  CSV fails rather than passing: a sampler that never ran is a broken harness, not a healthy pool.
+- **`test_map_document_cap.py`'s three strict-xfail reproductions could never turn red.** The first
+  asserted `hasattr(settings, "UL_MAP_DOCUMENT_MAX_PINS")` — the environment variable's name, not
+  the Django setting's — so when D12's ceiling landed the file went on xfailing and reported
+  nothing. It is the trap its own docstring describes, committed by the file describing it. Now two
+  honest xfails against `map.search`, which genuinely has no ceiling, plus a guard that overriding
+  the name actually moves `document.max_pins()`.
+- **`EndpointScalingMixin` could not measure a streamed response at all.** It read
+  `len(response.content)`, which raises on `StreamingHttpResponse` — so `map.document`, the largest
+  response the application serves, was outside the reach of the most complete gate in the repo.
+  Fixed, with two fixture views in `urls_endpoint_scaling.py` and three harness tests holding the
+  extension honest, and `map.document` is now gated: 0 objects/pin, **444 bytes/pin measured**, and
+  rows-fetched bounded at one pin row plus one through-row per label it names.
+
+The audit those instruments were sharpened for is N21; its 54 findings are P113. The short version
+is that they are mostly not new work: three of the five families are phases 3, 4 and 6 of this
+plan, unbuilt.
 
 ## Phase 0 — done 2026-09-10
 
