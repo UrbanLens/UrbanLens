@@ -92,6 +92,80 @@ class ADeepLabelTreeIsNotAQueryStormTests(_LabelCase):
         self.assertLessEqual(len(found), 4)
 
 
+class TheGraphIsWalkedCorrectlyTests(_LabelCase):
+    """One recursive query has to handle the shapes a walk handled by construction."""
+
+    def test_a_label_reachable_by_two_paths_is_returned_once(self) -> None:
+        """A diamond: UNION (not UNION ALL) is what dedupes it."""
+        root, left, right, bottom = self._labels(4)
+        left.parents.add(root)
+        right.parents.add(root)
+        bottom.parents.add(left)
+        bottom.parents.add(right)
+
+        found = Label.get_label_and_descendants(root.pk)
+
+        self.assertEqual(found, {root.pk, left.pk, right.pk, bottom.pk})
+
+    def test_a_cycle_terminates(self) -> None:
+        """Labels nest freely, so nothing stops somebody making one."""
+        first, second = self._labels(2)
+        second.parents.add(first)
+        first.parents.add(second)
+
+        found = Label.get_label_and_descendants(first.pk)
+
+        self.assertEqual(found, {first.pk, second.pk})
+
+    def test_a_label_with_no_children_is_just_itself(self) -> None:
+        only = self._labels(1)[0]
+
+        self.assertEqual(Label.get_label_and_descendants(only.pk), {only.pk})
+
+
+class TrimmingIsNeverSilentTests(_LabelCase):
+    """Trimming is not direction-safe, so it must never happen unnoticed.
+
+    A short descendant set narrows an ``and``/``or`` group - fewer labels match -
+    but *widens* a ``not`` one, because there is less to exclude. The ceiling is
+    set well above any real tree for that reason; this holds the two properties
+    that make it safe to have at all.
+    """
+
+    @override_settings(**{EXPANSION_SETTING: 3})
+    def test_trimming_logs(self) -> None:
+        root = self._chain(20)
+
+        with self.assertLogs("urbanlens.dashboard.models.labels.model", level="WARNING") as logs:
+            Label.get_label_and_descendants(root.pk)
+
+        self.assertTrue(any("under-exclude" in line for line in logs.output), logs.output)
+
+    @override_settings(**{EXPANSION_SETTING: 3})
+    def test_a_trimmed_and_group_narrows_rather_than_widens(self) -> None:
+        """The safe direction, asserted rather than assumed."""
+        root = self._chain(20)
+        carries_root = baker.make(Pin, profile=self.profile)
+        carries_root.labels.add(root)
+        carries_nothing = baker.make(Pin, profile=self.profile)
+
+        matched = (
+            Pin.objects.filter(profile=self.profile).apply_label_groups([{"op": "and", "ids": [root.pk]}]).distinct()
+        )
+
+        self.assertIn(carries_root, matched)
+        self.assertNotIn(carries_nothing, matched)
+
+    def test_an_untrimmed_expansion_logs_nothing(self) -> None:
+        """The anti-vacuity half: a warning on every call would pass the test above."""
+        import logging
+
+        root = self._chain(3)
+
+        with self.assertNoLogs("urbanlens.dashboard.models.labels.model", level=logging.WARNING):
+            Label.get_label_and_descendants(root.pk)
+
+
 class TheFilterLengthIsCappedTests(_LabelCase):
     def _parse(self, raw: str) -> list[dict] | None:
         from urbanlens.dashboard.forms.search import SearchForm

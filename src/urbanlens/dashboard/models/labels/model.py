@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.db.models import (
@@ -25,6 +26,8 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, KIND_CHOICES, KIND_TAG
 from urbanlens.dashboard.models.labels.queryset import LabelManager
 from urbanlens.dashboard.services.core.colors import clean_color
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -308,8 +311,15 @@ class Label(abstract.FrontendDashboardModel):
         One recursive query rather than a walk: labels are user-created and nest
         freely, so a walk let whoever built the tree decide how many queries a
         search costs - a chain N deep cost N queries however the walk was
-        batched. ``UNION`` (not ``UNION ALL``) is what makes a cycle terminate.
-        Bounded by ``settings.SEARCH_MAX_LABEL_EXPANSION`` for the same reason.
+        batched. ``UNION`` (not ``UNION ALL``) is what dedupes a diamond and what
+        makes a cycle terminate.
+
+        ``settings.SEARCH_MAX_LABEL_EXPANSION`` is a safety valve on the size of
+        the id list this hands to the pin query, not an operating limit, and it
+        is set well above any real label tree - because truncating is not
+        direction-safe. A short set narrows an ``and``/``or`` group (fewer labels
+        match) but *widens* a ``not`` one, since there is less to exclude. It
+        logs when it trims so that never happens quietly.
 
         Args:
             label_id: The label to expand.
@@ -335,9 +345,15 @@ class Label(abstract.FrontendDashboardModel):
             f" SELECT edge.{child} FROM {table} edge JOIN descendants ON edge.{parent} = descendants.id"
             ") SELECT id FROM descendants LIMIT %s"
         )
+        ceiling = settings.SEARCH_MAX_LABEL_EXPANSION
         with connection.cursor() as cursor:
-            cursor.execute(sql, [label_id, settings.SEARCH_MAX_LABEL_EXPANSION])
-            return {row[0] for row in cursor.fetchall()}
+            # One past the ceiling, so "it was trimmed" comes from the same read.
+            cursor.execute(sql, [label_id, ceiling + 1])
+            found = {row[0] for row in cursor.fetchall()}
+        if len(found) > ceiling:
+            logger.warning("Label %s expands to more than %d descendants; a `not` filter on it will under-exclude.", label_id, ceiling)
+            return set(sorted(found)[:ceiling])
+        return found
 
     @property
     def is_global(self) -> bool:

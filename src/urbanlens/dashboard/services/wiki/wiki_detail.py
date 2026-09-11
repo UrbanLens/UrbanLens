@@ -197,8 +197,12 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         "stats": _stats(wiki, profile, conceal=conceal),
         "article": _article_summary(wiki, profile),
         # Gated, so the number cannot disagree with the thread the viewer is
-        # shown - see services.comments.comments.visible_comment_count.
-        "comment_count": visible_comment_count(comments, profile),
+        # shown - see services.comments.comments.visible_comment_count. Coerced
+        # here because this payload is rendered by the JSON encoder rather than
+        # by a template: the count carries a `capped` flag and prints itself as
+        # "512+" for the web badge, and neither travels through DRF. The
+        # documented contract (WikiDetailSerializer.comment_count) is an integer.
+        "comment_count": int(visible_comment_count(comments, profile)),
         "created": _isoformat_or_none(wiki.created),
         "updated": _isoformat_or_none(wiki.updated),
     }

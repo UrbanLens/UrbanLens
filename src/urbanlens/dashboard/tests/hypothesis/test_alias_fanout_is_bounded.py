@@ -120,3 +120,46 @@ class TheFanOutStillHappensTests(_FanOutCase):
         self._add_a_wiki_alias("Not Wanted Mill")
 
         self.assertFalse(PinAlias.objects.filter(pin=pins[0], name="Not Wanted Mill").exists())
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True, CELERY_TASK_EAGER_PROPAGATES=True)
+class TheFanOutSurvivesBeingRunTwiceTests(_FanOutCase):
+    """A bulk task that dies halfway is re-run, so a second pass must be a no-op.
+
+    Every write is a ``get_or_create``, which is what makes that true - asserted
+    rather than assumed, because the answer changes the day somebody reaches for
+    ``bulk_create`` to make the fan-out faster.
+    """
+
+    def test_running_it_again_creates_no_duplicates(self) -> None:
+        from urbanlens.dashboard.services.aliases.fanout import mirror_wiki_alias_to_pins
+
+        pins = self._pin_the_location(3)
+        alias, _ = self._add_a_wiki_alias("Twice Over Mill")
+
+        mirror_wiki_alias_to_pins(alias.pk)
+
+        for pin in pins:
+            self.assertEqual(PinAlias.objects.filter(pin=pin, name="Twice Over Mill").count(), 1)
+
+    def test_it_finishes_the_job_after_a_partial_run(self) -> None:
+        """The half a pure "no duplicates" test would pass without doing anything."""
+        from urbanlens.dashboard.services.aliases.fanout import mirror_wiki_alias_to_pins
+
+        pins = self._pin_the_location(3)
+        alias, _ = self._add_a_wiki_alias("Half Done Mill")
+        PinAlias.objects.filter(pin=pins[0], name="Half Done Mill").delete()
+
+        mirror_wiki_alias_to_pins(alias.pk)
+
+        self.assertTrue(PinAlias.objects.filter(pin=pins[0], name="Half Done Mill").exists())
+
+    def test_a_deleted_alias_is_a_no_op_rather_than_a_crash(self) -> None:
+        from urbanlens.dashboard.services.aliases.fanout import mirror_wiki_alias_to_pins
+
+        self._pin_the_location(1)
+        alias, _ = self._add_a_wiki_alias("Gone Mill")
+        alias_id = alias.pk
+        alias.delete()
+
+        self.assertEqual(mirror_wiki_alias_to_pins(alias_id), 0)

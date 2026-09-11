@@ -53,6 +53,18 @@ class WikiDetailGetTests(WikiDetailBaseTestCase):
         self.assertEqual(body["uuid"], str(self.wiki.uuid))
         self.assertEqual(body["location_slug"], self.location.ensure_slug())
 
+    def test_the_comment_count_is_a_json_number(self) -> None:
+        """This payload is rendered by the JSON encoder, not by a template.
+
+        The gated count grew a `capped` flag and a `__str__` that prints "512+"
+        for the badge. That object is not JSON-serialisable, and the documented
+        contract here (`WikiDetailSerializer.comment_count`) is an integer - so
+        the web badge's affordance must not travel into the API payload.
+        """
+        body = self.client.get(self.url(), **self.headers()).json()
+
+        self.assertIsInstance(body["comment_count"], int)
+
     def test_location_slug_round_trips(self) -> None:
         """The slug the payload hands back actually resolves the same wiki."""
         body = self.client.get(self.url(), **self.headers()).json()

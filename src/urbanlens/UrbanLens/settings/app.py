@@ -309,10 +309,13 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
     search_max_label_expansion: int = Field(
-        default=500,
+        default=10_000,
         description=(
-            "How many labels one id may expand to when its descendants are walked. Labels are user-created and "
-            "nest freely, so the tree's size is chosen by whoever built it."
+            "How many labels one id may expand to when its descendants are resolved. A safety valve on the size of "
+            "the id list handed to the pin query, not an operating limit - the expansion itself is one recursive "
+            "query however deep the tree. Set well above any real label tree because trimming is not "
+            "direction-safe: a short set narrows an 'and'/'or' group but widens a 'not' one, since there is less "
+            "to exclude. Trimming logs a warning so it is never silent."
         ),
     )
     comment_count_scan_limit: int = Field(
