@@ -50,6 +50,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: The most events one feed request will build. The client picks the date range
+#: and "All time" asks for everything, so this is what actually bounds the work -
+#: each source is stopped at this many too, so the merge never materialises a
+#: whole history to return a screenful.
+MAX_FEED_EVENTS = 500
+
 _DEFAULT_WINDOW_DAYS = 90
 _ON_THIS_DAY_LIMIT = 10
 _MAX_BULK_VISITS = 60  # matches unlogged.UNLOGGED_VISIT_LIMIT - never more pins than the page can show
@@ -254,6 +260,25 @@ def _parse_date(value: str | None, default: datetime.date) -> datetime.date:
         return default
 
 
+def _parse_datetime(value: str | None) -> datetime.datetime | None:
+    """Parse the feed's exclusive page cursor, or None when absent or unusable.
+
+    Args:
+        value: An ISO-8601 timestamp from the query string.
+
+    Returns:
+        The parsed timestamp, made timezone-aware if it was naive, or None - in
+        which case the caller simply starts from the newest event.
+    """
+    if not value:
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
+
+
 def _parse_bbox(request: HttpRequest) -> BBox | None:
     """Parse a ``minLat,minLng,maxLat,maxLng`` bbox query param, or None if absent/invalid."""
     raw = request.GET.get("bbox")
@@ -439,8 +464,11 @@ class MemoriesFeedDataView(LoginRequiredMixin, View):
 
     GET /memories/data/?start=YYYY-MM-DD&end=YYYY-MM-DD&bbox=minLat,minLng,maxLat,maxLng
 
-    A date range is always applied (defaulting to the trailing 90 days) so a
-    profile's full history is never loaded in a single request.
+    A date range is always applied (defaulting to the trailing 90 days), but the
+    client chooses it and "All time" sends one that covers everything - so the
+    range is not what bounds this. `MAX_FEED_EVENTS` is. When the cap bites, the
+    response says so and carries `next_before`, the timestamp to end the next
+    page at, so "All time" still reaches all time a page at a time.
     """
 
     def get(self, request: HttpRequest):
@@ -460,12 +488,21 @@ class MemoriesFeedDataView(LoginRequiredMixin, View):
         end = _parse_date(request.GET.get("end"), today)
         bbox = _parse_bbox(request)
 
-        events = get_memory_events(profile, start, end, bbox=bbox)
+        before = _parse_datetime(request.GET.get("before"))
+        events = get_memory_events(profile, start, end, bbox=bbox, limit=MAX_FEED_EVENTS + 1, before=before)
+        truncated = len(events) > MAX_FEED_EVENTS
+        events = events[:MAX_FEED_EVENTS]
+        # The oldest event on this page, exclusive, so the next request resumes
+        # exactly where this one stopped. A date here would loop forever on a day
+        # holding more events than the cap.
+        next_before = events[-1].occurred_at.isoformat() if truncated and events else None
 
         return JsonResponse(
             {
                 "start": start.isoformat(),
                 "end": end.isoformat(),
+                "truncated": truncated,
+                "next_before": next_before,
                 "events": [
                     {
                         "type": event.type,

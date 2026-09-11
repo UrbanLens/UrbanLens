@@ -397,14 +397,95 @@
         renderTimeline(filtered);
     }
 
-    function fetchMemories(start, end) {
-        var url = feedUrl + '?start=' + start + '&end=' + end;
-        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(function (resp) { return resp.json(); })
+    // The feed is capped server-side (MAX_FEED_EVENTS), so "All time" arrives a
+    // page at a time. The page after the one on screen is fetched as soon as the
+    // current one lands, so pressing "Load more" is a render rather than a wait.
+    var feedStart = null;
+    var feedEnd = null;
+    var nextBefore = null;
+    var prefetchedPage = null;
+    var prefetchInFlight = false;
+
+    // No id is common to all four event types, so identity is the tuple that is.
+    // A same-day event can appear on both sides of a page boundary because the
+    // cursor is a date.
+    function eventKey(event) {
+        return [event.type, event.occurred_at, event.url || '', event.title || ''].join('|');
+    }
+
+    function requestPage(start, end, before) {
+        var url = feedUrl + '?start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end);
+        // `before` is an exclusive timestamp cursor, separate from the range:
+        // narrowing `end` instead would stall on a day holding more events than
+        // one page.
+        if (before) { url += '&before=' + encodeURIComponent(before); }
+        return fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (resp) { return resp.json(); });
+    }
+
+    function prewarmNextPage() {
+        if (!nextBefore || prefetchInFlight) { return; }
+        prefetchInFlight = true;
+        var requestedFor = nextBefore;
+        requestPage(feedStart, feedEnd, requestedFor)
             .then(function (data) {
-                currentEvents = data.events || [];
-                applyLegendFilter();
+                // Discard it if the range moved on while this was in flight -
+                // otherwise "Load more" would append a page of the old range.
+                if (nextBefore === requestedFor) { prefetchedPage = data; }
+                prefetchInFlight = false;
             })
+            .catch(function () { prefetchInFlight = false; });
+    }
+
+    function absorbPage(data, append) {
+        var incoming = data.events || [];
+        if (append) {
+            var seen = {};
+            currentEvents.forEach(function (event) { seen[eventKey(event)] = true; });
+            incoming.forEach(function (event) {
+                if (!seen[eventKey(event)]) { currentEvents.push(event); }
+            });
+        } else {
+            currentEvents = incoming;
+        }
+        nextBefore = data.truncated ? data.next_before : null;
+        prefetchedPage = null;
+        applyLegendFilter();
+        renderLoadMore();
+        prewarmNextPage();
+    }
+
+    function renderLoadMore() {
+        var existing = document.getElementById('memories-load-more');
+        if (!nextBefore) {
+            if (existing) { existing.remove(); }
+            return;
+        }
+        if (existing) { return; }
+        var button = document.createElement('button');
+        button.id = 'memories-load-more';
+        button.type = 'button';
+        button.className = 'btn btn--ghost';
+        button.textContent = 'Load earlier memories';
+        button.addEventListener('click', function () {
+            if (!nextBefore) { return; }
+            if (prefetchedPage) { absorbPage(prefetchedPage, true); return; }
+            button.disabled = true;
+            requestPage(feedStart, feedEnd, nextBefore)
+                .then(function (data) { absorbPage(data, true); })
+                .catch(function () { button.disabled = false; });
+        });
+        var timeline = document.getElementById('memories-timeline');
+        if (timeline && timeline.parentNode) { timeline.parentNode.insertBefore(button, timeline.nextSibling); }
+    }
+
+    function fetchMemories(start, end) {
+        feedStart = start;
+        feedEnd = end;
+        nextBefore = null;
+        prefetchedPage = null;
+        requestPage(start, end, null)
+            .then(function (data) { absorbPage(data, false); })
             .catch(function () {
                 document.getElementById('memories-timeline').innerHTML =
                     '<div class="memories-empty"><i class="material-symbols-outlined">error</i>Couldn\'t load memories.</div>';

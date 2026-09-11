@@ -4,12 +4,19 @@ Adding a future memory type is one new ``_x_for_range`` function listed in
 ``_event_sources`` below - nothing else needs to change. Each source function
 does its own date/bbox filtering on its own model's already-indexed fields, and
 contributes independently: one source failing omits its own events, never the feed.
+
+A source's signature is ``(profile, start, end, bbox, before=None)`` and it must
+yield **newest first**. Both halves are load-bearing: the feed is capped, and it
+takes the first N of each source, so an unordered source would contribute an
+arbitrary N rather than its newest N. ``before`` is the exclusive page cursor -
+a source that ignores it will repeat its newest events on every page.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
+import itertools
 import logging
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -76,13 +83,15 @@ def _date_to_datetime(value: date) -> datetime:
     return timezone.make_aware(combined) if timezone.is_naive(combined) else combined
 
 
-def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | None) -> Iterator[MemoryEvent]:
+def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each Route that started within the given range."""
     from urbanlens.dashboard.models.routes.model import Route
     from urbanlens.dashboard.services.core.units import format_distance
 
     units = profile.effective_distance_units
-    routes = Route.objects.for_profile(profile).in_date_range(start, end)
+    routes = Route.objects.for_profile(profile).in_date_range(start, end).order_by("-started_at")
+    if before is not None:
+        routes = routes.filter(started_at__lt=before)
     if bbox is not None:
         routes = routes.intersecting_bbox(bbox.min_lat, bbox.min_lng, bbox.max_lat, bbox.max_lng)
 
@@ -129,7 +138,7 @@ def _trip_representative_point(trip: Trip) -> tuple[float, float] | None:
     return None
 
 
-def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None) -> Iterator[MemoryEvent]:
+def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each Trip whose effective date range overlaps the given range."""
     from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 
@@ -160,7 +169,14 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
             )
         )
         .distinct()
+        .order_by("-_eff_start")
     )
+    if before is not None:
+        # A trip is day-granular, so this is the coarse half of the cursor: it
+        # keeps the boundary day, and get_memory_events drops the events on it
+        # that were already delivered. Everything newer is excluded here, so the
+        # per-source cap is not spent on rows the caller has already seen.
+        trips = trips.filter(_eff_start__lte=before.date())
 
     for trip in trips:
         # The annotations, not the equivalent model properties: those re-derive the same
@@ -188,11 +204,13 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
         )
 
 
-def _visits_for_range(profile: Profile, start: date, end: date, bbox: BBox | None) -> Iterator[MemoryEvent]:
+def _visits_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each PinVisit within the given range."""
     from urbanlens.dashboard.models.visits.model import PinVisit
 
-    visits = PinVisit.objects.filter(pin__profile=profile, visited_at__date__range=(start, end)).select_related("pin")
+    visits = PinVisit.objects.filter(pin__profile=profile, visited_at__date__range=(start, end)).select_related("pin").order_by("-visited_at")
+    if before is not None:
+        visits = visits.filter(visited_at__lt=before)
     if bbox is not None:
         visits = visits.filter(
             pin__latitude__range=(bbox.min_lat, bbox.max_lat),
@@ -217,7 +235,7 @@ def _visits_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         )
 
 
-def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | None) -> Iterator[MemoryEvent]:
+def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each of the profile's own geotagged photos within the given range."""
     from urbanlens.dashboard.models.images.model import Image
 
@@ -230,7 +248,16 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
     # (EXIF taken_at, else a filename-parsed date) so the two stay in sync;
     # reading the real property below (not this annotation) keeps that the
     # single source of truth.
-    photos = Image.objects.filter(profile=profile).with_coords().annotate(_effective_taken_at=Coalesce("taken_at", "filename_taken_at")).filter(_effective_taken_at__date__range=(start, end)).select_related("pin", "wiki", "wiki__location")
+    photos = (
+        Image.objects.filter(profile=profile)
+        .with_coords()
+        .annotate(_effective_taken_at=Coalesce("taken_at", "filename_taken_at"))
+        .filter(_effective_taken_at__date__range=(start, end))
+        .select_related("pin", "wiki", "wiki__location")
+        .order_by("-_effective_taken_at")
+    )
+    if before is not None:
+        photos = photos.filter(_effective_taken_at__lt=before)
     if bbox is not None:
         photos = photos.filter(
             latitude__range=(bbox.min_lat, bbox.max_lat),
@@ -265,7 +292,7 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         )
 
 
-def _event_sources() -> tuple[Callable[[Profile, date, date, BBox | None], Iterator[MemoryEvent]], ...]:
+def _event_sources() -> tuple[Callable[..., Iterator[MemoryEvent]], ...]:
     """The registered memory sources, resolved fresh on each call.
 
     A module-level tuple would capture these at import time, which both hides
@@ -279,7 +306,7 @@ def _event_sources() -> tuple[Callable[[Profile, date, date, BBox | None], Itera
     )
 
 
-def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | None = None) -> list[MemoryEvent]:
+def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | None = None, limit: int | None = None, before: datetime | None = None) -> list[MemoryEvent]:
     """Merge every registered event source over [start, end], sorted newest-first.
 
     Each source contributes independently. This is the page's extensibility seam -
@@ -296,17 +323,37 @@ def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | 
         start: Earliest date (inclusive).
         end: Latest date (inclusive).
         bbox: Optional map-viewport bounding box to further narrow results.
+        limit: The most events to return. Each source is also stopped at this
+            many, so the merge is bounded whatever date range was asked for -
+            which is the point, since the range comes from the client. Correct
+            only because every source yields newest-first; taking the first N of
+            an unordered source would keep an arbitrary N.
+        before: Exclusive cursor - only events strictly older than this. A date
+            would not do: a single day holding more events than *limit* would
+            return the same page forever, because the cursor could never move
+            past it. Known limit: events sharing an exact timestamp cannot be
+            split across pages, so more than *limit* of them at one instant
+            loses the overflow rather than looping. Real timestamps collide
+            rarely enough that a composite cursor has not been worth its cost.
 
     Returns:
-        List of MemoryEvent across every source that succeeded, newest first.
+        List of MemoryEvent across every source that succeeded, newest first, at
+        most *limit* of them.
     """
     events: list[MemoryEvent] = []
     for source in _event_sources():
         try:
-            # extend() consumes the generator incrementally, so a source that raises
-            # partway keeps whatever it already yielded rather than losing it too.
-            events.extend(source(profile, start, end, bbox))
+            # islice() consumes the generator incrementally and stops early, so a
+            # source that raises partway keeps whatever it already yielded, and a
+            # source with a million rows is not drained to find the newest few.
+            stream = source(profile, start, end, bbox, before)
+            events.extend(itertools.islice(stream, limit) if limit is not None else stream)
         except Exception:
             logger.exception("Memory source %s failed; omitting it from the feed", getattr(source, "__name__", source))
+    if before is not None:
+        # The exact half of the cursor. Day-granular sources filter to the
+        # boundary day and no further, so this is what removes the events on
+        # that day the caller already has.
+        events = [event for event in events if event.occurred_at < before]
     events.sort(key=lambda e: e.occurred_at, reverse=True)
-    return events
+    return events[:limit] if limit is not None else events
