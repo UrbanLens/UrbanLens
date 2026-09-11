@@ -280,8 +280,19 @@ class SearchForm(forms.Form):
             groups = json.loads(raw)
             if not isinstance(groups, list):
                 return None
-            validated = []
+            from django.conf import settings
+
+            # Ceilings, not rejections: a saved filter built before they existed
+            # must still return results rather than start erroring. The client
+            # chooses this JSON, and every id in it becomes a descendant walk and
+            # a join, so its length is the request's cost.
+            max_groups = settings.SEARCH_MAX_LABEL_GROUPS
+            remaining_ids = settings.SEARCH_MAX_LABEL_FILTER_IDS
+
+            validated: list[dict[str, Any]] = []
             for g in groups:
+                if len(validated) >= max_groups or remaining_ids <= 0:
+                    break
                 op = g.get("op")
                 ids = g.get("ids")
                 if op in {"and", "or", "not"} and isinstance(ids, list):
@@ -291,7 +302,8 @@ class SearchForm(forms.Form):
                     # always positive (Django's default auto-incrementing PK), so a
                     # negative id never occurs for a real label in practice, and this
                     # function's contract is to never raise on malformed input.
-                    group: dict[str, Any] = {"op": op, "ids": [int(i) for i in ids if str(i).isdigit()]}
+                    group = {"op": op, "ids": [int(i) for i in ids if str(i).isdigit()][:remaining_ids]}
+                    remaining_ids -= len(group["ids"])
                     # Only meaningful on an "or" group - see
                     # PinQuerySet.apply_label_groups.
                     if op == "or" and str(g.get("min_priority") or "").isdigit():

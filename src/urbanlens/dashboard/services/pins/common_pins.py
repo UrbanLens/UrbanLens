@@ -74,10 +74,13 @@ def common_pin_location_ids(profiles: Sequence[Profile]) -> set[int]:
         # One representative Location per shared place: the callers render a
         # list of places, and listing the same property once per coordinate
         # anybody pinned it at would be the old duplication all over again.
-        for place_id in place_ids:
-            representative = Pin.objects.filter(profile=profiles[0], location__place_id=place_id).values_list("location_id", flat=True).first()
-            if representative is not None:
-                location_ids.add(representative)
+        # Picked in one pass rather than a query per place - the number of
+        # places two accounts share is not something either of them chose.
+        representatives: dict[int, int] = {}
+        rows = Pin.objects.filter(profile=profiles[0], location__place_id__in=place_ids).order_by("location_id").values_list("location__place_id", "location_id")
+        for place_id, location_id in rows:
+            representatives.setdefault(place_id, location_id)
+        location_ids.update(representatives.values())
     return location_ids
 
 

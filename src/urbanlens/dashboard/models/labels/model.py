@@ -300,21 +300,44 @@ class Label(abstract.FrontendDashboardModel):
 
     @classmethod
     def get_label_and_descendants(cls, label_id: int) -> set[int]:
-        """Return label_id plus all descendant label IDs (BFS, cycle-safe).
+        """Return label_id plus all descendant label IDs (cycle-safe).
 
         Used so that filtering pins by a parent label also surfaces pins carrying
         any of its descendant labels.
+
+        One recursive query rather than a walk: labels are user-created and nest
+        freely, so a walk let whoever built the tree decide how many queries a
+        search costs - a chain N deep cost N queries however the walk was
+        batched. ``UNION`` (not ``UNION ALL``) is what makes a cycle terminate.
+        Bounded by ``settings.SEARCH_MAX_LABEL_EXPANSION`` for the same reason.
+
+        Args:
+            label_id: The label to expand.
+
+        Returns:
+            The label and its descendants, up to the expansion ceiling.
         """
-        visited: set[int] = set()
-        queue: list[int] = [label_id]
-        while queue:
-            current = queue.pop(0)
-            if current in visited:
-                continue
-            visited.add(current)
-            children_ids = list(cls.objects.filter(parents__id=current).values_list("id", flat=True))
-            queue.extend(children_ids)
-        return visited
+        from django.conf import settings
+        from django.db import connection
+
+        through = cls.parents.through._meta  # noqa: SLF001 - the through model's table is not exposed any other way
+        table = connection.ops.quote_name(through.db_table)
+        child = connection.ops.quote_name(through.get_field("from_label").column)
+        parent = connection.ops.quote_name(through.get_field("to_label").column)
+        # Identifiers come from Django's own model metadata and are quoted by the
+        # backend; the two values are bound.
+        sql = (
+            "WITH RECURSIVE descendants(id) AS ("  # noqa: S608
+            # Cast, or Postgres refuses the union: the seed is an integer
+            # literal and the column it unions with is bigint.
+            " SELECT CAST(%s AS bigint)"
+            " UNION"
+            f" SELECT edge.{child} FROM {table} edge JOIN descendants ON edge.{parent} = descendants.id"
+            ") SELECT id FROM descendants LIMIT %s"
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [label_id, settings.SEARCH_MAX_LABEL_EXPANSION])
+            return {row[0] for row in cursor.fetchall()}
 
     @property
     def is_global(self) -> bool:

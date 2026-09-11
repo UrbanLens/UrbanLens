@@ -166,27 +166,30 @@ class ViewProfileView(LoginRequiredMixin, View):
         except Profile.DoesNotExist:
             return
 
-        from urbanlens.dashboard.services.pins.common_pins import common_pin_location_ids
+        from urbanlens.dashboard.services.pins import common_pins
 
-        common_ids = common_pin_location_ids([my_profile, profile])
-
-        # Locations both profiles have visited. `PinQuerySet.visited()` owns the predicate
-        # ("has a last_visited timestamp or carries the profile's Visited status label") and
-        # its docstring asks callers to build on it rather than re-derive the Q, which this
-        # did - one of four inline copies that had to stay in step by hand.
-        their_visited_ids = set(
-            Pin.objects.filter(profile=profile, location__isnull=False).visited().values_list("location_id", flat=True),
-        )
-        my_visited_ids = set(
-            Pin.objects.filter(profile=my_profile, location__isnull=False).visited().values_list("location_id", flat=True),
-        )
-        shared_visited_ids = their_visited_ids & my_visited_ids
-
-        # common_pin_count itself must be gated the same as the detail-page link -
-        # otherwise a profile that opted out of sharing common-pin data (or a
-        # viewer who hasn't opted in themselves) still had the count rendered on
-        # the stats row, just without a clickable link to the detail page.
+        # Asked before anything is computed, not after. Both scans below walk
+        # whole accounts, and the setting they gate on defaults to friends-only,
+        # so the ordinary visitor was paying for an answer the page then threw
+        # away - and paying in proportion to how much the *other* person owns.
         common_pins_permitted = profile.can_view_common_pins_with(my_profile)
+
+        common_ids: set[int] = set()
+        shared_visited_ids: set[int] = set()
+        if common_pins_permitted:
+            common_ids = common_pins.common_pin_location_ids([my_profile, profile])
+
+            # Locations both profiles have visited. `PinQuerySet.visited()` owns the predicate
+            # ("has a last_visited timestamp or carries the profile's Visited status label") and
+            # its docstring asks callers to build on it rather than re-derive the Q, which this
+            # did - one of four inline copies that had to stay in step by hand.
+            their_visited_ids = set(
+                Pin.objects.filter(profile=profile, location__isnull=False).visited().values_list("location_id", flat=True),
+            )
+            my_visited_ids = set(
+                Pin.objects.filter(profile=my_profile, location__isnull=False).visited().values_list("location_id", flat=True),
+            )
+            shared_visited_ids = their_visited_ids & my_visited_ids
         context["common_pin_count"] = len(common_ids) if common_pins_permitted else None
         context["can_view_common_pins"] = bool(common_ids) and common_pins_permitted
         # Gated on the same mutual permission as common_pin_count above. A shared

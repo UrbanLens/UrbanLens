@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
 
+from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.geo.longitude import split_at_antimeridian
 
 if TYPE_CHECKING:
@@ -63,19 +64,42 @@ class ListAddResult:
     max_pins: int
 
 
-def sync_pin_against_smart_lists(pin: Pin) -> None:
+def sync_pin_against_smart_lists(pin: Pin, *, deferred: bool = False) -> None:
     """Evaluate one pin against every smart list owned by the same profile.
+
+    Each list deserialises its criteria and runs its own query, and nothing caps
+    how many smart lists a profile creates - so a bulk edit multiplied the two
+    together inside one request. Past ``settings.MAX_SMART_LISTS_PER_SYNC`` the
+    whole sync is handed to the bulk queue instead: nothing is dropped, it just
+    stops holding a request and a database connection while it runs.
 
     Args:
         pin: The pin that was just created/edited.
+        deferred: True when already running on the queue, so the ceiling is not
+            applied a second time and the hand-off cannot recurse.
     """
+    from django.conf import settings
+
     from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 
     smart_lists = PinList.objects.active_smart_lists(pin.profile_id)
+    if not deferred:
+        ceiling = settings.MAX_SMART_LISTS_PER_SYNC
+        # One past the ceiling, so "there are more" comes from the same read.
+        bounded = list(smart_lists[: ceiling + 1])
+        if len(bounded) > ceiling:
+            from urbanlens.dashboard.tasks import sync_pin_against_smart_lists_task
+
+            safely_enqueue_task(sync_pin_against_smart_lists_task, pin.pk)
+            return
+        smart_lists = bounded
+
     for pin_list in smart_lists:
-        matches = _pin_matches_smart_list(pin, pin_list)
+        # One evaluation, not two: deciding membership and deciding which rule
+        # to record used to be separate passes over the same filter.
+        rule = _matching_rule(pin, pin_list)
         existing = PinListItem.objects.membership(pin_list, pin)
-        if matches and existing is None:
+        if rule is not None and existing is None:
             # Overlapping Pin.save() transactions can both see "no existing
             # membership" and race to create one - the table has a
             # UniqueConstraint(pin_list, pin), so the loser here just means
@@ -86,9 +110,9 @@ def sync_pin_against_smart_lists(pin: Pin) -> None:
                     pin_list=pin_list,
                     pin=pin,
                     order=pin_list.items.count(),
-                    added_via=_provenance(pin, pin_list),
+                    added_via=rule,
                 )
-        elif not matches and existing is not None and existing.added_via != PinListItem.ADDED_MANUAL:
+        elif rule is None and existing is not None and existing.added_via != PinListItem.ADDED_MANUAL:
             existing.delete()
         # matches + manual, or not-matches + manual: no-op either way - manual always wins.
 
@@ -157,18 +181,19 @@ def resync_smart_list(pin_list: PinList, *, filter_ids: set[int] | None = None) 
     )
 
 
-def _pin_matches_smart_list(pin: Pin, pin_list: PinList) -> bool:
-    if pin_list.smart_filter and _pin_matches_filter(pin, pin_list):
-        return True
-    return bool(pin_list.smart_boundary and _pin_in_boundary(pin, pin_list))
+def _matching_rule(pin: Pin, pin_list: PinList) -> str | None:
+    """Which smart rule puts this pin on this list, or None if neither does.
 
-
-def _provenance(pin: Pin, pin_list: PinList) -> str:
+    Returns:
+        The ``PinListItem.ADDED_*`` provenance to record, or None.
+    """
     from urbanlens.dashboard.models.pin_list.model import PinListItem
 
     if pin_list.smart_filter and _pin_matches_filter(pin, pin_list):
         return PinListItem.ADDED_SMART_FILTER
-    return PinListItem.ADDED_BOUNDARY
+    if pin_list.smart_boundary and _pin_in_boundary(pin, pin_list):
+        return PinListItem.ADDED_BOUNDARY
+    return None
 
 
 def _pin_matches_filter(pin: Pin, pin_list: PinList) -> bool:

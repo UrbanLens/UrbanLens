@@ -4307,7 +4307,25 @@ about. The read that carries the marker payload stays restricted to the chosen r
 `LIMIT`: the coordinate read carries one now, so a test keyed on that would pass against either
 query and mean nothing.
 
-Still open in family 4: the ~25 findings N21 lists beyond these, most of which are request-path
+**Six more of family 4 are fixed** (2026-09-11). All six were verified against the code first, since
+several audit findings have turned out to be overstated:
+
+| finding | the shape | now |
+|---|---|---|
+| H25 | one alias added to a community wiki wrote a `PinAlias` into every other profile's pin at that location, in the committing request, each write firing two further receivers | the fan-out is a `Queue.BULK` task; the request is flat in how many people pinned the place |
+| H18 | the comment-count badge fetched and re-rendered the full text of every `@loc` comment on every pin and wiki load | `COMMENT_COUNT_SCAN_LIMIT`, and `is_visible_to` rather than `render_comment_text` - the badge needs the decision, not the HTML |
+| H11 | `label_groups` expanded each client-supplied id with a query *per label visited* and no ceiling on how many ids | one recursive query, and `SEARCH_MAX_LABEL_GROUPS` / `_FILTER_IDS` / `_EXPANSION` |
+| H30 | viewing a profile ran a query per place the two accounts share, and ran the whole computation before checking whether the viewer may see it | one pass for the representatives, and the permission asked first |
+| H09 | the Immich picker downloaded the whole geolocated library per *pin*, because the cache key carried the point | the download is keyed on the account, bounded by `IMMICH_MARKER_CACHE_MAX_ASSETS`; only the measuring stays per point |
+| H27 | every `Pin.save()` evaluated the pin against every smart list its owner has, twice per matching list | `MAX_SMART_LISTS_PER_SYNC`, past which the whole sync moves to the bulk queue, and one evaluation instead of two |
+
+Two of those ceilings are deliberately not refusals. An over-long label filter is trimmed and a
+thread over the comment ceiling reports a floor with a `+`, because a saved filter written before the
+ceiling existed must still return results, and a badge that reveals less than the thread reveals
+nothing - a badge that reveals *more* is the existence oracle `services/comments` is built to deny.
+H27's ceiling drops nothing at all: past it the same work runs, on the queue.
+
+Still open in family 4: the findings N21 lists beyond these, most of which are request-path
 loops over one account's data in surfaces nobody has measured yet.
 
 **H19 is fixed** (2026-09-11), and it is the one that could have taken the site down rather than

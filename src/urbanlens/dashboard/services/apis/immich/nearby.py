@@ -20,11 +20,14 @@ removing the fetch-everything shape; the cap and the cache stand either way.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import TYPE_CHECKING
 
 from django.core.cache import cache
 
 from urbanlens.dashboard.models.profile.model import _haversine_km
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.immich.model import ImmichAccount
@@ -45,6 +48,48 @@ NEARBY_ASSET_LIMIT = 500
 #: that a photo uploaded to Immich shows up in the picker without the user
 #: wondering why it hasn't.
 NEARBY_CACHE_SECONDS = 300
+
+
+def _markers_cache_key(account: ImmichAccount) -> str:
+    """Cache key for one account's whole geolocated library.
+
+    Stamped the same way as :func:`_cache_key`, and deliberately carries no
+    point: the download is a property of the account, so every pin in the
+    library shares it. Only the measuring below depends on where the pin is.
+    """
+    return f"immich:markers:{account.pk}:{account.updated.timestamp():.6f}"
+
+
+def _library_markers(gateway: ImmichGateway, account: ImmichAccount) -> list[MapMarker]:
+    """Every geolocated asset in the library, fetched once per account.
+
+    Args:
+        gateway: The account's gateway, used only on a cache miss.
+        account: Whose library this is.
+
+    Returns:
+        The markers. A library past ``settings.IMMICH_MARKER_CACHE_MAX_ASSETS``
+        is returned without being stored - it shares one Valkey with sessions
+        and the broker, and refusing to cache must never mean refusing to
+        answer.
+
+    Raises:
+        GatewayRequestError: On a network error or non-2xx response.
+    """
+    from django.conf import settings
+
+    key = _markers_cache_key(account)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    markers = gateway.get_map_markers()
+    ceiling = settings.IMMICH_MARKER_CACHE_MAX_ASSETS
+    if len(markers) > ceiling:
+        logger.warning("Immich library for account %s has %d markers, over the %d cache ceiling; not storing it.", account.pk, len(markers), ceiling)
+        return markers
+    cache.set(key, markers, NEARBY_CACHE_SECONDS)
+    return markers
 
 
 def _cache_key(account: ImmichAccount, point: tuple[float, float]) -> str:
@@ -99,7 +144,7 @@ def nearby_assets(gateway: ImmichGateway, account: ImmichAccount, point: tuple[f
     if cached is not None:
         return cached
 
-    measured = [(_haversine_km(point, (marker.lat, marker.lon)) * 1000, marker) for marker in gateway.get_map_markers()]
+    measured = [(_haversine_km(point, (marker.lat, marker.lon)) * 1000, marker) for marker in _library_markers(gateway, account)]
     measured.sort(key=lambda row: row[0])
     neighbourhood = Neighbourhood(nearest=measured[:limit], truncated=len(measured) > limit)
     cache.set(key, neighbourhood, NEARBY_CACHE_SECONDS)

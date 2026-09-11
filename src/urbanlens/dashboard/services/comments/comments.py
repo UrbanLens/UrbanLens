@@ -74,6 +74,33 @@ class UnsupportedReactionEmojiError(CommentValidationError):
     """``toggle_reaction`` was called with an emoji outside :data:`ALLOWED_EMOJIS`."""
 
 
+@dataclass(frozen=True, slots=True)
+class VisibleCommentCount:
+    """How many comments a viewer may see, and whether the scan stopped early.
+
+    Behaves like the integer it replaced everywhere a template touches it -
+    ``{% if count %}`` and ``{{ count }}`` - so the badge renders ``512+``
+    rather than a number it did not verify.
+
+    Attributes:
+        total: Comments confirmed visible. A floor when ``capped``.
+        capped: Whether more mentioning comments existed than
+            ``settings.COMMENT_COUNT_SCAN_LIMIT`` allows the badge to evaluate.
+    """
+
+    total: int
+    capped: bool = False
+
+    def __bool__(self) -> bool:
+        return self.total > 0
+
+    def __int__(self) -> int:
+        return self.total
+
+    def __str__(self) -> str:
+        return f"{self.total}+" if self.capped else str(self.total)
+
+
 @dataclass(slots=True)
 class VisibleComment:
     """One comment that survived every visibility gate, plus its visible replies.
@@ -224,7 +251,7 @@ def _render_if_visible(comment: Comment, profile: Profile, pinned: set[Any], can
     return render_comment_text(comment.text, pinned)
 
 
-def visible_comment_count(comments: QuerySet[Comment], profile: Profile) -> int:
+def visible_comment_count(comments: QuerySet[Comment], profile: Profile) -> VisibleCommentCount:
     """How many of *comments* this viewer may actually see.
 
     The number rendered beside a thread has to agree with the thread, or it
@@ -253,11 +280,16 @@ def visible_comment_count(comments: QuerySet[Comment], profile: Profile) -> int:
         profile: The viewing profile.
 
     Returns:
-        The number of comments visible to *profile* under gates 2 and 3.
+        The number of comments visible to *profile* under gates 2 and 3 - exact
+        while the thread is a normal size, and a floor marked ``capped`` above
+        ``settings.COMMENT_COUNT_SCAN_LIMIT``. A floor is safe in the direction
+        that matters: a badge below the thread reveals nothing, a badge above it
+        is the oracle.
     """
+    from django.conf import settings
     from django.db.models import Q
 
-    from urbanlens.dashboard.services.notifications.mentions import LOCATION_MENTION_MARKER
+    from urbanlens.dashboard.services.notifications.mentions import LOCATION_MENTION_MARKER, is_visible_to
 
     # Gate 2.
     candidates = comments.exclude(Q(pending_scan=True) & ~Q(profile_id=profile.pk))
@@ -266,8 +298,14 @@ def visible_comment_count(comments: QuerySet[Comment], profile: Profile) -> int:
     # without the marker can be dropped by it.
     plain_total = candidates.exclude(text__contains=LOCATION_MENTION_MARKER).count()
     pinned = viewer_pinned_uuids(profile)
-    mentioning = candidates.filter(text__contains=LOCATION_MENTION_MARKER).values_list("text", flat=True)
-    return plain_total + sum(1 for text in mentioning if render_comment_text(text, pinned) is not None)
+    ceiling = settings.COMMENT_COUNT_SCAN_LIMIT
+    # One past the ceiling, so "there are more" is answered by the same read.
+    texts = list(candidates.filter(text__contains=LOCATION_MENTION_MARKER).values_list("text", flat=True)[: ceiling + 1])
+    capped = len(texts) > ceiling
+    # `is_visible_to` rather than `render_comment_text`: the badge needs the
+    # decision, not the HTML, and rendering resolves a URL per mention.
+    visible = sum(1 for text in texts[:ceiling] if is_visible_to(text, pinned))
+    return VisibleCommentCount(total=plain_total + visible, capped=capped)
 
 
 def comment_is_visible(comment: Comment, profile: Profile) -> bool:

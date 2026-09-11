@@ -814,6 +814,12 @@ MAX_REQUEST_BODY_BYTES = max(0, _app_settings.max_request_body_mb) * 1_000_000
 MAP_DOCUMENT_MAX_PINS = _app_settings.map_document_max_pins
 MAP_DOCUMENT_CACHE_SECONDS = _app_settings.map_document_cache_seconds
 EXTERNAL_MEDIA_DAILY_BYTES = _app_settings.external_media_daily_bytes
+MAX_SMART_LISTS_PER_SYNC = _app_settings.max_smart_lists_per_sync
+IMMICH_MARKER_CACHE_MAX_ASSETS = _app_settings.immich_marker_cache_max_assets
+SEARCH_MAX_LABEL_GROUPS = _app_settings.search_max_label_groups
+SEARCH_MAX_LABEL_FILTER_IDS = _app_settings.search_max_label_filter_ids
+SEARCH_MAX_LABEL_EXPANSION = _app_settings.search_max_label_expansion
+COMMENT_COUNT_SCAN_LIMIT = _app_settings.comment_count_scan_limit
 WEBSOCKET_MAX_SOCKETS_PER_ACCOUNT = _app_settings.websocket_max_sockets_per_account
 
 # Default primary key field type

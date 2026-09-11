@@ -4725,3 +4725,39 @@ def run_scheduled_redata_public_locations_sync() -> bool:
 
     call_command("import_redata_public_locations")
     return True
+
+
+@shared_task(queue=Queue.BULK)
+def fan_out_wiki_alias_to_pins(alias_id: int) -> int:
+    """Mirror one new wiki alias onto every opted-in pin at that location.
+
+    Bulk rather than interactive because the list is as long as the place is
+    popular, and nobody is waiting on it - the person who added the name has
+    already seen it on the wiki.
+
+    Args:
+        alias_id: Primary key of the ``WikiAlias`` that was created.
+
+    Returns:
+        How many pins were considered.
+    """
+    from urbanlens.dashboard.services.aliases.fanout import mirror_wiki_alias_to_pins
+
+    return mirror_wiki_alias_to_pins(alias_id)
+
+
+@shared_task(queue=Queue.BULK)
+def sync_pin_against_smart_lists_task(pin_id: int) -> None:
+    """Re-evaluate one pin against every smart list its owner has.
+
+    The hand-off for a profile with more smart lists than a request should walk.
+
+    Args:
+        pin_id: Primary key of the pin that was created or edited.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.pins.pin_list_membership import sync_pin_against_smart_lists
+
+    pin = Pin.objects.filter(pk=pin_id).first()
+    if pin is not None:
+        sync_pin_against_smart_lists(pin, deferred=True)
