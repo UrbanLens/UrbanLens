@@ -1,0 +1,39 @@
+{# The filter panel's result set as identifiers, for a client that already holds #}
+{# the pins. The same 10,000-pin result is ~360KB here against 11.45MB as        #}
+{# payloads, and the server builds no payloads at all - see                      #}
+{# services/map_pins/filter_results.py for when this form is served.             #}
+<div id="map-body">
+{{ map_pin_uuids|json_script:"map-filter-uuids" }}
+{{ map_meta|json_script:"map-filter-meta" }}
+<script>
+{
+    _filterMode = true;
+    clusterGroup.clearLayers();
+    _markerMap.clear();
+    _pushFilterStateToUrl();
+
+    const uuids = JSON.parse(document.getElementById('map-filter-uuids').textContent);
+    const meta = JSON.parse(document.getElementById('map-filter-meta').textContent);
+    const batch = [];
+    let missing = 0;
+    for (const uuid of uuids) {
+        const p = _pinStore.get(uuid);
+        if (!p) { missing += 1; continue; }
+        if (p.latitude && p.longitude) {
+            const m = _buildMarker(p);
+            if (m) { _markerMap.set(p.uuid, m); batch.push(m); }
+        }
+    }
+    if (batch.length) clusterGroup.addLayers(batch);
+    if (window._fitToFilteredPinsOnce) {
+        window._fitToFilteredPinsOnce = false;
+        if (batch.length) {
+            try { map.fitBounds(L.featureGroup(batch).getBounds().pad(0.15)); } catch (e) { /* single pin or no valid bounds */ }
+        }
+    }
+    _applyFilterMeta({ truncated: meta.truncated, shown: uuids.length, total: meta.total });
+    if (window.updatePinCounter) window.updatePinCounter();
+    if (missing) _refilterWithPayloads(missing);
+}
+</script>
+</div>

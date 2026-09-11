@@ -7,6 +7,7 @@
 <div id="map-body">
 {{ map_pins|json_script:"map-filter-pins" }}
 {{ map_labels|json_script:"map-filter-labels" }}
+{{ map_meta|json_script:"map-filter-meta" }}
 <script>
 {
     _filterMode = true;
@@ -16,19 +17,11 @@
     clusterGroup.clearLayers();
     _markerMap.clear();
     // Push filter state into URL so Back button and refresh preserve filters
-    (function() {
-        const form = document.getElementById('filter-form');
-        if (form) {
-            const params = new URLSearchParams(new FormData(form));
-            // Remove empty values
-            const clean = new URLSearchParams();
-            for (const [k, v] of params.entries()) { if (v !== '') clean.append(k, v); }
-            history.replaceState({ filter: clean.toString() }, '', _urlWithMapView(clean));
-        }
-    })();
+    _pushFilterStateToUrl();
 
+    const _shipped = JSON.parse(document.getElementById('map-filter-pins').textContent);
     const batch = [];
-    for (const p of JSON.parse(document.getElementById('map-filter-pins').textContent)) {
+    for (const p of _shipped) {
         if (p.latitude && p.longitude) {
             const m = _buildMarker(p);
             if (m) { _markerMap.set(p.uuid, m); batch.push(m); }
@@ -41,6 +34,8 @@
             try { map.fitBounds(L.featureGroup(batch).getBounds().pad(0.15)); } catch (e) { /* single pin or no valid bounds */ }
         }
     }
+    const _meta = JSON.parse(document.getElementById('map-filter-meta').textContent);
+    _applyFilterMeta({ truncated: _meta.truncated, shown: _shipped.length, total: _meta.total });
     if (window.updatePinCounter) window.updatePinCounter();
 }
 </script>

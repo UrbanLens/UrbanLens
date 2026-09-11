@@ -69,6 +69,11 @@
               hx-swap="outerHTML"
               hx-sync="this:replace">
             {% csrf_token %}
+            {# The fingerprint this page last saw from map.pins.meta, kept current by #}
+            {# _syncFilterStoreClaim(). Empty means "do not trust my store", which is what #}
+            {# every path that cannot prove it is complete leaves it as.                    #}
+            <input type="hidden" name="store_fingerprint" id="fp-store-fingerprint" value="">
+            <p class="settings-help" id="fp-truncation-note" hidden></p>
             {# Kept in sync by toggleToolbarSavedFilter() - the bottom-right toolbar's active #}
             {# filter set rides along with every existing #filter-form submission (map.search, #}
             {# the pin-list panel GET, URL restore) as an independent, AND-combined layer.       #}
@@ -2146,6 +2151,55 @@
     }
 
     // -- Filter mode -----------------------------------------------------------
+    // The filter POST answers with identifiers rather than payloads whenever this
+    // page can prove its store is the account's current pin set, which turns an
+    // 11.45MB document for a 10,000-pin account into ~360KB of uuids and removes
+    // the payload build from a request the user is waiting on. The proof is the
+    // fingerprint map.pins.meta serves: the server re-derives it and only trusts
+    // a claim that still matches. _filterStoreTrusted is this side's veto - it
+    // drops the claim after an identifier the store could not resolve, until the
+    // next full refresh re-establishes it.
+    let _filterStoreTrusted = true;
+
+    function _syncFilterStoreClaim() {
+        const field = document.getElementById('fp-store-fingerprint');
+        if (!field) return;
+        const usable = _filterStoreTrusted && _fetchedTiles.has('*') && _lastKnownUpdated;
+        field.value = usable ? _lastKnownUpdated : '';
+    }
+
+    function _pushFilterStateToUrl() {
+        const form = document.getElementById('filter-form');
+        if (!form) return;
+        const params = new URLSearchParams(new FormData(form));
+        const clean = new URLSearchParams();
+        for (const [k, v] of params.entries()) { if (v !== '' && k !== 'store_fingerprint') clean.append(k, v); }
+        history.replaceState({ filter: clean.toString() }, '', _urlWithMapView(clean));
+    }
+
+    function _applyFilterMeta(meta) {
+        const note = document.getElementById('fp-truncation-note');
+        if (!note) return;
+        if (meta && meta.truncated) {
+            note.textContent = `Showing ${meta.shown} of ${meta.total} matching pins. Narrow the filter to see the rest.`;
+            note.hidden = false;
+        } else {
+            note.hidden = true;
+        }
+    }
+
+    // An identifier the store cannot resolve means the claim was wrong - the
+    // store is behind what the server just filtered. Ask again for payloads
+    // rather than drawing a map that is quietly missing pins.
+    function _refilterWithPayloads(missing) {
+        console.warn('[UL] %d filtered pin(s) missing from the store - refetching payloads', missing);
+        _filterStoreTrusted = false;
+        _syncFilterStoreClaim();
+        const form = document.getElementById('filter-form');
+        if (form) htmx.trigger(form, 'change');
+        _refreshAllPins().then(function () { _filterStoreTrusted = true; _syncFilterStoreClaim(); }).catch(function () {});
+    }
+
     // Called when search/filter results arrive (see data.html).
     // Called by resetFilters() to restore the full pin set from the store.
     function _exitFilterMode() {
@@ -2311,6 +2365,9 @@
         const form = document.getElementById('filter-form');
         const params = new URLSearchParams(new FormData(form));
         params.delete('csrfmiddlewaretoken');
+        // Only map.search answers differently for it; every other consumer of
+        // these criteria would just carry it around.
+        params.delete('store_fingerprint');
         return params.toString();
     }
 
@@ -2354,6 +2411,15 @@
     // re-fetches the child pins with the same criteria the root pins use.
     document.getElementById('filter-form').addEventListener('htmx:afterRequest', function (e) {
         if (_childPinsActive && e.detail && e.detail.successful) _loadChildPins();
+    });
+
+    // Refreshed at send time rather than wherever the store changes: there are
+    // several such places and one of them forgetting would silently hand the
+    // server a claim this page can no longer back.
+    document.getElementById('filter-form').addEventListener('htmx:configRequest', function (e) {
+        _syncFilterStoreClaim();
+        const field = document.getElementById('fp-store-fingerprint');
+        if (e.detail && e.detail.parameters && field) e.detail.parameters['store_fingerprint'] = field.value;
     });
 
     // Places layer group (landmarks from external APIs, including Google Places)

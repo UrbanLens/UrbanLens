@@ -43,7 +43,6 @@ from django.contrib.auth.models import User
 from django.test import override_settings
 from django.urls import reverse
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
@@ -142,11 +141,14 @@ class TheCeilingMustExistTests(_SeededMapCase):
 
 @override_settings(**{SETTING_NAME: TEST_CAP})
 class TheFilterPostMustRespectItTests(_SeededMapCase):
-    """`map.search` is the one a user triggers repeatedly, by changing a filter."""
+    """`map.search` is the one a user triggers repeatedly, by changing a filter.
 
-    @pytest.mark.xfail(
-        strict=True, reason="map.search still ships the whole account; D12 capped map.document and left this one"
-    )
+    Was `xfail(strict=True)` until the ceiling landed; kept here as the
+    regression guard, because the thing that made it red - a whole-account
+    serialization with no bound - is one `map_data_context` caller away from
+    coming back.
+    """
+
     def test_it_ships_no_more_pins_than_the_ceiling(self) -> None:
         response = self.client.post(reverse("map.search"), {})
 
@@ -159,9 +161,6 @@ class TheFilterPostMustRespectItTests(_SeededMapCase):
             "is O(account), so its cost is set by how many pins the requester owns.",
         )
 
-    @pytest.mark.xfail(
-        strict=True, reason="map.search still ships the whole account; D12 capped map.document and left this one"
-    )
     def test_a_truncated_document_says_so(self) -> None:
         """Silently dropping pins would be worse than shipping them all.
 

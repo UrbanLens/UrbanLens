@@ -27,7 +27,7 @@ from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.map_pins import MapPinPayloadService, document as map_document
+from urbanlens.dashboard.services.map_pins import MapPinPayloadService, document as map_document, filter_results
 from urbanlens.dashboard.services.map_pins.view_urls import with_view_urls
 from urbanlens.dashboard.services.pins.pin_creation import (
     AddressResolutionError,
@@ -533,6 +533,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria)
             query = _apply_toolbar_filters(query, profile, request.POST.get("toolbar_filter_ids", ""))
+            claim = request.POST.get(filter_results.STORE_FINGERPRINT_FIELD, "")
+            if filter_results.client_holds_every_pin(profile, claim):
+                uuids, truncated = filter_results.matching_uuids(query)
+                total = query.count() if truncated else len(uuids)
+                return render(
+                    request,
+                    "dashboard/pages/map/data_ids.html",
+                    {"map_pin_uuids": uuids, "map_meta": {"truncated": truncated, "total": total}},
+                )
             return render(request, "dashboard/pages/map/data.html", self.map_data_context(request, query))
 
         logger.error("Invalid search criteria: %s", search_form.errors)
@@ -1173,9 +1182,17 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if query is None:
             query = Pin.objects.filter(profile=profile).root_pins()
+        # Bounded here rather than at each caller, because this is the one place
+        # that turns a queryset into a list of payloads and so the only place a
+        # missed caller could still be unbounded.
+        query, truncated, total = filter_results.bounded(query)
         service = MapPinPayloadService(profile)
         pins = with_view_urls(service.all(query))
-        return {"map_pins": pins, "map_labels": service.label_dictionary_for(pins)}
+        return {
+            "map_pins": pins,
+            "map_labels": service.label_dictionary_for(pins),
+            "map_meta": {"truncated": truncated, "total": total},
+        }
 
 
 def _tag_document(response, etag):
