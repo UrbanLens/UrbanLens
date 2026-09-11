@@ -4309,3 +4309,60 @@ query and mean nothing.
 
 Still open in family 4: the ~25 findings N21 lists beyond these, most of which are request-path
 loops over one account's data in surfaces nobody has measured yet.
+
+## P114 — Staging outranks production for CPU on the host they share
+
+`id: P114` · `status: open` · `updated: 2026-09-11`
+
+Measured on damballa, 2026-09-11, with `docker inspect` against the running containers:
+
+| container | `NanoCpus` | `CpuShares` | `Memory` |
+|---|---|---|---|
+| `urbanlens_production_app` | 0 | **0** | 0 |
+| `urbanlens_staging_app` | 2 | **2048** | 2g |
+| `urbanlens_production_db` | 0 | **0** | 0 |
+| `urbanlens_staging_db` | 2 | **2048** | 2g |
+| `urbanlens_production_celery_worker` | 6 | 0 | 24g |
+| `urbanlens_staging_celery_worker` | 2 | 256 | 3g |
+
+`CpuShares: 0` means the key was absent when the container was created, and the kernel uses 1024.
+So under contention on a host that runs both stacks, staging's web tier and database each carry
+**twice** production's weight. Every other production container is unlimited and unweighted too;
+only `celery_worker` carries any limit at all.
+
+This is not a compose bug. Staging's numbers are exactly `docker-compose.yml`'s defaults, so staging
+sets none of these variables and simply runs what the file says. Production's containers predate the
+`cpu_shares` keys entirely - they were created from a compose file that did not have them. The
+inversion is an artefact of deployment order, which means it will recur on any host where the two
+stacks are recreated at different times.
+
+**It cannot be fixed from this repository alone.** Production has to be recreated from the current
+compose file for its `cpu_shares` to exist at all. Until then no repo-side default can put it above
+staging, because an absent key is 1024 and any positive staging value at or above that wins.
+
+### What this repository can do
+
+`config/env/staging.sample.env` holds a full set of limits below the base defaults, so bringing
+staging up with them is a copy rather than a judgement call, and
+`test_staging_limits_are_below_production.py` fails if any variable `docker-compose.yml` reads is
+missing from it or is not lower. That makes the *intent* enforceable here even though the fix is a
+deploy.
+
+### "Staging shouldn't be running when not needed"
+
+Three options, and they are not exclusive:
+
+| option | buys | costs |
+|---|---|---|
+| **Idle detector** - a timer that stops the stack after N hours with no nginx access-log entry | Matches the actual requirement ("when not needed") rather than a guess at it. Nothing to remember. | Needs a definition of idle that a health check or uptime monitor does not satisfy - both hit nginx. A cold start is then the first visit's latency. |
+| **Scheduled stop** - stop at a fixed hour, start on demand | Trivial, no state | Wrong whenever someone works outside those hours, and they will |
+| **Alert only** - page when staging has been up and idle for N hours | No surprise shutdowns | Relies on somebody acting on it, which is the thing that already did not happen |
+
+Recommendation: the idle detector, with the alert as its fallback for when the detector itself has
+not run. The definition of idle that avoids the health-check problem is an access-log line whose
+`$http_user_agent` is not the monitor's and whose path is not `/health/`; nginx already logs both
+fields. It belongs in the `infrastructure` repo beside the other host timers, not here.
+
+Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
+is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
+still several gigabytes of a host production also lives on.
