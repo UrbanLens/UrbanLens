@@ -4327,6 +4327,35 @@ refusal does not arrive with the bytes already spent.
 did - that is the exemption - and the claim is corrected rather than left as the first thing a reader
 would check.
 
+**H12 and H14 are fixed** (2026-09-11), both by the same move: a ceiling at the door the
+client-supplied thing comes through.
+
+- `dissolve_polygons` compares every remaining pair of components and restarts after each merge, so
+  its cost is quadratic per pass with up to one pass per merge - in GEOS `intersects()` calls, inside
+  the request. The component count came from a POST body and nothing bounded it.
+  `MAX_REGION_POLYGONS` (200) and `MAX_REGION_VERTICES` (50,000) bound both halves, checked in
+  `parse_multipolygon_geojson` rather than in the dissolve, because a ceiling checked after something
+  has stored the shape is on the wrong side of the write. One consequence is worth knowing: on the
+  map filter an unusable region drops that criterion rather than failing the search, so a region over
+  the ceiling *widens* the result. That is the pre-existing contract for a corrupt region, now
+  written down.
+- The four REData media proxies cached whatever they downloaded, unbounded, into the shared Valkey,
+  with no login required and a cache key built from path parameters. Both halves are bounded now: a
+  4MB per-entry ceiling (larger than `bounded_cache`'s thumbnail default, named at the call site,
+  because these are scanned PDFs) and a rate. `throttled` had to learn to count GETs first - it
+  counted only unsafe methods, which was right for the signup POSTs it was written for and useless
+  for a download proxy.
+
+**H16 is overstated.** The audit says "every wiki/photo access check re-reads the whole site-wide
+Place aggregate table, so each media-file fetch costs a full-table scan". The scan is real -
+`_earn_aggregates` reads every aggregate `Place` and then every member of those - but the media path
+does not reach it. `services/media/access.py` authorizes an ordinary photo through
+`Image.objects.filter(pk=...).visible_to(profile)`; only `authorize_comment_image` calls
+`location_visible_to`, and `visible_wiki_location_ids_cached` already memoises the result on the
+`Profile` instance for the life of the request. What remains is that the cost grows with total site
+data rather than with the requester's, which is worth fixing when the aggregate count justifies it -
+and is not the per-fetch full-table scan the finding describes.
+
 ## P114 — Staging outranks production for CPU on the host they share
 
 `id: P114` · `status: open` · `updated: 2026-09-11`
