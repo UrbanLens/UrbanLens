@@ -89,6 +89,13 @@ why its real assertion is the **ratio** - measured at 22-26x, and asserted at 3x
 A ratio is measured on one host in one run; a millisecond is a claim about a
 machine.
 
+### What a streamed response holds while it streams
+
+A `StreamingHttpResponse` keeps its database connection open until the last byte is written, even at
+`CONN_MAX_AGE=0`: sampled at each megabyte of a 3.2 MB document, the connection was open every time.
+That is the argument for leaving nginx buffering on for this endpoint rather than the reverse - the
+alternative lets a slow client decide how long a worker and a backend are occupied.
+
 **The wire sizes in that table are not a production comparison.** The hit is served pre-gzipped from
 Valkey; the miss streams plain NDJSON and is gzipped by nginx, which Django's test client does not
 go through. On the wire in production they are comparable. What the hit saves is the work - no

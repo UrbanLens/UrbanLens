@@ -59,6 +59,10 @@ CHUNK_BYTES = 64 * 1024
 #: suite's network guard.
 _CACHE_ERRORS = (RedisError, ConnectionError, OSError, RuntimeError)
 
+#: How long one claim to build a version suppresses other callers' tasks. Long
+#: enough to cover a build, short enough that a lost one is retried promptly.
+_BUILD_CLAIM_SECONDS = 120
+
 
 def document_etag(profile: Profile) -> tuple[str, int]:
     """The document's identity, and how many pins it would carry.
@@ -243,6 +247,28 @@ class MapDocumentCache:
         if stored is None:
             return None
         return self._decoded(stored)
+
+    def claim_build(self, etag: str) -> bool:
+        """Whether this caller should be the one to enqueue a build.
+
+        Without it every concurrent miss enqueues its own task, so an account
+        open in several tabs schedules several identical multi-megabyte builds.
+        The marker expires on its own, so a build that dies simply lets the next
+        reader try again.
+
+        Args:
+            etag: The version a build would produce.
+
+        Returns:
+            True at most once per version per window, and True whenever there is
+            no cache to co-ordinate through - one task is better than none.
+        """
+        if not self.client or self.ttl() <= 0:
+            return True
+        try:
+            return bool(self.client.set(f"{self.key(etag)}:building", b"1", nx=True, ex=_BUILD_CLAIM_SECONDS))
+        except _CACHE_ERRORS:
+            return True
 
     def set(self, etag: str, body: bytes) -> bool:
         """Store a built document, if nobody else already did.

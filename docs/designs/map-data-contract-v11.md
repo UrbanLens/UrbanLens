@@ -114,6 +114,14 @@ is no lock, no rename, no generation flag, nothing for a race to corrupt. P101's
 cannot recur in this shape — though P101 itself stays open until the per-pin cache leaves the read
 path, which is what `map.pins` still uses.
 
+**Streaming does not release anything until the last byte.** A `StreamingHttpResponse` holds its
+database connection for the whole of the response - measured open at every megabyte of a 3.2 MB
+document with `CONN_MAX_AGE=0` - and the worker with it. So nginx buffering stays *on* for this
+endpoint: unbuffered, a slow client would set how long a worker and a Postgres backend are occupied,
+which is the failure this endpoint exists to avoid. Buffered, nginx drains the application at local
+speed and feeds the slow client from its own buffers. The cost is time-to-first-marker, and it is
+small because nginx forwards as its buffers fill rather than waiting for the end.
+
 **A deployment note that cost an hour to find.** The document is built by a Celery task, so a deploy
 that updates the web image without rebuilding the worker leaves `build_map_document` unregistered:
 every miss enqueues a task the worker rejects, the cache never warms, and the only symptom is

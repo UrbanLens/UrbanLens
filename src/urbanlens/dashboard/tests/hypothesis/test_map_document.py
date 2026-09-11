@@ -325,6 +325,31 @@ class TheCacheIsAnAcceleratorTests(TestCase):
 
         self.assertEqual(cached, streamed)
 
+    def test_only_one_request_claims_the_build(self) -> None:
+        """Several tabs missing at once should schedule one build, not one each."""
+        with mock.patch.object(map_document, "make_binary_client", return_value=self.redis):
+            cache = map_document.MapDocumentCache(self.profile.pk)
+            etag, _total = map_document.document_etag(self.profile)
+
+            claims = [cache.claim_build(etag) for _ in range(5)]
+
+        self.assertEqual(claims, [True, False, False, False, False])
+
+    def test_a_different_version_is_claimed_separately(self) -> None:
+        with mock.patch.object(map_document, "make_binary_client", return_value=self.redis):
+            cache = map_document.MapDocumentCache(self.profile.pk)
+
+            self.assertTrue(cache.claim_build("aaaa"))
+            self.assertTrue(cache.claim_build("bbbb"))
+
+    def test_without_a_cache_the_build_is_never_suppressed(self) -> None:
+        """One task is better than none when there is nothing to co-ordinate through."""
+        with mock.patch.object(map_document, "make_binary_client", return_value=None):
+            cache = map_document.MapDocumentCache(self.profile.pk)
+
+            self.assertTrue(cache.claim_build("aaaa"))
+            self.assertTrue(cache.claim_build("aaaa"))
+
     def test_a_second_build_does_not_overwrite_the_first(self) -> None:
         """Content-addressed, so concurrent builders write identical bytes."""
         from urbanlens.dashboard.services.map_pins.view_urls import with_view_urls

@@ -722,7 +722,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if total > map_document.max_pins():
             return _tag_document(HttpResponse(map_document.paged_header(total, etag), content_type=map_document.CONTENT_TYPE), quoted)
 
-        cached = map_document.MapDocumentCache(profile.pk).get(etag)
+        documents = map_document.MapDocumentCache(profile.pk)
+        cached = documents.get(etag)
         if cached is not None:
             hit = HttpResponse(cached, content_type=map_document.CONTENT_TYPE)
             hit["Content-Encoding"] = "gzip"
@@ -735,12 +736,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             content_type=map_document.CONTENT_TYPE,
         )
         streamed["X-Map-Document"] = "miss"
-        # Or nginx buffers the whole document before sending any of it, which is
-        # the one thing streaming it was for.
-        streamed["X-Accel-Buffering"] = "no"
-        if map_document.MapDocumentCache.ttl() > 0:
-            # Or a disabled cache means every request enqueues a task that will
-            # decline to store anything.
+        # nginx buffering is deliberately left on: a streamed response holds its
+        # database connection to the last byte, so unbuffered a slow client would
+        # decide how long a worker and a backend are occupied. See D12.
+        if map_document.MapDocumentCache.ttl() > 0 and documents.claim_build(etag):
+            # Claimed, so several tabs missing at once schedule one build rather
+            # than one each; and skipped entirely when there is no cache to fill.
             safely_enqueue_task(build_map_document, profile.pk)
         return _tag_document(streamed, quoted)
 
