@@ -157,15 +157,11 @@ jobs:
       # typecheck's dependencies, not the suite's.
       - name: Install integration-suite dependencies
         working-directory: tests/integration
-        # The same conditional integration.yml uses: no package-lock.json is
-        # committed there yet, so `npm ci` has nothing to read. Direct
-        # dependencies are pinned exactly; only transitives float.
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund --ignore-scripts
-          else
-            npm install --no-audit --no-fund --ignore-scripts
-          fi
+        # `npm ci`, not `npm install`: with transitives floating, npm resolved
+        # a second copy of playwright-core beside the one `playwright` carries,
+        # and the two disagreed about `Page` - a type error in a file nobody had
+        # touched. The lockfile is committed for that reason.
+        run: npm ci --no-audit --no-fund --ignore-scripts
       - name: TypeScript typecheck
         run: bun run typecheck
 

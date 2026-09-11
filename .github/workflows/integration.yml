@@ -66,14 +66,10 @@ jobs:
 
       - name: Install suite dependencies
         working-directory: tests/integration
-        # `npm ci` once a package-lock.json is committed; until then the direct
-        # dependencies are pinned exactly and only transitives float.
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-audit --no-fund
-          fi
+        # `npm ci`: the lockfile is committed now. It was not, and the floating
+        # transitives resolved a second playwright-core beside the one
+        # `playwright` bundles, whose `Page` type is not the same type.
+        run: npm ci --no-audit --no-fund
 
       - name: Type-check the suite
         working-directory: tests/integration

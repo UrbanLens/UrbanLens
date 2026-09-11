@@ -27,6 +27,10 @@ docs/screenshots/
 # Libraries (npm, etc)
 node_modules
 package-lock.json
+# Except the integration suite's: npm is that project's package manager (the
+# Playwright image carries npm and not bun), and with its transitives floating
+# CI resolved a second playwright-core beside the one `playwright` bundles.
+!tests/integration/package-lock.json
 .venv/
 .venv_windows/
 
