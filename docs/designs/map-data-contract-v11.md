@@ -114,6 +114,13 @@ is no lock, no rename, no generation flag, nothing for a race to corrupt. P101's
 cannot recur in this shape — though P101 itself stays open until the per-pin cache leaves the read
 path, which is what `map.pins` still uses.
 
+**A deployment note that cost an hour to find.** The document is built by a Celery task, so a deploy
+that updates the web image without rebuilding the worker leaves `build_map_document` unregistered:
+every miss enqueues a task the worker rejects, the cache never warms, and the only symptom is
+`Received unregistered task` in the worker log and an endpoint that is merely slow. The worker and
+the web tier must be deployed together - which is already true for other reasons, but this is the
+first thing that fails quietly when they are not.
+
 **Built 2026-09-11.** Two details the design did not anticipate. The document is built in a Celery
 task rather than in the request that missed, because building it holds the whole thing in memory and
 streaming it exists precisely so a request never does; a miss streams from the database and enqueues
