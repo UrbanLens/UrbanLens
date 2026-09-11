@@ -70,7 +70,7 @@ class MapEndpointPayloadAgreementTests(TestCase):
     def _bulk_payloads(self) -> dict[str, dict[str, Any]]:
         # MapPinCache reads UL_VALKEY_URL from the environment rather than
         # settings, so under test it opens a socket the network guard refuses.
-        with mock.patch.object(MapPinCache, "_make_client", return_value=None):
+        with mock.patch.object(MapPinCache, "make_client", return_value=None):
             response = self.client.get(reverse("map.pins"))
         self.assertEqual(response.status_code, 200)
         return {pin["uuid"]: pin for pin in response.json()["pins"]}

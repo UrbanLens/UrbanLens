@@ -54,7 +54,7 @@ class MapPinCacheReadPathTests(TestCase):
         self.assertTrue(self.redis.exists(cache.meta_key), "the rebuild did not publish a cache to read from")
 
     def _get(self, **params: Any) -> dict[str, Any]:
-        with mock.patch.object(MapPinCache, "_make_client", return_value=self.redis):
+        with mock.patch.object(MapPinCache, "make_client", return_value=self.redis):
             response = self.client.get(reverse("map.pins"), params)
         self.assertEqual(response.status_code, 200)
         return response.json()

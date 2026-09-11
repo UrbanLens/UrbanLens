@@ -1302,7 +1302,7 @@
         if (csi) csi.classList.add('refreshing');
         _setFetching(true, 'Refreshing pins...');
         try {
-            const data = await _fetchAllPinPages('Refreshing pins...');
+            const data = await _fetchEveryPin('Refreshing pins...');
 
             if (Number.isFinite(data.total)) _totalPins = data.total;
             const freshUuids = new Set((data.pins || []).map(p => p.uuid));
@@ -1878,6 +1878,74 @@
         return window.ulFetchJson(url, Object.assign({}, options || {}, { timeoutMs: timeoutMs || 120000 }));
     }
 
+    function _setLoadProgress(text) {
+        const overlayText = document.getElementById('plo-text');
+        if (overlayText && !document.getElementById('pin-load-overlay')?.classList.contains('hidden')) overlayText.textContent = text;
+        const tfiText = document.getElementById('tfi-text');
+        if (tfiText) tfiText.textContent = text;
+    }
+
+    // One request instead of twenty. Returns null - not an error - whenever the
+    // paged path should be used instead: an account over the server's ceiling, a
+    // browser without streaming, or a document that arrived without its end line.
+    async function _fetchMapDocument(message) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 120000);
+        try {
+            const resp = await fetch('{% url "map.document" %}', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                signal: controller.signal,
+            });
+            if (!resp.ok || !resp.body || !resp.body.getReader) return null;
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            const pins = [];
+            let buffer = '', head = null, ended = false;
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                let nl;
+                while ((nl = buffer.indexOf('\n')) >= 0) {
+                    const line = buffer.slice(0, nl);
+                    buffer = buffer.slice(nl + 1);
+                    if (!line) continue;
+                    let obj;
+                    try { obj = JSON.parse(line); } catch { return null; }
+                    if (obj.t === 'head') {
+                        head = obj;
+                        if (obj.mode !== 'document') return null;
+                    } else if (obj.t === 'pin') {
+                        pins.push(obj.p);
+                        if (pins.length % 500 === 0) {
+                            _setLoadProgress(`${message || 'Loading pins...'} ${pins.length} / ${head ? head.total : '?'}`);
+                            await new Promise(resolve => setTimeout(resolve, 0));
+                        }
+                    } else if (obj.t === 'end') {
+                        ended = obj.sent === pins.length;
+                    }
+                }
+            }
+            // Against the end line's own count, not head.total: a pin created
+            // mid-stream makes those differ without the transfer being short, and
+            // the next meta poll picks that up. A short read is what this catches.
+            if (!head || !ended) return null;
+            return { pins, next_cursor: null, total: head.total };
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    async function _fetchEveryPin(message) {
+        try {
+            const doc = await _fetchMapDocument(message);
+            if (doc) return doc;
+        } catch (err) {
+            console.warn('[UL] map document unavailable, falling back to paged fetch', err);
+        }
+        return _fetchAllPinPages(message);
+    }
+
     async function _fetchAllPinPages(message) {
         const pins = [];
         let cursor = null;
@@ -1894,11 +1962,7 @@
             cursor = data.next_cursor || null;
             total = Number.isFinite(data.total) ? data.total : total;
             page += 1;
-            const text = total ? `${message || 'Loading pins...'} ${Math.min(pins.length, total)} / ${total}` : `${message || 'Loading pins...'} ${pins.length}`;
-            const overlayText = document.getElementById('plo-text');
-            if (overlayText && !document.getElementById('pin-load-overlay')?.classList.contains('hidden')) overlayText.textContent = text;
-            const tfiText = document.getElementById('tfi-text');
-            if (tfiText) tfiText.textContent = text;
+            _setLoadProgress(total ? `${message || 'Loading pins...'} ${Math.min(pins.length, total)} / ${total}` : `${message || 'Loading pins...'} ${pins.length}`);
             await new Promise(resolve => setTimeout(resolve, 0));
         } while (cursor);
         return { pins, next_cursor: null, total };
@@ -1912,7 +1976,7 @@
         _setFetching(true, msg);
         try {
             const data = (tileKeys.length === 1 && tileKeys[0] === '*')
-                ? await _fetchAllPinPages('Loading pins...')
+                ? await _fetchEveryPin('Loading pins...')
                 : await _fetchJson(
                     `{% url "map.pins" %}?bbox=${encodeURIComponent((() => { const b = _bboxFromKeys(tileKeys); return `${b.s},${b.w},${b.n},${b.e}`; })())}`,
                     { headers: { 'X-Requested-With': 'XMLHttpRequest' } },

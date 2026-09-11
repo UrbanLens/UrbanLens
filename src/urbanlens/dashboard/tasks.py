@@ -407,6 +407,33 @@ def cleanup_vestigial_assets_task() -> dict[str, int]:
     return result.as_dict()
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def build_map_document(profile_id: int) -> int:
+    """Build and cache one profile's map document.
+
+    Off the request path because building it holds the whole document in memory,
+    which is exactly what the streaming response exists to avoid. A miss is
+    served from the database either way; this only makes the next visit faster.
+
+    Args:
+        profile_id: Whose document to build.
+
+    Returns:
+        Bytes stored, or 0 when it was already cached, too large, or the profile
+        is gone.
+    """
+    from urbanlens.dashboard.models.pin import Pin
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.map_pins import document as map_document
+    from urbanlens.dashboard.services.map_pins.view_urls import with_view_urls
+
+    profile = Profile.objects.filter(pk=profile_id).first()
+    if profile is None:
+        return 0
+    query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
+    return map_document.build_and_store(profile, query, decorate=with_view_urls)
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def rebuild_map_pin_cache(self, profile_id: int) -> int:
     """Rebuild the full root-pin map cache for a profile."""

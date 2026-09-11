@@ -53,6 +53,37 @@ than a dependency.
 internally. Not chased down; worth knowing before quoting the document build as the cheaper path on
 CPU rather than on bytes.
 
+## The document endpoint, measured on the development stack
+
+`map.document` was built on 2026-09-11 and measured against the real development
+database and Valkey, seeded with 2,000 pins (daphne, not the deployment's gunicorn, so treat these
+as relative):
+
+| pins | miss | hit | speedup | document, gzipped |
+|---|---|---|---|---|
+| 500 | 76 ms | 18 ms | 4.3x | 21 KB |
+| 2,000 | 168 ms | 13 ms | 12.5x | 81 KB |
+| 10,000 | 955 ms | 20 ms | 47.2x | 402 KB |
+
+Best of three, after a warm-up request. **The miss is linear at ~95 ms per 1,000 pins; the hit is
+flat at 13-20 ms whatever the size**, because it is one `GET` and one write of already-compressed
+bytes. So the cache helps most where it matters most - at the 30,000 ceiling the miss would be
+around 2.9 s against a hit still in the tens of milliseconds.
+
+The request and streaming layers cost nothing measurable over the payload build: the same work with
+no request around it measured 170 ms against the endpoint's 168 ms at 2,000 pins.
+
+**The wire sizes in that table are not a production comparison.** The hit is served pre-gzipped from
+Valkey; the miss streams plain NDJSON and is gzipped by nginx, which Django's test client does not
+go through. On the wire in production they are comparable. What the hit saves is the work - no
+queries, no serialization, no compression - not the bytes.
+
+**A first measurement said 2,227 ms and was wrong.** That was the first request through a cold
+process, and the warm-up - imports, query plans - was the whole of the difference. It was briefly
+blamed on one chunk being yielded per line; the chunking was kept anyway, because one write per line
+is wrong over real HTTP, but Django's test client consumes the generator directly and never writes
+to a socket, so nothing here can measure that either way.
+
 ## The caveat that matters most
 
 `seed_heavy_account` gives every pin **one** shared label. A real account carries several per pin,

@@ -10,7 +10,8 @@ growing a test-only branch.
 Deliberately not a Redis emulator. It implements the commands
 `services.map_pins.cache._SyncRedis` declares and no others, with the semantics
 those calls depend on: `rename` carries the source key's TTL, `set(nx=True)`
-returns None when the key exists, and `zrangebyscore` understands ``-inf``,
+returns None when the key exists, `get` returns exactly what `set` stored
+(bytes stay bytes, which is what the gzipped map document needs), and `zrangebyscore` understands ``-inf``,
 ``+inf`` and the ``(score`` exclusive form the keyset pager uses. Anything it
 does not implement should fail loudly instead of quietly returning a default.
 """
@@ -86,7 +87,10 @@ class FakeRedis:
         known = self._all_keys()
         return sum(1 for name in names if name in known)
 
-    def set(self, name: str, value: str, *, nx: bool = False, ex: int | None = None) -> bool | None:
+    def get(self, name: str) -> str | bytes | None:
+        return self.strings.get(name)
+
+    def set(self, name: str, value: str | bytes, *, nx: bool = False, ex: int | None = None) -> bool | None:
         if nx and name in self._all_keys():
             return None
         self.strings[name] = value

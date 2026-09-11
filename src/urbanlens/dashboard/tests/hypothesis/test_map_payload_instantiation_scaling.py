@@ -86,7 +86,7 @@ class MapPayloadInstantiationScalingTests(InstantiationScalingMixin, TestCase):
         # than through settings, so under test it opens a real socket the test
         # network guard refuses. Without a client it serves from the payload
         # service directly, which is the path being measured here.
-        with mock.patch.object(MapPinCache, "_make_client", return_value=None):
+        with mock.patch.object(MapPinCache, "make_client", return_value=None):
             self.assert_objects_per_row_bounded(reverse("map.pins"))
 
     def test_the_payload_service_itself_does_not_build_objects_per_pin(self) -> None:

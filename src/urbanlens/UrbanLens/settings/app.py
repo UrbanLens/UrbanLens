@@ -257,6 +257,23 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "to disable the instrument; turn it down when hunting something specific."
         ),
     )
+    map_document_max_pins: int = Field(
+        default=30_000,
+        description=(
+            "Largest account the map's single-document fetch will serve. Above this the endpoint answers with a "
+            "header telling the client to use the paged endpoint instead, so a very large account degrades to more "
+            "round trips rather than to one response nobody can hold. Raising it costs client memory and time to "
+            "first marker, not server memory - the document is streamed in batches either way."
+        ),
+    )
+    map_document_cache_seconds: int = Field(
+        default=6 * 60 * 60,
+        description=(
+            "How long a built map document stays in Valkey. Entries are keyed by their content's fingerprint, so a "
+            "stale one is never read - this only decides how long an unread entry occupies memory. 0 disables the "
+            "cache, which must leave the endpoint correct, only slower."
+        ),
+    )
     sandbox_enabled: bool = Field(
         default=True,
         description=(

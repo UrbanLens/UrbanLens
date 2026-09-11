@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError
 from django.db import DatabaseError
 from django.db.models import Count, Prefetch
 from django.db.models.functions import Coalesce, Lower
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, HttpResponseNotModified, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from rest_framework.viewsets import GenericViewSet
@@ -27,7 +27,8 @@ from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
+from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService, document as map_document
+from urbanlens.dashboard.services.map_pins.view_urls import with_view_urls
 from urbanlens.dashboard.services.pins.pin_creation import (
     AddressResolutionError,
     DuplicateCoordinatesError,
@@ -46,7 +47,6 @@ logger = logging.getLogger(__name__)
 
 #: Stand-in slug used to reverse the pin detail route once, then split it, so
 #: per-pin URLs are string formatting rather than a resolver call each.
-_URL_PLACEHOLDER = "pin-slug-placeholder"
 
 #: Default/fallback page size for the pin-list sidebar, used when the client
 #: hasn't measured a "how many rows fit in the container" size yet (e.g. the
@@ -688,7 +688,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # answer - see get_or_build_page.
             cacheable=bbox is None,
         )
-        _with_view_urls(cached_page.page.pins)
+        with_view_urls(cached_page.page.pins)
 
         payload: dict[str, Any] = {
             "pins": cached_page.page.pins,
@@ -698,6 +698,51 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if cached_page.page.total is not None:
             payload["total"] = cached_page.page.total
         return JsonResponse(payload)
+
+    def map_document(self, request, *args, **kwargs):
+        """Stream every one of the profile's root pins as one NDJSON document.
+
+        Replaces the twenty sequential paged fetches the map page used to make.
+        `map.pins` is unchanged and still serves anyone who wants pages - and is
+        what the client falls back to for an account above the document ceiling,
+        which this endpoint says so rather than trying to answer.
+
+        Returns:
+            StreamingHttpResponse of NDJSON, a cached gzipped body, or 304.
+        """
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import build_map_document
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        etag, total = map_document.document_etag(profile)
+        quoted = f'W/"{etag}"'
+        if request.headers.get("If-None-Match") == quoted:
+            return HttpResponseNotModified()
+
+        if total > map_document.max_pins():
+            return _tag_document(HttpResponse(map_document.paged_header(total, etag), content_type=map_document.CONTENT_TYPE), quoted)
+
+        cached = map_document.MapDocumentCache(profile.pk).get(etag)
+        if cached is not None:
+            hit = HttpResponse(cached, content_type=map_document.CONTENT_TYPE)
+            hit["Content-Encoding"] = "gzip"
+            hit["X-Map-Document"] = "hit"
+            return _tag_document(hit, quoted)
+
+        query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
+        streamed = StreamingHttpResponse(
+            map_document.stream(profile, query, etag=etag, total=total, decorate=with_view_urls),
+            content_type=map_document.CONTENT_TYPE,
+        )
+        streamed["X-Map-Document"] = "miss"
+        # Or nginx buffers the whole document before sending any of it, which is
+        # the one thing streaming it was for.
+        streamed["X-Accel-Buffering"] = "no"
+        if map_document.MapDocumentCache.ttl() > 0:
+            # Or a disabled cache means every request enqueues a task that will
+            # decline to store anything.
+            safely_enqueue_task(build_map_document, profile.pk)
+        return _tag_document(streamed, quoted)
 
     def map_child_pins_json(self, request, *args, **kwargs):
         """Return the profile's child pins (all nesting depths) for the Child pins layer.
@@ -1130,25 +1175,22 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if query is None:
             query = Pin.objects.filter(profile=profile).root_pins()
-        return _with_view_urls(MapPinPayloadService(profile).all(query))
+        return with_view_urls(MapPinPayloadService(profile).all(query))
 
 
-def _with_view_urls(pins: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Attach each pin's detail-page URL to its payload.
-
-    Reversed once against a placeholder rather than per pin: `reverse` is not
-    free, and the map serializes whole accounts at a time.
+def _tag_document(response, etag):
+    """Attach the validators every map-document response carries.
 
     Args:
-        pins: Map payloads, each carrying a ``slug``.
+        response: The response to tag.
+        etag: The quoted ETag value.
 
     Returns:
-        The same list, each payload given a ``viewLocationUrl``.
+        The same response.
     """
-    prefix, _, suffix = reverse("pin.details", kwargs={"pin_slug": _URL_PLACEHOLDER}).partition(_URL_PLACEHOLDER)
-    for pin in pins:
-        pin["viewLocationUrl"] = f"{prefix}{urllib.parse.quote(str(pin['slug']))}{suffix}"
-    return pins
+    response["ETag"] = etag
+    response["Cache-Control"] = "private, no-cache"
+    return response
 
 
 def _safe_positive_int(value: str | None) -> int | None:

@@ -331,7 +331,7 @@ class TheCachedPinsAreActuallyDroppedTests(TestCase):
         self.assertTrue(self.redis.exists(cache.pins_key), "the fake cache did not warm, so this asserts nothing")
 
         with (
-            mock.patch.object(MapPinCache, "_make_client", classmethod(lambda cls: self.redis)),
+            mock.patch.object(MapPinCache, "make_client", classmethod(lambda cls: self.redis)),
             self.captureOnCommitCallbacks(execute=True),
         ):
             label.color = "#2196F3"
@@ -351,7 +351,7 @@ class TheCachedPinsAreActuallyDroppedTests(TestCase):
             raise RuntimeError("cache is unreachable")
 
         with (
-            mock.patch.object(MapPinCache, "_make_client", classmethod(refuse)),
+            mock.patch.object(MapPinCache, "make_client", classmethod(refuse)),
             self.captureOnCommitCallbacks(execute=True),
         ):
             label.color = "#2196F3"

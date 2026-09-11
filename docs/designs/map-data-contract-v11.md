@@ -75,10 +75,12 @@ make three copies of one rule.
 The client currently makes 20 sequential round trips of 500 pins for a 10k account, and polls
 `Max(Pin.updated)` — which a deletion never moves, so a pin deleted in another tab stays on the map.
 
-- `GET /dashboard/map/document/` streams `head` (carrying the label dictionary), `pin` lines in
-  batches of 1000, and `end`. NDJSON because the inline script can split a `ReadableStream` on
-  newlines in a few dozen lines, each line is a complete value, and a missing `end` line detects a
-  truncated response — which a bare JSON array cannot.
+- `GET /dashboard/map/document/` streams `head`, `pin` lines in batches of 1000, and `end`. NDJSON
+  because the inline script can split a `ReadableStream` on newlines in a few dozen lines, each line
+  is a complete value, and a missing `end` line detects a truncated response — which a bare JSON
+  array cannot. **Built 2026-09-11**, without the label dictionary, which waits on decision 2.
+  `map.pins` is unchanged and still pages: it is what a client that wants pages uses, what an
+  account over the ceiling is told to fall back to, and what progressive loading would be built on.
 - The ETag is **derived**, not stored: a hash over `Max(Pin.updated)`, the root-pin count,
   `Max(PinTombstone.created)`, the label and customisation maxima, and the payload version. Four
   indexed aggregates, no writes. A stored counter was rejected because it needs a `bump()` at every
@@ -88,8 +90,10 @@ The client currently makes 20 sequential round trips of 500 pins for a 10k accou
 - `?since=` returns changed pins plus deleted uuids from `PinTombstone`, which already exists with
   400-day retention and is already consumed by `services/pins/pin_sync.py` with a 410 full-resync
   fallback. No new table.
-- A ceiling (`UL_MAP_DOCUMENT_MAX_PINS`, 30,000) degrades to viewport mode rather than timing out,
-  which revives the bbox path the client already has and currently never uses.
+- A ceiling (`UL_MAP_DOCUMENT_MAX_PINS`, 30,000) degrades rather than timing out. **Built**, as a
+  `head` line naming `mode: "paged"` and no pin lines, which sends the client back to the paged
+  endpoint. Viewport mode over the bbox path the client already has is the better answer and is not
+  built.
 
 The client store moves to IndexedDB. localStorage's ~5 MB origin quota means the accounts that most
 need a cache are exactly the ones that hit `QuotaExceededError` and refetch everything on every
@@ -104,10 +108,17 @@ document", which is a stronger property and is what `test_map_xss.py` will asser
 
 ## Decision 5: the cache comes back, immutable and version-keyed
 
-`ul:map-doc:v11:<profile>:<etag>` → gzipped NDJSON, written `SET NX`, gated on size. Because the
-content is a pure function of the key, concurrent builders write identical bytes: there is no lock,
-no rename, no generation flag, nothing for a race to corrupt. P101's class of defect cannot recur in
-this shape.
+`ul:map-doc:<format>:<profile>:<etag>` → gzipped NDJSON, written `SET NX`, gated on the ceiling.
+Because the content is a pure function of the key, concurrent builders write identical bytes: there
+is no lock, no rename, no generation flag, nothing for a race to corrupt. P101's class of defect
+cannot recur in this shape — though P101 itself stays open until the per-pin cache leaves the read
+path, which is what `map.pins` still uses.
+
+**Built 2026-09-11.** Two details the design did not anticipate. The document is built in a Celery
+task rather than in the request that missed, because building it holds the whole thing in memory and
+streaming it exists precisely so a request never does; a miss streams from the database and enqueues
+the build. And the builder re-reads the fingerprint afterwards and discards the result if it moved,
+because the key is a promise about the content and a write during the build would make it a lie.
 
 Jess allocated 10 GB for Valkey on 2026-09-10, and asked for the cache to be made more useful rather
 than removed, which settles this as in-scope for the same phase rather than deferred behind a

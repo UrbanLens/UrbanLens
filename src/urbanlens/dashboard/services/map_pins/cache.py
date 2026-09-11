@@ -50,7 +50,7 @@ class _SyncRedis(Protocol):
     stubs cover both the sync and async clients.  This protocol declares the
     concrete sync return types so that callers in this module are properly typed
     without scattering ``type: ignore`` comments throughout.  The single boundary
-    cast lives in ``_make_client``.
+    cast lives in ``make_client``.
     """
 
     def exists(self, *names: str) -> int: ...
@@ -94,7 +94,7 @@ class MapPinCache:
     def __init__(self, profile: Profile, client: _SyncRedis | None = None):
         self.profile = profile
         self.profile_id = profile.pk
-        self.client: _SyncRedis | None = client if client is not None else self._make_client()
+        self.client: _SyncRedis | None = client if client is not None else self.make_client()
         self.payload = MapPinPayloadService(profile)
 
     @classmethod
@@ -102,7 +102,7 @@ class MapPinCache:
         return bool(os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL"))
 
     @classmethod
-    def _make_client(cls) -> _SyncRedis | None:
+    def make_client(cls) -> _SyncRedis | None:
         url = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
         if not url:
             return None
@@ -371,7 +371,7 @@ class MapPinCache:
         ids = sorted({profile_id for profile_id in profile_ids if profile_id})
         if not ids:
             return 0
-        connection = client if client is not None else cls._make_client()
+        connection = client if client is not None else cls.make_client()
         if connection is None:
             return 0
 

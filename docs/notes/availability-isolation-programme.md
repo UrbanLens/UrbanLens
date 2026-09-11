@@ -30,7 +30,7 @@ on purpose until it lands. Each phase's acceptance is a measurement, not a revie
 | 2 | Config-only shedding and telemetry, deployable under today's gevent | **partly done 2026-09-10** |
 | 3 | `gthread`, per-role Postgres users, `app-heavy` pool (D11) | not started |
 | 4 | Valkey split + degradable session path (P105) | not started |
-| 5 | Map data contract v11 (D12) | **underway 2026-09-11** — write paths and the freshness signal done (P102, P106, P108 closed); payload v11 and the document endpoint not started |
+| 5 | Map data contract v11 (D12) | **underway 2026-09-11** — write paths, freshness signal and the single-document fetch done (P102, P106, P108 closed); payload v11, deltas and the IndexedDB store not started |
 | 6 | Celery queue classes; move P96/P98/P2 work off the request | not started |
 | 7 | Observability completion, profiling harness, k8s parity | not started |
 

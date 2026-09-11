@@ -811,6 +811,8 @@ MEDIA_X_ACCEL_OBJECT_URL_TTL_SECONDS = 60
 # limit to this, which is what both the server-side check and the browser's
 # pre-flight read - so the file is refused before it is sent.
 MAX_REQUEST_BODY_BYTES = max(0, _app_settings.max_request_body_mb) * 1_000_000
+MAP_DOCUMENT_MAX_PINS = _app_settings.map_document_max_pins
+MAP_DOCUMENT_CACHE_SECONDS = _app_settings.map_document_cache_seconds
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
