@@ -63,16 +63,7 @@ class Friendship(DashboardModel):
         relationship_type: str = FriendshipType.FRIEND,
         message: str | None = None,
     ) -> Friendship | None:
-        """
-        Create a new friendship request.
-
-        Args:
-            from_profile: Profile sending the request.
-            to_profile: Profile being requested.
-            relationship_type: Requested relationship tier.
-            message: Optional note from the requester, stored on the row and
-                surfaced in the recipient's notification.
-        """
+        """Create a friendship request."""
         if isinstance(from_profile, int):
             from_profile = Profile.objects.get(pk=from_profile)
         if isinstance(to_profile, int):
@@ -82,14 +73,10 @@ class Friendship(DashboardModel):
             logger.warning("Could not find profiles")
             raise ValueError("Could not find profiles")
 
-        # guaranteed above, but handle case in the event code drifts.
         if not isinstance(from_profile, Profile) or not isinstance(to_profile, Profile):
             raise TypeError("Could not find profiles")
 
-        # A profile with Community turned off can neither send nor be sent
-        # friend requests - checked here since this is the one chokepoint
-        # every request path (button click, invite acceptance, pending
-        # invitation auto-accept) routes through.
+        # Community-off profiles can neither send nor receive requests.
         if not from_profile.community_enabled or not to_profile.community_enabled:
             logger.info("Friendship request blocked: Community disabled for from=%s or to=%s", from_profile.pk, to_profile.pk)
             return None
@@ -223,20 +210,7 @@ class Friendship(DashboardModel):
         )
 
     def _mute_field_for(self, viewer: Profile | int) -> str:
-        """Name the mute column belonging to ``viewer``.
-
-        Args:
-            viewer: The profile whose own preference is being read or written,
-                or its pk.
-
-        Returns:
-            ``"muted_by_from_profile"`` or ``"muted_by_to_profile"``.
-
-        Raises:
-            ValueError: ``viewer`` is not one of this row's two profiles.
-                Raised rather than defaulted, because every wrong answer here
-                silences somebody who did not ask to be silenced.
-        """
+        """Mute column belonging to ``viewer``."""
         viewer_id = viewer if isinstance(viewer, int) else viewer.pk
         if viewer_id == self.from_profile_id:
             return "muted_by_from_profile"
@@ -245,65 +219,15 @@ class Friendship(DashboardModel):
         raise ValueError(f"Profile {viewer_id} is not part of friendship {self.pk}")
 
     def is_muted_by(self, viewer: Profile | int) -> bool:
-        """Whether ``viewer`` has silenced notifications from the other side.
-
-        Args:
-            viewer: The profile whose own preference to read, or its pk.
-
-        Returns:
-            True when that profile muted this relationship.
-
-        Raises:
-            ValueError: ``viewer`` is not part of this relationship.
-        """
+        """Whether ``viewer`` silenced notifications from the other side."""
         return bool(getattr(self, self._mute_field_for(viewer)))
 
     def mute(self, viewer: Profile | int) -> None:
-        """Silence notifications ``viewer`` would receive from the other side.
-
-        An instance method rather than the ``(from_profile, to_profile)``
-        classmethod it replaces, for two reasons. First, it now sits alongside
-        :meth:`accept`/:meth:`decline`/:meth:`ignore`/:meth:`remove` as one
-        more transition on an existing row, which is what it always was.
-        Second, the old classmethod *created* a ``Muted`` row when the two
-        profiles had no relationship at all - inventing a relationship out of
-        nothing in order to record a preference about it, and (since ``Muted``
-        was a status) simultaneously making the pair permanently unable to
-        send each other a friend request. Muting a stranger is meaningless;
-        there is nothing to turn the volume down on.
-
-        Written as a targeted ``UPDATE`` rather than ``save()`` for three
-        reasons. It cannot clobber a concurrent accept/decline of the same
-        row, since no other column is in the statement; it cannot clobber the
-        *other* side's mute preference, which a full save of a stale instance
-        would; and it leaves ``updated`` alone. ``updated`` is ``auto_now``,
-        and the profile page renders it as the friendship's "since" date - a
-        notification preference must not rewrite when two people became
-        friends.
-
-        Args:
-            viewer: The profile doing the muting, or its pk.
-
-        Raises:
-            ValueError: ``viewer`` is not part of this relationship.
-        """
+        """Silence notifications ``viewer`` would receive from the other side."""
         self._set_muted(viewer, muted=True)
 
     def unmute(self, viewer: Profile | int) -> None:
-        """Restore notifications ``viewer`` had silenced.
-
-        The exact inverse of :meth:`mute`. Under the old status-based scheme
-        there was no inverse to write: the pre-mute status had been discarded,
-        so the profile page's "Unmute" button posted to the friend-request
-        endpoint instead and was rejected outright, because
-        ``FriendshipStatus.can_request`` excludes ``Muted``.
-
-        Args:
-            viewer: The profile doing the unmuting, or its pk.
-
-        Raises:
-            ValueError: ``viewer`` is not part of this relationship.
-        """
+        """Restore notifications ``viewer`` had silenced."""
         self._set_muted(viewer, muted=False)
 
     def _set_muted(self, viewer: Profile | int, *, muted: bool) -> None:
@@ -321,19 +245,7 @@ class Friendship(DashboardModel):
         db_table = "dashboard_friendships"
         unique_together = ("from_profile", "to_profile")
         constraints = [
-            # "One row per pair" was a convention every reader relied on and
-            # nothing enforced: `unique_together` stops a duplicate in one
-            # direction and permits `A->B` *and* `B->A`. A profile import
-            # restoring both, or two simultaneous requests in opposite
-            # directions, produced exactly that - and `between()` then had two
-            # rows to choose between, with the mute columns split across them.
-            #
-            # Expressed on the *ordered pair* rather than by reordering the
-            # columns, which was the other candidate: `from_profile` means "who
-            # asked", which `Pending`/`Requested` and `request_message` depend
-            # on, so normalising the columns to id order would invert that
-            # meaning for half the table. This gets the same guarantee and
-            # leaves the direction alone.
+            # One row per unordered pair; direction still records who asked.
             UniqueConstraint(
                 Least("from_profile_id", "to_profile_id"),
                 Greatest("from_profile_id", "to_profile_id"),

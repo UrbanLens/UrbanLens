@@ -102,78 +102,29 @@ class CredentialScopeMixin(_CredentialScopeBase):
 
     @database_sync_to_async
     def _credential_still_valid(self) -> bool:
-        """Re-read this connection's credential from the database - see :func:`_credential_is_still_valid`."""
+        """Re-check credential validity from the DB."""
         return _credential_is_still_valid(self.credential)
 
 
 class InboundVolumeMixin(_CredentialScopeBase):
-    """Bounds how large and how fast one connection's inbound frames may be.
+    """Cap inbound frame size and rate per connection and per sender."""
 
-    Authorization on these sockets is thorough - participation is verified
-    before any group is joined, credential scope is checked, credentials are
-    re-validated on a timer. None of it bounds *volume*, and every accepted
-    frame costs at least a parse and a dispatch, most of them a database write,
-    and some of them a fan-out to every other member of a group. This collapses
-    the size and volume gate into one place so a limit is added once per family
-    rather than once per consumer.
-
-    Three checks, in the order they are cheapest:
-
-    1. Frame size, compared before the frame is decoded. Parsing a megabyte to
-       keep a thousand characters of it is the work being avoided.
-    2. A per-connection counter, in this process, off a monotonic clock. It
-       needs no I/O, so a flood cannot knock out its own limiter.
-    3. A shared counter keyed by sender, which the per-connection tier cannot
-       substitute for: it is what stops one account opening fifty sockets.
-
-    Subclasses give :meth:`volume_identity` and may tighten
-    :attr:`max_frame_chars`; everything else is inherited.
-    """
-
-    #: Tightens the site-wide character cap for a consumer whose legitimate
-    #: frames are smaller. The effective cap is the smaller of this and
-    #: ``UL_WEBSOCKET_MAX_FRAME_CHARS``, so lowering the setting still lowers
-    #: every socket - a class attribute that could shadow the setting upwards
-    #: would make the setting a suggestion.
+    #: Lower cap for consumers with small legitimate frames.
     max_frame_chars: int | None = None
 
     def volume_identity(self) -> str:
-        """Who this connection's shared budgets are charged to.
-
-        Built from ids the consumer resolved at connect time, never from
-        client-supplied text: a sender who could choose their own key could
-        spend somebody else's budget, or evade their own.
-        """
+        """Sender key for shared budgets, from server-side ids only."""
         raise NotImplementedError
 
     @property
     def _effective_max_frame_chars(self) -> int:
-        """The smaller of this consumer's own cap and the site-wide one.
-
-        Never returns zero. A consumer that sets no ``max_frame_chars`` would
-        otherwise inherit "no cap at all" from a setting that had somehow
-        reached zero, which is the one answer this must not give: the site-wide
-        field is documented as having no off switch, and a size cap that
-        silently disables itself is worse than one that is merely too tight.
-        """
+        """Smaller of the consumer cap and the site-wide cap."""
         setting = int(getattr(settings, "UL_WEBSOCKET_MAX_FRAME_CHARS", 0) or 0)
         candidates = [value for value in (self.max_frame_chars, setting) if value and value > 0]
         return min(candidates) if candidates else _FALLBACK_MAX_FRAME_CHARS
 
     async def accept_frame(self, text_data: str | None, bytes_data: bytes | None = None) -> dict[str, Any] | None:
-        """Size-check, budget-check and decode one inbound frame.
-
-        Args:
-            text_data: The raw frame, as Channels delivered it.
-            bytes_data: Set instead of *text_data* for a binary frame. These
-                sockets are JSON-text-only, so a binary frame is discarded -
-                but it is charged first, or flipping the opcode would buy an
-                unmetered flood.
-
-        Returns:
-            The decoded frame object, or None when the caller must stop -
-            having already replied with an error frame where one is owed.
-        """
+        """Size-check, budget-check, and decode one inbound frame."""
         if text_data is None:
             if bytes_data is not None:
                 await self._charge_frame()
@@ -194,24 +145,11 @@ class InboundVolumeMixin(_CredentialScopeBase):
             logger.warning("%s received an unparseable frame", type(self).__name__)
             return None
         if not isinstance(data, dict):
-            # Valid JSON, but not a frame: ``"5"`` and ``[]`` parse fine and
-            # would raise AttributeError on ``.get`` below, killing the socket.
             return None
         return data
 
     async def charge_fanout(self) -> bool:
-        """Charge one frame that reaches other people without writing a row.
-
-        Only the direct-message typing indicator, today. Anything that creates a
-        message is charged at the service layer instead
-        (``services.core.message_limits``), because those writes are equally
-        reachable over HTTP and a socket-only budget is one a POST loop walks
-        around.
-
-        Returns:
-            True when the frame may proceed. False once the budget is spent,
-            having already told the sender.
-        """
+        """Charge one fanout frame that writes no row."""
         budget = FrameBudget(name="fanout", limit=int(getattr(settings, "UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE", 0) or 0))
         if await budget.aconsume(self.volume_identity()):
             return True
@@ -239,34 +177,10 @@ class InboundVolumeMixin(_CredentialScopeBase):
 
 
 class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
-    """Pushes on-site notifications to a logged-in user's open tabs as they are created.
-
-    Mounted at ``ws/notifications/``. Authentication comes from the session
-    cookie via Channels' ``AuthMiddlewareStack``, or from a ``?key=``
-    credential via ``ApiKeyAuthMiddleware``; each connection joins the
-    per-profile group produced by
-    ``urbanlens.dashboard.models.notifications.signals.notification_group_name``,
-    which the ``NotificationLog`` post_save signal broadcasts to.
-
-    A credential-authenticated connection additionally has to hold
-    ``notifications:read``, the same scope the HTTP notification endpoints
-    require - this socket is a live feed of the very same data, so letting any
-    valid bearer token subscribe would make the scope meaningless. Session
-    connections are unaffected (see :class:`CredentialScopeMixin`).
-
-    The socket is strictly server → client: incoming frames are ignored, and
-    marking notifications read stays on the existing HTMX endpoints. There is
-    therefore no write scope to check.
-
-    Close codes on ``connect()`` failure (mirroring ``SafetyCheckinChatConsumer``):
-
-    - ``4404``: the session is unauthenticated, or the credential doesn't grant
-      ``notifications:read`` - permanent, retrying won't help.
-    - ``4500``: an unexpected server-side error - transient, safe to retry.
-    """
+    """Server-to-client live notification feed for one user."""
 
     async def connect(self):
-        """Authenticate the session or credential, check scope, and join the profile's notification group."""
+        """Join the profile's notification group after auth and scope checks."""
         from urbanlens.dashboard.models.account.model import ApiKeyScope
 
         user = self.scope.get("user")
@@ -291,9 +205,6 @@ class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             self.start_credential_revalidation()
         except Exception:
             logger.exception("Notification socket connect failed for user %s", getattr(user, "pk", None))
-            # Leave the group again if group_add succeeded but a later step (accept()) then
-            # failed - Channels only reliably fires disconnect() for a connection that reached
-            # accept(), so without this the group membership would otherwise leak.
             if hasattr(self, "group_name"):
                 try:
                     await self.channel_layer.group_discard(self.group_name, self.channel_name)
@@ -302,7 +213,7 @@ class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
-        """Leave the notification group, if we ever joined one, and stop re-validating the credential."""
+        """Leave the notification group and stop credential revalidation."""
         self.stop_credential_revalidation()
         if hasattr(self, "group_name"):
             try:
@@ -311,32 +222,15 @@ class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
                 logger.exception("Notification socket failed to leave group %s cleanly", self.group_name)
 
     async def receive(self, text_data=None, bytes_data=None):
-        """Ignore client frames - this socket is server → client only.
-
-        That already covers the client's ``{"type": "ping"}`` keep-alive (see
-        ``_notification_push.html``), which needs no reply: the frame exists only
-        to be traffic, so the Cloudflare tunnel doesn't time an idle connection out.
-
-        Channels' base consumer calls ``receive(bytes_data=...)`` for a binary WS frame;
-        accepting both keyword arguments (rather than only ``text_data``) keeps a stray binary
-        frame from raising an uncaught ``TypeError`` that would otherwise kill the connection.
-        """
+        """Ignore client frames; server-to-client only."""
 
     async def notification_new(self, event):
-        """Deliver one broadcasted notification to this connection.
-
-        Args:
-            event: The group-send event, with a ``notification`` dict payload.
-        """
+        """Deliver one broadcasted notification."""
         await self.send(text_data=json.dumps({"type": "notification", "notification": event["notification"]}))
 
     @database_sync_to_async
     def _get_profile_id(self):
-        """Resolve (creating if needed) the session user's profile id.
-
-        Returns:
-            The primary key of the user's Profile.
-        """
+        """Resolve the session user's profile id."""
         from urbanlens.dashboard.models.profile.model import Profile
 
         profile, _ = Profile.objects.get_or_create(user=self.scope["user"])
