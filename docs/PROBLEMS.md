@@ -4325,8 +4325,27 @@ ceiling existed must still return results, and a badge that reveals less than th
 nothing - a badge that reveals *more* is the existence oracle `services/comments` is built to deny.
 H27's ceiling drops nothing at all: past it the same work runs, on the queue.
 
+**Three more** (2026-09-11), and two findings that were already fixed:
+
+| finding | the shape | now |
+|---|---|---|
+| H42/H49 | the global-search panel fires per keystroke, hands an unbounded `q` to ~11 providers each running an un-indexable trigram scan, and had no throttle - while the *API* surface of the same engine caps the query at 250 characters for exactly that reason | the same cap, truncating rather than refusing, and a per-account throttle counting GET |
+| H26 | `LabelBulkEditView` capped neither the id list nor the parent/child lists, then ran a graph-walking cycle check per (label, parent) pair and an account-wide pin touch per label saved | `LABEL_BULK_EDIT_MAX_IDS`, refused rather than trimmed, checked before the first save |
+| H41 | one group message enqueued one Celery task per member, each building its own event loop and channel-layer connection to push a single frame | one task carrying the batch, delivered in one loop |
+
+H26 refuses where the filter ceilings trim, and the difference is worth keeping straight: a bulk
+*edit* that silently applied to some of what somebody selected is worse than one that says no,
+while a *filter* that returns results for part of itself is better than one that errors.
+
+**H20 and (mostly) H41 were already fixed** when checked. The export view claims a single-flight
+lock before it creates anything and releases it if the enqueue fails - which is the debounce the
+approved decision asked for, already in place. H41's group-chat half already built its payloads
+once per broadcast rather than once per member; what was left was the delivery, which is the part
+fixed above. Both went on the list because the audit was read rather than the code.
+
 Still open in family 4: the findings N21 lists beyond these, most of which are request-path
-loops over one account's data in surfaces nobody has measured yet.
+loops over one account's data in surfaces nobody has measured yet. H39 (markup JSON returns a
+whole subtree, and geometry has no point cap at the sanitize layer) is verified real and next.
 
 **H19 is fixed** (2026-09-11), and it is the one that could have taken the site down rather than
 slowed it. Upvoting an external photo materializes it - downloads up to 20MB and stores it on the

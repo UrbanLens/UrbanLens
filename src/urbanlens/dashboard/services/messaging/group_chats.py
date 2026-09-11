@@ -26,7 +26,7 @@ from django.db.models import Count, Max, Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
-from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
+from urbanlens.dashboard.services.core.channel_broadcast import send_group_messages
 from urbanlens.dashboard.services.core.message_limits import charge_message, refund_message, sender_identity
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message, direct_message_group_name, reaction_summary
@@ -469,8 +469,7 @@ def _broadcast_group_event(group: GroupChat, payload: dict[str, Any], *, extra_p
     groups = {direct_message_group_name(profile_id) for profile_id in profile_ids}
 
     def _send() -> None:
-        for channel_group in groups:
-            send_group_message(channel_group, {"type": "dm.message", "message": payload})
+        send_group_messages([(channel_group, {"type": "dm.message", "message": payload}) for channel_group in groups])
 
     transaction.on_commit(_send)
 
@@ -791,8 +790,7 @@ def broadcast_group_message(message: GroupMessage) -> None:
     ]
 
     def _send() -> None:
-        for channel_group, payload in deliveries:
-            send_group_message(channel_group, {"type": "dm.message", "message": payload})
+        send_group_messages([(channel_group, {"type": "dm.message", "message": payload}) for channel_group, payload in deliveries])
 
     transaction.on_commit(_send)
 
@@ -887,8 +885,7 @@ def toggle_group_reaction(profile: Profile, message: GroupMessage, emoji: str) -
     ]
 
     def _send() -> None:
-        for channel_group, payload in deliveries:
-            send_group_message(channel_group, {"type": "dm.message", "message": payload})
+        send_group_messages([(channel_group, {"type": "dm.message", "message": payload}) for channel_group, payload in deliveries])
 
     transaction.on_commit(_send)
     return action

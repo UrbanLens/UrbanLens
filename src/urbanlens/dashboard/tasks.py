@@ -3670,6 +3670,32 @@ def broadcast_channel_group_message(group: str, message: dict[str, Any]) -> None
 
 
 @shared_task(queue=Queue.INTERACTIVE)
+def broadcast_channel_group_messages(deliveries: list[tuple[str, dict[str, Any]]]) -> None:
+    """Deliver many ``(group, message)`` pairs inside one event loop.
+
+    The batched counterpart to :func:`broadcast_channel_group_message`, for a
+    fan-out whose length is set by how many people are in a conversation. One
+    loop and one channel-layer connection for the whole batch; a failure on one
+    group is logged and the rest still go.
+
+    Args:
+        deliveries: ``(channel group name, event dict)`` pairs.
+    """
+    layer = get_channel_layer()
+    if layer is None:
+        return
+
+    async def send_all() -> None:
+        for group, message in deliveries:
+            try:
+                await layer.group_send(group, message)
+            except Exception:
+                logger.exception("Failed to broadcast to channel-layer group %s", group)
+
+    async_to_sync(send_all)()
+
+
+@shared_task(queue=Queue.INTERACTIVE)
 def run_link_extraction(extraction_id: int) -> None:
     """Execute one queued AI link-extraction run (fetch, AI call, apply, notify).
 

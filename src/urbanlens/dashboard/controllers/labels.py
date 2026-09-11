@@ -447,7 +447,14 @@ def _owned_label(request: HttpRequest, label_id: int, kind: str, *, require_owne
 
 
 def _parse_ids_json(request: HttpRequest) -> tuple[list[int] | None, HttpResponse | None]:
-    """Parse a JSON body containing an ``ids`` list."""
+    """Parse a JSON body containing an ``ids`` list.
+
+    Bounded by ``settings.LABEL_BULK_EDIT_MAX_IDS``: every bulk label view reached
+    through here does per-id work against the database, and the list is whatever
+    the client sent.
+    """
+    from django.conf import settings
+
     try:
         data = json.loads(request.body)
         ids = [int(x) for x in data.get("ids", [])]
@@ -455,6 +462,8 @@ def _parse_ids_json(request: HttpRequest) -> tuple[list[int] | None, HttpRespons
         return None, JsonResponse({"error": "Invalid data"}, status=400)
     if not ids:
         return None, HttpResponse("No items specified.", status=400)
+    if len(ids) > settings.LABEL_BULK_EDIT_MAX_IDS:
+        return None, JsonResponse({"error": f"Select at most {settings.LABEL_BULK_EDIT_MAX_IDS} items at a time."}, status=400)
     return ids, None
 
 
@@ -488,6 +497,23 @@ def _parse_bulk_payload(data: dict) -> dict:
         "add_parent_ids": [i for i in (_safe_int(x, -1) for x in data.get("add_parent_ids", [])) if i >= 0],
         "add_child_ids": [i for i in (_safe_int(x, -1) for x in data.get("add_child_ids", [])) if i >= 0],
     }
+
+
+def _over_the_bulk_ceiling(payload: dict) -> HttpResponse | None:
+    """Refuse a parent/child list longer than the bulk ceiling.
+
+    Args:
+        payload: The result of :func:`_parse_bulk_payload`.
+
+    Returns:
+        A 400 when either list is over the ceiling, else None.
+    """
+    from django.conf import settings
+
+    ceiling = settings.LABEL_BULK_EDIT_MAX_IDS
+    if len(payload["add_parent_ids"]) > ceiling or len(payload["add_child_ids"]) > ceiling:
+        return JsonResponse({"error": f"Select at most {ceiling} items at a time."}, status=400)
+    return None
 
 
 def _apply_bulk_fields(label: Label, payload: dict) -> list[str]:
@@ -1083,6 +1109,10 @@ class LabelBulkEditView(_LabelKindMixin, LoginRequiredMixin, View):
 
         profile = _request_profile(request)
         payload = _parse_bulk_payload(data)
+        # Checked before the first save: every (label, parent) pair walks the
+        # label graph, so the work is the product of the two lists.
+        if over_limit := _over_the_bulk_ceiling(payload):
+            return over_limit
         labels = list(Label.objects.filter(id__in=ids, profile=profile, kind=self.kind))
         if self.kind == KIND_STATUS:
             labels = [label for label in labels if not label.is_protected]
@@ -1148,6 +1178,10 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
 
         profile = _request_profile(request)
         payload = _parse_bulk_payload(data)
+        # Checked before the first save: every (label, parent) pair walks the
+        # label graph, so the work is the product of the two lists.
+        if over_limit := _over_the_bulk_ceiling(payload):
+            return over_limit
         labels = list(Label.objects.filter(id__in=ids, profile=profile, kind=self.kind))
         if self.kind == KIND_STATUS:
             labels = [label for label in labels if not label.is_protected]

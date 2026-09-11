@@ -266,6 +266,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "first marker, not server memory - the document is streamed in batches either way."
         ),
     )
+    label_bulk_edit_max_ids: int = Field(
+        default=500,
+        description=(
+            "How many label ids one bulk edit may carry, in any of its three lists. Every (label, parent) pair walks "
+            "the label graph in the database and every label saved touches every pin carrying it, so the cost is the "
+            "product of two numbers the caller picks. Refused rather than trimmed: a bulk edit that silently applied "
+            "to some of what was selected is worse than one that says no."
+        ),
+    )
     max_smart_lists_per_sync: int = Field(
         default=25,
         description=(

@@ -1933,7 +1933,11 @@ urlpatterns = [
         "search/",
         include(
             [
-                path("panel/", search.GlobalSearchPanelView.as_view(), name="search.panel"),
+                path(
+                    "panel/",
+                    throttled("search.panel", search.GLOBAL_SEARCH_RATE, search.GLOBAL_SEARCH_METHODS, account_or_address)(search.GlobalSearchPanelView.as_view()),
+                    name="search.panel",
+                ),
                 path("hints/", search.GlobalSearchHintsView.as_view(), name="search.hints"),
                 path("commit/", search.GlobalSearchCommitView.as_view(), name="search.commit"),
                 path("history/delete/", search.GlobalSearchHistoryDeleteView.as_view(), name="search.history.delete"),
