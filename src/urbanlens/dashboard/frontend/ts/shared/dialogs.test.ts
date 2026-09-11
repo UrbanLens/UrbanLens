@@ -19,7 +19,31 @@ function toasts(): HTMLElement[] {
     return [...(container()?.children ?? [])] as HTMLElement[];
 }
 
+/**
+ * Both branches of `notify` are silent no-ops when the DOM is not what this file
+ * assumes: `window.toastr` unreadable sends it to `fallbackToast`, and a missing
+ * `document.body` makes that return without rendering. Every assertion below then
+ * fails as "0 calls" or "expected 1, got 0", which says nothing about why.
+ *
+ * CI on 2026-09-11 failed exactly that way - seven of these, with the two that
+ * merely assert "did not throw" and "nothing was rendered" passing, which is the
+ * signature of a silent no-op rather than a broken toast. It could not be
+ * reproduced on the same bun version, the same happy-dom version, the same file
+ * order or a clean lockfile install, so this states the preconditions instead of
+ * assuming them: the next failure names the one that was not met.
+ */
+function requireTheDom(): void {
+    if (typeof window === "undefined") throw new Error("no `window`: happy-dom is not registered in this process (bunfig.toml preloads testing/dom-setup.ts)");
+    if (typeof document === "undefined") throw new Error("no `document`: happy-dom is not registered in this process");
+    if (!document.body) throw new Error("`document.body` is absent, so fallbackToast returns without rendering and every assertion here reads as an empty container");
+    const probe = "__toast_realm_probe__";
+    (window as unknown as Record<string, unknown>)[probe] = 1;
+    if ((globalThis as Record<string, unknown>)[probe] !== 1) throw new Error("`window` and `globalThis` are different objects, so what this file sets is not what dialogs.ts reads");
+    delete (window as unknown as Record<string, unknown>)[probe];
+}
+
 beforeEach(() => {
+    requireTheDom();
     document.body.innerHTML = "";
     delete (window as { toastr?: unknown }).toastr;
 });
