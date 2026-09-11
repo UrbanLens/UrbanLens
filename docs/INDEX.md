@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P113` · `T3` · `PL8` · `D13` · `X17` · `I5` · `R29` · `N21`
+**Next free id:** `P113` · `T3` · `PL8` · `D13` · `X18` · `I5` · `R29` · `N21`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -97,13 +97,10 @@ still resolves after it is fixed, and the id is never handed out again.
 | P98 | open | 2026-09-10 | The site-admin system panel re-walks the whole media tree on every load, gated only by admin permission | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P100 | open | 2026-09-10 | Map search-box autocomplete runs 8 leading-wildcard `ILIKE`s with zero trigram indexes to serve them | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P101 | open | 2026-09-10 | `MapPinCache.rebuild` still drops concurrent writes and can release a lock it no longer holds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P102 | open | 2026-09-10 | One Label edit re-serializes every pin carrying it, synchronously, inside the edit's own request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P103 | open | 2026-09-10 | `MEDIA_PIPELINE.md`'s "every parser is now guarded" was false; a label-icon resize decodes unsandboxed in-request | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P104 | open | 2026-09-10 | Celery can starve the web tier by exhausting Postgres connections, not CPU; this already caused an 11-hour outage | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P105 | open | 2026-09-10 | A Valkey outage 500s every request after 32 seconds, including the readiness probe | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P106 | open | 2026-09-10 | Reordering labels changes which icon a pin draws, but never tells the client | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P107 | open | 2026-09-10 | The saved-filter count badges read every pin in the account to draw a number | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P108 | open | 2026-09-10 | Opening the map compares every pin with every other pin, in Python, before the page renders | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P109 | open | 2026-09-10 | One import's task fan-out fills the only Celery queue for hours, and a safety task waits behind it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P110 | open | 2026-09-10 | The Overture OOM fix is best-effort, and Overture rate-limiting us is what turns it off | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P111 | open | 2026-09-10 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -119,7 +116,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | D9 | accepted | 2026-09-07 | A moderator's removal costs reputation slightly and reversibly - a per-event weight, not the binary retraction | [`docs/designs/reputation-removal-weighting.md`](designs/reputation-removal-weighting.md) |
 | D10 | accepted | 2026-09-08 | A block's incident history is its own paid flag, not `NEARBY_RESEARCH` - it is a distinct pricing lever, not a variant of one | [`docs/designs/incident-history-feature-gate.md`](designs/incident-history-feature-gate.md) |
 | D11 | accepted | 2026-09-10 | One user's expensive request must be unable to reach another user's request, and the way to guarantee that is bounded pools with named budgets | [`docs/designs/request-isolation-and-connection-budget.md`](designs/request-isolation-and-connection-budget.md) |
-| D12 | accepted | 2026-09-10 | The map cache becomes an accelerator the site can lose, and labels stop being copied into every pin | [`docs/designs/map-data-contract-v11.md`](designs/map-data-contract-v11.md) |
+| D12 | accepted | 2026-09-11 | The map cache becomes an accelerator the site can lose, and labels stop being copied into every pin | [`docs/designs/map-data-contract-v11.md`](designs/map-data-contract-v11.md) |
 | X1 | holds | 2026-08-27 | A release merge silently dropped --skip-undecryptable from DATA_ENCRYPTION.md; nothing else had drifted | [`docs/audits/DATA_ENCRYPTION_AUDIT.md`](audits/DATA_ENCRYPTION_AUDIT.md) |
 | X2 | holds | 2026-09-01 | A gate enforced in the web UI is repeatedly missing from the parallel external-API endpoint | [`docs/audits/FEATURES_CODE_AUDIT.md`](audits/FEATURES_CODE_AUDIT.md) |
 | X3 | holds | 2026-08-27 | GOALS.md contradicts the other docs on six points and states ten goals no other doc records at all | [`docs/audits/GOALS_AUDIT.md`](audits/GOALS_AUDIT.md) |
@@ -136,6 +133,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | X14 | holds | 2026-09-10 | Switching the render mixin to a CPU clock separates the classes worse, not better; keep `perf_counter` | [`docs/notes/render-clock-calibration.md`](notes/render-clock-calibration.md) |
 | X15 | holds | 2026-09-10 | The first neighbour run, and the correction: on the real process model one user filtering costs another user nothing | [`docs/notes/first-neighbour-run.md`](notes/first-neighbour-run.md) |
 | X16 | holds | 2026-09-10 | The four chaos scenarios, run for the first time: one catastrophic, three clean | [`docs/notes/first-chaos-run.md`](notes/first-chaos-run.md) |
+| X17 | holds | 2026-09-11 | What one account's map data actually costs: the cache is 662 bytes a pin, not 1,700 | [`docs/notes/map-data-cost-measured.md`](notes/map-data-cost-measured.md) |
 | I1 | unvalidated | 2026-08-27 | Splitting into a near-zero-knowledge server and a data-holding agent was planned in full, then deferred | [`docs/designs/rejected-and-deferred/split-architecture.md`](designs/rejected-and-deferred/split-architecture.md) |
 | I2 | actionable | 2026-08-27 | Ten free/open APIs surveyed as integration candidates; several have since shipped as plugins, so re-check before using it | [`docs/reports/api-expansion-candidates.md`](reports/api-expansion-candidates.md) |
 | I3 | absorbed | 2026-07-30 | SpotGuessr's backend was sound and its frontend was the debt; all five recommendations shipped | [`docs/reports/spotguessr-audit.md`](reports/spotguessr-audit.md) |

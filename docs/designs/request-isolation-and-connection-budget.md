@@ -80,11 +80,12 @@ stops — but the threshold matters and was never stated: starving the heartbeat
 consecutive seconds requires a request that *runs* for 180 seconds. Ordinary heavy endpoints cost
 seconds, and the heartbeat is scheduled between them.
 
-Two known requests can run that long, and both have entries: **P108** (a 20,000-pin map page spends
+Two known requests could run that long, and both had entries: **P108** (a 20,000-pin map page spent
 ~7 minutes in a pairwise Haversine scan) and **P96** (a 20,000-pin import would run 78 minutes). So
 the collateral-kill argument is a property of those two defects, not of heavy endpoints in general.
 That is a materially weaker case for the move than this section originally made, and it should be
-weighed against P108 and P96 being fixable directly.
+weighed against both being fixable directly — **P108 now has been**, at 99 ms for that same account,
+which leaves exactly one known request in the class this decision exists to contain.
 
 **What the measurement did *not* weaken is decision 2.** The cap bounds the database's exposure and
 provides no fairness at all between users: during the storm the neighbour's *median* request did not

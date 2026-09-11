@@ -17,11 +17,16 @@ from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.map_pins.payload import MapPinPage, MapPinPayloadService
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+#: Keys deleted per command when dropping several profiles' caches at once.
+_DELETE_CHUNK = 500
 
 
 class _SyncPipeline(Protocol):
@@ -328,7 +333,56 @@ class MapPinCache:
 
     def clear(self) -> None:
         if self.client:
-            self.client.delete(self.meta_key, self.pins_key, self.order_key, self.lock_key, self.rebuild_queued_key)
+            self.client.delete(*self.all_keys())
+
+    def all_keys(self) -> list[str]:
+        """Every key this profile's cache occupies.
+
+        Returns:
+            The five key names, so a caller dropping several profiles at once
+            can batch them into one command.
+        """
+        return [self.meta_key, self.pins_key, self.order_key, self.lock_key, self.rebuild_queued_key]
+
+    @classmethod
+    def clear_for_profiles(cls, profile_ids: Iterable[int], *, client: _SyncRedis | None = None) -> int:
+        """Drop the cached pin sets of several profiles, with one connection.
+
+        The alternative - updating each affected pin's cached payload in place -
+        costs a Redis round trip, two queries and a fresh client per pin, which
+        is how one label edit came to do tens of thousands of round trips inside
+        the editing user's own request (P102). Dropping the set instead costs one
+        command, and the next reader rebuilds it from the database at around
+        37 ms per 1,000 pins (X17). That is the cache being an accelerator rather
+        than something the page cannot be served without.
+
+        Args:
+            profile_ids: Whose caches to drop. Duplicates and empties are fine.
+            client: Connection to use. Defaults to a new one, which is why this
+                is a classmethod: the caller usually has no `Profile` instance,
+                only ids.
+
+        Returns:
+            How many profiles were dropped, or 0 when there is no cache
+            configured to drop them from.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        ids = sorted({profile_id for profile_id in profile_ids if profile_id})
+        if not ids:
+            return 0
+        connection = client if client is not None else cls._make_client()
+        if connection is None:
+            return 0
+
+        keys = [key for profile_id in ids for key in cls(Profile(pk=profile_id), client=connection).all_keys()]
+        # Chunked rather than one DELETE of every key: Valkey executes a command
+        # on one thread, so a single delete of tens of thousands of keys is a
+        # pause every other client on the instance waits through.
+        for start in range(0, len(keys), _DELETE_CHUNK):
+            with contextlib.suppress(RedisError):
+                connection.delete(*keys[start : start + _DELETE_CHUNK])
+        return len(ids)
 
     def _touch(self) -> None:
         if not self.client:

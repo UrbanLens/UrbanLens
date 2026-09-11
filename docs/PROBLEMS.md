@@ -3620,8 +3620,9 @@ the *preview* step. `import_confirmed` is a separate endpoint that trusts whatev
 client posts back to it, not the server's own preview output, so nothing stops a client from
 replaying or hand-building a `lists` payload past that cap. A large confirmed import ties up one
 gunicorn worker (see P104/R28 on why that worker is gevent, not threads) for the duration of every
-`Pin.objects.create()` plus its `post_save` signal fan-out (`models/pin/signals.py`, including the
-O(pins carrying a label) work described in P102's sibling code path).
+`Pin.objects.create()` plus its `post_save` signal fan-out (`models/pin/signals.py`; the
+O(pins carrying a label) part of that was P102 and is fixed, but each created pin still pays its own
+receivers).
 
 **Measured 2026-09-10, and the number is worse than "ties up a worker".** Against the development
 stack, otherwise idle:
@@ -3758,25 +3759,6 @@ Not fixed. Not measured this session.
 Not fixed. Not re-measured this session against a real concurrent-write race - findings 1 and 3 are
 by code inspection of the sequence above; the 30s/6.79s figures are this session's own measurements
 (see R27).
-
-## P102 — One Label edit re-serializes every pin carrying it, synchronously, inside the edit's own request
-
-`id: P102` · `status: open` · `updated: 2026-09-10`
-
-`models/pin/signals.py:165` `refresh_map_pin_cache_for_label` (a `post_save` receiver on `Label`)
-calls `refresh_map_pin_cache_for_label_ids` (`signals.py:143-159`), which iterates every `Pin`
-carrying the label (`Pin.objects.filter(labels__in=ids).distinct()`) and calls
-`_refresh_cached_pin` (`signals.py:64-84`) per pin. `_refresh_cached_pin` schedules its work via
-`transaction.on_commit(_run)`, which runs `_run` synchronously, in-process, immediately after the
-request's transaction commits - not on Celery. So one label edit costs O(pins carrying that label)
-`MapPinCache.upsert_pin` calls (`cache.py:288`, itself a `Pin` re-fetch plus
-`MapPinPayloadService.all()` per pin), all inside the request/response cycle that saved the label,
-for every profile that has that pin's map cached. `refresh_map_pin_cache_for_label_customization`
-(`signals.py:181`), the per-profile icon/color override path, pays the identical cost shape.
-
-Not fixed. Not measured this session - no timing taken against a label with a large carrying-pin
-count; the O(n), in-request, non-Celery shape is confirmed by reading `transaction.on_commit` and
-the receiver chain above.
 
 ## P103 — `MEDIA_PIPELINE.md`'s "every parser is now guarded" was false; a label-icon resize decodes unsandboxed in-request
 
@@ -3933,37 +3915,6 @@ for D11's Valkey split, which had been justified on the fill case alone.
 
 Not fixed. See D11 for the Valkey split this sits inside; the chaos scenario is the reproduction.
 
-## P106 — Reordering labels changes which icon a pin draws, but never tells the client
-
-`id: P106` · `status: open` · `updated: 2026-09-10`
-
-`_winning_display_label` sorts a pin's labels by `-order`, so a label's `order` decides which label
-supplies the pin's icon and colour when the pin has none of its own
-(`services/map_pins/payload.py`). Every reorder path knows this and invalidates the *server* cache
-for it - and every one of them stops there:
-
-- `controllers/labels.py:918-923` (`LabelReorderView`)
-- `controllers/organize.py:238-243`
-- `external_api/views_labels_bulk.py:80-85` and `:174-182`
-
-All four do `Label.objects.bulk_update(..., ["order"])` then
-`refresh_map_pin_cache_for_label_ids(...)`, each with a comment explaining that `bulk_update` fires
-no `post_save` so the receiver would otherwise not run. Correct as far as it goes. But the *client*
-does not read that cache - it polls `map.pins.meta`, which is `Max(Pin.updated)` over the profile's
-root pins (`controllers/maps.py:766`), and `bulk_update` does not touch `auto_now` columns, so no
-pin's `updated` moves. The poll sees nothing, `_refreshAllPins` never runs, and the browser keeps
-drawing the old icon from its own cache until that expires (6 h) or the user hard-refreshes.
-
-Every *other* label write does bump it, which is what makes the omission easy to miss:
-`controllers/labels.py:843` (edit) and `services/labels/customization.py:99,118` both run
-`Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())` with a comment
-saying exactly why.
-
-Not measured against a browser this session - the mechanism is read from source. The fix is not a
-fourth copy of that `UPDATE`: D12 replaces `Max(updated)` with a derived fingerprint and routes
-every one of these sites through a single `services/map_pins/touch.py`, so the next write path that
-forgets is a missing call to one named function rather than a silently absent statement.
-
 ## P107 — The saved-filter count badges read every pin in the account to draw a number
 
 `id: P107` · `status: open` · `updated: 2026-09-10`
@@ -3997,91 +3948,6 @@ Not fixed, and not measured against a large account this session — the complex
 code. The fix is to count in the database (a `COUNT(*)` per filter, or one grouped query over the
 filter/pin join) rather than by intersecting Python sets, at which point the per-filter uuid cache
 this depends on may stop earning its keep too.
-
-## P108 — Opening the map compares every pin with every other pin, in Python, before the page renders
-
-`id: P108` · `status: open` · `updated: 2026-09-10`
-
-`Profile.compute_map_center` (`models/profile/model.py:873`) picks the densest cluster of an
-account's pins by asking, for every point, how many other points are within 1,000 km:
-
-```python
-best_idx = max(
-    range(len(pts)),
-    key=lambda i: sum(1 for other in pts if _haversine_km(pts[i], other) <= _CLUSTER_RADIUS_KM),
-)
-```
-
-That is one great-circle calculation per *pair* — O(n²), in pure Python, reached from `view_map`
-(`controllers/maps.py:250`) through `get_map_center_template_context`. It is on the critical path of
-the application's main page.
-
-Measured on chiron (plain `python3`, 1.04 µs per `haversine_km`):
-
-| pins | pairwise calls | projected |
-|---|---|---|
-| 1,000 | 1,001,000 | ~1 s |
-| 5,000 | 25,005,000 | ~26 s |
-| 10,000 | 100,010,000 | ~1.7 min |
-| 20,000 | 400,020,000 | ~7 min |
-
-**Observed, not projected.** A 20,000-pin load fixture on the development stack issued one
-`GET /dashboard/map/`. The container pinned a core at 102% and served nothing for nine minutes —
-`/health/ready` timed out at 120 s, the healthcheck went red, and daphne killed the application
-instance for that connection while the work continued. Every other request to that process waited
-behind one account's page load, which is the availability invariant failing on an ordinary action.
-`py-spy dump` named it exactly (`bin/perf/pyspy.sh`, added for this):
-
-```
-Thread 3435 (active+gil): "ThreadPoolExecutor-1575_0"
-    haversine_km (urbanlens/dashboard/services/geo/distance.py:63)
-    _haversine_km (urbanlens/dashboard/models/profile/model.py:111)
-    <genexpr> (urbanlens/dashboard/models/profile/model.py:875)
-    compute_map_center (urbanlens/dashboard/models/profile/model.py:873)
-    get_map_center_template_context (urbanlens/dashboard/models/profile/model.py:937)
-    view_map (urbanlens/dashboard/controllers/maps.py:250)
-```
-
-**What bounds it today, and what does not.** The result is written to `Profile.map_center_*`, so a
-profile pays this once rather than per page load — that is the only reason any large account has
-ever loaded its map. It is not a fix: the first load after the threshold is crossed is a request that
-does not return, and it is paid again whenever the stored centre is cleared. Nor does the process
-model help. Under gunicorn `gthread` this holds a worker thread and degrades its siblings through the
-GIL; under gevent it starves the arbiter heartbeat and the whole worker is SIGKILLed with every
-co-resident request on it (D11 §2.1).
-
-**Why nothing caught it.** Every existing instrument watches the *payload* path. R27's fix, the
-projection, `InstantiationScalingMixin` and `EndpointScalingMixin` all measure what `map.pins`
-builds; none of them measures what the map *page* computes before rendering. The cost is not queries
-(one `values_list`), not objects (none), not bytes (two floats) — it is arithmetic, and the only axis
-that sees it is how many times a pure function is called.
-
-Two fixes are available and they are not the same size. The cheap one moves the calculation off the
-request: compute it in a Celery task and let the page fall back to a bounding-box centre until it
-lands, which fixes availability and leaves the algorithm alone. The real one replaces the pairwise
-scan — a grid bucket at cluster resolution, or PostGIS doing the clustering in the database
-(`ST_ClusterDBSCAN` over `Location.point`, which already exists), either of which is linear-ish and
-runs where the data is.
-
-Reproduced by `dashboard/tests/hypothesis/test_map_center_scaling.py`, which counts pairwise calls
-rather than timing anything — a wall-clock assertion on a shared host is a flaky test that gets
-deleted, and the call count is exact, machine-independent, and is the defect itself. Its
-reproductions are `xfail(strict=True)` and turn red the day this is fixed.
-
-`services/integration_testing/perf_seed.py` stores the centre directly when it seeds, so a load run
-measures something other than this. That is not hiding it: the stored value is the same answer (the
-seeded grid is well inside the cluster radius, so the densest-cluster centroid is the arithmetic
-mean), and `precompute_map_center=False` puts the defect back.
-
-**The rest of the codebase was swept for the same shape and is clean.** An AST pass over
-`dashboard/` and `core/` for a loop, comprehension or `max`/`min`/`sorted(key=…)` whose inner
-iterable is the *same* collection as the outer one — first checked against this function, since a
-detector that cannot find the known instance is not finding anything — returns five hits. The other
-four are all bounded by human-scale collections and none takes pin-scale input:
-`controllers/memories.py:630` and `controllers/visits.py:383` (participants tagged on one visit),
-`services/trips/trip_activities.py:334` (trip members who said yes), and
-`models/custom_fields/model.py:352` (a seven-element module constant, evaluated once at import).
-Not worth a CI check at four false positives out of five, but worth not repeating.
 
 ## P109 — One import's task fan-out fills the only Celery queue for hours, and a safety task waits behind it
 

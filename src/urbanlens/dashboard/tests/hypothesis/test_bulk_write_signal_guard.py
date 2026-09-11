@@ -38,12 +38,24 @@ REVIEWED: dict[tuple[str, str, str], str] = {
         "dashboard/controllers/organize.py",
         "Label",
         "bulk_update",
-    ): "Reordering labels; calls refresh_map_pin_cache_for_label_ids() immediately after, because order decides which label supplies a pin's icon.",
+    ): "Reordering labels; calls touch_pins_for_labels() immediately after, because order decides which label supplies a pin's icon.",
     (
         "dashboard/external_api/views_labels_bulk.py",
         "Label",
         "bulk_update",
-    ): "The API's reorder and bulk-edit endpoints; both call refresh_map_pin_cache_for_label_ids() immediately after.",
+    ): "The API's reorder and bulk-edit endpoints; both call touch_pins_for_labels() immediately after.",
+    (
+        "dashboard/services/integration_testing/perf_seed.py",
+        "Pin",
+        "bulk_create",
+    ): (
+        "Seeding a performance fixture, tens of thousands of pins at a time. Skipping Pin's receivers "
+        "is the point rather than an oversight: they exist to keep a per-pin map cache and a wiki sync "
+        "coherent for pins a person made, and firing them per row here would mean one Redis round trip "
+        "and one wiki write per seeded pin - which is itself the load the fixture exists to measure "
+        "against. The seeded account is synthetic, is never a real user's, and has its cache built "
+        "explicitly afterwards by whatever the run is measuring."
+    ),
     (
         "dashboard/services/sharing/pin_sharing.py",
         "Image",
@@ -72,7 +84,7 @@ REVIEWED: dict[tuple[str, str, str], str] = {
         "dashboard/controllers/labels.py",
         "Label",
         "bulk_update",
-    ): "The Display Order tab's drag-and-drop reorder; calls refresh_map_pin_cache_for_label_ids() immediately after, and only for labels whose order actually moved - the refresh costs work per pin carrying the label.",
+    ): "The Display Order tab's drag-and-drop reorder; calls touch_pins_for_labels() immediately after, and only for labels whose order actually moved.",
     (
         "dashboard/services/trips/trip_activities.py",
         "TripActivity",

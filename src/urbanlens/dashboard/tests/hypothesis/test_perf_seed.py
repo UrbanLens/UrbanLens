@@ -271,14 +271,15 @@ class TheReportIsUsableByTheHarnessTests(TestCase):
         self.assertEqual(Pin.objects.filter(profile=self.profile, labels=second["label_id"]).count(), SEEDED * 2)
 
 
-class TheSeedHoldsP108ConstantTests(TestCase):
-    """The seed stores the map centre so a load run is not just a P108 reproduction.
+class TheSeedHoldsTheMapCentreConstantTests(TestCase):
+    """The seed stores the map centre, so a load run does not measure computing it.
 
-    `Profile.compute_map_center` is O(n^2) in pins and sits on the critical path
-    of the map page, so a seeded account that had not had its centre stored
-    would wedge the process on the run's first map request and every phase after
-    it would be measuring that. Held constant deliberately; P108 has its own
-    reproduction in `test_map_center_scaling.py`.
+    `Profile.compute_map_center` sits on the critical path of the map page. It
+    used to be O(n^2) in pins, so a seeded account without a stored centre wedged
+    the process on the run's first map request and every phase after it measured
+    that (P108, fixed). Still held constant: the harness exists to compare phases
+    against each other, and a per-account one-off on the first request of the run
+    is exactly the kind of variable that makes two phases incomparable.
     """
 
     def setUp(self) -> None:

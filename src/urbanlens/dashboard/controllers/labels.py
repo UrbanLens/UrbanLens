@@ -18,7 +18,6 @@ from django.contrib.auth.models import User as AuthUser
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
-from django.utils import timezone
 from django.utils.html import escape
 from django.views import View
 from PIL.Image import DecompressionBombError as PILDecompressionBombError
@@ -28,7 +27,6 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, DEFAULT_LABEL_COLOR, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.core.colors import clean_color
@@ -47,6 +45,7 @@ from urbanlens.dashboard.services.labels.merge import (
     merge_labels,
 )
 from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
+from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_labels
 from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
@@ -835,13 +834,6 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
             changed_fields.extend(["kind", "profile"])
         label.save(update_fields=changed_fields)
 
-        # A label's icon/color/name feed into every pin's cached map marker
-        # (Pin.effective_icon, Pin.effective_color, the "statuses" list in
-        # to_detail_json()) without touching the Pin row itself, so the
-        # client's cache-freshness check (keyed to Max(Pin.updated)) would
-        # otherwise never notice this change and keep serving stale markers.
-        Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())
-
         if kind_changed:
             label.parents.clear()
         else:
@@ -919,7 +911,7 @@ class LabelReorderView(_LabelKindMixin, LoginRequiredMixin, View):
             # order decides which label supplies a pin's map icon/colour
             # (_winning_display_label sorts by -order), and bulk_update fires no
             # post_save, so the usual label -> cache receiver never sees this write.
-            refresh_map_pin_cache_for_label_ids([label.pk for label in labels])
+            touch_pins_for_labels([label.pk for label in labels])
         return JsonResponse({"ok": True})
 
 
@@ -1094,20 +1086,11 @@ class LabelBulkEditView(_LabelKindMixin, LoginRequiredMixin, View):
         labels = list(Label.objects.filter(id__in=ids, profile=profile, kind=self.kind))
         if self.kind == KIND_STATUS:
             labels = [label for label in labels if not label.is_protected]
-        changed_labels = []
         for label in labels:
-            update_fields = _apply_bulk_fields(label, payload)
-            if update_fields:
+            # Each save fires the Label receiver, which touches the pins carrying
+            # it - see services.map_pins.touch. Nothing to do here beyond saving.
+            if update_fields := _apply_bulk_fields(label, payload):
                 label.save(update_fields=update_fields)
-                changed_labels.append(label)
-
-        if changed_labels:
-            # Bumping the label alone (its own post_save signal refreshes the
-            # server-side map pin cache) isn't enough - the client's own pin
-            # cache only refetches when Max(Pin.updated) advances, and this
-            # bulk path never touches a Pin row directly. Same pattern as the
-            # single-label edit/customize views below.
-            Pin.objects.filter(profile=profile, labels__in=changed_labels).update(updated=timezone.now())
 
         if payload["add_parent_ids"]:
             # Scoped via _parent_candidates() (not a raw Label.objects.visible_to()
@@ -1196,12 +1179,6 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
                 safe_parents = [p for p in valid_parents if p.id != label.id and not _would_create_cycle(label, p.id)]
                 if safe_parents:
                     label.parents.add(*safe_parents)
-
-        if labels:
-            # See LabelBulkEditView.post - the client's pin cache only refetches
-            # when Max(Pin.updated) advances, and this bulk path never touches a
-            # Pin row directly.
-            Pin.objects.filter(profile=profile, labels__in=labels).update(updated=timezone.now())
 
         if payload["add_child_ids"]:
             valid_children = list(_parent_candidates(profile, self.kind).filter(id__in=payload["add_child_ids"]))

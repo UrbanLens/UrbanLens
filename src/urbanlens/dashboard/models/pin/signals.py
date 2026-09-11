@@ -1,4 +1,3 @@
-from collections.abc import Iterable
 import logging
 
 from django.db import transaction
@@ -136,29 +135,17 @@ def record_pin_tombstone(sender: type[Pin], instance: Pin, **kwargs) -> None:
 
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_refresh_map_pin_cache")
 def refresh_map_pin_cache_for_labels(sender, instance: Pin, action: str, **kwargs) -> None:
-    if action in {"post_add", "post_remove", "post_clear"} and instance.profile_id:
-        _refresh_cached_pin(instance.pk, instance.profile_id)
+    """A pin gaining or losing a label changes its chips, and can change its icon.
 
-
-def refresh_map_pin_cache_for_label_ids(label_ids: Iterable[int]) -> None:
-    """Invalidate the cached map pins of every pin carrying any of these labels.
-
-    Call this after a bulk write to ``Label``. ``bulk_update`` issues raw SQL and
-    never fires ``post_save``, so :func:`refresh_map_pin_cache_for_label` does not
-    run and affected pins keep serving the icon and colour baked in at cache time.
-    That is not only an icon edit: ``Pin.icon_source_label`` picks the winning label
-    by ``-order``, so a reorder changes what a pin draws just as much.
-
-    Args:
-        label_ids: Primary keys of the labels that changed.
+    Writing ``Pin.labels.through`` does not write the pin row, so ``auto_now``
+    does not fire and the client's poll sees nothing - see
+    ``services.map_pins.touch``.
     """
-    ids = list(label_ids)
-    if not ids:
-        return
-    # distinct(): a pin carrying two of the changed labels would otherwise be
-    # refreshed once per label.
-    for pin_id, profile_id in Pin.objects.filter(labels__in=ids).distinct().values_list("pk", "profile_id"):
-        _refresh_cached_pin(pin_id, profile_id)
+    from urbanlens.dashboard.services.map_pins.touch import touch_pin
+
+    if action in {"post_add", "post_remove", "post_clear"} and instance.profile_id:
+        touch_pin(instance.pk)
+        _refresh_cached_pin(instance.pk, instance.profile_id)
 
 
 @receiver(post_save, sender=Label, dispatch_uid="label_refresh_map_pin_cache")
@@ -166,21 +153,28 @@ def refresh_map_pin_cache_for_label(sender: type[Label], instance: Label, create
     """A label's icon/color can appear on any pin carrying it (Pin.effective_icon).
 
     Unlike the m2m-add/remove case above, editing the label itself never
-    touches Pin.labels.through, so nothing else here would invalidate the
-    server-side Redis pin cache for pins that already carry this label - they'd
-    keep serving the old baked-in icon/color until something else happened to
-    touch that specific pin, or the cache TTL lapsed.
+    touches Pin.labels.through, so without this the pins already carrying it
+    keep serving the old baked-in icon/color - from the server cache until its
+    TTL lapses, and from the browser's own cache until the client's poll sees
+    Max(Pin.updated) move. ``touch_pins_for_labels`` does both.
     """
+    from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_labels
+
     if created:
         return  # not attached to any pin yet
-    refresh_map_pin_cache_for_label_ids([instance.pk])
+    touch_pins_for_labels([instance.pk])
 
 
 @receiver(post_save, sender=LabelCustomization, dispatch_uid="label_customization_refresh_map_pin_cache")
 def refresh_map_pin_cache_for_label_customization(sender: type[LabelCustomization], instance: LabelCustomization, **kwargs) -> None:
-    """Per-profile icon/color overrides need the same cache refresh as editing the label itself."""
-    for pin_id in Pin.objects.filter(profile_id=instance.profile_id, labels=instance.label_id).values_list("pk", flat=True):
-        _refresh_cached_pin(pin_id, instance.profile_id)
+    """Per-profile icon/color overrides need the same treatment as editing the label itself.
+
+    Saves only. Clearing an override deletes the row, which fires nothing here -
+    ``services.labels.customization`` calls the same function directly for that.
+    """
+    from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_label_customization
+
+    touch_pins_for_label_customization(instance.profile_id, instance.label_id)
 
 
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_propagate_visited")
@@ -240,13 +234,21 @@ def sync_redata_assignments_for_pin_labels(sender, instance, action: str, revers
 
 @receiver(post_save, sender=Review, dispatch_uid="review_refresh_map_pin_cache")
 def refresh_map_pin_cache_for_review(sender, instance: Review, **kwargs) -> None:
+    """A review carries the pin's rating, which the map payload shows."""
+    from urbanlens.dashboard.services.map_pins.touch import touch_pin
+
     if instance.pin_id:
+        touch_pin(instance.pin_id)
         _refresh_cached_pin(instance.pin_id, instance.pin.profile_id)
 
 
 @receiver(post_delete, sender=Review, dispatch_uid="review_delete_refresh_map_pin_cache")
 def refresh_map_pin_cache_for_deleted_review(sender, instance: Review, **kwargs) -> None:
+    """Removing a rating changes the payload as much as adding one."""
+    from urbanlens.dashboard.services.map_pins.touch import touch_pin
+
     if instance.pin_id:
+        touch_pin(instance.pin_id)
         _refresh_cached_pin(instance.pin_id, instance.pin.profile_id)
 
 

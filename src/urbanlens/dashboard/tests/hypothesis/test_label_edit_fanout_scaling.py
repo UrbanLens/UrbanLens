@@ -16,17 +16,17 @@ away from everyone else sharing it - which is the invariant this whole programme
 exists to defend: *no action a user takes should impact the availability of the
 site for other users*.
 
-**These tests fail today, deliberately.** They are the TDD reproduction for P102,
-written before the fix, and carry `xfail(strict=True)` so the suite stays honest
-in both directions: red now would just be noise, and a non-strict xfail would let
-the fix land without anyone noticing the marker had gone stale. Strict means the
-day the fan-out goes, these *fail for passing* - which is the prompt to delete the
-markers and let them stand as ordinary regression tests.
+**Written as the TDD reproduction for P102, and now the regression guard.** The
+fan-out is gone: `services/map_pins/touch.py` drops the carrying profiles' cached
+sets whole - one command each - instead of rewriting each pin's payload, and the
+next reader rebuilds from the database at around 37 ms per 1,000 pins (X17).
 
-D12 removes the mechanism rather than optimising it: the per-pin cache goes, and a
-label edit becomes the single `UPDATE` that `controllers/labels.py:843` already
-issues alongside it, with the client learning about it through a derived ETag
-rather than through rewritten payloads.
+One thing to know if these ever go red again. They were `xfail(strict=True)` while
+the defect stood, and during the fix they kept reporting `xfailed` while actually
+failing on an uncaught `RuntimeError` from the suite's localhost-only network
+guard - the new code opened a real Redis connection. An xfail reports "expected
+failure" for *any* failure, including one the fix itself introduced. Re-run with
+`--runxfail` before concluding a change did not work.
 
 Two details that make the reproduction faithful, and that a naive version gets
 wrong:
@@ -34,10 +34,12 @@ wrong:
 - The receivers do their work in `transaction.on_commit`, and a Django `TestCase`
   never commits, so without `captureOnCommitCallbacks(execute=True)` the fan-out
   simply does not run and the test passes against broken code.
-- `MapPinCache` early-returns when it has no client or the profile is not already
-  cached, and pytest sets no Valkey URL, so a test that does not inject a fake
-  client measures a cache that declines to do anything. That is exactly why this
-  cost has never shown up in the suite.
+- `MapPinCache` early-returns when the profile is not already cached, so a test
+  that does not warm a fake first measures a cache declining to do anything. That
+  is exactly why this cost never showed up in the suite. Note that the app
+  container *does* set a Valkey URL, so a client gets built and then refused by
+  the localhost-only network guard with a `RuntimeError` - which is why the
+  receivers catch that alongside the connection errors.
 """
 
 from __future__ import annotations
@@ -49,7 +51,6 @@ from django.contrib.auth.models import User
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.fake_redis import FakeRedis
 from urbanlens.core.tests.testcase import TestCase
@@ -142,7 +143,6 @@ class _LabelFanoutCase(TestCase):
 class LabelEditCostIsFlatTests(_LabelFanoutCase):
     """The cost of a label edit must not track how many pins carry the label."""
 
-    @pytest.mark.xfail(strict=True, reason="P102: the label-edit fan-out is not fixed yet; D12 removes it")
     def test_it_does_not_query_per_pin_carrying_the_label(self) -> None:
         self.seed_pins(SMALL)
         self.warm_the_cache()
@@ -161,7 +161,6 @@ class LabelEditCostIsFlatTests(_LabelFanoutCase):
             "user's own request. P102; see this module's docstring.",
         )
 
-    @pytest.mark.xfail(strict=True, reason="P102: the label-edit fan-out is not fixed yet; D12 removes it")
     def test_it_does_not_build_a_redis_client_per_pin(self) -> None:
         """The per-pin cost is not only SQL - each pin gets its own connection.
 
@@ -182,7 +181,6 @@ class LabelEditCostIsFlatTests(_LabelFanoutCase):
             "carrying pins; each one builds its own Redis client.",
         )
 
-    @pytest.mark.xfail(strict=True, reason="P102: the label-edit fan-out is not fixed yet; D12 removes it")
     def test_the_constant_cost_is_small(self) -> None:
         """Flatness is necessary but not sufficient - the constant matters too."""
         self.seed_pins(SMALL)

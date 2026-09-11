@@ -1495,12 +1495,17 @@
                 await _refreshAllPins();
                 return;
             }
-            if (data.last_updated) {
-                if (_lastKnownUpdated !== null && data.last_updated !== _lastKnownUpdated) {
-                    _lastKnownUpdated = data.last_updated;
+            // fingerprint, not last_updated: deleting any pin other than the most
+            // recently updated one leaves the timestamp exactly where it was, so a
+            // pin deleted in another tab used to stay on this map until the cache
+            // expired. Falls back for a response from an older server.
+            const stamp = data.fingerprint || data.last_updated;
+            if (stamp) {
+                if (_lastKnownUpdated !== null && stamp !== _lastKnownUpdated) {
+                    _lastKnownUpdated = stamp;
                     await _refreshAllPins();
                 } else {
-                    _lastKnownUpdated = data.last_updated;
+                    _lastKnownUpdated = stamp;
                 }
             }
         } catch { _setOffline(true); }

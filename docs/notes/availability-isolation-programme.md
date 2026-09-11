@@ -30,8 +30,8 @@ on purpose until it lands. Each phase's acceptance is a measurement, not a revie
 | 2 | Config-only shedding and telemetry, deployable under today's gevent | **partly done 2026-09-10** |
 | 3 | `gthread`, per-role Postgres users, `app-heavy` pool (D11) | not started |
 | 4 | Valkey split + degradable session path (P105) | not started |
-| 5 | Map data contract v11 (D12) | not started |
-| 6 | Celery queue classes; move P96/P98/P102/P2 work off the request | not started |
+| 5 | Map data contract v11 (D12) | **underway 2026-09-11** — write paths and the freshness signal done (P102, P106, P108 closed); payload v11 and the document endpoint not started |
+| 6 | Celery queue classes; move P96/P98/P2 work off the request | not started |
 | 7 | Observability completion, profiling harness, k8s parity | not started |
 
 ## Phase 0 — done 2026-09-10
@@ -61,7 +61,7 @@ Landed (`57b234277`, `c03618f6b`), all verified in the app container:
   named ones, twice per assertion. `test_seed_scaling_analyze.py` proves
   `pg_class.reltuples` actually moves.
 - **Ten reproductions**, all `xfail(strict=True)` so the suite is green now and
-  turns red the day each fix lands: P102's label fan-out (3), P96's uncapped
+  turns red the day each fix lands: P102's label fan-out (3, now fixed), P96's uncapped
   import (4), and the unbounded map document (3). Each group is paired with
   non-xfail guards asserting the seed and the response shape are real.
 - **X14**: the proposed `perf_counter` → `process_time` switch for
@@ -112,12 +112,13 @@ building anything similar:
   it.
 
 **It found P108 on its first honest run.** A 20,000-pin account's map page
-compares every pin with every other pin in Python — one `GET /dashboard/map/`
+compared every pin with every other pin in Python — one `GET /dashboard/map/`
 pinned a core and served nothing for nine minutes, with `/health/ready` timing
 out behind it. `bin/perf/pyspy.sh` (added for this) named the frame. That is the
 invariant failing on an ordinary page load, and no existing instrument watched
 that path: they all measure the payload, and this cost is neither queries nor
-objects nor bytes.
+objects nor bytes. **Fixed** — `services/geo/clustering.py` answers the same
+question with a spatial histogram, 99 ms for that account, identical answers.
 
 **Phase 1 is done.** The chaos scenarios ran too (X16), and everything was
 re-run on the real process model — `dev_env.py create --environment staging`,
@@ -136,8 +137,9 @@ Two of this programme's own predictions did not survive contact:
 - **D11 §2.1's collateral kill did not occur**, under the storm or under the most
   CPU-bound phase. Starving gevent's heartbeat for `-t 180` needs a request that
   *runs* for 180 seconds; ordinary heavy endpoints cost seconds. The only two
-  known candidates are P108 and P96, both fixable directly, which makes the case
-  for the gthread move materially weaker than D11 argued. Recorded there.
+  known candidates were P108 and P96, both fixable directly — and P108 now has
+  been — which makes the case for the gthread move materially weaker than D11
+  argued. Recorded there.
 - **P105 was understated.** A Valkey outage does not leave signed-in browsing
   working — every request 500s after ~32 seconds, readiness included (X16).
 

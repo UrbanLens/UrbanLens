@@ -108,16 +108,16 @@ def _grid(index: int) -> tuple[str, str]:
 def _precompute_map_center(profile: Profile, total: int) -> tuple[float, float] | None:
     """Store the account's map centre without computing it the expensive way.
 
-    `Profile.compute_map_center` finds the densest cluster by comparing every
-    point with every other one — O(n^2) great-circle calculations in Python, on
-    the critical path of `view_map` (P108). At 20,000 pins that is around seven
-    minutes during which the process serves nothing, so a load run against a
-    seeded account would measure that one defect in every phase and nothing
-    else.
+    `Profile.compute_map_center` finds the densest cluster of an account's pins,
+    on the critical path of `view_map`. It used to do that by comparing every
+    point with every other one, which at 20,000 pins was around seven minutes of
+    a process serving nothing — a load run against a seeded account measured that
+    one defect in every phase and nothing else (P108, since fixed: the same
+    answer now costs about 99 ms at that size).
 
-    Holding it constant is not hiding it: P108 has its own reproduction in
-    `dashboard/tests/hypothesis/test_map_center_scaling.py`, and a harness that
-    cannot get past it cannot measure anything beside it.
+    Still stored directly, because a variable held constant is worth holding
+    whether or not it is currently large, and because the harness should not
+    silently start measuring this again if the algorithm regresses.
 
     The stored value is the same answer, not an approximation. The seeded grid
     spans well under the 1,000 km cluster radius, so every point is in the one
@@ -157,8 +157,8 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True, pre
             demonstrate what skipping it costs.
         precompute_map_center: Store the map centre directly instead of leaving
             the first page load to derive it. On by default because deriving it
-            is P108, and a run that trips over P108 measures nothing else. Turn
-            it off to reproduce P108 against a seeded account.
+            was P108, which is fixed - turn this off to have the centre
+            computed the way a real first page load computes it.
 
     Raises:
         ValueError: ``pins`` is larger than the coordinate scheme can lay out.

@@ -11,6 +11,138 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-11: One Label edit re-serialized every pin carrying it, inside the edit's own request
+
+`id: P102` · `status: fixed` · `resolved: 2026-09-11`
+
+A `post_save` receiver on `Label` walked every `Pin` carrying it and refreshed that pin's cached
+payload one at a time. Each of those re-fetched the `Profile`, re-fetched the `Pin`, constructed a
+fresh `MapPinCache` - whose `__init__` builds a new Redis client - and rebuilt the payload. The work
+was scheduled through `transaction.on_commit`, which runs synchronously in-process right after the
+request's transaction commits, so it was inside the request either way. The per-profile icon/colour
+override path had the identical shape.
+
+A user who owns 20,000 pins and recolours a label they use everywhere spent tens of thousands of
+round trips inside their own request. On a gevent worker, where pure-Python work yields to nothing,
+that is the shape that takes a worker away from everyone sharing it.
+
+**Fixed by dropping the profile's cached set instead of rewriting it.** `services/map_pins/touch.py`
+issues one `UPDATE` bumping the carrying pins' `updated`, then one `MapPinCache.clear_for_profiles`
+per *profile* - not per pin - after commit. The next reader rebuilds from the database, measured at
+about 37 ms per 1,000 pins (X17), which is what makes this affordable: the cache is an accelerator,
+not something the page cannot be served without.
+
+Cost by shape, for a label carried by N pins in one profile:
+
+| | before | after |
+|---|---|---|
+| SQL statements | O(N) | 2 |
+| Redis clients built | O(N) | 1 |
+| Payload serializations | N | 0 |
+
+The guards are in `test_label_edit_fanout_scaling.py`, written before the fix, which assert the
+slope rather than a wall-clock time: a shared host makes timing assertions flaky, and the statement
+count is exact and machine-independent.
+
+**Two things this did not fix.** P101's races in `MapPinCache.rebuild` remain - a clear that lands
+while a rebuild is in flight can still be overwritten by that rebuild's rename, bounded only by the
+2-hour TTL; D12's immutable version-keyed document is the shape where that cannot happen. And a bulk
+edit of M labels still drops the cache M times, because each `label.save()` fires the receiver
+separately. That is bounded by how many labels a person edits at once rather than by how many pins
+they own, which was the point.
+
+## RESOLVED 2026-09-11: Seven writes changed what a pin draws and none of them told the client
+
+`id: P106` · `status: fixed` · `resolved: 2026-09-11`
+
+The browser does not read the server's pin cache. It polls `map.pins.meta` and refetches only when
+that moves. So every write that changes a pin's appearance has two obligations - drop the server's
+cached copy, and move `Pin.updated` - and a write that does only the first leaves the map wrong for
+up to six hours, with nothing in any log to say so.
+
+Opened as one instance: label `order` decides which label supplies a pin's icon
+(`_winning_display_label` sorts by `-order`), four paths reorder labels in bulk, and all four
+dropped the cache without moving `Pin.updated`, because `bulk_update` does not touch `auto_now`
+columns.
+
+**Four more were found by asking each trigger rather than by reading the code** - change the thing,
+then ask `map.pins.meta` whether it noticed:
+
+| trigger | dropped the cache | told the client |
+|---|---|---|
+| Reorder labels (dashboard, organize page, API reorder, API bulk edit) | yes | **no** |
+| Add a label to a pin | yes | **no** |
+| Remove a label from a pin | yes | **no** |
+| Rate a pin | yes | **no** |
+| Delete a rating | yes | **no** |
+| Clear a per-profile label customization | **no** | **no** |
+
+The last row was a second defect in the same place: clearing an override deletes the
+`LabelCustomization` row, which fires no `post_save`, so the receiver that normally invalidates the
+cache never ran either.
+
+**And one the maximum could not see at all.** `map.pins.meta` reported `Max(Pin.updated)`, which is
+unchanged by deleting any pin except the most recently updated one - so a pin deleted in another tab
+stayed on the map. It now reports a fingerprint pairing that maximum with the row count
+(`services/map_pins/fingerprint.py`), which a delete always moves: it either removes the maximum or
+lowers the count. `last_updated` is still reported, and still a timestamp, but it is no longer what
+the page compares.
+
+Fixed by `services/map_pins/touch.py`, through which all seven now run. Both obligations follow from
+one call, so the next write path that forgets is missing a function call rather than missing a
+statement nobody knew about. Three hand-written copies of the `UPDATE` went with it.
+
+Regression tests in `dashboard/tests/hypothesis/test_map_touch.py` and
+`test_map_pins_meta_fingerprint.py`, both written before the fix and both exercising the real entry
+points - because "every one of them calls the shared helper" was already true while the bug was
+live.
+
+## RESOLVED 2026-09-11: Opening the map compared every pin with every other pin, in Python
+
+`id: P108` · `status: fixed` · `resolved: 2026-09-11`
+
+`Profile.compute_map_center` picked the densest cluster of an account's pins by asking, for every
+point, how many other points were within 1,000 km — one great-circle calculation per *pair*, in pure
+Python, reached from `view_map` through `get_map_center_template_context`. It was on the critical
+path of the application's main page.
+
+**Observed, not projected.** A 20,000-pin fixture issued one `GET /dashboard/map/`. The container
+pinned a core at 102% and served nothing for nine minutes; `/health/ready` timed out at 120 s, the
+healthcheck went red, and daphne killed the application instance for that connection while the work
+continued. Every other request to that process waited behind one account's page load. `py-spy dump`
+named it exactly, which is what `bin/perf/pyspy.sh` was added for.
+
+Fixed by `services/geo/clustering.py`: a spatial histogram over cells cut from the unit sphere picks
+the densest cell neighbourhood, then two exact refinement passes find the cluster and its centroid.
+The cost is one pass over the points plus a bounded number of dictionary lookups — bounded by the
+radius and the size of the planet, not by the account.
+
+| pins | before | after |
+|---|---|---|
+| 100 | 7.7 ms | 0.6 ms |
+| 1,000 | 846 ms | 4.1 ms |
+| 5,000 | 21.2 s | 20.9 ms |
+| 20,000 | ~7 min (projected) | 99 ms |
+
+The answers are identical — 0.000 km apart at every size measured, and across clustered, polar,
+antimeridian-straddling and outlier-heavy point sets. They differ only where the question has no
+single answer: two concentrations of equal size, or points spread evenly enough that every one has
+the same number of neighbours. The pairwise scan resolved those by taking whichever point the
+database listed first, so the rewrite also made them order-independent, which
+`test_geo_clustering.py` pins as its own property.
+
+**Why nothing caught it.** Every existing instrument watched the *payload* path — R27's projection,
+`InstantiationScalingMixin`, `EndpointScalingMixin` all measure what `map.pins` builds. None measured
+what the map *page* computes before rendering. The cost was not queries (one `values_list`), not
+objects (none), not bytes (two floats). It was arithmetic, and the only axis that sees it is how many
+times a pure function is called — which is what `test_map_center_scaling.py` now counts.
+
+The rest of the codebase was swept for the same shape with an AST pass over `dashboard/` and `core/`
+looking for a loop, comprehension or `max`/`min`/`sorted(key=…)` whose inner iterable is the same
+collection as the outer one, first checked against this function so that a detector unable to find
+the known instance would not pass as clean. Four other hits, all bounded by human-scale collections,
+none taking pin-scale input.
+
 ## RESOLVED 2026-09-10: Bulk photo delete carried the whole batch into every row's queries
 
 `id: P99` · `status: fixed` · `resolved: 2026-09-10`

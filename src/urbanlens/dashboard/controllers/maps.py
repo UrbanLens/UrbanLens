@@ -749,26 +749,32 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"pins": pins})
 
     def map_pins_meta(self, request, *args, **kwargs):
-        """Return the latest pin update timestamp and app UUID for client-side cache invalidation.
+        """Report whether the profile's pins have changed, for client-side cache invalidation.
 
-        The client polls this endpoint to detect when the pin collection changed,
-        then calls the full pins endpoint only when necessary.  ``app_uuid`` lets
-        the client detect a DB wipe or fresh deployment (new UUID → stale cache).
+        The client polls this endpoint and refetches when the answer moves.
+        ``app_uuid`` lets it detect a DB wipe or fresh deployment (new UUID →
+        stale cache).
+
+        ``fingerprint`` is the value to compare; ``last_updated`` is kept
+        because it is the timestamp it claims to be and callers may want it, but
+        it cannot answer the question on its own - deleting any pin other than
+        the most recently updated one leaves it unchanged, so a pin deleted in
+        another tab stayed on the map (P106's sibling). See
+        ``services.map_pins.fingerprint``.
 
         Returns:
-            JsonResponse: ``{"last_updated": "<ISO timestamp>" | null, "app_uuid": "<uuid>"}``
+            JsonResponse: ``{"fingerprint": "<opaque>", "last_updated": "<ISO timestamp>" | null, "app_uuid": "<uuid>"}``
         """
-        from django.db.models import Max
-
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
+        from urbanlens.dashboard.services.map_pins.fingerprint import pin_collection_state
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = Pin.objects.filter(profile=profile).root_pins().aggregate(last_updated=Max("updated"))
-        last_updated = result["last_updated"]
+        state = pin_collection_state(profile)
         site = SiteSettings.get_current()
         return JsonResponse(
             {
-                "last_updated": last_updated.isoformat() if last_updated else None,
+                "fingerprint": state.fingerprint,
+                "last_updated": state.last_updated.isoformat() if state.last_updated else None,
                 "app_uuid": str(site.uuid),
             },
         )

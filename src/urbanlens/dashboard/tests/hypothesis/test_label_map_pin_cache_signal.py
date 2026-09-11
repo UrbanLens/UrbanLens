@@ -1,16 +1,21 @@
-"""Tests for the server-side Redis map pin cache invalidation on label edits.
+"""Editing a label invalidates the cached map pins that draw from it - and only those.
 
-Regression coverage for a bug where editing a label's icon/color left stale
-marker icons on the main map even after the client noticed something changed
-(see test_label_pin_cache_invalidation.py for that half of the fix - bumping
-Pin.updated). LabelEditView/LabelCustomizeView/bulk views all mutate the
-Label row via .save()/queryset without ever touching the Pin row's own
-fields, so nothing previously told MapPinCache (services/map_pins/cache.py,
-Redis-backed, only live when a Valkey/Redis URL is configured) to rebuild
-the cached JSON for pins carrying that label - they kept serving the old
-baked-in icon/color until something else happened to touch that specific
-pin, or the 2-hour TTL lapsed. Label/LabelCustomization now have their own
-post_save receivers in models/pin/signals.py that refresh every affected pin.
+Regression coverage for a bug where editing a label's icon/colour left stale
+marker icons on the main map (see test_map_touch.py for the other half - telling
+the client). LabelEditView/LabelCustomizeView/bulk views all mutate the Label row
+without touching any Pin row, so nothing told MapPinCache to rebuild the cached
+JSON for pins carrying that label; they kept serving the old baked-in icon until
+something else happened to touch that pin, or the 2-hour TTL lapsed.
+
+**The invalidation used to be per pin, and that was its own defect.** Rewriting
+every carrying pin's payload cost a Redis round trip, two queries and a fresh
+client each, inside the editing user's request - tens of thousands of them for an
+account that uses one label everywhere (P102). The profile's cached set is
+dropped whole instead, and the next reader rebuilds it from the database.
+
+So what these assert is scope: which profiles' caches go, and whose do not. A
+label edit reaching a stranger's cache would be a correctness bug; reaching it
+per pin was an availability one.
 """
 
 from __future__ import annotations
@@ -42,20 +47,32 @@ def _make_pin_with_label(profile, label) -> Pin:
     return pin
 
 
-class LabelSaveRefreshesMapPinCacheTests(TestCase):
+def _dropped_profile_ids(mock_cache_cls: mock.MagicMock) -> set[int]:
+    """Whose caches a patched `MapPinCache` was asked to drop.
+
+    Args:
+        mock_cache_cls: The patched class.
+
+    Returns:
+        Every profile id passed to `clear_for_profiles`, flattened.
+    """
+    return {profile_id for call in mock_cache_cls.clear_for_profiles.call_args_list for profile_id in call.args[0]}
+
+
+class LabelSaveDropsCachedMapPinsTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user: User = baker.make(User)
         self.profile = self.user.profile
 
-    def test_editing_label_icon_refreshes_every_pin_carrying_it(self) -> None:
+    def test_editing_a_label_icon_drops_the_cache_of_profiles_carrying_it(self) -> None:
         label = baker.make(Label, profile=self.profile, kind="tag", name="Urbex", icon="place")
-        pin = _make_pin_with_label(self.profile, label)
-        other_pin = _make_pin_with_label(self.profile, label)
+        _make_pin_with_label(self.profile, label)
+        stranger = baker.make(User).profile
         offset = next(_COORDS)
-        unrelated_pin = baker.make(
+        baker.make(
             Pin,
-            profile=self.profile,
+            profile=stranger,
             location=baker.make(
                 "dashboard.Location", latitude=f"{40 + offset * 0.01:.6f}", longitude=f"{-74 + offset * 0.01:.6f}"
             ),
@@ -68,12 +85,28 @@ class LabelSaveRefreshesMapPinCacheTests(TestCase):
             label.icon = "explore"
             label.save(update_fields=["icon"])
 
-        refreshed_pin_ids = {call.args[0].pk for call in mock_cache_cls.return_value.upsert_pin.call_args_list}
-        self.assertEqual(refreshed_pin_ids, {pin.pk, other_pin.pk})
-        self.assertNotIn(unrelated_pin.pk, refreshed_pin_ids)
+        dropped = _dropped_profile_ids(mock_cache_cls)
+        self.assertEqual(dropped, {self.profile.pk})
+        self.assertNotIn(stranger.pk, dropped)
+
+    def test_it_does_not_rewrite_pins_one_at_a_time(self) -> None:
+        """The shape P102 was about: the cost must not track the carrying pins."""
+        label = baker.make(Label, profile=self.profile, kind="tag", name="Everywhere", icon="place")
+        for _ in range(5):
+            _make_pin_with_label(self.profile, label)
+
+        with (
+            mock.patch("urbanlens.dashboard.services.map_pins.MapPinCache") as mock_cache_cls,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            label.icon = "explore"
+            label.save(update_fields=["icon"])
+
+        mock_cache_cls.return_value.upsert_pin.assert_not_called()
+        self.assertEqual(mock_cache_cls.clear_for_profiles.call_count, 1)
 
     def test_creating_a_label_does_not_touch_the_cache(self) -> None:
-        """A brand-new label isn't attached to any pin yet - nothing to refresh."""
+        """A brand-new label isn't attached to any pin yet - nothing to drop."""
         with (
             mock.patch("urbanlens.dashboard.services.map_pins.MapPinCache") as mock_cache_cls,
             self.captureOnCommitCallbacks(execute=True),
@@ -81,9 +114,10 @@ class LabelSaveRefreshesMapPinCacheTests(TestCase):
             baker.make(Label, profile=self.profile, kind="tag", name="New Label")
 
         mock_cache_cls.return_value.upsert_pin.assert_not_called()
+        mock_cache_cls.clear_for_profiles.assert_not_called()
 
 
-class LabelCustomizationSaveRefreshesMapPinCacheTests(TestCase):
+class LabelCustomizationSaveDropsCachedMapPinsTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user: User = baker.make(User)
@@ -91,10 +125,11 @@ class LabelCustomizationSaveRefreshesMapPinCacheTests(TestCase):
         self.other_user: User = baker.make(User)
         self.other_profile = self.other_user.profile
 
-    def test_customizing_a_global_label_refreshes_only_own_pins(self) -> None:
+    def test_customizing_a_global_label_drops_only_the_customizers_cache(self) -> None:
+        """Everyone can carry a global label; only one profile's rendering changed."""
         global_label = ensure_label(profile=None, kind="tag", name="Visited", icon="check")
-        own_pin = _make_pin_with_label(self.profile, global_label)
-        other_profiles_pin = _make_pin_with_label(self.other_profile, global_label)
+        _make_pin_with_label(self.profile, global_label)
+        _make_pin_with_label(self.other_profile, global_label)
 
         with (
             mock.patch("urbanlens.dashboard.services.map_pins.MapPinCache") as mock_cache_cls,
@@ -102,6 +137,6 @@ class LabelCustomizationSaveRefreshesMapPinCacheTests(TestCase):
         ):
             LabelCustomization.objects.create(profile=self.profile, label=global_label, icon="star")
 
-        refreshed_pin_ids = {call.args[0].pk for call in mock_cache_cls.return_value.upsert_pin.call_args_list}
-        self.assertEqual(refreshed_pin_ids, {own_pin.pk})
-        self.assertNotIn(other_profiles_pin.pk, refreshed_pin_ids)
+        dropped = _dropped_profile_ids(mock_cache_cls)
+        self.assertEqual(dropped, {self.profile.pk})
+        self.assertNotIn(self.other_profile.pk, dropped)

@@ -15,7 +15,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_MEDIA, KIND_USER
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
+from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_labels
 
 # Kinds that never affect map icon priority, and so are excluded from the
 # Display Order tab (tag/category/status only).
@@ -238,8 +238,8 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
             # that was never what they dragged.
             with transaction.atomic():
                 Label.objects.bulk_update(reordered, ["order"])
-            # bulk_update fires no post_save, so the cache-invalidating receiver
-            # never runs - and order decides which label supplies a pin's icon.
-            refresh_map_pin_cache_for_label_ids([label.pk for label in reordered])
+            # bulk_update fires no post_save, so the receiver never runs - and
+            # order decides which label supplies a pin's icon.
+            touch_pins_for_labels([label.pk for label in reordered])
 
         return JsonResponse({"ok": True, "reordered": len(reordered), "skipped_global_ids": skipped_global_ids})

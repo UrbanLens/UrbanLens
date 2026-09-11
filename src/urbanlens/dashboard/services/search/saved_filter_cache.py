@@ -27,7 +27,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.core.cache import cache
-from django.db.models import Count, Max
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -53,12 +52,9 @@ def pins_fingerprint(profile: Profile) -> str:
     each call re-running it: with N saved filters that was N redundant,
     identical queries on every toolbar toggle.
     """
-    from urbanlens.dashboard.models.pin import Pin
+    from urbanlens.dashboard.services.map_pins.fingerprint import pin_collection_state
 
-    result = Pin.objects.filter(profile=profile).root_pins().aggregate(last_updated=Max("updated"), total=Count("pk"))
-    last_updated = result["last_updated"]
-    stamp = last_updated.isoformat() if last_updated else "none"
-    return f"{stamp}:{result['total']}"
+    return pin_collection_state(profile).fingerprint
 
 
 def get_or_compute_matching_uuids(profile: Profile, saved_filter: SavedFilter, *, fingerprint: str | None = None) -> list[str]:

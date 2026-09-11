@@ -8,47 +8,60 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: D12` · `status: accepted` · `updated: 2026-09-10`
+`id: D12` · `status: accepted` · `updated: 2026-09-11`
 
 Follows R27 (`docs/MAP_PERFORMANCE.md`), which measured the map payload's cost as 88% Python object
 construction and replaced the object graph with a column projection. That fix made the payload
-cheap. This decides the shape of the data around it, and it closes P101, P102 and P106 by removing
-the mechanisms they are defects in rather than by patching each one.
+cheap. This decides the shape of the data around it. P102 and P106 are closed - by removing the
+mechanisms they were defects in rather than by patching each one - and P101 closes when decision 5
+replaces the mutable structure its races live in.
 
 Jess's framing constrains this more than the performance numbers do: *"we anticipate having a large
 number of users, and there may be reasons we can't keep all user's data fully cached in redis
 forever ... Prewarming the cache should only occur to make an already performant site snappier, not
 to address this problem."*
 
-## Decision 1: the per-pin Valkey cache is deleted, not repaired
+## Decision 1: the per-pin Valkey cache changes shape; it is not removed
 
 `MapPinCache` stores one JSON payload per pin in a hash plus a zset for ordering, mutated by seven
 signal receivers. P101 lists three races in `rebuild` alone (concurrent writes lost, a two-key
 `RENAME` that is not atomic, a lock released without comparing the token it holds). Each is fixable.
-The reason not to fix them is that the measured database path is now ~33 ms per 1000 pins, so the
-cache is no longer buying correctness-critical speed — it is buying a modest constant at the price of
-a mutable distributed data structure that four write paths must keep coherent.
 
-It also costs more than it looks: ~1.7 KB per pin plus a zset entry means a 10,000-pin profile
-occupies ~17-20 MB, so roughly 25 such profiles filled the old 512 MB instance shared with the
-broker and sessions.
-NOTE From Jess: This calculation overlooks that we could potentially store less data in the cache
-than 20 MB per profile.
+**An earlier version of this decision argued partly from storage, and was wrong to.** It claimed
+~1.7 KB per pin and 17–20 MB for a 10,000-pin profile. Measured against Valkey's own `MEMORY USAGE`
+(X17): **662 bytes per pin, 6.6 MB for that profile** — an overstatement of 2.6×, and Jess said so
+before the measurement was taken. Memory pressure is not the argument.
 
-Replaced by `services/map_pins/touch.py` — one `UPDATE ... SET updated = now()` per event, wired
-from a table of payload-field → write-path. Two of the paths already do exactly this by hand
-(`controllers/labels.py:843`, `services/labels/customization.py:99,118`); the reorder paths forgot
-(P106). Routing all of them through one named function makes the next omission a missing call rather
-than a silently absent statement.
+The argument that survives measurement is shape. The same account's data is **18× smaller** as one
+gzipped document (0.36 MB) than as the per-pin hash (6.6 MB), and is read with a single `GET`
+against a server that executes commands on one thread rather than `HMGET` across a multi-megabyte
+hash. Building it is also cheaper: 851 ms against 1,197 ms for the cache rebuild. Meanwhile the
+uncached database path measures 36.8 ms of CPU per 1,000 pins, which is what keeps the cache an
+accelerator rather than a dependency — and is why a cache with three known races is not worth
+repairing in place when a shape with no room for them costs less.
+
+So the mutable per-pin structure goes and the immutable per-document one (Decision 5) takes its
+place in the same phase. Valkey keeps accelerating the map; it stops holding a data structure four
+write paths have to keep coherent.
+
+The write-path half is replaced by `services/map_pins/touch.py` — one `UPDATE ... SET updated = now()`
+per event, alongside the cache invalidation that already happened. Three paths did that `UPDATE` by
+hand with a comment explaining why; the four reorder paths did not, and left the client drawing a
+stale icon for six hours (P106). Both consequences now follow from one call, so the next write path
+that forgets is missing a function call rather than missing a statement nobody knew about.
 
 ## Decision 2: labels ship once per document; pins carry `label_ids`
 
-Today every pin payload embeds its labels' name, colour and icon. That denormalisation is precisely
-why editing one label has to rewrite every pin carrying it (P102 — and in the current
-implementation each of those rewrites constructs a *new Redis client*, because `MapPinCache.__init__`
-calls `from_url` per instance). Under a per-profile label dictionary plus `label_ids`, a label edit
-is one `UPDATE` and the dictionary is re-sent whole on the next fetch: the fan-out stops being O(pins)
-and becomes O(1) structurally, not by optimisation.
+Today every pin payload embeds its labels' name, colour and icon. That denormalisation is why
+editing one label used to rewrite every pin carrying it (P102). That fan-out is already gone - the
+profile's cached set is dropped whole instead of rewritten pin by pin - but the *reason* it existed
+is still here: a label's colour is copied into every payload, so the payloads really are stale after
+an edit and something has to deal with them.
+
+Under a per-profile label dictionary plus `label_ids` they are not stale at all. A label edit
+changes one entry in one dictionary, the pins are untouched, and there is nothing to invalidate -
+which is O(1) structurally rather than by optimisation, and is what lets the cached document survive
+a label edit instead of being thrown away by it.
 
 Icon and colour resolution stays on the server, in `payload.py`, unchanged — `resolve_icon` and
 `resolve_color` remain the only implementation of those rules. The client derives only chips, status
@@ -96,9 +109,11 @@ content is a pure function of the key, concurrent builders write identical bytes
 no rename, no generation flag, nothing for a race to corrupt. P101's class of defect cannot recur in
 this shape.
 
-Jess allocated 10 GB for Valkey on 2026-09-10, which moves this from "only if measured necessary" to
-"build it in the same phase" — at 8 GB of cache, ~4,000 profiles' 10k-pin documents (~2 MB gzipped)
-fit, against ~25 profiles under the old representation and budget. What the memory does **not**
+Jess allocated 10 GB for Valkey on 2026-09-10, and asked for the cache to be made more useful rather
+than removed, which settles this as in-scope for the same phase rather than deferred behind a
+measurement. Measured sizes (X17): a 10,000-pin profile's document is 0.36 MB gzipped against 6.6 MB
+for the per-pin representation, so an 8 GB cache holds a great many more accounts either way — the
+point of the change is the access pattern, not the headroom. What the memory does **not**
 change is the ordering: the uncached path is measured green first, and the cache is never what makes
 the endpoint viable. Valkey is single-threaded for command execution, so a 2 MB `GET` is also a
 better neighbour than `HMGET` across a 17 MB hash — the document shape is more clearly right at 8 GB
