@@ -37,6 +37,44 @@ class EmptyPolygonGeometryError(InvalidPolygonGeoJSONError):
     """The payload parsed to a Polygon/MultiPolygon with no coordinates."""
 
 
+class TooComplexGeometryError(InvalidPolygonGeoJSONError):
+    """The payload parsed, but is larger than one drawn region may be.
+
+    A subclass rather than a new hierarchy, because every caller already turns
+    :class:`InvalidPolygonGeoJSONError` into a 400 and a new failure mode here
+    should not arrive as a 500 instead.
+    """
+
+
+#: Most components one drawn region may have. :func:`dissolve_polygons` compares
+#: every remaining pair and restarts after each merge, so its cost is quadratic
+#: per pass with up to one pass per merge - and the count arrives in a POST body.
+#: Far above what anyone draws by hand; far below what makes the request
+#: expensive.
+MAX_REGION_POLYGONS = 200
+
+#: Most vertices one drawn region may carry in total. A component cap alone would
+#: move the cost rather than remove it: a single polygon with a hundred thousand
+#: points is one cheap `len()` and one expensive `intersects()`.
+MAX_REGION_VERTICES = 50_000
+
+
+def _refuse_if_too_complex(geom: MultiPolygon) -> None:
+    """Refuse a region larger than the dissolve can be asked to handle.
+
+    Args:
+        geom: The parsed multipolygon.
+
+    Raises:
+        TooComplexGeometryError: Too many components, or too many vertices.
+    """
+    if len(geom) > MAX_REGION_POLYGONS:
+        raise TooComplexGeometryError(f"Region has {len(geom)} components, above the {MAX_REGION_POLYGONS} one region may have")
+    vertices = sum(polygon.num_points for polygon in geom)
+    if vertices > MAX_REGION_VERTICES:
+        raise TooComplexGeometryError(f"Region has {vertices} vertices, above the {MAX_REGION_VERTICES} one region may have")
+
+
 def geometry_to_geojson(geom) -> dict | None:
     """Serialize a GEOS geometry to a GeoJSON dict, or None."""
     return json.loads(geom.geojson) if geom else None
@@ -55,6 +93,8 @@ def parse_multipolygon_geojson(polygon_geojson: dict) -> MultiPolygon:
         GeoJSONParseError: The payload isn't valid GeoJSON/geometry at all.
         NotPolygonalGeometryError: It parsed, but isn't a Polygon or MultiPolygon.
         EmptyPolygonGeometryError: It parsed to a Polygon/MultiPolygon with no coordinates.
+        TooComplexGeometryError: It parsed, but carries more components or
+            vertices than one region may.
     """
     try:
         geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
@@ -78,6 +118,10 @@ def parse_multipolygon_geojson(polygon_geojson: dict) -> MultiPolygon:
         # lookup matches zero rows rather than imposing no restriction - and a
         # boundary row holding one draws nothing while reading as "set".
         raise EmptyPolygonGeometryError("Parsed geometry has no coordinates")
+    # Here rather than in dissolve_polygons: this is the door every client-
+    # supplied geometry comes through, and a ceiling checked after something has
+    # already stored the shape is a ceiling on the wrong side of the write.
+    _refuse_if_too_complex(geom)
     return geom
 
 

@@ -244,6 +244,13 @@ class SearchForm(forms.Form):
             The parsed MultiPolygon, or None when absent or malformed. Never
             raises - a corrupted region payload should drop that one
             criterion, not fail the whole search.
+
+            "Malformed" now includes "larger than one region may be" (see
+            ``geo.MAX_REGION_POLYGONS``), which drops the criterion rather than
+            refusing, and therefore widens the result rather than narrowing it.
+            That is the existing contract for an unusable region and not a new
+            one; it is written down here because a filter that silently returns
+            *more* than was asked for is worth knowing about.
         """
         raw = (self.cleaned_data.get(key) or "").strip()
         if not raw:
