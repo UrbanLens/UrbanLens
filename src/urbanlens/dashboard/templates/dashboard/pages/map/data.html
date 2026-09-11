@@ -6,9 +6,13 @@
 {# without a second code path. #}
 <div id="map-body">
 {{ map_pins|json_script:"map-filter-pins" }}
+{{ map_labels|json_script:"map-filter-labels" }}
 <script>
 {
     _filterMode = true;
+    // Before the markers: a filter can be the first thing to show a label the
+    // page has not loaded a pin for yet, and a chip is drawn by resolving ids.
+    _mergeLabels(JSON.parse(document.getElementById('map-filter-labels').textContent));
     clusterGroup.clearLayers();
     _markerMap.clear();
     // Push filter state into URL so Back button and refresh preserve filters

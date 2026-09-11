@@ -205,13 +205,17 @@ def serialize_sync_pin(service: MapPinPayloadService, pin: Pin) -> dict[str, Any
     """
     payload = service.serialize(pin)
     payload["pin_type"] = pin.pin_type
-    # Same chips the map payload emits, plus each one's `kind`. The web client
-    # doesn't need it (it renders every chip identically), but a sync client
-    # holds the pin offline and must be able to tell a status from a category
-    # without re-deriving it - and it cannot be added to the map payload itself
-    # without forcing a frontend cache-version bump. Labels are already
-    # prefetched by prepare_queryset, so this adds no query.
-    payload["tags"] = [{"id": label.id, "name": label.name, "color": label.effective_color, "icon": label.effective_icon, "kind": label.kind} for label in service.display_labels(pin)]
+    # The map payload names its labels by id and sends the dictionary once per
+    # response; a sync client holds one pin at a time and offline, so it gets the
+    # labels themselves - each already carrying its id, which is why the ids are
+    # dropped rather than sent alongside. Labels are already prefetched by
+    # prepare_queryset, so this adds no query.
+    payload.pop("label_ids", None)
+    chips = service.display_labels(pin)
+    payload["tags"] = [{"id": label.id, "name": label.name, "color": label.effective_color, "icon": label.effective_icon, "kind": label.kind} for label in chips]
+    statuses = [label.name for label in chips if label.kind == "status"]
+    payload["status"] = statuses[0] if statuses else ""
+    payload["categories"] = [label.name for label in chips if label.kind == "category"]
     parent = pin.parent_pin
     payload["parent_uuid"] = str(parent.uuid) if parent is not None else None
     payload["created"] = pin.created.isoformat()

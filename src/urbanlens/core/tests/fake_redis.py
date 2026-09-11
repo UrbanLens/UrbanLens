@@ -1,10 +1,9 @@
-"""An in-memory stand-in for the Redis commands the map-pin cache issues.
+"""An in-memory stand-in for the Redis commands the map caches issue.
 
-`MapPinCache` reads its connection URL straight from the environment, so under
-test it opens a real socket that the network guard refuses - which is why its
-read path (`get_page`, `rebuild`, `upsert_pin`, `delete_pin`) had no coverage at
-all while every map load in production went through it. The constructor already
-accepts an injected client, so this fills that hole rather than the cache
+Valkey clients here read their connection URL straight from the environment, so
+under test they open a real socket the network guard refuses - which is why the
+cache read paths had no coverage at all while every map load went through them.
+Each cache accepts an injected client, so this fills that hole rather than
 growing a test-only branch.
 
 Deliberately not a Redis emulator. It implements the commands
@@ -58,7 +57,7 @@ class FakePipeline:
 
 
 class FakeRedis:
-    """The subset of redis-py that `MapPinCache` uses, backed by dicts."""
+    """The subset of redis-py the map caches use, backed by dicts."""
 
     def __init__(self) -> None:
         self.hashes: dict[str, dict[str, str]] = {}

@@ -25,9 +25,8 @@ from django.conf import settings
 import redis
 from redis.exceptions import RedisError
 
-from urbanlens.dashboard.services.map_pins.cache import MapPinCache
 from urbanlens.dashboard.services.map_pins.fingerprint import pin_collection_state
-from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
+from urbanlens.dashboard.services.map_pins.payload import PAYLOAD_VERSION, MapPinPayloadService
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -78,7 +77,7 @@ def document_etag(profile: Profile) -> tuple[str, int]:
         The ETag value (without quotes) and the profile's root pin count.
     """
     state = pin_collection_state(profile)
-    seed = f"{FORMAT_VERSION}:{MapPinCache.VERSION}:{state.fingerprint}"
+    seed = f"{FORMAT_VERSION}:{PAYLOAD_VERSION}:{state.fingerprint}"
     return hashlib.sha256(seed.encode()).hexdigest()[:16], state.total
 
 
@@ -105,7 +104,17 @@ def stream(
         Chunks of whole NDJSON lines, each line ending in a newline.
     """
     service = MapPinPayloadService(profile)
-    buffer: list[bytes] = [_line({"t": "head", "mode": MODE_DOCUMENT, "total": total, "etag": etag, "version": FORMAT_VERSION})]
+    # The whole label vocabulary up front, so a pin line can name its labels by
+    # id and the client can resolve them the moment it reads one.
+    head = {
+        "t": "head",
+        "mode": MODE_DOCUMENT,
+        "total": total,
+        "etag": etag,
+        "version": FORMAT_VERSION,
+        "labels": service.label_dictionary(),
+    }
+    buffer: list[bytes] = [_line(head)]
     pending = len(buffer[0])
 
     sent = 0
@@ -168,9 +177,8 @@ def _line(value: dict[str, Any]) -> bytes:
 def make_binary_client() -> Any:
     """A Valkey client that does not decode what it reads.
 
-    Documents are stored gzipped, and `MapPinCache.make_client` sets
-    `decode_responses=True` - which would try to read those bytes as UTF-8 and
-    raise. This is the same connection settings without that.
+    Documents are stored gzipped, so the client must not try to read what it
+    gets back as UTF-8.
 
     Returns:
         The client, or None when no cache is configured.

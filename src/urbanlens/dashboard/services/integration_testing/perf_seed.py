@@ -76,6 +76,28 @@ MAX_SEEDED_PINS = int((90.0 - ORIGIN_LATITUDE) / COORDINATE_STEP) * GRID_SIDE
 #: label edit expensive; see this module's docstring.
 HEAVY_LABEL_NAME = "Perf Heavy"
 
+#: Names drawn from when a seed is asked for more than one label per pin. Small
+#: and shared, which is what a real account looks like: a vocabulary of a few
+#: dozen labels carried by thousands of pins.
+VOCABULARY = [
+    ("tag", "Abandoned"),
+    ("tag", "Industrial"),
+    ("tag", "Rooftop"),
+    ("tag", "Tunnel"),
+    ("tag", "Hospital"),
+    ("tag", "Church"),
+    ("tag", "School"),
+    ("tag", "Rail"),
+    ("category", "Factory"),
+    ("category", "Residential"),
+    ("category", "Military"),
+    ("category", "Civic"),
+    ("status", "Standing"),
+    ("status", "Demolished"),
+    ("status", "Sealed"),
+    ("status", "Watched"),
+]
+
 #: Shared by every seeded pin's name, so a load test can post a filter that
 #: genuinely matches all of them. A filter matching nothing measures the query
 #: planner rather than the response builder.
@@ -143,7 +165,14 @@ def _precompute_map_center(profile: Profile, total: int) -> tuple[float, float] 
     return latitude, longitude
 
 
-def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True, precompute_map_center: bool = True) -> dict[str, Any]:
+def seed_heavy_account(
+    profile: Profile,
+    *,
+    pins: int,
+    analyze: bool = True,
+    precompute_map_center: bool = True,
+    labels_per_pin: int = 1,
+) -> dict[str, Any]:
     """Give *profile* *pins* root pins, all carrying one shared label.
 
     Idempotent in the sense that matters for a fixture: it counts what the
@@ -155,6 +184,11 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True, pre
         pins: How many root pins it should end up with.
         analyze: Refresh planner statistics afterwards. Only turn this off to
             demonstrate what skipping it costs.
+        labels_per_pin: How many labels each pin carries. The first is always the
+            shared heavy label the load harness edits; the rest are a rotating
+            window over `VOCABULARY`, so neighbouring pins differ. One is the
+            cheapest case for every payload measurement, so raise it to measure
+            anything that scales with a pin's label count.
         precompute_map_center: Store the map centre directly instead of leaving
             the first page load to derive it. On by default because deriving it
             was P108, which is fixed - turn this off to have the centre
@@ -174,6 +208,10 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True, pre
     """
     if pins > MAX_SEEDED_PINS:
         raise ValueError(f"{pins} pins would run the grid past the north pole; this coordinate scheme tops out at {MAX_SEEDED_PINS}.")
+    # One short of the vocabulary, so the window can rotate: a pin that took every
+    # label would make every pin identical, which is the case this exists to avoid.
+    if labels_per_pin < 1 or labels_per_pin > len(VOCABULARY):
+        raise ValueError(f"labels_per_pin must be between 1 and {len(VOCABULARY)}; got {labels_per_pin}.")
 
     started = time.perf_counter()
     existing = Pin.objects.filter(profile=profile).root_pins().count()
@@ -185,6 +223,12 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True, pre
         profile=profile,
         defaults={"color": "#b34747", "description": "Every pin in a seeded performance account carries this."},
     )
+
+    # The whole vocabulary whenever more than the shared label is wanted: each pin
+    # takes a window of it, so it has to be larger than the window or every pin
+    # ends up with the same set and the fixture stops resembling an account.
+    extras = _vocabulary_labels(profile) if labels_per_pin > 1 else []
+    per_pin = labels_per_pin - 1
 
     created = 0
     for start in range(0, wanted, BATCH_SIZE):
@@ -210,7 +254,14 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True, pre
                 ],
             )
             through = Pin.labels.through
-            through.objects.bulk_create([through(pin_id=pin.pk, label_id=label.pk) for pin in seeded_pins])
+            pairs = []
+            for offset, pin in enumerate(seeded_pins):
+                pairs.append(through(pin_id=pin.pk, label_id=label.pk))
+                index = existing + start + offset
+                # A rotating window rather than a random sample: the distribution
+                # is the same on every run, so two measurements are comparable.
+                pairs.extend(through(pin_id=pin.pk, label_id=extras[(index + step) % len(extras)].pk) for step in range(per_pin))
+            through.objects.bulk_create(pairs)
         created += len(seeded_pins)
 
     analyzed = analyze and _analyze()
@@ -223,10 +274,27 @@ def seed_heavy_account(profile: Profile, *, pins: int, analyze: bool = True, pre
         "label": label.name,
         "label_id": label.pk,
         "label_kind": label.kind,
+        "labels_per_pin": labels_per_pin,
         "pin_name_prefix": PIN_NAME_PREFIX,
         "analyzed": analyzed,
         "seconds": round(time.perf_counter() - started, 1),
     }
+
+
+def _vocabulary_labels(profile: Profile) -> list[Label]:
+    """The shared vocabulary, created if absent.
+
+    Args:
+        profile: The account the labels belong to.
+
+    Returns:
+        The labels, in `VOCABULARY` order.
+    """
+    labels = []
+    for kind, name in VOCABULARY:
+        label, _ = Label.objects.get_or_create(name=name, kind=kind, profile=profile, defaults={"color": "#4a6fa5"})
+        labels.append(label)
+    return labels
 
 
 def _locations_for(coordinates: list[tuple[str, str]], *, first_index: int) -> list[Location]:

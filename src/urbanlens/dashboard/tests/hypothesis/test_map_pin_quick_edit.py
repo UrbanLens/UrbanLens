@@ -2,13 +2,15 @@
 popup's "Edit Pin" quick-edit flow).
 
 Invariants verified:
-  - map_pin_json's tags_data entries include each label's id, not just its
-    name - the map popup's edit dialog matches labels by id to pre-fill the
+  - map_pin_json names the pin's labels by id and defines them in the same
+    response - the map popup's edit dialog matches labels by id to pre-fill the
     label picker, and names aren't guaranteed unique across label kinds/owners.
-  - patch_pin round-trips label_ids taken straight from tags_data: saving a
-    pin without changing its labels must not clear them (regression test for
-    a bug where the edit dialog silently dropped a pin's labels on save
-    because it could only match them by name).
+    This response follows an edit, so it is the one most likely to carry a label
+    the client has not seen before.
+  - patch_pin round-trips the ids taken straight back out of it: saving a pin
+    without changing its labels must not clear them (regression test for a bug
+    where the edit dialog silently dropped a pin's labels on save because it
+    could only match them by name).
   - patch_pin honors clear_custom_icon by removing an existing custom icon,
     but leaves it alone when the flag isn't sent.
   - map_pin_json separates "icon"/"color" (effective, possibly label-inherited
@@ -33,7 +35,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 
 
-class MapPinJsonTagsDataTests(TestCase):
+class MapPinJsonLabelsTests(TestCase):
     """map_pin_json must expose enough per-label data to round-trip labels."""
 
     def setUp(self) -> None:
@@ -44,28 +46,44 @@ class MapPinJsonTagsDataTests(TestCase):
         location = baker.make(Location)
         self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None)
 
-    def _tags_data(self) -> list[dict]:
+    def _body(self) -> dict:
         resp = self.client.get(f"/dashboard/map/pins/{self.pin.slug or self.pin.uuid}/")
         self.assertEqual(resp.status_code, 200)
-        return resp.json()["pin"]["tags_data"]
+        return resp.json()
 
-    def test_tags_data_includes_label_id(self) -> None:
+    def test_the_pin_names_its_labels_by_id(self) -> None:
         label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Urbex")
         self.pin.labels.add(label)
-        tags_data = self._tags_data()
-        self.assertEqual(len(tags_data), 1)
-        self.assertEqual(tags_data[0]["id"], label.id)
-        self.assertEqual(tags_data[0]["name"], "Urbex")
 
-    def test_tags_data_disambiguates_same_named_labels_by_id(self) -> None:
+        body = self._body()
+
+        self.assertEqual(body["pin"]["label_ids"], [label.id])
+        self.assertEqual(body["labels"][str(label.id)]["name"], "Urbex")
+
+    def test_same_named_labels_stay_distinct(self) -> None:
         """Two distinct labels may legally share a name (no unique constraint) -
         matching by name alone would conflate them, so id must always be present."""
         tag = ensure_label(profile=self.profile, kind=KIND_TAG, name="Church")
         category = ensure_label(profile=self.profile, kind=KIND_CATEGORY, name="Church")
         self.pin.labels.add(tag, category)
-        tags_data = self._tags_data()
-        ids = {t["id"] for t in tags_data}
-        self.assertEqual(ids, {tag.id, category.id})
+
+        body = self._body()
+
+        self.assertEqual(set(body["pin"]["label_ids"]), {tag.id, category.id})
+        self.assertEqual(
+            {body["labels"][str(tag.id)]["kind"], body["labels"][str(category.id)]["kind"]}, {KIND_TAG, KIND_CATEGORY}
+        )
+
+    def test_it_defines_every_label_the_pin_names(self) -> None:
+        """The edit dialog resolves ids against this dictionary; a gap loses a label."""
+        self.pin.labels.add(
+            ensure_label(profile=self.profile, kind=KIND_TAG, name="Urbex"),
+            ensure_label(profile=self.profile, kind=KIND_CATEGORY, name="Factory"),
+        )
+
+        body = self._body()
+
+        self.assertEqual({str(label_id) for label_id in body["pin"]["label_ids"]} - set(body["labels"]), set())
 
 
 class PatchPinLabelRoundTripTests(TestCase):
@@ -86,10 +104,10 @@ class PatchPinLabelRoundTripTests(TestCase):
         label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Urbex")
         self.pin.labels.add(label)
 
-        # Mirror what the edit dialog now does: read tags_data's ids straight
-        # back out and resend them unchanged.
-        tags_data = self.client.get(f"/dashboard/map/pins/{self.pin.slug or self.pin.uuid}/").json()["pin"]["tags_data"]
-        label_ids = [str(t["id"]) for t in tags_data]
+        # Mirror what the edit dialog now does: read the ids straight back out
+        # and resend them unchanged.
+        body = self.client.get(f"/dashboard/map/pins/{self.pin.slug or self.pin.uuid}/").json()
+        label_ids = [str(label_id) for label_id in body["pin"]["label_ids"]]
 
         resp = self._patch(name=self.pin.name or "Pin", label_ids=label_ids)
         self.assertEqual(resp.status_code, 200)

@@ -21,8 +21,6 @@ vocabulary of three labels becomes three objects on every pin.
 
 from __future__ import annotations
 
-from unittest import mock
-
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
@@ -35,7 +33,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
+from urbanlens.dashboard.services.map_pins import MapPinPayloadService
 
 #: Bigger than the mixin's defaults: the payload's per-row cost is what is being
 #: measured, and ten extra pins make the marginal count unambiguous.
@@ -82,19 +80,14 @@ class MapPayloadInstantiationScalingTests(InstantiationScalingMixin, TestCase):
             pin.save(update_fields=["cover_photo"])
 
     def test_the_map_pins_endpoint_does_not_build_objects_per_pin(self) -> None:
-        # MapPinCache reads UL_VALKEY_URL straight from the environment rather
-        # than through settings, so under test it opens a real socket the test
-        # network guard refuses. Without a client it serves from the payload
-        # service directly, which is the path being measured here.
-        with mock.patch.object(MapPinCache, "make_client", return_value=None):
-            self.assert_objects_per_row_bounded(reverse("map.pins"))
+        self.assert_objects_per_row_bounded(reverse("map.pins"))
 
     def test_the_payload_service_itself_does_not_build_objects_per_pin(self) -> None:
         """The service, measured directly - `all()` is the unbounded caller's path.
 
         `map.pins` pages at 500, so the endpoint above can only ever show the
-        per-row cost. `all()` is what `get_map_data` (the filter POST and
-        `map.init`) and `MapPinCache.rebuild` call with no limit at all, so it
+        per-row cost. `all()` is what `map_data_context` (the filter POST and
+        `map.init`) and the document builder call with no limit at all, so it
         is measured on its own rather than through a URL.
         """
         self.seed_rows(self.second_batch)

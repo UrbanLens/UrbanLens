@@ -3,7 +3,6 @@ import logging
 from django.db import transaction
 from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
 from django.dispatch import receiver
-from redis.exceptions import RedisError
 
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
@@ -60,55 +59,6 @@ def invalidate_profile_map_center(sender: type[Pin], instance: Pin, created: boo
     )
 
 
-def _refresh_cached_pin(pin_id: int, profile_id: int) -> None:
-    """Update one cached map pin if that profile is currently cached in Valkey."""
-
-    def _run() -> None:
-        from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.map_pins import MapPinCache
-
-        try:
-            profile = Profile.objects.get(pk=profile_id)
-            pin = Pin.objects.get(pk=pin_id)
-        except (Profile.DoesNotExist, Pin.DoesNotExist):
-            try:
-                MapPinCache(Profile(pk=profile_id)).delete_pin(pin_id)
-            except (RedisError, ConnectionError, OSError, RuntimeError):
-                logger.debug("Unable to delete missing pin %s from map cache", pin_id, exc_info=True)
-            return
-        try:
-            MapPinCache(profile).upsert_pin(pin)
-        except (RedisError, ConnectionError, OSError, RuntimeError):
-            logger.warning("Unable to refresh cached map pin %s", pin_id, exc_info=True)
-
-    transaction.on_commit(_run)
-
-
-def _delete_cached_pin(pin_id: int, profile_id: int) -> None:
-    def _run() -> None:
-        from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.map_pins import MapPinCache
-
-        try:
-            MapPinCache(Profile(pk=profile_id)).delete_pin(pin_id)
-        except (RedisError, ConnectionError, OSError, RuntimeError):
-            logger.warning("Unable to delete cached map pin %s", pin_id, exc_info=True)
-
-    transaction.on_commit(_run)
-
-
-@receiver(post_save, sender=Pin, dispatch_uid="pin_refresh_map_pin_cache")
-def refresh_map_pin_cache(sender: type[Pin], instance: Pin, **kwargs) -> None:
-    if instance.profile_id:
-        _refresh_cached_pin(instance.pk, instance.profile_id)
-
-
-@receiver(post_delete, sender=Pin, dispatch_uid="pin_delete_map_pin_cache")
-def delete_map_pin_cache(sender: type[Pin], instance: Pin, **kwargs) -> None:
-    if instance.profile_id:
-        _delete_cached_pin(instance.pk, instance.profile_id)
-
-
 @receiver(post_delete, sender=Pin, dispatch_uid="pin_record_tombstone")
 def record_pin_tombstone(sender: type[Pin], instance: Pin, **kwargs) -> None:
     """Durably record the deletion for external-API delta-sync clients.
@@ -133,30 +83,25 @@ def record_pin_tombstone(sender: type[Pin], instance: Pin, **kwargs) -> None:
     PinTombstone.objects.record(profile_id=instance.profile_id, pin_uuid=instance.uuid)
 
 
-@receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_labels(sender, instance: Pin, action: str, **kwargs) -> None:
+@receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_touch_pin")
+def touch_pin_for_labels(sender, instance: Pin, action: str, **kwargs) -> None:
     """A pin gaining or losing a label changes its chips, and can change its icon.
 
     Writing ``Pin.labels.through`` does not write the pin row, so ``auto_now``
-    does not fire and the client's poll sees nothing - see
-    ``services.map_pins.touch``.
+    does not fire and the client's poll sees nothing.
     """
     from urbanlens.dashboard.services.map_pins.touch import touch_pin
 
     if action in {"post_add", "post_remove", "post_clear"} and instance.profile_id:
         touch_pin(instance.pk)
-        _refresh_cached_pin(instance.pk, instance.profile_id)
 
 
 @receiver(post_save, sender=Label, dispatch_uid="label_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_label(sender: type[Label], instance: Label, created: bool, **kwargs) -> None:
-    """A label's icon/color can appear on any pin carrying it (Pin.effective_icon).
+def touch_pins_for_edited_label(sender: type[Label], instance: Label, created: bool, **kwargs) -> None:
+    """A label's icon/colour can appear on any pin carrying it (Pin.effective_icon).
 
-    Unlike the m2m-add/remove case above, editing the label itself never
-    touches Pin.labels.through, so without this the pins already carrying it
-    keep serving the old baked-in icon/color - from the server cache until its
-    TTL lapses, and from the browser's own cache until the client's poll sees
-    Max(Pin.updated) move. ``touch_pins_for_labels`` does both.
+    Editing the label never touches Pin.labels.through, so without this the pins
+    carrying it keep drawing the old icon until the browser's own cache expires.
     """
     from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_labels
 
@@ -166,8 +111,8 @@ def refresh_map_pin_cache_for_label(sender: type[Label], instance: Label, create
 
 
 @receiver(post_save, sender=LabelCustomization, dispatch_uid="label_customization_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_label_customization(sender: type[LabelCustomization], instance: LabelCustomization, **kwargs) -> None:
-    """Per-profile icon/color overrides need the same treatment as editing the label itself.
+def touch_pins_for_customized_label(sender: type[LabelCustomization], instance: LabelCustomization, **kwargs) -> None:
+    """Per-profile icon/colour overrides need the same treatment as editing the label.
 
     Saves only. Clearing an override deletes the row, which fires nothing here -
     ``services.labels.customization`` calls the same function directly for that.
@@ -233,23 +178,21 @@ def sync_redata_assignments_for_pin_labels(sender, instance, action: str, revers
 
 
 @receiver(post_save, sender=Review, dispatch_uid="review_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_review(sender, instance: Review, **kwargs) -> None:
+def touch_pin_for_review(sender, instance: Review, **kwargs) -> None:
     """A review carries the pin's rating, which the map payload shows."""
     from urbanlens.dashboard.services.map_pins.touch import touch_pin
 
     if instance.pin_id:
         touch_pin(instance.pin_id)
-        _refresh_cached_pin(instance.pin_id, instance.pin.profile_id)
 
 
 @receiver(post_delete, sender=Review, dispatch_uid="review_delete_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_deleted_review(sender, instance: Review, **kwargs) -> None:
+def touch_pin_for_deleted_review(sender, instance: Review, **kwargs) -> None:
     """Removing a rating changes the payload as much as adding one."""
     from urbanlens.dashboard.services.map_pins.touch import touch_pin
 
     if instance.pin_id:
         touch_pin(instance.pin_id)
-        _refresh_cached_pin(instance.pin_id, instance.pin.profile_id)
 
 
 # -- Wiki-sync: mirror rating/vulnerability/priority/danger onto WikiStatVote ---

@@ -12,9 +12,8 @@
 
 Follows R27 (`docs/MAP_PERFORMANCE.md`), which measured the map payload's cost as 88% Python object
 construction and replaced the object graph with a column projection. That fix made the payload
-cheap. This decides the shape of the data around it. P102 and P106 are closed - by removing the
-mechanisms they were defects in rather than by patching each one - and P101 closes when decision 5
-replaces the mutable structure its races live in.
+cheap. This decides the shape of the data around it. P101, P102 and P106 are closed - by removing the
+mechanisms they were defects in rather than by patching each one.
 
 Jess's framing constrains this more than the performance numbers do: *"we anticipate having a large
 number of users, and there may be reasons we can't keep all user's data fully cached in redis
@@ -41,8 +40,14 @@ accelerator rather than a dependency — and is why a cache with three known rac
 repairing in place when a shape with no room for them costs less.
 
 So the mutable per-pin structure goes and the immutable per-document one (Decision 5) takes its
-place in the same phase. Valkey keeps accelerating the map; it stops holding a data structure four
-write paths have to keep coherent.
+place. Valkey keeps accelerating the map; it stops holding a data structure four write paths have to
+keep coherent.
+
+**Done 2026-09-11**, and the measurement that settled it is worth keeping. On a 30,000-pin account a
+500-pin page cost 29.8 ms from the database against 8.8 ms from the cache - a 21 ms saving, paid for
+with a 3,866 ms worker rebuild on every invalidation. After R27 made the payload a column projection,
+the path the cache was accelerating was already fast enough that the cache was not worth its
+coherence problem. `map.pins` serves from the projection now and still pages.
 
 The write-path half is replaced by `services/map_pins/touch.py` — one `UPDATE ... SET updated = now()`
 per event, alongside the cache invalidation that already happened. Three paths did that `UPDATE` by
@@ -58,10 +63,30 @@ profile's cached set is dropped whole instead of rewritten pin by pin - but the 
 is still here: a label's colour is copied into every payload, so the payloads really are stale after
 an edit and something has to deal with them.
 
-Under a per-profile label dictionary plus `label_ids` they are not stale at all. A label edit
-changes one entry in one dictionary, the pins are untouched, and there is nothing to invalidate -
-which is O(1) structurally rather than by optimisation, and is what lets the cached document survive
-a label edit instead of being thrown away by it.
+Under a per-profile label dictionary plus `label_ids` the payloads are not stale at all. A label
+edit changes one entry in one dictionary and leaves every pin payload correct, which is O(1)
+structurally rather than by optimisation.
+
+**It does not follow that the cached document survives a label edit, and the first draft of this
+section claimed it did.** The document's ETag is derived from the pin collection's fingerprint, and
+every label write moves that fingerprint by design - `touch_pins_for_labels` bumps `Pin.updated` on
+the carrying pins, which is the P106 mechanism the client's poll and the sync API's `?since=` both
+read. So a label edit still invalidates the cached document. What normalisation buys is that the
+*payloads* stop being wrong, the document shrinks, and a client holding the data can correct a chip
+by replacing one dictionary entry rather than refetching the pins that carry it. Making the cached
+document itself survive a label edit would mean caching the dictionary separately from the pin
+lines; deferred, with the trigger below.
+
+**Built 2026-09-11, and measured.** At a realistic four labels per pin over a 17-label vocabulary,
+10,000 pins weigh 3.88 MB rather than 6.46 MB - **40% smaller uncompressed, 12% gzipped** - and the
+dictionary that replaces the repetition is 1,335 bytes. Gzip was already collapsing most of the
+duplication, so the compressed saving is the smaller number; the uncompressed one is what the server
+allocates, the client parses and the browser's store holds. Full figures in X17.
+
+Every response carries the labels its own pins name, not the account's whole vocabulary: the views
+are already in hand from serializing those pins, so a page costs no query for it. Only the streamed
+document asks for the account's, because its head goes out before its first pin line - one join over
+the through table, measured at 26 ms on a 10,000-pin account, once per document.
 
 Icon and colour resolution stays on the server, in `payload.py`, unchanged — `resolve_icon` and
 `resolve_color` remain the only implementation of those rules. The client derives only chips, status
@@ -111,8 +136,7 @@ document", which is a stronger property and is what `test_map_xss.py` will asser
 `ul:map-doc:<format>:<profile>:<etag>` → gzipped NDJSON, written `SET NX`, gated on the ceiling.
 Because the content is a pure function of the key, concurrent builders write identical bytes: there
 is no lock, no rename, no generation flag, nothing for a race to corrupt. P101's class of defect
-cannot recur in this shape — though P101 itself stays open until the per-pin cache leaves the read
-path, which is what `map.pins` still uses.
+cannot recur in this shape. P101 closed with the per-pin cache it lived in.
 
 **Streaming does not release anything until the last byte.** A `StreamingHttpResponse` holds its
 database connection for the whole of the response - measured open at every megabyte of a 3.2 MB
@@ -161,6 +185,10 @@ real account lives above the ceiling in viewport mode.
 
 ## Deferred, with the trigger that would reopen each
 
+- Caching the label dictionary separately from the pin lines, so a label edit invalidates only the
+  dictionary: reconsider if label edits are frequent enough on a large account that document
+  rebuilds show up in worker time. Today one rebuild is a few seconds on a 30,000-pin account and
+  nothing on a typical one.
 - Geometry-tier-then-card-tier streaming: reconsider if p50 time-to-all-markers exceeds 1.5 s on the
   largest real account, or if the ceiling is raised.
 - Maintained `Pin.latest_rating` / `Pin.child_count` columns (~10 ms per 1000 pins): reconsider when

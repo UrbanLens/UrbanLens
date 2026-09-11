@@ -783,7 +783,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         may contribute. Other labels on the pin (e.g. a yellow tag when a green
         icon tag has no color) must not produce a circle.
 
-        Prefetch labels (with customizations) when calling in bulk (e.g. get_map_data).
+        Prefetch labels (with customizations) when calling in bulk (e.g. map_data_context).
         """
         if self.color:
             return self.color

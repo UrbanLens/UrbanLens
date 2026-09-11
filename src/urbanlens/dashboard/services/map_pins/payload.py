@@ -102,6 +102,15 @@ class LabelView:
             icon_is_overridden=label.icon_is_overridden,
         )
 
+    def as_dictionary_entry(self) -> dict[str, Any]:
+        """This label as the client's label dictionary holds it.
+
+        Returns:
+            The facts a chip needs, plus the `kind` that separates a status from
+            a category.
+        """
+        return {"id": self.id, "kind": self.kind, "name": self.name, "color": self.effective_color, "icon": self.effective_icon}
+
     @classmethod
     def from_row(cls, row: dict[str, Any], customization: dict[str, Any] | None) -> LabelView:
         """Build a view from a label's columns and this profile's override row.
@@ -245,8 +254,6 @@ def _build_payload(
             projected columns - so neither the wiki fallback nor the "Unnamed
             Location in {area}" placeholder is decided here.
     """
-    statuses = [label for label in labels if label.kind == "status"]
-    categories = [label.name for label in labels if label.kind == "category"]
     chips = display_label_views(labels)
     return {
         "id": pk,
@@ -259,12 +266,13 @@ def _build_payload(
         "last_visited": last_visited.isoformat() if last_visited else "never",
         "latitude": float(latitude),
         "longitude": float(longitude),
-        "status": statuses[0].name if statuses else "",
-        "categories": categories,
         "profile": profile_id,
         "rating": rating or 0,
         "color": resolve_color(pin_color=own_color, pin_icon=own_icon, pin_custom_icon_url=own_custom_icon_url, labels=labels),
-        "tags": [{"id": label.id, "name": label.name, "color": label.effective_color, "icon": label.effective_icon} for label in chips],
+        # The labels themselves travel once per response, not once per pin that
+        # carries them - see `MapPinPayloadService.label_dictionary`. Ordered by
+        # `(-order, name)`, so the client's chips keep the server's priority.
+        "label_ids": [label.id for label in chips],
         "address": address,
         # The pin's own icon/color overrides, distinct from "icon"/"color" above
         # (which fall back to an inherited label's icon/color for map display).
@@ -284,6 +292,14 @@ class MapPinPage:
     pins: list[dict[str, Any]]
     next_cursor: int | None
     total: int | None = None
+
+
+#: The payload shape's version, mirrored by `PIN_CACHE_VERSION` in
+#: `frontend/ts/shared/pin-cache.ts` and held to it by
+#: `test_map_pin_payload_contract.py`. Anything keyed on the shape - a cached
+#: document, a client store - includes this so a change orphans the old copies
+#: rather than needing them migrated.
+PAYLOAD_VERSION = 11
 
 
 class MapPinPayloadService:
@@ -408,11 +424,7 @@ class MapPinPayloadService:
         if not pin_ids:
             return {}
         pairs = list(Pin.labels.through.objects.filter(pin_id__in=pin_ids).values_list("pin_id", "label_id"))
-        missing = {label_id for _, label_id in pairs} - self._label_views.keys()
-        if missing:
-            overrides = {row["label_id"]: row for row in LabelCustomization.objects.filter(profile=self.profile, label_id__in=missing).values("label_id", "name", "icon", "color")}
-            for row in Label.objects.filter(pk__in=missing).values("id", "kind", "name", "order", "icon", "color", "custom_icon"):
-                self._label_views[row["id"]] = LabelView.from_row(row, overrides.get(row["id"]))
+        self._resolve_label_views({label_id for _, label_id in pairs})
 
         by_pin: dict[int, list[LabelView]] = {}
         for pin_id, label_id in pairs:
@@ -422,6 +434,60 @@ class MapPinPayloadService:
         for views in by_pin.values():
             views.sort(key=lambda label: (-label.order, label.name or ""))
         return by_pin
+
+    def _resolve_label_views(self, label_ids: set[int]) -> None:
+        """Build a :class:`LabelView` for each of these labels not already held.
+
+        Args:
+            label_ids: The labels to resolve. Views this service instance has
+                already built are reused rather than re-read.
+        """
+        missing = label_ids - self._label_views.keys()
+        if not missing:
+            return
+        overrides = {row["label_id"]: row for row in LabelCustomization.objects.filter(profile=self.profile, label_id__in=missing).values("label_id", "name", "icon", "color")}
+        for row in Label.objects.filter(pk__in=missing).values("id", "kind", "name", "order", "icon", "color", "custom_icon"):
+            self._label_views[row["id"]] = LabelView.from_row(row, overrides.get(row["id"]))
+
+    def label_dictionary_for(self, payloads: Sequence[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """The labels *payloads* name, resolved from what building them already read.
+
+        Free: every view is already in hand from serializing the pins. Prefer
+        this wherever the payloads exist before the response is written, which
+        is everywhere except the streamed document - whose head goes out before
+        its first pin, so it has to ask :meth:`label_dictionary` instead.
+
+        Args:
+            payloads: Map payloads carrying ``label_ids``.
+
+        Returns:
+            ``{"<id>": {id, kind, name, color, icon}}``, covering exactly the ids
+            these payloads use.
+        """
+        entries: dict[str, dict[str, Any]] = {}
+        for payload in payloads:
+            for label_id in payload.get("label_ids", ()):
+                key = str(label_id)
+                if key not in entries and (view := self._label_views.get(label_id)) is not None:
+                    entries[key] = view.as_dictionary_entry()
+        return entries
+
+    def label_dictionary(self) -> dict[str, dict[str, Any]]:
+        """Every label the profile's pins can name, keyed by id as a string.
+
+        One query, and it walks the whole through table for the profile - which
+        is why only the streamed document uses it. Keys are strings because the
+        client reads them back out of JSON, where an object's keys always are.
+
+        Returns:
+            ``{"<id>": {id, kind, name, color, icon}}`` for the profile's
+            chip-bearing labels.
+        """
+        attached = set(
+            Pin.labels.through.objects.filter(pin__profile=self.profile).values_list("label_id", flat=True).distinct(),
+        )
+        self._resolve_label_views(attached)
+        return {str(label_id): view.as_dictionary_entry() for label_id in attached if (view := self._label_views.get(label_id)) is not None and view.kind in DISPLAY_LABEL_KINDS}
 
     def _serialize_rows(self, rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
         """Turn one batch of projected rows into payloads."""
@@ -492,8 +558,9 @@ class MapPinPayloadService:
     def all(self, query: QuerySet[Pin]) -> list[dict[str, Any]]:
         """Every matching pin's payload, read in bounded batches.
 
-        Unbounded in output by design - `MapPinCache.rebuild` needs the whole
-        account - so callers on a request path should prefer :meth:`page`.
+        Unbounded in output by design, for the callers that need the whole
+        account at once. A request path should prefer :meth:`page`, or
+        :mod:`services.map_pins.document`, which streams batches of it.
 
         Args:
             query: Pins to serialize, already scoped to the requesting profile.

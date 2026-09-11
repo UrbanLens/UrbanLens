@@ -4,7 +4,7 @@ Three endpoints feed the same client-side `_pinStore` and the same versioned
 localStorage cache: `map.pins` (the bulk fetch), `map.pin.json` (the targeted
 refresh after an edit) and `map.search` (the filter panel). Only the first
 returned `MapPinPayloadService`'s payload as-is; the other two went through
-`get_map_data`, which rewrote it - tags collapsed to a comma-separated string
+`map_data_context`, which rewrote it - tags collapsed to a comma-separated string
 with the objects moved to a `tags_data` key, categories to a string, dates
 reformatted, status capitalized.
 
@@ -21,7 +21,6 @@ from __future__ import annotations
 import json
 import re
 from typing import Any
-from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -32,7 +31,6 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.map_pins import MapPinCache
 
 _EMBEDDED_PINS = re.compile(rb'<script id="map-filter-pins" type="application/json">(.*?)</script>', re.DOTALL)
 
@@ -68,10 +66,7 @@ class MapEndpointPayloadAgreementTests(TestCase):
             self.pins.append(pin)
 
     def _bulk_payloads(self) -> dict[str, dict[str, Any]]:
-        # MapPinCache reads UL_VALKEY_URL from the environment rather than
-        # settings, so under test it opens a socket the network guard refuses.
-        with mock.patch.object(MapPinCache, "make_client", return_value=None):
-            response = self.client.get(reverse("map.pins"))
+        response = self.client.get(reverse("map.pins"))
         self.assertEqual(response.status_code, 200)
         return {pin["uuid"]: pin for pin in response.json()["pins"]}
 

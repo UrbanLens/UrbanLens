@@ -29,17 +29,15 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_trip
 
-CACHE_TARGET = "urbanlens.dashboard.models.pin.signals._refresh_cached_pin"
 
-
-class LabelBulkUpdateRefreshesMapPinCacheTests(TestCase):
-    """A label's order/icon/color decides what its pins draw on the map.
+class LabelBulkUpdateTouchesCarryingPinsTests(TestCase):
+    """A label's order decides what its pins draw, and reordering is a ``bulk_update``.
 
     ``Pin.icon_source_label`` sorts by ``-label.order``, so reordering labels changes
-    which one supplies a pin's icon and colour. The server-side pin cache bakes those
-    in, and ``refresh_map_pin_cache_for_label`` exists to invalidate it - but it is a
-    ``post_save`` receiver, so the bulk paths went straight past it and pins kept
-    drawing the old icon until the cache TTL lapsed.
+    which one supplies a pin's icon and colour. ``bulk_update`` fires no ``post_save``
+    and never writes an ``auto_now`` column, so the reorder has to move ``Pin.updated``
+    itself; otherwise the client polls an unchanged timestamp and keeps drawing the old
+    icon (P106).
     """
 
     def setUp(self):
@@ -52,34 +50,43 @@ class LabelBulkUpdateRefreshesMapPinCacheTests(TestCase):
         self.label_b = ensure_label(profile=self.profile, name="Beta", kind="tag", order=2, icon="bolt")
         self.pin.labels.add(self.label_a, self.label_b)
 
-    def _reorder_via_organize(self) -> mock.MagicMock:
+    def _updated(self, pin: Pin):
+        """The stored ``updated`` stamp, read fresh.
+
+        Args:
+            pin: Whose stamp to read.
+
+        Returns:
+            The timestamp the client's poll is derived from.
+        """
+        return Pin.objects.filter(pk=pin.pk).values_list("updated", flat=True).first()
+
+    def _reorder_via_organize(self) -> None:
+        """Swap the two labels' order through the endpoint that does it in bulk."""
         self.client.force_login(self.user)
-        with mock.patch(CACHE_TARGET) as refresh:
-            response = self.client.post(
-                reverse("organize.priority.save"),
-                data={"items": [{"id": self.label_b.pk}, {"id": self.label_a.pk}]},
-                content_type="application/json",
-            )
+        response = self.client.post(
+            reverse("organize.priority.save"),
+            data={"items": [{"id": self.label_b.pk}, {"id": self.label_a.pk}]},
+            content_type="application/json",
+        )
         self.assertEqual(response.status_code, 200, response.content)
-        return refresh
 
     def test_reordering_labels_actually_changes_which_icon_a_pin_draws(self):
-        # Establishes the premise: without this, refreshing the cache would be pointless.
+        # Establishes the premise: without this, saying so would be pointless.
         self.assertEqual(self.pin.icon_source_label(), self.label_b)
 
         Label.objects.filter(pk=self.label_a.pk).update(order=99)
         self.pin.refresh_from_db()
         self.assertEqual(self.pin.icon_source_label(), self.label_a)
 
-    def test_reordering_labels_refreshes_the_cache_for_affected_pins(self):
-        refresh = self._reorder_via_organize()
+    def test_reordering_labels_tells_the_client_about_the_affected_pin(self):
+        before = self._updated(self.pin)
 
-        # Both args matter: _refresh_cached_pin(pin_id, profile_id) reading the
-        # wrong profile would look up the wrong cache entry and silently no-op.
-        calls = {(call.args[0], call.args[1]) for call in refresh.call_args_list}
-        self.assertIn((self.pin.pk, self.profile.pk), calls)
+        self._reorder_via_organize()
 
-    def test_a_pin_carrying_only_one_of_the_reordered_labels_is_still_refreshed(self):
+        self.assertGreater(self._updated(self.pin), before)
+
+    def test_a_pin_carrying_only_one_of_the_reordered_labels_is_still_told(self):
         # self.pin carries both labels, which would also pass a buggy AND-style
         # filter (require every reordered label) instead of the intended
         # "carries any of them" match - this pin only carries one, so it
@@ -90,30 +97,24 @@ class LabelBulkUpdateRefreshesMapPinCacheTests(TestCase):
             name="Beta only",
         )
         only_beta.labels.add(self.label_b)
+        before = self._updated(only_beta)
 
-        refresh = self._reorder_via_organize()
+        self._reorder_via_organize()
 
-        refreshed = {call.args[0] for call in refresh.call_args_list}
-        self.assertIn(only_beta.pk, refreshed)
+        self.assertGreater(self._updated(only_beta), before)
 
-    def test_a_pin_without_the_reordered_labels_is_not_refreshed(self):
+    def test_a_pin_without_the_reordered_labels_is_left_alone(self):
         # A profile may hold only one pin per location, so this needs its own.
         other = Pin.objects.create(
             profile=self.profile,
             location=Location.objects.create(latitude=42.0, longitude=-71.0),
             name="Untouched",
         )
+        before = self._updated(other)
 
-        refresh = self._reorder_via_organize()
+        self._reorder_via_organize()
 
-        refreshed = {call.args[0] for call in refresh.call_args_list}
-        self.assertNotIn(other.pk, refreshed)
-
-    def test_each_affected_pin_is_refreshed_once_even_when_it_carries_both_labels(self):
-        refresh = self._reorder_via_organize()
-
-        refreshed = [call.args[0] for call in refresh.call_args_list if call.args[0] == self.pin.pk]
-        self.assertEqual(len(refreshed), 1)
+        self.assertEqual(self._updated(other), before)
 
 
 class TripActivityBulkCreateQueuesCalendarPushTests(TestCase):

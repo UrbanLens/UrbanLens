@@ -48,9 +48,7 @@ SEARCH_ROOT = REPO_ROOT / "src" / "urbanlens"
 #: check missed `promote_wiki_alias_to_name` on its first outing for exactly
 #: that reason - it reaches `apply_wiki_edit` one level down, and a same-
 #: function scan cannot see it.
-WRITER_SEEDS = frozenset(
-    {"apply_wiki_edit", "revert_wiki_edit", "revert_edit_fields", "save_edited_fields", "purge_recorded_value"}
-)
+WRITER_SEEDS = frozenset({"apply_wiki_edit", "revert_wiki_edit", "revert_edit_fields", "save_edited_fields", "purge_recorded_value"})
 
 #: Parameter names that hold a wiki. A function saving something it was handed
 #: under another name is not something this can see; that is in the limits.
@@ -125,9 +123,7 @@ def _writes(fn: ast.FunctionDef, watched: set[str], writers: frozenset[str]) -> 
             # the same value as `f(wiki)` does, and only positional args were
             # inspected until a review pointed at the gap.
             passed = [a for a in node.args if isinstance(a, ast.Name)]
-            passed += [
-                kw.value for kw in node.keywords if isinstance(kw.value, ast.Name) and kw.arg not in READ_ONLY_KWARGS
-            ]
+            passed += [kw.value for kw in node.keywords if isinstance(kw.value, ast.Name) and kw.arg not in READ_ONLY_KWARGS]
             for arg in passed:
                 if arg.id in watched:
                     found.append((node.lineno, f"{called}({arg.id}, ...)"))

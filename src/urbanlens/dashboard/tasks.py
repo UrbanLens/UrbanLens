@@ -435,26 +435,6 @@ def build_map_document(profile_id: int) -> int:
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def rebuild_map_pin_cache(self, profile_id: int) -> int:
-    """Rebuild the full root-pin map cache for a profile."""
-    from urbanlens.dashboard.models.pin import Pin
-    from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.map_pins import MapPinCache
-
-    logger.info("Rebuilding map pin cache for profile %s", profile_id)
-    update_task_progress(self, current=0, total=1, message="Rebuilding map cache...")
-    profile = Profile.objects.filter(pk=profile_id).first()
-    if profile is None:
-        logger.info("rebuild_map_pin_cache: profile %s no longer exists", profile_id)
-        return 0
-    query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
-    cache = MapPinCache(profile)
-    cache.rebuild(query)
-    update_task_progress(self, current=1, total=1, message="Map cache ready")
-    return query.count()
-
-
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def suggest_wiki_category(self, wiki_id: int) -> list[str]:
     """Suggest and attach labels for a community Wiki outside model signals."""
     from urbanlens.dashboard.models.wiki import Wiki

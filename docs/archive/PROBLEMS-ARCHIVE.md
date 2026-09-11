@@ -11,6 +11,46 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-11: `MapPinCache.rebuild` dropped concurrent writes and released locks it no longer held
+
+`id: P101` · `status: fixed` · `resolved: 2026-09-11`
+
+Three races in `services/map_pins/cache.py`, all in the same mechanism: a mutable per-pin structure -
+a hash of payloads plus a zset for ordering - rebuilt in place while four write paths mutated it.
+
+1. **Concurrent creates and deletes during a rebuild were lost or resurrected.** `rebuild()` built
+   into temporary keys and renamed them over the live ones at the end, while `upsert_pin`/`delete_pin`
+   wrote straight to the live keys, gated on a marker that still held the previous generation's value
+   for the whole window. A pin created during a rebuild was discarded by the rename; a pin deleted
+   during one came back as a ghost until something touched it again.
+2. **The two-key rename was not atomic** - two separate commands, so a reader between them saw a pins
+   hash and an order index from different generations.
+3. **The lock was released without comparing its own token**, so a rebuild that ran past the 30-second
+   expiry deleted the *next* rebuild's lock and let a third start.
+
+**Closed by deleting the structure rather than by fixing the three races**, which is what D12 decided
+and what measurement then justified. On a 30,000-pin account:
+
+| | |
+|---|---|
+| a 500-pin page from the database | 29.8 ms |
+| the same page from the cache | 8.8 ms |
+| rebuilding that cache once | 3,866 ms |
+
+The cache saved 21 ms per page and cost a 3.9-second worker rebuild on every invalidation, held
+~6.6 MB per profile (X17), and needed seven signal receivers and a Celery task to stay coherent. After
+R27 made the payload a column projection, the database path it was accelerating was already fast.
+
+`map.pins` now serves from `MapPinPayloadService.page()` directly and still pages, which is what a
+client wanting pages uses and what an account over the document ceiling falls back to. What Valkey
+caches instead is the whole document, keyed by a hash of its own content (`services/map_pins/document.py`):
+concurrent builders write identical bytes, so there is no lock, no rename and no generation flag for
+a race to live in. Measured at 26x on the path that matters.
+
+Deleted with it: `cache.py` (380 lines), `rebuild_map_pin_cache`, seven receivers, and three test
+files that existed only to cover them. `services/map_pins/touch.py` keeps the half that mattered -
+moving `Pin.updated` so the client's poll notices.
+
 ## RESOLVED 2026-09-11: One Label edit re-serialized every pin carrying it, inside the edit's own request
 
 `id: P102` · `status: fixed` · `resolved: 2026-09-11`

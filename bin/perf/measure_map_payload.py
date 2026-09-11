@@ -1,18 +1,21 @@
 #!/usr/bin/env python
-"""What one account's map data costs to build, to store, and to ship.
+"""What one account's map data costs to build and to ship.
 
-D12 rests on two numbers that were inherited rather than measured: the database
-projection path costs about 33 ms per 1,000 pins, and the per-pin Valkey cache
-holds about 1.7 KB per pin. Both decide whether the cache is worth its shape, so
-they need to be reproducible rather than quoted.
+The figures D12 rests on - the projection path's cost per 1,000 pins, and what a
+whole account weighs as one document - decide whether the cache is worth its
+shape, so they need to be reproducible rather than quoted.
+
+``--labels-per-pin`` matters more than it looks: a pin payload names its labels
+by id and the response defines each label once, so the saving over copying every
+label's name, colour and icon into every pin grows with how many labels a pin
+carries. Seeding one label per pin measures the case where there is nothing to
+save.
 
 Runs against a throwaway test database it creates and destroys, so it is safe on
-a machine with real data. Valkey is measured against whatever ``UL_VALKEY_URL``
-points at, under this profile's own key prefix, and the keys are deleted
-afterwards - so point it at a development instance, not a shared one.
+a machine with real data.
 
     docker exec -e UL_TEST_DB_NAME=payload_cost <app> \
-        /app/.venv/bin/python bin/perf/measure_map_payload.py --pins 10000
+        /app/.venv/bin/python bin/perf/measure_map_payload.py --pins 10000 --labels-per-pin 4
 """
 
 from __future__ import annotations
@@ -39,12 +42,13 @@ from django.test.utils import setup_test_environment, teardown_test_environment
 BATCH = 1_000
 
 
-def measure(pins: int, batch: int) -> dict[str, object]:
+def measure(pins: int, batch: int, labels_per_pin: int) -> dict[str, object]:
     """Build one account's map data every way the application can, and time each.
 
     Args:
         pins: How many pins to seed.
         batch: Page size for the paged measurements.
+        labels_per_pin: How many labels each seeded pin carries.
 
     Returns:
         A report, keyed by measurement name.
@@ -52,15 +56,15 @@ def measure(pins: int, batch: int) -> dict[str, object]:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.integration_testing.perf_seed import seed_heavy_account
-    from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
+    from urbanlens.dashboard.services.map_pins import MapPinPayloadService
 
     user = User.objects.create_user(username="payload-cost", email="payload-cost@example.invalid", password="x")  # nosec B106  # noqa: S106
     profile = Profile.objects.get_or_create(user=user)[0]
-    seeded = seed_heavy_account(profile, pins=pins, analyze=True)
+    seeded = seed_heavy_account(profile, pins=pins, analyze=True, labels_per_pin=labels_per_pin)
 
     query = Pin.objects.filter(profile=profile).root_pins()
     service = MapPinPayloadService(profile)
-    report: dict[str, object] = {"pins_requested": pins, "pins_seeded": seeded.get("pins", pins)}
+    report: dict[str, object] = {"pins_requested": pins, "pins_seeded": seeded.get("pins", pins), "labels_per_pin": labels_per_pin}
 
     # The paged path, which is what the map page actually walks today.
     pages, rows, wall, cpu = 0, 0, 0.0, 0.0
@@ -98,9 +102,68 @@ def measure(pins: int, batch: int) -> dict[str, object]:
         },
     )
 
-    report["cache"] = _measure_cache(MapPinCache(profile), query, len(everything))
+    report["labels"] = _measure_label_dictionary(service, len(everything))
+    report["denormalised"] = _measure_denormalised(service, everything, len(everything))
     report["filter_post"] = _measure_filter_post(user, len(everything))
     return report
+
+
+def _measure_label_dictionary(service: object, pin_count: int) -> dict[str, object]:
+    """What the per-response label dictionary costs, once.
+
+    Args:
+        service: The payload service for the profile.
+        pin_count: How many pins the response would carry.
+
+    Returns:
+        Its size, and what it works out to per pin.
+    """
+    started, started_cpu = time.perf_counter(), time.process_time()
+    dictionary = service.label_dictionary()  # type: ignore[attr-defined]
+    wall = time.perf_counter() - started
+    cpu = time.process_time() - started_cpu
+    encoded = json.dumps(dictionary, separators=(",", ":")).encode()
+    return {
+        "entries": len(dictionary),
+        "wall_ms": round(wall * 1000, 1),
+        "cpu_ms": round(cpu * 1000, 1),
+        "bytes": len(encoded),
+        "bytes_per_pin": round(len(encoded) / max(pin_count, 1), 2),
+    }
+
+
+def _measure_denormalised(service: object, payloads: list, pin_count: int) -> dict[str, object]:
+    """What the same document would weigh with each label copied into every pin.
+
+    The shape the payload had before the labels were normalised out of it, built
+    from the same rows in the same run so the two are comparable.
+
+    Args:
+        service: The payload service for the profile.
+        payloads: The v11 payloads, which name their labels by id.
+        pin_count: How many pins those cover.
+
+    Returns:
+        Byte counts for the denormalised form.
+    """
+    dictionary = service.label_dictionary()  # type: ignore[attr-defined]
+    inflated = []
+    for payload in payloads:
+        copy = {key: value for key, value in payload.items() if key != "label_ids"}
+        labels = [dictionary[str(label_id)] for label_id in payload["label_ids"] if str(label_id) in dictionary]
+        copy["tags"] = [{"id": label["id"], "name": label["name"], "color": label["color"], "icon": label["icon"]} for label in labels]
+        statuses = [label["name"] for label in labels if label["kind"] == "status"]
+        copy["status"] = statuses[0] if statuses else ""
+        copy["categories"] = [label["name"] for label in labels if label["kind"] == "category"]
+        inflated.append(copy)
+    ndjson = b"".join(json.dumps(pin, separators=(",", ":")).encode() + b"\n" for pin in inflated)
+    compressed = gzip.compress(ndjson, compresslevel=6)
+    return {
+        "bytes": len(ndjson),
+        "bytes_per_pin": round(len(ndjson) / max(pin_count, 1), 1),
+        "gzipped_bytes": len(compressed),
+        "gzipped_bytes_per_pin": round(len(compressed) / max(pin_count, 1), 1),
+    }
 
 
 def _measure_filter_post(user: object, pin_count: int) -> dict[str, object]:
@@ -147,49 +210,6 @@ def _measure_filter_post(user: object, pin_count: int) -> dict[str, object]:
     )
 
 
-def _measure_cache(cache: object, query: object, pin_count: int) -> dict[str, object]:
-    """Rebuild the per-pin Valkey cache and ask Valkey what it cost.
-
-    ``MEMORY USAGE`` is the server's own accounting, which is the only honest
-    answer here: the payload's JSON length ignores the hash's per-field overhead
-    and the sorted set entirely.
-
-    Args:
-        cache: A ``MapPinCache`` for the profile.
-        query: The profile's root pins.
-        pin_count: How many pins were serialized, for the per-pin figures.
-
-    Returns:
-        Timings and byte counts, or a note saying why they are absent.
-    """
-    client = getattr(cache, "client", None)
-    if client is None:
-        return {"skipped": "no UL_VALKEY_URL/UL_REDIS_URL in this environment"}
-
-    started, started_cpu = time.perf_counter(), time.process_time()
-    cache.rebuild(query)  # type: ignore[attr-defined]
-    wall = time.perf_counter() - started
-    cpu = time.process_time() - started_cpu
-
-    keys = {name: getattr(cache, f"{name}_key") for name in ("pins", "order", "meta")}
-    try:
-        usage = {name: int(client.memory_usage(key) or 0) for name, key in keys.items()}
-    finally:
-        client.delete(*keys.values())
-
-    total = sum(usage.values())
-    return _per_thousand(
-        pin_count,
-        wall,
-        cpu,
-        extra={
-            "valkey_bytes": total,
-            "valkey_bytes_per_pin": round(total / max(pin_count, 1), 1),
-            "by_key": usage,
-        },
-    )
-
-
 def _per_thousand(rows: int, wall: float, cpu: float, *, extra: dict[str, object] | None = None) -> dict[str, object]:
     """Normalise a timing to the per-1,000-rows figure the design argues in.
 
@@ -223,12 +243,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--pins", type=int, default=10_000, help="How many pins to seed (default: 10000).")
     parser.add_argument("--batch", type=int, default=BATCH, help=f"Page size for the paged path (default: {BATCH}).")
+    parser.add_argument("--labels-per-pin", type=int, default=1, help="Labels each seeded pin carries (default: 1).")
     args = parser.parse_args()
 
     setup_test_environment()
     connection.creation.create_test_db(verbosity=0, autoclobber=True)
     try:
-        report = measure(args.pins, args.batch)
+        report = measure(args.pins, args.batch, args.labels_per_pin)
     finally:
         connection.creation.destroy_test_db(connection.settings_dict["NAME"], verbosity=0)
         teardown_test_environment()

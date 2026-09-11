@@ -26,6 +26,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.fake_redis import FakeRedis
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.map_pins import document as map_document
@@ -120,20 +121,6 @@ class TheDocumentAgreesWithThePagedEndpointTests(TestCase):
                 location=baker.make(Location, latitude=float(index), longitude=2.0),
             )
 
-    def _no_cache(self):
-        """Run the paged endpoint against the database.
-
-        `MapPinCache` reads its URL from the environment and the suite's network
-        guard refuses the connection, so the endpoint has to be told there is no
-        cache - which is also the path this comparison wants.
-
-        Returns:
-            A patch context manager.
-        """
-        from urbanlens.dashboard.services.map_pins import MapPinCache
-
-        return mock.patch.object(MapPinCache, "make_client", return_value=None)
-
     def _paged(self) -> list[dict]:
         """Every pin, walked through `map.pins` the way the old client did.
 
@@ -142,14 +129,13 @@ class TheDocumentAgreesWithThePagedEndpointTests(TestCase):
         """
         pins: list[dict] = []
         cursor = None
-        with self._no_cache():
-            while True:
-                url = reverse("map.pins") + (f"?cursor={cursor}&limit=3" if cursor else "?limit=3")
-                body = self.client.get(url).json()
-                pins.extend(body["pins"])
-                cursor = body.get("next_cursor")
-                if not cursor:
-                    return pins
+        while True:
+            url = reverse("map.pins") + (f"?cursor={cursor}&limit=3" if cursor else "?limit=3")
+            body = self.client.get(url).json()
+            pins.extend(body["pins"])
+            cursor = body.get("next_cursor")
+            if not cursor:
+                return pins
 
     def test_the_two_endpoints_return_identical_payloads(self) -> None:
         document = [line["p"] for line in _lines(self.client.get(reverse("map.document"))) if line["t"] == "pin"]
@@ -158,11 +144,127 @@ class TheDocumentAgreesWithThePagedEndpointTests(TestCase):
 
     def test_the_paged_endpoint_still_pages(self) -> None:
         """Kept working on purpose - progressive loading needs it."""
-        with self._no_cache():
-            first = self.client.get(reverse("map.pins") + "?limit=3").json()
+        first = self.client.get(reverse("map.pins") + "?limit=3").json()
 
         self.assertEqual(len(first["pins"]), 3)
         self.assertIsNotNone(first["next_cursor"])
+
+
+class TheLabelsTravelOncePerResponseTests(TestCase):
+    """A pin names its labels by id, so the response has to carry the dictionary.
+
+    The alternative - each pin carrying its labels' names, colours and icons -
+    is what made one label edit rewrite every payload that carried it, and what
+    made a shared vocabulary the largest thing in the document (D12).
+
+    The property both endpoints owe: no pin may name a label the same response
+    does not define, or its chips silently vanish.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.labels = [
+            baker.make(Label, profile=self.profile, kind="tag", name="Tag", order=3, color="#ff0000"),
+            baker.make(Label, profile=self.profile, kind="category", name="Category", order=2),
+            baker.make(Label, profile=self.profile, kind="status", name="Status", order=1),
+        ]
+        for index in range(4):
+            pin = baker.make(
+                Pin, profile=self.profile, location=baker.make(Location, latitude=float(index), longitude=9.0)
+            )
+            pin.labels.set(self.labels)
+
+    def _document(self) -> tuple[dict, list[dict]]:
+        """The document's head and its pin payloads.
+
+        Returns:
+            The head line, and one payload per pin.
+        """
+        lines = _lines(self.client.get(reverse("map.document")))
+        return lines[0], [line["p"] for line in lines if line["t"] == "pin"]
+
+    def test_the_head_defines_every_label_a_pin_names(self) -> None:
+        head, pins = self._document()
+
+        named = {str(label_id) for pin in pins for label_id in pin["label_ids"]}
+        self.assertTrue(named)
+        self.assertEqual(named - set(head["labels"]), set())
+
+    def test_every_page_defines_every_label_its_pins_name(self) -> None:
+        """Each page stands alone: a client may fetch them in any order, or one alone.
+
+        The page's dictionary covers the page rather than the account, which is
+        what makes it free - the views were built serializing these very pins.
+        """
+        cursor = None
+        pages = 0
+        while True:
+            url = reverse("map.pins") + (f"?cursor={cursor}&limit=2" if cursor else "?limit=2")
+            body = self.client.get(url).json()
+            pages += 1
+            named = {str(label_id) for pin in body["pins"] for label_id in pin["label_ids"]}
+            self.assertEqual(named - set(body["labels"]), set(), f"page {pages} names labels it does not define")
+            cursor = body.get("next_cursor")
+            if not cursor:
+                break
+        self.assertGreater(pages, 1, "the seed did not produce more than one page, so this proved nothing")
+
+    def test_a_dictionary_entry_carries_what_a_chip_draws(self) -> None:
+        head, _pins = self._document()
+
+        entry = head["labels"][str(self.labels[0].pk)]
+        self.assertEqual(entry["name"], "Tag")
+        self.assertEqual(entry["kind"], "tag")
+        self.assertEqual(entry["color"], "#ff0000")
+
+    def test_the_ids_keep_the_order_the_chips_are_drawn_in(self) -> None:
+        """Highest `order` first - the same priority that decides the pin's icon."""
+        _head, pins = self._document()
+
+        self.assertEqual(pins[0]["label_ids"], [label.pk for label in self.labels])
+
+    def test_a_page_does_not_cost_a_query_to_define_its_labels(self) -> None:
+        """The whole-account dictionary is one join over the through table; a page
+        pays it per page, which is the fallback path's whole walk."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as captured:
+            self.client.get(reverse("map.pins") + "?limit=2")
+        paged = len(captured)
+
+        with CaptureQueriesContext(connection) as captured:
+            self.client.get(reverse("map.pins") + "?limit=4")
+
+        self.assertEqual(len(captured), paged, "the label dictionary is costing a query per page")
+
+    def test_the_dictionary_does_not_carry_another_profiles_labels(self) -> None:
+        stranger = baker.make(User).profile
+        theirs = baker.make(Label, profile=stranger, kind="tag", name="Theirs", order=1)
+        baker.make(Pin, profile=stranger, location=baker.make(Location, latitude=50.0, longitude=50.0)).labels.add(
+            theirs
+        )
+
+        head, _pins = self._document()
+
+        self.assertNotIn(str(theirs.pk), head["labels"])
+
+    def test_editing_a_label_changes_the_document_rather_than_being_missed(self) -> None:
+        """The dictionary is only correct if a label edit moves the ETag it is served under."""
+        before = self.client.get(reverse("map.document")).headers["ETag"]
+
+        Label.objects.filter(pk=self.labels[0].pk).update(name="Renamed")
+        from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_labels
+
+        touch_pins_for_labels([self.labels[0].pk])
+
+        head, _pins = self._document()
+        self.assertEqual(head["labels"][str(self.labels[0].pk)]["name"], "Renamed")
+        self.assertNotEqual(self.client.get(reverse("map.document")).headers["ETag"], before)
 
 
 class TheDocumentDoesNotHoldTheAccountTests(TestCase):

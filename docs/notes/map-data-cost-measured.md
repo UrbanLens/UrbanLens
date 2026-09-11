@@ -20,12 +20,34 @@ database on chiron, asking Valkey's own `MEMORY USAGE` rather than estimating fr
 
 | | per 1,000 pins | 10,000-pin profile |
 |---|---|---|
-| **Per-pin Valkey cache** (hash + zset, today) | — | **6.6 MB** (662 B/pin) |
+| **Per-pin Valkey cache** (hash + zset, since deleted) | — | **6.6 MB** (662 B/pin) |
 | **One NDJSON document**, uncompressed | — | 4.5 MB (454 B/pin) |
 | **One NDJSON document**, gzipped | — | **0.36 MB** (36 B/pin) |
 
+Those three are at one label per pin and payload v10. The v11 figures are in the next section.
+
 The cache overstatement was 2.6×. At the old 512 MB instance that is ~77 such profiles rather than
 the ~25 D12 claimed, and memory pressure is a much weaker argument than that decision made it.
+
+## What normalising the labels out of the pin saved
+
+Measured on the same account at a realistic label distribution -
+`--labels-per-pin 4` over a 17-label vocabulary, which the seeder gained for this - by building both
+shapes from the same rows in the same run:
+
+| 10,000 pins, 4 labels each | uncompressed | gzipped |
+|---|---|---|
+| Labels copied into every pin (v10: `tags`, `status`, `categories`) | 6.46 MB (646 B/pin) | 432 KB (43.2 B/pin) |
+| `label_ids` plus one dictionary (v11) | 3.88 MB (388 B/pin) | 381 KB (38.1 B/pin) |
+| **saved** | **40%** | **12%** |
+
+The dictionary itself is **1,335 bytes for 17 labels** - 0.13 B/pin at this size, and less as the
+account grows, because it does not grow with it.
+
+Gzip already collapses most of the repetition, which is why the compressed saving is 12% rather than
+40%. What the uncompressed figure buys is real anyway: it is what the server allocates, what the
+client parses, and what the browser's store holds. And the saving scales with labels per pin, so the
+one-label seed the rest of this file uses measures the case where there is nothing to save.
 
 ## What the measurement does support
 
@@ -34,13 +56,14 @@ stored in today, and cheaper to produce:
 
 | | wall | CPU |
 |---|---|---|
-| Build and write the per-pin cache (`MapPinCache.rebuild`) | 1,197 ms | 943 ms |
+| Build and write the per-pin cache (`MapPinCache.rebuild`, since deleted) | 1,197 ms | 943 ms |
 | Build the document (`MapPinPayloadService.all`) | 851 ms | 588 ms |
 | Walk the paged path, 10 pages of 1,000 (`page()`) | 591 ms | 368 ms |
 
 So the argument for the document shape is its size and its access pattern — one `GET` against a
 single-threaded server, rather than `HMGET` across a multi-megabyte hash — and not the memory
-budget. The cache is worth keeping; what is worth changing is what it holds.
+budget. The cache was worth keeping; what was worth changing is what it holds, and on 2026-09-11 the
+per-pin cache was deleted and the document cache took its place.
 
 ## The database path, which decides whether any of it is optional
 
@@ -109,8 +132,9 @@ to a socket, so nothing here can measure that either way.
 
 ## The caveat that matters most
 
-`seed_heavy_account` gives every pin **one** shared label. A real account carries several per pin,
-so:
+`seed_heavy_account` gives every pin **one** shared label unless asked otherwise, and every figure
+above except the v10-against-v11 comparison was taken that way. A real account carries several per
+pin, so:
 
 - the per-pin and per-document byte figures are both **understated**;
 - the gzipped figure is understated *most*, because 10,000 repetitions of one label name is the best
@@ -119,4 +143,5 @@ so:
 
 The **ratio** between the two representations is more robust than either absolute, because both were
 measured on the same rows in the same run. Re-measure with a realistic label distribution before
-quoting an absolute at anyone.
+quoting an absolute at anyone - `--labels-per-pin N` now does that, and the v10-against-v11 section
+above is the one measurement here that used it.

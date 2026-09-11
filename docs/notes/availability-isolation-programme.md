@@ -30,7 +30,7 @@ on purpose until it lands. Each phase's acceptance is a measurement, not a revie
 | 2 | Config-only shedding and telemetry, deployable under today's gevent | **partly done 2026-09-10** |
 | 3 | `gthread`, per-role Postgres users, `app-heavy` pool (D11) | not started |
 | 4 | Valkey split + degradable session path (P105) | not started |
-| 5 | Map data contract v11 (D12) | **underway 2026-09-11** — write paths, freshness signal and the single-document fetch done (P102, P106, P108 closed); payload v11, deltas and the IndexedDB store not started |
+| 5 | Map data contract v11 (D12) | **underway 2026-09-11** — write paths, freshness signal, the single-document fetch and the cache shape change done (P101, P102, P106, P108 closed); payload v11, deltas and the IndexedDB store not started |
 | 6 | Celery queue classes; move P96/P98/P2 work off the request | not started |
 | 7 | Observability completion, profiling harness, k8s parity | not started |
 
@@ -78,10 +78,11 @@ Landed (`57b234277`, `c03618f6b`), all verified in the app container:
 Two traps found while writing those, both now documented in the test files
 because the next person will hit them the same way: a reproduction whose work
 happens in `transaction.on_commit` does nothing under a `TestCase`, and
-`MapPinCache` declines to act at all without an injected client — so a
-fan-out test written the obvious way passes against the broken code. The import
-tests were vacuous in their first draft for a third reason (wrong payload keys),
-caught by probing the live endpoint rather than by review.
+the per-pin cache of the time declined to act at all without an injected
+client — so a fan-out test written the obvious way passed against the broken
+code (that cache has since been deleted; the trap was in the shape, not the
+class). The import tests were vacuous in their first draft for a third reason
+(wrong payload keys), caught by probing the live endpoint rather than by review.
 
 **The neighbour test now exists and has been run** (`tests/perf/`,
 `bin/run_perf_tests.sh`, `bin/perf/`). One account acts, a different account

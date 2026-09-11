@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.integration_testing.perf_seed import (
     HEAVY_LABEL_NAME,
     MAX_SEEDED_PINS,
     PIN_NAME_PREFIX,
+    VOCABULARY,
     seed_heavy_account,
 )
 
@@ -321,3 +322,58 @@ class TheSeedHoldsTheMapCentreConstantTests(TestCase):
         self.profile.refresh_from_db()
         self.assertIsNone(self.profile.map_center_latitude)
         self.assertIsNone(report["map_center"])
+
+
+class TheSeedCanCarryARealisticLabelCountTests(TestCase):
+    """One label per pin is the cheapest case for anything that scales with them.
+
+    The map payload names a pin's labels by id and defines each once per
+    response, so what that saves over copying every label's facts into every pin
+    grows with how many labels a pin carries. A fixture that always gives one
+    measures the case where there is nothing to save.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.profile: Profile = self.user.profile
+
+    def test_each_pin_carries_the_requested_number(self) -> None:
+        seed_heavy_account(self.profile, pins=SEEDED, labels_per_pin=4)
+
+        counts = {pin.labels.count() for pin in Pin.objects.filter(profile=self.profile)}
+
+        self.assertEqual(counts, {4})
+
+    def test_the_vocabulary_is_shared_rather_than_per_pin(self) -> None:
+        """A label per pin is not a realistic account and would flatter compression.
+
+        Counted as `(kind, name)` pairs rather than against the profile's total or
+        by name alone: a profile arrives with several dozen default labels, and
+        some of them share a name with the vocabulary under a different kind.
+        """
+        report = seed_heavy_account(self.profile, pins=SEEDED, labels_per_pin=4)
+
+        names = {name for _kind, name in VOCABULARY}
+        present = set(Label.objects.filter(profile=self.profile, name__in=names).values_list("kind", "name"))
+        self.assertEqual(present & set(VOCABULARY), set(VOCABULARY))
+        self.assertEqual(report["labels_per_pin"], 4)
+        self.assertLess(4, len(VOCABULARY), "the window must be smaller than the vocabulary or every pin is identical")
+
+    def test_neighbouring_pins_do_not_all_carry_the_same_set(self) -> None:
+        """Rotating the vocabulary, or every pin's chip list is byte-identical."""
+        seed_heavy_account(self.profile, pins=SEEDED, labels_per_pin=3)
+
+        sets = {frozenset(pin.labels.values_list("pk", flat=True)) for pin in Pin.objects.filter(profile=self.profile)}
+
+        self.assertGreater(len(sets), 1)
+
+    def test_one_label_per_pin_is_still_the_default(self) -> None:
+        seed_heavy_account(self.profile, pins=SEEDED)
+
+        self.assertEqual({pin.labels.count() for pin in Pin.objects.filter(profile=self.profile)}, {1})
+
+    def test_more_labels_than_the_vocabulary_holds_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            seed_heavy_account(self.profile, pins=SEEDED, labels_per_pin=len(VOCABULARY) + 1)

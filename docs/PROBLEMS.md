@@ -3726,40 +3726,6 @@ observation, downgraded from a hazard.
 
 Not fixed. Not measured this session.
 
-## P101 — `MapPinCache.rebuild` still drops concurrent writes and can release a lock it no longer holds
-
-`id: P101` · `status: open` · `updated: 2026-09-10`
-
-`112df3dab` fixed this class's bbox, intactness and `RedisError` defects; three remain in
-`services/map_pins/cache.py`.
-
-1. **Concurrent creates/deletes during a rebuild are silently lost or resurrected.** `rebuild()`
-   (`cache.py:250-286`) writes the freshly-queried payload into `tmp_pins`/`tmp_order` and only
-   renames them onto the live `self.pins_key`/`self.order_key` at the end (`cache.py:271-272`).
-   `upsert_pin`/`delete_pin` (`cache.py:288-327`) write straight into the *live* keys, gated only
-   on `self.client.exists(self.meta_key)` - which still holds the previous generation's value for
-   the whole rebuild window, since `meta_key` is not touched until `cache.py:278`. A pin created
-   during that window (write lands in the old live hash) is discarded the instant the rename
-   replaces it; a pin deleted during that window (removed from the old live hash) reappears once
-   the rename restores the pre-delete snapshot the rebuild's own query already captured -
-   resurrected as a ghost until the next rebuild or a later individual write touches that pin
-   again.
-2. **The two-key rename is not atomic.** `cache.py:271-272` renames `tmp_pins` then `tmp_order` as
-   two separate Redis commands, not a `MULTI`/Lua transaction - a reader between them sees a pins
-   hash and an order zset from two different generations.
-3. **The lock is released without checking its own token.** `rebuild()` sets `self.lock_key` to a
-   fresh `lock_token` with `nx=True, ex=LOCK_SECONDS` (`cache.py:253-256`; `LOCK_SECONDS = 30`,
-   `cache.py:87`), but its `finally` block unconditionally deletes `self.lock_key` (`cache.py:284`)
-   with no compare-and-delete against `lock_token`. If a rebuild runs longer than 30s - plausible
-   at 10k pins, where this investigation measured `MapPinCache.rebuild(10k)` at 6.79s cold but did
-   not measure it under load or Redis contention - its lock can expire, let a second rebuild
-   acquire it, and then the first rebuild's `finally` deletes the *second* rebuild's lock, opening
-   the door to a third concurrent rebuild.
-
-Not fixed. Not re-measured this session against a real concurrent-write race - findings 1 and 3 are
-by code inspection of the sequence above; the 30s/6.79s figures are this session's own measurements
-(see R27).
-
 ## P103 — `MEDIA_PIPELINE.md`'s "every parser is now guarded" was false; a label-icon resize decodes unsandboxed in-request
 
 `id: P103` · `status: open` · `updated: 2026-09-10`

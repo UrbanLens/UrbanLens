@@ -75,7 +75,7 @@ Implemented as a read-only presentation proxy (§4), never by mutating rows.
 | `viewed_by_other` | `model.py:167` | `False` on read — **and no write** (§1.6). |
 | `cover_photo` | `model.py:173-179` | `None`. A brand-new wiki has no cover; do not substitute an enrichment photo. |
 | `uuid` | `abstract/model.py:75` | Unchanged. |
-| `created` | `abstract/model.py:46` | Month-truncated, or omitted. It is, to within a Celery hop, the moment the first user pinned the place (`tasks.py:27-61` queued from `models/pin/signals.py:360-362`). Must agree with the concealed `first_pinned` so the two cannot be differenced. |
+| `created` | `abstract/model.py:46` | Month-truncated, or omitted. It is, to within a Celery hop, the moment the first user pinned the place (`tasks.py:27-61` queued from `models/pin/signals.py:280-281`). Must agree with the concealed `first_pinned` so the two cannot be differenced. |
 | `updated` | `abstract/model.py:47` | `= concealed created`. Blanket rule; see §2.6. |
 | Address proxies (`address`, `city`, `county`, `state`, `country`, `latitude`, `longitude`, `point`, `official_name`, `place_name`, `cid`, …) | `abstract/addressable.py:30-102` | **Unchanged.** Read-only delegations to `Location`; the wiki edit surface has no path to any of them. |
 | `effective_latitude` / `effective_longitude` | `model.py:358-372` | Unchanged for the root wiki. Not emitted for child wikis (which are concealed wholesale). |
@@ -227,7 +227,7 @@ Note an inconsistency, not a protection: the markup-driven security write (`cont
 
 ### 2.7 `Wiki.created` — automatic in origin, tracks the first pin
 
-`abstract/model.py:46`. The draft row is created by `tasks.ensure_draft_wiki_for_location`, queued from the `Pin` `post_save` signal (`models/pin/signals.py:360-362`), so it dates the first human to pin the place — and `wiki_detail.py:166` ships it as a full ISO datetime while `first_pinned` right beside it is deliberately coarsened to the 1st of the month and suppressed below three pinners. **Every protection on `first_pinned` is defeated by reading `created` in the same response, today, for every API consumer, independent of concealment.** Fix regardless. **Recommendation: coarsen to the same month precision and suppress under the same rule.**
+`abstract/model.py:46`. The draft row is created by `tasks.ensure_draft_wiki_for_location`, queued from the `Pin` `post_save` signal (`models/pin/signals.py:280-281`), so it dates the first human to pin the place — and `wiki_detail.py:166` ships it as a full ISO datetime while `first_pinned` right beside it is deliberately coarsened to the 1st of the month and suppressed below three pinners. **Every protection on `first_pinned` is defeated by reading `created` in the same response, today, for every API consumer, independent of concealment.** Fix regardless. **Recommendation: coarsen to the same month precision and suppress under the same rule.**
 
 ### 2.8 `WikiAlias` — **provenance recoverable via `source`, not `created_by`**
 

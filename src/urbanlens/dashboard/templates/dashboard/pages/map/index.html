@@ -682,6 +682,13 @@
 
     // -- Shared state ----------------------------------------------------------
     const _pinStore     = new Map();   // uuid → pin data
+    // id (as a string) → {id, kind, name, color, icon}. A pin names its labels
+    // by id; every map response carries whatever ids it uses.
+    let   _labelDict    = {};
+    // Entries that moved since a refresh last acted on them. A label edit shows
+    // up here rather than in any pin, so this is the only thing that can say a
+    // marker needs rebuilding for one.
+    const _changedLabelIds = new Set();
     const _fetchedTiles = new Set();   // tile keys already loaded from server
     const _markerMap    = new Map();   // uuid → L.Marker
     let   _filterMode        = false;  // true while search/filter results are shown
@@ -1107,8 +1114,8 @@
         'uuid', 'id', 'name', 'icon', 'color',
         'own_icon', 'own_custom_icon_url', 'own_color',
         'latitude', 'longitude',
-        'description', 'status', 'last_visited', 'rating',
-        'tags', 'viewLocationUrl', 'address', 'cover_photo_url',
+        'description', 'last_visited', 'rating',
+        'label_ids', 'viewLocationUrl', 'address', 'cover_photo_url',
     ]);
     function _slimPin(pin) {
         const slim = {};
@@ -1127,7 +1134,7 @@
             // on every load, until a fresh _writeCache() happens to overwrite it
             // (which isn't guaranteed - e.g. if the next fetch fails, or the tab
             // closes before a scheduled write fires).
-            if (c.v !== 10 || c.profileUuid !== _PROFILE_UUID) { localStorage.removeItem(_CACHE_KEY); return null; }
+            if (c.v !== 11 || c.profileUuid !== _PROFILE_UUID) { localStorage.removeItem(_CACHE_KEY); return null; }
             if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
             // App UUID mismatch = DB was wiped or app was redeployed with a fresh database.
             // Clear cache so ghost pins from the old DB don't appear on the map.
@@ -1159,9 +1166,10 @@
         if (!_pinStore.size) return;   // nothing to cache yet
         const ts = Date.now();
         const payload = JSON.stringify({
-            v: 10, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
+            v: 11, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
             lastUpdated: _lastKnownUpdated,
             tiles: [..._fetchedTiles],
+            labels: _labelDict,
             pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
         });
         try {
@@ -1317,8 +1325,8 @@
                         if (m) { _markerMap.set(pin.uuid, m); batch.push(m); }
                     } else {
                         const changed = existing.icon !== pin.icon || existing.color !== pin.color
-                            || existing.tags !== pin.tags || existing.rating !== pin.rating
-                            || existing.name !== pin.name || existing.status !== pin.status
+                            || _labelsDiffer(existing, pin) || existing.rating !== pin.rating
+                            || existing.name !== pin.name
                             || existing.latitude !== pin.latitude || existing.longitude !== pin.longitude;
                         if (changed && _markerMap.has(pin.uuid)) {
                             clusterGroup.removeLayer(_markerMap.get(pin.uuid));
@@ -1342,6 +1350,9 @@
             }
 
             if (batch.length) clusterGroup.addLayers(batch);
+            // Every pin has now been compared against them, so a label edit does
+            // not go on rebuilding its markers on every later refresh.
+            _changedLabelIds.clear();
             _fetchedTiles.clear();
             _fetchedTiles.add('*');
             _totalPins = _pinStore.size;
@@ -1512,12 +1523,39 @@
     }
 
     // -- Marker builder --------------------------------------------------------
-    // A pin's labels as objects, whatever wrote the entry. Every endpoint now
-    // returns `tags` as [{id, name, color, icon}]; `tags_data` was the filter
-    // panel's and the single-pin refresh's separate shape, and a comma-joined
-    // string was the same paths' `tags`. Both linger only in caches written
-    // before the shapes were unified.
+    // Merge a response's label dictionary in rather than replacing it: a paged
+    // fetch sends one per page, and the quick-edit endpoints send none at all.
+    // Records which entries actually moved, because a renamed or recoloured
+    // label changes what a pin draws without changing anything in the pin.
+    function _mergeLabels(labels) {
+        if (!labels || typeof labels !== 'object') return;
+        const merged = Object.assign({}, _labelDict);
+        for (const [id, entry] of Object.entries(labels)) {
+            const before = merged[id];
+            if (!before || JSON.stringify(before) !== JSON.stringify(entry)) _changedLabelIds.add(String(id));
+            merged[id] = entry;
+        }
+        _labelDict = merged;
+    }
+
+    // Whether this pin draws differently than the store's copy of it does,
+    // given what the dictionary just learned.
+    function _labelsDiffer(before, after) {
+        const ids = Array.isArray(after?.label_ids) ? after.label_ids : [];
+        const previous = Array.isArray(before?.label_ids) ? before.label_ids : [];
+        if (ids.join(',') !== previous.join(',')) return true;
+        return ids.some(id => _changedLabelIds.has(String(id)));
+    }
+
+    // A pin's labels as objects, whatever wrote the entry. The map endpoints
+    // send `label_ids` and the dictionary to resolve them against. `tags` is
+    // still what the quick-edit and pin-list endpoints return, `tags_data` was
+    // the filter panel's separate shape, and a comma-joined string was the same
+    // paths' `tags` before they were unified.
     function _pinTagObjects(pin) {
+        if (Array.isArray(pin.label_ids)) {
+            return pin.label_ids.map(id => _labelDict[String(id)]).filter(Boolean);
+        }
         if (Array.isArray(pin.tags) && pin.tags.length) {
             return pin.tags.map(t => (typeof t === 'object' && t !== null) ? t : { name: String(t) });
         }
@@ -1583,9 +1621,6 @@
             marker.setIcon(L.divIcon({ className: 'map-pin-icon-wrap', html: iconHtml, iconSize, iconAnchor }));
         }
 
-        // Tag chips come from `tags`, which every map endpoint now returns as
-        // objects. The string branch is only for cache entries written before
-        // that was true, and can go once no client can be holding one.
         let tagChipsData = _pinTagObjects(pin);
         const tagChips = tagChipsData.map(t => {
             const bg = t.color ? `${t.color}22` : 'rgba(100,120,160,0.18)';
@@ -1915,6 +1950,7 @@
                     if (obj.t === 'head') {
                         head = obj;
                         if (obj.mode !== 'document') return null;
+                        _mergeLabels(obj.labels);
                     } else if (obj.t === 'pin') {
                         pins.push(obj.p);
                         if (pins.length % 500 === 0) {
@@ -1959,6 +1995,7 @@
                 headers: { 'X-Requested-With': 'XMLHttpRequest' },
             }, 45000);
             pins.push(...(data.pins || []));
+            _mergeLabels(data.labels);
             cursor = data.next_cursor || null;
             total = Number.isFinite(data.total) ? data.total : total;
             page += 1;
@@ -1989,7 +2026,7 @@
                 if (existing) {
                     // Refresh marker when display-relevant fields changed (tag edits, rating, etc.)
                     if (existing.icon !== pin.icon || existing.color !== pin.color
-                            || existing.tags !== pin.tags || existing.rating !== pin.rating) {
+                            || _labelsDiffer(existing, pin) || existing.rating !== pin.rating) {
                         _pinStore.set(pin.uuid, pin);
                         if (!_filterMode && _markerMap.has(pin.uuid)) {
                             clusterGroup.removeLayer(_markerMap.get(pin.uuid));
@@ -2011,6 +2048,7 @@
                 updatePinCounter();
                 _scheduleCache();
             }
+            if (tileKeys.length === 1 && tileKeys[0] === '*') _changedLabelIds.clear();
             console.log('[UL] Server returned %d new pin(s) for tile(s): %s', batch.length, tileKeys.join(', '));
             return batch.length;
         } catch (err) {
@@ -2146,6 +2184,9 @@
             // Restore from cache immediately - no server round-trip, no loading indicator.
             const ageSeconds = Math.round((Date.now() - cache.ts) / 1000);
             console.log('[UL] Cache HIT - %d pins, age %ds, app_uuid=%s', Object.keys(cache.pins).length, ageSeconds, cache.appUuid || 'none');
+            // Before the markers: a chip is drawn by resolving the pin's
+            // label ids, so a marker built against an empty dictionary loses them.
+            _mergeLabels(cache.labels);
             const layers = [];
             for (const [uuid, pin] of Object.entries(cache.pins)) {
                 _pinStore.set(uuid, pin);
@@ -5674,7 +5715,7 @@
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
         })
         .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d && d.pin) window.updateCachedPin(d.pin); onDone?.(); })
+        .then(d => { if (d && d.pin) { _mergeLabels(d.labels); window.updateCachedPin(d.pin); } onDone?.(); })
         .catch(() => {
             window.invalidatePinCache();
             _refreshAllPins().then(onDone).catch(onDone);

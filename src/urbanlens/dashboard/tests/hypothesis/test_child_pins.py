@@ -184,7 +184,7 @@ class MapSearchExcludesChildPinsTests(TestCase):
     """POST /map/search/ (the filter-formula search path) must not surface child pins as if they were root pins.
 
     Unlike every other map-data query, this path built its queryset without
-    ``.root_pins()`` before ``get_map_data()`` was called with an explicit
+    ``.root_pins()`` before ``map_data_context()`` was called with an explicit
     (non-None) query - which only applies that filter itself when no query is
     given. Left unfixed, a search would show a merged/detail pin as a normal
     top-level marker, the opposite of the "merged pins disappear" symptom.

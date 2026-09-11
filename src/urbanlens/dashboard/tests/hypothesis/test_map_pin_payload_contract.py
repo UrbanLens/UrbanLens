@@ -33,7 +33,7 @@ _PIN_CACHE_TS = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "ts" 
 
 #: The payload shape that ``PIN_CACHE_VERSION`` currently describes. Update this
 #: *and* the version together, never one alone.
-_EXPECTED_VERSION = 10
+_EXPECTED_VERSION = 11
 _EXPECTED_KEYS = frozenset(
     {
         "id",
@@ -46,12 +46,10 @@ _EXPECTED_KEYS = frozenset(
         "last_visited",
         "latitude",
         "longitude",
-        "status",
-        "categories",
         "profile",
         "rating",
         "color",
-        "tags",
+        "label_ids",
         "address",
         "own_icon",
         "own_custom_icon_url",

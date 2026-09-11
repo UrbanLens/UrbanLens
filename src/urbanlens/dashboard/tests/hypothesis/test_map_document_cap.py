@@ -1,6 +1,6 @@
 """The map's whole-account endpoints must have a ceiling the account cannot raise.
 
-`MapController.get_map_data` (`controllers/maps.py:1105-1128`) serialises every
+`MapController.map_data_context` (`controllers/maps.py:1149-1178`) serialises every
 root pin the profile owns - `MapPinPayloadService.all()`, whose own docstring says
 "Unbounded in output by design" - and hands the list to `map/data.html`, which
 embeds it as one JSON document. Both `search_map_post` (`:520-538`) and `init_map`

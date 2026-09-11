@@ -1,9 +1,9 @@
 """A pin whose map appearance changed has to say so, whatever changed it.
 
-The client does not read the server's pin cache. It polls `map.pins.meta`, which
-reports `Max(Pin.updated)` over the profile's root pins, and refetches only when
-that moves. So every write that changes what a pin *draws* has two obligations:
-drop the server's cached copy, and move `Pin.updated`.
+The client polls `map.pins.meta`, which reports a fingerprint over the profile's
+root pins, and refetches only when that moves. So every write that changes what a
+pin *draws* has to move `Pin.updated` - including the writes that never touch the
+pin row.
 
 Label `order` decides which of a pin's labels supplies its icon and colour
 (`_winning_display_label` sorts by `-order`), so a reorder changes what a pin
@@ -19,13 +19,11 @@ thing that was already true while the bug was live.
 from __future__ import annotations
 
 import json
-from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.fake_redis import FakeRedis
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.labels.model import Label
@@ -33,7 +31,6 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
-from urbanlens.dashboard.services.map_pins import MapPinCache
 
 
 class LabelWritesTellTheClientTests(TestCase):
@@ -248,9 +245,7 @@ class TheOtherWritesThatChangeAPinsAppearanceTests(TestCase):
 
     A pin's payload carries its labels and its rating. Both can change without
     the pin row being written - `pin.labels.add()` writes the through table, and
-    a `Review` is its own row - and both already drop the server's cached copy
-    through receivers in `models/pin/signals.py`. Whether they also move
-    `Pin.updated`, which is the half P106 was about, is what these ask.
+    a `Review` is its own row.
     """
 
     def setUp(self) -> None:
@@ -303,58 +298,3 @@ class TheOtherWritesThatChangeAPinsAppearanceTests(TestCase):
         review.delete()
 
         self.assertGreater(self._updated(), before, "the pin's rating was removed and the client is not told")
-
-
-class TheCachedPinsAreActuallyDroppedTests(TestCase):
-    """That the drop reaches Valkey, not just that the code path runs.
-
-    `clear_for_profiles` builds its own connection, which in this suite the
-    network guard refuses - and the caller swallows that, deliberately, because a
-    receiver that dies on an unavailable cache breaks writes that have nothing to
-    do with caching. Swallowing it also means a drop that never happened looks
-    exactly like one that did, so this patches a fake in and reads the keys back.
-    """
-
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)
-        self.user = baker.make(User)
-        self.profile = self.user.profile
-        self.redis = FakeRedis()
-
-    def test_editing_a_label_drops_the_carrying_profiles_cached_pins(self) -> None:
-        label = baker.make(Label, profile=self.profile, kind="tag", name="carried", order=1)
-        pin = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=1.0, longitude=1.0))
-        pin.labels.add(label)
-        cache = MapPinCache(self.profile, client=self.redis)
-        cache.rebuild(Pin.objects.filter(profile=self.profile).root_pins().select_related("location"))
-        self.assertTrue(self.redis.exists(cache.pins_key), "the fake cache did not warm, so this asserts nothing")
-
-        with (
-            mock.patch.object(MapPinCache, "make_client", classmethod(lambda cls: self.redis)),
-            self.captureOnCommitCallbacks(execute=True),
-        ):
-            label.color = "#2196F3"
-            label.save(update_fields=["color"])
-
-        self.assertFalse(self.redis.exists(cache.pins_key), "the cached pin set survived a label edit")
-        self.assertFalse(self.redis.exists(cache.meta_key), "the cache metadata survived a label edit")
-
-    def test_an_unreachable_cache_does_not_break_the_edit(self) -> None:
-        """The write must succeed even when the cache cannot be dropped."""
-        label = baker.make(Label, profile=self.profile, kind="tag", name="carried", order=1)
-        pin = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=1.0, longitude=1.0))
-        pin.labels.add(label)
-        before = Pin.objects.filter(pk=pin.pk).values_list("updated", flat=True).first()
-
-        def refuse(cls: type[MapPinCache]) -> None:
-            raise RuntimeError("cache is unreachable")
-
-        with (
-            mock.patch.object(MapPinCache, "make_client", classmethod(refuse)),
-            self.captureOnCommitCallbacks(execute=True),
-        ):
-            label.color = "#2196F3"
-            label.save(update_fields=["color"])
-
-        self.assertGreater(Pin.objects.filter(pk=pin.pk).values_list("updated", flat=True).first(), before)

@@ -14,7 +14,8 @@
 
 Measured in the `app` container against `MapPinPayloadService.all()`
 (`services/map_pins/payload.py:492`, reached from `controllers/maps.py:520` `search_map_post` ->
-`:1105` `get_map_data`), around the four fix commits on `release/v_0_8_0`: `0fab2b35a` (build the
+`:1105` `get_map_data`, since renamed `map_data_context`), around the four fix commits on
+`release/v_0_8_0`: `0fab2b35a` (build the
 payload from columns instead of a model graph), `cc0040878` (one payload shape per map endpoint),
 `112df3dab` (the map cache answered questions it had not cached), `f2623a5d4` (stop an abandoned
 request burning a worker for eight more minutes) - those commit messages record the fixes
@@ -39,8 +40,9 @@ to the target pin count if re-running.
   to end. Postgres building the JSON itself, server-side: 0.28s.
 - Cost was linear in pin count, not superlinear anywhere in the SQL: 438/566/571/610 μs per pin at
   1k/5k/10k/25k pins respectively.
-- `MapPinCache`: `page(500 pins)` cache hit 12.6ms, miss 236.8ms; `MapPinCache.rebuild(10k)` 6.79s
-  cold (see P101 for the concurrency defects this rebuild path still has).
+- The per-pin Valkey cache of the time: `page(500 pins)` cache hit 12.6ms, miss 236.8ms;
+  `rebuild(10k)` 6.79s cold. That cache was deleted on 2026-09-11 (D12), which is what closed P101 -
+  these figures describe a path that no longer exists.
 
 ### After, 5,000 pins, with `ANALYZE` run post-seed
 
@@ -58,6 +60,6 @@ comparable to anything below.)
 
 ### What this does not cover
 
-Nothing here re-measures `MapPinCache`'s remaining race conditions (P101) or the autocomplete
-endpoint's missing trigram indexes (P100) — neither is touched by the four commits above, and both
-are still open.
+Nothing here re-measures the autocomplete endpoint's missing trigram indexes (P100), which the four
+commits above do not touch. The per-pin cache's race conditions (P101) were resolved by deleting the
+cache; see D12 and X17 for what replaced it and what it measures at.

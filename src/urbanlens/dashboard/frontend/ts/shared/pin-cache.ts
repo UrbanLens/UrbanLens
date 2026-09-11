@@ -18,7 +18,7 @@
 // matched. Both are exported so pin-cache.contract.test.ts can read the template
 // and fail the build when the two sides disagree again, rather than the feature
 // just going quiet.
-export const PIN_CACHE_VERSION = 10;
+export const PIN_CACHE_VERSION = 11;
 
 /** The localStorage key holding one profile's cached pin store. */
 export function pinCacheKey(profileUuid: string): string {
@@ -41,20 +41,33 @@ export interface CachedSearchPin {
     tags?: string[];
 }
 
-/** Parse the raw per-pin records out of the current profile's cache, or [] if unavailable/invalid. */
-function readRawCachedPins(profileUuid: string): Array<Record<string, unknown>> {
-    if (!profileUuid) return [];
+/** A cached pin's label ids resolved against the blob's own label dictionary. */
+interface CachedStore {
+    pins: Array<Record<string, unknown>>;
+    labels: Record<string, { name?: unknown }>;
+}
+
+/** Parse the current profile's cache, or an empty store if unavailable/invalid. */
+function readCachedStore(profileUuid: string): CachedStore {
+    const empty: CachedStore = { pins: [], labels: {} };
+    if (!profileUuid) return empty;
     try {
         const raw = localStorage.getItem(pinCacheKey(profileUuid));
-        if (!raw) return [];
+        if (!raw) return empty;
         const cache = JSON.parse(raw);
-        if (cache?.v !== PIN_CACHE_VERSION || cache?.profileUuid !== profileUuid) return [];
+        if (cache?.v !== PIN_CACHE_VERSION || cache?.profileUuid !== profileUuid) return empty;
         const pins = cache.pins;
-        if (!pins || typeof pins !== "object") return [];
-        return Object.values(pins) as Array<Record<string, unknown>>;
+        if (!pins || typeof pins !== "object") return empty;
+        const labels = cache.labels && typeof cache.labels === "object" ? cache.labels : {};
+        return { pins: Object.values(pins) as Array<Record<string, unknown>>, labels };
     } catch {
-        return [];
+        return empty;
     }
+}
+
+/** Parse the raw per-pin records out of the current profile's cache, or [] if unavailable/invalid. */
+function readRawCachedPins(profileUuid: string): Array<Record<string, unknown>> {
+    return readCachedStore(profileUuid).pins;
 }
 
 /** Return the lat/lng of every pin in the current profile's cached pin store, or [] if unavailable. */
@@ -76,7 +89,8 @@ export function readCachedPinLocations(profileUuid: string): CachedPinLocation[]
  */
 export function readCachedPinsForSearch(profileUuid: string): CachedSearchPin[] {
     const results: CachedSearchPin[] = [];
-    for (const pin of readRawCachedPins(profileUuid)) {
+    const { pins, labels } = readCachedStore(profileUuid);
+    for (const pin of pins) {
         const lat = Number(pin?.latitude);
         const lng = Number(pin?.longitude);
         const name = typeof pin?.name === "string" ? pin.name : "";
@@ -88,7 +102,11 @@ export function readCachedPinsForSearch(profileUuid: string): CachedSearchPin[] 
             longitude: lng,
             icon: typeof pin?.icon === "string" ? pin.icon : undefined,
             address: typeof pin?.address === "string" ? pin.address : undefined,
-            tags: Array.isArray(pin?.tags) ? (pin.tags as unknown[]).filter((t): t is string => typeof t === "string") : undefined,
+            tags: Array.isArray(pin?.label_ids)
+                ? (pin.label_ids as unknown[])
+                      .map((id) => labels[String(id)]?.name)
+                      .filter((name): name is string => typeof name === "string" && name.length > 0)
+                : undefined,
         });
     }
     return results;

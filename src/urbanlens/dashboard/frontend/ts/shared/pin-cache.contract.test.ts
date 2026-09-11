@@ -66,7 +66,7 @@ describe("pin cache contract with the map page's inline writer", () => {
         expect(cachedFields.size).toBeGreaterThan(5); // guards against a regex that matched nothing useful
 
         // Every field read by readRawCachedPins' consumers in pin-cache.ts.
-        for (const field of ["uuid", "name", "latitude", "longitude", "icon", "address", "tags"]) {
+        for (const field of ["uuid", "name", "latitude", "longitude", "icon", "address", "label_ids"]) {
             expect(cachedFields).toContain(field);
         }
     });

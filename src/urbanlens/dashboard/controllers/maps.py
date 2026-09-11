@@ -27,7 +27,7 @@ from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService, document as map_document
+from urbanlens.dashboard.services.map_pins import MapPinPayloadService, document as map_document
 from urbanlens.dashboard.services.map_pins.view_urls import with_view_urls
 from urbanlens.dashboard.services.pins.pin_creation import (
     AddressResolutionError,
@@ -533,7 +533,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria)
             query = _apply_toolbar_filters(query, profile, request.POST.get("toolbar_filter_ids", ""))
-            return render(request, "dashboard/pages/map/data.html", {"map_pins": self.get_map_data(request, query)})
+            return render(request, "dashboard/pages/map/data.html", self.map_data_context(request, query))
 
         logger.error("Invalid search criteria: %s", search_form.errors)
         return HttpResponse(status=400, content="Invalid search criteria.")
@@ -678,25 +678,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         cursor = _safe_positive_int(request.GET.get("cursor"))
         limit = _safe_positive_int(request.GET.get("limit"))
         include_total = request.GET.get("include_total") == "1"
-        cached_page = MapPinCache(profile).get_or_build_page(
-            query,
-            cursor=cursor,
-            limit=limit,
-            include_total=include_total,
-            # The cache holds every root pin for this profile ordered by pk and
-            # nothing narrower, so a bounded request is not a question it can
-            # answer - see get_or_build_page.
-            cacheable=bbox is None,
-        )
-        with_view_urls(cached_page.page.pins)
+        service = MapPinPayloadService(profile)
+        page = service.page(query, cursor=cursor, limit=limit, include_total=include_total)
+        with_view_urls(page.pins)
 
-        payload: dict[str, Any] = {
-            "pins": cached_page.page.pins,
-            "next_cursor": cached_page.page.next_cursor,
-            "cache": "hit" if cached_page.hit else "miss",
-        }
-        if cached_page.page.total is not None:
-            payload["total"] = cached_page.page.total
+        # Repeated on every page rather than sent once: a page has to be enough
+        # on its own to render what it carries, whatever order pages arrive in.
+        payload: dict[str, Any] = {"pins": page.pins, "next_cursor": page.next_cursor, "labels": service.label_dictionary_for(page.pins)}
+        if page.total is not None:
+            payload["total"] = page.total
         return JsonResponse(payload)
 
     def map_document(self, request, *args, **kwargs):
@@ -843,10 +833,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             except (Pin.DoesNotExist, ValueError, ValidationError):
                 # ValidationError: pin_slug isn't a valid UUID string at all.
                 return JsonResponse({"error": "not found"}, status=404)
-        map_data = self.get_map_data(request, Pin.objects.filter(pk=pin.pk).select_related("location"))
-        if not map_data:
+        context = self.map_data_context(request, Pin.objects.filter(pk=pin.pk).select_related("location"))
+        if not context["map_pins"]:
             return JsonResponse({"error": "not found"}, status=404)
-        return JsonResponse({"pin": map_data[0]})
+        # The dictionary too: this is the response that follows an edit, so it is
+        # the one most likely to name a label the client has never seen.
+        return JsonResponse({"pin": context["map_pins"][0], "labels": context["map_labels"]})
 
     def patch_pin(self, request, pin_slug, *args, **kwargs):
         """Quick-edit a pin from the map popup dialog.
@@ -1152,9 +1144,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"place": detail, "cached": False})
 
     def init_map(self, request, *args, **kwargs):
-        return render(request, "dashboard/pages/map/data.html", {"map_pins": self.get_map_data(request)})
+        return render(request, "dashboard/pages/map/data.html", self.map_data_context(request))
 
-    def get_map_data(self, request, query: PinQuerySet | None = None) -> list[dict[str, Any]]:
+    def map_data_context(self, request, query: PinQuerySet | None = None) -> dict[str, Any]:
         """The map payload for *query*, in the one shape every map endpoint returns.
 
         Deliberately no reshaping. This used to rewrite each payload for
@@ -1166,17 +1158,24 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         surfaced as a pin whose labels read as empty depending on which endpoint
         last loaded it.
 
+        The dictionary travels with the payloads because a pin names its labels
+        by id, and a response the client cannot resolve those against draws a pin
+        with no chips.
+
         Args:
             request: The current request, for the requesting profile.
             query: Pins to serialize. Defaults to the profile's root pins.
 
         Returns:
-            One payload per pin, each carrying its own detail-page URL.
+            Template context for `map/data.html`: one payload per pin, each
+            carrying its own detail-page URL, and the labels they name.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if query is None:
             query = Pin.objects.filter(profile=profile).root_pins()
-        return with_view_urls(MapPinPayloadService(profile).all(query))
+        service = MapPinPayloadService(profile)
+        pins = with_view_urls(service.all(query))
+        return {"map_pins": pins, "map_labels": service.label_dictionary_for(pins)}
 
 
 def _tag_document(response, etag):
