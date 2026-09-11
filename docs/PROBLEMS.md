@@ -4310,6 +4310,23 @@ query and mean nothing.
 Still open in family 4: the ~25 findings N21 lists beyond these, most of which are request-path
 loops over one account's data in surfaces nobody has measured yet.
 
+**H19 is fixed** (2026-09-11), and it is the one that could have taken the site down rather than
+slowed it. Upvoting an external photo materializes it - downloads up to 20MB and stores it on the
+shared media volume, which is the filesystem Postgres lives on - with `QuotaExemption.EXTERNAL_MEDIA`
+set, so the storage quota does not apply. The exemption is right and deliberate: the person who
+upvoted someone else's photo did not author it and should not be charged for caching it. It was also
+the *only* bound, as `media_materialize`'s own docstring said in as many words ("Only the per-item
+`_MAX_DOWNLOAD_BYTES` cap applies") - and per-item is not a bound on an account.
+
+`EXTERNAL_MEDIA_DAILY_BYTES` (512MB, rolling 24 hours, per profile) is the missing half. The
+exemption decides who is charged; the ceiling decides how fast. It is checked after the dedupe
+lookup, so re-voting a photo already cached is free and never refused, and before the download, so a
+refusal does not arrive with the bytes already spent.
+
+`WikiMediaVoteView`'s docstring claimed the materialize "costs the *voter's* storage quota". It never
+did - that is the exemption - and the claim is corrected rather than left as the first thing a reader
+would check.
+
 ## P114 — Staging outranks production for CPU on the host they share
 
 `id: P114` · `status: open` · `updated: 2026-09-11`

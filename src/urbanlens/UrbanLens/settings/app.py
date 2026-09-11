@@ -266,6 +266,16 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "first marker, not server memory - the document is streamed in batches either way."
         ),
     )
+    external_media_daily_bytes: int = Field(
+        default=512 * 1024 * 1024,
+        description=(
+            "How many bytes of external media one profile may cache in a rolling 24 hours. These rows are exempt "
+            "from the uploader's storage quota on purpose - the person who upvoted someone else's photo into the "
+            "cache did not author it - which left nothing at all bounding them, so one account could fill the "
+            "volume the database lives on. The exemption is about who is charged; this is about how fast. Far above "
+            "what contributing normally costs, and far below what filling a disk takes."
+        ),
+    )
     map_document_cache_seconds: int = Field(
         default=6 * 60 * 60,
         description=(

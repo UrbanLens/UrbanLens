@@ -229,9 +229,10 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
     materializes it and attaches it to this wiki, exactly like the pin
     detail page's "Send to wiki" bulk action - see the module docstring's
     "An up-vote also submits the item to the wiki" bullet for why voting
-    here is treated as that same deliberate sharing action. This costs the
-    *voter's* storage quota (``materialize_media_item`` downloads and saves
-    it), same as any other materialize call. A failed download still keeps
+    here is treated as that same deliberate sharing action. It does *not* cost
+    the voter's storage quota - a cached copy of someone else's photo is
+    exempt, and ``materialize_media_item``'s own rolling per-profile ceiling is
+    what bounds it instead. A failed download still keeps
     the vote (the voter's opinion is worth keeping even if today's download
     attempt failed) but is reported back via ``materialize_error`` so the
     frontend can toast it. A down-vote or a cleared vote never materializes

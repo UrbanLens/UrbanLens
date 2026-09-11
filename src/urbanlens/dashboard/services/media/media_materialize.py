@@ -11,17 +11,29 @@ and creates (or reuses) an ``Image`` row for it.
 Rows created here are exempt from the acting user's storage quota
 (``QuotaExemption.EXTERNAL_MEDIA``): the cache exists so the gallery survives
 a provider's URL rotting, and the user who upvoted an item into it didn't
-author the photo. Only the per-item ``_MAX_DOWNLOAD_BYTES`` cap applies. See
-``services.media.quota_rewards``.
+author the photo. See ``services.media.quota_rewards``.
+
+That exemption is about who is *charged*, and it was also the only bound there
+was. ``_MAX_DOWNLOAD_BYTES`` caps one item; nothing capped an account, so 20MB
+times however many distinct photos somebody cared to upvote went onto the shared
+media volume - the filesystem the database lives on - with the quota explicitly
+off. :data:`EXTERNAL_MEDIA_DAILY_BYTES` is the missing half: a rolling
+per-profile ceiling, far above what contributing normally costs and far below
+what filling a disk takes. Nobody is charged for caching someone else's photo;
+nobody caches an unbounded number of them either.
 """
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
+from django.conf import settings
 from django.core.files.base import ContentFile
+from django.db.models import Sum
+from django.utils import timezone
 import requests
 
 from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExemption
@@ -42,6 +54,11 @@ _DOWNLOAD_TIMEOUT = 15
 # A Media gallery photo is a thumbnail/preview, not a multi-megapixel original -
 # bound the download defensively regardless of what a provider's Content-Length claims.
 _MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
+
+#: The window the per-profile ceiling rolls over. A day rather than a cumulative
+#: total: cumulative would make the ceiling a permanent ban on a contributor who
+#: once hit it.
+_CEILING_WINDOW = 60 * 60 * 24
 _DEFAULT_FILENAME = "photo.jpg"
 # Redirects are followed manually (see materialize_media_item) so each hop can
 # be SSRF-validated; this bounds how many hops a hostile server can chain.
@@ -173,6 +190,38 @@ def fetch_with_revalidated_redirects(
     return fetch_public_url(url, headers=headers, timeout=timeout, max_redirects=max_redirects)
 
 
+def daily_external_media_bytes() -> int:
+    """How much external media one profile may cache in a rolling day.
+
+    Read at call time rather than bound at import, so a test can lower it without
+    downloading half a gigabyte.
+
+    Returns:
+        The configured ceiling in bytes.
+    """
+    return int(getattr(settings, "EXTERNAL_MEDIA_DAILY_BYTES", 512 * 1024 * 1024))
+
+
+def _external_bytes_cached_today(profile: Profile) -> int:
+    """How much quota-exempt external media *profile* has cached in the window.
+
+    Args:
+        profile: Whose recent caching to total.
+
+    Returns:
+        Bytes, counting only rows this function's ceiling governs - an ordinary
+        upload is charged to the storage quota instead, and counting it here
+        would charge it twice and refuse a user their own photographs.
+    """
+    since = timezone.now() - timedelta(seconds=_CEILING_WINDOW)
+    total = Image.objects.filter(
+        profile=profile,
+        quota_exempt_reason=QuotaExemption.EXTERNAL_MEDIA,
+        created__gte=since,
+    ).aggregate(total=Sum("file_size"))["total"]
+    return int(total or 0)
+
+
 def materialize_media_item(
     *,
     location: Location,
@@ -251,6 +300,16 @@ def materialize_media_item(
         if update_fields:
             existing.save(update_fields=[*update_fields, "updated"])
         return existing
+
+    # After the dedupe lookup, so re-voting a photo already in the cache stores
+    # nothing and is never refused, and before the download, so a refusal does
+    # not happen with the bytes already spent.
+    if profile is not None:
+        ceiling = daily_external_media_bytes()
+        cached = _external_bytes_cached_today(profile)
+        if cached >= ceiling:
+            logger.info("Profile %s has cached %s bytes of external media today, at a ceiling of %s", profile.pk, cached, ceiling)
+            raise MaterializeError("You have cached as much external media as one account may in a day. Try again tomorrow.")
 
     try:
         response = fetch_with_revalidated_redirects(url, max_redirects=_MAX_REDIRECTS, timeout=_DOWNLOAD_TIMEOUT, headers=_DOWNLOAD_HEADERS)
