@@ -29,6 +29,8 @@ from urbanlens.dashboard.controllers.site_admin_models import scrub_personal_key
 _LABELS = "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway.get_model"
 _PHOTOS = "urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway.get_model"
 _CONFIGURED = "urbanlens.dashboard.services.labels.redata_suggestions.redata_labels_configured"
+_LABELS_GATEWAY = "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway"
+_PHOTOS_GATEWAY = "urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway"
 
 #: The envelope REData returns before any model has been promoted.
 _HEURISTIC = {"active": None, "ranker": "heuristic"}
@@ -309,3 +311,42 @@ class ReputationIsNotConsumedTests(SimpleTestCase):
         ]
 
         self.assertEqual(hits, [])
+
+
+class TheDiagnosticsPageSurvivesAnUnconfiguredRedataTests(SiteAdminModelsViewTests):
+    """Constructing the gateway raises before anything can report on it.
+
+    ``_model_summary`` is careful to report an unreachable REData rather than
+    raise - "a diagnostics page that 500s when the thing it diagnoses is down is
+    the least useful moment to lose it". But the gateways are *built* in the
+    argument list, outside that guard, and their ``__post_init__`` raises
+    ``ValueError`` when ``UL_REDATA_API_URL`` is unset. Any deployment without
+    REData configured got a 500 on this page.
+    """
+
+    #: What ``RedataJsonGateway.__post_init__`` raises with no URL configured.
+    REFUSAL = ValueError("UL_REDATA_API_URL must be configured.")
+
+    def test_a_gateway_that_refuses_to_build_is_reported_rather_than_raised(self) -> None:
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS_GATEWAY, side_effect=self.REFUSAL),
+            mock.patch(_PHOTOS_GATEWAY, side_effect=self.REFUSAL),
+        ):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200, "the models page 500s wherever REData is not configured")
+        for model in response.context["models"]:
+            self.assertFalse(model["summary"]["available"])
+
+    def test_a_configured_gateway_is_still_reported_as_available(self) -> None:
+        """The half that stops the test above passing against a page that reports nothing."""
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value={"active": {"version": 1}}),
+            mock.patch(_PHOTOS, return_value={"active": {"version": 2}}),
+        ):
+            response = self.client.get(self.url)
+
+        for model in response.context["models"]:
+            self.assertTrue(model["summary"]["available"])

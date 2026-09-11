@@ -100,11 +100,12 @@ def _model_summary(fetch: Callable[[], dict[str, Any]], label: str) -> dict[str,
 
     try:
         payload = scrub_personal_keys(fetch() or {})
-    except (GatewayRequestError, RequestCancelledError) as exc:
+    except (GatewayRequestError, RequestCancelledError, ValueError) as exc:
         # RequestCancelledError covers this side's own rate limiter refusing or
-        # the service being switched off in admin - neither is a gateway error,
-        # and letting them through would 500 the page that exists to report on
-        # exactly that kind of problem.
+        # the service being switched off in admin; ValueError covers a gateway
+        # that will not construct because REData is unconfigured. None is a
+        # gateway error, and letting them through would 500 the page that exists
+        # to report on exactly that kind of problem.
         logger.info("REData %s model metadata unavailable: %s", label, exc)
         return {"available": False, "message": str(exc)}
 
@@ -189,8 +190,12 @@ class SiteAdminModelsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 # A list so the template renders both identically; adding a
                 # third model should not mean a third copy of the markup.
                 "models": [
-                    {"title": "Label suggestion", "summary": _model_summary(RedataLabelsGateway().get_model, "label-suggestion")},
-                    {"title": "Photo relevance", "summary": _model_summary(RedataPhotosGateway().get_model, "photo-relevance")},
+                    # The gateway is built inside _model_summary, not here: its
+                    # __post_init__ refuses an unconfigured REData, and building
+                    # it in this list put that refusal outside the guard that
+                    # exists to report exactly this.
+                    {"title": "Label suggestion", "summary": _model_summary(lambda: RedataLabelsGateway().get_model(), "label-suggestion")},
+                    {"title": "Photo relevance", "summary": _model_summary(lambda: RedataPhotosGateway().get_model(), "photo-relevance")},
                 ],
             },
         )

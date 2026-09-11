@@ -25,6 +25,10 @@ env:
   UL_DB_PORT: "5432"
   UL_VALKEY_URL: redis://localhost:6379/0
   UL_UNSAFE_ALLOW_HTTP: "True"
+  # Required for the gateway to construct at all. Unroutable on purpose, and the
+  # test suite's network guard refuses a real socket regardless - without it,
+  # every REData test fails here and passes on a developer machine.
+  UL_REDATA_API_URL: http://redata.invalid/api/
   UL_ENVIRONMENT: testing
 
 jobs:

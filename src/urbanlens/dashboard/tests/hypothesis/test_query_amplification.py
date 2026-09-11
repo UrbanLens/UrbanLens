@@ -84,6 +84,24 @@ class MapPinPayloadAmplificationTests(_AmplificationTestCase):
     """The map's pin payload - the single highest-traffic serialization in the app."""
 
     def _pin_with_labels(self) -> Pin:
+        """A pin carrying the profile's labels - the same ones every time.
+
+        Minting a fresh pair per pin measured two things at once: the payload's
+        cost per *pin*, which is what this asserts, and the cost of a label the
+        per-profile label resolution has not seen before, which is a fixed pair
+        of batched queries however many labels are new. The second showed up as
+        growth (2 queries, then 4) on a fixture that grows both at once.
+        """
+        if not hasattr(self, "_shared_labels"):
+            self._shared_labels = [
+                baker.make(Label, profile=self.profile, kind="tag"),
+                baker.make(Label, profile=self.profile, kind="category"),
+            ]
+        pin = baker.make(Pin, profile=self.profile, location=self._next_location())
+        pin.labels.add(*self._shared_labels)
+        return pin
+
+    def _pin_with_its_own_labels(self) -> Pin:
         pin = baker.make(Pin, profile=self.profile, location=self._next_location())
         pin.labels.add(baker.make(Label, profile=self.profile, kind="tag"))
         pin.labels.add(baker.make(Label, profile=self.profile, kind="category"))
@@ -98,6 +116,35 @@ class MapPinPayloadAmplificationTests(_AmplificationTestCase):
             service.all(Pin.objects.filter(profile=self.profile))
 
         self.assert_flat(self._pin_with_labels, measure)
+
+    def test_it_is_flat_in_label_count_too(self) -> None:
+        """A label nobody has seen costs a fixed pair of batched reads, not one per label.
+
+        The half the test above deliberately holds still, asserted on its own so
+        holding it still does not lose the coverage.
+        """
+        service = MapPinPayloadService(self.profile)
+
+        def measure() -> None:
+            service.all(Pin.objects.filter(profile=self.profile))
+
+        for _ in range(3):
+            self._pin_with_its_own_labels()
+        measure()  # warm-up, as assert_flat does
+
+        with CaptureQueriesContext(connection) as first:
+            measure()
+        for _ in range(6):
+            self._pin_with_its_own_labels()
+        with CaptureQueriesContext(connection) as second:
+            measure()
+
+        before, after = len(first.captured_queries), len(second.captured_queries)
+        self.assertLessEqual(
+            after - before,
+            2,
+            f"twelve new labels cost {after - before} more queries than four did, so label resolution is not batched",
+        )
 
 
 class PinDetailPageAmplificationTests(_AmplificationTestCase):

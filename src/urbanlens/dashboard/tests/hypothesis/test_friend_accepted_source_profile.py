@@ -144,9 +144,15 @@ class EveryFriendAcceptedSiteSetsSourceProfileTests(SimpleTestCase):
 
         Deriving the guard from the walk itself is what makes them agree: a scan
         that stops matching now fails here instead of passing silently there.
+
+        One site, not two: ``1899a8e64`` moved the controller's own raise into
+        ``accept_friend_request``, so the service is the only place left that
+        raises it. The guard is still what stops ``test_no_site_omits_it``
+        asserting that an empty list is empty - which is the failure it exists
+        for, and which one site catches as well as two.
         """
         self.assertGreaterEqual(
             len(self._accepted_sites()),
-            2,
-            "expected at least two FRIEND_ACCEPTED sites - have they moved out of these modules, or changed how they raise?",
+            1,
+            "expected at least one FRIEND_ACCEPTED site - have they moved out of these modules, or changed how they raise?",
         )

@@ -37,14 +37,20 @@ _SQUARE = {
 
 #: Every shape a client can send that is not a usable polygon, paired with the
 #: specific subclass it must raise. The first four raise GDALException rather
-#: than GEOSException; `coordinates: []` parses cleanly into an *empty*
-#: geometry; the rest parse but fail the polygonal check.
-MALFORMED: list[tuple[dict, type[InvalidPolygonGeoJSONError]]] = [
+#: than GEOSException; the rest parse but fail the polygonal check.
+#:
+#: `coordinates: []` is the one row that is not a property of this code: GDAL
+#: 3.5+ parses it into an *empty* geometry, GDAL 3.4 (which CI's postgis image
+#: carries) refuses it outright, so the subclass follows the library version.
+#: Both are `InvalidPolygonGeoJSONError`, which is the whole of what every
+#: caller dispatches on - pinning one of them makes the suite pass or fail on
+#: which machine ran it.
+MALFORMED: list[tuple[dict, type[InvalidPolygonGeoJSONError] | tuple[type[InvalidPolygonGeoJSONError], ...]]] = [
     ({}, GeoJSONParseError),
     ({"type": "Nonsense"}, GeoJSONParseError),
     ({"type": "Polygon"}, GeoJSONParseError),
     ({"type": "Polygon", "coordinates": "nope"}, GeoJSONParseError),
-    ({"type": "Polygon", "coordinates": []}, EmptyPolygonGeometryError),
+    ({"type": "Polygon", "coordinates": []}, (EmptyPolygonGeometryError, GeoJSONParseError)),
     ({"type": "Point", "coordinates": [1, 2]}, NotPolygonalGeometryError),
     ({"type": "LineString", "coordinates": [[0, 0], [1, 1]]}, NotPolygonalGeometryError),
     ({"type": "GeometryCollection", "geometries": []}, NotPolygonalGeometryError),

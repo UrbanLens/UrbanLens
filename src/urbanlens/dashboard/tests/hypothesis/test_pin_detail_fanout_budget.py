@@ -42,6 +42,12 @@ from urbanlens.dashboard.models.pin.model import Pin
 
 #: The most load-triggered HTMX requests the Private Pin page may fire.
 #:
+#: Raised to **49** on 2026-09-11 for one more REData enrichment panel
+#: (`redata_historical_features`), which queues against a lane like every other
+#: one - `test_every_enrichment_panel_queues_against_a_lane` is what holds the
+#: concurrency, and it stayed green. Raising this for a *laned* panel is the
+#: case the ratchet asks for; an unlaned one is a defect, not a budget request.
+#:
 #: Was 53 at the time of writing; lowered to **48** when the Visits/Photos/
 #: Article/Notes/Edit-History subnav tabs switched from `hx-trigger="load"` to
 #: `"revealed"` - those five panels sit inside a client-side-hidden
@@ -59,7 +65,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 #: rather than the static count. The static count is still the right thing to
 #: bound, because it is the ceiling a user with everything expanded actually
 #: reaches.
-MAX_LOAD_TRIGGERED_REQUESTS = 48
+MAX_LOAD_TRIGGERED_REQUESTS = 49
 
 #: An element that fetches as soon as the page loads. `load` may carry a filter
 #: (`load[!window.ulSectionCollapsed(...)]`) or sit alongside other triggers, so

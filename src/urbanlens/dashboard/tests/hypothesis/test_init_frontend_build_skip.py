@@ -71,7 +71,15 @@ class FrontendBuildSkipTests(SimpleTestCase):
     def test_without_the_flag_it_still_builds(self) -> None:
         """The skip must be opt-in: every other deployment needs this to run."""
         initializer = self._initializer(skip=False)
-        with mock.patch.object(initializer, "run_command") as run_command, mock.patch.object(pathlib.Path, "mkdir"):
+        with (
+            mock.patch.object(initializer, "run_command") as run_command,
+            mock.patch.object(pathlib.Path, "mkdir"),
+            # It reads a manifest a real build leaves behind. With the build
+            # mocked there is none, so without this the test passes only where
+            # somebody has built the frontend already - it did on a developer
+            # machine and failed in CI.
+            mock.patch.object(initializer, "verify_static_manifest"),
+        ):
             initializer.build_frontend()
         commands = [call.args[0] for call in run_command.call_args_list]
         self.assertTrue(any("sass" in " ".join(command) for command in commands), commands)
