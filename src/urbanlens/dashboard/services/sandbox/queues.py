@@ -7,7 +7,12 @@ containers deliberately differ in what they can reach:
 ===================  =========================  ==================================
 Queue                Container                  Reaches
 ===================  =========================  ==================================
-``celery``           ``celery-worker``          everything (DB, broker, internet)
+``interactive``      ``celery-worker``          everything (DB, broker, internet)
+``bulk``             ``celery-worker-bulk``     everything, at low concurrency and
+                                                a low CPU weight
+``maintenance``      ``celery-worker-bulk``     as ``bulk``
+``celery``           ``celery-worker-bulk``     as ``bulk`` - the safety net for a
+                                                task whose queue was forgotten
 ``panel_fetch``      ``celery-worker-panels``   everything - it *is* the API caller
 ``sandbox``          ``media-worker``           DB, broker, media volumes. No internet,
                                                 no third-party API keys, no capabilities
@@ -17,6 +22,14 @@ Queue                Container                  Reaches
                                                 provider keys - model calls go through
                                                 ai-inference. See docs/AI_PIPELINE.md.
 ===================  =========================  ==================================
+
+``interactive``, ``bulk`` and ``maintenance`` are the same split applied to what
+used to be one queue, and they differ in *scheduling* only - one container drains
+the first, another drains the rest. The line is who waits: a person waiting on a
+result, or a deadline that is safety-critical, is interactive; a job whose size is
+set by how much one account owns is bulk; beat-driven site-wide work is
+maintenance. The safety check-in tasks are beat-driven and interactive anyway,
+because what they do is tell somebody that a person is overdue.
 
 ``sandbox`` and ``sandbox_batch`` differ in *scheduling*, not in trust: both are
 drained inside the same isolated network with the same reduced environment. The
@@ -53,8 +66,18 @@ class Queue(StrEnum):
     """A Celery queue name.
 
     Attributes:
-        DEFAULT: Celery's own default queue name. Anything without an explicit
-            queue lands here, drained by ``celery-worker``.
+        DEFAULT: Celery's own default queue name. Nothing should route here -
+            ``dashboard.checks.check_every_task_declares_a_queue`` fails startup
+            for a task that leaves it as the default - and ``celery-worker-bulk``
+            drains it anyway, so a task added without one runs slowly rather than
+            not at all.
+        INTERACTIVE: Work a person is waiting on, or a safety deadline. Drained
+            by ``celery-worker``, which drains nothing else.
+        BULK: One account's large job. Its own container, low concurrency, low
+            CPU weight, so its size cannot become anyone else's latency.
+        MAINTENANCE: Beat-driven, site-wide, and may wait. Shares the bulk
+            container: these are rare, and a third container would cost
+            connections and memory without buying an invariant.
         PANEL_FETCH: External-data panel fetches for the Private Pin page.
         SANDBOX: Interactive parsing of untrusted user-supplied bytes - image
             decode, video transcode, document conversion. Drained by
@@ -68,6 +91,9 @@ class Queue(StrEnum):
     """
 
     DEFAULT = "celery"
+    INTERACTIVE = "interactive"
+    BULK = "bulk"
+    MAINTENANCE = "maintenance"
     PANEL_FETCH = "panel_fetch"
     SANDBOX = "sandbox"
     SANDBOX_BATCH = "sandbox_batch"

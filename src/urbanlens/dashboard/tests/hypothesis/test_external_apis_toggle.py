@@ -111,7 +111,7 @@ def test_schedule_panel_fetch_runs_when_external_apis_enabled() -> None:
         result = schedule_panel_fetch("boundary", pin)
 
     assert result is True
-    fetch_task.apply_async.assert_called_once_with(args=("boundary", pin.pk, mock.ANY), kwargs={}, queue="celery")
+    fetch_task.apply_async.assert_called_once_with(args=("boundary", pin.pk, mock.ANY), kwargs={}, queue="interactive")
 
 
 @pytest.mark.django_db
@@ -165,18 +165,23 @@ def test_schedule_panel_fetch_releases_flight_marker_on_broker_failure() -> None
 
 
 @pytest.mark.django_db
-def test_cpu_heavy_panels_stay_on_the_default_queue() -> None:
+def test_cpu_heavy_panels_stay_on_the_prefork_queue() -> None:
     """BoundaryPanelSource and OvertureBuildingAttributesPanelSource do real CPU-bound
     work (gunzipping/parsing GeoParquet, shapely geometry) - several of those running
     concurrently on the thread-pool queue would cause enough GIL contention to slow
-    down every other panel sharing it, so they opt out via PanelSource.queue."""
-    from urbanlens.dashboard.services.pins.external_data import BoundaryPanelSource, get_panel_source
+    down every other panel sharing it, so they opt out via PanelSource.queue.
 
-    assert BoundaryPanelSource().queue == "celery"
+    The interactive class, not bulk and not the bare default: somebody is looking
+    at the panel while it loads, and since D13 the default queue is drained by the
+    slow pool rather than by the general worker."""
+    from urbanlens.dashboard.services.pins.external_data import BoundaryPanelSource, get_panel_source
+    from urbanlens.dashboard.services.sandbox.queues import Queue
+
+    assert BoundaryPanelSource().queue == Queue.INTERACTIVE
 
     overture = get_panel_source("overture_building_attributes")
     assert overture is not None
-    assert overture.queue == "celery"
+    assert overture.queue == Queue.INTERACTIVE
 
 
 @pytest.mark.django_db

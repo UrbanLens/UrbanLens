@@ -10,11 +10,13 @@
 
 `id: D13` · `status: accepted` · `updated: 2026-09-11`
 
-> **Not built, and not yet reviewed.** `accepted` is the only non-superseded
-> value `bin/check_docs_index.py` allows for a `D` record; it does not mean Jess
-> has signed off on the table below. The classification is a proposal, and the
-> placements most worth a second opinion are called out under *Safety overrides
-> the beat rule*.
+> **Built 2026-09-11, and not yet reviewed.** `accepted` is the only
+> non-superseded value `bin/check_docs_index.py` allows for a `D` record; it does
+> not mean Jess has signed off on the table below. The classification is a
+> proposal that has now shipped, and the placements most worth a second opinion
+> are called out under *Safety overrides the beat rule*. Nothing here is
+> deployed - `celery-worker-bulk` is a new compose service, so it starts
+> existing on the next `docker compose up`.
 
 ## The problem, measured
 
@@ -181,3 +183,28 @@ It also does not bound how many bulk jobs one account may queue over time — on
 once, which the in-flight guards already do per job type. A user who exports, then imports, then
 sweeps still occupies the bulk pool for as long as those take. That is the intended shape: the bulk
 pool exists to be occupied.
+
+It does not touch Kubernetes. `infrastructure/platform/urbanlens-app/base/deployment-worker.yaml`
+passes no `-Q` at all, so if its `replicas: 0` is ever raised it would drain `celery` and nothing
+else — every interactive and maintenance task would sit unconsumed. That is a latent trap, not a
+live one (celery is at `replicas: 0` everywhere there today), and it lives in a different repo.
+
+## What changed when it was built
+
+Two panel sources had opted out of the `panel_fetch` thread pool by naming the *default* queue,
+because before this the default queue was the general prefork worker. It is now the slow pool, so
+that declaration would have meant the opposite of what it was written to mean — a person watching a
+boundary panel load would be waiting behind an import. `BoundaryPanelSource` and
+`OvertureBuildingAttributesPanelSource` now name `Queue.INTERACTIVE`, which is the pool they were
+always asking for. The reasoning in their comments was already right; only the name of the pool
+moved.
+
+`fetch_panel_source` itself declares `Queue.INTERACTIVE` as its default, but `schedule_panel_fetch`
+overrides it per source with `queue=source.queue`, which is the pre-existing design and is left
+alone: whether a panel is thread-pool or prefork work is a property of that panel, not of the task.
+
+The startup check exempts test modules. A probe task defined by a test is never enqueued by the
+running site, and requiring a class of it would make every such test carry a declaration that means
+nothing. `test_celery_queue_classes.py` registers its probe under a production module name for
+exactly that reason, and says so — otherwise the harness test would land in the exemption and pass
+against a check that reports nothing.

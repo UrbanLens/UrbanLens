@@ -88,6 +88,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 
 from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+from urbanlens.dashboard.services.sandbox.queues import Queue
 
 logger = logging.getLogger(__name__)
 
@@ -271,12 +272,13 @@ class PanelSource(ABC):
             the dedicated ``panel_fetch`` queue (a high-concurrency thread
             pool - see docker-compose.yml's celery-worker-panels service),
             appropriate for the common case of "one or two small HTTP calls."
-            Override to ``"celery"`` (the default queue, prefork pool) for a
-            source whose fetch does real CPU-bound work (e.g. Overture's
+            Override to :attr:`Queue.INTERACTIVE` (prefork pool) for a source
+            whose fetch does real CPU-bound work (e.g. Overture's
             GeoParquet/Shapely geometry parsing) - many of those running at
             once on a thread pool would cause GIL contention that slows down
             every other panel sharing it, defeating the point of splitting
-            the queue in the first place.
+            the queue in the first place. Not the bulk pool: somebody is
+            looking at the panel while it loads.
         api_kinds: Which :class:`PanelApiKind` shapes this source can serve as
             JSON. Empty - the default - means "this panel is not exposed on
             the external API at all", and is the authoritative signal for
@@ -299,7 +301,7 @@ class PanelSource(ABC):
     title: ClassVar[str] = ""
     outer_class: ClassVar[str] = ""
     outer_is_card: ClassVar[bool] = False
-    queue: ClassVar[str] = "panel_fetch"
+    queue: ClassVar[str] = Queue.PANEL_FETCH
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
     required_feature: ClassVar[SiteFeature | None] = None
 
@@ -766,12 +768,12 @@ class BoundaryPanelSource(PanelSource):
     """
 
     key = "boundary"
-    # Stays on the default (prefork) queue, not the fast thread-pool queue -
-    # generate_location_boundaries does real CPU-bound work (gunzipping
-    # building-footprint shards, shapely geometry ops), and several of those
-    # running concurrently on a thread pool would cause enough GIL contention
-    # to slow down every other panel sharing it. See PanelSource.queue.
-    queue = "celery"
+    # The prefork pool, not the fast thread-pool queue - generate_location_boundaries
+    # does real CPU-bound work (gunzipping building-footprint shards, shapely
+    # geometry ops), and several of those running concurrently on a thread pool
+    # would cause enough GIL contention to slow down every other panel sharing
+    # it. See PanelSource.queue.
+    queue = Queue.INTERACTIVE
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.BOUNDARY})
 
     def scope(self, pin: Pin) -> str:

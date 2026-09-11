@@ -4269,3 +4269,31 @@ Two corrections to the audit came out of building it, both of which would have b
 **The other four families are not fixed.** Each needs its own decision about where the ceiling goes,
 and several change what a user sees when they hit it — which is a product call, not a technical one.
 Recorded so the choices are made deliberately rather than discovered during an outage.
+
+**Family 2 is fixed** (2026-09-11), as D13. All 96 tasks now declare a class, `celery-worker` drains
+`-Q interactive` and nothing else, and a new `celery-worker-bulk` drains `bulk,maintenance,celery` at
+`--concurrency=2` with a low `cpu_shares`. `dashboard.E010` fails startup for a task that names no
+queue, which is what keeps the classification from decaying — the failure mode being silent, not
+loud: a task with no `queue=` goes on working, on the wrong pool. Building it turned up two panel
+sources that had opted out of the thread pool by naming the *default* queue; that now means the slow
+pool, so they name `Queue.INTERACTIVE` instead, which is the pool they were always asking for. See
+D13 for the table and for what the split deliberately does not do.
+
+**Family 4 is being worked through per endpoint.** Five done:
+
+| endpoint | was | now |
+|---|---|---|
+| undo panel | read every `payload` blob it never displays | `defer("payload")` at the three panel call sites |
+| photo map layers (pin, wiki, album) | one serialized row per photo, unbounded | `MAX_MAP_PHOTOS = 500`, chosen for spatial coverage rather than the first N, with a note that appears only when capped |
+| memories feed | "All time" built an event per route, trip, visit and geotagged photo ever recorded | `MAX_FEED_EVENTS = 500`, every source ordered newest-first and islice'd, paginated on a timestamp cursor |
+| `map.search` | every matching pin's full payload, 11.45MB for 10,000 pins, per filter change | identifiers only when the client can prove its store is current, and `MAP_DOCUMENT_MAX_PINS` over both answers |
+| `map.init` | the same unbounded document | bounded by the same ceiling, via `map_data_context` |
+
+Each carries its own regression test, and the ceiling tests assert that the constant under test is
+the one the serving code reads — the failure mode found in `test_map_document_cap.py`'s first draft,
+where an `override_settings` invented a name nothing looked at.
+
+Still open in family 4: `pin_lists` and the saved-filter preview cap their maps with a first-N slice
+(`_MAP_PIN_LIMIT`, `_PREVIEW_MAP_PIN_LIMIT`), which is bounded but keeps whichever 500 pins sort
+first rather than a spread — the same defect the photo maps had. Moving both to
+`services/geo/sampling.spread_across_space` is the next one.

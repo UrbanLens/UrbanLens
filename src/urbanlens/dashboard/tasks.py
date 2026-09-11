@@ -7,6 +7,14 @@ container rather than the general-purpose worker. The queue is declared on the
 task instead of at each ``apply_async`` site on purpose - see
 :mod:`urbanlens.dashboard.services.sandbox.queues` for why, and
 :mod:`urbanlens.dashboard.services.sandbox.guard` for what the isolation buys.
+
+Every other task declares one of :attr:`Queue.INTERACTIVE`, :attr:`Queue.BULK`
+or :attr:`Queue.MAINTENANCE`. The line is who waits - a person waiting on a
+result or a safety deadline is interactive, a job sized by how much one account
+owns is bulk, beat-driven site-wide work is maintenance - and
+``dashboard.checks.check_every_task_declares_a_queue`` fails startup for a task
+that names none, because a task that lands on the default queue keeps working
+and nothing says so.
 """
 
 from __future__ import annotations
@@ -28,6 +36,7 @@ from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's aut
 from urbanlens.dashboard.services.core.celery import update_task_progress
 from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
 from urbanlens.dashboard.services.sandbox import sandbox_queue
+from urbanlens.dashboard.services.sandbox.queues import Queue
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -45,7 +54,7 @@ SANDBOX_QUEUE = sandbox_queue()
 SANDBOX_BATCH_QUEUE = sandbox_queue(batch=True)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def ensure_wiki_for_location(location_id: int) -> int | None:
     """Auto-create the Wiki for a Location, so enrichment can get a head start.
 
@@ -91,7 +100,7 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
     return wiki.pk
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def enrich_wiki_location(self, wiki_id: int) -> bool:
     """Enrich a Wiki's Location with external data.
 
@@ -160,7 +169,7 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
     return True
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
     """Mirror imported buildings onto the community wiki, off the request.
 
@@ -193,7 +202,7 @@ def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
     return pin_restructure.mirror_buildings_to_wiki(pin, buildings, pin.profile)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def auto_nest_building_pins(pin_id: int) -> int:
     """Build a new pin's default child-pin structure from cached building data.
 
@@ -218,7 +227,7 @@ def auto_nest_building_pins(pin_id: int) -> int:
     return auto_nest_pin(pin)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def generate_boundaries_for_location(location_id: int) -> bool:
     """Generate (or, if stale, refresh) the default property/building boundaries for a Location.
 
@@ -252,7 +261,7 @@ def generate_boundaries_for_location(location_id: int) -> bool:
         cache.delete(generation_lock_key(location_id))
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def classify_detail_marker(kind: str, marker_id: int) -> bool:
     """Decide whether a newly placed child pin/wiki stands on a building.
 
@@ -263,7 +272,7 @@ def classify_detail_marker(kind: str, marker_id: int) -> bool:
     footprint polygon containing that exact point, which is precisely the
     question being asked.
 
-    Runs on the default (prefork) queue rather than ``panel_fetch``: boundary
+    Runs on the interactive (prefork) queue rather than ``panel_fetch``: boundary
     generation does real CPU-bound geometry work, and a campus import queues
     one of these per building. See ``PanelSource.queue`` for the same reasoning.
 
@@ -294,7 +303,7 @@ def classify_detail_marker(kind: str, marker_id: int) -> bool:
     return classify_building_pin_type(marker)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def warm_saved_filter_cache(profile_id: int) -> int:
     """Precompute and cache a profile's saved-filter matching-pin uuid lists.
 
@@ -318,7 +327,7 @@ def warm_saved_filter_cache(profile_id: int) -> int:
     return warm_all_for_profile(profile)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def push_trip_to_calendar(trip_id: int) -> int:
     """Push a trip's current state to every calendar it is auto-synced with.
 
@@ -342,7 +351,7 @@ def push_trip_to_calendar(trip_id: int) -> int:
     return push_auto_synced_trip_changes(trip)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None, email_to_user: bool = False) -> bool:
     """Build a user's data export archive outside the web request."""
     from urbanlens.dashboard.services.import_export.export import run_export
@@ -359,7 +368,7 @@ def run_user_data_export(self, user_id: int, export_types: list[str], export_dir
     return False
 
 
-@shared_task
+@shared_task(queue=Queue.BULK)
 def cleanup_export_artifacts_task(export_dir: str, job_id: str | None = None) -> None:
     """Remove expired export artifacts and cache-backed status."""
     from urbanlens.dashboard.services.import_export.export import ExportJobStatus, cleanup_export_artifacts
@@ -385,7 +394,7 @@ def run_user_data_import(self, user_id: int, zip_path: str, job_id: str) -> bool
     return False
 
 
-@shared_task
+@shared_task(queue=Queue.BULK)
 def cleanup_import_artifacts_task(import_dir_path: str, job_id: str | None = None) -> None:
     """Remove expired import artifacts and cache-backed status."""
     from urbanlens.dashboard.services.import_export.import_data import ImportJobStatus, cleanup_import_artifacts
@@ -394,7 +403,7 @@ def cleanup_import_artifacts_task(import_dir_path: str, job_id: str | None = Non
     logger.info("Cleaned up import artifacts for job %s", job_id or import_dir_path)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def cleanup_vestigial_assets_task() -> dict[str, int]:
     """Sweep stale import/export artifacts missed by per-job cleanup tasks."""
     from urbanlens.dashboard.services.import_export.vestigial_assets import cleanup_vestigial_assets
@@ -407,7 +416,7 @@ def cleanup_vestigial_assets_task() -> dict[str, int]:
     return result.as_dict()
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def build_map_document(profile_id: int) -> int:
     """Build and cache one profile's map document.
 
@@ -434,7 +443,7 @@ def build_map_document(profile_id: int) -> int:
     return map_document.build_and_store(profile, query, decorate=with_view_urls)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def suggest_wiki_category(self, wiki_id: int) -> list[str]:
     """Suggest and attach labels for a community Wiki outside model signals."""
     from urbanlens.dashboard.models.wiki import Wiki
@@ -450,7 +459,7 @@ def suggest_wiki_category(self, wiki_id: int) -> list[str]:
     return [b.name for b in labels]
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def suggest_pin_category(self, pin_id: int) -> list[str]:
     """Suggest and attach labels for a Pin outside request/import loops."""
     from urbanlens.dashboard.models.pin import Pin
@@ -466,7 +475,7 @@ def suggest_pin_category(self, pin_id: int) -> list[str]:
     return [b.name for b in labels]
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def resolve_location_place_name(location_id: int) -> str | None:
     """Fetch and cache a Location's Google place name outside the request/response cycle.
 
@@ -484,7 +493,7 @@ def resolve_location_place_name(location_id: int) -> str | None:
     return location.get_place_name()
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def backfill_location_address(location_id: int) -> bool:
     """Reverse-geocode and persist a Location's street address outside the request/response cycle.
 
@@ -511,7 +520,7 @@ def backfill_location_address(location_id: int) -> bool:
     return ensure_location_address(location)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
     """Best-effort archive a PinLink's or WikiLink's URL to the Wayback Machine.
 
@@ -567,7 +576,7 @@ def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
     return True
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None) -> None:
     """Pre-warm LocationCache for a newly created Location.
 
@@ -1447,7 +1456,7 @@ STALLED_UPLOAD_AGE = timedelta(hours=6)
 STALLED_UPLOAD_BATCH = 100
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def sweep_stale_preview_sources() -> int:
     """Remove staged preview sources whose render never ran.
 
@@ -1466,7 +1475,7 @@ def sweep_stale_preview_sources() -> int:
     return removed
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     """Re-enqueue uploads whose processing task never ran.
 
@@ -1532,7 +1541,7 @@ def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     return requeued
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def discard_unretried_failed_uploads(limit: int | None = None) -> int:
     """Throw away failed uploads nobody came back for.
 
@@ -1598,7 +1607,7 @@ def _clear_orphaned_dedup_siblings(cutoff) -> int:
     return cleared
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def backfill_image_thumbnails(limit: int | None = None) -> int:
     """Enqueue a bounded batch of photos that still lack a grid thumbnail.
 
@@ -1672,7 +1681,7 @@ _MARKER_THUMBNAIL_BACKFILL_CURSOR_KEY = "image-marker-thumbnail-backfill-cursor"
 _MARKER_THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def backfill_image_marker_thumbnails(limit: int | None = None) -> int:
     """Enqueue a bounded batch of photos that still lack a map-marker thumbnail.
 
@@ -1754,7 +1763,7 @@ _ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_KEY = "image-analysis-thumbnail-backfill-cur
 _ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def backfill_image_analysis_thumbnails(limit: int | None = None) -> int:
     """Queue analysis-copy generation for photos that still lack one.
 
@@ -1792,7 +1801,7 @@ def backfill_image_analysis_thumbnails(limit: int | None = None) -> int:
     return len(ids)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def generate_image_keywords(image_id: int) -> dict[str, int]:
     """Generate searchable keywords for an uploaded photo via keyword plugins.
 
@@ -1811,7 +1820,7 @@ def generate_image_keywords(image_id: int) -> dict[str, int]:
     return generate_keywords_for_image(image_id)
 
 
-@shared_task
+@shared_task(queue=Queue.BULK)
 def submit_redata_photos(image_ids: list[int]) -> bool:
     """Submit photo observations to REData and cache the confidence scores it returns.
 
@@ -1840,7 +1849,7 @@ def submit_redata_photos(image_ids: list[int]) -> bool:
     return True
 
 
-@shared_task
+@shared_task(queue=Queue.BULK)
 def submit_redata_photo_vote(image_id: int, profile_id: int, is_relevant: bool) -> bool:
     """Submit one relevance vote on a photo to REData.
 
@@ -1876,7 +1885,7 @@ def submit_redata_photo_vote(image_id: int, profile_id: int, is_relevant: bool) 
     return str(image.uuid) not in (response.get("unknown_photo_ids") or [])
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def sync_redata_label_definitions(profile_ids: list[int], definitions: list[dict]) -> bool:
     """Push tag/category label definitions into every listed profile's REData taxonomy.
 
@@ -1902,7 +1911,7 @@ def sync_redata_label_definitions(profile_ids: list[int], definitions: list[dict
     return True
 
 
-@shared_task
+@shared_task(queue=Queue.BULK)
 def sync_redata_pin_assignment(pin_id: int) -> bool:
     """Push one pin's complete current tag/category label set to REData.
 
@@ -2076,7 +2085,7 @@ def _resolve_image_location(image: Image, coords: tuple[float, float] | None) ->
     return None
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str], visit_id_by_asset: dict[str, int] | None = None) -> dict[str, int]:
     """Download selected Immich assets and import them onto a pin.
 
@@ -2181,7 +2190,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
     return counts
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     """Sweep a user's entire Immich library for places they've been.
 
@@ -2446,7 +2455,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
     return created_count, exists_count, skipped_count
 
 
-@shared_task(bind=True, max_retries=None)
+@shared_task(bind=True, max_retries=None, queue=Queue.BULK)
 def resolve_deferred_pin_locations(
     self,
     profile_id: int,
@@ -2671,7 +2680,7 @@ def resolve_deferred_pin_locations(
     return {"created": created_count, "exists": exists_count, "skipped": skipped_count}
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str]) -> dict[str, int]:
     """Download selected Flickr photos and import them onto a pin.
 
@@ -2760,7 +2769,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
     return counts
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_id: int, album_url: str, photo_ids: list[str]) -> dict[str, int]:
     """Download selected photos from a *public* Flickr album/photoset onto a pin or wiki.
 
@@ -2867,7 +2876,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
     return counts
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, media_item_ids: list[str]) -> dict[str, int]:
     """Download selected Google Photos picker items and import them onto a pin.
 
@@ -2991,13 +3000,13 @@ def _run_database_backup(task=None) -> bool:
     return result
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def run_database_backup(self) -> bool:
     """Run database backup and retention cleanup from a Celery worker."""
     return _run_database_backup(self)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def run_scheduled_database_backup(self) -> bool:
     """Run a database backup only when site-admin schedule settings say it is due."""
     from urbanlens.dashboard.services.admin.backups import scheduled_backup_due
@@ -3015,7 +3024,7 @@ def run_scheduled_database_backup(self) -> bool:
 # sources with long stagger pauses) from ever overlapping the next hourly
 # firing; SoftTimeLimitExceeded propagates out of run_enrichment_cycle so the
 # task winds down cleanly mid-batch.
-@shared_task(bind=True, soft_time_limit=3000, time_limit=3300)
+@shared_task(bind=True, soft_time_limit=3000, time_limit=3300, queue=Queue.MAINTENANCE)
 def run_scheduled_enrichment(self) -> dict:
     """Run one background-enrichment cycle when site settings allow it.
 
@@ -3049,7 +3058,7 @@ def run_scheduled_enrichment(self) -> dict:
         release_lock(RUN_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def refresh_pin_web_search(self, pin_id: int) -> int:
     """Pre-warm the shared web-search cache for a pin's Location."""
     from urllib.parse import urlparse
@@ -3087,7 +3096,7 @@ _CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY = "urbanlens:safety:archival-sweep-lock"
 _CHECKIN_LOCK_TIMEOUT_SECONDS = 270  # just under the 5-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_due_checkin_reminders() -> int:
     """Send the check-in-due reminder for every safety check-in whose time has arrived."""
 
@@ -3117,7 +3126,7 @@ def send_due_checkin_reminders() -> int:
         release_lock(_CHECKIN_REMINDER_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_final_checkin_warnings() -> int:
     """Send a final "check in now" warning for every safety check-in about to escalate."""
 
@@ -3143,7 +3152,7 @@ def send_final_checkin_warnings() -> int:
         release_lock(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def escalate_overdue_checkins() -> int:
     """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
 
@@ -3173,7 +3182,7 @@ def escalate_overdue_checkins() -> int:
         release_lock(_CHECKIN_ESCALATION_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def archive_safety_checkin(checkin_id: int) -> None:
     """Encrypt-and-scrub one resolved check-in, dispatched with a countdown= at resolution
     time (``services.visits.safety.schedule_checkin_archival``) for responsiveness.
@@ -3189,7 +3198,7 @@ def archive_safety_checkin(checkin_id: int) -> None:
         archive_checkin(checkin)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_due_safety_checkin_archival() -> int:
     """Backstop for ``archive_safety_checkin``'s countdown-scheduled dispatch.
 
@@ -3226,7 +3235,7 @@ def sweep_due_safety_checkin_archival() -> int:
         release_lock(_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def delete_expired_safety_checkins() -> int:
     """Permanently delete every resolved safety check-in past its owner's auto-delete window."""
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
@@ -3239,7 +3248,7 @@ def delete_expired_safety_checkins() -> int:
     return count
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def prune_expired_undo_actions() -> int:
     """Delete UndoAction rows past their retention window.
 
@@ -3260,7 +3269,7 @@ def prune_expired_undo_actions() -> int:
     return count
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def detect_dm_address_mentions(message_id: int) -> int:
     """Detect street addresses in a direct message's text and record their shares.
 
@@ -3284,7 +3293,7 @@ def detect_dm_address_mentions(message_id: int) -> int:
     return len(detect_address_mentions(message))
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def hard_delete_expired_direct_messages(batch_size: int = 2000, max_per_run: int = 50000) -> int:
     """Permanently delete every direct message past its sender's disappearing-message window.
 
@@ -3372,7 +3381,7 @@ _HARD_DELETE_LOCK_CACHE_KEY = "urbanlens:account:hard-delete-lock"
 _HARD_DELETE_LOCK_TIMEOUT_SECONDS = 3300  # just under the hourly beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def send_account_deletion_reminders() -> int:
     """Send the "1 day left" reminder for every account approaching its hard delete."""
     from urbanlens.dashboard.models.profile.model import Profile
@@ -3394,7 +3403,7 @@ def send_account_deletion_reminders() -> int:
         release_lock(_DELETION_REMINDER_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def hard_delete_expired_accounts() -> int:
     """Permanently delete every account whose 7-day deletion grace period has elapsed."""
     from urbanlens.dashboard.models.profile.model import Profile
@@ -3421,7 +3430,7 @@ def hard_delete_expired_accounts() -> int:
 # race the poll-driven re-scheduling in schedule_panel_fetch. The time limits
 # sit under external_data.FLIGHT_TTL_SECONDS so a hard-killed task's
 # single-flight marker expires right after the task does.
-@shared_task(soft_time_limit=110, time_limit=130)
+@shared_task(soft_time_limit=110, time_limit=130, queue=Queue.INTERACTIVE)
 def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = None) -> None:
     """Fetch one external-data panel's upstream data in the background.
 
@@ -3446,7 +3455,7 @@ def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = 
     run_panel_fetch(source_key, pin, flight_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_direct_message_email_if_unread(message_id: int) -> None:
     """Send the delayed "new message" email, unless it's since been read or already sent.
 
@@ -3488,7 +3497,7 @@ def send_direct_message_email_if_unread(message_id: int) -> None:
     send_message_email_now(message)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
     """Send the delayed WhatsApp/SMS "new message" alert, unless read or already alerted.
 
@@ -3530,7 +3539,7 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
     send_message_text_alerts_now(message)
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def prune_api_call_logs() -> int:
     """Delete ApiCallLog rows older than every consumer's longest window.
 
@@ -3562,7 +3571,7 @@ def prune_api_call_logs() -> int:
 _API_CALL_LOG_RETENTION_DAYS = 400
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def prune_pin_tombstones() -> int:
     """Remove pin-deletion tombstones older than the sync retention window.
 
@@ -3585,7 +3594,7 @@ def prune_pin_tombstones() -> int:
     return deleted
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def evaluate_public_pin_candidates() -> dict[str, int]:
     """Run the public-pin eligibility engine and settle open votes.
 
@@ -3605,7 +3614,7 @@ def evaluate_public_pin_candidates() -> dict[str, int]:
     return counters
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_notification_text_alerts_if_unread(notification_id: int) -> None:
     """Send the delayed WhatsApp/SMS alert for a site notification, unless read or debounced.
 
@@ -3633,7 +3642,7 @@ def send_notification_text_alerts_if_unread(notification_id: int) -> None:
     send_notification_text_alerts_now(notification)
 
 
-@shared_task
+@shared_task(queue=Queue.INTERACTIVE)
 def broadcast_channel_group_message(group: str, message: dict[str, Any]) -> None:
     """Deliver ``message`` to every channel in channel-layer group ``group``.
 
@@ -3660,7 +3669,7 @@ def broadcast_channel_group_message(group: str, message: dict[str, Any]) -> None
         logger.exception("Failed to broadcast to channel-layer group %s", group)
 
 
-@shared_task
+@shared_task(queue=Queue.INTERACTIVE)
 def run_link_extraction(extraction_id: int) -> None:
     """Execute one queued AI link-extraction run (fetch, AI call, apply, notify).
 
@@ -3683,7 +3692,7 @@ def run_link_extraction(extraction_id: int) -> None:
     run_extraction(extraction)
 
 
-@shared_task
+@shared_task(queue=Queue.INTERACTIVE)
 def classify_trivia_submission(question_id: int) -> None:
     """Classify one pending user-submitted Trivia question and record its verdict.
 
@@ -3707,7 +3716,7 @@ def classify_trivia_submission(question_id: int) -> None:
     classify_and_update(question)
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def run_scheduled_trivia_generation() -> dict:
     """Generate AI trivia questions for a bounded batch of not-yet-processed wikis.
 
@@ -3736,7 +3745,7 @@ def run_scheduled_trivia_generation() -> dict:
         release_lock(lock_key, _lock_token)
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def run_scheduled_trivia_wiki_incorporation() -> dict:
     """Fold well-upvoted user-submitted Trivia questions into their location wikis.
 
@@ -3778,7 +3787,7 @@ _PLACEHOLDER_SLUGS = ("unnamed-location", "unnamed", "dropped-pin", "pin", "loca
 _RESLUG_MIN_AGE = timedelta(hours=1)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     """Clear a pin's stored placeholder name once its location has a meaningful one to fall back to.
 
@@ -3852,7 +3861,7 @@ def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     return upgraded
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def dispatch_native_push(notification_id: int) -> int:
     """Deliver one notification to the recipient's registered native push devices.
 
@@ -3881,7 +3890,7 @@ _SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:spotguessr:stall-sweep-lock"
 _SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_spotguessr_sessions() -> int:
     """Force-reveal any SpotGuessr round that's been open too long.
 
@@ -3927,7 +3936,7 @@ def sweep_stalled_spotguessr_sessions() -> int:
         release_lock(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def prewarm_spotguessr_round(session_id: int, sequence_index: int) -> bool:
     """Pre-select a SpotGuessr session's next round, so it's ready the instant a player reaches it.
 
@@ -3980,7 +3989,7 @@ def prewarm_spotguessr_round(session_id: int, sequence_index: int) -> bool:
     return True
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def prewarm_spotguessr_solo_start(profile_id: int, mode: str, config_dict: dict) -> bool:
     """Pre-select a solo player's likely first round before they've even clicked "start".
 
@@ -4030,7 +4039,7 @@ _TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:trivia:stall-sweep-lock"
 _TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_trivia_sessions() -> int:
     """Force-reveal any Trivia round that's been open too long.
 
@@ -4081,7 +4090,7 @@ _CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:consensus:stall-sweep-lock"
 _CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_consensus_sessions() -> int:
     """Force-resolve any Consensus round that's been open too long.
 
@@ -4133,7 +4142,7 @@ def sweep_stalled_consensus_sessions() -> int:
         release_lock(_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def recompute_fact_confidence(fact_id: int) -> None:
     """Recompute one Fact's confidence/status/value from its accumulated evidence.
 
@@ -4148,12 +4157,13 @@ def recompute_fact_confidence(fact_id: int) -> None:
     recompute(fact_id)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def process_device_scan_upload(self, upload_id: int) -> bool:
     """Classify, wiki-match, and cluster one wireless device-scan upload.
 
-    Runs on the default queue - real CPU-bound geometry work, not
-    ``panel_fetch`` (same reasoning as ``classify_detail_marker``). Always
+    Runs on the bulk queue - up to 100,000 rows of real CPU-bound geometry
+    work, sized by one account's upload, so it must not share a pool with
+    anything a person is waiting on. Always
     marks the upload PROCESSED or FAILED by the time this returns, even on an
     unexpected error, so a stuck PENDING row always means the task never ran
     at all rather than having failed silently mid-way.
@@ -4197,7 +4207,7 @@ def process_device_scan_upload(self, upload_id: int) -> bool:
     return True
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def evaluate_achievements_for_profile(profile_id: int, metric_keys: list[str] | None = None) -> int:
     """Grant any achievements a profile now qualifies for.
 
@@ -4230,7 +4240,7 @@ def evaluate_achievements_for_profile(profile_id: int, metric_keys: list[str] | 
     return len(evaluate_profile(profile, metric_keys=metric_keys))
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def backfill_achievement(achievement_id: int) -> int:
     """Grant a newly defined achievement to everyone who already qualifies.
 
@@ -4254,7 +4264,7 @@ def backfill_achievement(achievement_id: int) -> int:
     return evaluate_achievement_for_all(achievement)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def score_reputation_event(event_id: int) -> str:
     """Work out what one recorded contribution was worth.
 
@@ -4286,7 +4296,7 @@ def score_reputation_event(event_id: int) -> str:
     return "unscorable" if value is None else str(value)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def recompute_reputation_total(profile_id: int) -> str:
     """Rebuild one profile's cached reputation totals from the ledger.
 
@@ -4301,7 +4311,7 @@ def recompute_reputation_total(profile_id: int) -> str:
     return str(recompute_total(profile_id))
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_reputation(chunk_size: int = 500) -> int:
     """Drain unscored ledger rows and rebuild any totals known to be stale.
 
@@ -4339,7 +4349,7 @@ def sweep_reputation(chunk_size: int = 500) -> int:
     return dispatched
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_reputation_range(start_pk: int, end_pk: int) -> int:
     """Score every unscored ledger row with ``start_pk <= pk <= end_pk``.
 
@@ -4366,7 +4376,7 @@ def sweep_reputation_range(start_pk: int, end_pk: int) -> int:
     return scored
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_achievements(chunk_size: int = 1000) -> int:
     """Fan the nightly achievement sweep out as bounded profile-range subtasks.
 
@@ -4408,7 +4418,7 @@ def sweep_achievements(chunk_size: int = 1000) -> int:
     return dispatched
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
     """Evaluate every achievement for profiles with ``start_pk <= pk <= end_pk``.
 
@@ -4428,7 +4438,7 @@ def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
     return evaluate_profiles_in_range(start_pk, end_pk)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sync_stripe_subscriptions() -> int:
     """Re-sync every non-canceled RoleSubscription's status/price/threshold from Stripe.
 
@@ -4469,7 +4479,7 @@ def sync_stripe_subscriptions() -> int:
     return count
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def advance_pwyw_usage_ledgers() -> int:
     """Advance every pay-what-you-want RoleSubscription's usage ledger.
 
@@ -4497,7 +4507,7 @@ def advance_pwyw_usage_ledgers() -> int:
     return count
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """Download an external media item and file the local copy into an album.
 
@@ -4572,7 +4582,7 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
     return image.pk
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """Download an external media item and attach the local copy to a wiki.
 
@@ -4626,7 +4636,7 @@ def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: 
     return image.pk
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
     """Fill a Location's recorded-weather cache for a set of days.
 
@@ -4667,7 +4677,7 @@ def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
     return len(recorded_days(location, days))
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def run_scheduled_demo_account_purge() -> bool:
     """Delete expired demo accounts. A no-op on any instance that is not the demo.
 
@@ -4693,7 +4703,7 @@ def run_scheduled_demo_account_purge() -> bool:
     return True
 
 
-@shared_task
+@shared_task(queue=Queue.MAINTENANCE)
 def run_scheduled_redata_public_locations_sync() -> bool:
     """Refresh the demo instance's location pool from REData. A no-op everywhere else.
 

@@ -31,7 +31,7 @@ on purpose until it lands. Each phase's acceptance is a measurement, not a revie
 | 3 | `gthread`, per-role Postgres users, `app-heavy` pool (D11) | not started |
 | 4 | Valkey split + degradable session path (P105) | not started |
 | 5 | Map data contract v11 (D12) | **built 2026-09-11** — payload v11, the per-pin cache deleted, labels normalised, the streamed document and its per-account build claim (P101, P102, P106, P108 closed). The `?since=` delta, viewport mode and the IndexedDB store are deferred with triggers in D12 |
-| 6 | Celery queue classes; move P96/P98/P2 work off the request | not started |
+| 6 | Celery queue classes; move P96/P98/P2 work off the request | **queue classes built 2026-09-11** (D13: all 96 tasks classified, `celery-worker` narrowed to `-Q interactive`, `celery-worker-bulk` added, startup check `dashboard.E010`). P96/P98/P2 not started |
 | 7 | Observability completion, profiling harness, k8s parity | not started |
 
 ## 2026-09-11 — the instruments were audited, and three of them could not fail

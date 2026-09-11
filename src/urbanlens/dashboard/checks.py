@@ -581,3 +581,43 @@ def websocket_frame_cap_conflict() -> str | None:
                 "UL_WEBSOCKET_MAX_FRAME_CHARS."
             )
     return None
+
+
+@register()
+def check_every_task_declares_a_queue(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """Refuse to start when a task this codebase defines names no queue.
+
+    A task with no ``queue=`` lands on ``celery``, which is where 87 of 96 of
+    them were when D13 measured it - one pool, drained by one worker, so an
+    account-sized job and a safety escalation shared four concurrency slots.
+    The classification fixes that; this is what keeps it fixed, because the
+    failure mode is silent. A task added without a queue goes on working, on
+    whichever pool drains the default, and nothing says so.
+
+    Scoped to tasks defined in ``urbanlens``: a third-party package's task is
+    not ours to declare, and failing startup over one would make this a check
+    somebody switches off. Test modules are out too - a probe task
+    defined by a test is never enqueued by the running site, and requiring a
+    class of it would make every such test carry a declaration that means
+    nothing.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        One error naming every task that declares no queue.
+    """
+    from urbanlens.UrbanLens.celery import app as celery_app
+
+    unrouted = sorted(name for name, task in celery_app.tasks.items() if (module := getattr(task, "__module__", "")).startswith("urbanlens.") and ".tests." not in module and not getattr(task, "queue", None))
+    if not unrouted:
+        return []
+    return [
+        Error(
+            f"{len(unrouted)} Celery task(s) declare no queue, so they run on whichever pool drains the default "
+            f"instead of the class they belong to: {', '.join(unrouted)}. Add queue=Queue.INTERACTIVE, Queue.BULK "
+            "or Queue.MAINTENANCE to the @shared_task decorator - see services/sandbox/queues.py for which.",
+            id="dashboard.E010",
+        ),
+    ]
