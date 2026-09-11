@@ -29,6 +29,14 @@
     var reconnectTimer = null;
     var heartbeatTimer = null;
     var stopped = false;   // set on close 4404 (unauthenticated) - retrying won't help
+    // Set on close 4429: this account already holds as many sockets as it may
+    // (services/security/socket_budget.py). Temporary - closing a tab frees a
+    // place - so unlike `stopped` this keeps retrying, but it must not retry
+    // eagerly. Every attempt is a handshake, an auth resolution and a store
+    // round trip, which is the cost the cap exists to bound; and the polling
+    // fallback below would replace one refused socket with a stream of HTTP
+    // requests, which is worse than the socket it is standing in for.
+    var overLimit = false;
 
     function refreshBadge() {
         if (window.htmx) htmx.trigger(document.body, 'notifCountRefresh');
@@ -161,6 +169,7 @@
 
         ws.onopen = function () {
             retryDelay = RETRY_MIN_MS;
+            overLimit = false;   // a place came free; the eager retries are useful again
             failures = 0;
             stopPolling();
             startHeartbeat();
@@ -193,6 +202,12 @@
                 stopPolling();
                 return;
             }
+            if (e && e.code === 4429) {
+                overLimit = true;
+                retryDelay = RETRY_MAX_MS;
+                scheduleReconnect();
+                return;
+            }
             failures++;
             if (failures >= FAILURES_BEFORE_POLLING) startPolling();
             scheduleReconnect();
@@ -202,14 +217,14 @@
     // Returning to the tab or coming back online is a good moment to retry
     // immediately instead of waiting out the current backoff.
     document.addEventListener('visibilitychange', function () {
-        if (!document.hidden && !ws && !stopped) {
+        if (!document.hidden && !ws && !stopped && !overLimit) {
             retryDelay = RETRY_MIN_MS;
             if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
             connect();
         }
     });
     window.addEventListener('online', function () {
-        if (!ws && !stopped) {
+        if (!ws && !stopped && !overLimit) {
             retryDelay = RETRY_MIN_MS;
             if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
             connect();

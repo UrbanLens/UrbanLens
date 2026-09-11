@@ -4383,6 +4383,19 @@ the load it prevents is not a limiter. A capacity refusal now waits the full cei
 brought forward by those triggers, and clears once a place comes free; three of the five new tests
 fail against the previous version.
 
+That fix covered `live-socket.ts`, which the three game consumers use - and nothing else. The
+notification, direct-message and safety-chat sockets are written by hand in their templates, and the
+notification one is the socket every logged-in page opens. All three reconnected on any code but
+4404, and the notification one reset its backoff on every tab focus *and* escalated to HTTP polling
+after two failures, so a refused socket would have been answered with a stream of requests. Found by
+grepping for `new WebSocket(` rather than by reasoning about which page opens what; a test now
+discovers them the same way, so a fifth hand-rolled socket fails there rather than in production.
+
+A second leak, and a permanent one rather than a temporary one: Channels fires `disconnect()` only
+for a connection that reached `accept()`, so a failure between the claim and the accept held the
+place - and the renewal task kept that claim fresh for the life of the process, so it would never
+even age out. Every connect-failure path releases now.
+
 The claims also renew. They expire so a worker that went away stops costing an account part of its
 allowance, but these sockets live as long as their tab - hours - so without a renewal a long-lived
 one would quietly stop counting, which is lenient rather than dangerous but would make the cap

@@ -256,6 +256,30 @@ class TheConsumersHonourTheAllowanceTests(TransactionTestCase):
         await first.disconnect()
 
     @override_settings(**{SETTING_NAME: 1})
+    def test_a_connect_that_fails_after_claiming_gives_the_place_back(self) -> None:
+        """The leak that would be permanent rather than temporary.
+
+        Channels fires `disconnect()` only for a connection that reached
+        `accept()`, so a failure between the claim and the accept would hold the
+        place - and the task renewing its claim would keep it fresh for the life
+        of the process, so it would never even age out.
+        """
+        async_to_sync(self._connect_that_fails_gives_the_place_back)()
+
+    async def _connect_that_fails_gives_the_place_back(self) -> None:
+        with mock.patch.object(UserNotificationConsumer, "accept", side_effect=RuntimeError("boom")):
+            broken = self._communicator()
+            await broken.connect()
+            await broken.disconnect()
+
+        self.assertEqual(socket_budget.open_count(f"user:{self.user.pk}"), 0, "a failed connect kept its place")
+
+        after = self._communicator()
+        connected, _ = await after.connect()
+        self.assertTrue(connected, "the account could not reconnect after a failed connect")
+        await after.disconnect()
+
+    @override_settings(**{SETTING_NAME: 1})
     def test_disconnecting_gives_the_place_back(self) -> None:
         async_to_sync(self._disconnecting_gives_the_place_back)()
 
@@ -301,3 +325,59 @@ class TheEdgeBoundsWhatTheAppCannotTests(SimpleTestCase):
         text = (REPO_ROOT / "src" / "urbanlens" / "config" / "nginx" / "django.conf").read_text(encoding="utf-8")
 
         self.assertLess(text.index("real_ip_header"), text.index("limit_conn ws_conn"))
+
+
+class EverySocketClientBacksOffOnTheRefusalTests(SimpleTestCase):
+    """A client that retries a capacity refusal eagerly is the cap's own load.
+
+    Found by grepping rather than by reasoning about which page opens what: the
+    fix for `live-socket.ts` covered the three game consumers and nothing else,
+    because the notification, direct-message and safety-chat sockets are written
+    by hand in their templates. The notification one - the socket every logged-in
+    page opens - reset its backoff to a second on every tab focus, and escalated
+    to HTTP polling after two failures, which would have answered a refused
+    socket with a stream of requests.
+
+    The rule is about who owns the close handler. A file that constructs its own
+    `WebSocket` owns it and must handle the code; a file that calls
+    `openLiveSocket` inherits the handling and must not have to repeat it.
+    Discovered rather than listed, so a fifth hand-rolled socket fails here
+    rather than in production.
+    """
+
+    #: Close code the consumers use for "this account already holds as many
+    #: sockets as it may".
+    CODE = "4429"
+
+    def _hand_rolled_clients(self) -> list[pathlib.Path]:
+        """Every file that constructs a WebSocket and so owns its own onclose."""
+        roots = (
+            REPO_ROOT / "src" / "urbanlens" / "dashboard" / "templates",
+            REPO_ROOT / "src" / "urbanlens" / "dashboard" / "frontend" / "ts",
+        )
+        found = []
+        for root in roots:
+            for path in root.rglob("*"):
+                if path.suffix not in {".html", ".ts"} or path.name.endswith(".test.ts"):
+                    continue
+                if "new WebSocket(" in path.read_text(encoding="utf-8", errors="ignore"):
+                    found.append(path)
+        return found
+
+    def test_the_scan_finds_the_clients_it_is_meant_to_guard(self) -> None:
+        """An empty list would satisfy the assertion below."""
+        names = {path.name for path in self._hand_rolled_clients()}
+
+        self.assertIn("_notification_push.html", names)
+        self.assertIn("live-socket.ts", names)
+        self.assertGreaterEqual(len(names), 4, f"only found {sorted(names)}")
+
+    def test_each_handles_the_capacity_refusal(self) -> None:
+        for path in self._hand_rolled_clients():
+            with self.subTest(path.name):
+                self.assertIn(
+                    self.CODE,
+                    path.read_text(encoding="utf-8"),
+                    f"{path.relative_to(REPO_ROOT)} constructs a WebSocket but does not handle close {self.CODE}, "
+                    "so a refused connection would be retried on the ordinary backoff",
+                )

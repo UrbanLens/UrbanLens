@@ -134,6 +134,16 @@ JavaScript is unavailable.
                 return;
             }
             if (permanentlyClosed) return;
+            if (ev.code === 4429) {
+                // This account already holds as many sockets as it may
+                // (services/security/socket_budget.py). Temporary - closing a
+                // tab frees a place - so keep trying, but at the ceiling: every
+                // attempt is a handshake, an auth resolution and a store round
+                // trip, which is the cost the cap exists to bound.
+                retryDelay = maxDelay;
+                setTimeout(connect, retryDelay);
+                return;
+            }
             retryCount += 1;
             if (retryCount === 5 && !warnedSlowReconnect) {
                 warnedSlowReconnect = true;

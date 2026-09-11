@@ -499,6 +499,10 @@ class UserNotificationConsumer(SocketAllowanceMixin, CredentialScopeMixin, Async
                     await self.channel_layer.group_discard(self.group_name, self.channel_name)
                 except Exception:
                     logger.exception("Notification socket failed to leave group %s during connect-failure cleanup", self.group_name)
+            # Channels fires disconnect() only for a connection that reached
+            # accept(), so without this the place - and the task renewing its
+            # claim - would be held for the life of the process.
+            await self.release_socket_slot()
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
@@ -619,6 +623,10 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
                     await self.channel_layer.group_discard(self.group_name, self.channel_name)
                 except Exception:
                     logger.exception("Direct message socket failed to leave group %s during connect-failure cleanup", self.group_name)
+            # Channels fires disconnect() only for a connection that reached
+            # accept(), so without this the place - and the task renewing its
+            # claim - would be held for the life of the process.
+            await self.release_socket_slot()
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
@@ -986,6 +994,10 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
             return
         except Exception:
             logger.exception("Safety chat connect failed unexpectedly: %s", kwargs)
+            # Channels fires disconnect() only for a connection that reached
+            # accept(), so without this the place - and the task renewing its
+            # claim - would be held for the life of the process.
+            await self.release_socket_slot()
             await self.close(code=4500)
             return
 
@@ -1033,6 +1045,10 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
                     await self.channel_layer.group_discard(name, self.channel_name)
                 except Exception:
                     logger.exception("Safety chat failed to leave group %s during connect-failure cleanup", name)
+            # Channels fires disconnect() only for a connection that reached
+            # accept(), so without this the place - and the task renewing its
+            # claim - would be held for the life of the process.
+            await self.release_socket_slot()
             await self.close(code=4500)
             return
         logger.info("Safety chat connected: checkin=%s contact=%s", self.checkin.pk, getattr(self.contact, "pk", None))
@@ -1503,6 +1519,10 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
             is_participant = await self._is_participant(session_id, user)
         except Exception:
             logger.exception("%s socket connect failed unexpectedly for session %s", self.game_label, session_id)
+            # Channels fires disconnect() only for a connection that reached
+            # accept(), so without this the place - and the task renewing its
+            # claim - would be held for the life of the process.
+            await self.release_socket_slot()
             await self.close(code=4500)
             return
 
@@ -1533,6 +1553,10 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
                 await self.channel_layer.group_discard(self.group_name, self.channel_name)
             except Exception:
                 logger.exception("%s socket failed to leave group %s during connect-failure cleanup", self.game_label, self.group_name)
+            # Channels fires disconnect() only for a connection that reached
+            # accept(), so without this the place - and the task renewing its
+            # claim - would be held for the life of the process.
+            await self.release_socket_slot()
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
