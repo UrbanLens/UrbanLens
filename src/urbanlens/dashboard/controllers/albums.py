@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH, column_max_length, text_length_error
+from urbanlens.dashboard.services.geo.sampling import bound_map_layer
 from urbanlens.dashboard.services.media.images import image_to_gallery_json
 from urbanlens.dashboard.services.media.media_relevance import MATERIALIZE_ERROR_MESSAGE
 from urbanlens.dashboard.services.photos.albums import (
@@ -363,9 +364,23 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
     # A vault album has no such gallery endpoint yet, so its map is read-only -
     # same fallback the lightbox already uses for a page with no reposition wiring.
     row["reposition_base"] = "" if isinstance(owner, Profile) else reverse("pin.gallery" if isinstance(owner, Pin) else "location.wiki.gallery", args=_owner_url_args(owner))
-    map_images = list(Image.objects.filter(pk__in=visible_ids).select_related("location")) if visible_ids else []
+    # The grid pages at ALBUM_GRID_PAGE_SIZE; the map used to embed every photo
+    # in the album inline in the same response, so pagination bounded what you
+    # could see and nothing bounded what was sent. Capped by the same mechanism
+    # the gallery map layers use, which keeps the area covered rather than
+    # keeping the first N - see services/geo/sampling.py.
+    map_queryset, map_truncated, map_total = (
+        bound_map_layer(
+            Image.objects.filter(pk__in=visible_ids, latitude__isnull=False, longitude__isnull=False),
+        )
+        if visible_ids
+        else (Image.objects.none(), False, 0)
+    )
+    map_images = list(map_queryset.select_related("location"))
     row["map_photos"] = _photo_map_payload(map_images, viewer)
-    row["placed_count"] = len(row["map_photos"])
+    row["placed_count"] = map_total
+    row["map_truncated"] = map_truncated
+    row["map_total"] = map_total
     row["context_type"] = "pin" if isinstance(owner, Pin) else "wiki" if isinstance(owner, Wiki) else "vault"
     row["picker_albums"] = _picker_album_payload(owner, viewer, exclude_slug=album.slug)
     _attach_owner_action_urls(row, owner)

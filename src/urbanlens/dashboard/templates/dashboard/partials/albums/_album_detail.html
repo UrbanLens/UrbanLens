@@ -10,7 +10,7 @@ picker - are opt-in panels rather than always-rendered page content.
 
 Expects (from controllers.albums._album_detail_context):
   album, grid_images, available_image_count, eligible_url, photo_count, cover, date_start, date_end
-  map_photos, placed_count
+  map_photos, placed_count, map_truncated, map_total
   back_url, list_url, add_url, remove_url, reorder_url, edit_url, upload_url,
   items_url, reposition_base
 {% endcomment %}
@@ -107,7 +107,9 @@ Expects (from controllers.albums._album_detail_context):
   <section id="album-map-section" class="album-map-section" hidden>
     <div class="album-map-head">
       <span class="album-map-hint settings-help">
-        {% if placed_count %}
+        {% if map_truncated %}
+        Showing {{ map_photos|length }} of {{ map_total }} placed photos, spread across the area. Drag a marker to correct where a photo was taken.
+        {% elif placed_count %}
         Drag a marker to correct where a photo was taken. Only your own photos can be moved.
         {% else %}
         None of this album's photos have a position yet.

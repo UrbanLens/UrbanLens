@@ -1010,6 +1010,9 @@ function init(): void {
     let detailPins: DetailPinEntry[] = [];
     let highlightedDpUuid: string | null = null;
     let photoPanelItems: PhotoPanelItem[] = [];
+    //: Whether the server capped the photo map layer, and how many there were.
+    let photoLayerTruncated = false;
+    let photoLayerTotal = 0;
     const photoMarkers: Record<number, { marker: L.Marker; url: string; lat: number; lng: number; highlighted: boolean }> = {};
 
     function hexToRgb(hex: string): string {
@@ -2185,6 +2188,17 @@ function init(): void {
                 badge.remove();
             }
         }
+        if (photoLayerTruncated) {
+            const note = document.createElement("li");
+            note.className = "photo-panel-note";
+            const shown = String(photoPanelItems.length);
+            const total = String(photoLayerTotal);
+            note.innerHTML =
+                '<i class="material-symbols-outlined">info</i><span></span>';
+            const text = note.querySelector("span");
+            if (text) text.textContent = `Showing ${shown} of ${total} photos, spread across the area.`;
+            ul.appendChild(note);
+        }
         if (!photoPanelItems.length) {
             const empty = document.createElement("li");
             empty.className = "photo-panel-empty";
@@ -2365,6 +2379,12 @@ function init(): void {
         .then((r) => r.json())
         .then((data) => {
             photoPanelItems = [];
+            // The layer is capped for locations with thousands of photos. The
+            // server keeps a spatially spread subset rather than the first N, so
+            // the map still shows the whole site - but the count is not the
+            // whole count, and saying nothing would be a quiet lie.
+            photoLayerTruncated = Boolean(data.truncated);
+            photoLayerTotal = Number(data.total) || 0;
             (data.images || []).forEach((img: any) => {
                 photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: img.is_mine });
                 if (img.latitude != null && img.longitude != null) addPhotoMarker(img.id, img.marker_thumb_url || img.url, img.latitude, img.longitude, img.child_pin_name);

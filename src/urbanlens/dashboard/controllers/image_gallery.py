@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.geo.sampling import bound_map_layer
 from urbanlens.dashboard.services.media.images import apply_image_map_update, delete_stored_file, detach_image_from_wiki, image_to_gallery_json
 from urbanlens.dashboard.services.photos.uploads import UploadRejection, record_photo_upload_failure, upload_photo_for_owner
 from urbanlens.dashboard.services.wiki.concealment import visible_rows
@@ -201,15 +202,16 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images, include_children = _pin_gallery_images(request, pin, profile)
+        images, truncated, total = bound_map_layer(images.with_coords())
         data = []
-        for img in images.with_coords():
+        for img in images:
             entry = image_to_gallery_json(img, request, profile)
             if include_children and img.pin_id is not None and img.pin_id != pin.pk and img.pin is not None:
                 # Child-pin photos render read-only on the parent's map layer;
                 # they are repositioned from their own pin's page.
                 entry["child_pin_name"] = img.pin.effective_name
             data.append(entry)
-        return JsonResponse({"images": data})
+        return JsonResponse({"images": data, "truncated": truncated, "total": total})
 
 
 #: Most photos one bulk request may name. The same number `pin_bulk.py` uses for
@@ -543,13 +545,16 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
         # where they stood.
         if concealment_active(wiki, profile):
             images = conceal_rows(images, profile)
+        # Capped after concealment, so a concealed row can never be what the cap
+        # chose to keep.
+        images, truncated, total = bound_map_layer(images)
         data = []
         for img in images:
             entry = image_to_gallery_json(img, request, profile)
             if include_children and img.wiki_id is not None and img.wiki_id != wiki.pk and img.wiki is not None:
                 entry["child_pin_name"] = img.wiki.name
             data.append(entry)
-        return JsonResponse({"images": data})
+        return JsonResponse({"images": data, "truncated": truncated, "total": total})
 
 
 class WikiCoverPhotoView(LoginRequiredMixin, View):
