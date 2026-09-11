@@ -122,6 +122,7 @@ export const shellFragmentRoutes = {
 /** JSON endpoints the map page itself calls, useful as service-level probes. */
 export const mapDataRoutes = {
     pins: "/dashboard/map/pins/",
+    document: "/dashboard/map/document/",
     pinsMeta: "/dashboard/map/pins/meta/",
     pinList: "/dashboard/map/pins/list/",
     search: "/dashboard/map/search/",

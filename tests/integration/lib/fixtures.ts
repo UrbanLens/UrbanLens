@@ -19,7 +19,7 @@
 
 import { test as base, expect, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
 
-import { optionalAccount, PRIMARY_ROLE, requireAccount, SECONDARY_ROLE, storageStatePath, type IntegrationAccount } from "./accounts.js";
+import { HEAVY_ROLE, optionalAccount, PRIMARY_ROLE, requireAccount, SECONDARY_ROLE, storageStatePath, type IntegrationAccount } from "./accounts.js";
 import { ApiClient } from "./api-client.js";
 import { env } from "./env.js";
 import { installHtmxTracking } from "./htmx.js";
@@ -73,6 +73,13 @@ export interface IntegrationFixtures {
      * {@link ifSecondaryAccount}, as for {@link IntegrationFixtures.secondaryApi}.
      */
     secondaryPage: Page;
+    /**
+     * A signed-in page as the `heavy` account - the one seeded with a realistic
+     * number of pins by `provision_integration_env --heavy-pins`.
+     *
+     * For the specs whose subject is size. Gate with {@link ifHeavyAccount}.
+     */
+    heavyPage: Page;
 }
 
 export interface IntegrationWorkerFixtures {
@@ -199,6 +206,24 @@ export const test = base.extend<IntegrationOptions & IntegrationFixtures, Integr
         await use(guard);
     },
 
+    heavyPage: async ({ browser }, use) => {
+        requireAccount(HEAVY_ROLE);
+
+        let context: BrowserContext | null = null;
+        try {
+            context = await browser.newContext({
+                baseURL: env.baseUrl,
+                storageState: storageStatePath(HEAVY_ROLE),
+                ignoreHTTPSErrors: env.ignoreHttpsErrors,
+            });
+            await installHtmxTracking(context);
+            const page = await context.newPage();
+            await use(page);
+        } finally {
+            await context?.close();
+        }
+    },
+
     secondaryPage: async ({ browser }, use) => {
         // Specs gate themselves with `ifSecondaryAccount()`; this is the
         // backstop for one that forgot, and says what to do about it.
@@ -241,6 +266,17 @@ export function ifSecondaryAccount(): typeof test | typeof test.skip {
     return hasAccountFor(SECONDARY_ROLE) ? test : test.skip;
 }
 
+/**
+ * `test`, or a skipped `test`, depending on whether a seeded heavy account exists.
+ *
+ * Provision one with
+ * `manage.py provision_integration_env --roles primary,secondary,heavy --heavy-pins 30000`.
+ * Seeding takes minutes, so ordinary runs skip these rather than paying for them.
+ */
+export function ifHeavyAccount(): typeof test | typeof test.skip {
+    return hasAccountFor(HEAVY_ROLE) ? test : test.skip;
+}
+
 export { expect };
-export { PRIMARY_ROLE, SECONDARY_ROLE, STAFF_ROLE } from "./accounts.js";
+export { HEAVY_ROLE, PRIMARY_ROLE, SECONDARY_ROLE, STAFF_ROLE } from "./accounts.js";
 export { env } from "./env.js";

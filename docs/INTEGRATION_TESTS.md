@@ -531,6 +531,20 @@ may be pointed at a staging instance people also use by hand.
 The manifest it writes contains **plaintext passwords and API keys**. `--out`
 writes it to a file (mode 600) rather than to a terminal by default.
 
+### The `heavy` role, for the specs whose subject is size
+
+`--roles primary,secondary,heavy --heavy-pins 30000` seeds a third account with
+that many pins. The specs that need one gate themselves with `ifHeavyAccount()`
+and skip without it, because seeding takes minutes and most runs should not pay
+for it.
+
+It exists for `specs/ui/map-document.spec.ts`, which asserts that a large
+account's map document answers inside a budget - cached and uncached. Those
+budgets are deliberately far above the measured numbers (X17): they are there to
+catch a change of shape, a reintroduced per-pin query or a cache that stopped
+being used, not to measure anything. A run on a loaded shared host will be noisy
+well beyond the effect they guard against.
+
 ### Provision after the instance has a real admin
 
 `promote_first_user_if_needed` grants site admin to the first user created on a

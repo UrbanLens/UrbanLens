@@ -73,6 +73,22 @@ around 2.9 s against a hit still in the tens of milliseconds.
 The request and streaming layers cost nothing measurable over the payload build: the same work with
 no request around it measured 170 ms against the endpoint's 168 ms at 2,000 pins.
 
+### Over real HTTP, at the ceiling
+
+The table above is in-process. Measured through nginx and a browser's request
+API against a 30,000-pin account, which is what
+`tests/integration/specs/ui/map-document.spec.ts` asserts on:
+
+| | uncached | cached |
+|---|---|---|
+| 30,000 pins | 3,971-4,749 ms | 179-526 ms |
+
+Both halves move by roughly 20% run to run on an otherwise idle development box,
+which is why that spec's absolute budgets are set at 8,000 ms and 1,000 ms and
+why its real assertion is the **ratio** - measured at 22-26x, and asserted at 3x.
+A ratio is measured on one host in one run; a millisecond is a claim about a
+machine.
+
 **The wire sizes in that table are not a production comparison.** The hit is served pre-gzipped from
 Valkey; the miss streams plain NDJSON and is gzipped by nginx, which Django's test client does not
 go through. On the wire in production they are comparable. What the hit saves is the work - no

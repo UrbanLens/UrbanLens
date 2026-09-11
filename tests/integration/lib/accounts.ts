@@ -70,6 +70,8 @@ interface AccountsManifest {
 export const PRIMARY_ROLE = "primary";
 export const SECONDARY_ROLE = "secondary";
 export const STAFF_ROLE = "staff";
+/** The account `provision_integration_env --heavy-pins` seeds, for size-dependent specs. */
+export const HEAVY_ROLE = "heavy";
 
 function fromManifest(path: string): Map<string, IntegrationAccount> {
     const absolute = isAbsolute(path) ? path : resolve(INTEGRATION_ROOT, path);
