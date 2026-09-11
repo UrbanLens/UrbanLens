@@ -4249,6 +4249,23 @@ DRF-only; `services/core/rate_limiter.py` caps *outbound* third-party spend, not
 `/demo/start/` does five — with nothing in front of them, and nginx carries no `limit_req` zone
 either. An anonymous caller can occupy the web tier with a loop.
 
-**Not fixed here.** Each family needs its own decision about where the ceiling goes, and several
-change what a user sees when they hit it — which is a product call, not a technical one. Recorded
-so the choices are made deliberately rather than discovered during an outage.
+**Family 1 is fixed** (2026-09-11). `services/security/throttle.py` adds the inbound limit the web
+tier did not have, and `signup`, `password_reset`, `resend_verification` and `demo.start` carry it
+at ten calls per five minutes per address — far above what those actions take and far below what a
+loop costs. It **fails open**: a throttle that refuses when it cannot read its counter turns a
+Valkey outage into a site-wide lockout, and P105 already records that a Valkey outage 500s every
+request. Losing an abuse control for the length of that outage is the cheaper failure, and
+`test_request_throttle.py` asserts it rather than assuming it.
+
+Two corrections to the audit came out of building it, both of which would have been wasted work:
+
+- **`/accounts/login/` needs nothing.** `CustomLoginView` already carries per-identifier *and*
+  per-IP failure lockouts, configured from `SiteSettings`. A second limiter in front of it would be
+  two gates disagreeing about one rule.
+- **`/demo/start/` is registered only when `demo_mode` is on** (`UrbanLens/urls.py:131`), so on a
+  normal deployment the route does not exist. Throttled anyway, because a demo instance is still a
+  deployment.
+
+**The other four families are not fixed.** Each needs its own decision about where the ceiling goes,
+and several change what a user sees when they hit it — which is a product call, not a technical one.
+Recorded so the choices are made deliberately rather than discovered during an outage.

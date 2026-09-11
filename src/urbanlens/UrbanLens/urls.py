@@ -33,6 +33,7 @@ from urbanlens.dashboard.controllers.account import (
 from urbanlens.dashboard.controllers.health import HealthController
 from urbanlens.dashboard.controllers.index import IndexController
 from urbanlens.dashboard.controllers.media import MediaGateView
+from urbanlens.dashboard.services.security.throttle import ANONYMOUS_EXPENSIVE, throttled
 from urbanlens.dashboard.urls import urlpatterns as dashboard_urls
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -70,11 +71,13 @@ urlpatterns = [
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path(
         "accounts/password_reset/",
-        auth_views.PasswordResetView.as_view(
-            form_class=SsoAwarePasswordResetForm,
-            subject_template_name="registration/password_reset_subject.txt",
-            email_template_name="registration/password_reset_email.txt",
-            html_email_template_name="registration/password_reset_email.html",
+        throttled("password_reset", ANONYMOUS_EXPENSIVE)(
+            auth_views.PasswordResetView.as_view(
+                form_class=SsoAwarePasswordResetForm,
+                subject_template_name="registration/password_reset_subject.txt",
+                email_template_name="registration/password_reset_email.txt",
+                html_email_template_name="registration/password_reset_email.html",
+            ),
         ),
         name="password_reset",
     ),
@@ -86,13 +89,13 @@ urlpatterns = [
     ),
     path("accounts/reset/done/", auth_views.PasswordResetCompleteView.as_view(), name="password_reset_complete"),
     # Registration
-    path("signup/", SignupView.as_view(), name="signup"),
+    path("signup/", throttled("signup", ANONYMOUS_EXPENSIVE)(SignupView.as_view()), name="signup"),
     path("accounts/suggest-passphrases/", suggest_passphrases, name="suggest_passphrases"),
     path("accounts/validate-password/", validate_password_policy, name="validate_password_policy"),
     # Email verification
     path("verify-email/sent/", VerifyEmailSentView.as_view(), name="verify_email_sent"),
     path("verify-email/<uuid:token>/", VerifyEmailView.as_view(), name="verify_email"),
-    path("resend-verification/", ResendVerificationView.as_view(), name="resend_verification"),
+    path("resend-verification/", throttled("resend_verification", ANONYMOUS_EXPENSIVE)(ResendVerificationView.as_view()), name="resend_verification"),
     path("dashboard/", include(dashboard_urls), name="dashboard"),
     # OAuth2 provider (django-oauth-toolkit). Native clients (the mobile app)
     # register a *public* application here and authenticate with PKCE
@@ -131,7 +134,7 @@ urlpatterns = [
 if app_settings.demo_mode:
     from urbanlens.dashboard.controllers.demo import DemoLoginView
 
-    urlpatterns += [path("demo/start/", DemoLoginView.as_view(), name="demo.start")]
+    urlpatterns += [path("demo/start/", throttled("demo_start", ANONYMOUS_EXPENSIVE)(DemoLoginView.as_view()), name="demo.start")]
 
 # Prometheus scrape endpoint, registered for the same reason the demo route is:
 # an instance that has not opted in has no such URL, rather than a view that

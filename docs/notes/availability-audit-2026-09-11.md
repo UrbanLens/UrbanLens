@@ -146,7 +146,14 @@ has no cost to an attacker at all.
 | H23 | medium | any-authenticated | `src/urbanlens/dashboard/services/search/saved_filter_cache.py:91` | Every login and every map/toolbar load writes a full list of a profile's matching pin UUIDs into Valkey under a fingerprint-versioned key, and the superseded copy is never deleted - it lingers for a day. |  |
 ## What was fixed in the session that found these
 
-Only the instruments. The findings above are recorded, not fixed — see P113.
+Family 1, and the instruments. The other four families are recorded, not fixed — see P113.
+
+**Family 1: the inbound throttle the web tier never had.** `services/security/throttle.py`, applied
+to `signup`, `password_reset`, `resend_verification` and `demo.start`. Two of the six findings in
+that family dissolved on contact: `/accounts/login/` already has per-identifier and per-IP failure
+lockouts, and `/demo/start/` only exists when `demo_mode` is on. The remaining two — the REData
+media proxies and nginx's 200MB request-body spooling — are infrastructure rather than application
+code and are left with the rest.
 
 Three defects in the safety net itself were repaired, because a finding list is worth nothing if the
 gates that should have caught them cannot fail:
