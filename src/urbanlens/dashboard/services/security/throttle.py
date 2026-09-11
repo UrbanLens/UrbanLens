@@ -1,16 +1,5 @@
 """A per-caller inbound rate limit for plain Django views.
-
-`external_api/throttling.py` covers the DRF surface and `core/rate_limiter.py`
-caps outbound third-party spend. Neither limits how often an anonymous caller may
-POST to a web view, which left the most expensive unauthenticated work in the
-application - password hashing at roughly a second of CPU per call, and
-synchronous mail - reachable in a loop by anyone.
-
-Fixed windows rather than a sliding log: one counter and one TTL per caller per
-window, which costs two cache operations and cannot grow. A caller can send two
-windows' worth across a boundary; that is the accepted cost of not keeping a
-timestamp list per caller in a 512MB Valkey that also holds every session.
-"""
+Fixed windows rather than a sliding log: one counter and one TTL per caller per window, which costs two cache operations and cannot grow."""
 
 from __future__ import annotations
 
@@ -51,12 +40,10 @@ class Rate:
     window_seconds: int
 
 
-#: For the unauthenticated endpoints that hash a password or send mail. Ten in
-#: five minutes is far above what signing up or asking for a reset takes and far
-#: below what a loop costs: at roughly a second of PBKDF2 each, ten is ten
-#: seconds of one worker rather than five minutes of all of them. Deliberately
-#: generous, because the identity is an IP address and a university or a phone
-#: network is one address.
+#: For the unauthenticated endpoints that hash a password or send mail.
+#: Ten in five minutes is far above what signing up or asking for a reset takes and far below what a
+#: loop costs: at roughly a second of PBKDF2 each, ten is ten seconds of one worker rather than five
+#: minutes of all of them.
 ANONYMOUS_EXPENSIVE = Rate(limit=10, window_seconds=300)
 
 
@@ -85,19 +72,13 @@ def _cache_add(key: str, timeout: int) -> bool:
 def allow(scope: str, identity: str, rate: Rate) -> bool:
     """Whether *identity* may make another call in *scope* right now.
 
-    Fails **open**. A throttle that refuses when it cannot read its own counter
-    converts a cache outage into a site-wide lockout, and this deployment has
-    already had one Valkey outage take every request down (P105). Losing an abuse
-    control for the length of that outage is the cheaper failure.
-
     Args:
         scope: What is being limited, so two endpoints do not share a budget.
         identity: Who is calling, usually the client IP.
         rate: The limit and its window.
 
     Returns:
-        ``True`` if the call is permitted.
-    """
+        ``True`` if the call is permitted."""
     key = _key(scope, identity, rate)
     try:
         if _cache_add(key, rate.window_seconds):
@@ -155,10 +136,9 @@ def throttled(scope: str, rate: Rate) -> Callable[[Callable[..., Any]], Callable
     """
 
     def decorate(view: Callable[..., Any]) -> Callable[..., Any]:
-        # `functools.wraps` rather than copying a name and a docstring: an
-        # `as_view()` result carries `view_class`, `view_initkwargs` and any
-        # `csrf_exempt` mark in its `__dict__`, and Django and its tooling read
-        # them off the callable the URLconf holds.
+        # `functools.wraps` rather than copying a name and a docstring: an `as_view()` result
+        # carries `view_class`, `view_initkwargs` and any `csrf_exempt` mark in its `__dict__`, and
+        # Django and its tooling read them off the callable the URLconf holds.
         @functools.wraps(view)
         def guarded(request: HttpRequest, *args: Any, **kwargs: Any) -> Any:
             if request.method not in COUNTED_METHODS:

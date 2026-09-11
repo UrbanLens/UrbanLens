@@ -1,11 +1,4 @@
-"""The assistant's distance/drive-time tool - calls OSRM directly, never REData.
-
-``services.apis.locations`` has a REData-first chokepoint for routing
-(``routing_resolution``), the same shape as ``weather_resolution``'s for
-weather - this deliberately bypasses it, straight to ``OSRMGateway``, so the
-sandboxed AI worker's "no REData" guarantee (``docs/AI_PIPELINE.md``) holds
-for this tool without needing REData reachable from it at all.
-"""
+"""The assistant's distance/drive-time tool - calls OSRM directly, never REData."""
 
 from __future__ import annotations
 

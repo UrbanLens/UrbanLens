@@ -1,14 +1,4 @@
-"""Storage quota accounting and upload downscale policy.
-
-Central place for everything the storage-quota feature needs:
-
-- Resolving a user's quota (site default vs. subscription-role overrides).
-- Summing how many bytes of uploads a profile has stored.
-- Deciding how (and whether) an upload should be downscaled / converted,
-  combining the site-wide policy with the user's own voluntary cap.
-- Estimating how many more photos fit in the remaining quota at a given
-  downscale setting, so the settings UI can show an intuitive number.
-"""
+"""Storage quota accounting and upload downscale policy. - Resolving a user's quota (site default vs. subscription-role overrides). - Summing how many bytes of uploads a profile has stored. - Deciding how (and whether) an upload should be downscaled / converted, combining the site-wide policy with the user's own voluntary cap. - Estimating how many more photos fit in the remaining quota at a given downscale setting, so the settings UI can show an intuitive number."""
 
 from __future__ import annotations
 
@@ -30,10 +20,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# How long a per-profile upload lock is held before it auto-expires, in
-# seconds. Long enough to cover a check-then-create quota sequence (including
-# image processing/checksumming before the DB insert), short enough that a
-# crashed request doesn't wedge the profile's uploads for long.
+# How long a per-profile upload lock is held before it auto-expires, in seconds.
+# Long enough to cover a check-then-create quota sequence (including image processing/checksumming
+# before the DB insert), short enough that a crashed request doesn't wedge the profile's uploads for
+# long.
 _UPLOAD_LOCK_TIMEOUT_SECONDS = 30
 
 GIB = 1024**3
@@ -72,10 +62,6 @@ _ASSUMED_ASPECT = 0.75
 def get_quota_bytes(profile: Profile, *, roles: Sequence[SubscriptionRole] | None = None) -> int | None:
     """Resolve the storage quota for a profile, in bytes.
 
-    The site-wide default applies to everyone; active subscription roles with
-    their own quota raise it (the largest applicable quota wins). A quota of
-    0 GB anywhere means unlimited.
-
     Args:
         profile: The profile whose quota to resolve.
         roles: The profile's active subscription roles, when the caller has
@@ -85,8 +71,7 @@ def get_quota_bytes(profile: Profile, *, roles: Sequence[SubscriptionRole] | Non
             and they are fetched.
 
     Returns:
-        The quota in bytes, or None when the user's storage is unlimited.
-    """
+        The quota in bytes, or None when the user's storage is unlimited."""
     settings = SiteSettings.get_current()
     quotas_gb = [settings.storage_quota_gb]
     for role in active_subscription_roles(profile.user) if roles is None else roles:
@@ -99,20 +84,13 @@ def get_quota_bytes(profile: Profile, *, roles: Sequence[SubscriptionRole] | Non
 
 def get_storage_used_bytes(profile: Profile) -> int:
     """Total bytes of stored uploads counted against a profile's quota.
-
-    Rows predating the ``file_size`` field are skipped until their size is
-    lazily backfilled by ``process_image_upload``. Rows carrying a
-    ``quota_exempt_reason`` are skipped permanently - cached external media
-    and community-rewarded contributions are storage the whole site benefits
-    from, so no single user is charged for them (see
-    ``services.media.quota_rewards``).
+    Rows carrying a ``quota_exempt_reason`` are skipped permanently - cached external media and community-rewarded contributions are storage the whole site benefits from, so no single user is charged for them (see ``services.media.quota_rewards``).
 
     Args:
         profile: The profile whose usage to sum.
 
     Returns:
-        The number of bytes currently used.
-    """
+        The number of bytes currently used."""
     from urbanlens.dashboard.models.images.model import Image
 
     total = Image.objects.filter(profile=profile, quota_exempt_reason="").aggregate(total=Sum("file_size"))["total"]
@@ -121,16 +99,13 @@ def get_storage_used_bytes(profile: Profile) -> int:
 
 def get_exempt_bytes(profile: Profile) -> int:
     """Total bytes this profile stores that don't count against their quota.
-
-    Surfaced in the storage settings so a user can see the benefit rather
-    than just an unexplained gap between their file list and their usage bar.
+    Surfaced in the storage settings so a user can see the benefit rather than just an unexplained gap between their file list and their usage bar.
 
     Args:
         profile: The profile whose exempt storage to sum.
 
     Returns:
-        The number of exempt bytes.
-    """
+        The number of exempt bytes."""
     from urbanlens.dashboard.models.images.model import Image
 
     total = Image.objects.filter(profile=profile).exclude(quota_exempt_reason="").aggregate(total=Sum("file_size"))["total"]
@@ -140,17 +115,11 @@ def get_exempt_bytes(profile: Profile) -> int:
 def get_storage_totals(profile: Profile) -> tuple[int, int]:
     """Both halves of a profile's storage accounting, in one query.
 
-    The settings page needs counted *and* exempt bytes together; running the
-    two aggregates separately scans the same rows twice. Prefer this over
-    calling :func:`get_storage_used_bytes` and :func:`get_exempt_bytes` back
-    to back.
-
     Args:
         profile: The profile whose storage to total.
 
     Returns:
-        ``(counted_bytes, exempt_bytes)``.
-    """
+        ``(counted_bytes, exempt_bytes)``."""
     from urbanlens.dashboard.models.images.model import Image
 
     totals = Image.objects.filter(profile=profile).aggregate(
@@ -187,27 +156,7 @@ def quota_error_for_upload(profile: Profile, upload_size: int | None) -> str | N
 @contextmanager
 def per_profile_upload_lock(profile: Profile, timeout: int = _UPLOAD_LOCK_TIMEOUT_SECONDS) -> Iterator[bool]:
     """Serialize one profile's uploads just long enough to make quota checks atomic.
-
-    :func:`quota_error_for_upload` reads current usage and the caller then
-    creates a new ``Image`` row afterwards - with no locking, N concurrent
-    uploads from the same profile can each pass the check before any of them
-    commits, letting the profile blow past its quota by up to N files. This
-    is a pragmatic fix (a short-lived cache lock) rather than true DB-level
-    atomicity, which would need a dedicated running-total column.
-
-    Wrap the check-then-create sequence in a call site with:
-
-    .. code-block:: python
-
-        with per_profile_upload_lock(profile) as locked:
-            quota_error = quota_error_for_upload(profile, image_file.size)
-            ...
-            Image.objects.create(...)
-
-    If the lock can't be acquired promptly (e.g. another upload from the same
-    profile is already mid-flight), the check proceeds anyway rather than
-    blocking the request - a missed lock only re-opens the original race for
-    that one request, it never hangs the upload.
+    This is a pragmatic fix (a short-lived cache lock) rather than true DB-level atomicity, which would need a dedicated running-total column.
 
     Args:
         profile: The uploading profile; the lock is scoped to this profile
@@ -218,8 +167,7 @@ def per_profile_upload_lock(profile: Profile, timeout: int = _UPLOAD_LOCK_TIMEOU
     Yields:
         True when the lock was acquired and will be released on exit, False
         when it could not be acquired within a short retry window (a warning
-        is logged and the caller should proceed without the extra safety net).
-    """
+        is logged and the caller should proceed without the extra safety net)."""
     from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
 
     key = f"upload-quota-lock:{profile.pk}"
@@ -248,50 +196,35 @@ def ingress_body_limit_bytes() -> int:
 
 def cap_to_ingress(limit_bytes: int) -> int:
     """Lower *limit_bytes* to what the ingress will actually carry.
-
-    An upload larger than the ingress cap is rejected by the proxy, which
-    answers the browser itself - so the application never sees the request, no
-    view runs, and the user is left with somebody else's error page after
-    uploading as much as the cap allowed. Advertising the smaller number instead
-    turns that into a refusal before any bytes are sent.
+    An upload larger than the ingress cap is rejected by the proxy, which answers the browser itself - so the application never sees the request, no view runs, and the user is left with somebody else's error page after uploading as much as the cap allowed.
 
     Args:
         limit_bytes: The limit this deployment would otherwise apply.
 
     Returns:
         The smaller of *limit_bytes* and the ingress cap, or *limit_bytes*
-        unchanged when no cap is configured.
-    """
+        unchanged when no cap is configured."""
     ingress = ingress_body_limit_bytes()
     return min(limit_bytes, ingress) if ingress else limit_bytes
 
 
 def max_upload_file_size_bytes() -> int:
     """Site-wide max size for a single photo/video/document upload, in bytes.
-
-    Read by both halves of the size check - ``file_size_error_for_upload`` on
-    the server and the ``data-max-file-size`` the vault pages hand their upload
-    widget - so clamping here refuses an oversized file in the browser rather
-    than after it has been sent.
+    Read by both halves of the size check - ``file_size_error_for_upload`` on the server and the ``data-max-file-size`` the vault pages hand their upload widget - so clamping here refuses an oversized file in the browser rather than after it has been sent.
 
     Returns:
-        The admin's configured limit, lowered to the ingress cap when there is one.
-    """
+        The admin's configured limit, lowered to the ingress cap when there is one."""
     return cap_to_ingress(SiteSettings.get_current().max_upload_file_size_mb * 1_000_000)
 
 
 def file_size_error_for_upload(upload_size: int | None) -> str | None:
     """Check a single upload against the site-wide max file size.
 
-    Distinct from :func:`quota_error_for_upload`, which checks *total* stored
-    usage - this caps any one file regardless of how much quota is free.
-
     Args:
         upload_size: Size of the incoming file in bytes.
 
     Returns:
-        A user-facing error message when the file is too large, or None.
-    """
+        A user-facing error message when the file is too large, or None."""
     max_bytes = max_upload_file_size_bytes()
     size = upload_size or 0
     if size <= max_bytes:
@@ -302,16 +235,12 @@ def file_size_error_for_upload(upload_size: int | None) -> str | None:
 def get_entitled_policy(profile: Profile) -> tuple[int | None, bool]:
     """The site-imposed downscale policy for a profile, ignoring the user's own cap.
 
-    Users with an active subscription are exempt from site-imposed downscaling
-    and WebP conversion unless the admin enabled "downscale subscriber uploads".
-
     Args:
         profile: The uploading profile.
 
     Returns:
         (max_dimension, convert_webp): the longest-edge cap in pixels (None
-        when the site imposes none) and whether uploads are re-encoded as WebP.
-    """
+        when the site imposes none) and whether uploads are re-encoded as WebP."""
     settings = SiteSettings.get_current()
     exempt = not settings.image_downscale_vip and bool(active_subscription_roles(profile.user))
     max_dimension = settings.image_downscale_max_dimension if settings.image_downscale_enabled and not exempt else None
@@ -321,16 +250,13 @@ def get_entitled_policy(profile: Profile) -> tuple[int | None, bool]:
 
 def get_downscale_policy(profile: Profile) -> tuple[int | None, bool]:
     """The effective downscale policy for a profile's future uploads.
-
-    Combines the site-imposed policy with the user's voluntary cap: the user
-    can only tighten the cap (the smaller dimension wins), never loosen it.
+    Combines the site-imposed policy with the user's voluntary cap: the user can only tighten the cap (the smaller dimension wins), never loosen it.
 
     Args:
         profile: The uploading profile.
 
     Returns:
-        (max_dimension, convert_webp) as in :func:`get_entitled_policy`.
-    """
+        (max_dimension, convert_webp) as in :func:`get_entitled_policy`."""
     entitled_dimension, convert_webp = get_entitled_policy(profile)
     dimensions = [d for d in (entitled_dimension, profile.image_downscale_max_dimension) if d]
     return (min(dimensions) if dimensions else None), convert_webp
@@ -338,16 +264,13 @@ def get_downscale_policy(profile: Profile) -> tuple[int | None, bool]:
 
 def get_entitled_video_policy(profile: Profile) -> int | None:
     """The site-imposed video downscale policy for a profile, ignoring the user's own cap.
-
-    Mirrors :func:`get_entitled_policy` for photos, but videos have no WebP-
-    equivalent format toggle - only a max resolution.
+    Mirrors :func:`get_entitled_policy` for photos, but videos have no WebP- equivalent format toggle - only a max resolution.
 
     Args:
         profile: The uploading profile.
 
     Returns:
-        Max video height in pixels the site imposes, or None for no cap.
-    """
+        Max video height in pixels the site imposes, or None for no cap."""
     settings = SiteSettings.get_current()
     exempt = not settings.video_downscale_vip and bool(active_subscription_roles(profile.user))
     return settings.video_downscale_max_height if settings.video_downscale_enabled and not exempt else None
@@ -355,16 +278,13 @@ def get_entitled_video_policy(profile: Profile) -> int | None:
 
 def get_video_downscale_policy(profile: Profile) -> int | None:
     """The effective video downscale policy for a profile's future uploads.
-
-    Combines the site-imposed cap with the user's voluntary cap: the user can
-    only tighten it (the smaller height wins), never loosen it.
+    Combines the site-imposed cap with the user's voluntary cap: the user can only tighten it (the smaller height wins), never loosen it.
 
     Args:
         profile: The uploading profile.
 
     Returns:
-        Max video height in pixels, or None for no cap.
-    """
+        Max video height in pixels, or None for no cap."""
     entitled = get_entitled_video_policy(profile)
     heights = [h for h in (entitled, profile.video_downscale_max_height) if h]
     return min(heights) if heights else None
@@ -379,8 +299,7 @@ def estimate_bytes_per_photo(max_dimension: int | None, convert_webp: bool) -> i
         convert_webp: Whether uploads are re-encoded as WebP.
 
     Returns:
-        Estimated stored bytes per photo (always at least 50 KB).
-    """
+        Estimated stored bytes per photo (always at least 50 KB)."""
     dimension = max_dimension or _ORIGINAL_ASSUMED_DIMENSION
     pixels = dimension * dimension * _ASSUMED_ASPECT
     bytes_per_pixel = _WEBP_BYTES_PER_PIXEL if convert_webp else _JPEG_BYTES_PER_PIXEL

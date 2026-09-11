@@ -42,17 +42,13 @@ _RESTORABLE_FIELDS = (
 
 def with_wiki_descendants(wikis: list[Wiki]) -> list[Wiki]:
     """Expand ``wikis`` to include their full child-wiki subtree.
-
-    Deleting a wiki cascades to its ``child_wikis`` (``Wiki.parent_wiki`` is
-    ``on_delete=CASCADE``), so stashing only the given wikis would silently
-    lose any nested child wikis on restore.
+    Deleting a wiki cascades to its ``child_wikis`` (``Wiki.parent_wiki`` is ``on_delete=CASCADE``), so stashing only the given wikis would silently lose any nested child wikis on restore.
 
     Args:
         wikis: The wikis about to be deleted.
 
     Returns:
-        ``wikis`` plus every descendant, as fresh Wiki instances.
-    """
+        ``wikis`` plus every descendant, as fresh Wiki instances."""
     all_ids = {w.pk for w in wikis}
     frontier = set(all_ids)
     while frontier:
@@ -62,10 +58,7 @@ def with_wiki_descendants(wikis: list[Wiki]) -> list[Wiki]:
     return list(Wiki.objects.filter(pk__in=all_ids))
 
 
-#: Registry key for this handler. Exposed as a module-level constant so call
-#: sites can import it (``from ...handlers.wiki import MODEL_LABEL``) instead
-#: of hand-typing ``"wiki"`` - a typo in a hand-typed string only fails at
-#: runtime via ``get_handler``'s ``ValueError``.
+#: Registry key for this handler. Import it instead of hand-typing the string.
 MODEL_LABEL = "wiki"
 
 
@@ -87,11 +80,10 @@ class WikiUndoHandler(UndoHandler):
     @classmethod
     def _serialize_one(cls, wiki: Wiki) -> dict[str, Any]:
         fields = {name: getattr(wiki, name) for name in _RESTORABLE_FIELDS}
-        # Image.wiki is SET_NULL, so the delete detached these photos rather
-        # than destroying them, and nothing else records where they were. The
-        # exemption comes along in the same read: a delete by the contributor
-        # revokes the community quota bonus their photos earned here
-        # (services.media.quota_rewards), and a restore has to hand it back.
+        # Image.wiki is SET_NULL, so the delete detached these photos rather than destroying them,
+        # and nothing else records where they were.
+        # The exemption comes along in the same read: a delete by the contributor revokes the
+        # community quota bonus their photos earned here (services.media.quota_rewards), and a
         photos = list(wiki.images.values_list("pk", "quota_exempt_reason"))
         return {
             "old_pk": wiki.pk,
@@ -148,10 +140,9 @@ class WikiUndoHandler(UndoHandler):
         for entry, wiki in zip(payload, restored, strict=True):
             old_parent_pk = entry["parent_wiki_old_pk"]
             if old_parent_pk:
-                # The parent may have been restored in this same batch (its
-                # pk changed), or it may never have been deleted at all (only
-                # a child subtree was stashed) - in which case its old pk is
-                # still the current one.
+                # The parent may have been restored in this same batch (its pk changed), or it may
+                # never have been deleted at all (only a child subtree was stashed) - in which case
+                # its old pk is still the current one.
                 parent = old_to_new.get(old_parent_pk) or Wiki.objects.filter(pk=old_parent_pk).first()
                 if parent is not None:
                     wiki.parent_wiki = parent
@@ -161,12 +152,10 @@ class WikiUndoHandler(UndoHandler):
             image_ids = entry.get("image_ids") or []
             if image_ids:
                 Image.objects.filter(pk__in=image_ids, wiki__isnull=True).update(wiki=wiki)
-            # Re-grant only what this delete took: a photo back on this wiki
-            # that is carrying no exemption now. Restoring is not a grant, and
-            # an exemption held for some other reason is not this one's to move.
-            # What was handed back is written into the entry so `redo_delete`
-            # can take back exactly that, and no more - by then every one of
-            # them looks alike in the column.
+            # Re-grant only what this delete took: a photo back on this wiki that is carrying no
+            # exemption now.
+            # Restoring is not a grant, and an exemption held for some other reason is not this
+            # one's to move.
             bonus_ids = entry.get("bonus_image_ids") or []
             regranted: list[int] = []
             if bonus_ids:
@@ -182,17 +171,11 @@ class WikiUndoHandler(UndoHandler):
     @classmethod
     def redo_delete(cls, payload: dict[str, Any]) -> None:
         """Re-delete the wikis ``restore`` recreated, and re-take what it re-granted.
-
-        The inherited implementation only deletes the rows. A wiki delete also
-        ends the deleting contributor's community quota bonus
-        (``services.media.quota_rewards``), so a redo that left the re-granted
-        exemptions standing would hand back permanently what the delete exists
-        to take away - the same defect, reached in three clicks instead of one.
+        The inherited implementation only deletes the rows.
 
         Args:
-            payload: Wrapped stash of the form
-                ``{"entries": [...], "restored_pks": [...]}``.
-        """
+                payload: Wrapped stash of the form
+                ``{"entries": [...], "restored_pks": [...]}``."""
         for entry in payload.get("entries") or []:
             regranted = entry.get("regranted_image_ids") or []
             if regranted:

@@ -46,19 +46,11 @@ class HaveIBeenPwnedGateway(Gateway):
     def endpoint_for_log(url: str) -> str:
         """Record the range endpoint, never the prefix that identifies the password.
 
-        The default implementation logs the full URL into an ``ApiCallLog`` row
-        retained for over a year. Here the last path segment is the first five
-        hex characters of the user's password SHA-1 - twenty bits of it,
-        timestamped, for every password anyone has ever set. ``ApiCallLog``
-        exists to track volume and cost per service, and the endpoint without
-        its prefix answers that completely.
-
         Args:
-            url: The range URL about to be requested.
+                url: The range URL about to be requested.
 
         Returns:
-            The URL truncated at the ``/range/`` segment.
-        """
+                The URL truncated at the ``/range/`` segment."""
         marker = "/range/"
         prefix, sep, _rest = url.partition(marker)
         return f"{prefix}{marker}" if sep else url

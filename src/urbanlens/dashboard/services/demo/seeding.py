@@ -1,26 +1,5 @@
 """Build one demo account, with enough content to exercise the whole product.
-
-Runs only on a demo instance (``UL_DEMO_MODE``), against that instance's own
-database. See this package's docstring for why isolation is the deployment
-boundary and not a per-row flag.
-
-Two rules shape everything here:
-
-**Plain ORM, never model-bakery.** Baker is a dev-only dependency
-(``pyproject.toml``) and staging/production images install ``--no-dev``, so a
-module-scope import of it is an ``ImportError`` on deploy. Its custom classes
-are registered only in ``settings/test.py`` too, so baking a Profile-touching
-model outside the test runner raises. The recipes stay a test tool.
-
-**No outbound *network* call.** Seeding runs with Celery dispatch patched out,
-and the profiles are written with ``external_apis_enabled``/``ai_enabled`` off
-*before* any content exists, so a later worker pass cannot pick the rows up and
-start calling paid APIs on their behalf. A blank ``user.email`` is load-bearing
-rather than cosmetic: it is what keeps account mail, invite lookups and the
-purge's own deletion notice silent. Photos are the one place real bytes are
-written - generated in memory and saved to this instance's own local storage
-(see ``social.seed_photos``), never fetched from anywhere.
-"""
+Runs only on a demo instance (``UL_DEMO_MODE``), against that instance's own database."""
 
 from __future__ import annotations
 
@@ -71,12 +50,7 @@ def demo_username(seed: str, index: int) -> str:
 
 def _make_user(seed: str, index: int, display_name: str, *, username: str = "", password: str = "") -> User:
     """Create one active demo user with no email and a real password.
-
-    A real password rather than ``set_unusable_password()``: an unusable one
-    routes the very next request into the "set a password" prompt, which is not
-    a demo. Random unless the caller supplies one - a dev environment hands its
-    login credentials to whoever created it (see :func:`seed_dev_environment`),
-    which a random password cannot do.
+    A real password rather than ``set_unusable_password()``: an unusable one routes the very next request into the "set a password" prompt, which is not a demo.
 
     Args:
         seed: Session token.
@@ -86,8 +60,7 @@ def _make_user(seed: str, index: int, display_name: str, *, username: str = "", 
         password: Explicit password, or "" for a random one.
 
     Returns:
-        The created user.
-    """
+        The created user."""
     user = User.objects.create_user(
         username=username or demo_username(seed, index),
         email="",
@@ -102,13 +75,7 @@ def _make_user(seed: str, index: int, display_name: str, *, username: str = "", 
 
 def _prepare_profile(user: User, *, bio: str, expires_at: Any) -> Profile:
     """Stamp the profile the creation signal already made.
-
-    Updated rather than constructed: ``profile_create_user_profile`` fires on
-    every ``User`` insert, so a second ``Profile(...)`` would collide with the
-    row that already exists.
-
-    The external-API switches go off here, before any content is written, so
-    that even a later background pass over these rows cannot bill anything.
+    Updated rather than constructed: ``profile_create_user_profile`` fires on every ``User`` insert, so a second ``Profile(...)`` would collide with the row that already exists.
 
     Args:
         user: The freshly created user.
@@ -116,8 +83,7 @@ def _prepare_profile(user: User, *, bio: str, expires_at: Any) -> Profile:
         expires_at: When this account becomes purgeable.
 
     Returns:
-        The updated profile.
-    """
+        The updated profile."""
     from urbanlens.dashboard.models.profile.model import Profile
 
     profile = Profile.objects.get(user=user)
@@ -129,11 +95,10 @@ def _prepare_profile(user: User, *, bio: str, expires_at: Any) -> Profile:
     profile.tos_accepted_at = timezone.now()
     profile.community_enabled = True
     profile.save()
-    # Repoint the user's cached reverse relation at the row we just wrote. The
-    # creation signal populated `user.profile` with the *pre-update* instance,
-    # so without this every caller holding this user - the login view included -
-    # reads stale settings back, and the external-API switches above look as
-    # though they never applied.
+    # Repoint the user's cached reverse relation at the row we just wrote.
+    # The creation signal populated `user.profile` with the *pre-update* instance, so without this
+    # every caller holding this user - the login view included - reads stale settings back, and the
+    # external-API switches above look as though they never applied.
     user.profile = profile
     logger.debug("demo: prepared profile %s (expires %s)", user.username, expires_at)
     return profile
@@ -141,22 +106,14 @@ def _prepare_profile(user: User, *, bio: str, expires_at: Any) -> Profile:
 
 def _pin_pool(profile: Profile, locations: list) -> list[Pin]:
     """Give ``profile`` a pin on each pooled location.
-
-    Pinning is what grants wiki access - visibility is earned by holding a pin
-    on the location - so this is also how a demo account comes to see each
-    place's wiki, aliases and cached photos.
-
-    The pin carries no name of its own: ``Pin.name`` is a personal override, and
-    leaving it unset lets the pin display the location's real name, which is the
-    one the import brought across.
+    Pinning is what grants wiki access - visibility is earned by holding a pin on the location - so this is also how a demo account comes to see each place's wiki, aliases and cached photos.
 
     Args:
         profile: Owner of the created pins.
         locations: Locations from :func:`.locations.pool_locations`.
 
     Returns:
-        The created pins.
-    """
+        The created pins."""
     from urbanlens.dashboard.models.pin.model import Pin
 
     return [Pin.objects.create(profile=profile, location=location) for location in locations]
@@ -164,31 +121,7 @@ def _pin_pool(profile: Profile, locations: list) -> list[Pin]:
 
 def seed_demo_account(*, ttl_hours: int = 24, username: str = "", password: str = "", locations: list[Location] | None = None) -> User:
     """Create one demo login account, its personas, and their content.
-
-    Celery dispatch is patched for the *whole* call, and the patch has to stay
-    entered until after the transaction actually commits - not just until the
-    last row is written. Pin, Friendship, Comment and several others fire
-    ``achievements.signals`` on ``post_save``, which defers to
-    ``transaction.on_commit`` rather than calling ``safely_enqueue_task``
-    immediately; that deferred call runs whatever the *current* function is at
-    commit time, not whatever it was when it was registered. An
-    ``@transaction.atomic``-decorated function commits after its body -
-    including a ``with mock.patch(...):`` block nested inside it - has already
-    exited, so that nesting order patches nothing the commit actually needs:
-    every on_commit callback fires against the real, unpatched function. This
-    is exactly backwards from what it needs to be, which is why the patch
-    wraps the atomic block here rather than sitting inside it.
-
-    Django's ``TestCase`` cannot catch this class of bug on its own - it wraps
-    every test in a transaction that is rolled back, not committed, so
-    ``on_commit`` never runs and the ordering never gets exercised. Even
-    ``captureOnCommitCallbacks`` does not help: it defers every captured
-    callback to when the *test's* ``with`` block exits, by which point this
-    function has already returned regardless of the order below - it cannot
-    tell "patch outlived the real commit" from "patch outlived the function
-    call". See ``SeedingCommitOrderingTests`` (a genuine
-    ``TransactionTestCase``, for a real commit) for the test that actually
-    exercises this and that regressing this ordering fails.
+    Pin, Friendship, Comment and several others fire ``achievements.signals`` on ``post_save``, which defers to ``transaction.on_commit`` rather than calling ``safely_enqueue_task`` immediately; that deferred call runs whatever the *current* function is at commit time, not whatever it was when it was registered.
 
     Args:
         ttl_hours: How long before the account may be purged.
@@ -204,8 +137,7 @@ def seed_demo_account(*, ttl_hours: int = 24, username: str = "", password: str 
             :func:`~.locations.pool_locations` would find nothing.
 
     Returns:
-        The login account's user.
-    """
+        The login account's user."""
     seed = secrets.token_hex(4)
     expires_at = timezone.now() + timedelta(hours=ttl_hours)
 
@@ -244,10 +176,9 @@ def seed_demo_account(*, ttl_hours: int = 24, username: str = "", password: str 
         messages = social.seed_direct_messages(owner, personas)
         social.seed_group_chat(owner, personas)
 
-        # The "on this day" callout needs an exact month/day match in a past
-        # year - deliberate on the owner's visits/photos only, once each, is
-        # enough to populate it without every seeded profile claiming the
-        # same anniversary.
+        # The "on this day" callout needs an exact month/day match in a past year - deliberate on
+        # the owner's visits/photos only, once each, is enough to populate it without every seeded
+        # profile claiming the same anniversary.
         owner_visits: list[Any] = []
         for profile, pins in pins_by_profile.items():
             visited = social.seed_visits(profile, pins, on_this_day=profile is owner)
@@ -285,13 +216,9 @@ def seed_demo_account(*, ttl_hours: int = 24, username: str = "", password: str 
 
 
 #: The one place a dev environment is pinned to by name rather than by catalog.
-#: Real coordinates, like everything else seeded here - a pin is a claim that a
-#: place exists at a point, and the whole Private Pin page (boundaries, parcel
-#: lookup, wiki) answers emptily for a point nobody has ever surveyed.
-#: ``Location`` carries no name field of its own (the community-editable name
-#: lives on ``Wiki``, the external-source one in ``official_name``), so the
-#: recognisable label goes on the *pin*, where a user's own name for a place
-#: belongs.
+#: Real coordinates, like everything else seeded here - a pin is a claim that a place exists at a
+#: point, and the whole Private Pin page (boundaries, parcel lookup, wiki) answers emptily for a
+#: point nobody has ever surveyed.
 HUDSON_RIVER_STATE_HOSPITAL = {
     "name": "Hudson River State Hospital",
     "latitude": "41.733000",
@@ -304,22 +231,11 @@ HUDSON_RIVER_STATE_HOSPITAL = {
 
 def ensure_location_pool() -> tuple[list[Location], str]:
     """Make sure there is something for seeding to pin, and say what happened.
-
-    The gap between "the seeder works" and "a fresh environment has content":
-    the pool comes from an imported catalog, and a database nobody has imported
-    into has none, so seeding succeeds and produces zero pins. That reads as a
-    broken seeder rather than an empty catalog, which is why the reason travels
-    back to the caller as text instead of only into the log.
-
-    Makes the one outbound call this module otherwise forbids - REData's
-    ``/public-locations/`` catalog, the same call ``import_redata_public_locations``
-    makes - and inherits its degrade-to-empty contract: unconfigured,
-    unreachable, or not deployed all mean "no locations", never an exception.
+    The gap between "the seeder works" and "a fresh environment has content": the pool comes from an imported catalog, and a database nobody has imported into has none, so seeding succeeds and produces zero pins.
 
     Returns:
         ``(locations, note)`` - the Locations to pin (possibly empty) and a
-        human-readable account of where they came from or why there are none.
-    """
+        human-readable account of where they came from or why there are none."""
     from urbanlens.dashboard.services.demo.locations import import_location_entries, merge_into_manifest, redata_demo_locations
 
     existing = pool_locations()
@@ -341,16 +257,11 @@ def ensure_location_pool() -> tuple[list[Location], str]:
 def _locations_for_entries(entries: list[dict[str, Any]]) -> list[Location]:
     """Resolve just-imported export entries to their Location rows.
 
-    :func:`~.locations.pool_locations` does this from the manifest, which is
-    the demo instance's path; an instance with no manifest configured still has
-    the rows, and this is how it finds them.
-
     Args:
         entries: Entries in export format, as handed to ``import_location_entries``.
 
     Returns:
-        The matching Locations, in entry order, skipping any that did not land.
-    """
+        The matching Locations, in entry order, skipping any that did not land."""
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.location.queryset import quantize_coordinate
 
@@ -408,20 +319,7 @@ def seed_landmark_pin(profile: Profile, landmark: dict[str, str] | None = None) 
 
 def seed_dev_environment(*, username: str = "demo", password: str, ttl_hours: int = 24 * 365) -> dict[str, Any]:
     """Seed one ephemeral dev environment with an account somebody can log into.
-
-    A freshly created environment (the `infrastructure` repo's ``bin/dev_env.py``)
-    has an empty database, so
-    every page it serves is an empty state and nothing about the product can be
-    seen without first building an account and content by hand. This is the same
-    content the public demo instance is seeded with, under a fixed username and
-    a password derived from the environment's own slug, plus one named landmark
-    pin so the map is never empty even when the catalog is unreachable.
-
-    Deliberately not gated on ``UL_DEMO_MODE``: a dev environment is not a demo
-    instance and must not wear the demo banner or expose the demo-login
-    endpoint. What the management commands' demo-mode guard actually protects -
-    real coordinates merging into a database holding real user data - is
-    covered here by refusing to run in staging or production at all.
+    A freshly created environment (the `infrastructure` repo's ``bin/dev_env.py``) has an empty database, so every page it serves is an empty state and nothing about the product can be seen without first building an account and content by hand.
 
     Args:
         username: Login account name. Deliberately outside
@@ -437,8 +335,7 @@ def seed_dev_environment(*, username: str = "demo", password: str, ttl_hours: in
 
     Raises:
         RuntimeError: Called in staging or production, where this would write
-            real coordinates and a shared-password account into real data.
-    """
+            real coordinates and a shared-password account into real data."""
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
     environment = str(app_settings.environment_name).lower()

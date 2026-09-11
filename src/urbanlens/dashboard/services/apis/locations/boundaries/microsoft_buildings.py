@@ -1,23 +1,5 @@
 """Gateway for Microsoft's Global ML Building Footprints dataset.
-
-Unlike Regrid, this isn't a query API -- Microsoft publishes ~1.4B building
-footprint polygons as gzip-compressed, line-delimited GeoJSON files, sharded
-by country and Bing-Maps quadkey, and lists the download URL for every shard
-in a public CSV (``dataset-links.csv``) on GitHub:
-https://github.com/microsoft/GlobalMLBuildingFootprints
-
-This gateway resolves which quadkey shard(s) cover a bounding box, downloads
-just those shards over plain HTTPS, and filters to features that actually
-overlap the box. It still extends ``Gateway`` (and still benefits
-from ``self.session``'s rate limiting/logging) even though there's no auth
-token -- every request here is an ordinary GET against GitHub/Azure Blob
-Storage.
-
-Note: Microsoft partitions the current dataset-links.csv at Bing tile zoom
-level 9. Microsoft has changed this scheme before, so if lookups start
-turning up empty, double check the zoom level implied by the QuadKey values
-in the current CSV against ``quadkey_zoom`` below.
-"""
+Microsoft has changed this scheme before, so if lookups start turning up empty, double check the zoom level implied by the QuadKey values in the current CSV against ``quadkey_zoom`` below."""
 
 from __future__ import annotations
 
@@ -111,11 +93,10 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
 
         features: list[dict] = []
         for row in matches:
-            # Runs inside the boundary panel-fetch Celery task (via
-            # BoundaryProviderChain, see services/external_data.py), whose
-            # soft time limit is the real budget - the (connect, read) tuple
-            # just keeps a dead connection from eating that budget while a
-            # genuinely slow shard download may keep trickling within it.
+            # Runs inside the boundary panel-fetch Celery task (via BoundaryProviderChain, see
+            # services/external_data.py), whose soft time limit is the real budget - the (connect,
+            # read) tuple just keeps a dead connection from eating that budget while a genuinely
+            # slow shard download may keep trickling within it.
             response = self.session.get(row["Url"], timeout=(5, 60))
             response.raise_for_status()
             raw = gzip.decompress(response.content)

@@ -1,11 +1,5 @@
 """Session orchestration: solo/competitive lifecycle, round generation, answer/vote resolution.
-
-The one place ``controllers.consensus``/``consumers.ConsensusSessionConsumer``
-call into - mirrors ``services.spotguessr.session`` closely, but with three
-extra branches unique to Consensus: trust-check rounds (never touch the
-wiki), ``WIKI_ALIAS`` rounds (additive, never routed through agree/vote), and
-the vote-then-tentative disagreement path (see ``_finish_round``).
-"""
+The one place ``controllers.consensus``/``consumers.ConsensusSessionConsumer`` call into - mirrors ``services.spotguessr.session`` closely, but with three extra branches unique to Consensus: trust-check rounds (never touch the wiki), ``WIKI_ALIAS`` rounds (additive, never routed through agree/vote), and the vote-then-tentative disagreement path (see ``_finish_round``)."""
 
 from __future__ import annotations
 
@@ -39,23 +33,16 @@ DEFAULT_ROUNDS_PER_SESSION = 5
 MIN_ROUNDS_PER_SESSION = 3
 MAX_ROUNDS_PER_SESSION = 20
 
-#: How long a session's current round (answer-collection or vote) can sit
-#: unresolved before the stall-sweep Celery task
-#: (``tasks.sweep_stalled_consensus_sessions``) force-resolves it - the
-#: safety net for a participant who simply closed their tab. Mirrors
-#: SpotGuessr's ``STALL_ROUND_TIMEOUT_MINUTES``.
+#: How long a session's current round (answer-collection or vote) can sit unresolved before the
+#: stall-sweep Celery task (``tasks.sweep_stalled_consensus_sessions``) force-resolves it - the
+#: safety net for a participant who simply closed their tab.
+#: Mirrors SpotGuessr's ``STALL_ROUND_TIMEOUT_MINUTES``.
 STALL_ROUND_TIMEOUT_MINUTES = 10
 
 
 class ConsensusError(Exception):
     """Raised for invalid session/round/answer/vote/lobby operations.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below (or this base class as a
-    fallback) and author its own user-facing text, rather than relaying
-    ``message`` - that keeps a future raise site here from being able to
-    smuggle unreviewed text into a response just by adding a new ``raise``.
-    """
+    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class NotHostError(ConsensusError):
@@ -481,15 +468,7 @@ def _resolve_competitive_round(round_: ConsensusRound, real_answers: list[Consen
 
 def _finish_round(round_: ConsensusRound, answers: list[ConsensusAnswer]) -> None:
     """Resolve a round whose answer-collection phase just completed (every joined participant responded).
-
-    Dispatches to whichever resolution branch applies - trust-check (never
-    touches the wiki), alias (additive), solo (single answer applies
-    immediately), or competitive (agree immediately, or open a vote on
-    disagreement, see ``_resolve_competitive_round``). Broadcasts
-    ``round.revealed`` regardless of which branch ran, even when the round
-    is still ``VOTE_OPEN`` afterwards - participants need to see the
-    distinct candidates to vote on them.
-    """
+    Dispatches to whichever resolution branch applies - trust-check (never touches the wiki), alias (additive), solo (single answer applies immediately), or competitive (agree immediately, or open a vote on disagreement, see ``_resolve_competitive_round``)."""
     strategy = fields.get_strategy(round_.field_kind)
     session = round_.session
     participant_count = session.participants.joined().count()
@@ -593,16 +572,7 @@ def _advance_or_complete(session: ConsensusSession) -> None:
 
 
 def force_reveal_round(round_: ConsensusRound) -> None:
-    """Force a stalled answer-collection round to completion without waiting for every participant.
-
-    Called by the stall-sweep Celery task
-    (``tasks.sweep_stalled_consensus_sessions``). If literally nobody
-    answered or skipped (zero ``ConsensusAnswer`` rows at all - the whole
-    table walked away), the session is marked ``ABANDONED`` instead of
-    manufacturing an empty next round forever.
-
-    Idempotent: a round no longer ``PENDING`` is a silent no-op.
-    """
+    """Force a stalled answer-collection round to completion without waiting for every participant."""
     session = round_.session
     with transaction.atomic():
         locked_round = ConsensusRound.objects.select_for_update().get(pk=round_.pk)

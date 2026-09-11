@@ -17,11 +17,10 @@ logger = logging.getLogger(__name__)
 _API_URL = "https://commons.wikimedia.org/w/api.php"
 _THUMB_WIDTH = 400
 _MAX_RESULTS = 60
-# The MediaWiki API caps the `titles` parameter at 50 values per request for
-# unauthenticated (non-bot) requests -- exceeding it doesn't truncate, it
-# fails the whole request with a "toomanyvalues" error, silently dropping
-# every result. _MAX_RESULTS (60) is above that limit, so imageinfo lookups
-# must be chunked.
+# The MediaWiki API caps the `titles` parameter at 50 values per request for unauthenticated
+# (non-bot) requests -- exceeding it doesn't truncate, it fails the whole request with a
+# "toomanyvalues" error, silently dropping every result. _MAX_RESULTS (60) is above that limit, so
+# imageinfo lookups must be chunked.
 _TITLES_BATCH_SIZE = 50
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
@@ -39,12 +38,10 @@ class WikimediaGateway(MediaProvider):
     display_name: ClassVar[str] = "Wikimedia Commons"
     paid_service: ClassVar[bool] = False
     multi_query: ClassVar[bool] = True
-    # Commons' full-text search over individual file description pages appears
-    # to do (near-)strict AND matching across query tokens - every extra
-    # qualifying term shrinks the candidate set, and a country name rarely
-    # appears in a single file's own title/description text. Confirmed by hand:
-    # "<name> <city> <state>" returns hits; the same query plus "United States"
-    # or a full street address does not.
+    # Commons' full-text search over individual file description pages appears to do (near-)strict
+    # AND matching across query tokens - every extra qualifying term shrinks the candidate set, and
+    # a country name rarely appears in a single file's own title/description text.
+    # Confirmed by hand: "<name> <city> <state>" returns hits; the same query plus "United States"
     search_with_country: ClassVar[bool] = False
 
     base_url: str = _API_URL
@@ -54,16 +51,14 @@ class WikimediaGateway(MediaProvider):
         self.session.headers.update({"User-Agent": _USER_AGENT})
 
     def search_images(self, query: str) -> list[dict[str, Any]]:
-        """
-        Search Commons for images matching *query* and return thumbnail info.
+        """Search Commons for images matching *query* and return thumbnail info.
 
         Args:
-            query: Human-readable wiki/place name used as the search term.
+                query: Human-readable wiki/place name used as the search term.
 
         Returns:
-            List of dicts with keys ``title``, ``url``, ``thumb``,
-            ``description_url``, ``mime``.  Empty list on failure or no results.
-        """
+                List of dicts with keys ``title``, ``url``, ``thumb``,
+                ``description_url``, ``mime``.  Empty list on failure or no results."""
         page_ids = self._search_files(query)
         if not page_ids:
             return []

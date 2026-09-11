@@ -1,35 +1,5 @@
 """Wires UrbanLens's photos up to REData's photo-relevance-scoring service.
-
-Two kinds of data flow out to REData (``services.apis.photos.redata_photos_gateway``):
-
-- **Observations** (``POST /photos/``), whenever a new photo is uploaded or
-  discovered from an external source - see :func:`queue_photo_submission`.
-  REData scores it immediately and the response's confidence is cached back
-  onto the ``Image`` row (:data:`Image.redata_confidence` and friends) so
-  pin-detail/wiki galleries can order by it without a live call on every
-  render.
-- **Votes** (``POST /photos/votes/``), whenever a user marks a photo
-  relevant/not relevant - see :func:`queue_relevance_vote`. Votes are the
-  model's training label, never a scoring input, so this never touches the
-  cached confidence itself.
-
-Both are best-effort: a missing/unreachable REData deployment (the common
-case for most installs - see ``_redata_configured``) is a silent no-op, not
-an error, exactly like every other REData integration in this codebase (see
-``services.apis.locations.places_resolution._redata_configured``).
-
-Both also send UrbanLens's own content for REData to store and train on, so
-they only fire from production - the gateway enforces this (see
-``services.core.environment``), which is why nothing here re-checks it per
-call site. A dev photo therefore stays unscored and ranks by upload order,
-exactly as it does before its first successful submission.
-
-Submission omits any field UrbanLens has no value for, rather than sending an
-explicit ``None`` - REData's own docs describe a missing signal as "treated
-as missing rather than imputed", i.e. a sparse submission still gets a real
-(just less confident) answer, so there's no reason to send a null placeholder
-for a photo with no capture GPS, no known photographer, etc.
-"""
+REData scores it immediately and the response's confidence is cached back onto the ``Image`` row (:data:`Image.redata_confidence` and friends) so pin-detail/wiki galleries can order by it without a live call on every render. - **Votes** (``POST /photos/votes/``), whenever a user marks a photo relevant/not relevant - see :func:`queue_relevance_vote`."""
 
 from __future__ import annotations
 
@@ -138,18 +108,11 @@ def _submission_payload(image: Image) -> dict[str, Any] | None:
 
 def submit_photos(images: list[Image]) -> None:
     """Submit observations for ``images`` to REData and cache the confidence each gets back.
-
-    Called from the ``submit_redata_photos`` Celery task - never call this
-    synchronously from a request/view. Best-effort: a REData request failure
-    is logged and swallowed rather than raised, matching every other
-    best-effort REData call site in this codebase (e.g.
-    ``tasks.import_immich_photos``) - a photo simply stays unscored (falls
-    back to upload-order ranking) until a later submission succeeds.
+    Called from the ``submit_redata_photos`` Celery task - never call this synchronously from a request/view.
 
     Args:
         images: Photos to submit - each is skipped (not sent) when it has no
-            usable location coordinates yet.
-    """
+            usable location coordinates yet."""
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.services.apis.photos.redata_photos_gateway import RedataPhotosGateway
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
@@ -197,15 +160,10 @@ def submit_photos(images: list[Image]) -> None:
 
 def queue_photo_submission(image: Image) -> None:
     """Queue ``image`` for REData submission, if REData is configured and it has a location.
-
-    Safe to call unconditionally from any photo-creation call site (upload
-    processing, external-source enrichment, Media-gallery materialization) -
-    silently does nothing when REData isn't configured or the photo has no
-    location yet, so callers never need their own guard.
+    Safe to call unconditionally from any photo-creation call site (upload processing, external-source enrichment, Media-gallery materialization) - silently does nothing when REData isn't configured or the photo has no location yet, so callers never need their own guard.
 
     Args:
-        image: The newly created (or newly located) photo.
-    """
+        image: The newly created (or newly located) photo."""
     if not _redata_configured() or image.location_id is None:
         return
 
@@ -217,12 +175,7 @@ def queue_photo_submission(image: Image) -> None:
 
 def queue_relevance_vote(image: Image, profile: Profile, *, is_relevant: bool) -> None:
     """Queue one relevance vote on ``image`` for submission to REData.
-
-    Safe to call unconditionally from any vote call site - silently does
-    nothing when REData isn't configured. REData has no "retract a vote"
-    endpoint, so this is only meaningful for an explicit relevant/not-relevant
-    vote, not for clearing one back to neutral (callers should simply not
-    call this for a clear).
+    REData has no "retract a vote" endpoint, so this is only meaningful for an explicit relevant/not-relevant vote, not for clearing one back to neutral (callers should simply not call this for a clear).
 
     Args:
         image: The photo being voted on. If REData was never told about this
@@ -231,8 +184,7 @@ def queue_relevance_vote(image: Image, profile: Profile, *, is_relevant: bool) -
             ``unknown_photo_ids`` and is otherwise a no-op on REData's side -
             see ``services.apis.photos.redata_photos_gateway.RedataPhotosGateway.submit_votes``.
         profile: The voting profile.
-        is_relevant: True for a relevant vote, False for not-relevant.
-    """
+        is_relevant: True for a relevant vote, False for not-relevant."""
     if not _redata_configured():
         return
 

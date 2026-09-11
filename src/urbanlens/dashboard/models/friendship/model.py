@@ -20,58 +20,17 @@ logger = logging.getLogger(__name__)
 class Friendship(DashboardModel):
     """One directional relationship row between two profiles.
 
-    ``status`` answers *what kind of relationship is this* and is the single
-    thing every visibility gate reads (through ``Profile.are_friends``, which
-    matches ``ACCEPTED`` and nothing else). The mute columns answer the entirely
-    separate question *do I want to hear from them*. Those two facts must never
-    share a column again: mute used to be a ``FriendshipStatus`` value, so
-    muting an accepted friend overwrote ``Accepted`` and thereby revoked the
-    friendship for every downstream permission check - profile fields, pin
-    visibility, direct messages, common-pin/common-trip queries - while also
-    making the relationship unrecoverable, since the pre-mute status was not
-    stored anywhere and ``FriendshipStatus.can_request`` refuses ``Muted``.
-
-    Mute is per-side (:meth:`is_muted_by`, :meth:`mute`, :meth:`unmute`) even
-    though the row is shared, and
-    ``services.social.friendship.notifications_muted`` is what turns the
-    preference into actual silence.
+    ``status`` is the relationship; mute columns are per-side notification
+    preference and must stay separate from it.
     """
 
     status = CharField(max_length=10, choices=FriendshipStatus.choices)
-    # Notification volume control, deliberately orthogonal to ``status`` - see
-    # the class docstring for the data-integrity bug that separating them
-    # fixes. Muting is not a relationship state: a muted friend is still a
-    # friend, and unmuting must be able to return the pair to exactly where
-    # they were, which is only possible if the relationship state was never
-    # overwritten in the first place.
-    #
-    # One column per side, because a pair normally has exactly one row
-    # (``between()`` matches either direction and ``request()`` reuses the
-    # existing row) and mute is a preference of one *person*, not of the
-    # relationship. "Normally" was doing real work until 2026-09-05:
-    # ``unique_together`` did not forbid ``A->B`` and ``B->A`` both existing,
-    # and ``friendship_one_row_per_pair`` now does. Anything asking "did X mute
-    # Y" still reads *either* row rather than one - which is what
-    # ``services.social.friendship.notifications_muted`` does - because a
-    # database restored from before that migration can still hold the pair. A single shared boolean - which is what this was, inherited
-    # from the ``status='Muted'`` encoding it replaced - meant A muting B also
-    # read as muted from B's side, so wiring it into delivery would have
-    # silenced the wrong person. Read these through :meth:`is_muted_by` rather
-    # than directly; which column belongs to a viewer depends on which end of
-    # the row they are, and that is exactly the detail a caller gets wrong.
+    # Per-side mute preference; read via is_muted_by.
     muted_by_from_profile = BooleanField(default=False)
     muted_by_to_profile = BooleanField(default=False)
     relationship_type = CharField(max_length=12, choices=FriendshipType.choices)
-    # No production code path ever set this explicitly, so every row used to
-    # persist "" (not a valid Permission choice) and has_permission() was
-    # effectively dead against real data. VIEW_PROFILE is the value every
-    # test fixture/baker recipe already uses as the baseline permission for a
-    # friendship (see baker_recipes.friendship/accepted_friendship) - the
-    # weakest capability, matching how has_permission() behaved in practice
-    # (no real permission was ever actually granted, just invalidly stored).
     permissions = CharField(max_length=16, choices=Permission.choices, default=Permission.VIEW_PROFILE)
-    # Optional note the requester attached when the request was first sent.
-    # Only ever set on creation - never touched by accept()/decline()/etc.
+    # Optional note attached at request creation.
     request_message = TextField(
         null=True,
         blank=True,
@@ -142,27 +101,14 @@ class Friendship(DashboardModel):
                 logger.warning("Cannot request another friendship")
                 return None
 
-            # Re-orient the row before reviving it. Without this it keeps the
-            # ends it had when it was declined or removed, so B re-adding A is
-            # recorded as though *A* had asked - and the person it was actually
-            # sent to cannot accept it, because from their side there is no
-            # incoming request. Both people see a request neither can act on.
-            # See "re-adding a removed friend" in docs/PROBLEMS.md.
+            # Re-orient the row so the direction matches who asked.
             if friendship.from_profile_id != from_profile.pk:
-                # A row pointing the right way is preferred over swapping this
-                # one's ends. Since 2026-09-05 a pair can only have one row
-                # (`friendship_one_row_per_pair`), so `forward` and `friendship`
-                # are the same row whenever both exist - the branch is kept
-                # because a database predating that constraint can still hold
-                # the pair until its migration runs.
+                # Prefer an existing forward row; legacy DBs may hold both directions.
                 forward = cls.objects.filter(from_profile=from_profile, to_profile=to_profile).first()
                 if forward is None:
                     friendship.from_profile = from_profile
                     friendship.to_profile = to_profile
-                    # These two are *positional* - which column belongs to a
-                    # viewer depends on which end of the row they are - so they
-                    # have to travel with the ends, or A's mute silently
-                    # becomes B's.
+                    # Mute flags are positional, so they travel with the ends.
                     friendship.muted_by_from_profile, friendship.muted_by_to_profile = (
                         friendship.muted_by_to_profile,
                         friendship.muted_by_from_profile,
@@ -173,7 +119,6 @@ class Friendship(DashboardModel):
                     logger.warning("Cannot request another friendship: reciprocal row is %s", forward.status)
                     return None
 
-            # Update the status to requested
             friendship.status = FriendshipStatus.REQUESTED
             friendship.request_message = message
             friendship.save(
@@ -189,11 +134,7 @@ class Friendship(DashboardModel):
             )
         else:
             try:
-                # The savepoint is load-bearing, not defensive. A failed insert
-                # marks the whole transaction unusable in Postgres, so without
-                # it the re-read below raises TransactionManagementError instead
-                # of answering - and so would everything else the caller went on
-                # to do.
+                # Savepoint keeps a failed insert from poisoning the transaction.
                 with transaction.atomic():
                     friendship = cls.objects.create(
                         from_profile=from_profile,
@@ -203,18 +144,10 @@ class Friendship(DashboardModel):
                         request_message=message,
                     )
             except IntegrityError:
-                # Two opposite requests at once: `between()` above saw nothing,
-                # and the other one inserted first. Before the pair constraint
-                # this produced two rows for one relationship, with the mute
-                # columns split across them; now it is a refused insert, and the
-                # right answer is the row that won - the two people wanted the
-                # same thing, and the loser's request is satisfied by it.
+                # Concurrent opposite request won; return that row.
                 logger.info("Friendship request from %s to %s lost the race; returning the row that won", from_profile.pk, to_profile.pk)
                 friendship = cls.objects.all().between(from_profile, to_profile)
-                # The same guard the found-row branch applies. The winner is
-                # usually the mirror request, but it can be a BLOCKED or IGNORED
-                # row written in the same window - and returning that would have
-                # the caller report a request it never made.
+                # Guard against the winner being a non-requestable state.
                 if friendship is not None and not FriendshipStatus.can_request(friendship.status) and friendship.status != FriendshipStatus.REQUESTED:
                     logger.warning("Cannot request another friendship: the row that won is %s", friendship.status)
                     return None
@@ -223,15 +156,7 @@ class Friendship(DashboardModel):
 
     @staticmethod
     def profile_at_max_friends(profile: Profile) -> bool:
-        """Return whether ``profile`` is already at the site's max-friends limit.
-
-        Args:
-            profile: Profile to check.
-
-        Returns:
-            True when the site's ``max_friends_per_user`` is set (non-zero)
-            and ``profile`` already has that many accepted friends.
-        """
+        """Whether ``profile`` already reached its max-friends limit."""
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
         max_friends = SiteSettings.get_current().max_friends_per_user
@@ -240,14 +165,7 @@ class Friendship(DashboardModel):
         return Friendship.objects.profile(profile).is_friend().count() >= max_friends
 
     def accept(self) -> bool:
-        """Accept a friendship request.
-
-        Returns:
-            True if accepted, False (no-op) if either profile has Community
-            disabled - accepting would create a mutual, visible friendship,
-            which a Community-disabled profile cannot have - or if either
-            profile is already at the site's max-friends limit.
-        """
+        """Accept the request; no-op when Community is off or friends are maxed."""
         if not self.from_profile.community_enabled or not self.to_profile.community_enabled:
             logger.info("Friendship accept blocked: Community disabled for from=%s or to=%s", self.from_profile_id, self.to_profile_id)
             return False
@@ -261,30 +179,7 @@ class Friendship(DashboardModel):
         return True
 
     def _set_status(self, status: str) -> None:
-        """Write one status transition, and nothing else.
-
-        ``update_fields`` rather than a bare ``save()``: a bare save writes
-        every column from this in-memory instance, which is only correct when
-        nothing else has touched the row since it was loaded. The mute columns
-        are written by a targeted ``UPDATE`` that leaves the instance alone
-        (see :meth:`_set_muted`), so an instance loaded before somebody muted
-        and saved after it would silently un-mute them - and a mute is a
-        preference the person set deliberately, restored by nobody.
-
-        Not a ``queryset.update()``, which would avoid the problem outright but
-        also skip ``post_save`` - and the achievements system subscribes to it
-        for this model, specifically to see a friendship *reach* ``ACCEPTED``
-        (``models.achievements.signals``, ``created_only=False``). Silencing
-        that signal to fix a lost update would trade one silent bug for
-        another.
-
-        ``updated`` is included deliberately: it is ``auto_now``, and the
-        profile page renders it as the friendship's "since" date, which a
-        status transition legitimately moves. Mute deliberately does not.
-
-        Args:
-            status: The ``FriendshipStatus`` to move to.
-        """
+        """Write one status transition; keeps mute columns and signals intact."""
         self.status = status
         self.save(update_fields=["status", "updated"])
 

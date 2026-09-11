@@ -24,9 +24,7 @@ MAX_ANSWER_LENGTH = 255
 
 def submit_user_question(profile: Profile, location: Location, prompt: str, answer: str) -> TriviaQuestion:
     """Create a user-submitted question and enqueue it for classification.
-
-    Enqueues on commit so a rolled-back transaction never schedules a task
-    against a row that was never actually saved.
+    Enqueues on commit so a rolled-back transaction never schedules a task against a row that was never actually saved.
 
     Args:
         profile: The submitting profile.
@@ -35,8 +33,7 @@ def submit_user_question(profile: Profile, location: Location, prompt: str, answ
         answer: The canonical accepted answer, truncated to MAX_ANSWER_LENGTH.
 
     Returns:
-        The new PENDING_REVIEW TriviaQuestion row.
-    """
+        The new PENDING_REVIEW TriviaQuestion row."""
     question = TriviaQuestion.objects.create(
         location=location,
         prompt=prompt.strip()[:MAX_PROMPT_LENGTH],
@@ -58,22 +55,10 @@ def _enqueue_classification(question_id: int) -> None:
 
 def classify_and_update(question: TriviaQuestion) -> None:
     """Run the shared content classifier on a PENDING_REVIEW question and record its verdict.
-
-    Never raises for an AI-related failure - classify_trivia_question
-    itself fails closed (returns a rejection) rather than raising. A no-op
-    on a question that isn't PENDING_REVIEW, guarding against a duplicate
-    task run racing a manual re-classification.
-
-    An "ai_unavailable" verdict (AI globally/per-profile disabled, or the
-    gateway call itself failed) deliberately does NOT flip the question to
-    REJECTED - that would silently mass-reject every submission for the
-    duration of any AI outage or an admin's deliberate AI-off period. The
-    question is left PENDING_REVIEW instead, ready to be picked up by a
-    later classification run once AI is available again.
+    Never raises for an AI-related failure - classify_trivia_question itself fails closed (returns a rejection) rather than raising.
 
     Args:
-        question: The question to classify.
-    """
+        question: The question to classify."""
     from urbanlens.dashboard.services.trivia.classifier import classify_trivia_question
 
     if question.status != TriviaQuestionStatus.PENDING_REVIEW:

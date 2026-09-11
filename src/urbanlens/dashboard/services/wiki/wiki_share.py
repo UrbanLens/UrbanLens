@@ -1,15 +1,5 @@
 """Sharing a pin's own content to the community Wiki for its Location.
-
-The user picks which of their pin's fields, names and photos to contribute;
-nothing here happens without that choice. Publishing private pin content as a
-side effect of something else is the defect ``bin/check_pin_not_published_to_wiki.py``
-exists for, and a visibility setting is a control over the audience for things
-you have shared rather than consent to share them.
-
-The Wiki itself is not created here. Every pinned Location gets one
-automatically (``tasks.ensure_wiki_for_location``), enriched in the background,
-so by the time anyone shares anything there is already a page to share it to.
-"""
+The user picks which of their pin's fields, names and photos to contribute; nothing here happens without that choice."""
 
 from __future__ import annotations
 
@@ -38,12 +28,8 @@ SEEDABLE_PHOTO_LIMIT = 60
 #: Security fields shared between Pin and Wiki (both inherit SecurityModel).
 SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked")
 
-#: Pin scalar fields a user may copy into a newly created wiki. Keys are the
-#: tokens posted by the create-wiki dialog. Aliases and photos are seeded
-#: separately (per-item selection, see alias_ids/image_ids on share_from_pin).
-#: Name is deliberately excluded: the wiki's name is resolved from external
-#: place data (see name-resolution plugin), and the pin's own name already
-#: appears as a selectable alias via the Pin.save() name/alias invariant.
+#: Pin scalar fields a user may copy into a newly created wiki.
+#: Keys are the tokens posted by the create-wiki dialog.
 SEEDABLE_FIELDS = ("danger", "vulnerability")
 
 #: Stat fields seeded as the pin owner's own initial WikiStatVote, rather than
@@ -67,23 +53,22 @@ class WikiShareService:
         """Create (or fetch) the Wiki for a pin's Location and link the pin to it.
 
         Args:
-            pin: The pin whose Location gets a community wiki.
-            include_fields: Subset of :data:`SEEDABLE_FIELDS` the user chose to
+                pin: The pin whose Location gets a community wiki.
+                include_fields: Subset of :data:`SEEDABLE_FIELDS` the user chose to
                 copy from their pin into the new wiki. Ignored when the wiki
                 is already official (never overwrite community content with
                 personal data) - a still-unofficial draft is fair game, since
                 nobody has edited it yet.
-            alias_ids: PKs of the pin's own (non-official) aliases to copy in
+                alias_ids: PKs of the pin's own (non-official) aliases to copy in
                 as wiki aliases, on top of official ones (always copied).
-            image_ids: PKs of the pin's own photos to also attach to the wiki.
+                image_ids: PKs of the pin's own photos to also attach to the wiki.
 
         Returns:
-            Tuple of (Wiki, shared) - `shared` is whether the caller chose
-            anything to contribute.
+                Tuple of (Wiki, shared) - `shared` is whether the caller chose
+                anything to contribute.
 
         Raises:
-            ValueError: If the pin has no Location to attach a wiki to.
-        """
+                ValueError: If the pin has no Location to attach a wiki to."""
         if pin.location_id is None:
             raise ValueError("Cannot create a wiki for a pin without a Location")
 
@@ -99,10 +84,10 @@ class WikiShareService:
             # task has not landed yet, which is a race rather than a workflow.
             wiki, created = Wiki.objects.get_or_create_for_location(location)
 
-            # Runs on every share, not just the first. That is the difference
-            # between this and the create button it replaced: contributing is
-            # something a person does repeatedly, and there is no longer a
-            # one-time creation moment to hang it off.
+            # Runs on every share, not just the first.
+            # That is the difference between this and the create button it replaced: contributing is
+            # something a person does repeatedly, and there is no longer a one-time creation moment
+            # to hang it off.
             for field in _SEEDABLE_VOTE_FIELDS:
                 if field not in include:
                     continue
@@ -121,11 +106,10 @@ class WikiShareService:
             Pin.objects.filter(pk=pin.pk).update(wiki=wiki)
 
             if shared and location.place_id is not None:
-                # Grandfathers the sharer permanently - see wiki_access's module
-                # docstring, "Engaging with a wiki". Gated on `shared`, not on
-                # merely reaching this method: opening the dialog and
-                # contributing nothing is not the "shared content...in any
-                # capacity" this is meant to catch.
+                # Grandfathers the sharer permanently - see wiki_access's module docstring,
+                # "Engaging with a wiki".
+                # Gated on `shared`, not on merely reaching this method: opening the dialog and
+                # contributing nothing is not the "shared content...in any capacity" this is meant
                 from urbanlens.dashboard.models.place.model import PlaceAccessGrant
 
                 PlaceAccessGrant.objects.record_engagement(pin.profile, location.place)
@@ -134,30 +118,12 @@ class WikiShareService:
 
     def _name_from_pin(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:
         """Name a newly-created wiki after the place, not its postal address.
-
-        ``claim_for_location`` names a wiki ``location.official_name``, which for
-        a reverse-geocoded location is a street address - so creating a wiki from
-        a pin called "HRSH", having explicitly chosen the aliases "Hudson
-        Heritage" and "Hudson River State Hospital", produced a wiki titled "83
-        Hudson View Dr, Poughkeepsie, NY 12601, USA". That was reported from
-        staging, and it discards the two things the user actually told us.
-
-        Only aliases are considered, never ``pin.name``. That is a standing
-        decision this service already encodes - "name isn't a seedable field at
-        all; the wiki's name comes from external place data, and the pin's name
-        already surfaces as an alias" - because a pin name is the user's own
-        private label for a place and a wiki is public. The aliases are different:
-        the user picked them in this very dialog precisely to hand them over, and
-        they are copied onto the wiki either way.
-
-        Preference order is the aliases they chose, then official ones. If none is
-        meaningful the claimed name stands - an address beats a placeholder.
+        ``claim_for_location`` names a wiki ``location.official_name``, which for a reverse-geocoded location is a street address - so creating a wiki from a pin called "HRSH", having explicitly chosen the aliases "Hudson Heritage" and "Hudson River State Hospital", produced a wiki titled "83 Hudson View Dr, Poughkeepsie, NY 12601, USA".
 
         Args:
-            pin: The pin the wiki is being created from.
-            wiki: The freshly-claimed wiki.
-            alias_ids: The aliases the user selected in the dialog.
-        """
+                pin: The pin the wiki is being created from.
+                wiki: The freshly-claimed wiki.
+                alias_ids: The aliases the user selected in the dialog."""
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
         candidates = []
@@ -186,15 +152,7 @@ class WikiShareService:
 
     def _processed_photo_ids(self, pin: Pin, image_ids: set[int]) -> set[int]:
         """Selected pin photos whose stored bytes have already completed upload processing.
-
-        A photo's wiki link controls who may fetch its file, so an image is only
-        eligible once ``process_image_upload`` has stripped embedded EXIF/location
-        metadata from its stored bytes. That parse is decorated ``@untrusted_parse``
-        and may only run in the sandbox worker (``queue=SANDBOX_QUEUE``) - never
-        inline here in the web process - so an image still missing that pass is
-        (re-)enqueued for next time and left out of this share rather than
-        processed on the spot.
-        """
+        A photo's wiki link controls who may fetch its file, so an image is only eligible once ``process_image_upload`` has stripped embedded EXIF/location metadata from its stored bytes."""
         if not image_ids:
             return set()
 
@@ -240,20 +198,11 @@ def seedable_aliases(pin: Pin) -> list[PinAlias]:
 
 def seedable_photos(pin: Pin) -> list[Image]:
     """The pin's most recent photos, for the create-wiki dialog's per-photo picker.
-
-    Capped, and ordered so the cap is stable: a LIMIT over an unordered
-    queryset may return a different slice per call, which would make which
-    photos are offerable depend on the query plan.
-
-    The cap is a display bound only. ``WikiShareService`` re-scopes whatever
-    ids come back on the POST through ``pin.images``, so a photo below the cap
-    is not thereby made unshareable by a crafted submission - and is not made
-    shareable by one either.
+    Capped, and ordered so the cap is stable: a LIMIT over an unordered queryset may return a different slice per call, which would make which photos are offerable depend on the query plan.
 
     Args:
         pin: The pin whose photos may seed the new wiki.
 
     Returns:
-        At most ``SEEDABLE_PHOTO_LIMIT`` photos, newest first.
-    """
+        At most ``SEEDABLE_PHOTO_LIMIT`` photos, newest first."""
     return list(pin.images.order_by("-created")[:SEEDABLE_PHOTO_LIMIT])

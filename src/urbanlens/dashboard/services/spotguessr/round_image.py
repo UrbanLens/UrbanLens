@@ -1,21 +1,4 @@
-"""Serving a round's photo to a client that must not learn where it was taken.
-
-The web client fetches a round's photo straight from ``/media/`` and that is
-fine: the answer is the location, and the browser never reads the file's
-metadata. A programmatic client is different. The stored JPEG frequently still
-carries the camera's own EXIF - GPS coordinates pointing at the answer, an
-``ImageDescription`` naming the place, a timestamp that gives away the date
-guess - so handing over the original bytes would reopen the exact leak the
-pre-reveal round payload was just fixed to close (see
-``services.spotguessr.modes._serialize_photos``), just through the file instead
-of through the JSON.
-
-Re-encoding is the whole mechanism: nothing is copied across except the pixels.
-That is deliberately blunt rather than surgical - a denylist of "GPS, plus
-description, plus timestamp, plus whatever XMP block this camera writes" is a
-list somebody has to keep complete forever, and one missed tag is one leaked
-answer.
-"""
+"""Serving a round's photo to a client that must not learn where it was taken."""
 
 from __future__ import annotations
 
@@ -55,10 +38,7 @@ class RoundImageUnavailableError(Exception):
 
 def stripped_round_image(image: Image) -> tuple[bytes, str]:
     """Return one round photo's bytes with every metadata block removed.
-
-    The file is decoded and re-encoded from its pixels alone. No ``exif=``,
-    ``pnginfo=``, XMP or IPTC argument is passed to the save, so none of it
-    survives - including tags this code has never heard of.
+    No ``exif=``, ``pnginfo=``, XMP or IPTC argument is passed to the save, so none of it survives - including tags this code has never heard of.
 
     Args:
         image: The ``Image`` row the round showed.
@@ -68,8 +48,7 @@ def stripped_round_image(image: Image) -> tuple[bytes, str]:
 
     Raises:
         RoundImageUnavailableError: The row has no stored file, or the file
-            cannot be opened or decoded as an image.
-    """
+            cannot be opened or decoded as an image."""
     if not image.image:
         raise RoundImageUnavailableError("This round's photo has no stored file.")
 

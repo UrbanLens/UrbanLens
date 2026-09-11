@@ -1,15 +1,4 @@
-"""Gateway for REData's ``/walkability/`` endpoint.
-
-See ``../REData/docs/api-reference.md``, "GET /walkability/ - EPA National
-Walkability Index". One provider (``epa_walkability``), keyless, USA-only.
-
-The score describes a **census block group**, not a coordinate - two
-addresses a street apart share a score, and a block group containing a park
-or rail yard is scored as a whole (``block_group_geoid`` says exactly what
-the number covers). ``transit_distance_meters`` is null where no stop is in
-range, and null is the *majority* answer nationally - ordinary, not missing
-data.
-"""
+"""Gateway for REData's ``/walkability/`` endpoint."""
 
 from __future__ import annotations
 
@@ -35,20 +24,19 @@ class RedataWalkabilityGateway(RedataLocationContextGateway):
         """Fetch the EPA National Walkability Index for the block group at a point.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            force_refresh: Bypass REData's cache and re-query live.
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
+                force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
-            The parsed envelope. The (at most one) result carries ``index``
-            (EPA's 1-20 scale), ``band`` (EPA's own label for that score,
-            e.g. "Most walkable"), ``intersection_density`` (street
-            intersections per square mile), nullable
-            ``transit_distance_meters`` (a stop on the parcel is a
-            legitimate ``0``), and ``block_group_geoid``.
+                The parsed envelope. The (at most one) result carries ``index``
+                (EPA's 1-20 scale), ``band`` (EPA's own label for that score,
+                e.g. "Most walkable"), ``intersection_density`` (street
+                intersections per square mile), nullable
+                ``transit_distance_meters`` (a stop on the parcel is a
+                legitimate ``0``), and ``block_group_geoid``.
 
         Raises:
-            LocationContextUnavailableError: The source failed to answer, or
-                the request itself failed.
-        """
+                LocationContextUnavailableError: The source failed to answer, or
+                the request itself failed."""
         return self.near_point(_WALKABILITY_PATH, latitude, longitude, force_refresh=force_refresh)

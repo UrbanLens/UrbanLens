@@ -54,20 +54,19 @@ class AzureMapsSearchGateway(AzureMapsGateway):
         """Free-text fuzzy search across addresses, POIs, and geographies.
 
         Args:
-            query: Free-text search query.
-            latitude: Optional bias/restrict-to latitude.
-            longitude: Optional bias/restrict-to longitude.
-            radius: Optional search radius in meters (used together with
+                query: Free-text search query.
+                latitude: Optional bias/restrict-to latitude.
+                longitude: Optional bias/restrict-to longitude.
+                radius: Optional search radius in meters (used together with
                 ``latitude``/``longitude``).
-            limit: Maximum number of results (1-100).
+                limit: Maximum number of results (1-100).
 
         Returns:
-            Normalized result dicts, most relevant first; empty when nothing
-            matched or the request failed.
+                Normalized result dicts, most relevant first; empty when nothing
+                matched or the request failed.
 
         Raises:
-            ValueError: When no subscription key is configured.
-        """
+                ValueError: When no subscription key is configured."""
         if not query:
             return []
         params: dict[str, Any] = {"query": query, "limit": max(1, min(int(limit), 100))}
@@ -95,20 +94,19 @@ class AzureMapsSearchGateway(AzureMapsGateway):
         """Search points of interest near a coordinate, nearest first.
 
         Args:
-            latitude: WGS-84 latitude of the search origin.
-            longitude: WGS-84 longitude of the search origin.
-            query: Optional free-text filter (e.g. ``"coffee"``); omit to
+                latitude: WGS-84 latitude of the search origin.
+                longitude: WGS-84 longitude of the search origin.
+                query: Optional free-text filter (e.g. ``"coffee"``); omit to
                 return every nearby POI regardless of category.
-            radius: Search radius in meters.
-            limit: Maximum number of results (1-100).
+                radius: Search radius in meters.
+                limit: Maximum number of results (1-100).
 
         Returns:
-            Normalized POI dicts ordered by distance; empty when nothing was
-            found nearby or the request failed.
+                Normalized POI dicts ordered by distance; empty when nothing was
+                found nearby or the request failed.
 
         Raises:
-            ValueError: When no subscription key is configured.
-        """
+                ValueError: When no subscription key is configured."""
         params: dict[str, Any] = {"lat": latitude, "lon": longitude, "radius": radius, "limit": max(1, min(int(limit), 100))}
         # "poi" takes a free-text query; "nearby" (no query param) ranks every
         # POI in range purely by distance - two distinct Search API endpoints.
@@ -126,18 +124,17 @@ class AzureMapsSearchGateway(AzureMapsGateway):
         """Find the single nearest POI to a coordinate - never by name.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            radius: Search radius in meters; kept tight so the match stays
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
+                radius: Search radius in meters; kept tight so the match stays
                 tied to the actual pinned building rather than a nearby,
                 unrelated place.
 
         Returns:
-            The nearest POI's normalized dict, or None when nothing is close
-            enough.
+                The nearest POI's normalized dict, or None when nothing is close
+                enough.
 
         Raises:
-            ValueError: When no subscription key is configured.
-        """
+                ValueError: When no subscription key is configured."""
         results = self.search_poi(latitude, longitude, radius=radius, limit=1)
         return results[0] if results else None

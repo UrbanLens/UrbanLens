@@ -1,22 +1,4 @@
-"""Assistant controller - the chat UI over the async turn task (UL-293).
-
-Conversation state lives in the session (per browser, capped), not in a
-conversation/message table of its own: the chat is a scratchpad, not a
-record, so there's nothing to export or retain deliberately. The session
-backend is ``cached_db``, which writes through to the database, so this
-state does land in a DB row (``django_session``) - it just isn't modeled,
-queryable, or kept past the session's own expiry.
-
-A turn now runs on ``ai-worker`` (``services.ai.tasks.run_assistant_turn_task``),
-never inline in this process - this view gates, enqueues, and polls, the
-same shape as every other slow background operation in this app (see e.g.
-``controllers.immich``'s library-scan progress view). One session entry
-represents an in-flight turn until its poll resolves it -
-``{"role": "assistant", "pending": True, "turn_id": ...}`` - and
-:func:`_history` is the single point that repairs a stale one (the server
-restarted, the turn record's TTL lapsed, the cache was flushed) into an
-error bubble, so a reopened tab never polls a turn_id that will never answer.
-"""
+"""Assistant controller - chat UI over the async turn task."""
 
 from __future__ import annotations
 

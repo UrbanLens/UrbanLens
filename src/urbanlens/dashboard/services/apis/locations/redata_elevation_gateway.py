@@ -1,11 +1,4 @@
-"""Gateway for REData's ``/elevation/`` near-a-coordinate endpoint.
-
-See ``../REData/docs/api-reference.md``, "GET /elevation/ - metres above sea
-level". Replaces the direct, keyless call to the public Open-Elevation
-instance (SRTM-derived, ~90 m resolution, no per-source disagreement to show)
-with REData's pooled view across every digital elevation model it has
-configured (USGS 3DEP, Open-Elevation, Open-Meteo/Copernicus).
-"""
+"""Gateway for REData's ``/elevation/`` near-a-coordinate endpoint."""
 
 from __future__ import annotations
 
@@ -25,22 +18,21 @@ class RedataElevationGateway(RedataLocationContextGateway):
         """Fetch every configured DEM's elevation reading at a coordinate.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            force_refresh: Bypass REData's cache and re-query live.
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
+                force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
-            The parsed envelope. Each ``results`` entry is
-            ``{"provider", "dataset", "resolution_meters", "elevation_meters",
-            "status"}``, in REData's recommended order (finest resolution
-            first where it applies) - never a single winner, since digital
-            elevation models genuinely disagree with each other by real
-            margins on the same terrain. ``elevation_meters: null`` alongside
-            ``status: "ok"`` is itself a real answer (a gap in that model's
-            coverage, e.g. open ocean), not a failure.
+                The parsed envelope. Each ``results`` entry is
+                ``{"provider", "dataset", "resolution_meters", "elevation_meters",
+                "status"}``, in REData's recommended order (finest resolution
+                first where it applies) - never a single winner, since digital
+                elevation models genuinely disagree with each other by real
+                margins on the same terrain. ``elevation_meters: null`` alongside
+                ``status: "ok"`` is itself a real answer (a gap in that model's
+                coverage, e.g. open ocean), not a failure.
 
         Raises:
-            LocationContextUnavailableError: Every configured DEM failed to
-                answer, or the request to REData failed outright.
-        """
+                LocationContextUnavailableError: Every configured DEM failed to
+                answer, or the request to REData failed outright."""
         return self.near_point(_ELEVATION_PATH, latitude, longitude, force_refresh=force_refresh)

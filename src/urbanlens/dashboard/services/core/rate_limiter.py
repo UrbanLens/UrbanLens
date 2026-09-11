@@ -1,18 +1,5 @@
 """Rate limiting for external API calls.
-
-Provides ``check_rate_limit`` and ``log_api_call`` helpers used by the
-``_RateLimitedSession`` inside every ``Gateway`` subclass that declares a
-``service_key``.  Configuration is persisted in ``ApiRateLimit`` rows, which
-are auto-created on first access using the defaults in ``SERVICE_REGISTRY``.
-
-``check_rate_limit`` (a COUNT query) and ``log_api_call`` (an INSERT) are
-individually cheap but, called back-to-back with no locking, let concurrent
-callers race: several requests can all see the count under the limit before
-any of them has logged a call, producing a real burst above the configured
-limit. ``_RateLimitedSession`` closes this by going through
-``_reserve_call``/``_finalize_call`` instead of calling ``check_rate_limit``
-and ``log_api_call`` directly - see their docstrings.
-"""
+``_RateLimitedSession`` closes this by going through ``_reserve_call``/``_finalize_call`` instead of calling ``check_rate_limit`` and ``log_api_call`` directly - see their docstrings."""
 
 from __future__ import annotations
 
@@ -37,11 +24,10 @@ from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Service registry - default config for external API services that have not
-# yet been converted to plugins. Plugin-provided integrations declare their
-# defaults via ``UrbanLensPlugin.get_service_defaults`` instead; the merged
-# view lives in ``all_service_defaults``. Rows are auto-created from these
-# defaults the first time a service is seen.
+# Service registry - default config for external API services that have not yet been converted to
+# plugins.
+# Plugin-provided integrations declare their defaults via ``UrbanLensPlugin.get_service_defaults``
+# instead; the merged view lives in ``all_service_defaults``.
 # ---------------------------------------------------------------------------
 
 
@@ -59,26 +45,15 @@ class ServiceDefaults:
     min_interval_seconds: float | None = None
     usa_only: bool = False
     notes: str = ""
-    #: Estimated USD cost per successful call, if confidently known from the
-    #: provider's published pricing. None means "not yet priced" (which may
-    #: still be a free service - see ``notes``), not "confirmed free". Only
-    #: populate this from a specific, verifiable published rate; a wrong
-    #: number here is worse than no cost-tracking at all for a feature whose
-    #: whole purpose is informing real spending decisions - see
-    #: ApiCallLog.cost_estimate's own docstring for the same caveat.
+    #: Estimated USD cost per successful call, if confidently known from the provider's published
+    #: pricing.
+    #: None means "not yet priced" (which may still be a free service - see ``notes``), not
+    #: "confirmed free".
     cost_per_call: Decimal | None = None
 
-    #: Whether a call here can cost money. Defaults to True, and the default is
-    #: the point: `cost_per_call = None` means "not yet priced", *not* "free"
-    #: (see above), so it cannot be used to decide this. A new service is
-    #: treated as billable until someone reads the provider's terms and says
+    #: Whether a call here can cost money.
+    #: A new service is treated as billable until someone reads the provider's terms and says
     #: otherwise here, citing them in ``notes``.
-    #:
-    #: Read when the limiter cannot reach its own configuration:
-    #: :func:`check_rate_limit` refuses the call in that state, because an
-    #: uncapped window on a paid API costs money that a degraded database does
-    #: not. A service marked free is let through instead, so a database problem
-    #: does not also take out geocoding, weather and the archives.
     billable: bool = True
 
 
@@ -87,10 +62,10 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         display_name="Google Geocoding API",
         calls_per_minute=20,
         calls_per_day=500,
-        # Places Details (used for CID lookups - see get_coordinates_by_cid) is
-        # billed under the Essentials SKU: 10,000 free calls/month. Capped one
-        # short of that so a full month of free-tier installs never crosses
-        # into billing purely from float/rounding in the 30-day rolling window.
+        # Places Details (used for CID lookups - see get_coordinates_by_cid) is billed under the
+        # Essentials SKU: 10,000 free calls/month.
+        # Capped one short of that so a full month of free-tier installs never crosses into billing
+        # purely from float/rounding in the 30-day rolling window.
         calls_per_30_days=9999,
         notes="Free tier: 10,000 calls/month (Places Details Essentials SKU).",
         # Google's published rate is $5/1000 requests, consistent with this
@@ -99,16 +74,6 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_cid_lookup": ServiceDefaults(
         display_name="REData CID Resolution",
-        # Our own outbound throttle, well under REData's own dedicated
-        # 200 requests/hour-per-key limit on POST /places/resolve-cids/ (see
-        # ../REData/docs/api-reference.md) - deliberately generous for that
-        # endpoint, since each call is a batch of up to 10,000 CIDs, not one
-        # lookup. get_place_detail/download_media below share this same
-        # throttle even though they're unbatched (one CID/media item per
-        # call) - REData has no dedicated per-key cap on those two the way it
-        # does on resolve-cids, so there's no equivalent number to size against;
-        # both are also cached (LocationCache, the media proxy's own cache),
-        # so real call volume per pin stays low.
         calls_per_minute=10,
         calls_per_day=None,
         calls_per_30_days=None,
@@ -120,56 +85,43 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_places": ServiceDefaults(
         display_name="REData Places",
-        # Shares REData's single 1,000 req/hour "lookup" pool with redata_api
-        # (property records) and cultural-resources - NOT redata_cid_lookup,
-        # which has its own separate, dedicated 200/hour pool. Deliberately
-        # conservative since this rate limiter has no cross-service
-        # shared-budget concept and redata_api already draws from the same pool.
+        # Deliberately conservative since this rate limiter has no cross-service shared-budget
+        # concept and redata_api already draws from the same pool.
         calls_per_minute=20,
         calls_per_day=None,
         notes="Places API (New) via REData - permanently cached on REData's end. See services.apis.locations.places_resolution.",
     ),
     "redata_photos": ServiceDefaults(
         display_name="REData Photo Relevance",
-        # Each call is a batch (up to 200 photos / 1,000 votes / 1,000
-        # confidence lookups per REData's own limits), so real call volume
-        # stays low relative to photo/vote counts - generous but still bounded
-        # in case a burst of uploads or votes fires many small batches back to
-        # back. See services.photos.redata_relevance.
+        # Each call is a batch (up to 200 photos / 1,000 votes / 1,000 confidence lookups per
+        # REData's own limits), so real call volume stays low relative to photo/vote counts -
+        # generous but still bounded in case a burst of uploads or votes fires many small batches
+        # back to back.
         calls_per_minute=30,
         calls_per_day=None,
         notes="Photo submission/voting/confidence via POST /photos/, /photos/votes/, /photos/confidence/.",
     ),
     "redata_labels": ServiceDefaults(
         display_name="REData Label Suggestions",
-        # Taxonomy/assignment syncs are batched (up to 2,000 labels / 500
-        # locations per REData's own limits) and only fire on actual writes;
-        # suggestion lookups are one call per dialog open. Generous but still
-        # bounded, matching redata_photos.
+        # Taxonomy/assignment syncs are batched (up to 2,000 labels / 500 locations per REData's own
+        # limits) and only fire on actual writes; suggestion lookups are one call per dialog open.
+        # Generous but still bounded, matching redata_photos.
         calls_per_minute=30,
         calls_per_day=None,
         notes="Tag/category taxonomy + assignment sync and suggestions via POST /labels/, /labels/assignments/, /labels/suggest/.",
     ),
     "redata_basemap_tiles": ServiceDefaults(
         display_name="REData Basemap Tiles",
-        # Deliberately far above the shared "lookup" budget below: a tile
-        # request is one per pan, not one per user action, and REData applies
-        # its own tile throttle that *replaces* rather than stacks with the
-        # per-key budget (see its api-reference.md). Holding tiles to a lookup
-        # allowance would let a few seconds of panning exhaust the budget every
-        # other location feature draws on - which is also why this has its own
-        # key rather than inheriting the base gateway's.
+        # Deliberately far above the shared "lookup" budget below: a tile request is one per pan,
+        # not one per user action, and REData applies its own tile throttle that *replaces* rather
+        # than stacks with the per-key budget (see its api-reference.md).
+        # Holding tiles to a lookup allowance would let a few seconds of panning exhaust the budget
         calls_per_minute=600,
         calls_per_day=None,
         notes="Basemap tiles and their catalogue via GET /tiles/. Proxied so REData's key stays server-side - see controllers.basemap_tiles.",
     ),
     "redata_geocode": ServiceDefaults(
         display_name="REData Geocoding",
-        # Shares REData's single 1,000 req/hour "lookup" pool (see the
-        # api-reference.md rate-limiting section) with weather/imagery/
-        # elevation/hazards/etc. below - deliberately conservative on our own
-        # side since this rate limiter has no cross-service shared-budget
-        # concept and every one of them draws from the same REData-side pool.
         calls_per_minute=20,
         calls_per_day=None,
         notes="Forward/reverse geocoding via GET /geocode/, /geocode/reverse/. See services.apis.locations.geocode_resolution.",
@@ -191,11 +143,10 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_capabilities": ServiceDefaults(
         display_name="REData Capability Index",
-        # Costs REData no external call - it is a bounds test over its own
-        # registries - so this budget bounds our own round trips, not a source's.
+        # Costs REData no external call - it is a bounds test over its own registries - so this
+        # budget bounds our own round trips, not a source's.
         # Read on the pin-detail path now (services.apis.locations.
-        # redata_points_of_interest_gateway.applicable_provider_tags caches it for
-        # an hour per coarse coordinate), not just by the site-admin page.
+        # redata_points_of_interest_gateway.applicable_provider_tags caches it for an hour per
         calls_per_minute=60,
         calls_per_day=None,
         notes="Which REData domains and providers cover a point, via GET /capabilities/. Answers from REData's own registries with no upstream call; cached for an hour per coarse coordinate.",
@@ -222,9 +173,9 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "overpass": ServiceDefaults(
         display_name="Overpass API (OpenStreetMap)",
-        # OverpassGateway spreads every call across a pool of public instances
-        # and drops any that error out of rotation until the next day, so this
-        # limit governs our total load, not the load on any single instance.
+        # OverpassGateway spreads every call across a pool of public instances and drops any that
+        # error out of rotation until the next day, so this limit governs our total load, not the
+        # load on any single instance.
         # Each logical lookup may spend more than one call when it fails over.
         calls_per_minute=240,
         calls_per_day=24_000,
@@ -272,12 +223,9 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     "virustotal": ServiceDefaults(
         display_name="VirusTotal",
         # VirusTotal's own public/free API tier: 4 requests/minute, 500/day.
-        # Both capped below that (not merely at it) on purpose: check_rate_limit's
-        # rolling window is ours, not VirusTotal's, so a call that lands right at
-        # our own ceiling isn't guaranteed to land inside VirusTotal's - clock
-        # skew or window-boundary misalignment could still trip their real 429.
-        # Staying strictly under both gives that margin instead of running the
-        # rolling window flush against the actual wall.
+        # Both capped below that (not merely at it) on purpose: check_rate_limit's rolling window is
+        # ours, not VirusTotal's, so a call that lands right at our own ceiling isn't guaranteed to
+        # land inside VirusTotal's - clock skew or window-boundary misalignment could still trip
         calls_per_minute=3,
         calls_per_day=480,
         notes=("Free public API tier, hash-lookup only. Fast path before ClamAV on externally-fetched image assets - never sent a user upload or a user's own cloud photo library. See services.security.virustotal_scan."),
@@ -335,14 +283,10 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
 
 def all_service_defaults() -> dict[str, ServiceDefaults]:
     """Every known service's default config: static registry plus plugins.
-
-    Plugin-declared defaults win over a same-keyed ``SERVICE_REGISTRY`` entry
-    so converting an integration to a plugin fully transfers ownership of its
-    configuration.
+    Plugin-declared defaults win over a same-keyed ``SERVICE_REGISTRY`` entry so converting an integration to a plugin fully transfers ownership of its configuration.
 
     Returns:
-        Mapping of service key to its :class:`ServiceDefaults`.
-    """
+        Mapping of service key to its :class:`ServiceDefaults`."""
     from urbanlens.dashboard.plugins import plugin_registry
 
     merged = dict(SERVICE_REGISTRY)
@@ -358,15 +302,11 @@ def all_service_defaults() -> dict[str, ServiceDefaults]:
 def get_limit_config(service: str) -> Any:
     """Return the ``ApiRateLimit`` row for ``service``, creating it if absent.
 
-    Uses the merged :func:`all_service_defaults` (static registry plus
-    plugin declarations) when creating a new row.
-
     Args:
         service: The service key (e.g. ``"nps"``).
 
     Returns:
-        An ``ApiRateLimit`` instance.
-    """
+        An ``ApiRateLimit`` instance."""
     from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 
     defaults_entry = all_service_defaults().get(service)
@@ -396,89 +336,47 @@ def get_limit_config(service: str) -> Any:
 
 
 def service_is_permitted(service: str) -> bool:
-    """
-    Check if the service is enabled and not rate limited.
+    """Check if the service is enabled and not rate limited.
 
     Args:
         service: The service key.
 
     Returns:
-        ``True`` if the service is enabled and not rate limited, ``False`` otherwise.
-    """
+        ``True`` if the service is enabled and not rate limited, ``False`` otherwise."""
     return service_is_enabled(service) and check_rate_limit(service)
 
 
-#: Environments whose calls are nobody's budget to spend. A developer working on
-#: an integration sets ``UL_ALLOW_OUTBOUND_APIS=true``; everyone else, and every
-#: background task on their machine, stays off the wire.
-#:
-#: Matched against ``django.conf.settings.ENVIRONMENT_NAME``, which is
-#: ``UL_ENVIRONMENT`` - **not** ``app_settings.environment_name``, which is a
-#: separate Pydantic field that is not wired to it (see the comment at
-#: ``settings/app.py``'s ``environment_name``). The dev stack reports
-#: ``development`` for the first and ``local`` for the second, and a production
-#: deployment that never sets ``UL_ENVIRONMENT_NAME`` reports ``local`` for the
-#: second too - so reading that one here would have refused every outbound call
-#: in production. ``settings/base.py`` already branches on the same variable and
-#: the same two values.
+#: Environments whose calls are nobody's budget to spend.
+#: A developer working on an integration sets ``UL_ALLOW_OUTBOUND_APIS=true``; everyone else, and
+#: every background task on their machine, stays off the wire.
 _UNBUDGETED_ENVIRONMENTS = frozenset({EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL})
 
 
 def outbound_calls_permitted(service: str) -> bool:
     """Whether this deployment may call ``service`` at all.
-
-    Two separate guards, for two separate budgets, neither overriding the other.
-
-    **The demo** runs on somebody else's budget: every visitor is anonymous, the
-    accounts are throwaway, and a keyed provider bills per call whether or not
-    the caller was a real prospect. REData is exempt there because it is this
-    project's own service - the demo is the thing it exists to show off, and
-    calling our own instance costs nothing but our own capacity.
-
-    **A development box** is not spending anyone's budget deliberately, which is
-    worse: the calls are a side effect of work nobody is watching. A load run
-    imported 1,000 pins and the `Pin` post_save chain enqueued 2,644 tasks, most
-    of them wiki enrichment, which then spent hours on the wire (P109). REData is
-    *not* exempt here, and that is the substantive difference from the demo rule:
-    a dev checkout's ``UL_REDATA_API_URL`` points at the production instance with
-    a live key, and REData reaches Google Places one hop later - which answered
-    ``429 ... request budget is exhausted`` during that run. "Only our own
-    capacity" stops being true at a boundary the demo guard never had to consider.
-
-    Refusing rather than mocking is deliberate. A refused call raises
-    ``ServiceDisabledError`` from the same place a rate limit does, so every
-    caller takes a path it already has to handle - providers do fail - and there
-    is no fixture to keep in step with a provider's real response shape. It also
-    means development and production run the same code down to the socket.
+    REData is exempt there because it is this project's own service - the demo is the thing it exists to show off, and calling our own instance costs nothing but our own capacity.
 
     Args:
         service: The service key.
 
     Returns:
-        True when the call is allowed.
-    """
+        True when the call is allowed."""
     from django.conf import settings as django_settings
 
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
     if app_settings.demo_mode:
         return service.startswith("redata")
-    # The suite runs with UL_ENVIRONMENT inherited from whatever container it is
-    # in, which is a development one - so without this every gateway in every
-    # test would be disabled, and thousands of tests would be asserting against a
-    # refusal rather than against the code they name. Tests keep themselves off
-    # the network by mocking the session, which is a separate property from this
-    # one; making the suite hermetic by force is worth doing and is not this
-    # change.
+    # The suite runs with UL_ENVIRONMENT inherited from whatever container it is in, which is a
+    # development one - so without this every gateway in every test would be disabled, and thousands
+    # of tests would be asserting against a refusal rather than against the code they name.
+    # Tests keep themselves off the network by mocking the session, which is a separate property
     if getattr(django_settings, "TESTING", False):
         return True
-    # An explicit answer wins over the environment's default, in both
-    # directions. The direction that matters is `false` on a deployment the
-    # environment would otherwise trust: `dev_env.py --environment staging` sets
-    # UL_ENVIRONMENT=staging purely to get gunicorn, and the application branches
-    # on that one variable, so a throwaway environment is otherwise
-    # indistinguishable from the real staging deployment. It also gives a real
-    # deployment a way to take a provider out of the path during an incident.
+    # An explicit answer wins over the environment's default, in both directions.
+    # The direction that matters is `false` on a deployment the environment would otherwise trust:
+    # `dev_env.py --environment staging` sets UL_ENVIRONMENT=staging purely to get gunicorn, and the
+    # application branches on that one variable, so a throwaway environment is otherwise
     explicit = app_settings.allow_outbound_apis
     if explicit is not None:
         return bool(explicit)
@@ -499,10 +397,10 @@ def service_is_enabled(service: str, config: Any = None) -> bool:
     Returns:
         ``True`` if the service is enabled, ``False`` otherwise.
     """
-    # Checked before the config, and before the cached-config fast path, so it
-    # cannot be skipped by a caller that already holds a row. This is the one
-    # place every outbound call passes through (``_reserve_call``), which is why
-    # the deployment spend guards live here rather than in each of 58 gateways.
+    # Checked before the config, and before the cached-config fast path, so it cannot be skipped by
+    # a caller that already holds a row.
+    # This is the one place every outbound call passes through (``_reserve_call``), which is why the
+    # deployment spend guards live here rather than in each of 58 gateways.
     if not outbound_calls_permitted(service):
         return False
     if config is not None:
@@ -511,9 +409,8 @@ def service_is_enabled(service: str, config: Any = None) -> bool:
         config = get_limit_config(service)
     except DatabaseError:
         # Reports the service as disabled, which refuses the call - the opposite of
-        # check_rate_limit's choice, and deliberate: "is this service switched on" has no
-        # safe affirmative answer when it cannot be read. The log line previously said
-        # "allowing call" while returning False.
+        # check_rate_limit's choice, and deliberate: "is this service switched on" has no safe
+        # affirmative answer when it cannot be read.
         logger.exception("Failed to read rate limit config for %s - treating the service as disabled", service)
         return False
     return config.enabled
@@ -521,14 +418,7 @@ def service_is_enabled(service: str, config: Any = None) -> bool:
 
 def check_rate_limit(service: str, config: Any = None) -> bool:
     """Return ``True`` if a call to ``service`` is currently permitted.
-
-    Queries the ``ApiCallLog`` table using a rolling window to enforce the
-    per-minute, per-day, and per-30-day limits configured in
-    ``ApiRateLimit``.  A ``False`` result means the call should be skipped; a
-    ``_RateLimitedSession`` will log the blocked attempt automatically.
-
-    Only the windows that are actually configured are counted - a service with
-    no ``calls_per_30_days`` never pays for that ``COUNT(*)``.
+    Only the windows that are actually configured are counted - a service with no ``calls_per_30_days`` never pays for that ``COUNT(*)``.
 
     Args:
         service: The service key.
@@ -536,28 +426,17 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
             (see :func:`service_is_enabled` for why).
 
     Returns:
-        ``True`` if the call is allowed, ``False`` if rate limited.
-    """
+        ``True`` if the call is allowed, ``False`` if rate limited."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
     if config is None:
         try:
             config = get_limit_config(service)
         except DatabaseError:
-            # Fail closed on anything that can cost money. This limiter is the
-            # only cap on spend at paid third-party APIs, so answering "allowed"
-            # when it cannot read its own configuration turns a database problem
-            # into an unbounded bill - and the database being down is exactly
-            # when nobody is watching the spend.
-            #
-            # A service the registry records as free is let through, so the same
-            # failure does not also take out geocoding, weather and the
-            # archives. `billable` defaults to True, so an unlisted or newly
-            # added service is capped rather than exempted.
-            #
-            # Deliberately *not* a bare except: a bug here - a broken plugin
-            # rate-limit declaration, say - must surface rather than be absorbed
-            # by this branch.
+            # Fail closed on anything that can cost money.
+            # This limiter is the only cap on spend at paid third-party APIs, so answering "allowed"
+            # when it cannot read its own configuration turns a database problem into an unbounded
+            # bill - and the database being down is exactly when nobody is watching the spend.
             defaults = SERVICE_REGISTRY.get(service)
             billable = defaults is None or defaults.billable
             logger.exception(
@@ -619,9 +498,7 @@ def log_api_call(
     was_service_disabled: bool = False,
     cost_estimate: Decimal | None = None,
 ) -> None:
-    """Record one API call in the ``ApiCallLog`` table.
-
-    Failures are swallowed so that logging problems never break callers.
+    """Record one API call in the ``ApiCallLog`` table. Failures are swallowed so that logging problems never break callers.
 
     Args:
         service: The service key.
@@ -631,8 +508,7 @@ def log_api_call(
         was_rate_limited: True if the call was blocked by rate limiting.
         was_geo_filtered: True if the call was skipped due to geo filtering.
         cost_estimate: Estimated USD cost of this call, if known - see
-            ``ServiceDefaults.cost_per_call``.
-    """
+            ``ServiceDefaults.cost_per_call``."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
     try:
@@ -652,35 +528,7 @@ def log_api_call(
 
 def _reserve_call(service: str, *, endpoint: str = "") -> int:
     """Atomically check ``service``'s rate limit and reserve a logged call slot.
-
-    ``check_rate_limit`` (COUNT) and ``log_api_call`` (INSERT), called as two
-    separate steps with no locking, let concurrent callers race: several
-    requests can all pass the COUNT check before any of them has inserted a
-    log row, letting a burst of calls through above the configured limit.
-    This function closes that gap by locking the service's ``ApiRateLimit``
-    row (the natural one-row-per-service counter for this domain) for the
-    duration of the count check and the reservation insert, via
-    ``select_for_update()`` inside ``transaction.atomic()`` - so a second
-    concurrent caller for the same service blocks until the first has
-    committed its reservation, and then sees it in its own count.
-
-    A rolling-window budget alone still doesn't guarantee even spacing - all
-    of a generous per-minute allowance can land in the same few seconds and
-    still be "within budget". For a hard per-request spacing requirement
-    like Nominatim's 1 req/second or GDELT's 1 req/5s, ``min_interval_seconds``
-    is checked against ``last_call_at`` under the same lock, so it can't race
-    with the count check above.
-
-    The lock is held only for the check-and-insert - it is released as soon
-    as this function returns, well before the actual outbound network
-    request happens, so concurrent calls to *different* services (or calls
-    that are ultimately blocked) are never serialized by it.
-
-    The blocked/disabled branches below record their ``ApiCallLog`` row and
-    then exit the ``atomic()`` block normally rather than raising from inside
-    it - raising from inside would roll back that same transaction and take
-    the just-written log row with it, silently losing every blocked-attempt
-    record this function exists to produce.
+    This function closes that gap by locking the service's ``ApiRateLimit`` row (the natural one-row-per-service counter for this domain) for the duration of the count check and the reservation insert, via ``select_for_update()`` inside ``transaction.atomic()`` - so a second concurrent caller for the same service blocks until the first has committed its reservation, and then sees it in its own count.
 
     Args:
         service: The service key.
@@ -696,18 +544,16 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
             limit, or land sooner than ``min_interval_seconds`` after the
             last one. The blocked attempt is logged before raising.
         ServiceDisabledError: If the service is administratively disabled.
-            The skipped attempt is logged before raising.
-    """
+            The skipped attempt is logged before raising."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
     from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 
     truncated_endpoint = endpoint[:500] if endpoint else ""
 
-    # Ensure the row exists (auto-created from defaults) before locking it -
-    # get_or_create is safe to call outside the lock since it already handles
-    # its own creation race. Its result is deliberately discarded: the row must
-    # be re-read under the lock below, and that locked instance is then threaded
-    # into check_rate_limit/service_is_enabled rather than each re-reading it.
+    # Ensure the row exists (auto-created from defaults) before locking it - get_or_create is safe
+    # to call outside the lock since it already handles its own creation race.
+    # Its result is deliberately discarded: the row must be re-read under the lock below, and that
+    # locked instance is then threaded into check_rate_limit/service_is_enabled rather than each
     get_limit_config(service)
 
     to_raise: RequestCancelledError | None = None
@@ -750,21 +596,14 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
 
 def _finalize_call(entry_pk: int, *, success: bool, response_ms: int | None = None, cost_estimate: Decimal | None = None) -> None:
     """Update a reservation row created by ``_reserve_call`` with the request's outcome.
-
-    Updates the existing row in place rather than inserting a new one, so a
-    reserved-but-not-yet-finalized call still counts toward
-    ``check_rate_limit``'s window queries (which count rows regardless of
-    ``success``) without double-counting once finalized.
-
-    Failures are swallowed so that logging problems never break callers.
+    Updates the existing row in place rather than inserting a new one, so a reserved-but-not-yet-finalized call still counts toward ``check_rate_limit``'s window queries (which count rows regardless of ``success``) without double-counting once finalized.
 
     Args:
         entry_pk: pk of the ``ApiCallLog`` row returned by ``_reserve_call``.
         success: Whether the call succeeded (HTTP 2xx, no exception).
         response_ms: Round-trip time in milliseconds.
         cost_estimate: Estimated USD cost of this call, if known - see
-            ``ServiceDefaults.cost_per_call``.
-    """
+            ``ServiceDefaults.cost_per_call``."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
     try:
@@ -791,12 +630,9 @@ class _RateLimitedSession:
 
         self._service_key = service_key
         self._session = requests.Session()
-        # How this service's URLs are described in ApiCallLog. The default is
-        # the URL itself, which is right for the point lookups every other
-        # service makes. A service whose URL *is* a user's position (map tiles)
-        # overrides it: the log exists to track volume and cost per service,
-        # and the coordinate adds nothing to that while building a record of
-        # which places were looked at.
+        # How this service's URLs are described in ApiCallLog.
+        # The default is the URL itself, which is right for the point lookups every other service
+        # makes.
         self._endpoint_for_log = endpoint_for_log or str
 
     def __getattr__(self, name: str):
@@ -828,29 +664,23 @@ class _RateLimitedSession:
 
     def _do_request(self, method: str, url: str, **kwargs):
         """Reserve a rate-limit slot, make the request, finalize the logged result.
-
-        The reservation (see ``_reserve_call``) atomically checks the rate
-        limit and logs the attempt in one locked transaction, so this
-        no longer has a check-then-log gap for concurrent callers to race
-        through.
-        """
+        The reservation (see ``_reserve_call``) atomically checks the rate limit and logs the attempt in one locked transaction, so this no longer has a check-then-log gap for concurrent callers to race through."""
         entry_pk = _reserve_call(self._service_key, endpoint=self._endpoint_for_log(str(url)))
 
-        # requests has no default timeout at all: a gateway call that forgets
-        # timeout= would otherwise block its caller (and, when running under a
-        # call_with_deadline guard, pin an executor slot) indefinitely. The
-        # (connect, read) tuple bounds each phase separately; callers that pass
-        # their own timeout are untouched, including long-running offline jobs.
+        # requests has no default timeout at all: a gateway call that forgets timeout= would
+        # otherwise block its caller (and, when running under a call_with_deadline guard, pin an
+        # executor slot) indefinitely.
+        # The (connect, read) tuple bounds each phase separately; callers that pass their own
         kwargs.setdefault("timeout", (5, 30))
 
         t0 = time.monotonic()
         try:
             resp = self._session.request(method, url, **kwargs)
             elapsed_ms = int((time.monotonic() - t0) * 1000)
-            # Only a call that actually reached the provider and succeeded is
-            # billable - a rate-limited/disabled call above never went out,
-            # and a failed response wasn't necessarily charged either way, so
-            # estimating a cost for it would overstate real spend.
+            # Only a call that actually reached the provider and succeeded is billable - a
+            # rate-limited/disabled call above never went out, and a failed response wasn't
+            # necessarily charged either way, so estimating a cost for it would overstate real
+            # spend.
             cost_estimate = all_service_defaults().get(self._service_key, ServiceDefaults(display_name="")).cost_per_call if resp.ok else None
             _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate)
             return resp

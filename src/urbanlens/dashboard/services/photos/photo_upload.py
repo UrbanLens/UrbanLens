@@ -1,19 +1,5 @@
 """Shared photo/video/document upload pipeline.
-
-Extracted from ``controllers.vault_photos.PhotoUploadView.post`` so the Vault
-page's drag-and-drop uploader and the external API's ``POST photos/`` run
-byte-for-byte the same admission checks: media-type sniffing, the per-account
-video/document feature gates, the malware/size/dimension checks in
-``services.media.images.image_upload_error``, per-profile duplicate rejection, and
-the storage quota. A second implementation of any of those on the API side
-would be a second place for them to be wrong - and the quota check in
-particular is only sound because every writer takes the same lock.
-
-The web controller and the API differ only in how a failure is rendered
-(``JsonResponse`` vs. DRF ``Response``), which is why this raises
-:class:`PhotoUploadError` carrying an HTTP status rather than returning a
-response of either kind.
-"""
+Extracted from ``controllers.vault_photos.PhotoUploadView.post`` so the Vault page's drag-and-drop uploader and the external API's ``POST photos/`` run byte-for-byte the same admission checks: media-type sniffing, the per-account video/document feature gates, the malware/size/dimension checks in ``services.media.images.image_upload_error``, per-profile duplicate rejection, and the storage quota."""
 
 from __future__ import annotations
 
@@ -119,10 +105,6 @@ def upload_photo(
 ) -> Image:
     """Admit one uploaded file as an ``Image`` row and queue its metadata ingestion.
 
-    The caller is responsible for having established that *profile* owns
-    (or may write to) any ``pin``/``visit``/``wiki`` passed in - this function
-    attaches them as given and does not re-check ownership.
-
     Args:
         profile: The uploading profile; the file counts against its quota.
         file_obj: The uploaded file.
@@ -139,8 +121,7 @@ def upload_photo(
 
     Raises:
         PhotoUploadError: The upload was refused; see the exception's
-            ``status`` for how to answer the caller.
-    """
+            ``status`` for how to answer the caller."""
     from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
     from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
@@ -169,11 +150,10 @@ def upload_photo(
     # prepare_photo_upload. Videos and documents have their own pipelines.
     prepared = prepare_photo_upload(file_obj, profile) if media_type == MediaKind.PHOTO else None
 
-    # Every media type is quarantined, not just photos: a video or document is
-    # stored as uploaded too, and its processing window is the *longer* one - an
-    # ffmpeg transcode runs for minutes where a photo's downscale runs for
-    # seconds. The malware scan that gate now covers (tasks._scan_pending_upload)
-    # is media-type-agnostic.
+    # Every media type is quarantined, not just photos: a video or document is stored as uploaded
+    # too, and its processing window is the *longer* one - an ffmpeg transcode runs for minutes
+    # where a photo's downscale runs for seconds.
+    # The malware scan that gate now covers (tasks._scan_pending_upload) is media-type-agnostic.
     row_metadata = dict(prepared.metadata) if prepared else {}
     row_metadata.setdefault("pending_scan", True)
 

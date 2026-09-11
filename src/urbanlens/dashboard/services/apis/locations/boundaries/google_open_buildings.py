@@ -1,23 +1,5 @@
 """Gateway for Google's Open Buildings dataset (V3).
-
-Like Microsoft's dataset, this is static, sharded, downloadable data rather
-than a query API -- Google publishes building polygons and centroid points
-as gzip-compressed CSVs, one shard per S2 *level-4* cell, on public Google
-Cloud Storage: https://sites.research.google/gr/open-buildings/
-
-This gateway computes which S2 level-4 cells cover a bounding box (using
-Google's own S2 geometry library via the ``s2sphere`` package), downloads
-just those shards over HTTPS through ``self.session``, and filters rows to
-the exact bounding box.
-
-Coverage: mostly Africa, South Asia, and South-East Asia -- check Google's
-coverage map before assuming a region is included.
-
-Requires the optional dependency ``s2sphere`` (``pip install s2sphere``) to
-compute S2 cell coverings, and ``shapely`` to turn WKT polygons into GeoJSON
-geometries (already a transitive dependency of GeoPandas, which this project
-already uses elsewhere).
-"""
+Like Microsoft's dataset, this is static, sharded, downloadable data rather than a query API -- Google publishes building polygons and centroid points as gzip-compressed CSVs, one shard per S2 *level-4* cell, on public Google Cloud Storage: https://sites.research.google/gr/open-buildings/"""
 
 from __future__ import annotations
 
@@ -102,11 +84,10 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
         min_lon, min_lat, max_lon, max_lat = bbox
         results: list[dict] = []
         for token in _s2_tokens_for_bbox(bbox):
-            # Runs inside the boundary panel-fetch Celery task (via
-            # BoundaryProviderChain, see services/external_data.py), whose
-            # soft time limit is the real budget - the (connect, read) tuple
-            # just keeps a dead connection from eating that budget while a
-            # genuinely slow shard download may keep trickling within it.
+            # Runs inside the boundary panel-fetch Celery task (via BoundaryProviderChain, see
+            # services/external_data.py), whose soft time limit is the real budget - the (connect,
+            # read) tuple just keeps a dead connection from eating that budget while a genuinely
+            # slow shard download may keep trickling within it.
             response = self.session.get(f"{base_url}/{token}_buildings.csv.gz", timeout=(5, 60))
             if response.status_code == 404:
                 continue  # cell has no shard published (no buildings there)

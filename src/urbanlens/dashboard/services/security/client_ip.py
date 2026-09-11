@@ -26,22 +26,13 @@ logger = logging.getLogger(__name__)
 def client_ip(request: HttpRequest) -> str:
     """Return the client address, trusting only the proxies we put in front.
 
-    Counted from the right of ``X-Forwarded-For``, one place per proxy in
-    ``TRUSTED_PROXY_COUNT``. The leftmost entries arrive from the client and are
-    forgeable, so keying on them lets an attacker mint a fresh counter per
-    request and spray passwords through a throttle untouched; only the entries
-    our own proxies appended mean anything. A chain shorter than the configured
-    hop count means the request did not come through them, so it falls back to
-    the socket address.
-
     Args:
         request: The incoming HTTP request.
 
     Returns:
         A string address, or ``"unknown"`` when the socket address is missing.
         Suitable for use as a cache-key fragment; parse with
-        :func:`parse_ip` before comparing it to a network.
-    """
+        :func:`parse_ip` before comparing it to a network."""
     remote_addr = request.META.get("REMOTE_ADDR") or "unknown"
     hops = settings.TRUSTED_PROXY_COUNT
     if hops <= 0:
@@ -80,13 +71,7 @@ def parse_ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None
 @lru_cache(maxsize=8)
 def parse_networks(raw: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
     """Parse a comma-separated CIDR list into networks.
-
-    Cached on the raw string, because callers re-derive this from a setting on
-    every request and the result only changes when the setting does. That also
-    keeps a typo to one log line rather than one per request. The cache is
-    keyed by value, so a test that overrides the setting gets its own entry
-    rather than a stale one; ``maxsize`` is small because the number of distinct
-    allowlists a process ever sees is the number of settings that hold one.
+    Cached on the raw string, because callers re-derive this from a setting on every request and the result only changes when the setting does.
 
     Args:
         raw: Comma-separated CIDRs, e.g. ``"10.2.0.0/24, 127.0.0.1/32"``.
@@ -97,8 +82,7 @@ def parse_networks(raw: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Netw
         between every caller that passes the same string. An unparseable entry
         is logged and dropped rather than raising: this list gates access, so a
         typo must narrow what is reachable, never widen it or take the process
-        down at import time.
-    """
+        down at import time."""
     networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
     for entry in raw.split(","):
         candidate = entry.strip()

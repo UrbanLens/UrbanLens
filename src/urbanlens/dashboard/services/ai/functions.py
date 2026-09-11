@@ -7,11 +7,7 @@ if TYPE_CHECKING:
 
 
 def estimate_tokens(prompt: str) -> int:
-    """
-    Estimate the number of tokens in a given text prompt.
-
-    This method provides an approximation based on whitespace and common punctuation.
-
+    """Estimate the number of tokens in a given text prompt.
 
     Args:
         prompt (str):
@@ -19,9 +15,7 @@ def estimate_tokens(prompt: str) -> int:
 
     Returns:
         int:
-            The estimated token count for the given prompt.
-
-    """
+            The estimated token count for the given prompt."""
     # Basic whitespace tokenization as a rough approximation
     tokens = prompt.split()
 
@@ -38,10 +32,7 @@ def estimate_tokens(prompt: str) -> int:
 
 
 def estimate_combined_tokens(messages: MessageQueue | list[MessageType]) -> int:
-    """
-    Estimate the combined token count of a list of messages.
-
-    This method provides an approximation based on whitespace and common punctuation.
+    """Estimate the combined token count of a list of messages.
 
     Args:
         messages (MessageQueue | list[dict[str, str]]):
@@ -49,9 +40,7 @@ def estimate_combined_tokens(messages: MessageQueue | list[MessageType]) -> int:
 
     Returns:
         int:
-            The estimated combined token count for the given list of messages.
-
-    """
+            The estimated combined token count for the given list of messages."""
     tokens = 0
     for message in messages:
         tokens += estimate_tokens(message["content"])

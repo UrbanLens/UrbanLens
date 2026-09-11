@@ -1,11 +1,4 @@
-"""VirusTotal API v3 client: hash-based file report lookups only.
-
-Thin HTTP transport with no opinion about what counts as a "clean" verdict -
-see ``services.security.virustotal_scan`` for that policy. Deliberately does
-not upload files (``POST /files``): that endpoint returns no immediate
-verdict (it has to be polled separately once analysis completes), which buys
-nothing for the scan that triggered it - see that module's docstring.
-"""
+"""VirusTotal API v3 client: hash-based file report lookups only."""
 
 from __future__ import annotations
 
@@ -29,9 +22,7 @@ class VirusTotalGateway(Gateway):
     service_key: ClassVar[str] = "virustotal"
     paid_service: ClassVar[bool] = False
 
-    # default_factory, not a bare default: a dataclass field's bare default is evaluated
-    # once at class-definition/import time, so a later settings change never reaches
-    # subsequent instantiations - default_factory re-reads it fresh each time.
+    # default_factory so settings changes apply per instance; a bare default freezes at import.
     api_key: str | None = field(default_factory=lambda: settings.virustotal_api_key)
 
     def __post_init__(self) -> None:
@@ -43,20 +34,19 @@ class VirusTotalGateway(Gateway):
         """Look up an existing VirusTotal report for a file by its SHA-256 hash.
 
         Args:
-            sha256: The file's SHA-256 hex digest.
+                sha256: The file's SHA-256 hex digest.
 
         Returns:
-            The report's ``data.attributes`` dict (includes
-            ``last_analysis_stats``) when VirusTotal has already analyzed a
-            file with this hash, or ``None`` on HTTP 404 - not an error, just
-            "VirusTotal has never seen this exact file".
+                The report's ``data.attributes`` dict (includes
+                ``last_analysis_stats``) when VirusTotal has already analyzed a
+                file with this hash, or ``None`` on HTTP 404 - not an error, just
+                "VirusTotal has never seen this exact file".
 
         Raises:
-            GatewayRequestError: The request could not be made, VirusTotal
+                GatewayRequestError: The request could not be made, VirusTotal
                 returned a non-2xx status other than 404 (401 bad key, 429
                 rate limited, 5xx, ...), or the response body was not the
-                expected JSON shape.
-        """
+                expected JSON shape."""
         try:
             response = self.session.get(f"{_BASE_URL}/files/{sha256}", timeout=_REQUEST_TIMEOUT)
         except OSError as exc:

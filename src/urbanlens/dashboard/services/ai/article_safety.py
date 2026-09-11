@@ -1,13 +1,5 @@
 """Fail-closed safety classifier for AI-drafted article text.
-
-Every paragraph produced by the link-extraction writing assistant must pass
-through this judge before it is appended to a pin or wiki article. Unavailable
-gateways, empty responses, and unrecognized tokens are all treated as REJECT —
-moderation is never bypassed by turning the feature off (the caller skips
-expansion entirely when this feature's SiteSettings toggle is disabled).
-
-Follows ``services.trivia.classifier``'s allowlisted-``<ANSWER>`` token pattern.
-"""
+Unavailable gateways, empty responses, and unrecognized tokens are all treated as REJECT — moderation is never bypassed by turning the feature off (the caller skips expansion entirely when this feature's SiteSettings toggle is disabled)."""
 
 from __future__ import annotations
 

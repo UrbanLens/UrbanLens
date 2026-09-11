@@ -1,18 +1,5 @@
 """Opaque ``(timestamp, pk)`` cursors for keyset-paginated feeds.
-
-Keyset pagination is what every browse/sync feed on the external API uses
-instead of page numbers: concurrent inserts reorder page-numbered results
-under the reader, silently dropping or duplicating rows. A cursor pins the
-exact position instead.
-
-The token is base64 of ``"<isoformat>|<pk>"`` - opaque to clients (so the
-shape stays free to change) but not secret, since it only encodes a position
-in a feed the caller is already authorized to read.
-
-``services.pins.pin_sync`` predates this module and still carries its own private
-copies of the same two functions; it was left alone deliberately rather than
-refactored underneath a well-tested sync path.
-"""
+Keyset pagination is what every browse/sync feed on the external API uses instead of page numbers: concurrent inserts reorder page-numbered results under the reader, silently dropping or duplicating rows."""
 
 from __future__ import annotations
 
@@ -24,13 +11,7 @@ from django.utils import timezone
 
 
 class InvalidCursorError(ValueError):
-    """The supplied cursor is malformed or was never issued by this service.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should author its own user-facing text rather than relaying it - that
-    keeps a future raise site here from being able to smuggle unreviewed text
-    into a response just by adding a new ``raise``.
-    """
+    """The supplied cursor is malformed or was never issued by this service."""
 
 
 def encode_cursor(stamp: datetime, pk: int) -> str:
@@ -43,8 +24,7 @@ def encode_cursor(stamp: datetime, pk: int) -> str:
             would page inconsistently.
 
     Returns:
-        A URL-safe base64 token.
-    """
+        A URL-safe base64 token."""
     return base64.urlsafe_b64encode(f"{stamp.isoformat()}|{pk}".encode()).decode()
 
 
@@ -60,8 +40,7 @@ def decode_cursor(cursor: str) -> tuple[datetime, int]:
     Raises:
         InvalidCursorError: The token is malformed, or decodes to a naive
             datetime (every stored timestamp here is timezone-aware, so a
-            naive one means the token was not ours).
-    """
+            naive one means the token was not ours)."""
     try:
         raw = base64.urlsafe_b64decode(cursor.encode()).decode()
         stamp_raw, _, pk_raw = raw.rpartition("|")

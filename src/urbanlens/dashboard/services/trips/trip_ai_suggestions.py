@@ -1,38 +1,5 @@
 """AI trip suggestions (UL-60): pins worth adding, and a drive/weather/vote-aware schedule.
-
-Privacy model - two independent gates, both required before anything reaches the model:
-
-1. CANDIDATE POOL. A location is only ever offered as an "add this pin"
-   suggestion when EVERY joined trip member already has it pinned on their
-   own map, unconditionally - this never bypasses even for members who have
-   external sharing off, because it's a pure membership check, never data
-   sent anywhere. Suggesting a location only some members have would leak
-   that member's private pin to the others; requiring universal membership
-   makes that structurally impossible.
-2. PERSONAL SIGNALS. For a candidate location, only members with
-   ``Profile.external_apis_enabled`` on contribute their own visited /
-   priority / vulnerability / danger signal to what the model sees. Members
-   who opted out still count toward "does everyone have this pinned" (that
-   check never touches the model) but their personal ratings are withheld
-   completely - not aggregated, not anonymized-and-included, just absent.
-
-Existing trip activities (title, schedule, aggregate up/down votes) are
-already visible to every joined member through the trip page itself, so they
-need no extra gating beyond the same per-viewer location-visibility rule the
-trip page already applies (``services.trips.trip_visibility``) - an activity whose
-location is hidden from the requester is dropped before it ever reaches the
-prompt, exactly as it would be dropped from their view of the page itself.
-
-No member's identity (name, username, profile id) is ever sent to the model.
-Per-member signals are labeled "Member 1", "Member 2"... using a dense,
-trip-scoped anonymous index assigned only across sharing-enabled members (so
-the numbering itself can't reveal that non-participating members exist).
-
-Results are cached per (trip, requester) for a short TTL - the underlying
-data is shared/anonymized already, but each viewer's own pin slugs (needed
-for their personal "Add to trip" button) differ, so caching stays per-viewer
-rather than trying to share one cache entry across the whole trip.
-"""
+A location is only ever offered as an "add this pin" suggestion when EVERY joined trip member already has it pinned on their own map, unconditionally - this never bypasses even for members who have external sharing off, because it's a pure membership check, never data sent anywhere."""
 
 from __future__ import annotations
 
@@ -150,13 +117,7 @@ _UNAVAILABLE = TripSuggestions(summary="", pin_suggestions=[], schedule=None, ge
 
 def _joined_profiles(trip: Trip) -> list[Profile]:
     """Profiles of every member who has actually joined the trip (not just invited).
-
-    The creator is always treated as joined, matching ``_viewer_has_joined``/
-    ``_can_perform`` elsewhere - defensive against a creator row somehow
-    missing its own membership, since this set gates what's privacy-safe to
-    show the model and under-counting it would be the safe direction anyway,
-    but over-counting (treating a non-member as joined) never happens here.
-    """
+    The creator is always treated as joined, matching ``_viewer_has_joined``/ ``_can_perform`` elsewhere - defensive against a creator row somehow missing its own membership, since this set gates what's privacy-safe to show the model and under-counting it would be the safe direction anyway, but over-counting (treating a non-member as joined) never happens here."""
     from urbanlens.dashboard.models.trips.model import TripMembership
 
     profiles = {m.profile_id: m.profile for m in TripMembership.objects.filter(trip=trip, status=TripMembership.STATUS_JOINED).select_related("profile")}
@@ -201,10 +162,9 @@ def _build_candidates(profiles: list[Profile], requester: Profile, exclude_locat
         requester_pin = requester_pins.get(location_id)
         location_pins = by_location.get(location_id)
         if requester_pin is None or not location_pins:
-            # Requester must have their own pin to add it (guaranteed by the
-            # intersection above); no sharing-enabled data means nothing safe
-            # to tell the model about this location, so it's skipped rather
-            # than suggested blind.
+            # Requester must have their own pin to add it (guaranteed by the intersection above); no
+            # sharing-enabled data means nothing safe to tell the model about this location, so it's
+            # skipped rather than suggested blind.
             continue
         signals = [
             MemberSignal(
@@ -281,11 +241,10 @@ def _weather_summary(activities: list[TripActivity], requester: Profile) -> tupl
     end = max(scheduled_at.date() for _activity, scheduled_at in dated)
     by_day: dict[datetime.date, list[ForecastSlot]] = {}
     for slot in slots:
-        # `start`/`end` come from aware-UTC `scheduled_at` values, so bucket
-        # by the UTC calendar day when the slot is UTC-anchored (see the
-        # `ForecastSlot` contract) - grouping by the provider-local `date`
-        # would land near-midnight slots in the wrong day. Slots without
-        # `date_utc` keep the wall-clock grouping.
+        # `start`/`end` come from aware-UTC `scheduled_at` values, so bucket by the UTC calendar day
+        # when the slot is UTC-anchored (see the `ForecastSlot` contract) - grouping by the
+        # provider-local `date` would land near-midnight slots in the wrong day.
+        # Slots without `date_utc` keep the wall-clock grouping.
         slot_date = slot.get("date_utc") or slot.get("date")
         if slot_date is None:
             continue

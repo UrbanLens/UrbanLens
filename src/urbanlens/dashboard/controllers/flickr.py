@@ -1,20 +1,4 @@
-"""Flickr integration controller.
-
-Three groups of views:
-
-- Settings ("Connect Flickr"): ``FlickrSettingsView`` (read-only subsection
-  partial), ``FlickrConnectView``/``FlickrCallbackView`` (OAuth 1.0a 3-legged
-  flow), ``FlickrDisconnectView``.
-- Pin detail ("Import from Flickr"): server-side geo search over *one user's
-  own* OAuth-connected library (no thumbnail proxy needed - Flickr's photo
-  URLs are public, capability-scoped per photo) and a Celery-backed import
-  with progress polling.
-- Pin/wiki Media ("Import a Flickr Album"): given the public URL of *any*
-  Flickr user's public album/photoset (no OAuth involved - see
-  ``services.apis.flickr.public``), preview its photos and import selected
-  ones. Same picker + Celery-progress-polling shape as the section above,
-  parameterized over a pin or a wiki target.
-"""
+"""Flickr integration controller."""
 
 from __future__ import annotations
 

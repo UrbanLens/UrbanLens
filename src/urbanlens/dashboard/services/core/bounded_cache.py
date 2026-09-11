@@ -1,17 +1,4 @@
-"""Cache a proxied body only when it is small enough to be worth storing.
-
-Four views proxy bytes from somewhere else and cache them so the next request
-does not re-fetch: Google Photos previews, Immich thumbnails, and the two map
-tile proxies. All four wrote whatever came back into the single 512MB Valkey
-that also holds sessions, the Channels layer and the Celery broker, under
-`volatile-lru` - so a large enough body does not merely waste space, it evicts
-other people's sessions.
-
-Three of the four ask the provider for a thumbnail, so an oversized body means
-the provider ignored the request. That is the case this exists for: serve it,
-decline to store it, and say so once in the log rather than silently filling the
-instance everything else shares.
-"""
+"""Cache a proxied body only when it is small enough to be worth storing."""
 
 from __future__ import annotations
 
@@ -24,7 +11,6 @@ logger = logging.getLogger(__name__)
 #: Anything the cache can raise when it cannot answer.
 _CACHE_ERRORS = (ConnectionError, OSError, RuntimeError, ValueError)
 
-#: Largest proxied body worth storing. A thumbnail is tens of kilobytes; this is
 #: generous enough that a normal one always caches and a surprise never does.
 MAX_CACHED_BODY_BYTES = 512 * 1024
 

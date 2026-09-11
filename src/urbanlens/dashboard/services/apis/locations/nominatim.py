@@ -22,11 +22,10 @@ _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urba
 # is read, since the raw value is also used as a pin-naming candidate.
 _OSM_TYPE_PREFIX_PATTERN = re.compile(r"^(node|way|relation)\s*:\s*", re.IGNORECASE)
 
-# Curated extratags worth surfacing beyond the headline fields (website, phone,
-# hours, operator) already broken out individually. Ordered by roughly how
-# often they're useful across the amenity/tourism/historic/shop types this
-# panel sees. Value is the human label; boolean-ish values are humanized
-# separately by ``humanize_tag_value``.
+# Curated extratags worth surfacing beyond the headline fields (website, phone, hours, operator)
+# already broken out individually.
+# Ordered by roughly how often they're useful across the amenity/tourism/historic/shop types this
+# panel sees.
 _EXTRA_DETAIL_FIELDS: tuple[tuple[str, str], ...] = (
     ("cuisine", "Cuisine"),
     ("religion", "Religion"),
@@ -65,13 +64,8 @@ def _humanize_osm_key(value: str) -> str:
 
 @dataclass(slots=True, kw_only=True)
 class NominatimGateway(Gateway):
-    """
-    Reverse-geocodes coordinates via the Nominatim API and returns rich place metadata.
-
-    Nominatim is free and requires no API key, but enforces a 1-request/second
-    rate limit.  The LocationCache layer ensures we only query once per 7 days,
-    so this is not a concern in practice.
-    """
+    """Reverse-geocodes coordinates via the Nominatim API and returns rich place metadata.
+    The LocationCache layer ensures we only query once per 7 days, so this is not a concern in practice."""
 
     service_key: ClassVar[str] = "nominatim"
     paid_service: ClassVar[bool] = False
@@ -98,12 +92,10 @@ class NominatimGateway(Gateway):
             resp.raise_for_status()
             raw = resp.json()
         except RateLimitExceededError:
-            # Propagated, not flattened to [], for the same reason
-            # ``reverse_geocode_admin`` propagates: a caller cannot otherwise tell
-            # "Nominatim knows of no such place" from "we did not ask". Callers
-            # that treat the two alike still may - they just have to say so.
-            # Logging a traceback here would also mean one per refused call, and
-            # this service is capped at one call a minute app-wide.
+            # Propagated, not flattened to [], for the same reason ``reverse_geocode_admin``
+            # propagates: a caller cannot otherwise tell "Nominatim knows of no such place" from "we
+            # did not ask".
+            # Callers that treat the two alike still may - they just have to say so.
             raise
         except Exception:
             logger.exception("Nominatim search failed for %r", query)
@@ -138,32 +130,25 @@ class NominatimGateway(Gateway):
         return [self._normalise(item) for item in raw if isinstance(item, dict)]
 
     def reverse_geocode_admin(self, latitude: float, longitude: float) -> dict[str, str] | None:
-        """
-        Reverse-geocode coordinates to just their country/state/city, for admin-level comparisons.
-
-        A lighter sibling of ``reverse_geocode()`` - used by
-        ``services.spotguessr.geo_bonus`` to score a guess point's
-        administrative area against a round's answer location, which only
-        needs these three fields, not the full place-metadata shape
-        ``_normalise()`` builds for the location-info panel.
+        """Reverse-geocode coordinates to just their country/state/city, for admin-level comparisons.
+        A lighter sibling of ``reverse_geocode()`` - used by ``services.spotguessr.geo_bonus`` to score a guess point's administrative area against a round's answer location, which only needs these three fields, not the full place-metadata shape ``_normalise()`` builds for the location-info panel.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
 
         Returns:
-            ``{"country": ..., "state": ..., "city": ...}`` (each possibly
-            an empty string if Nominatim didn't report it), or None if
-            Nominatim returned a genuine "nothing found" response.
+                ``{"country": ..., "state": ..., "city": ...}`` (each possibly
+                an empty string if Nominatim didn't report it), or None if
+                Nominatim returned a genuine "nothing found" response.
 
         Raises:
-            Exception: on a request/transport failure (including a
+                Exception: on a request/transport failure (including a
                 ``RateLimitExceededError`` from the shared rate-limited
                 session) - deliberately NOT swallowed to None here, so a
                 transient failure isn't indistinguishable from a real
                 "no result" to ``geo_bonus``'s caching layer (which gives
-                the two cases very different TTLs; see its docstring).
-        """
+                the two cases very different TTLs; see its docstring)."""
         params: dict[str, str | int | float] = {"lat": latitude, "lon": longitude, "format": "json", "addressdetails": 1}
         resp = self.session.get(
             f"{self.base_url}/reverse",
@@ -185,16 +170,14 @@ class NominatimGateway(Gateway):
         }
 
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any] | None:
-        """
-        Reverse-geocode coordinates and return structured place metadata.
+        """Reverse-geocode coordinates and return structured place metadata.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
 
         Returns:
-            Dict with place metadata, or None if no result or an error occurred.
-        """
+                Dict with place metadata, or None if no result or an error occurred."""
         try:
             params: dict[str, str | int | float] = {
                 "lat": latitude,
@@ -238,10 +221,9 @@ class NominatimGateway(Gateway):
         tourism = extra.get("tourism") or address.get("tourism") or ""
         historic = extra.get("historic") or address.get("historic") or ""
 
-        # A single human label for the place's kind, preferring the specific
-        # OSM primary tag (e.g. "golf_course") over the broader class/category
-        # ("leisure") and the coarser amenity/tourism/historic/building
-        # fallbacks already parsed above.
+        # A single human label for the place's kind, preferring the specific OSM primary tag (e.g.
+        # "golf_course") over the broader class/category ("leisure") and the coarser
+        # amenity/tourism/historic/building fallbacks already parsed above.
         raw_type = raw.get("type") or ""
         kind_source = raw_type if raw_type and raw_type != "yes" else amenity or tourism or historic or building or raw.get("category") or raw.get("class") or ""
         kind_label = _humanize_osm_key(kind_source) if kind_source else ""
@@ -253,10 +235,10 @@ class NominatimGateway(Gateway):
             # rather than trying to hotlink an unresolved image.
             image = f"https://commons.wikimedia.org/wiki/{image}"
 
-        # Address-breakdown facts (from addressdetails=1, not extratags) - these
-        # exist for nearly every reverse-geocode result, even a bare point with
-        # no OSM tags of its own beyond geometry, so surfacing them keeps the
-        # panel from looking sparse/empty for the common "no extra tags" case.
+        # Address-breakdown facts (from addressdetails=1, not extratags) - these exist for nearly
+        # every reverse-geocode result, even a bare point with no OSM tags of its own beyond
+        # geometry, so surfacing them keeps the panel from looking sparse/empty for the common "no
+        # extra tags" case.
         address_details = [
             {"key": key, "label": label, "value": address[key]}
             for key, label in (("neighbourhood", "Neighbourhood"), ("suburb", "Suburb"), ("county", "County"), ("postcode", "Postcode"))

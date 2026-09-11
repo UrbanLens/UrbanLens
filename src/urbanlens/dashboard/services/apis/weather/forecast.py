@@ -14,28 +14,12 @@ from typing import Any, NotRequired, TypedDict
 
 class ForecastSlot(TypedDict):
     """One forecast time slot, in a shape independent of the source provider.
+    Time arithmetic (matching a slot to a scheduled activity, bucketing by day) must use ``date_utc`` instead."""
 
-    ``date`` is the provider's own wall clock, kept for display and carrying
-    **no timezone contract**: Open-Meteo publishes local time for the queried
-    coordinates, OpenWeatherMap publishes UTC, and REData passes through
-    whatever its upstream emitted. Time arithmetic (matching a slot to a
-    scheduled activity, bucketing by day) must use ``date_utc`` instead.
-
-    ``date_utc`` is always timezone-aware UTC when present. Converters derive
-    it as: an aware provider timestamp is ``astimezone(UTC)``; a naive one is
-    assumed to already be UTC (correct for OpenWeatherMap's ``dt_txt``, and
-    the documented assumption for REData) - except Open-Meteo, whose naive
-    local timestamps are first anchored with the response's own
-    ``utc_offset_seconds``. It is absent only when a converter had no way to
-    anchor the provider's wall clock.
-    """
-
-    #: Naive **UTC**, so slots from different providers are comparable and can be
-    #: matched against `Activity.scheduled_at` (also stored UTC). Providers that
-    #: report local time convert on the way out - see `OpenMeteoGateway`, which
-    #: requests `timezone=auto` for its own local-time behaviour and subtracts
-    #: the `utc_offset_seconds` it reports back. Not displayed anywhere; the
-    #: rendered slots carry their own labels.
+    #: Naive **UTC**, so slots from different providers are comparable and can be matched against
+    #: `Activity.scheduled_at` (also stored UTC).
+    #: Providers that report local time convert on the way out - see `OpenMeteoGateway`, which
+    #: requests `timezone=auto` for its own local-time behaviour and subtracts the
     date: datetime
     #: The slot's instant as an aware UTC datetime - see the class docstring
     #: for the per-provider derivation and when it can be absent.
@@ -54,13 +38,7 @@ class ForecastSlot(TypedDict):
 
 class SunTimes(TypedDict):
     """Sunrise/sunset and golden-hour windows for one local calendar day.
-
-    Golden hour is approximated as the hour immediately after sunrise and
-    the hour immediately before sunset - the common photography-app
-    convention, rather than a precise solar-elevation calculation (which
-    would need a separate astronomy library); good enough for planning
-    purposes.
-    """
+    Golden hour is approximated as the hour immediately after sunrise and the hour immediately before sunset - the common photography-app convention, rather than a precise solar-elevation calculation (which would need a separate astronomy library); good enough for planning purposes."""
 
     sunrise: datetime
     sunset: datetime

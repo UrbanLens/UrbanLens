@@ -51,17 +51,7 @@ def _profile(request) -> Profile:
 
 
 def comment_image_error(image_file) -> str | None:
-    """Validate an image attached to a comment (pin, wiki, or trip) before accepting it.
-
-    Shared by all three comment POST handlers - comments don't go through
-    the ``Image`` model, so they can't reuse ``services.media.images.image_upload_error``
-    directly, but every upload still gets the same size/content-type checks
-    before it's ever saved. The antivirus scan itself is deliberately
-    skipped here - it's slow and occasionally unavailable (a clamd hiccup
-    used to fail the whole comment submission outright) - and instead runs
-    asynchronously after the comment is created (see ``start_comment_image_scan``
-    and ``tasks.scan_comment_image``/``scan_trip_comment_image``), with the
-    comment hidden from other viewers until it clears.
+    """Validate an image attached to a comment before accepting it.
 
     Args:
         image_file: The uploaded file from ``request.FILES.get("image")``.

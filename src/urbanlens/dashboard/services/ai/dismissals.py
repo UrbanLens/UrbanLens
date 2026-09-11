@@ -1,17 +1,4 @@
-"""The client's own dismissal ring (plan §10, batch 4) - never a server-side registry.
-
-Explainer and onboarding-tour-card ids are include args, and several are
-generated dynamically, so a Python registry keyed by id would drift the same
-way a hand-maintained ``PAGE_HELP``-style dict would (see that module's own
-docstring) - except here a template-parsing contract test can't see the
-dynamic ones either. Instead the client itself captures what it just showed
-the user (``_page_explainer_script.html``'s ``collapse()``,
-``onboarding-tour.ts``'s ``dismiss()``) into a capped sessionStorage ring and
-sends it with every assistant turn. This module only parses and re-caps that
-payload - the model only ever sees text the user's own page actually
-rendered, and ``services.ai.tools.dismissals``'s ``user_content_fields``
-declaration is what wraps it as untrusted content before it reaches a prompt.
-"""
+"""The client's own dismissal ring (plan §10, batch 4) - never a server-side registry."""
 
 from __future__ import annotations
 
@@ -77,17 +64,13 @@ def _entry_from_dict(item: Any) -> DismissalEntry | None:
 
 def dismissals_from_list(data: list[Any] | None) -> tuple[DismissalEntry, ...]:
     """Rebuild verified :class:`DismissalEntry` objects from a Celery-safe list of dicts.
-
-    Every entry is re-validated and re-capped, matching :func:`parse_dismissals_json` -
-    a malformed or oversized item is dropped, never raised, since this also
-    runs on ``ai-worker`` against whatever the web view enqueued.
+    Every entry is re-validated and re-capped, matching :func:`parse_dismissals_json` - a malformed or oversized item is dropped, never raised, since this also runs on ``ai-worker`` against whatever the web view enqueued.
 
     Args:
         data: The task's own ``dismissals`` argument, or ``None``.
 
     Returns:
-        Up to :data:`MAX_DISMISSALS` verified entries, in the given order.
-    """
+        Up to :data:`MAX_DISMISSALS` verified entries, in the given order."""
     if not isinstance(data, list):
         return ()
     entries = (_entry_from_dict(item) for item in data[:MAX_DISMISSALS])
@@ -101,17 +84,13 @@ def dismissals_to_list(entries: tuple[DismissalEntry, ...]) -> list[dict[str, An
 
 def parse_dismissals_json(raw: str) -> tuple[DismissalEntry, ...]:
     """Parse the request body's raw ``dismissals`` JSON string into verified entries.
-
-    Never raises - a missing, malformed, or oversized payload just yields
-    fewer (or zero) entries, the same way an unresolvable page path yields no
-    page context.
+    Never raises - a missing, malformed, or oversized payload just yields fewer (or zero) entries, the same way an unresolvable page path yields no page context.
 
     Args:
         raw: The POST body's ``dismissals`` value - a JSON array, or ``""``.
 
     Returns:
-        Up to :data:`MAX_DISMISSALS` verified entries.
-    """
+        Up to :data:`MAX_DISMISSALS` verified entries."""
     if not raw:
         return ()
     try:

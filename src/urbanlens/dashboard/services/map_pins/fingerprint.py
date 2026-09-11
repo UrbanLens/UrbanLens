@@ -1,14 +1,5 @@
 """A value that changes whenever a profile's map would draw differently.
-
-`Max(Pin.updated)` alone cannot see a deletion - remove any pin but the most
-recently updated one and it is unchanged - so a pin deleted in another tab stayed
-on the map. Pairing it with the row count closes that.
-
-Everything that changes a pin's appearance without writing the pin row moves
-`Pin.updated` through `services.map_pins.touch`, which is why this does not also
-aggregate over the label tables. A write path that changes what a pin draws
-without touching it would go unnoticed here; fix that in `touch`.
-"""
+`Max(Pin.updated)` alone cannot see a deletion - remove any pin but the most recently updated one and it is unchanged - so a pin deleted in another tab stayed on the map."""
 
 from __future__ import annotations
 

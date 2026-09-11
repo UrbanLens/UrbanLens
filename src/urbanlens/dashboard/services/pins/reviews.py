@@ -1,12 +1,5 @@
 """Upsert/clear logic for a profile's own star rating on a pin.
-
-A :class:`~urbanlens.dashboard.models.reviews.model.Review` is always the
-caller's own opinion of their own pin - there is exactly one per
-``(profile, pin)`` pair, enforced by a ``unique_together`` constraint. Both the
-internal star-rating widget and the external API act on that pair rather than
-on a Review id, so the "create it the first time, update it afterwards" rule
-lives here instead of being written twice.
-"""
+Both the internal star-rating widget and the external API act on that pair rather than on a Review id, so the "create it the first time, update it afterwards" rule lives here instead of being written twice."""
 
 from __future__ import annotations
 

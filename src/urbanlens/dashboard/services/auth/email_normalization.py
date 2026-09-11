@@ -19,18 +19,12 @@ _GMAIL_DOMAINS = frozenset({"gmail.com", "googlemail.com"})
 def normalize_email(email: str) -> str:
     """Return a canonical form of ``email`` suitable for equality comparisons.
 
-    Always lowercases and strips surrounding whitespace. For Gmail addresses
-    (``gmail.com``/``googlemail.com``) also strips dots from the local part and
-    anything from a ``+`` onward, since Gmail treats those as equivalent to the
-    same mailbox (e.g. ``Jake.Smith+spam@gmail.com`` -> ``jakesmith@gmail.com``).
-
     Args:
         email: Raw email address as entered by a user.
 
     Returns:
         The normalized address. Never raises on malformed input - callers are
-        expected to validate format separately (e.g. via ``validate_email``).
-    """
+        expected to validate format separately (e.g. via ``validate_email``)."""
     normalized = email.strip().lower()
     local, _, domain = normalized.rpartition("@")
     if not domain or domain not in _GMAIL_DOMAINS:
@@ -43,11 +37,7 @@ def normalize_email(email: str) -> str:
 
 def find_user_by_email(email: str, *, active_only: bool = True) -> User | None:
     """Look up a User whose primary or verified secondary email matches.
-
-    Matching is done on the normalized form of ``email`` via the indexed
-    ``Profile.primary_email_normalized`` cache and verified ``ProfileEmail``
-    rows, so Gmail dot/plus variants and case differences all resolve to the
-    same account without scanning every user.
+    Matching is done on the normalized form of ``email`` via the indexed ``Profile.primary_email_normalized`` cache and verified ``ProfileEmail`` rows, so Gmail dot/plus variants and case differences all resolve to the same account without scanning every user.
 
     Args:
         email: Raw email address to look up.
@@ -58,8 +48,7 @@ def find_user_by_email(email: str, *, active_only: bool = True) -> User | None:
             verification" hint), never for anything that grants access.
 
     Returns:
-        The matching User, or None if no account matches.
-    """
+        The matching User, or None if no account matches."""
     from urbanlens.dashboard.models.profile.email import ProfileEmail
     from urbanlens.dashboard.models.profile.model import Profile
 

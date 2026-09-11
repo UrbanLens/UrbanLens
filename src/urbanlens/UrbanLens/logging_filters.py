@@ -4,14 +4,7 @@ import logging
 
 
 class HealthCheckAccessLogFilter(logging.Filter):
-    """Silences the ASGI access log line for the health check endpoint.
-
-    Args:
-        record: The log record to evaluate.
-
-    Returns:
-        False to drop the record, True to let it through.
-    """
+    """Drop ASGI access log lines for the health endpoint."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         if record.levelno != logging.INFO:

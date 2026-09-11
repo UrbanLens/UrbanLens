@@ -48,22 +48,12 @@ class AutocompleteResult:
 def search_local(query: str, profile) -> list[AutocompleteResult]:
     """Search the local DB for pins, locations, and their aliases matching *query*.
 
-    Covers:
-    - Pin name (effective name)
-    - Pin aliases (PinAlias)
-    - Pin personal notes / description
-    - Label / tag names assigned to the pin
-    - Location canonical name
-    - Wiki aliases (WikiAlias / community wiki aliases)
-    - Location description
-
     Args:
         query: Raw search string (may be a partial word).
         profile: The requesting user's Profile instance.
 
     Returns:
-        Up to 12 ordered AutocompleteResult items, most relevant first.
-    """
+        Up to 12 ordered AutocompleteResult items, most relevant first."""
     from django.db.models import Q
 
     from urbanlens.dashboard.models.pin import Pin
@@ -80,11 +70,10 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     q_lower = q.lower()
     seen_pin_ids: set[int] = set()
 
-    # -- Pin search ---------------------------------------------------------------
-    # Single query with OR across all relevant text fields. Deliberately not
-    # restricted to root pins: jumping to a child (sub) pin must always work,
-    # even though the map hides child pins unless their layer is on - the map
-    # turns the layer on when the user jumps to one (see _onLocationSelect).
+    # -- Pin search --------------------------------------------------------------- Single query
+    # with OR across all relevant text fields.
+    # Deliberately not restricted to root pins: jumping to a child (sub) pin must always work, even
+    # though the map hides child pins unless their layer is on - the map turns the layer on when the
     pin_qs = (
         Pin.objects.filter(profile=profile)
         .select_related("location__wiki", "parent_pin", "parent_pin__location")
@@ -108,17 +97,10 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
             continue
         seen_pin_ids.add(pin.id)
 
-        # A pin's own fields justify surfacing it regardless of its wiki's
-        # concealment state - nothing wiki-scoped is being disclosed. But the
-        # query above also matches via location__wiki__* clauses, and a pin
-        # whose *only* reason for matching is a concealed wiki's live
-        # name/description/alias is exactly the substring oracle
-        # docs/PROBLEMS.md's 2026-08-24 entry describes, one hop further out.
-        # Wiki.objects.get_for_location, not the reverse accessor directly -
-        # `Location.wiki` raises RelatedObjectDoesNotExist rather than
-        # returning None when the location has no wiki yet, even with
-        # select_related (the descriptor caches "there is none" as an
-        # exception, not a cached None).
+        # A pin's own fields justify surfacing it regardless of its wiki's concealment state -
+        # nothing wiki-scoped is being disclosed.
+        # Wiki.objects.get_for_location, not the reverse accessor directly - `Location.wiki` raises
+        # RelatedObjectDoesNotExist rather than returning None when the location has no wiki yet,
         wiki = Wiki.objects.get_for_location(pin.location) if pin.location_id and pin.location is not None else None
         if wiki is not None and concealment_active(wiki, profile) and not _pin_own_fields_match(pin, q_lower):
             from urbanlens.dashboard.services.global_search.providers import _concealed_wiki_haystacks, _terms_survive
@@ -150,11 +132,6 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
             ),
         )
 
-    # -- Wiki search (community pages) -------------------------------------------
-    # Scoped to the wikis this user can actually open, asked of the access
-    # authority rather than restated here: "has a pin on the exact location" is
-    # one of its four clauses, so a pin sharing the place's domain opened the
-    # wiki page while its name refused to autocomplete.
     seen_wiki_ids: set[int] = set()
     wiki_qs = (
         Wiki.objects.filter(
@@ -171,12 +148,10 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         seen_wiki_ids.add(wiki.id)
         if wiki.location is None or wiki.location.latitude is None or wiki.location.longitude is None:
             continue
-        # Re-verify against what this viewer would actually be shown - the SQL
-        # match above ran against the live name/description/aliases, which is
-        # precisely what concealment exists to hide. Surviving that check only
-        # says the wiki may appear in the list; the title itself must still
-        # come from the concealed value, or a term matched via a friend's
-        # alias would display the wiki's true, stranger-renamed title.
+        # Re-verify against what this viewer would actually be shown - the SQL match above ran
+        # against the live name/description/aliases, which is precisely what concealment exists to
+        # hide.
+        # Surviving that check only says the wiki may appear in the list; the title itself must
         from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
 
         if concealment_active(wiki, profile):
@@ -200,15 +175,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
 
 
 def _pin_own_fields_match(pin, q_lower: str) -> bool:
-    """Whether *q_lower* matches the pin's own data, ignoring anything wiki-scoped.
-
-    Used to tell "this pin matched on its own name/notes/labels" (always fine
-    to surface, concealment or not) apart from "this pin matched only via its
-    location's wiki" (needs the concealed-content re-check). A place's
-    external tags count as "own data" the same way ``location.official_name``
-    already does below - they're provider (OSM/Overture) facts about the
-    place, not wiki-authored content.
-    """
+    """Whether *q_lower* matches the pin's own data, ignoring anything wiki-scoped."""
     if q_lower in (pin.name or "").lower():
         return True
     if any(q_lower in alias.name.lower() for alias in pin.aliases.all()):
@@ -288,17 +255,14 @@ def _pin_match_subtitle(pin, q_lower: str, profile) -> str:
 
 def search_google_places(query: str, api_key: str) -> list[AutocompleteResult]:
     """Proxy a Google Places Autocomplete request (hides the API key from the browser).
-
-    Coordinates are intentionally omitted here; they are resolved lazily in
-    `resolve_google_place` only when the user selects a suggestion.
+    Coordinates are intentionally omitted here; they are resolved lazily in `resolve_google_place` only when the user selects a suggestion.
 
     Args:
         query: User's search text.
         api_key: Google Maps / Places API key.
 
     Returns:
-        Up to 6 place suggestions without coordinates.
-    """
+        Up to 6 place suggestions without coordinates."""
     from urbanlens.dashboard.services.apis.locations import places_resolution
 
     results: list[AutocompleteResult] = []
@@ -331,15 +295,11 @@ def search_google_places(query: str, api_key: str) -> list[AutocompleteResult]:
 def empty_suggestions(profile) -> list[AutocompleteResult]:
     """Return suggestions for an empty search input: top cities by pin count.
 
-    Used when the search bar is focused but empty, giving the user quick
-    navigation shortcuts based on where they have the most pins.
-
     Args:
         profile: The requesting user's Profile instance.
 
     Returns:
-        Up to 2 city suggestions ordered by descending pin count.
-    """
+        Up to 2 city suggestions ordered by descending pin count."""
     from django.db.models import Count
 
     from urbanlens.dashboard.models.pin import Pin

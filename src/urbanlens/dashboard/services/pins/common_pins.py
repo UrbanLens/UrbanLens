@@ -1,10 +1,4 @@
-"""Locations pinned by every member of a group of profiles.
-
-Used today for the pairwise "Places in Common" stat/page on the profile
-page, but written to intersect any number of profiles so it also covers
-the "expand to groups, e.g. trips" follow-up called out in the same
-feature request without a later rewrite.
-"""
+"""Locations pinned by every member of a group of profiles."""
 
 from __future__ import annotations
 
@@ -23,23 +17,13 @@ if TYPE_CHECKING:
 
 def pinned_place_keys(profile: Profile) -> set[tuple[str, int]]:
     """One key per real-world thing this profile has pinned.
-
-    Keyed by *place* where one is known, falling back to the exact Location
-    otherwise. That is what makes the count mean what people expect it to:
-    two friends who explored the same property and pinned it fifty metres
-    apart used to show zero places in common, because their coordinates
-    resolved to different Location rows. Reused by every other "do these
-    profiles/pins share a place" check in the codebase (profile common-pin
-    visibility, wiki community counts, trip common-pin visibility) rather
-    than each reimplementing the same place-vs-location fallback - see
-    docs/audits/GOALS_CODE_AUDIT.md ("Cross-pin aggregate comparison level").
+    Keyed by *place* where one is known, falling back to the exact Location otherwise.
 
     Args:
         profile: The profile whose pins to key.
 
     Returns:
-        Set of ``("place", id)`` / ``("location", id)`` keys.
-    """
+        Set of ``("place", id)`` / ``("location", id)`` keys."""
     keys: set[tuple[str, int]] = set()
     for location_id, place_id in Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", "location__place_id"):
         keys.add(("place", place_id) if place_id is not None else ("location", location_id))
@@ -48,10 +32,7 @@ def pinned_place_keys(profile: Profile) -> set[tuple[str, int]]:
 
 def common_pin_location_ids(profiles: Sequence[Profile]) -> set[int]:
     """Return the ids of locations pinned by every one of ``profiles``.
-
-    Two profiles count as sharing a place when their pins resolve onto the
-    same real-world thing, not only when they land on the identical
-    coordinate row (see :func:`pinned_place_keys`).
+    Two profiles count as sharing a place when their pins resolve onto the same real-world thing, not only when they land on the identical coordinate row (see :func:`pinned_place_keys`).
 
     Args:
         profiles: The profiles to intersect. Fewer than two profiles can
@@ -60,8 +41,7 @@ def common_pin_location_ids(profiles: Sequence[Profile]) -> set[int]:
 
     Returns:
         The set of ``Location`` ids - one representative per shared place -
-        pinned by all of ``profiles``.
-    """
+        pinned by all of ``profiles``."""
     if len(profiles) < 2:
         return set()
     shared = set.intersection(*[pinned_place_keys(profile) for profile in profiles])

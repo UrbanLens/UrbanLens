@@ -46,14 +46,10 @@ def gpx_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, A
     try:
         text = file_contents.decode("utf-8")
 
-        # gpxpy builds its XML tree internally (preferring raw lxml.etree.XML,
-        # falling back to stdlib ElementTree.XML - see gpxpy.parser.GPXParser),
-        # with no parameter to inject a hardened parser and no XXE hardening of
-        # its own. Pre-parse the same text with defusedxml first, purely to
-        # reject a malicious payload (DTD declarations, entity expansion,
-        # external entity references) before it ever reaches gpxpy; the parsed
-        # tree itself is discarded here since gpxpy still does the real,
-        # GPX-aware parse on the now-vetted text immediately below.
+        # gpxpy builds its XML tree internally (preferring raw lxml.etree.XML, falling back to
+        # stdlib ElementTree.XML - see gpxpy.parser.GPXParser), with no parameter to inject a
+        # hardened parser and no XXE hardening of its own.
+        # Pre-parse the same text with defusedxml first, purely to reject a malicious payload (DTD
         parse_xml_defused(text)
 
         gpx = gpxpy.parse(text)

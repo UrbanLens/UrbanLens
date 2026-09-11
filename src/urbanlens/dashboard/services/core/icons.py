@@ -1,25 +1,5 @@
 """Validation for user-supplied icon values on the way into the database.
-
-``Pin.icon`` and ``Label.icon`` are plain ``CharField``s with no validator and no
-choices, assigned straight from request data - exactly where colours were before
-``services.core.colors.clean_color``. The field holds three different shapes
-depending on which picker wrote it, and the renderers branch on that shape:
-
-* a Material Icons name (``[a-z0-9_]+``), rendered as glyph text;
-* a URL for an uploaded custom icon, rendered into ``<img src="...">``;
-* an emoji, rendered as text - either one the icon picker's own catalogue
-  offers, or one the heuristic below recognises.
-
-The ``<img src>`` branch is the one that matters. The client half is already
-covered (``_ulEscAttr`` in the map page, plus the ``^(https?://|/)`` test in
-front of it), so this is the server half: a value that is not one of the three
-shapes has no business being stored, and a renderer added later should not have
-to rediscover the rule.
-
-Invalid input is coerced to the caller's default rather than raising, matching
-``clean_color``: these values come from icon pickers, so anything else is a
-malformed request rather than a user mistake worth reporting.
-"""
+The client half is already covered (``_ulEscAttr`` in the map page, plus the ``^(https?://|/)`` test in front of it), so this is the server half: a value that is not one of the three shapes has no business being stored, and a renderer added later should not have to rediscover the rule."""
 
 from __future__ import annotations
 
@@ -48,21 +28,10 @@ MAX_EMOJI_CODEPOINTS = 12
 @lru_cache(maxsize=1)
 def _catalogue_icons() -> frozenset[str]:
     """Every icon the picker offers, as the authority on what is storable.
-
-    ``_is_emoji_token`` is a heuristic about what an emoji looks like, and 29 of
-    the catalogue's own 1,249 entries do not look like one: the 14 keycaps
-    (``0`` through ``9``, ``#``, ``*``), whose base code point is ASCII;
-    ``!!`` and ``!?``, which are punctuation; and 13 letter-category glyphs
-    (Greek, Cyrillic, Hebrew, CJK, kana). Offering a value in a picker and then
-    discarding it on write with no error is the worst shape this can take, so
-    membership is checked before the heuristic runs (P68).
-
-    Loosening the heuristic instead would have admitted the bare ASCII those
-    entries are built on; a set cannot.
+    Loosening the heuristic instead would have admitted the bare ASCII those entries are built on; a set cannot.
 
     Returns:
-        The catalogue's icon values.
-    """
+        The catalogue's icon values."""
     from urbanlens.dashboard.models.labels.meta import ICON_CATEGORIES
 
     return frozenset(icon for _label, pairs in ICON_CATEGORIES.values() for icon, _ in pairs)

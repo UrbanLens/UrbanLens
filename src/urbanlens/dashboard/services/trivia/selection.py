@@ -1,16 +1,5 @@
 """Question selection: difficulty slider weighting against TriviaQuestionRating.
-
-Mirrors ``services.spotguessr.selection``'s difficulty-weighting pattern
-(Gaussian kernel against a rating, neutral default for content without
-enough game history) but applied per-question rather than per-location: the
-same location can host questions of very different difficulty (a building's
-year built vs. a parcel's building count), so difficulty is a question-level
-knob here, not a location-level one. Unlike SpotGuessr, there's no spatial
-"feels random" anti-clustering rule - a text question doesn't have the
-same back-to-back-same-spot repetitiveness a map guess does, so the
-within-session exclusion in ``services.trivia.eligibility`` (never repeat an
-already-asked question) is the only anti-repeat rule needed.
-"""
+Mirrors ``services.spotguessr.selection``'s difficulty-weighting pattern (Gaussian kernel against a rating, neutral default for content without enough game history) but applied per-question rather than per-location: the same location can host questions of very different difficulty (a building's year built vs. a parcel's building count), so difficulty is a question-level knob here, not a location-level one."""
 
 from __future__ import annotations
 

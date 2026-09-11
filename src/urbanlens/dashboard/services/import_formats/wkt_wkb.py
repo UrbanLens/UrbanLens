@@ -83,19 +83,12 @@ def wkt_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, A
 def wkb_to_dict(file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
     """Convert a WKB file into pin dicts.
 
-    Supports two forms:
-
-    - Raw binary WKB: the entire file is treated as a single geometry.
-    - Hex-encoded WKB text (e.g. copy-pasted from ``ST_AsBinary``/``ST_AsHexWKB``
-      in a PostGIS client): one hex-encoded geometry per line.
-
     Args:
         file_contents: Raw file bytes.
         user_profile: The profile to associate with each pin.
 
     Returns:
-        List of pin dicts, one per valid geometry.
-    """
+        List of pin dicts, one per valid geometry."""
     pins: list[dict[str, Any]] = []
 
     try:

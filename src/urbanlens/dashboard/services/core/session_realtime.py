@@ -1,14 +1,5 @@
 """Channel-layer group naming and broadcast for participant-session sockets.
-
-SpotGuessr, Trivia and Consensus each had their own ``realtime`` module whose only
-material difference was the group-name prefix - the docstrings themselves said "mirrors
-``services.spotguessr.realtime`` exactly". The consumer side was already shared
-(``consumers._ParticipantSessionConsumer``); this is the service-side counterpart, so a
-change to how sessions broadcast is made once rather than three times.
-
-Each game keeps its own ``realtime`` module as a thin binding, so existing callers and
-their import paths are unchanged.
-"""
+SpotGuessr, Trivia and Consensus each had their own ``realtime`` module whose only material difference was the group-name prefix - the docstrings themselves said "mirrors ``services.spotguessr.realtime`` exactly"."""
 
 from __future__ import annotations
 
@@ -23,8 +14,7 @@ class SessionBroadcaster:
     Args:
         prefix: Game identifier used to build group names (e.g. ``"spotguessr"``).
             Must stay stable - it is the name connected consumers have already
-            joined, so changing it orphans every open socket.
-    """
+            joined, so changing it orphans every open socket."""
 
     def __init__(self, prefix: str) -> None:
         self.prefix = prefix
@@ -43,13 +33,9 @@ class SessionBroadcaster:
     def broadcast(self, session_id: int, event_type: str, payload: dict[str, Any]) -> None:
         """Send ``payload`` to every connected participant of ``session_id``.
 
-        A no-op (not an error) when no channel layer is configured, matching
-        ``send_group_message``'s tolerance of a channel-layer-less environment.
-
         Args:
-            session_id: Primary key of the session to broadcast to.
-            event_type: Dot-notation Channels event type (e.g. ``"round.revealed"``),
+                session_id: Primary key of the session to broadcast to.
+                event_type: Dot-notation Channels event type (e.g. ``"round.revealed"``),
                 dispatched by the consumer to the matching ``round_revealed`` handler.
-            payload: Event body, merged into the message alongside ``type``.
-        """
+                payload: Event body, merged into the message alongside ``type``."""
         send_group_message(self.session_group_name(session_id), {"type": event_type, **payload})

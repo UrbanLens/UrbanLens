@@ -1,18 +1,5 @@
 """Content classifier for Trivia questions - shared by the user-submission and AI-generation paths.
-
-Per the Trivia spec: both a user-submitted question and an AI-generated one
-must be judged by the exact same classifier, using the exact same rules.
-This is the highest-harm piece of the whole feature - a false negative lets a
-bullying/in-group question reach real users with no report path that traces
-back to "the filter missed this," and a false positive silently kills a
-legitimate question with (by design) no feedback loop for the author to
-notice or correct. Every failure mode here defaults to REJECT (fail closed).
-
-Follows ``services.labels.auto_tag``'s allowlisted-``<ANSWER>`` pattern: the model
-must answer with exactly one token from a fixed set; anything else
-(unparseable, empty, gateway unavailable) is treated as a rejection, never
-as an approval.
-"""
+Follows ``services.labels.auto_tag``'s allowlisted-``<ANSWER>`` pattern: the model must answer with exactly one token from a fixed set; anything else (unparseable, empty, gateway unavailable) is treated as a rejection, never as an approval."""
 
 from __future__ import annotations
 
@@ -80,11 +67,6 @@ def _build_prompt(prompt: str, answer: str, location: Location) -> str:
 def classify_trivia_question(prompt: str, answer: str, location: Location, *, profile: Profile | None = None) -> ClassifierVerdict:
     """Judge whether a trivia question is safe to add to the public rotation.
 
-    Used identically for a user-submitted question (before it leaves
-    PENDING_REVIEW) and for an AI-generated one (before it is ever
-    persisted) - see this module's docstring for why both paths must share
-    the exact same rules.
-
     Args:
         prompt: The question text.
         answer: The canonical accepted answer.
@@ -95,8 +77,7 @@ def classify_trivia_question(prompt: str, answer: str, location: Location, *, pr
 
     Returns:
         APPROVE, or REJECT with a reason - AI unavailable, an unparseable
-        response, or one of the classifier's own reject categories.
-    """
+        response, or one of the classifier's own reject categories."""
     gateway = get_gateway("trivia_moderation", profile=profile, instructions=_INSTRUCTIONS)
     if gateway is None:
         logger.info("Trivia classifier unavailable (AI disabled); rejecting fail-closed")
@@ -108,10 +89,9 @@ def classify_trivia_question(prompt: str, answer: str, location: Location, *, pr
     try:
         raw = gateway.send_prompt(user_prompt)
     except Exception:
-        # A transport-level failure (provider outage, DNS, an unrecognized
-        # model tripping the token-counting library, etc.) must never bubble
-        # up and 500 the submitter's request - it's just another form of
-        # "AI unavailable right now," same as a None response.
+        # A transport-level failure (provider outage, DNS, an unrecognized model tripping the
+        # token-counting library, etc.) must never bubble up and 500 the submitter's request - it's
+        # just another form of "AI unavailable right now," same as a None response.
         logger.exception("Trivia classifier call failed unexpectedly; rejecting fail-closed")
         log_api_call("trivia_moderation", success=False)
         return ClassifierVerdict(approved=False, reason="ai_unavailable")

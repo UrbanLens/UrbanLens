@@ -1,28 +1,5 @@
 """Parcels that get subdivided, and the access that has to survive it.
-
-A property sold off in pieces stops being one parcel and becomes several. The
-old outline still geometrically contains every pin anyone ever dropped inside
-it, so leaving it in play would let containment against historical geometry
-grant access to a campus that no longer exists - hence
-:class:`~urbanlens.dashboard.models.place.model.PlaceStatus`, and hence
-``PlaceQuerySet.resolvable`` excluding superseded rows.
-
-What makes automatic processing safe is the grant snapshot. Nobody can lose
-access to a wiki they already hold, so a false positive costs a redundant row
-and an unnecessary aggregate, never someone's access. That in turn is why the
-detection threshold below can be generous.
-
-The snapshot covers the whole family, not just the superseded parcel: a
-holder of the undivided parcel knew everything that ground now contains, so
-they are granted the parcel *and* every one of its new successors together
-(:meth:`PlaceAccessGrantManager.snapshot_family`) - permanently, regardless of
-which successor their own pin happens to re-resolve onto.
-
-Deliberately *not* done here: creating child wikis. A split creates child
-*places* automatically; their wikis appear only when somebody with a pin there
-creates one, and nest under the superseded parent's wiki through ordinary
-lineage reconciliation.
-"""
+The old outline still geometrically contains every pin anyone ever dropped inside it, so leaving it in play would let containment against historical geometry grant access to a campus that no longer exists - hence :class:`~urbanlens.dashboard.models.place.model.PlaceStatus`, and hence ``PlaceQuerySet.resolvable`` excluding superseded rows."""
 
 from __future__ import annotations
 
@@ -39,10 +16,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: How much of a parcel's area has to disappear before a refresh is treated as
-#: a subdivision rather than a boundary correction. Providers routinely nudge
-#: outlines by a few percent; losing a third of a parcel is a different kind of
-#: event. Tuning, not design - processing is grandfather-safe either way.
+#: How much of a parcel's area has to disappear before a refresh is treated as a subdivision rather
+#: than a boundary correction.
+#: Providers routinely nudge outlines by a few percent; losing a third of a parcel is a different
+#: kind of event.
 SPLIT_SHRINK_RATIO = 0.66
 
 
@@ -90,11 +67,10 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
 
     children: list[Place] = []
     for geometry in successors:
-        # exclude_pk=place.pk: place is still CURRENT here (status flips below,
-        # only once we know this is really a split) - without it, a successor
-        # whose centroid falls near the original parcel's own centroid (common:
-        # the original center often lands inside one of its own pieces) would
-        # silently alias back onto place itself instead of becoming a new child.
+        # exclude_pk=place.pk: place is still CURRENT here (status flips below, only once we know
+        # this is really a split) - without it, a successor whose centroid falls near the original
+        # parcel's own centroid (common: the original center often lands inside one of its own
+        # pieces) would silently alias back onto place itself instead of becoming a new child.
         child = upsert_place(PlaceKind.PARCEL, geometry, name=place.name, exclude_pk=place.pk)
         if child is not None and child.pk != place.pk:
             lineage.set_parent(child, place, PlaceRelation.MEMBER_OF)

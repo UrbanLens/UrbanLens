@@ -1,24 +1,5 @@
 """Vision AI helpers: photo keyword description and image classification.
-
-Separate from the text-only ``LLMGateway`` hierarchy because these calls
-aren't conversations - there is no transcript, no tool loop, and no
-``<ANSWER>`` protocol, just one image and one question. What they *do* share
-is the sandbox: like every other provider call in this app, they go through
-``services.ai.inference_client`` to ``ai-inference``, which is the only tier
-holding provider API keys. Nothing in this module builds a provider client or
-reads a provider credential - see ``docs/AI_PIPELINE.md``.
-
-Callers pass the stored 512px copy the sandbox already wrote
-(``photo_keywords.analysis_jpeg_bytes``), never a full-resolution upload and
-never bytes this process decoded itself. ``urbanlens_ai.policy.MAX_IMAGE_BYTES``
-is the backstop if a caller forgets.
-
-Every call is recorded via ``rate_limiter.log_api_call`` and respects the
-admin-configurable per-service limits, with a running cost estimate logged
-per call. That accounting stays here, on the app side, for the same reason
-``LLMGateway`` keeps its own: ``ai-inference`` has no database and no idea
-what a service key or a cost bucket is.
-"""
+Separate from the text-only ``LLMGateway`` hierarchy because these calls aren't conversations - there is no transcript, no tool loop, and no ``<ANSWER>`` protocol, just one image and one question."""
 
 from __future__ import annotations
 
@@ -57,7 +38,6 @@ _KEYWORD_PROMPT = (
 #: punctuation and quoting it may wrap a phrase in.
 _KEYWORD_STRIP_CHARS = " .;:-*#\"'"
 
-#: Rough OpenAI vision token estimate for a <=512px image plus prompt/response,
 #: used only when the provider's response carries no usage of its own. Good
 #: enough for a running cost estimate.
 _OPENAI_VISION_FALLBACK_TOKENS = (900, 120)
@@ -86,15 +66,10 @@ def _parse_keyword_text(text: str) -> list[str]:
 
 def _vision_target() -> tuple[Provider, str]:
     """The ``(provider, model)`` the site's AI settings select for a vision call.
-
-    Mirrors the provider dispatch every other AI feature does through
-    ``services.ai.factory``, but resolved here: this module talks to the
-    inference client directly rather than through an ``LLMGateway``, because
-    there is no conversation for a gateway to manage.
+    Mirrors the provider dispatch every other AI feature does through ``services.ai.factory``, but resolved here: this module talks to the inference client directly rather than through an ``LLMGateway``, because there is no conversation for a gateway to manage.
 
     Returns:
-        The provider name and model identifier to send this call to.
-    """
+        The provider name and model identifier to send this call to."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.services.ai.openai import DEFAULT_MODEL
 
@@ -156,11 +131,10 @@ def _describe(image_bytes: bytes, prompt: str, *, service_key: str, max_tokens: 
         return None
     elapsed_ms = int((time.monotonic() - started) * 1000)
 
-    # Priced from the provider's own token counts where it reports them -
-    # more accurate than the flat ServiceDefaults.cost_per_call the HTTP
-    # gateway wrapper applies elsewhere, so it is worth storing. Cloudflare
-    # Workers AI bills per request rather than per token, so it records no
-    # estimate at all instead of a fabricated one.
+    # Priced from the provider's own token counts where it reports them - more accurate than the
+    # flat ServiceDefaults.cost_per_call the HTTP gateway wrapper applies elsewhere, so it is worth
+    # storing.
+    # Cloudflare Workers AI bills per request rather than per token, so it records no estimate at
     cost_estimate = _openai_cost(model, response.usage.input_tokens, response.usage.output_tokens) if provider == "openai" else None
     log_api_call(service_key, success=True, response_ms=elapsed_ms, endpoint=f"{provider}:{model}", cost_estimate=cost_estimate)
     logger.info("AI vision via %s %s: est. $%s, %dms", provider, model, round(cost_estimate, 5) if cost_estimate is not None else "n/a", elapsed_ms)
@@ -169,17 +143,13 @@ def _describe(image_bytes: bytes, prompt: str, *, service_key: str, max_tokens: 
 
 def describe_photo_keywords(image_bytes: bytes) -> list[str]:
     """Generate descriptive keywords for a (downscaled) photo via the site's AI provider.
-
-    Caller is responsible for permission checks (site/profile AI toggles and
-    the AI photo processing subscription feature); this function only handles
-    the provider call, rate limiting, and cost logging.
+    Caller is responsible for permission checks (site/profile AI toggles and the AI photo processing subscription feature); this function only handles the provider call, rate limiting, and cost logging.
 
     Args:
         image_bytes: JPEG bytes, already downscaled (never the full upload).
 
     Returns:
-        Raw keyword strings (possibly empty on failure - errors are logged).
-    """
+        Raw keyword strings (possibly empty on failure - errors are logged)."""
     if not _rate_limit_gate(SERVICE_AI_PHOTO_KEYWORDS):
         return []
     answer = _describe(image_bytes, _KEYWORD_PROMPT, service_key=SERVICE_AI_PHOTO_KEYWORDS, max_tokens=_KEYWORD_MAX_TOKENS)
@@ -188,18 +158,13 @@ def describe_photo_keywords(image_bytes: bytes) -> list[str]:
 
 def classify_photo(image_bytes: bytes) -> list[tuple[str, float]]:
     """Classify a (downscaled) photo's content via Cloudflare's ResNet-50 model.
-
-    Unlike :func:`describe_photo_keywords` this is not a chat completion - no
-    prompt, no tokens - so it takes the inference service's separate classify
-    call. Cloudflare is the only provider offering one, so the site's
-    ``ai_provider`` setting does not apply here.
+    Unlike :func:`describe_photo_keywords` this is not a chat completion - no prompt, no tokens - so it takes the inference service's separate classify call.
 
     Args:
         image_bytes: JPEG bytes, already downscaled.
 
     Returns:
-        (label, confidence) pairs, highest confidence first; empty on failure.
-    """
+        (label, confidence) pairs, highest confidence first; empty on failure."""
     from urbanlens.dashboard.services.ai.inference_client import ClassifyRequest, ImagePart, InferenceError, get_inference_client
 
     if not _rate_limit_gate(SERVICE_PHOTO_CLASSIFIER):

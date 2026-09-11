@@ -1,22 +1,5 @@
 """Longitude arithmetic that survives the antimeridian.
-
-Longitude wraps at ±180, so the ordinary arithmetic every other coordinate uses
-gives nonsense there:
-
-- averaging 179.99 and -179.99 yields **0.0** - a point in the Atlantic, some
-  20,000km from either input;
-- ``abs(179.99 - -179.99)`` is 359.98, so two points ~1km apart read as being on
-  opposite sides of the planet.
-
-Both mistakes were live in this codebase - in fact-evidence centroids, in the
-profile's saved map centre, and in the import-failure location guess - and each
-one was written independently, which is why these live in one place now. They
-return exactly the same answers as the naive arithmetic everywhere except within
-a hair of the date line, so adopting them is never a behaviour change for the
-99.9% of the planet that never noticed.
-
-Latitude needs none of this: it is clamped to ±90 and does not wrap.
-"""
+Longitude wraps at ±180, so the ordinary arithmetic every other coordinate uses gives nonsense there:"""
 
 from __future__ import annotations
 
@@ -72,10 +55,7 @@ def longitude_delta(a: float, b: float) -> float:
 
 def normalize_longitude(longitude: float) -> float:
     """Fold a longitude into [-180, 180].
-
-    Map clients report unwrapped bounds when panned across the date line -
-    Leaflet's ``getEast()`` can return 181 - while stored coordinates are always
-    folded, so the two never match until one side is normalised.
+    Map clients report unwrapped bounds when panned across the date line - Leaflet's ``getEast()`` can return 181 - while stored coordinates are always folded, so the two never match until one side is normalised.
 
     Args:
         longitude: Degrees, possibly outside [-180, 180].
@@ -86,8 +66,7 @@ def normalize_longitude(longitude: float) -> float:
         any negative one returns -180. That has to be decided on the sign of the
         input rather than by special-casing the literal 180, or the same meridian
         normalises two different ways depending on how many times the client
-        wrapped it (180 and 540 are one meridian; folding gave +180 and -180).
-    """
+        wrapped it (180 and 540 are one meridian; folding gave +180 and -180)."""
     folded = (longitude + 180.0) % 360.0 - 180.0
     if folded == -180.0 and longitude > 0.0:
         return 180.0
@@ -96,16 +75,7 @@ def normalize_longitude(longitude: float) -> float:
 
 def split_at_antimeridian(geometry):
     """Fold a region that runs past +/-180 into the two halves it really covers.
-
-    Map clients report unwrapped coordinates when the user draws across the date
-    line - Leaflet gives a box from 179 to 181 rather than 179 to -179 - while
-    stored points are always folded into [-180, 180]. A planar ``__within``
-    against the unwrapped polygon therefore misses everything on the far side of
-    the line: measured, a region drawn across it matched only the pins west of
-    it.
-
-    Splitting at the meridian and translating the overhanging part gives a shape
-    that means the same thing in stored coordinates.
+    Map clients report unwrapped coordinates when the user draws across the date line - Leaflet gives a box from 179 to 181 rather than 179 to -179 - while stored points are always folded into [-180, 180].
 
     Args:
         geometry: A Polygon or MultiPolygon in SRID 4326.
@@ -115,11 +85,7 @@ def split_at_antimeridian(geometry):
         MultiPolygon of its two halves.
 
     Note:
-        A polygon whose vertices are already folded but which spans more than
-        180 degrees (179 to -179 written literally) is genuinely ambiguous - the
-        coordinates say "the long way round" - and is left alone. Clients should
-        send the unwrapped form for a region crossing the line.
-    """
+        A polygon whose vertices are already folded but which spans more than 180 degrees (179 to -179 written literally) is genuinely ambiguous - the coordinates say "the long way round" - and is left alone. Clients should send the unwrapped form for a region crossing the line."""
     from django.contrib.gis.geos import MultiPolygon, Polygon
 
     min_x, _min_y, max_x, _max_y = geometry.extent

@@ -64,14 +64,7 @@ class InferenceError(RuntimeError):
 
 class InferenceClient(Protocol):
     """Sends a normalized request somewhere and returns the answer.
-
-    Two calls, because the inference service has two shapes of work:
-    :meth:`send` is a chat completion (text, or text plus an
-    :class:`~urbanlens_ai.schema.ImagePart` for vision), and
-    :meth:`classify` is an image classifier - no prompt, no tokens, labels
-    out. See ``urbanlens_ai.schema.ClassifyRequest`` for why the second is
-    not folded into the first.
-    """
+    Two calls, because the inference service has two shapes of work: :meth:`send` is a chat completion (text, or text plus an :class:`~urbanlens_ai.schema.ImagePart` for vision), and :meth:`classify` is an image classifier - no prompt, no tokens, labels out."""
 
     def send(self, request: InferenceRequest) -> InferenceResponse: ...
 
@@ -79,13 +72,7 @@ class InferenceClient(Protocol):
 
 
 class RemoteInferenceClient:
-    """Calls the sandboxed ``ai-inference`` service over HTTP.
-
-    Used whenever ``UL_AI_INFERENCE_URL`` is configured - every staging/
-    production deployment, and any local dev setup that opts into running
-    the sandbox stack. Presents a bearer token; holds no provider credential
-    of its own.
-    """
+    """Calls the sandboxed ``ai-inference`` service over HTTP."""
 
     def __init__(self, base_url: str, token: str, timeout_seconds: float) -> None:
         self._base_url = base_url.rstrip("/")
@@ -129,14 +116,7 @@ class RemoteInferenceClient:
 
 class LocalInferenceClient:
     """Calls the provider SDKs in-process - local dev/tests only.
-
-    Bypasses the sandbox entirely (provider keys come from *this* process's
-    own settings), so :func:`~services.sandbox.guard.check_direct_inference`
-    must pass before every call - see that guard for the exact policy. This
-    is the fallback ``get_gateway()`` picks when ``UL_AI_INFERENCE_URL`` is
-    unset, so a plain local checkout with no sandbox stack running still
-    works exactly as the pre-sandbox code did.
-    """
+    This is the fallback ``get_gateway()`` picks when ``UL_AI_INFERENCE_URL`` is unset, so a plain local checkout with no sandbox stack running still works exactly as the pre-sandbox code did."""
 
     def send(self, request: InferenceRequest) -> InferenceResponse:
         from urbanlens.dashboard.services.sandbox.guard import check_direct_inference
@@ -173,15 +153,7 @@ class LocalInferenceClient:
 
     def _build_config(self) -> InferenceConfig:
         """Build an ``InferenceConfig`` from this process's own Django settings.
-
-        ``urbanlens_ai.config.InferenceConfig`` normally reads straight from
-        the process environment (see that module) - correct for its real
-        deployment, which gets real container env vars and no ``.env`` file.
-        A local checkout may instead have these set only in ``.env``
-        (loaded by Django's pydantic ``AppSettings``, not by this process's
-        raw environment), so this constructs the config explicitly from
-        ``AppSettings`` instead of re-reading the environment independently.
-        """
+        A local checkout may instead have these set only in ``.env`` (loaded by Django's pydantic ``AppSettings``, not by this process's raw environment), so this constructs the config explicitly from ``AppSettings`` instead of re-reading the environment independently."""
         from urbanlens.UrbanLens.settings.app import settings
         from urbanlens_ai.config import InferenceConfig
 

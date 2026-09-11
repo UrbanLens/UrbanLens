@@ -1,7 +1,7 @@
 """
 Site administration panel controller.
 
-TODO: I could be mistaken, but I believe the override of handle_no_permission is not necessary throughout this file.
+TODO: check if handle_no_permission override is needed.
 """
 
 from __future__ import annotations

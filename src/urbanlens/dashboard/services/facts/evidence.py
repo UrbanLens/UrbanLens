@@ -1,13 +1,5 @@
 """Writing new FactEvidence rows - the single write path every source funnels through.
-
-Callers never touch ``Fact``/``FactEvidence`` directly: get-or-creating the
-resolved ``Fact`` row, snapshotting the key's registered ``data_type``, and
-queuing the async confidence recompute are all handled by
-:func:`record_evidence`, so every source (SpotGuessr, Consensus, manual wiki
-edits, future AI extraction) stays consistent. See
-``services.facts.registry`` for the key/data-type registry and
-``services.facts.confidence`` for what happens once evidence lands.
-"""
+Callers never touch ``Fact``/``FactEvidence`` directly: get-or-creating the resolved ``Fact`` row, snapshotting the key's registered ``data_type``, and queuing the async confidence recompute are all handled by :func:`record_evidence`, so every source (SpotGuessr, Consensus, manual wiki edits, future AI extraction) stays consistent."""
 
 from __future__ import annotations
 
@@ -111,10 +103,7 @@ def record_evidence(
     context: dict[str, Any] | None = None,
 ) -> FactEvidence | None:
     """Record one observation toward a Fact, creating the Fact row if this is the first.
-
-    Queues an async confidence recompute (``tasks.recompute_fact_confidence``)
-    rather than recomputing inline, per the project's Celery-everything-slow
-    standard.
+    Queues an async confidence recompute (``tasks.recompute_fact_confidence``) rather than recomputing inline, per the project's Celery-everything-slow standard.
 
     Args:
         key: A key registered in ``services.facts.registry``.
@@ -133,8 +122,7 @@ def record_evidence(
 
     Returns:
         The created evidence row, or None if ``key`` isn't registered, or the
-        subject doesn't allow it.
-    """
+        subject doesn't allow it."""
     fact = _get_or_create_fact(key=key, location=location, wiki=wiki, image=image)
     if fact is None:
         return None
@@ -165,20 +153,14 @@ def record_evidence(
 
 def record_photo_coordinate_evidence(image_id: int, guess_point: Point) -> FactEvidence | None:
     """Log one anonymous SpotGuessr guess toward an image's ``photo_coordinates`` fact.
-
-    Mirrors ``PhotoCoordinateGuess``'s own anonymized-by-design shape - no
-    submitter, no round reference, just the point. Called from
-    ``services.spotguessr.photo_coordinates.record_guess`` alongside (not
-    instead of) the existing ``PhotoCoordinateGuess``/``estimated_latitude``
-    machinery, which stays authoritative for existing consumers.
+    Called from ``services.spotguessr.photo_coordinates.record_guess`` alongside (not instead of) the existing ``PhotoCoordinateGuess``/``estimated_latitude`` machinery, which stays authoritative for existing consumers.
 
     Args:
         image_id: pk of the ``Image`` this guess is about.
         guess_point: Where the player clicked or picked from pin search.
 
     Returns:
-        The created evidence row, or None if the image no longer exists.
-    """
+        The created evidence row, or None if the image no longer exists."""
     from urbanlens.dashboard.models.images.model import Image
 
     try:
@@ -198,20 +180,13 @@ def record_photo_coordinate_evidence(image_id: int, guess_point: Point) -> FactE
 def record_consensus_answer_evidence(round_: ConsensusRound, answer: ConsensusAnswer) -> FactEvidence | None:
     """Log one Consensus player's answer as evidence, trust-weighted by their ``ConsensusProfile``.
 
-    The caller (``services.consensus.session._finish_round``) skips this for
-    trust-check-round answers (they measure player accuracy against an
-    already-known value, not new signal about the fact) and for
-    ``WIKI_ALIAS`` rounds (excluded from Facts entirely - see
-    ``CONSENSUS_FIELD_KIND_TO_FACT_KEY``).
-
     Args:
         round_: The round ``answer`` was submitted for.
         answer: A real (non-skip) answer.
 
     Returns:
         The created evidence row, or None if this round's field kind isn't
-        Facts-tracked, or the answer has no usable value.
-    """
+        Facts-tracked, or the answer has no usable value."""
     from urbanlens.dashboard.models.consensus.model import ConsensusProfile
 
     fact_key = CONSENSUS_FIELD_KIND_TO_FACT_KEY.get(round_.field_kind)
@@ -246,20 +221,13 @@ def record_consensus_answer_evidence(round_: ConsensusRound, answer: ConsensusAn
 
 def record_wiki_edit_evidence(edit: WikiEdit) -> list[FactEvidence]:
     """Log every Facts-mapped field change in a manual ``WikiEdit`` as evidence.
-
-    Only for edits made outside Consensus - the caller
-    (``models.wiki_edit.signals``) already guards on
-    ``edit.consensus_round_id is None``, since Consensus-sourced edits are
-    logged directly from the submitted answers by
-    :func:`record_consensus_answer_evidence` at round-resolution time;
-    logging both would double-count the same observation.
+    Only for edits made outside Consensus - the caller (``models.wiki_edit.signals``) already guards on ``edit.consensus_round_id is None``, since Consensus-sourced edits are logged directly from the submitted answers by :func:`record_consensus_answer_evidence` at round-resolution time; logging both would double-count the same observation.
 
     Args:
         edit: The manual edit that was just saved.
 
     Returns:
-        The created evidence rows (zero or more - only mapped fields count).
-    """
+        The created evidence rows (zero or more - only mapped fields count)."""
     created = []
     for field_name, change in (edit.changes or {}).items():
         fact_key = WIKI_EDIT_FIELD_TO_FACT_KEY.get(field_name)
@@ -292,11 +260,7 @@ def record_ai_evidence(
     context: dict[str, Any] | None = None,
 ) -> FactEvidence | None:
     """Log one AI-agent-sourced observation.
-
-    A ready seam, not called anywhere yet - real wiring belongs to whichever
-    future ticket adds structured extraction (e.g. a Wikidata/OpenPlaques
-    source, ``docs/ROADMAP.md``), which needs to parse discrete claims out of
-    otherwise-freeform model output before it has anything to pass here.
+    A ready seam, not called anywhere yet - real wiring belongs to whichever future ticket adds structured extraction (e.g. a Wikidata/OpenPlaques source, ``docs/ROADMAP.md``), which needs to parse discrete claims out of otherwise-freeform model output before it has anything to pass here.
 
     Args:
         key: A key registered in ``services.facts.registry``.
@@ -308,8 +272,7 @@ def record_ai_evidence(
         context: Free provenance metadata (e.g. the source document/URL).
 
     Returns:
-        The created evidence row, or None if ``key`` isn't registered.
-    """
+        The created evidence row, or None if ``key`` isn't registered."""
     return record_evidence(
         key=key,
         value=value,

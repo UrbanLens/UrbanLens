@@ -1,14 +1,4 @@
-"""Lightweight natural-language parsing for global-search queries.
-
-Turns free text like ``"photos from last summer"``, ``"pins in Cincinnati"``,
-``"pins near me"``, ``"messages from Alice"``, or ``"pin from John"`` into a
-structured :class:`ParsedQuery`: requested result types, an absolute date
-range, an optional place name, near-me intent, and a person name (messages
-and pins only, e.g. "who shared this pin with me"), plus the remaining
-free-text terms. Parsing is deliberately heuristic - anything it does not
-recognize stays in the free-text portion, and the engine falls back to a
-plain-text search when a structured interpretation yields nothing.
-"""
+"""Lightweight natural-language parsing for global-search queries."""
 
 from __future__ import annotations
 
@@ -21,11 +11,10 @@ from django.utils import timezone
 
 from urbanlens.dashboard.services.global_search.operators import OperatorScan, scan
 
-#: Words users type mapped to RESULT_TYPES slugs. Matched as whole tokens only,
-#: and only when the token is the FIRST word of the query (see
-#: ``_extract_type_keywords``) - many of these are ordinary English words
-#: ("pin", "map", "trip", "visit", "comment") that would otherwise hijack
-#: mid-sentence text like "please visit my page" into a visits-only search.
+#: Words users type mapped to RESULT_TYPES slugs.
+#: Matched as whole tokens only, and only when the token is the FIRST word of the query (see
+#: ``_extract_type_keywords``) - many of these are ordinary English words ("pin", "map", "trip",
+#: "visit", "comment") that would otherwise hijack mid-sentence text like "please visit my page"
 TYPE_KEYWORDS: dict[str, str] = {
     "photo": "photos",
     "photos": "photos",
@@ -275,8 +264,7 @@ def _resolve_calendar_date(phrase: str, today: date, year_hint: int | None = Non
             and Y" clause carried an explicit year that should apply to both.
 
     Returns:
-        The resolved date, or None if the phrase isn't a recognized format.
-    """
+        The resolved date, or None if the phrase isn't a recognized format."""
     phrase = phrase.strip(" ,.")
     iso = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", phrase)
     if iso:
@@ -376,11 +364,10 @@ def _extract_dates(text: str, today: date) -> tuple[str, date | None, date | Non
         (re.compile(r"\bthis week\b"), lambda _m: (today - timedelta(days=today.weekday()), today)),
         (re.compile(r"\byesterday\b"), lambda _m: (today - timedelta(days=1), today - timedelta(days=1))),
         (re.compile(r"\btoday\b"), lambda _m: (today, today)),
-        # The preposition is mandatory here (unlike the season/month patterns
-        # above, which explicitly allow bare mentions with a comment
-        # explaining why): a bare 4-digit token needs no other context to
-        # show up in ordinary text ("Building 2024", "Route 2027"), so
-        # treating it as an implicit date filter would be too eager.
+        # The preposition is mandatory here (unlike the season/month patterns above, which
+        # explicitly allow bare mentions with a comment explaining why): a bare 4-digit token needs
+        # no other context to show up in ordinary text ("Building 2024", "Route 2027"), so treating
+        # it as an implicit date filter would be too eager.
         (re.compile(r"\b(?:from|during|in)\s+(20\d{2})\b"), lambda m: (date(int(m.group(1)), 1, 1), date(int(m.group(1)), 12, 31))),
     ]
 
@@ -423,33 +410,25 @@ def _extract_near_me(text: str) -> tuple[str, str | None]:
     return text, None
 
 
-#: Clause-introducing keywords recognized elsewhere in the pipeline (the
-#: "in/near/around/at <place>" clause, extracted right after the person
-#: clause - see call order in ``parse_query``). The person-clause match stops
-#: before one of these so "pins from Alice in Cincinnati" splits into
-#: person="alice" + place="cincinnati" instead of swallowing both into the
-#: person name.
+#: Clause-introducing keywords recognized elsewhere in the pipeline (the "in/near/around/at <place>"
+#: clause, extracted right after the person clause - see call order in ``parse_query``).
+#: The person-clause match stops before one of these so "pins from Alice in Cincinnati" splits into
+#: person="alice" + place="cincinnati" instead of swallowing both into the person name.
 _CLAUSE_BOUNDARY_KEYWORDS = ("in", "near", "around", "at", "during")
 
 
 def _extract_person(text: str) -> tuple[str, str | None]:
     """Strip a "from <person>" clause from ``text``, stopping at the next clause.
-
-    Only recognized when the query already named the ``messages`` or ``pins``
-    type (see call site), so "photos from paris" keeps "paris" as free
-    text/place instead of being misread as a person's name.
+    Only recognized when the query already named the ``messages`` or ``pins`` type (see call site), so "photos from paris" keeps "paris" as free text/place instead of being misread as a person's name.
 
     Args:
         text: Query text with dates/types/near-me already removed.
 
     Returns:
-        (remaining text, person name or None).
-    """
-    # Bound matches Django's User.username max_length (150) so long usernames
-    # are still captured in full. The match is non-greedy and stops before a
-    # following recognized clause keyword (e.g. "in <place>") rather than
-    # running to the end of the string, so "from Alice in Cincinnati" doesn't
-    # get read as a single person named "alice in cincinnati".
+        (remaining text, person name or None)."""
+    # Bound matches Django's User.username max_length (150) so long usernames are still captured in
+    # full.
+    # The match is non-greedy and stops before a following recognized clause keyword (e.g.
     boundary = "|".join(_CLAUSE_BOUNDARY_KEYWORDS)
     match = re.search(rf"(?:^|\s)from\s+(.{{2,150}}?)(?=\s+(?:{boundary})\s+|$)", text)
     if not match:
@@ -468,17 +447,13 @@ def _extract_person(text: str) -> tuple[str, str | None]:
 
 def _extract_place(text: str) -> tuple[str, str | None]:
     """Strip a trailing "in/near/around/at <place>" clause from ``text``.
-
-    Only a *trailing* clause is treated as a place so mid-sentence usages stay
-    part of the free text. The engine retries without the place filter when a
-    parsed place produces no results, keeping false positives harmless.
+    Only a *trailing* clause is treated as a place so mid-sentence usages stay part of the free text.
 
     Args:
         text: Query text with dates/types already removed.
 
     Returns:
-        (remaining text, place or None).
-    """
+        (remaining text, place or None)."""
     match = re.search(r"(?:^|\s)(?:in|near|around|at)\s+(.{2,60})$", text)
     if not match:
         return text, None
@@ -491,26 +466,13 @@ def _extract_place(text: str) -> tuple[str, str | None]:
 
 def _extract_type_keywords(working: str) -> tuple[str, set[str]]:
     """Strip type-restricting keywords from ``working``, at either end of the query.
-
-    Many entries in ``TYPE_KEYWORDS`` are ordinary English words ("pin",
-    "map", "trip", "visit", "comment"), so a match anywhere in the sentence
-    produces false-positive hijacks - "please visit my page" must not become a
-    visits-only search. Only the first and last tokens are considered, which
-    is where a deliberate type scope actually lands in English: people write
-    both "photos of the abandoned mill" and "abandoned mill photos", but a
-    type word buried mid-sentence is almost always incidental.
-
-    A trailing keyword that turns out to be part of the target's real name
-    (searching for a pin literally called "Road Trip") is recovered by
-    ``GlobalSearchEngine``'s zero-result fallback, which retries with the
-    inferred types cleared.
+    Many entries in ``TYPE_KEYWORDS`` are ordinary English words ("pin", "map", "trip", "visit", "comment"), so a match anywhere in the sentence produces false-positive hijacks - "please visit my page" must not become a visits-only search.
 
     Args:
         working: Lowercased query text with dates already removed.
 
     Returns:
-        (remaining text, set of RESULT_TYPES slugs recognized).
-    """
+        (remaining text, set of RESULT_TYPES slugs recognized)."""
     # Type keywords are whole tokens; hyphens survive tokenization for "check-ins".
     tokens = re.findall(r"[a-z0-9][a-z0-9'-]*", working)
     edges = {0, len(tokens) - 1}
@@ -527,20 +489,13 @@ def _extract_type_keywords(working: str) -> tuple[str, set[str]]:
 
 def extract_fallback_terms(raw: str) -> list[str]:
     """Reduce a raw query to leftover meaningful words, for the plain-text fallback.
-
-    Applies the same date-phrase, type-keyword, near-me-phrase, and stopword
-    stripping the primary parse uses, without imposing any of those as search
-    filters. Used by :class:`~urbanlens.dashboard.services.global_search.engine.GlobalSearchEngine`
-    when a structured interpretation (parsed place/date/type) matches
-    nothing, so e.g. "photos from last summer" retries on "summer" alone
-    instead of requiring the literal word "photos" in the target text.
+    Applies the same date-phrase, type-keyword, near-me-phrase, and stopword stripping the primary parse uses, without imposing any of those as search filters.
 
     Args:
         raw: The query exactly as typed (``ParsedQuery.raw``).
 
     Returns:
-        Lowercased leftover tokens with stopwords removed.
-    """
+        Lowercased leftover tokens with stopwords removed."""
     cleaned = " ".join(raw.split())
     if not cleaned:
         return []
@@ -568,20 +523,20 @@ def parse_query(raw: str) -> ParsedQuery:
     if not cleaned:
         return parsed
 
-    # Operators are exact, so they are read first and the English heuristics
-    # below only ever see what is left over. That ordering is what lets
-    # `place:"Poughkeepsie, NY"` survive a place-guesser that would otherwise
-    # have split it at the comma.
+    # Operators are exact, so they are read first and the English heuristics below only ever see
+    # what is left over.
+    # That ordering is what lets `place:"Poughkeepsie, NY"` survive a place-guesser that would
+    # otherwise have split it at the comma.
     scanned = scan(cleaned)
     _apply_clauses(parsed, scanned)
     working = scanned.text.lower()
     if not working and not parsed.has_structure:
         return parsed
 
-    # Each heuristic still runs, because its job is also to *consume* the words
-    # it recognized so they don't fall through into free-text terms. But an
-    # operator already answered is never overwritten: what the user stated
-    # outranks what we guessed.
+    # Each heuristic still runs, because its job is also to *consume* the words it recognized so
+    # they don't fall through into free-text terms.
+    # But an operator already answered is never overwritten: what the user stated outranks what we
+    # guessed.
     working, guessed_start, guessed_end, guessed_phrase = _extract_dates(working, today)
     if parsed.date_start is None:
         parsed.date_start, parsed.date_end, parsed.date_phrase = guessed_start, guessed_end, guessed_phrase
@@ -612,12 +567,10 @@ def parse_query(raw: str) -> ParsedQuery:
 #: Operator keys that name a date field rather than filtering some other way.
 _DATE_OPERATORS = ("visited", "created", "updated", "viewed", "taken", "starts", "ends")
 
-#: `is:` choices with no backing field anywhere in the codebase (confirmed by
-#: search, not assumed) - "recognized but can't be answered" the same way
-#: `color:`/`contains:` already are, rather than a silent no-op filter.
-#: `archived` is deliberately not listed here - SafetyCheckin has a real
-#: archived state (SafetySearchProvider applies it); it's just a no-op for
-#: types that don't, the same as any other type-specific `is:`/`has:` choice.
+#: `is:` choices with no backing field anywhere in the codebase (confirmed by search, not assumed) -
+#: "recognized but can't be answered" the same way `color:`/`contains:` already are, rather than a
+#: silent no-op filter.
+#: `archived` is deliberately not listed here - SafetyCheckin has a real archived state
 _UNSUPPORTED_STATES: dict[str, str] = {
     "shared": "isn't tracked as a pin/trip state yet.",
     "private": "isn't tracked as a pin/trip state yet.",
@@ -625,10 +578,9 @@ _UNSUPPORTED_STATES: dict[str, str] = {
     "starred": "there's no starred/favorite concept yet.",
 }
 
-#: `has:` choices with no real meaning to test. Every Pin already has
-#: coordinates (Location's lat/long are required at creation), so `coords`
-#: would always be true - treated as unanswerable rather than a trivial
-#: always-match.
+#: `has:` choices with no real meaning to test.
+#: Every Pin already has coordinates (Location's lat/long are required at creation), so `coords`
+#: would always be true - treated as unanswerable rather than a trivial always-match.
 _UNSUPPORTED_HAS: dict[str, str] = {
     "coords": "every pin already has coordinates, so this can't narrow anything.",
 }
@@ -636,14 +588,11 @@ _UNSUPPORTED_HAS: dict[str, str] = {
 
 def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
     """Fold scanned operator clauses into *parsed*, in place.
-
-    Operators set the same fields the English heuristics would, so downstream
-    consumers never learn which register the user wrote in.
+    Operators set the same fields the English heuristics would, so downstream consumers never learn which register the user wrote in.
 
     Args:
         parsed: The query being built. Mutated.
-        scanned: The operator scan of the raw query.
-    """
+        scanned: The operator scan of the raw query."""
     parsed.clauses = list(scanned.clauses)
     parsed.unknown_keys = tuple(scanned.unknown_keys)
     unsupported: list[tuple[str, str]] = [(clause.key, clause.operator.unsupported_reason) for clause in scanned.clauses if clause.operator.unsupported_reason]
@@ -697,11 +646,10 @@ def _apply_date_clause(parsed: ParsedQuery, key: str, value: str) -> None:
     spoken = value.lower().replace("-", " ").strip()
     _, start, end, phrase = _extract_dates(spoken, today)
     if start is None:
-        # A bare value ("2019", "march") carries no preposition, which is what
-        # most of the phrase patterns key on. Saying it the long way reuses
-        # that vocabulary rather than growing a second date parser here - and
-        # it keeps a value meaning an *interval* ("2019" is the whole year)
-        # rather than the instant _resolve_calendar_date would return.
+        # A bare value ("2019", "march") carries no preposition, which is what most of the phrase
+        # patterns key on.
+        # Saying it the long way reuses that vocabulary rather than growing a second date parser
+        # here - and it keeps a value meaning an *interval* ("2019" is the whole year) rather than
         _, start, end, phrase = _extract_dates(f"in {spoken}", today)
     if start is None:
         return

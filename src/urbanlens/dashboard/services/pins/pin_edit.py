@@ -1,21 +1,4 @@
-"""Shared pin field-edit/move/reparent/delete logic.
-
-This is the single code path behind editing, moving, reparenting, and deleting
-a Pin, shared by the website's HTMX edit dialog
-(``controllers.pin_edit.PinEditView``), the internal DRF surface
-(``models.pin.viewset.PinViewSet``) and the external API
-(``external_api.views.PinDetailView``) - mirrors the same one-implementation
-principle as ``services.pins.pin_creation`` for pin creation.
-
-The split of responsibilities is deliberate. Each caller owns *parsing* its own
-wire format - a browser form posts blank strings and comma-joined names, a JSON
-API posts typed values validated by a DRF serializer - and hands this module a
-mapping of already-coerced values keyed by ``Pin`` field name. This module owns
-everything that happens *after* that: which companion flags a field write
-implies, which ``update_fields`` the save must name (the wiki-stat signals key
-off it), and the tombstoning that makes a label removal stick. Those are the
-parts that silently drift when two surfaces each grow their own copy.
-"""
+"""Shared pin field-edit/move/reparent/delete logic."""
 
 from __future__ import annotations
 
@@ -39,11 +22,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Free-text fields normalized to ``None`` when submitted blank, so "cleared in
-#: the UI" and "explicit JSON null" land on the same stored value. Without this
-#: a pin edited on the website would hold ``""`` where the same edit from the
-#: mobile app holds ``NULL``, and every ``field__isnull`` filter would disagree
-#: about which pins have one.
+#: Free-text fields normalized to ``None`` when submitted blank, so "cleared in the UI" and
+#: "explicit JSON null" land on the same stored value.
+#: Without this a pin edited on the website would hold ``""`` where the same edit from the mobile
+#: app holds ``NULL``, and every ``field__isnull`` filter would disagree about which pins have one.
 _TEXT_EDIT_FIELDS: frozenset[str] = frozenset({"name", "icon", "description", "color"})
 
 #: Fields written through exactly as handed over; the caller's parser is
@@ -66,28 +48,22 @@ _PASSTHROUGH_EDIT_FIELDS: frozenset[str] = frozenset(
 #: a ninth added there is editable here without a second edit.
 SECURITY_EDIT_FIELDS: frozenset[str] = frozenset(name for name, _label in SECURITY_FIELDS)
 
-#: Every ``Pin`` field :func:`apply_pin_edits` will write. Anything outside this
-#: set is refused rather than silently dropped - a caller naming a field this
-#: module doesn't handle has a bug, and answering 200 to it is the exact
-#: silent-success failure this module exists to prevent.
+#: Every ``Pin`` field :func:`apply_pin_edits` will write.
+#: Anything outside this set is refused rather than silently dropped - a caller naming a field this
+#: module doesn't handle has a bug, and answering 200 to it is the exact silent-success failure this
+#: module exists to prevent.
 EDITABLE_PIN_FIELDS: frozenset[str] = _TEXT_EDIT_FIELDS | _PASSTHROUGH_EDIT_FIELDS | SECURITY_EDIT_FIELDS
 
-#: Label kinds a pin-edit payload owns. Person (``user``) and media labels are
-#: attached by entirely different surfaces (photo tagging, media galleries), so
-#: a full label replacement submitted from a pin editor must leave them alone
+#: Label kinds a pin-edit payload owns.
+#: Person (``user``) and media labels are attached by entirely different surfaces (photo tagging,
+#: media galleries), so a full label replacement submitted from a pin editor must leave them alone
 #: rather than stripping labels its UI never showed the user.
 ORGANIZE_LABEL_KINDS: tuple[str, ...] = (KIND_TAG, KIND_CATEGORY, KIND_STATUS)
 
 
 class PinEditError(ValueError):
     """A submitted pin edit is self-contradictory or names a field we don't write.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below (or this base class as a fallback)
-    and author its own user-facing text, rather than relaying ``message`` -
-    that keeps a future raise site here from being able to smuggle unreviewed
-    text into a response just by adding a new ``raise``.
-    """
+    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class UnknownPinFieldsError(PinEditError):
@@ -104,13 +80,7 @@ class ConflictingVisitedFieldsError(PinEditError):
 
 class PinReparentError(ValueError):
     """The requested parent change is invalid.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below (or this base class as a fallback)
-    and author its own user-facing text, rather than relaying ``message`` -
-    that keeps a future raise site here from being able to smuggle unreviewed
-    text into a response just by adding a new ``raise``.
-    """
+    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class ReparentLocationConflictError(PinReparentError):
@@ -128,31 +98,15 @@ class CircularParentChainError(PinReparentError):
 
 class PinMoveError(ValueError):
     """The requested move can't be applied.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch this and author its own user-facing text, rather than
-    relaying ``message`` - that keeps a future raise site here from being
-    able to smuggle unreviewed text into a response just by adding a new
-    ``raise``. Only one condition ever raises this today, so there is no
-    subclass to dispatch on.
-    """
+    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch this and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class PinHasChildrenError(ValueError):
     """A delete was requested without saying what to do with the pin's children.
 
-    Callers should ask the user, then retry with an explicit ``children_mode``.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should author its own user-facing text, rather than relaying ``message`` -
-    that keeps a future raise site here from being able to smuggle unreviewed
-    text into a response just by adding a new ``raise``. Only one condition
-    ever raises this today, so there is no subclass to dispatch on.
-
     Attributes:
         descendant_count: Size of the pin's subtree below it. Not log-only -
-            callers read this to tell the user how many pins are at stake.
-    """
+            callers read this to tell the user how many pins are at stake."""
 
     def __init__(self, pin: Pin, descendant_count: int, children_mode: str) -> None:
         self.descendant_count = descendant_count
@@ -173,22 +127,12 @@ def _normalize_text(value: Any) -> str | None:
 
 def _replace_pin_labels(pin: Pin, labels: Sequence[Label]) -> None:
     """Make *labels* the pin's complete set of organize labels.
-
-    Every label dropped by the replacement gets a ``PinAutoRemoval`` tombstone
-    first. Without it the removal does not stick: keyword and AI auto-tagging
-    both re-derive labels from the pin's own text, so the next time either runs
-    over this pin it would reattach the exact label the user just took off, and
-    the user would watch it come back on its own. This mirrors
-    ``controllers.labels.LabelPinMembershipView``'s remove branch, which records
-    the same ``(pin, LABEL, primary key)`` tuple for a single-label removal.
-
-    Only :data:`ORGANIZE_LABEL_KINDS` participate - see its docstring.
+    Without it the removal does not stick: keyword and AI auto-tagging both re-derive labels from the pin's own text, so the next time either runs over this pin it would reattach the exact label the user just took off, and the user would watch it come back on its own.
 
     Args:
         pin: The pin whose labels are being replaced.
         labels: The complete set the pin should end up with. Callers are
-            responsible for having resolved these to labels the owner may use.
-    """
+            responsible for having resolved these to labels the owner may use."""
     from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 
     keep_ids = {label.pk for label in labels}
@@ -214,24 +158,7 @@ def apply_pin_edits(
     visited: bool | None = None,
 ) -> list[str]:
     """Apply a partial edit to *pin*, in one transaction, with its side effects.
-
-    Absent means untouched: only the keys actually present in *fields* are
-    written, so a single-control quick edit (a star click) cannot clobber a
-    field the user never saw. That also keeps ``update_fields`` narrow, which
-    matters beyond query size - ``models.pin.signals.sync_pin_stats_to_wiki``
-    reads it to decide which community ``WikiStatVote`` rows to publish, so a
-    save that names every field would republish the owner's priority/danger/
-    vulnerability votes on every unrelated edit.
-
-    Two companion flags are written implicitly, because a write that forgets
-    them is worse than no write at all:
-
-    * ``name`` sets ``name_is_user_provided``, so a name the user typed is not
-      later overwritten by an external-API name refresh.
-    * ``pin_type`` sets ``pin_type_is_user_provided`` to True, so automatic
-      building/parcel classification (``services.locations.site_scope``) stops
-      overruling the type the user deliberately chose. Submitting the value it
-      already had still counts: the user looked at the control and confirmed it.
+    Absent means untouched: only the keys actually present in *fields* are written, so a single-control quick edit (a star click) cannot clobber a field the user never saw.
 
     Args:
         pin: The pin to edit, already known to belong to the caller.
@@ -257,8 +184,7 @@ def apply_pin_edits(
         ConflictingVisitedFieldsError: *visited* was combined with an explicit
             ``last_visited`` in the same call - silently letting one win is
             how a client ends up showing a visit date the server does not
-            have.
-    """
+            have."""
     unknown = sorted(set(fields) - EDITABLE_PIN_FIELDS)
     if unknown:
         raise UnknownPinFieldsError(f"apply_pin_edits received non-editable field(s): {', '.join(unknown)}.")
@@ -270,10 +196,10 @@ def apply_pin_edits(
         for field, submitted in fields.items():
             value = _normalize_text(submitted) if field in _TEXT_EDIT_FIELDS else submitted
             if field == "icon":
-                # Validated here rather than per-caller, since this is the one
-                # function behind both the website's edit dialog and the API's
-                # PATCH. `color` is cleaned by its callers instead because they
-                # each have their own default to fall back to.
+                # Validated here rather than per-caller, since this is the one function behind both
+                # the website's edit dialog and the API's PATCH.
+                # `color` is cleaned by its callers instead because they each have their own default
+                # to fall back to.
                 value = clean_icon(value)
             setattr(pin, field, value)
             update_fields.append(field)
@@ -306,12 +232,7 @@ def apply_pin_edits(
 
 def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None:
     """Repoint *pin* to a new/existing Location at the given coordinates.
-
-    Coordinates live on ``Location`` (not ``Pin``), so this repoints
-    ``pin.location`` rather than writing through a serializer. Resolution is
-    exact (``get_exact_or_create``): a manual move lands on the point the user
-    actually submitted rather than snapping to whatever Location happens to sit
-    within the default dedup radius.
+    Coordinates live on ``Location`` (not ``Pin``), so this repoints ``pin.location`` rather than writing through a serializer.
 
     Args:
         pin: The pin being moved.
@@ -322,8 +243,7 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
         PinMoveError: The owner already has a *top-level* pin at that exact
             point. One root pin per Location per profile is a database
             constraint, so without this check the move surfaces as an
-            unhandled IntegrityError.
-    """
+            unhandled IntegrityError."""
     from urbanlens.dashboard.models.location.model import Location
 
     location, _created = Location.objects.get_exact_or_create(latitude, longitude)
@@ -371,23 +291,13 @@ def reparent_pin(pin: Pin, new_parent: Pin | None) -> None:
 
 def _promote_children(instance: Pin) -> list[int]:
     """Re-parent *instance*'s direct children ahead of its deletion.
-
-    Children move up to the deleted pin's own parent; when the deleted pin
-    was top-level they become top-level pins themselves. A child whose
-    Location already has another top-level pin nests under that pin instead
-    (top-level pins are unique per Location+profile).
-
-    Children that would collide with *instance*'s own root slot (same
-    Location) can only become top-level once the pin is actually gone, so
-    they are temporarily self-parented (detaching them from the doomed
-    cascade) and returned for :func:`_finish_deferred_promotions`.
+    A child whose Location already has another top-level pin nests under that pin instead (top-level pins are unique per Location+profile).
 
     Args:
         instance: The pin about to be deleted.
 
     Returns:
-        Primary keys of children whose promotion must finish post-delete.
-    """
+        Primary keys of children whose promotion must finish post-delete."""
     new_parent_id = instance.parent_pin_id
     deferred_ids: list[int] = []
     for child in Pin.objects.filter(parent_pin=instance):
@@ -411,15 +321,11 @@ def _promote_children(instance: Pin) -> list[int]:
 
 def _finish_deferred_promotions(profile_id: int, deferred_ids: list[int]) -> None:
     """Finish promoting the children held back by :func:`_promote_children`.
-
-    Runs after the parent pin's row is gone, so its root slot is free. If
-    several deferred children share one Location, the first becomes the
-    top-level pin and the rest nest under it.
+    Runs after the parent pin's row is gone, so its root slot is free.
 
     Args:
         profile_id: Owner of the pins (root uniqueness is per profile).
-        deferred_ids: Primary keys of the temporarily self-parented children.
-    """
+        deferred_ids: Primary keys of the temporarily self-parented children."""
     for child in Pin.objects.filter(pk__in=deferred_ids):
         existing_root = Pin.objects.filter(profile_id=profile_id, location_id=child.location_id, parent_pin__isnull=True).exclude(pk=child.pk).first()
         child.parent_pin_id = existing_root.pk if existing_root is not None else None
@@ -435,14 +341,7 @@ class PinDeletion:
 
 def delete_pin(pin: Pin, *, children_mode: str = "") -> PinDeletion:
     """Delete *pin*, asking the caller what to do with its child pins first.
-
-    A pin with descendants requires an explicit ``children_mode``:
-    ``"delete"`` removes the whole subtree (the pins and their photos
-    restorable from Undo History; CASCADEd content - comments, albums, links -
-    is not, see ``PinUndoHandler``); ``"keep"`` promotes the direct children to the deleted pin's
-    own parent (or to top-level pins) and deletes only the pin itself. Either
-    way, every pin actually deleted is staged for undo and (via
-    ``models.pin.signals``) gets a durable tombstone for sync clients.
+    A pin with descendants requires an explicit ``children_mode``: ``"delete"`` removes the whole subtree (the pins and their photos restorable from Undo History; CASCADEd content - comments, albums, links - is not, see ``PinUndoHandler``); ``"keep"`` promotes the direct children to the deleted pin's own parent (or to top-level pins) and deletes only the pin itself.
 
     Args:
         pin: The pin to delete.
@@ -455,8 +354,7 @@ def delete_pin(pin: Pin, *, children_mode: str = "") -> PinDeletion:
 
     Raises:
         PinHasChildrenError: *pin* has descendants and ``children_mode`` is
-            neither ``"delete"`` nor ``"keep"``.
-    """
+            neither ``"delete"`` nor ``"keep"``."""
     subtree = list(Pin.objects.filter(pk=pin.pk).with_descendants())
     descendant_count = len(subtree) - 1
 

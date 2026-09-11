@@ -1,12 +1,4 @@
-"""Controllers for sharing a single pin with one friend.
-
-The *decision* half of the lifecycle - materialising a pin from an accepted
-share, re-creating its bundled child hierarchy, and flipping the share's status
-- no longer lives here. It moved to ``services.sharing.pin_sharing`` so the DM share
-card, the group-chat share card, this page and the external API all run the
-same code; see that module's docstring, in particular its explanation of why
-accepting must **not** re-record a ``LocationExposure``.
-"""
+"""Controllers for sharing a single pin with one friend."""
 
 from __future__ import annotations
 

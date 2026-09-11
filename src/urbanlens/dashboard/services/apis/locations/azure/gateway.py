@@ -1,13 +1,5 @@
 """Shared request plumbing for the Azure Maps REST API.
-
-Azure Maps is Microsoft's actively-maintained geospatial platform - the
-intended replacement for the now-legacy Bing Maps Imagery API this codebase
-also integrates (see ``services.apis.locations.bing_maps``). One subscription
-key authenticates every Azure Maps product area used here (Search, Geocoding,
-Render), unlike Google's split per-product keys, so the auth/request
-convention lives in one place: :func:`azure_maps_request`, shared by
-``geocoding.py``, ``search.py``, and ``render.py``.
-"""
+One subscription key authenticates every Azure Maps product area used here (Search, Geocoding, Render), unlike Google's split per-product keys, so the auth/request convention lives in one place: :func:`azure_maps_request`, shared by ``geocoding.py``, ``search.py``, and ``render.py``."""
 
 from __future__ import annotations
 

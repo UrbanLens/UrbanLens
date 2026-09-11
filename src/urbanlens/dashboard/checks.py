@@ -1,8 +1,4 @@
-"""Startup checks that keep whole classes of mistake from reaching production.
-
-Registered from :meth:`urbanlens.dashboard.apps.DashboardConfig.ready`, so they
-run on every ``manage.py check``, ``migrate``, ``runserver``, and test session.
-"""
+"""Startup checks that fail fast on deploy-time misconfiguration."""
 
 from __future__ import annotations
 
@@ -23,30 +19,16 @@ if TYPE_CHECKING:
     from django.apps.config import AppConfig
     from django.core.checks import CheckMessage
 
-#: Only this project's own models are checked. A third-party app's FileField
-#: writes into MEDIA_ROOT too, but its prefix is not ours to authorize and the
-#: gate already refuses what it does not recognize - so an unregistered
-#: dependency fails closed rather than failing the check.
+#: Only our own models; third-party prefixes fail closed at runtime.
 _OWN_APP_PREFIX = "urbanlens."
 
 
 def _declared_family(field: FileField) -> tuple[str | None, str | None]:
-    """Resolve the media family a file field writes into.
-
-    Args:
-        field: The model field to inspect.
-
-    Returns:
-        Tuple of (family, error_hint). Exactly one is None: a resolved family
-        means no error, and a hint means the family could not be determined.
-    """
+    """Resolve the media family a file field writes into."""
     upload_to = field.upload_to
     if callable(upload_to):
         family = getattr(upload_to, MEDIA_FAMILY_ATTR, None)
         if not family:
-            # getattr, not a bare .__qualname__: an upload_to can be any callable
-            # (a callable class instance, a functools.partial, ...), not only a
-            # plain function/method, and only those guarantee __qualname__.
             name = getattr(upload_to, "__qualname__", repr(upload_to))
             hint = f"its upload_to callable {name!r} does not declare which directory it writes into."
             return None, f"{hint} Decorate it with @declares_media_family('<prefix>') from urbanlens.dashboard.services.media.access."
@@ -60,25 +42,7 @@ def _declared_family(field: FileField) -> tuple[str | None, str | None]:
 
 @register()
 def check_media_authorizers(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Verify every stored-file field has someone deciding who may read it.
-
-    ``MediaGateView`` authorizes a request by the file's leading path segment
-    and refuses anything it does not recognize. That is the right runtime
-    behaviour, but on its own it means a new ``upload_to`` prefix breaks image
-    loading silently and at the worst moment. This check turns the same
-    omission into a startup error naming the field, so the choice of policy is
-    made when the field is added rather than discovered in production.
-
-    The pairing is what makes the media gate structural: unknown files are
-    denied, and you cannot ship an unknown file family by accident.
-
-    Args:
-        app_configs: The app configs being checked, or None for all of them.
-        **kwargs: Ignored; Django passes ``databases`` and friends.
-
-    Returns:
-        One error per file field whose family has no registered authorizer.
-    """
+    """Fail startup when a file field has no registered media authorizer."""
     known = registered_families()
     errors: list[CheckMessage] = []
 
@@ -117,33 +81,7 @@ def check_media_authorizers(app_configs: Sequence[AppConfig] | None = None, **kw
 
 @register()
 def check_media_origin_cookie_domain(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Verify a configured media origin can actually issue its credential.
-
-    Serving uploads from their own hostname (``UL_MEDIA_BASE_URL``) only works
-    if the browser will send the media cookie there, and that hinges entirely
-    on the ``Domain`` attribute
-    :func:`~urbanlens.dashboard.services.media.origin.cookie_domain` derives
-    from ``SITE_URL`` and the media host. When it cannot derive one, every
-    ``set_media_cookie`` call becomes a no-op and the media origin answers 404
-    for every request - with no exception, no log line, and a working-looking
-    app whose images have all silently vanished.
-
-    That is not hypothetical: this check exists because the first version of
-    that function read ``settings.UL_SITE_URL`` (the *environment variable's*
-    spelling; the setting is ``SITE_URL``), got ``""`` on every real
-    deployment, and would have shipped exactly that outage. A test suite that
-    ``override_settings``-es a name into existence cannot catch that class of
-    mistake, because the override invents the very setting production lacks -
-    so the guard has to run against the real settings, which is what a system
-    check is.
-
-    Args:
-        app_configs: The app configs being checked, or None for all of them.
-        **kwargs: Ignored; Django passes ``databases`` and friends.
-
-    Returns:
-        One error when a media origin is configured but unusable.
-    """
+    """Fail startup when a configured media origin cannot issue its cookie."""
     from urllib.parse import urlsplit
 
     from urbanlens.dashboard.services.media.origin import PUBLIC_SUFFIXES, cookie_domain, media_origin, media_origin_host, shared_suffix
@@ -184,12 +122,7 @@ def check_media_origin_cookie_domain(app_configs: Sequence[AppConfig] | None = N
     return []
 
 
-#: Subsystems that write into ``MEDIA_ROOT`` with ``os.path``/``pathlib``
-#: directly rather than through ``STORAGES["default"]``, so an object-store
-#: deployment keeps them on the local disk. Each is a shared scratch area
-#: between containers rather than user-facing media, and none is served through
-#: the media gate - but a deployment that expects "no local media volume" after
-#: switching backends would lose all three, so the switch says so out loud.
+#: Scratch subtrees under MEDIA_ROOT kept on local disk.
 _LOCAL_ONLY_MEDIA_SUBTREES = (
     ("exports/", "services.import_export.export.export_dir"),
     ("imports/", "services.import_export.import_data"),
@@ -199,31 +132,7 @@ _LOCAL_ONLY_MEDIA_SUBTREES = (
 
 @register()
 def check_object_storage_is_configured(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Verify an object-store media backend has everything it needs, before a request finds out.
-
-    ``UL_MEDIA_STORAGE_BACKEND=s3`` with a missing bucket or credential does not
-    fail at startup - django-storages builds the client lazily, so the first
-    symptom is a 500 on one photo, in one request, long after deploy. This turns
-    that into a refusal to start.
-
-    The URL check is the load-bearing one. ``FileField.url`` is what every
-    template, serializer and API response renders, and ``S3Storage.url`` returns
-    a *presigned bucket URL* - a bearer token for one object, valid until it
-    expires, that takes the read out from behind
-    :class:`~urbanlens.dashboard.controllers.media.MediaGateView` entirely.
-    :class:`~urbanlens.dashboard.services.media.object_storage.GatedS3Storage`
-    overrides it back to a ``/media/`` path. A deployment that configured the
-    upstream backend directly would look identical and leak every upload, so the
-    class is checked rather than assumed.
-
-    Args:
-        app_configs: The app configs being checked, or None for all of them.
-        **kwargs: Ignored; Django passes ``databases`` and friends.
-
-    Returns:
-        Errors for an unusable configuration, and one warning naming what stays
-        on local disk regardless.
-    """
+    """Fail startup when the object-store backend is incomplete or bypasses the media gate."""
     if getattr(settings, "UL_MEDIA_STORAGE_BACKEND", "filesystem") != "s3":
         if getattr(settings, "MEDIA_X_ACCEL_OBJECT_PREFIX", ""):
             return [
@@ -245,8 +154,6 @@ def check_object_storage_is_configured(app_configs: Sequence[AppConfig] | None =
         return [
             Error(
                 f"UL_MEDIA_STORAGE_BACKEND is 's3' but STORAGES['default'] resolves to "
-                # __class__, not type(): default_storage is a LazyObject, and type() names the
-                # wrapper rather than the backend it is standing in for.
                 f"{default_storage.__class__.__name__}, not GatedS3Storage. Only GatedS3Storage keeps FileField.url "
                 f"pointing at /media/; the upstream backend returns a presigned bucket URL instead, which serves "
                 f"every upload to anyone holding the link and bypasses the media gate.",
@@ -256,17 +163,9 @@ def check_object_storage_is_configured(app_configs: Sequence[AppConfig] | None =
 
     messages: list[CheckMessage] = []
 
-    # Read off the constructed backend rather than out of the settings dict:
-    # django-storages resolves each option from OPTIONS, then from an AWS_*
-    # setting, then from its own default, so the dict is what was asked for and
-    # these attributes are what the deployment actually got.
     missing: list[str] = []
     if not default_storage.bucket_name:
         missing.append("UL_S3_BUCKET_NAME")
-    # boto3 has its own credential chain (environment, instance role, web
-    # identity), and a deployment on real AWS may legitimately use it - so the
-    # ambient key counts, and only the case where nothing at all supplies one is
-    # an error. Garage issues static keys, so this is the branch that fires here.
     if not (default_storage.access_key and default_storage.secret_key) and not os.environ.get("AWS_ACCESS_KEY_ID"):
         missing.append("UL_S3_ACCESS_KEY_ID/UL_S3_SECRET_ACCESS_KEY")
     if missing:
@@ -297,42 +196,16 @@ def check_object_storage_is_configured(app_configs: Sequence[AppConfig] | None =
     return messages
 
 
-#: The credentials that must exist only in the ai-inference container. Named
-#: here rather than imported from ``AppSettings`` so this check keeps working
-#: if a field is renamed there - a rename that silently emptied this tuple
-#: would turn the check into a no-op, which is worse than a stale name.
+#: Provider keys that belong only in the ai-inference container.
 _PROVIDER_KEY_SETTINGS = ("anthropic_api_key", "openai_api_key", "cloudflare_ai_api_key")
 
 
 @register()
 def check_provider_keys_are_not_on_the_app_tier(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Warn when a provider API key is readable by a process that routes inference remotely.
-
-    ``ai-inference`` exists so provider credentials never sit in the same
-    process as the database credentials and the field-encryption key. The one
-    way that quietly stops being true is a key finding its way back into the
-    root ``.env``, which ``app`` and ``celery-worker`` load wholesale via
-    ``env_file`` - nothing would break, and nothing would say so.
-
-    Deliberately a warning, not an error: the key being present is a
-    misconfiguration, not a failure, and blocking every ``manage.py`` command
-    over it would be worse than the problem. Deliberately silent when
-    ``ai_inference_url`` is unset, because that is a local checkout using
-    ``LocalInferenceClient``, where these keys are exactly where they should be.
-
-    Args:
-        app_configs: Unused; part of Django's check signature.
-        **kwargs: Unused; part of Django's check signature.
-
-    Returns:
-        One warning naming every provider key that should have been in
-        ``.env.ai`` instead, or an empty list.
-    """
+    """Warn when a provider key is readable on the app tier instead of ai-inference."""
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
     if not getattr(app_settings, "ai_inference_url", None):
-        # No remote inference tier configured - in-process provider calls are
-        # the intended path here, so the keys belong in this process.
         return []
     if getattr(settings, "UL_PROCESS_ROLE", "") == "inference":
         return []
@@ -355,9 +228,7 @@ def check_provider_keys_are_not_on_the_app_tier(app_configs: Sequence[AppConfig]
     ]
 
 
-#: Hosts a development or local deployment may point REData at without comment:
-#: this machine, a container on this machine, a private network, or a dev
-#: environment. Anything else is somebody's real deployment.
+#: Hosts a dev deployment may point REData at without warning.
 _LOCAL_REDATA_HOSTS = ("localhost", "127.0.0.1", "::1")
 
 #: Host fragments that identify a non-production REData.
@@ -365,26 +236,16 @@ _LOCAL_REDATA_MARKERS = (".dev.", "urbanlens_redata", "redata-", "_redata")
 
 
 def _redata_host_is_local(url: str) -> bool:
-    """Whether *url* names a REData that costs nobody anything to call.
-
-    Args:
-        url: The configured ``redata_api_url``.
-
-    Returns:
-        True when the host is this machine, a container beside it, a private
-        address, or a dev environment.
-    """
+    """Whether *url* points at a local or dev REData instance."""
     from urllib.parse import urlparse
 
     host = (urlparse(url).hostname or "").lower()
     if not host:
-        return True  # Unparseable, so nothing useful to say about it.
+        return True
     if host in _LOCAL_REDATA_HOSTS or host.endswith(".local"):
         return True
     if any(marker in host for marker in _LOCAL_REDATA_MARKERS):
         return True
-    # Container aliases and private ranges. A bare hostname with no dot is a
-    # Docker service name, which cannot leave the host's networks.
     if "." not in host:
         return True
     return host.startswith(("10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20."))
@@ -392,30 +253,7 @@ def _redata_host_is_local(url: str) -> bool:
 
 @register()
 def check_dev_is_not_pointed_at_a_real_redata(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Warn when a development deployment's REData is somebody's real one.
-
-    REData is this project's own service, which is why the demo's spend guard
-    exempts it - calling our own instance costs only our own capacity. That
-    reasoning stops holding one hop later: REData reaches Google Places, which
-    bills. A development checkout configured with the production REData URL and
-    a live key is therefore one flag away from spending a real budget on work
-    nobody is watching, and a pin import enqueues thousands of such calls
-    (P109).
-
-    Deliberately a warning rather than an error, and deliberately still raised
-    while ``UL_ALLOW_OUTBOUND_APIS`` is off: the guard in
-    ``rate_limiter.outbound_calls_permitted`` is what makes this currently
-    harmless, and the point of saying so is that turning that flag on - which is
-    exactly what someone working on an integration does - makes it live against
-    production.
-
-    Args:
-        app_configs: Unused; part of Django's check signature.
-        **kwargs: Unused; part of Django's check signature.
-
-    Returns:
-        One warning, or an empty list.
-    """
+    """Warn when a dev deployment points at a non-local REData."""
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
     environment = str(getattr(settings, "ENVIRONMENT_NAME", "")).lower()
@@ -444,34 +282,11 @@ def check_dev_is_not_pointed_at_a_real_redata(app_configs: Sequence[AppConfig] |
 
 @register()
 def check_metrics_endpoint_is_guarded(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Refuse to serve /metrics to anyone who asks.
-
-    ``UL_METRICS_ENABLED`` registers a URL that describes the running
-    application: every view name that has served a request, how often, how
-    slowly, and how often it failed. Two gates can restrict who reads that - a
-    bearer token and a network allowlist - and each is independently optional,
-    because either alone is a reasonable posture. Both being empty is not a
-    third posture, it is the endpoint being public, and on a deployment that
-    faces the internet that is a mistake nobody would make deliberately.
-
-    Local and development instances are exempt: they are the case where reading
-    ``/metrics`` with curl while working on it is the point, and they are not
-    reachable from anywhere that matters.
-
-    Args:
-        app_configs: The app configs being checked, or None for all of them.
-        **kwargs: Ignored; Django passes ``databases`` and friends.
-
-    Returns:
-        One error when the endpoint is enabled, unguarded, and on a deployment
-        that counts as production.
-    """
+    """Fail startup when /metrics is enabled without a token or allowlist on production."""
     if not getattr(settings, "UL_METRICS_ENABLED", False):
         return []
     if getattr(settings, "UL_METRICS_TOKEN", "") or getattr(settings, "UL_METRICS_ALLOWED_CIDRS", ""):
         return []
-    # is_production_environment() classifies staging - and any name it does not
-    # recognise - as production, which is the direction this check wants to err.
     if not getattr(settings, "IS_PRODUCTION", False):
         return []
 
@@ -487,38 +302,7 @@ def check_metrics_endpoint_is_guarded(app_configs: Sequence[AppConfig] | None = 
 
 @register()
 def check_celery_failures_cannot_requeue_forever(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Refuse the two settings combinations that turn a task failure into a loop.
-
-    With ``task_acks_late`` on, Celery's failure handler has one branch that
-    rejects the message *with requeue* instead of acknowledging it. Nothing
-    bounds the redelivery - ``max_retries`` counts ``task.retry()`` calls rather
-    than broker deliveries, and the Redis/Valkey transport enforces no delivery
-    limit - so a deterministic failure is handed straight back to a worker that
-    fails the same way, occupying a concurrency slot until someone notices.
-
-    Noticing is the hard part: that branch suppresses the failure event and the
-    stored result, so the loop is invisible to the metrics in
-    :mod:`~urbanlens.dashboard.services.core.celery_events` and to anything
-    reading task results.
-
-    Two settings reach that branch, and both are checked here because they fail
-    identically and only one of them is obvious:
-
-    - ``task_reject_on_worker_lost`` covers a child dying mid-task (an OOM kill,
-      or a segfault in an image or video decoder).
-    - ``task_acks_on_failure_or_timeout`` set to False covers any task exceeding
-      ``task_time_limit`` - a much easier condition to reach than an OOM.
-
-    Neither is read from the environment, so this fires only for an edit to
-    ``settings``, which is exactly the regression it exists to catch.
-
-    Args:
-        app_configs: The app configs being checked, or None for all of them.
-        **kwargs: Ignored; Django passes ``databases`` and friends.
-
-    Returns:
-        One error per settings combination that can requeue without bound.
-    """
+    """Fail startup when Celery settings allow unbounded task requeue."""
     if not getattr(settings, "CELERY_TASK_ACKS_LATE", False):
         return []
 
@@ -546,23 +330,7 @@ def check_celery_failures_cannot_requeue_forever(app_configs: Sequence[AppConfig
 
 
 def websocket_frame_cap_conflict() -> str | None:
-    """Report a transport frame cap below the one the application enforces.
-
-    Not a registered system check, and that is the point. Django's checks run
-    from ``manage.py``; the process that carries daphne's flags never calls
-    them, so a registered version of this reads an argv that can only ever be a
-    management command's and passes vacuously forever. It is called
-    from ``asgi.py`` instead, which daphne imports in its own process after
-    argv is set.
-
-    ``docker-entrypoint.sh`` derives the flags from the same setting, so the
-    two agree by construction on the shipped path. This exists for the
-    deployment that overrides them by hand.
-
-    Returns:
-        A description of the conflict, or None when there is none - including
-        when this process was not started with the flags at all.
-    """
+    """Report when daphne flags cap frames below the app-level limit."""
     required = int(getattr(settings, "UL_WEBSOCKET_MAX_MESSAGE_BYTES", 0) or 0)
     for flag in ("--websocket-max-message-size", "--websocket-max-frame-size"):
         if flag not in sys.argv:

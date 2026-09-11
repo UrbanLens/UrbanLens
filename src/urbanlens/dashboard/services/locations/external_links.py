@@ -1,12 +1,5 @@
 """Shared helper for auto-adding a provider-discovered external link to a Pin/Wiki.
-
-Several integrations (Nominatim, EPA ECHO, Wikipedia, ...) each independently
-discover one confidently-matched external URL for a pin's location and want
-to add it to that pin's (and its wiki's) Links list automatically - without
-duplicating an existing entry or resurrecting a link the user deliberately
-removed (see ``PinAutoRemoval``/``WikiAutoRemoval``'s tombstone mechanism).
-This module is that one shared primitive.
-"""
+Several integrations (Nominatim, EPA ECHO, Wikipedia, ...) each independently discover one confidently-matched external URL for a pin's location and want to add it to that pin's (and its wiki's) Links list automatically - without duplicating an existing entry or resurrecting a link the user deliberately removed (see ``PinAutoRemoval``/``WikiAutoRemoval``'s tombstone mechanism)."""
 
 from __future__ import annotations
 
@@ -29,19 +22,16 @@ def add_pin_link(pin: Pin, url: str, name: str) -> bool:
         name: The link's display name.
 
     Returns:
-        True when a new ``PinLink`` row was created.
-    """
+        True when a new ``PinLink`` row was created."""
     from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
     from urbanlens.dashboard.models.links.model import PinLink
 
     if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=url):
         return False
-    # The exists() check is only a fast path that avoids opening a savepoint for
-    # the common "already there" case. The unique constraint on (pin, md5(url))
-    # is what actually decides: this runs from a LocationCache signal whose panel
-    # fetches are concurrent (their own queue, concurrency 20), so two panels
-    # contributing the same URL can both pass the check. The loser's insert is
-    # absorbed here rather than escaping as a 500 from inside the signal.
+    # The exists() check is only a fast path that avoids opening a savepoint for the common "already
+    # there" case.
+    # The unique constraint on (pin, md5(url)) is what actually decides: this runs from a
+    # LocationCache signal whose panel fetches are concurrent (their own queue, concurrency 20), so
     if PinLink.objects.filter(pin=pin, url=url).exists():
         return False
     try:
@@ -61,8 +51,7 @@ def add_wiki_link(wiki: Wiki, url: str, name: str) -> bool:
         name: The link's display name.
 
     Returns:
-        True when a new ``WikiLink`` row was created.
-    """
+        True when a new ``WikiLink`` row was created."""
     from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
     from urbanlens.dashboard.models.links.model import WikiLink
 

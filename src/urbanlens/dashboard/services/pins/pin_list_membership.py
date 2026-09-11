@@ -1,28 +1,5 @@
 """Smart PinList membership matching and sync.
-
-A "smart" PinList (``PinList.is_smart=True``) auto-includes pins matching a
-saved filter (``smart_filter``, same JSON shape as ``SavedFilter.criteria``)
-and/or falling inside a drawn boundary polygon (``smart_boundary``). Two entry
-points keep membership current:
-
-- ``sync_pin_against_smart_lists`` - called from a Pin post_save signal
-  (see ``dashboard.models.pin_list.signals``) to evaluate one pin against all
-  of its owner's smart lists.
-- ``resync_smart_list`` - called synchronously from the list-edit view when a
-  list's ``smart_filter``/``smart_boundary`` changes (or ``is_smart`` is
-  turned on), to fully recompute that one list's membership.
-
-``PinListItem.added_via`` tracks provenance so manually-added pins are never
-auto-removed, even if they also happen to match (or stop matching) a smart
-rule.
-
-Alongside the smart-membership machinery, this module owns the *explicit*
-membership operations (add/remove/reorder). Those were previously written
-inline in ``controllers.pin_lists`` and are shared here so the external API
-(``external_api.views``) applies byte-for-byte the same cap enforcement,
-duplicate skipping and ordering rules the web UI does, rather than a second
-implementation that could drift.
-"""
+``PinListItem.added_via`` tracks provenance so manually-added pins are never auto-removed, even if they also happen to match (or stop matching) a smart rule."""
 
 from __future__ import annotations
 
@@ -76,11 +53,10 @@ def sync_pin_against_smart_lists(pin: Pin) -> None:
         matches = _pin_matches_smart_list(pin, pin_list)
         existing = PinListItem.objects.membership(pin_list, pin)
         if matches and existing is None:
-            # Overlapping Pin.save() transactions can both see "no existing
-            # membership" and race to create one - the table has a
-            # UniqueConstraint(pin_list, pin), so the loser here just means
-            # the concurrent path already added it; treat that as a no-op
-            # rather than letting IntegrityError bubble up as a 500.
+            # Overlapping Pin.save() transactions can both see "no existing membership" and race to
+            # create one - the table has a UniqueConstraint(pin_list, pin), so the loser here just
+            # means the concurrent path already added it; treat that as a no-op rather than letting
+            # IntegrityError bubble up as a 500.
             with contextlib.suppress(IntegrityError):
                 PinListItem.objects.create(
                     pin_list=pin_list,
@@ -95,20 +71,7 @@ def sync_pin_against_smart_lists(pin: Pin) -> None:
 
 def resync_smart_list(pin_list: PinList, *, filter_ids: set[int] | None = None) -> None:
     """Fully recompute one list's membership against its current smart_filter/smart_boundary rules.
-
-    Callable regardless of ``is_smart`` - picking a filter/boundary should show
-    a matching snapshot right away, even before the user opts into ongoing
-    auto-sync. ``is_smart`` only gates whether *future* pin edits keep
-    re-triggering this (see ``sync_pin_against_smart_lists``, wired to Pin's
-    post_save/labels-m2m signals).
-
-    Newly-added items never push the list past ``SiteSettings.get_current().
-    max_pins_per_list`` (0 = unlimited) - matches already on the list are kept
-    even if the cap is already met/exceeded (e.g. the cap was lowered after
-    the fact), but no *new* items are added beyond it. When more candidates
-    need adding than remain under the cap, which ones get kept is an
-    arbitrary-but-deterministic choice (lowest pin id first), so re-running a
-    resync against the same rules is reproducible.
+    ``is_smart`` only gates whether *future* pin edits keep re-triggering this (see ``sync_pin_against_smart_lists``, wired to Pin's post_save/labels-m2m signals).
 
     Args:
         pin_list: The list whose ``smart_filter``/``smart_boundary`` just changed.
@@ -117,8 +80,7 @@ def resync_smart_list(pin_list: PinList, *, filter_ids: set[int] | None = None) 
             lists that share the exact same freshly-saved ``smart_filter``
             criteria) and want to skip re-resolving the same Label/CustomField
             criteria into a Pin queryset for every list. Resolved internally
-            when omitted.
-    """
+            when omitted."""
     from urbanlens.dashboard.models.pin_list.model import PinListItem
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
@@ -179,10 +141,10 @@ def _pin_matches_filter(pin: Pin, pin_list: PinList) -> bool:
     from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria
 
     criteria = deserialize_criteria(smart_filter, pin_list.profile)
-    # root_pins(): every saved-filter preview call site (controllers/saved_filters.py)
-    # excludes detail/child pins before matching criteria - omitting it here let a
-    # child pin enter smart-list membership when its own filter preview would not
-    # have shown it. See docs/audits/GOALS_CODE_AUDIT.md ("Lists: filter/manual reconciliation").
+    # root_pins(): every saved-filter preview call site (controllers/saved_filters.py) excludes
+    # detail/child pins before matching criteria - omitting it here let a child pin enter smart-list
+    # membership when its own filter preview would not have shown it.
+    # See docs/audits/GOALS_CODE_AUDIT.md ("Lists: filter/manual reconciliation").
     return Pin.objects.filter(pk=pin.pk).root_pins().filter_by_criteria(criteria).exists()
 
 
@@ -191,31 +153,22 @@ def _pin_in_boundary(pin: Pin, pin_list: PinList) -> bool:
         return False
     from urbanlens.dashboard.models.location.model import Location
 
-    # Split at the antimeridian for the same reason filter_by_criteria's
-    # include_regions does: a boundary drawn across the date line arrives with
-    # unwrapped coordinates, and a planar __within against it matches nothing on
-    # the far side. Both boundary paths need it - this one decides a single pin's
-    # membership, _boundary_matching_ids resolves the whole list.
+    # Split at the antimeridian for the same reason filter_by_criteria's include_regions does: a
+    # boundary drawn across the date line arrives with unwrapped coordinates, and a planar __within
+    # against it matches nothing on the far side.
+    # Both boundary paths need it - this one decides a single pin's membership,
     return Location.objects.filter(pk=pin.location_id, point__within=split_at_antimeridian(pin_list.smart_boundary)).exists()
 
 
 def filter_matching_ids(pin_list: PinList) -> set[int]:
     """Resolve ``pin_list.smart_filter`` into the set of currently-matching pin ids.
-
-    Exposed publicly (not just an internal helper of ``resync_smart_list``) so
-    callers resyncing several lists that share the exact same freshly-saved
-    ``smart_filter`` criteria and profile (e.g. every ``PinList`` derived from
-    one edited ``SavedFilter``) can resolve it once and pass the result to
-    each list's ``resync_smart_list(pin_list, filter_ids=...)`` call, instead
-    of every list independently re-resolving the same Label/CustomField
-    criteria into a Pin queryset.
+    Exposed publicly (not just an internal helper of ``resync_smart_list``) so callers resyncing several lists that share the exact same freshly-saved ``smart_filter`` criteria and profile (e.g. every ``PinList`` derived from one edited ``SavedFilter``) can resolve it once and pass the result to each list's ``resync_smart_list(pin_list, filter_ids=...)`` call, instead of every list independently re-resolving the same Label/CustomField criteria into a Pin queryset.
 
     Args:
         pin_list: The list whose ``smart_filter`` to resolve.
 
     Returns:
-        Set of matching pin ids, or an empty set when there's no smart_filter.
-    """
+        Set of matching pin ids, or an empty set when there's no smart_filter."""
     if not pin_list.smart_filter:
         return set()
     from urbanlens.dashboard.models.pin.model import Pin
@@ -229,24 +182,7 @@ def filter_matching_ids(pin_list: PinList) -> set[int]:
 
 def add_pins_to_list(pin_list: PinList, pins: Sequence[Pin], *, added_via: str | None = None) -> ListAddResult:
     """Add *pins* to *pin_list*, skipping duplicates and honoring the per-list cap.
-
-    Extracted verbatim from ``controllers.pin_lists.PinListAddPinsView.post``
-    so the web UI and the external API share one implementation. Three rules
-    apply, in this order:
-
-    1. Pins already on the list are dropped - the table carries
-       ``UniqueConstraint(pin_list, pin)`` (``uq_pin_list_item``), so
-       re-adding one would raise rather than no-op.
-    2. New items are appended, numbered from the list's current item count, so
-       they land after everything already there.
-    3. ``SiteSettings.get_current().max_pins_per_list`` (0 = unlimited) bounds
-       the result. Pins over the cap are silently dropped and reported via
-       ``skipped_over_cap`` rather than raising - a partial add is the
-       behavior the UI already relies on.
-
-    The whole thing runs in one transaction: the count that determines
-    ordering and remaining capacity is read in the same atomic block that
-    creates the rows.
+    Extracted verbatim from ``controllers.pin_lists.PinListAddPinsView.post`` so the web UI and the external API share one implementation.
 
     Args:
         pin_list: The list to add to.
@@ -261,8 +197,7 @@ def add_pins_to_list(pin_list: PinList, pins: Sequence[Pin], *, added_via: str |
             other functions here) and stays import-cycle free.
 
     Returns:
-        A :class:`ListAddResult` describing what happened.
-    """
+        A :class:`ListAddResult` describing what happened."""
     from urbanlens.dashboard.models.pin_list.model import PinListItem
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
@@ -300,14 +235,7 @@ def add_pins_to_list(pin_list: PinList, pins: Sequence[Pin], *, added_via: str |
 
 def remove_pins_from_list(pin_list: PinList, pin_ids: Sequence[int]) -> int:
     """Remove the given pins from *pin_list*, whatever their provenance.
-
-    Explicit removal always wins - a smart-filter or boundary match is removed
-    just like a manual one. (A later resync may of course re-add it if it
-    still matches the list's rules; that is the same behavior the web UI has.)
-
-    Deliberately does *not* renumber the remaining items. ``PinListItem.Meta.
-    ordering = ["order", "created"]`` tolerates gaps, so closing them would be
-    a full-table rewrite for no visible difference.
+    ``PinListItem.Meta. ordering = ["order", "created"]`` tolerates gaps, so closing them would be a full-table rewrite for no visible difference.
 
     Args:
         pin_list: The list to remove from.
@@ -315,8 +243,7 @@ def remove_pins_from_list(pin_list: PinList, pin_ids: Sequence[int]) -> int:
             ignored.
 
     Returns:
-        How many membership rows were actually deleted.
-    """
+        How many membership rows were actually deleted."""
     from urbanlens.dashboard.models.pin_list.model import PinListItem
 
     deleted, _ = PinListItem.objects.for_list(pin_list).filter(pin_id__in=list(pin_ids)).delete()
@@ -326,23 +253,12 @@ def remove_pins_from_list(pin_list: PinList, pin_ids: Sequence[int]) -> int:
 def reorder_list_items(pin_list: PinList, item_ids: Sequence[int]) -> int:
     """Renumber *pin_list*'s items so they follow the order given in *item_ids*.
 
-    Each item's ``order`` becomes its index in *item_ids*. Ids that don't
-    belong to this list are ignored rather than rejected, matching
-    ``controllers.pin_lists.PinListReorderView``'s existing leniency: the
-    drag-and-drop UI can submit a stale id for an item deleted in another tab,
-    and failing the whole reorder over that would be worse than skipping it.
-
-    Note that ignored ids still consume their index, so a submission
-    containing foreign ids yields a sparse-but-correctly-ordered result rather
-    than a contiguous one - again matching the current behavior.
-
     Args:
         pin_list: The list whose items are being reordered.
         item_ids: ``PinListItem`` primary keys in their new display order.
 
     Returns:
-        How many items were actually renumbered.
-    """
+        How many items were actually renumbered."""
     from urbanlens.dashboard.models.pin_list.model import PinListItem
 
     ids = list(item_ids)
@@ -362,25 +278,13 @@ def reorder_list_items(pin_list: PinList, item_ids: Sequence[int]) -> int:
 
 def resync_lists_for_saved_filter(saved_filter: SavedFilter) -> int:
     """Refresh every PinList derived from *saved_filter* against its current criteria.
-
-    ``PinList.smart_filter`` is a one-time *copy* of a SavedFilter's criteria,
-    not a live reference, so a list pointed at a filter silently drifts out of
-    sync the moment that filter is edited. Every write path that changes
-    ``SavedFilter.criteria`` must call this.
-
-    The shared-computation optimization here was extracted from
-    ``controllers.saved_filters.SavedFilterEditView.post``: all derived lists
-    belong to the same profile and, once the copy below has run, carry
-    identical criteria - so the matching pin ids are resolved once and reused,
-    instead of every list independently re-resolving the same Label and
-    CustomField criteria into a Pin queryset.
+    ``PinList.smart_filter`` is a one-time *copy* of a SavedFilter's criteria, not a live reference, so a list pointed at a filter silently drifts out of sync the moment that filter is edited.
 
     Args:
         saved_filter: The filter whose ``criteria`` just changed.
 
     Returns:
-        How many derived lists were resynced.
-    """
+        How many derived lists were resynced."""
     criteria = saved_filter.criteria
     shared_filter_ids: set[int] | None = None
     resynced = 0

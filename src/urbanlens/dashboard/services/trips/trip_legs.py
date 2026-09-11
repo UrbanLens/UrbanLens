@@ -1,15 +1,5 @@
 """Drive-time legs between consecutive trip activities (UL-60 slice).
-
-Routed via REData when configured, falling back to the direct OSRM gateway
-otherwise (see ``services.apis.locations.routing_resolution``), and cached
-aggressively either way: road distances between two fixed places don't
-change, so a leg is fetched live at most once and then served from cache for
-weeks. Renders are budgeted - a panel render performs at most a couple of
-live routing calls and simply omits the legs it couldn't fetch yet; the next
-render fills them in from a warmer cache. This keeps the activities panel
-fast even for long itineraries, and keeps routing usage inside its
-(self-imposed) rate limits.
-"""
+Routed via REData when configured, falling back to the direct OSRM gateway otherwise (see ``services.apis.locations.routing_resolution``), and cached aggressively either way: road distances between two fixed places don't change, so a leg is fetched live at most once and then served from cache for weeks."""
 
 from __future__ import annotations
 

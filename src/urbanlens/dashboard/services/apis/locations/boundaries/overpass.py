@@ -22,39 +22,19 @@ from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededErro
 
 logger = logging.getLogger(__name__)
 
-# The self-hosted Overpass instance: fastest and most reliable endpoint in the
-# 2026-07-22 benchmark (docs/reports/overpass-mirror-test.md - sub-second medians, no
-# per-IP slot limit, verified globally complete against the public instances),
-# and the only one under our control. It is the primary; the public instances
-# below are ordered fallbacks, not equal peers (`_available_endpoints` keeps
-# the primary first and only shuffles the fallbacks).
+# It is the primary; the public instances below are ordered fallbacks, not equal peers
+# (`_available_endpoints` keeps the primary first and only shuffles the fallbacks).
 _API_URL = "https://overpass.osm.urbanlens.org/api/interpreter"
-# Public fallbacks, used when the primary is down or overloaded. Every
-# instance runs the same OSM3S/Overpass API software, so an identical query
-# works against any of them.
-# See https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances
-#
-# Pool membership rules, learned the hard way (benchmark: docs/reports/overpass-mirror-test.md):
-#
-# * Only GLOBALLY COMPLETE instances may be listed. A regional extract (e.g.
-#   overpass.osm.ch, Switzerland-only) answers 200 OK with an empty `elements`
-#   list for out-of-region queries - the empty result reads as an authoritative
-#   "OSM has nothing here", silently poisoning lookups. `query()` now
-#   cross-checks empty fallback responses against the next endpoint as a
-#   backstop, but that safety net is no reason to list a known extract.
-# * Chronically dead mirrors cost real latency, not just noise: they fail by
-#   socket timeout (up to `self.timeout` seconds) before failover moves on, so
-#   each dead entry selected first stalls a boundary lookup by ~30s. The
-#   2026-07-22 benchmark measured overpass.private.coffee at 20/20 failures and
-#   overpass.kumi.systems at 19/20; both were removed alongside osm.ch.
+# Public fallbacks, used when the primary is down or overloaded.
+# Every instance runs the same OSM3S/Overpass API software, so an identical query works against any
+# of them.
 _API_MIRRORS: tuple[str, ...] = (
     "https://overpass-api.de/api/interpreter",
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 )
-# HTTP statuses that mean "this instance is overloaded/unhealthy right now"
-# rather than "your query is wrong". 429 is the per-IP slot/quota limit;
-# 502/503/504 are the dispatcher-busy family. These, plus network timeouts,
-# take an instance out of rotation until the next day (see `_mark_endpoint_down`).
+# HTTP statuses that mean "this instance is overloaded/unhealthy right now" rather than "your query
+# is wrong".
+# 429 is the per-IP slot/quota limit; 502/503/504 are the dispatcher-busy family.
 _RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 _RETRY_BACKOFF_SECONDS = 0.5
 # Cache key namespace for the "this endpoint is down" flags. Backed by the
@@ -97,11 +77,10 @@ def _endpoint_is_down(url: str) -> bool:
         return False
 
 
-# Overpass QL has no OR operator to chain bracket filters within one statement, so
-# each top-level `|`-separated clause here becomes its own unioned statement per
-# element type (see `_TAG_FILTER_CLAUSE_SPLIT` / `_nearby_features_query`). The
-# split only breaks on a `|` between a `]` and a `[`, so the `|` inside the regex
-# alternation below is left intact.
+# Overpass QL has no OR operator to chain bracket filters within one statement, so each top-level
+# `|`-separated clause here becomes its own unioned statement per element type (see
+# `_TAG_FILTER_CLAUSE_SPLIT` / `_nearby_features_query`).
+# The split only breaks on a `|` between a `]` and a `[`, so the `|` inside the regex alternation
 _DEFAULT_FEATURE_TAG_FILTER = '[~"^(building|amenity|tourism|historic|leisure|landuse|industrial|man_made|shop|office)$"~"."]|["railway"="station"]'
 _TAG_FILTER_CLAUSE_SPLIT = re.compile(r"(?<=\])\|(?=\[)")
 OsmElementType = Literal["node", "way", "relation"]
@@ -170,11 +149,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
 
     base_url: str = _API_URL
     mirrors: tuple[str, ...] = _API_MIRRORS
-    #: Server-side Overpass QL ``[timeout:N]``. Overpass charges the time spent
-    #: waiting for a free dispatcher slot against this budget, so a low value
-    #: makes the busy public instances 504 ("Dispatcher_Client ... timeout")
-    #: before the (usually sub-second) query even starts. Keep it generous; the
-    #: HTTP ``timeout`` below must stay strictly larger so the socket does not
+    #: Server-side Overpass QL ``[timeout:N]``.
+    #: Keep it generous; the HTTP ``timeout`` below must stay strictly larger so the socket does not
     #: abort a query the server is still willing to run.
     ql_timeout: int = 25
     timeout: int = 30
@@ -194,12 +170,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
 
     def _available_endpoints(self) -> list[str]:
         """Healthy endpoints: the primary first, then fallbacks in randomised order.
-
-        The self-hosted primary is preferred deliberately (fastest, no per-IP
-        limits, under our control - see the module comment); shuffling only the
-        fallbacks spreads whatever load does spill over evenly across the
-        public instances instead of always hammering the same one.
-        """
+        The self-hosted primary is preferred deliberately (fastest, no per-IP limits, under our control - see the module comment); shuffling only the fallbacks spreads whatever load does spill over evenly across the public instances instead of always hammering the same one."""
         available = [url for url in self._endpoints() if not _endpoint_is_down(url)]
         if available and available[0] == self.base_url:
             fallbacks = available[1:]
@@ -210,44 +181,21 @@ class OverpassGateway(Gateway, BoundaryProvider):
 
     def query(self, query: str, *, timeout: int | None = None) -> dict[str, Any]:
         """Run a raw Overpass QL query and return the decoded JSON payload.
-
-        The self-hosted primary is tried first, failing over to the public
-        fallbacks on the transient overload responses (429/502/503/504) and
-        connection timeouts the free instances routinely return. Any endpoint
-        that fails that way is taken out of rotation until the next day
-        (:func:`_mark_endpoint_down`), so a chronically overloaded instance
-        stops being tried at all.
-
-        An **empty** ``elements`` list from a *fallback* endpoint is treated as
-        suspect rather than authoritative: a pool member can lie by omission
-        (the osm.ch regional-extract incident - 200 OK, zero elements,
-        worldwide), so the query is cross-checked once against the next
-        endpoint. If the cross-check finds elements, the empty-answering
-        endpoint is marked down and the non-empty payload wins; if it also
-        comes back empty, the empty result is accepted as genuine. The primary
-        is trusted without a cross-check - it is benchmarked complete and under
-        our control, and most genuinely-empty queries (rural coordinates etc.)
-        would otherwise pay a doubled request for nothing.
-
-        A non-retryable HTTP error (e.g. 400 for a malformed query) is raised
-        immediately without downing the endpoint - that is our bug, not the
-        instance's, and every mirror would reject it identically. Our own
-        :class:`RateLimitExceededError` likewise propagates untouched.
+        Any endpoint that fails that way is taken out of rotation until the next day (:func:`_mark_endpoint_down`), so a chronically overloaded instance stops being tried at all.
 
         Args:
-            query: The Overpass QL program to execute.
-            timeout: Optional HTTP timeout override in seconds; defaults to
+                query: The Overpass QL program to execute.
+                timeout: Optional HTTP timeout override in seconds; defaults to
                 ``self.timeout``.
 
         Returns:
-            The decoded JSON payload, or an empty dict if the response was not a
-            JSON object or every endpoint is currently down.
+                The decoded JSON payload, or an empty dict if the response was not a
+                JSON object or every endpoint is currently down.
 
         Raises:
-            requests.RequestException: If every available endpoint fails
+                requests.RequestException: If every available endpoint fails
                 transiently, or on the first non-retryable HTTP error.
-            RateLimitExceededError: If our own rate limiter blocks the call.
-        """
+                RateLimitExceededError: If our own rate limiter blocks the call."""
         http_timeout = timeout or self.timeout
         candidates = self._available_endpoints()
         if not candidates:
@@ -307,13 +255,10 @@ class OverpassGateway(Gateway, BoundaryProvider):
         try:
             payload = self.query(query, timeout=timeout)
         except (requests.RequestException, ValueError):
-            # Reached only after `query` has already failed over across every
-            # configured mirror (see `OverpassGateway.query`), so this is a genuine
-            # all-instances-unavailable event, not the routine single-instance 504
-            # it used to swallow. Still non-fatal - callers treat an empty result
-            # as "no boundary data" - but a sustained run of these now warrants a
-            # look. logger.warning (not .exception) so it doesn't read as a crash,
-            # matching GDELT's gateway, which handles its external failures the same.
+            # Still non-fatal - callers treat an empty result as "no boundary data" - but a
+            # sustained run of these now warrants a look. logger.warning (not .exception) so it
+            # doesn't read as a crash, matching GDELT's gateway, which handles its external failures
+            # the same.
             logger.warning("Overpass query failed on all endpoints", exc_info=True)
             return []
         elements = payload.get("elements")
@@ -347,27 +292,17 @@ class OverpassGateway(Gateway, BoundaryProvider):
 
     def buildings_within(self, polygon: Polygon | MultiPolygon) -> list[dict[str, Any]]:
         """Return every OSM building whose footprint falls inside a polygon.
-
-        The open-data counterpart to REData's per-parcel building list: given a
-        property/parcel boundary, this answers "what structures stand on it?"
-        for jurisdictions REData has no county GIS coverage for.
-
-        Not routed through :meth:`nearby_features` on purpose - that helper
-        clamps its search radius to 250 m (see ``_nearby_features_query``),
-        which is smaller than the sites this is for. Overpass's own ``poly:``
-        filter takes the real boundary instead, so a 40-acre campus is queried
-        exactly, in one request.
+        Overpass's own ``poly:`` filter takes the real boundary instead, so a 40-acre campus is queried exactly, in one request.
 
         Args:
-            polygon: The property boundary to search inside (WGS-84). A
+                polygon: The property boundary to search inside (WGS-84). A
                 MultiPolygon is queried by its largest ring.
 
         Returns:
-            One dict per building - ``{"name", "latitude", "longitude",
-            "osm_id", "source"}`` - matching the record shape
-            ``plugins.builtin.parcel_buildings`` caches. Empty when the
-            polygon is unusable or Overpass found nothing.
-        """
+                One dict per building - ``{"name", "latitude", "longitude",
+                "osm_id", "source"}`` - matching the record shape
+                ``plugins.builtin.parcel_buildings`` caches. Empty when the
+                polygon is unusable or Overpass found nothing."""
         ring = self._largest_exterior_ring(polygon)
         if ring is None:
             return []
@@ -406,18 +341,13 @@ out center tags;
     @staticmethod
     def _largest_exterior_ring(polygon: Polygon | MultiPolygon | None) -> list[tuple[float, float]] | None:
         """The exterior ring of the largest part of a polygonal geometry, as (lon, lat) pairs.
-
-        Overpass's ``poly:`` filter accepts a single ring, so a MultiPolygon
-        (the shape every stored ``Boundary`` uses) has to be reduced to one -
-        its largest part is the parcel proper, any others being outbuildings
-        or slivers.
+        Overpass's ``poly:`` filter accepts a single ring, so a MultiPolygon (the shape every stored ``Boundary`` uses) has to be reduced to one - its largest part is the parcel proper, any others being outbuildings or slivers.
 
         Args:
-            polygon: The geometry to reduce; None is tolerated.
+                polygon: The geometry to reduce; None is tolerated.
 
         Returns:
-            The ring's coordinates, or None when there is no usable ring.
-        """
+                The ring's coordinates, or None when there is no usable ring."""
         if polygon is None:
             return None
         largest: GEOSGeometry | None = polygon
@@ -449,15 +379,7 @@ out center tags;
         include_geometry: bool,
         ql_timeout: int = 25,
     ) -> str:
-        """Build an Overpass QL query constrained to useful place tags.
-
-        ``tag_filter`` may contain multiple ``|``-separated Overpass filter clauses;
-        each becomes its own unioned statement per element type, since Overpass QL
-        has no OR operator for chaining bracket filters within a single statement.
-
-        ``ql_timeout`` sets the server-side ``[timeout:N]``; see the
-        :class:`OverpassGateway.ql_timeout` field for why it must be generous.
-        """
+        """Build an Overpass QL query constrained to useful place tags."""
         radius = max(10, min(int(radius_meters), 250))
         lat = float(latitude)
         lon = float(longitude)
@@ -510,19 +432,13 @@ out center tags;
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | None]:
         """Return the smallest containing building footprint and property perimeter.
 
-        One Overpass query yields both kinds: elements tagged ``building`` (or
-        ``building:part``) become the building boundary; every other matching
-        feature (landuse, amenity, leisure, industrial...) competes for the
-        property boundary.
-
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            name: Unused; Overpass matches spatially.
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
+                name: Unused; Overpass matches spatially.
 
         Returns:
-            Mapping with "building" and "property" keys (values may be None).
-        """
+                Mapping with "building" and "property" keys (values may be None)."""
         candidates = self._containing_polygons_by_kind(latitude, longitude)
         return {kind: (min(polygons, key=lambda polygon: polygon.area) if polygons else None) for kind, polygons in candidates.items()}
 

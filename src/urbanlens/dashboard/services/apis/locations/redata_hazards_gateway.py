@@ -1,13 +1,5 @@
 """Gateway for REData's ``/hazards/`` near-a-coordinate endpoint.
-
-See ``../REData/docs/api-reference.md``, "GET /hazards/ - recorded
-natural-hazard events". Replaces the direct, keyless call to the USGS FDSN
-event catalog with REData's pooled hazards registry - one provider today
-(``usgs_earthquakes``, worldwide), but the endpoint is shared across hazard
-kinds (``event_type`` is a closed vocabulary: earthquake, flood, wildfire,
-severe_weather, landslide, volcanic, other), so a future flood/wildfire
-provider answers from the same endpoint without this gateway changing.
-"""
+Replaces the direct, keyless call to the USGS FDSN event catalog with REData's pooled hazards registry - one provider today (``usgs_earthquakes``, worldwide), but the endpoint is shared across hazard kinds (``event_type`` is a closed vocabulary: earthquake, flood, wildfire, severe_weather, landslide, volcanic, other), so a future flood/wildfire provider answers from the same endpoint without this gateway changing."""
 
 from __future__ import annotations
 
@@ -38,34 +30,33 @@ class RedataHazardsGateway(RedataLocationContextGateway):
         """Fetch recorded natural-hazard events near a coordinate.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            radius_meters: Search radius in meters. Each provider applies its
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
+                radius_meters: Search radius in meters. Each provider applies its
                 own default/ceiling when omitted (earthquakes 100/250 km,
                 wildfires 2/25 km, FEMA fixed).
-            providers: Restrict which sources actually run (REData's
+                providers: Restrict which sources actually run (REData's
                 ``?provider=`` semantics) - a panel wanting only one hazard
                 family should say so rather than fetching and discarding.
-            min_magnitude: Minimum event magnitude to include. Narrows the
+                min_magnitude: Minimum event magnitude to include. Narrows the
                 *fetch*, not the cache - a lower floor than a cached search
                 used returns the cached set until it expires (pair with
                 ``force_refresh`` when that matters).
-            years: How many years back to search.
-            limit: Maximum number of events to return.
-            force_refresh: Bypass REData's cache and re-query live.
+                years: How many years back to search.
+                limit: Maximum number of events to return.
+                force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
-            The parsed envelope. Each ``results`` entry carries ``event_type``,
-            ``magnitude``, ``magnitude_scale`` (magnitudes are not comparable
-            across event types - treat the number as opaque unless you
-            recognize the scale), ``occurred_at``, ``place``, ``url``, and any
-            provider-specific extras under ``attributes``.
+                The parsed envelope. Each ``results`` entry carries ``event_type``,
+                ``magnitude``, ``magnitude_scale`` (magnitudes are not comparable
+                across event types - treat the number as opaque unless you
+                recognize the scale), ``occurred_at``, ``place``, ``url``, and any
+                provider-specific extras under ``attributes``.
 
         Raises:
-            LocationContextUnavailableError: Every source covering the
+                LocationContextUnavailableError: Every source covering the
                 coordinate failed to answer, or the request to REData failed
-                outright.
-        """
+                outright."""
         extra_params: dict[str, Any] = {}
         if min_magnitude is not None:
             extra_params["min_magnitude"] = min_magnitude

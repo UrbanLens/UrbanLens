@@ -1,19 +1,5 @@
 """Turns a transient Media-gallery item into a persisted ``Image`` row.
-
-The Private Pin page's Media gallery (Wikimedia, Smithsonian, Yelp, Google
-Images, ...) renders straight from each provider's live results (see
-``services.pins.external_data``) without persisting anything per item - that's
-what keeps browsing it cheap. Two actions need a real, durable photo though:
-sending an item to the community wiki, and setting it as a cover photo. Both
-funnel through :func:`materialize_media_item`, which downloads the item once
-and creates (or reuses) an ``Image`` row for it.
-
-Rows created here are exempt from the acting user's storage quota
-(``QuotaExemption.EXTERNAL_MEDIA``): the cache exists so the gallery survives
-a provider's URL rotting, and the user who upvoted an item into it didn't
-author the photo. Only the per-item ``_MAX_DOWNLOAD_BYTES`` cap applies. See
-``services.media.quota_rewards``.
-"""
+The Private Pin page's Media gallery (Wikimedia, Smithsonian, Yelp, Google Images, ...) renders straight from each provider's live results (see ``services.pins.external_data``) without persisting anything per item - that's what keeps browsing it cheap."""
 
 from __future__ import annotations
 
@@ -51,13 +37,10 @@ _MAX_REDIRECTS = 5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 _DOWNLOAD_HEADERS = {"User-Agent": _USER_AGENT}
 
-# The Media gallery's per-provider panel key (GalleryMediaSource.key, what's
-# actually sent as `source` here) doesn't always match the ImageSource value
-# with the same real-world meaning - translate the ones that differ so a
-# materialized row keeps correct attribution instead of silently falling
-# back to plain ImageSource.UPLOAD (see ImageSource.valid() below). Every
-# panel key not listed here already equals its ImageSource value directly
-# (e.g. "smithsonian", "wikimedia", "yelp", "google_images", "google_maps").
+# The Media gallery's per-provider panel key (GalleryMediaSource.key, what's actually sent as
+# `source` here) doesn't always match the ImageSource value with the same real-world meaning -
+# translate the ones that differ so a materialized row keeps correct attribution instead of silently
+# falling back to plain ImageSource.UPLOAD (see ImageSource.valid() below).
 _PANEL_KEY_TO_IMAGE_SOURCE = {
     "loc": ImageSource.LIBRARY_OF_CONGRESS,
     "cris_building": ImageSource.CRIS,
@@ -90,11 +73,6 @@ def _translated_source(source: str) -> str:
 def find_materialized_image(location: Location, source: str, url: str, *, page_url: str = "", pin: Pin | None = None, profile: Profile | None = None) -> Image | None:
     """Look up an already-materialized ``Image`` row for a Media gallery item, without creating one.
 
-    Same identity :func:`materialize_media_item` dedupes on - used by
-    relevance-vote call sites (``controllers.pin``, ``controllers.wiki_media``)
-    that need to know whether a local copy already exists (e.g. to submit a
-    "not relevant" vote to REData) without materializing one just to check.
-
     Args:
         location: The shared Location the item belongs to.
         source: A Media gallery panel key or ``ImageSource`` value.
@@ -107,8 +85,7 @@ def find_materialized_image(location: Location, source: str, url: str, *, page_u
         profile: Required alongside ``pin`` for the same narrowed lookup.
 
     Returns:
-        The matching ``Image`` row, or None if this item was never materialized.
-    """
+        The matching ``Image`` row, or None if this item was never materialized."""
     source_url = page_url or url
     django_source = _translated_source(source)
     dedupe_filter: dict[str, Any] = {"location": location, "source": django_source, "source_url": source_url}
@@ -138,18 +115,6 @@ def fetch_with_revalidated_redirects(
 ) -> requests.Response:
     """Fetch ``url`` via GET, with rebind-proof SSRF protection on every hop.
 
-    Shared by every service that downloads a user- or provider-supplied url
-    from the server (this module, ``services.pins.pin_suggestions``'s
-    ``_download_photo_bytes``, and ``services.ai.link_extraction``'s
-    ``fetch_page_text`` - previously each had its own copy of this loop).
-
-    Thin wrapper over :func:`services.security.url_safety.fetch_public_url`,
-    which resolves each hop once and connects to that address. This used to
-    call ``ensure_public_http_url`` and then hand the *url* to ``requests``,
-    which re-resolved it - so an attacker serving a short-TTL record could
-    answer public for the check and loopback for the connection, and the
-    per-hop re-validation only multiplied their attempts per request.
-
     Args:
         url: The url to fetch. Already validated once by the caller, if
             applicable (e.g. at submission time) - this re-validates it
@@ -168,8 +133,7 @@ def fetch_with_revalidated_redirects(
             the connection landed on an unvalidated address, a redirect
             response had no ``Location`` header, or the chain exceeded
             ``max_redirects`` hops.
-        requests.RequestException: The underlying request failed.
-    """
+        requests.RequestException: The underlying request failed."""
     return fetch_public_url(url, headers=headers, timeout=timeout, max_redirects=max_redirects)
 
 
@@ -185,16 +149,7 @@ def materialize_media_item(
     pin: Pin | None = None,
 ) -> Image:
     """Download one Media gallery item and persist it as an ``Image`` row.
-
-    Idempotent per ``(location, source, source_url)`` - re-sending the same
-    item (e.g. clicking "send to wiki" twice) reuses the existing row rather
-    than downloading and storing a duplicate. When ``pin`` is given (marking
-    a Media item "relevant" on a specific pin, a personal "save this for me"
-    action - see ``PinController.media_relevance``), the dedup check is
-    additionally scoped to ``(pin, profile)`` so it never reuses a row
-    another profile already materialized for the same external item via a
-    *different* action (e.g. sending it to the shared wiki) - unlike the
-    wiki-send path, this one must always end up owned by the marking profile.
+    Idempotent per ``(location, source, source_url)`` - re-sending the same item (e.g. clicking "send to wiki" twice) reuses the existing row rather than downloading and storing a duplicate.
 
     Args:
         location: The shared Location the item belongs to.
@@ -218,15 +173,9 @@ def materialize_media_item(
 
     Raises:
         MaterializeError: The download failed, or the profile's storage quota
-            doesn't have room for it.
-    """
+            doesn't have room for it."""
     source_url = page_url or url
     item_key = media_item_key(url)
-    # Translated *before* the dedupe check - existing rows are persisted with
-    # `source=django_source` (see the `Image.objects.create` call below), so
-    # filtering on the untranslated panel key here would never match a
-    # previously materialized "loc"/"cris_building" item and re-download +
-    # duplicate it on every subsequent vote.
     django_source = _translated_source(source)
 
     dedupe_filter: dict[str, Any] = {"location": location, "source": django_source, "source_url": source_url}
@@ -239,10 +188,9 @@ def materialize_media_item(
         if wiki is not None and existing.wiki_id != wiki.pk:
             existing.wiki = wiki
             update_fields.append("wiki")
-        # Backfills the (source, item_key) identity onto rows materialized
-        # before these fields existed, or onto any row a dedupe hit reused
-        # without them having been set - see Image.media_source_key's
-        # docstring for why this identity can't be reconstructed from
+        # Backfills the (source, item_key) identity onto rows materialized before these fields
+        # existed, or onto any row a dedupe hit reused without them having been set - see
+        # Image.media_source_key's docstring for why this identity can't be reconstructed from
         # `source_url` alone.
         if existing.media_source_key != source or existing.media_item_key != item_key:
             existing.media_source_key = source
@@ -268,10 +216,9 @@ def materialize_media_item(
     checksum = compute_checksum(file_obj)
     file_obj.seek(0)
 
-    # Deliberately not quota-checked. This is a cached copy of someone else's
-    # photo, kept so the gallery survives the provider's URL rotting - the
-    # user who upvoted it into the cache didn't author it and isn't charged
-    # for it. The per-item _MAX_DOWNLOAD_BYTES cap still applies.
+    # Deliberately not quota-checked.
+    # This is a cached copy of someone else's photo, kept so the gallery survives the provider's URL
+    # rotting - the user who upvoted it into the cache didn't author it and isn't charged for it.
     image = Image.objects.create(
         image=file_obj,
         location=location,
@@ -294,15 +241,9 @@ def materialize_media_item(
         pending_scan=True,
     )
 
-    # Same post-storage pipeline an ordinary upload gets. Without it a
-    # materialized item kept its provider EXIF (location included), was never
+    # Same post-storage pipeline an ordinary upload gets.
+    # Without it a materialized item kept its provider EXIF (location included), was never
     # downscaled or thumbnailed, and was served exactly as fetched, forever.
-    #
-    # That pipeline ends in queue_photo_submission, which is why this no longer
-    # calls it itself - doing both submitted every materialized photo to REData
-    # twice. Submitting from the task is also the more correct of the two: it
-    # runs after the downscale, so what is offered is the file that will be
-    # served rather than the provider's original.
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import process_image_upload
 

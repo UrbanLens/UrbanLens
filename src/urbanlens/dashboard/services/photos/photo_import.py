@@ -1,13 +1,4 @@
-"""Shared photo-import mode constants and pin-visit-date lookup.
-
-Used by provider controllers whose connected library supports server-side
-filtering (Immich, Flickr) to offer three ways of finding candidate photos
-for a pin: near its coordinates, taken on a day the user recorded a
-:class:`~urbanlens.dashboard.models.visits.model.PinVisit` there, or browsed
-unfiltered. Providers that can't filter at all (Google Photos' Picker API,
-where the user always browses their whole library in Google's own UI) don't
-use this module.
-"""
+"""Shared photo-import mode constants and pin-visit-date lookup."""
 
 from __future__ import annotations
 

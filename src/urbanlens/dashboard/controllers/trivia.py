@@ -1,12 +1,4 @@
-"""Trivia controller - solo and multiplayer gameplay, lobby, and chat.
-
-See ``services.trivia.session`` for the orchestration this module only
-adapts to HTTP: request parsing, participant/ownership checks, JSON
-serialization (an answer is never serialized until it reveals it; real-time
-fan-out to other participants happens over
-``consumers.TriviaSessionConsumer``, not here). Mirrors
-``controllers.spotguessr`` throughout.
-"""
+"""Trivia controller - solo and multiplayer gameplay, lobby, and chat."""
 
 from __future__ import annotations
 

@@ -24,12 +24,10 @@ if TYPE_CHECKING:
 #: only ever backfilled server-side (see ``backfill_no_reaction``).
 EXPLICIT_KINDS = (TriviaQuestionVoteKind.UPVOTE, TriviaQuestionVoteKind.DOWNVOTE, TriviaQuestionVoteKind.REPORT)
 
-#: Deliberately unlike SpotGuessr's photo-relevance weights (where a downvote
-#: is a near-zero token weight): the Trivia spec explicitly wants downvotes
-#: alone able to retire a question ("significantly downvoted questions won't
-#: be asked anymore"), so DOWNVOTE carries real weight here, not just a
-#: tie-breaker. REPORT still outweighs a downvote - a report is "this is a
-#: problem," not just "I didn't enjoy this one."
+#: Deliberately unlike SpotGuessr's photo-relevance weights (where a downvote is a near-zero token
+#: weight): the Trivia spec explicitly wants downvotes alone able to retire a question
+#: ("significantly downvoted questions won't be asked anymore"), so DOWNVOTE carries real weight
+#: here, not just a tie-breaker.
 UPVOTE_WEIGHT = 1.0
 DOWNVOTE_WEIGHT = -1.0
 REPORT_WEIGHT = -3.0
@@ -49,27 +47,16 @@ _WEIGHTS = {
 def record_vote(question: TriviaQuestion, profile: Profile, kind: str) -> TriviaQuestionVote:
     """Record (or change) ``profile``'s explicit reaction to ``question``.
 
-    Always overwrites whatever was previously recorded for this
-    ``(question, profile)`` pair - including a prior ``NO_REACTION``
-    backfill, or an earlier change of mind.
-
     Args:
         question: The question being voted on.
         profile: The voting participant.
-        kind: One of ``EXPLICIT_KINDS``.
-    """
+        kind: One of ``EXPLICIT_KINDS``."""
     vote, _ = TriviaQuestionVote.objects.update_or_create(question=question, profile=profile, defaults={"kind": kind})
     return vote
 
 
 def backfill_no_reaction(question: TriviaQuestion, profiles: Iterable[Profile]) -> None:
-    """Record a weak default-positive signal for every participant who never explicitly voted on ``question``.
-
-    Called once a round is fully revealed (see ``services.trivia.session.submit_answer``).
-    Uses ``get_or_create`` (not ``update_or_create``) so this can never
-    clobber an explicit reaction a fast player already submitted before the
-    round finished for everyone else.
-    """
+    """Record a weak default-positive signal for every participant who never explicitly voted on ``question``."""
     for profile in profiles:
         TriviaQuestionVote.objects.get_or_create(question=question, profile=profile, defaults={"kind": TriviaQuestionVoteKind.NO_REACTION})
 

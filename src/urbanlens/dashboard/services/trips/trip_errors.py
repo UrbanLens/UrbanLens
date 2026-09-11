@@ -1,20 +1,5 @@
 """Transport-neutral error vocabulary for the shared trip services.
-
-The trip services (``trip_access``, ``trip_membership``, ``trip_crud``,
-``trip_activities``, ``trip_comments``) are consumed by two very different
-callers: the internal HTMX controllers, which answer with plain-text bodies
-that surface as toasts, and the external REST API, which answers with the
-``{"error": ...}`` JSON envelope. Neither can be the service layer's concern,
-so services raise these instead of building responses.
-
-Each class maps to exactly one HTTP status, and callers translate once (see
-``external_api.views.TripErrorResponseMixin``) rather than at every call site.
-
-Messages are stored as plain, *unescaped* text. A caller rendering into HTML
-must escape at render time - baking ``django.utils.html.escape`` into the
-message would leak HTML entities into the JSON API, which needs the raw
-characters.
-"""
+Neither can be the service layer's concern, so services raise these instead of building responses."""
 
 from __future__ import annotations
 
@@ -38,14 +23,7 @@ class TripError(ValueError):
 
 
 class TripNotFoundError(TripError):
-    """The trip, activity, comment, or member does not exist *for this viewer* - 404.
-
-    Deliberately also raised when the row exists but the viewer has no
-    standing access to know that. Answering "forbidden" there would confirm
-    the row's existence, which is exactly the enumeration leak
-    :func:`~urbanlens.dashboard.services.trips.trip_access.get_trip_for_viewer`
-    closes.
-    """
+    """The trip, activity, comment, or member does not exist *for this viewer* - 404."""
 
 
 class TripPermissionError(TripError):
@@ -67,13 +45,7 @@ class TripQuotaError(TripValidationError):
 
 class TripMemberNotFoundError(TripNotFoundError):
     """No user matches a submitted username - 404.
-
-    Carries the submitted ``username`` separately from the formatted message
-    so each caller can present it safely in its own medium: the internal HTMX
-    view HTML-escapes it, while the external API puts it into a JSON string
-    unescaped. Escaping inside the message itself would corrupt the JSON
-    response.
-    """
+    Carries the submitted ``username`` separately from the formatted message so each caller can present it safely in its own medium: the internal HTMX view HTML-escapes it, while the external API puts it into a JSON string unescaped."""
 
     def __init__(self, message: str, username: str) -> None:
         """Record the message plus the raw username that could not be resolved.

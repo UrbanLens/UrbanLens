@@ -1,31 +1,4 @@
-"""Wiki Media gallery - the community-page counterpart of the pin detail Media section.
-
-The Private Pin page renders a combined Media gallery (external archival/media
-providers plus the owner's own uploads) with per-user relevance marking (see
-``controllers.pin.PinController.media_provider`` / ``media_relevance``). These
-views expose the same external media on a Location's community **wiki**, with
-two deliberate differences:
-
-* **External media is automatic.** It's about the place, not a private upload,
-  so it appears on the wiki straight from the shared per-Location
-  ``LocationCache`` the Private Pin page already warms. User-uploaded photos, by
-  contrast, only appear once intentionally shared to the wiki (``Image.wiki``).
-* **Thumbs are community votes.** A thumbs-up/down is stored in the same
-  Location-scoped :class:`MediaRelevance` model, but the wiki reads the
-  *aggregate* across every contributing profile as a net score (up - down) and
-  sorts items highest-first. Because ``MediaRelevance`` is keyed by Location,
-  a relevance mark made on any user's Private Pin page already counts here - no
-  schema change needed for the score itself (see
-  ``MediaRelevanceQuerySet.vote_scores``).
-* **An up-vote also submits the item to the wiki.** Unlike the pin detail
-  page's "mark relevant" (which materializes onto the *pin*, private by
-  default), a wiki up-vote is cast on the wiki's own page, about an item the
-  voter is already looking at *as* a candidate wiki photo - so it's treated
-  as the same deliberate sharing action as the pin page's separate "Send to
-  wiki" button, not merely an opinion. See ``WikiMediaVoteView.post`` for why
-  this is the only thing that makes an externally-sourced photo eligible for
-  ``services.spotguessr.photos`` (its ``wiki__isnull=False`` gate) at all.
-"""
+"""Wiki Media gallery - community counterpart of the pin Media section."""
 
 from __future__ import annotations
 

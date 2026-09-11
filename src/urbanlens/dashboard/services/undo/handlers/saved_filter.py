@@ -12,10 +12,7 @@ if TYPE_CHECKING:
 
 _RESTORABLE_FIELDS = ("name", "icon", "criteria", "order", "color", "opacity")
 
-#: Registry key for this handler. Exposed as a module-level constant so call
-#: sites can import it (``from ...handlers.saved_filter import MODEL_LABEL``)
-#: instead of hand-typing ``"saved_filter"`` - a typo in a hand-typed string
-#: only fails at runtime via ``get_handler``'s ``ValueError``.
+#: Registry key for this handler. Import it instead of hand-typing the string.
 MODEL_LABEL = "saved_filter"
 
 

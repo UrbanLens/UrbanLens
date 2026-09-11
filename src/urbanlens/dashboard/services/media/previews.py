@@ -1,33 +1,5 @@
 """Server-side previews for Media-gallery items a browser can't render itself.
-
-The Media gallery (pin detail and wiki) renders every item as a plain
-``<img src=...>``. That silently fails for a large share of what external
-providers actually return: Wikimedia and the Library of Congress serve TIFFs,
-CRIS and NRHP serve scanned PDFs, and Apple-sourced archives serve HEIC. A
-TIFF renders as a broken image in every browser except Safari, and a PDF
-never renders in an ``<img>`` at all - so those items were reaching the page
-and then disappearing into the broken-image fallback or a grey document icon.
-
-This module answers two questions and does one conversion:
-
-* :func:`needs_server_side_preview` - "would a browser choke on this?", from a
-  provider-declared content type when there is one and the URL's extension
-  otherwise.
-* :func:`preview_thumb_url` - the URL the gallery should actually put in
-  ``src``: the item's own thumbnail when it's already web-safe, and a
-  server-rendered preview of it (or of the full-size file, for a provider that
-  publishes no thumbnail at all) when it isn't.
-* :func:`render_preview` - the conversion itself: first page for a PDF (via
-  poppler, already installed for the OCR pipeline - see
-  ``services.media.documents``), Pillow for everything else, out as JPEG/PNG.
-
-Remote URLs are fetched through a signed generic endpoint
-(``controllers.media_preview``) rather than by the template, so this never
-becomes an open image-fetching relay - same reasoning as the Google Maps photo
-proxy's signature (see ``controllers.media_proxy``). In-app proxy routes
-(CRIS attachments, LoopNet photos) already have the bytes server-side and take
-a ``?preview=1`` flag instead of a second round trip.
-"""
+A TIFF renders as a broken image in every browser except Safari, and a PDF never renders in an ``<img>`` at all - so those items were reaching the page and then disappearing into the broken-image fallback or a grey document icon."""
 
 from __future__ import annotations
 
@@ -92,7 +64,6 @@ RENDERABLE_CONTENT_TYPES = frozenset(
 #: Extensions matching :data:`RENDERABLE_CONTENT_TYPES`.
 RENDERABLE_EXTENSIONS = frozenset({".pdf", ".tif", ".tiff", ".heic", ".heif", ".bmp", ".jp2", ".jpf", ".jpx", ".ico", ".ppm", ".tga", ".dng"})
 
-#: Longest edge of a generated preview. Media tiles are ~200 px and the
 #: lightbox falls back to this same image when the full-size file won't load,
 #: so this is sized for the latter.
 PREVIEW_MAX_DIMENSION = 1200
@@ -133,19 +104,13 @@ def is_web_safe(url: str, content_type: str = "") -> bool:
 def needs_server_side_preview(url: str, content_type: str = "") -> bool:
     """Whether this item must be converted server-side to be displayable.
 
-    Deliberately narrower than ``not is_web_safe``: an item whose format this
-    module can't convert either (an archive, a plain-text record) is better
-    served by the gallery's existing document-icon tile than by a preview
-    request guaranteed to 404.
-
     Args:
         url: The item's URL.
         content_type: The provider-declared content type, when known.
 
     Returns:
         True when :func:`render_preview` is expected to be able to produce an
-        image for this item.
-    """
+        image for this item."""
     if not url:
         return False
     declared = (content_type or "").split(";")[0].strip().lower()
@@ -203,17 +168,13 @@ def _with_preview_flag(url: str) -> str:
 def preview_thumb_url(url: str, content_type: str = "") -> str:
     """The URL a gallery tile should render for an item that isn't web-safe.
 
-    In-app proxy routes render their own preview inline (they already hold the
-    bytes); everything else goes through the signed generic endpoint.
-
     Args:
         url: The item's URL - relative for an in-app proxy, absolute otherwise.
         content_type: The provider-declared content type, when known.
 
     Returns:
         A URL that serves a browser-renderable image, or ``""`` when this item
-        can't be previewed and should keep its fallback icon tile.
-    """
+        can't be previewed and should keep its fallback icon tile."""
     if not needs_server_side_preview(url, content_type):
         return ""
     if url.startswith("/"):
@@ -226,16 +187,6 @@ def preview_thumb_url(url: str, content_type: str = "") -> str:
 def gallery_thumb_url(item_url: str, thumb_url: str, content_type: str = "") -> str:
     """The best ``<img src>`` for one gallery item, converting when needed.
 
-    Resolves the three cases the gallery actually sees, in order:
-
-    1. A web-safe thumbnail the provider already published - used as-is.
-    2. A thumbnail in a format the browser can't render (a Wikimedia TIFF
-       "thumbnail" that is just the original) - converted.
-    3. No thumbnail at all, but a convertible full-size file (a scanned PDF
-       inventory form) - the full file's first page becomes the thumbnail,
-       which is the whole point: those tiles previously showed only a grey
-       document icon even though the document is a photograph of the building.
-
     Args:
         item_url: The item's full-resolution URL.
         thumb_url: The provider's own thumbnail URL, possibly ``""``.
@@ -245,8 +196,7 @@ def gallery_thumb_url(item_url: str, thumb_url: str, content_type: str = "") -> 
 
     Returns:
         A displayable URL, or ``""`` when nothing here is renderable and the
-        caller should fall back to an icon tile.
-    """
+        caller should fall back to an icon tile."""
     if thumb_url:
         if is_web_safe(thumb_url):
             return thumb_url
@@ -281,11 +231,7 @@ def _pdf_first_page(raw: bytes):
 @untrusted_parse("image.decode")
 def render_preview(raw: bytes, content_type: str = "", *, max_dimension: int = PREVIEW_MAX_DIMENSION) -> tuple[bytes, str] | None:
     """Convert one file's bytes into a browser-renderable image.
-
-    Format detection prefers the file's own magic bytes over the declared
-    content type: REData, CRIS and several archives label scanned documents
-    with generic or simply wrong types, and getting this wrong means falling
-    back to a broken tile rather than raising.
+    Format detection prefers the file's own magic bytes over the declared content type: REData, CRIS and several archives label scanned documents with generic or simply wrong types, and getting this wrong means falling back to a broken tile rather than raising.
 
     Args:
         raw: The source file's bytes.
@@ -294,8 +240,7 @@ def render_preview(raw: bytes, content_type: str = "", *, max_dimension: int = P
 
     Returns:
         ``(image_bytes, content_type)`` for the converted image, or None when
-        the source couldn't be decoded as either a PDF or an image.
-    """
+        the source couldn't be decoded as either a PDF or an image."""
     if not raw:
         return None
 
@@ -351,20 +296,14 @@ RENDER_QUEUED = "queued"
 #: worker that died mid-render does not wedge the tile for the whole day.
 RENDER_QUEUED_TTL = 120
 
-#: Where a source file waits between the web process staging it and the sandbox
-#: worker decoding it. Under MEDIA_ROOT because that is the one writable volume
-#: both containers mount; nothing serves it, because every media URL resolves
-#: through an ``Image`` row and these files have none.
+#: Where a source file waits between the web process staging it and the sandbox worker decoding it.
+#: Under MEDIA_ROOT because that is the one writable volume both containers mount; nothing serves
+#: it, because every media URL resolves through an ``Image`` row and these files have none.
 PREVIEW_SOURCE_DIR = "preview_sources"
 
-#: How long a staged source survives an un-run render before the sweep removes
-#: it. Must outlive a queue backlog; anything older is an orphan whose task
-#: never ran (a broker outage at enqueue time).
-#:
-#: Must also stay LONGER than the callers' descriptor cache TTL
-#: (``media_preview._SOURCE_CACHE_TTL``, 1800s). If the file were swept while
-#: its descriptor was still cached, the view would keep re-queueing a render
-#: for a file that no longer exists instead of re-fetching the source.
+#: How long a staged source survives an un-run render before the sweep removes it.
+#: Must outlive a queue backlog; anything older is an orphan whose task never ran (a broker outage
+#: at enqueue time).
 PREVIEW_SOURCE_MAX_AGE = 3600
 
 
@@ -380,14 +319,6 @@ def _preview_source_root() -> Path:
 def stage_preview_source(digest: str, raw: bytes, content_type: str) -> dict[str, str]:
     """Write a source file where the sandbox worker can read it.
 
-    Not through the cache, and not through the broker. The source cap is 60MB
-    (:data:`MAX_PREVIEW_SOURCE_BYTES`) and both of those are the same 512MB
-    Valkey that holds the Celery broker, sessions and Channels groups - one
-    gallery page of large scanned PDFs would evict all of it under
-    ``volatile-lru``, including (self-defeatingly) the staged sources
-    themselves. The media volume is mounted by both containers and is where
-    large files belong.
-
     Args:
         digest: A stable hash of the source URL, used as the filename.
         raw: The file's bytes.
@@ -396,8 +327,7 @@ def stage_preview_source(digest: str, raw: bytes, content_type: str) -> dict[str
 
     Returns:
         A small descriptor to put in the cache - filename plus content type,
-        not bytes - for :func:`load_preview_source` to resolve.
-    """
+        not bytes - for :func:`load_preview_source` to resolve."""
     root = _preview_source_root()
     target = root / f"{digest}.bin"
     # Written beside and renamed, so a worker never reads a half-written file.
@@ -437,16 +367,11 @@ def discard_preview_source(descriptor: dict[str, str]) -> None:
 def sweep_preview_sources(max_age: int = PREVIEW_SOURCE_MAX_AGE) -> int:
     """Delete staged sources whose render never ran.
 
-    ``render_media_preview`` removes its own source, so anything left is from
-    an enqueue that failed (the broker was down) - which leaves a file on the
-    media volume that nothing will ever read.
-
     Args:
         max_age: Age in seconds past which a staged file is an orphan.
 
     Returns:
-        How many files were removed.
-    """
+        How many files were removed."""
     cutoff = time.time() - max_age
     removed = 0
     try:
@@ -465,19 +390,7 @@ def sweep_preview_sources(max_age: int = PREVIEW_SOURCE_MAX_AGE) -> int:
 
 
 def request_sandbox_render(source_cache_key: str, preview_cache_key: str, *, ttl: int, failure_ttl: int) -> None:
-    """Queue a preview render in the sandbox worker, at most once per key.
-
-    :func:`render_preview` reaches Pillow and poppler, so it must not run in a
-    web process - see :mod:`urbanlens.dashboard.services.sandbox.guard`.
-
-    Deliberately fire-and-forget. Waiting on the result would keep the endpoint's
-    old contract ("one GET returns the preview"), but it also means every tile
-    request pins a web worker for as long as the sandbox is behind - twenty tiles
-    on one gallery page, times the wait, whenever ``media-worker`` is down. A
-    caller that finds nothing cached serves its icon tile, exactly as it already
-    does for a file that cannot be converted at all, and the tile fills in on the
-    next load. Self-healing beats synchronously correct here, because the thing
-    being waited for is a decorative thumbnail.
+    """Queue a preview render in the sandbox worker, at most once per key. :func:`render_preview` reaches Pillow and poppler, so it must not run in a web process - see :mod:`urbanlens.dashboard.services.sandbox.guard`.
 
     Args:
         source_cache_key: Cache key holding what the worker needs to find the
@@ -486,8 +399,7 @@ def request_sandbox_render(source_cache_key: str, preview_cache_key: str, *, ttl
             Must already be populated by the caller.
         preview_cache_key: Cache key the rendered preview is written to.
         ttl: Seconds to cache a successful render.
-        failure_ttl: Seconds to cache the :data:`UNPREVIEWABLE` sentinel.
-    """
+        failure_ttl: Seconds to cache the :data:`UNPREVIEWABLE` sentinel."""
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import render_media_preview
 
@@ -510,8 +422,7 @@ def cached_preview(preview_cache_key: str) -> tuple[bytes, str] | None:
     Returns:
         ``(image_bytes, content_type)``, or None when the render has not
         finished, was never queued, or produced nothing. All three mean the same
-        thing to a caller: serve the icon tile.
-    """
+        thing to a caller: serve the icon tile."""
     cached = cache.get(preview_cache_key)
     if cached is None or cached in (UNPREVIEWABLE, RENDER_QUEUED):
         return None

@@ -1,19 +1,5 @@
 """Shared sanitization for Leaflet map snapshots (``map_data`` JSON blobs).
-
-A map snapshot is a small JSON document capturing a map view plus any freehand
-markup a user drew on it (lines, arrows, shapes, text). It is the wire format
-between the shared map composer dialog and the server: the composer submits a
-snapshot in a form field, and the server materializes it into a standalone
-:class:`~urbanlens.dashboard.models.markup.model.MarkupMap` (viewport fields +
-``PinMarkup`` item rows) that the host model (comment, visit, trip comment)
-links to. Read-side rendering converts back to this format via
-``MarkupMap.to_snapshot()`` for the shared client-side ``MarkupEngine`` (see
-``partials/_markup_engine.html``).
-
-Because the blob is user-submitted and rendered back into the DOM, every field
-is validated and clamped here before it is trusted. Keeping this logic in one
-place ensures the comment composer and the visit composer stay in lock-step.
-"""
+Because the blob is user-submitted and rendered back into the DOM, every field is validated and clamped here before it is trusted."""
 
 from __future__ import annotations
 
@@ -198,11 +184,6 @@ def materialize_markup_map(
 ) -> MarkupMap | None:
     """Create/update/delete a MarkupMap so it matches a submitted snapshot.
 
-    The single write-path helper for hosts that attach maps through the
-    snapshot composer (comments, trip comments, pin visits): pass the
-    sanitized snapshot from ``parse_map_data`` plus whatever map the host
-    already links to, then store the returned map on the host FK.
-
     Args:
         profile: Owner for a newly created map.
         snapshot: Sanitized snapshot dict, or None when no map was submitted.
@@ -214,8 +195,7 @@ def materialize_markup_map(
 
     Returns:
         The MarkupMap the host should now link to, or None when the map was
-        removed (a now-unreferenced existing map is deleted).
-    """
+        removed (a now-unreferenced existing map is deleted)."""
     from urbanlens.dashboard.models.markup.model import MarkupMap
 
     if snapshot is None:

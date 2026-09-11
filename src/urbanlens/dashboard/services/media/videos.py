@@ -1,11 +1,5 @@
 """Video processing utilities - ffmpeg-based downscaling and metadata extraction.
-
-Requires the ``ffmpeg``/``ffprobe`` binaries on PATH (see the Dockerfile).
-Every function here degrades gracefully (logs and returns None/empty) when
-the binaries are missing or a given file can't be processed, rather than
-failing the upload - a video is still usable at its original resolution
-even if downscaling isn't available.
-"""
+Every function here degrades gracefully (logs and returns None/empty) when the binaries are missing or a given file can't be processed, rather than failing the upload - a video is still usable at its original resolution even if downscaling isn't available."""
 
 from __future__ import annotations
 
@@ -36,15 +30,7 @@ _FFPROBE_TIMEOUT_SECONDS = 30
 
 def ffmpeg_path() -> str | None:
     """The absolute path to the ffmpeg binary, or None.
-
-    Resolved once here rather than left to `exec`'s own PATH walk, so the
-    sandbox tier passes an absolute path and the binary it will run is
-    inspectable before it runs. This narrows the window, it does not close it:
-    `shutil.which` reads the same PATH, so a hostile PATH still selects a
-    hostile binary. The actual guarantee is that the container controls PATH;
-    this makes the choice explicit rather than implicit, which is what S607 asks
-    for.
-    """
+    Resolved once here rather than left to `exec`'s own PATH walk, so the sandbox tier passes an absolute path and the binary it will run is inspectable before it runs."""
     return shutil.which("ffmpeg")
 
 
@@ -69,10 +55,9 @@ def probe_video(path: str) -> dict[str, Any] | None:
         The parsed ffprobe JSON (``format``/``streams`` keys), or None if
         ffprobe is unavailable or the file can't be probed.
 
-    Gated on ffprobe alone. It previously required ffmpeg as well, which was
-    incidental - this function never invokes ffmpeg - and contradicted the
-    sentence above.
-    """
+        Gated on ffprobe alone. It previously required ffmpeg as well, which was
+        incidental - this function never invokes ffmpeg - and contradicted the
+        sentence above."""
     ffprobe = ffprobe_path()
     if ffprobe is None:
         return None
@@ -93,12 +78,10 @@ def probe_video(path: str) -> dict[str, Any] | None:
         return None
 
 
-#: Container tags a phone writes the capture coordinates into. ffmpeg copies
-#: global metadata across both a re-encode and a stream copy, so these have to
-#: be cleared explicitly; assigning an empty value is how ffmpeg deletes a tag.
-#: Only the location tags are cleared, never the whole metadata block - this
-#: mirrors the photo path, which drops the GPS IFD and leaves the rest of the
-#: EXIF alone.
+#: Container tags a phone writes the capture coordinates into. ffmpeg copies global metadata across
+#: both a re-encode and a stream copy, so these have to be cleared explicitly; assigning an empty
+#: value is how ffmpeg deletes a tag.
+#: Only the location tags are cleared, never the whole metadata block - this mirrors the photo path,
 _LOCATION_TAGS = ("location", "location-eng", "com.apple.quicktime.location.ISO6709")
 
 
@@ -140,11 +123,10 @@ def extract_video_metadata(path: str) -> dict[str, Any]:
             parsed = datetime.fromisoformat(creation_time)
             metadata["taken_at"] = parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
 
-    # `has_location_tag` is reported separately from the parsed coordinates: a
-    # scrub has to key off the tag being *present*, not off it being readable.
-    # A tag in a notation _parse_iso6709 doesn't handle still discloses where
-    # the video was taken, and gating the strip on successful parsing would
-    # leave exactly those behind.
+    # `has_location_tag` is reported separately from the parsed coordinates: a scrub has to key off
+    # the tag being *present*, not off it being readable.
+    # A tag in a notation _parse_iso6709 doesn't handle still discloses where the video was taken,
+    # and gating the strip on successful parsing would leave exactly those behind.
     location_tag = next((fmt_tags.get(tag) for tag in _LOCATION_TAGS if fmt_tags.get(tag)), None)
     if location_tag:
         metadata["has_location_tag"] = True
@@ -223,24 +205,7 @@ def _remux_without_location(src_path: str, out_path: str) -> bool:
 
 def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[str, Any], StoredFileReplacement | None]:
     """Extract metadata from an uploaded video, downscale it if oversized, and scrub its location.
-
-    Copies the stored file to a local temp path once (ffmpeg/ffprobe need a
-    real file, not a stream) and reuses that copy for both metadata probing
-    and, if needed, re-encoding - so the file is only fetched from storage a
-    single time regardless of storage backend.
-
-    **The location scrub is unconditional**, exactly as the photo pipeline's
-    EXIF strip is (see ``services.media.images.downscale_stored_image``), and
-    for the same reason: the stored file is served to everybody who can reach
-    the container it was contributed to, so coordinates riding along inside it
-    are outside the app's visibility rules entirely. The coordinates are kept on
-    the ``Image`` row, where those rules apply. This used to be a caller's
-    choice keyed on the uploader's *visit-tracking* preference - a setting about
-    whether the app records where they have been, which left the default (visit
-    tracking on) serving everyone the container's own location tag.
-
-    It is independent of ``max_height``: a video small enough to need no
-    downscale is still scrubbed, via a lossless stream copy.
+    Copies the stored file to a local temp path once (ffmpeg/ffprobe need a real file, not a stream) and reuses that copy for both metadata probing and, if needed, re-encoding - so the file is only fetched from storage a single time regardless of storage backend.
 
     Args:
         image: The Image row whose stored video to process.
@@ -253,8 +218,7 @@ def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[s
         replacement is None when the file was left alone, and otherwise carries
         the new size plus the superseded name - still on disk, for the caller to
         discard once the row names its successor (see
-        :func:`~urbanlens.dashboard.services.media.images.discard_superseded_file`).
-    """
+        :func:`~urbanlens.dashboard.services.media.images.discard_superseded_file`)."""
     old_name = image.image.name
     if not old_name or not ffmpeg_available():
         return {}, None

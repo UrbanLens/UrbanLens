@@ -77,17 +77,7 @@ logger = logging.getLogger(__name__)
 
 def _collect_slides(generator, limit: int, what: str) -> tuple[list, bool]:
     """Drain a slide generator, reporting whether the provider degraded.
-
-    A provider that cannot reach its source yields nothing, which is
-    indistinguishable at this level from a place that genuinely has no
-    imagery - and caching the second is right while caching the first turns a
-    passing outage into "no photographs here" that nothing retries (see
-    bin/check_outage_not_cached.py for the same defect class in panel fetches).
-
-    Providers signal the difference by letting their gateway error propagate
-    out of the generator rather than swallowing it. Slides yielded before the
-    failure are kept: a partial answer is still worth showing, it just is not
-    worth remembering.
+    Providers signal the difference by letting their gateway error propagate out of the generator rather than swallowing it.
 
     Args:
         generator: The provider's slide generator.
@@ -96,8 +86,7 @@ def _collect_slides(generator, limit: int, what: str) -> tuple[list, bool]:
 
     Returns:
         ``(slides, degraded)`` - ``degraded`` True when the provider failed
-        part-way, meaning the result must not be cached.
-    """
+        part-way, meaning the result must not be cached."""
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
@@ -115,19 +104,13 @@ def _collect_slides(generator, limit: int, what: str) -> tuple[list, bool]:
 
 class SlideFetch(NamedTuple):
     """One provider's answer for a carousel, and how much to trust it.
-
-    ``degraded`` used to stop at ``_collect_slides`` and never reach a caller,
-    so an outage arrived at the panel indistinguishable from "this location has
-    no imagery" - and the panel then trusted that emptiness for twelve hours
-    instead of retrying in five minutes. It is a field rather than an exception
-    because slides yielded before the failure are still worth showing.
+    It is a field rather than an exception because slides yielded before the failure are still worth showing.
 
     Attributes:
         slides: What the provider produced, in its own order.
         from_cache: The answer came from this provider's cache, not the source.
         degraded: The provider failed part-way. The answer is a floor, and must
-            not be recorded as a settled one.
-    """
+            not be recorded as a settled one."""
 
     slides: list
     from_cache: bool
@@ -175,14 +158,7 @@ class StreetViewProvider(Gateway, ABC):
 
 
 class BoundaryProvider(Service, ABC):
-    """Provider interface for default-boundary data sources.
-
-    Providers declare which kind of boundary they yield via ``boundary_kind``
-    ("property" or "building", matching :class:`BoundaryType` values). Sources
-    that can't say per-feature must declare "property" - ambiguity is always
-    treated as a property boundary. Providers that can distinguish per feature
-    (e.g. Overpass) override :meth:`get_typed_boundaries` instead.
-    """
+    """Provider interface for default-boundary data sources. Overpass) override :meth:`get_typed_boundaries` instead."""
 
     #: The boundary type this provider's ``get_boundary`` result describes.
     boundary_kind: ClassVar[str] = "property"
@@ -194,25 +170,15 @@ class BoundaryProvider(Service, ABC):
 
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> Mapping[str, Polygon | MultiPolygon | None]:
         """Return this provider's boundaries keyed by boundary type.
-
-        `Mapping` rather than `dict`, because `dict` is invariant in its value
-        type: a provider that only ever yields Polygons could not otherwise
-        declare that narrower return. `MultiPolygon` is in the union because
-        REData returns one for a parcel made of disjoint pieces; every caller
-        reads the result with `.get()` and narrows from there.
-
-        The default implementation wraps :meth:`get_boundary` under
-        ``boundary_kind``. Providers that can classify features per type
-        override this to return both kinds from one upstream query.
+        `Mapping` rather than `dict`, because `dict` is invariant in its value type: a provider that only ever yields Polygons could not otherwise declare that narrower return.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            name: Optional place name for name-aware providers.
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
+                name: Optional place name for name-aware providers.
 
         Returns:
-            Mapping of boundary type value to polygon (or None).
-        """
+                Mapping of boundary type value to polygon (or None)."""
         return {self.boundary_kind: self.get_boundary(latitude, longitude, name=name)}
 
 
@@ -346,10 +312,9 @@ def best_polygon_from_geometry(geom: GEOSGeometry) -> Polygon | None:
     if isinstance(geom, Polygon):
         return geom if geom.valid and not geom.empty else None
     if isinstance(geom, MultiPolygon):
-        # Return the element itself, never re-wrapped in Polygon(...) - unlike
-        # LineString/Point, Django's Polygon constructor has no "copy an
-        # existing Polygon" overload, and passing one in raises (confirmed,
-        # not hypothetical - see esri_rings_to_polygon's own docstring).
+        # Return the element itself, never re-wrapped in Polygon(...) - unlike LineString/Point,
+        # Django's Polygon constructor has no "copy an existing Polygon" overload, and passing one
+        # in raises (confirmed, not hypothetical - see esri_rings_to_polygon's own docstring).
         polygons = [polygon for polygon in geom if isinstance(polygon, Polygon) and polygon.valid and not polygon.empty]
         return max(polygons, key=lambda polygon: polygon.area) if polygons else None
     return None
@@ -379,21 +344,7 @@ def _close_ring(points: list) -> list[tuple[float, float]] | None:
 
 def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | None:
     """Convert an Esri ring-list polygon geometry into a GEOS polygon.
-
-    Only still needed for sources that hand back Esri's native ring-list shape
-    directly - Census TIGERweb (``geo_boundary.py``) being the one remaining
-    caller. REData used to require this too, but its API now returns
-    ``parcel_geometry``/``building_geometry`` as standard GeoJSON - see
-    ``geojson_polygon_to_geos`` below for that shape instead, used by
-    ``RedataBoundaryProvider``.
-
-    Esri's ring-winding convention is the opposite of GeoJSON's: a clockwise
-    ring is an exterior shell, a counter-clockwise ring is a hole - and
-    unlike GeoJSON, Esri doesn't guarantee a hole immediately follows its
-    shell in the array, so each hole is assigned to whichever shell actually
-    contains it (a point-in-polygon test), not just "the most recent shell".
-    Multiple disjoint shells (a parcel/building made of separate pieces)
-    become a MultiPolygon.
+    Only still needed for sources that hand back Esri's native ring-list shape directly - Census TIGERweb (``geo_boundary.py``) being the one remaining caller.
 
     Args:
         geometry: A dict of the shape ``{"format": "esri_rings", "rings": [...]}``,
@@ -402,8 +353,7 @@ def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | Non
     Returns:
         A single ``Polygon``, a ``MultiPolygon`` when more than one exterior
         shell was found, or None when the geometry is missing, malformed, or
-        has no usable exterior ring.
-    """
+        has no usable exterior ring."""
     if not isinstance(geometry, dict) or geometry.get("format") != "esri_rings":
         return None
     rings = geometry.get("rings")
@@ -466,14 +416,7 @@ def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | Non
 
 def geojson_polygon_to_geos(geometry: dict | None) -> Polygon | MultiPolygon | None:
     """Convert a standard GeoJSON ``Polygon``/``MultiPolygon`` dict into a GEOS geometry.
-
-    Unlike :func:`esri_rings_to_polygon`, the input here is already correct,
-    standard GeoJSON (RFC 7946 winding order, holes already nested under their
-    shell) - REData's API returns geometry in this shape directly, so this is
-    a direct structural translation rather than a geometry-fixing one:
-    GeoJSON's ``coordinates`` array for a ``Polygon`` (``[exterior_ring,
-    hole_ring, ...]``, each ring a list of ``[lon, lat]`` pairs) is exactly
-    the ring-list shape Django's own ``Polygon(*rings)`` constructor expects.
+    Unlike :func:`esri_rings_to_polygon`, the input here is already correct, standard GeoJSON (RFC 7946 winding order, holes already nested under their shell) - REData's API returns geometry in this shape directly, so this is a direct structural translation rather than a geometry-fixing one: GeoJSON's ``coordinates`` array for a ``Polygon`` (``[exterior_ring, hole_ring, ...]``, each ring a list of ``[lon, lat]`` pairs) is exactly the ring-list shape Django's own ``Polygon(*rings)`` constructor expects.
 
     Args:
         geometry: A dict of the shape ``{"type": "Polygon"|"MultiPolygon",
@@ -482,8 +425,7 @@ def geojson_polygon_to_geos(geometry: dict | None) -> Polygon | MultiPolygon | N
     Returns:
         A single ``Polygon``, a ``MultiPolygon`` when more than one shell was
         present, or None when the geometry is missing, malformed, an
-        unsupported type (e.g. a bare ``Point``), or resolves to nothing valid.
-    """
+        unsupported type (e.g. a bare ``Point``), or resolves to nothing valid."""
     if not isinstance(geometry, dict):
         return None
     geo_type = geometry.get("type")

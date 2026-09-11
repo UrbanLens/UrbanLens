@@ -1,25 +1,5 @@
 """Write operations for a pin's notes, aliases, and links, shared by every caller.
-
-The HTMX controllers (``controllers.aliases``, ``controllers.links``, the
-``PinNote`` views in ``controllers.pin_edit``) and the external API's
-sub-resource endpoints both go through here, so the two surfaces cannot drift.
-That matters more than it looks: two of these operations have a non-obvious
-ordering requirement that is easy to omit when reimplementing them, and getting
-it wrong produces a bug that only shows up minutes or hours later.
-
-Specifically, deleting an alias or a link must first record a
-:class:`~urbanlens.dashboard.models.auto_removals.model.PinAutoRemoval`
-tombstone. Aliases and links are not only user-authored - plugin panels
-(Nominatim, EPA) recreate links when their cache goes stale, and the
-pin<->wiki alias-mirror signal recreates aliases - so a plain ``delete()``
-is silently undone the next time either runs. The tombstone is what tells
-that automatic-creation code the value was deliberately removed.
-
-Every mutation also bumps the pin's ``updated`` stamp (:func:`touch_pin`).
-Sub-resource rows are part of what ``GET /pins/{slug}/`` serves but they live
-in their own tables, so without this a client delta-syncing on ``updated``
-would never learn that a pin's notes or links changed.
-"""
+The HTMX controllers (``controllers.aliases``, ``controllers.links``, the ``PinNote`` views in ``controllers.pin_edit``) and the external API's sub-resource endpoints both go through here, so the two surfaces cannot drift."""
 
 from __future__ import annotations
 
@@ -39,23 +19,14 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
 
 #: Same scheme restriction ``controllers.links._clean_link_input`` applies.
-#: Deliberately *not* ``services.security.url_safety.ensure_public_http_url``: that is an
-#: SSRF guard for urls the server itself will fetch, and it costs a DNS
-#: resolution per call. A stored bookmark is never fetched by us, and running it
-#: through that guard would reject a perfectly legitimate intranet bookmark
-#: (and slow every link creation down) for no security benefit.
+#: Deliberately *not* ``services.security.url_safety.ensure_public_http_url``: that is an SSRF guard
+#: for urls the server itself will fetch, and it costs a DNS resolution per call.
 _validate_link_url = URLValidator(schemes=["http", "https"])
 
 
 class PinSubResourceError(Exception):
     """Base for the recoverable failures these operations raise.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below and author its own user-facing
-    text, rather than relaying ``message`` - that keeps a future raise site
-    here from being able to smuggle unreviewed text into a response just by
-    adding a new ``raise``.
-    """
+    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class AliasExistsError(PinSubResourceError):
@@ -96,14 +67,8 @@ class LinkExistsError(PinSubResourceError):
 def touch_pin(pin: Pin) -> None:
     """Bump the pin's ``updated`` stamp so delta-sync clients see the change.
 
-    Sub-resources live in their own tables, so a note/alias/link write leaves
-    the pin row itself untouched and invisible to a client syncing on
-    ``updated``. Saving only ``updated`` also skips ``Pin.save()``'s
-    name-change alias sync, which keys off ``"name"`` being in ``update_fields``.
-
     Args:
-        pin: The pin to re-stamp.
-    """
+        pin: The pin to re-stamp."""
     pin.save(update_fields=["updated"])
 
 
@@ -130,13 +95,10 @@ def create_pin_note(pin: Pin, *, text: str) -> PinNote:
 
 def delete_pin_note(note: PinNote) -> None:
     """Delete one personal note.
-
-    No ``PinAutoRemoval`` tombstone, unlike aliases and links: notes are only
-    ever authored by the user, so nothing exists that could recreate one.
+    No ``PinAutoRemoval`` tombstone, unlike aliases and links: notes are only ever authored by the user, so nothing exists that could recreate one.
 
     Args:
-        note: The note to delete.
-    """
+        note: The note to delete."""
     pin = note.pin
     note.delete()
     touch_pin(pin)
@@ -158,18 +120,17 @@ def create_pin_alias(pin: Pin, *, name: str, kind: str = AliasType.ALTERNATE) ->
         AliasExistsError: The pin already has this name as an alias,
             case-insensitively.
     """
-    # Validate the value that will actually be stored: PinAlias.save() runs the
-    # name through sanitize_name, so a name made only of dropped characters
-    # ("\U0001f389", "<>") passes a raw non-empty check and then persists as an
-    # empty alias - a blank row that also consumes the pin's unique alias slot.
+    # Validate the value that will actually be stored: PinAlias.save() runs the name through
+    # sanitize_name, so a name made only of dropped characters ("\U0001f389", "<>") passes a raw
+    # non-empty check and then persists as an empty alias - a blank row that also consumes the pin's
+    # unique alias slot.
     cleaned = sanitize_name((name or "").strip()) or ""
     if not cleaned:
         raise ValueError("Name is required.")
     try:
-        # atomic() gives IntegrityError its own savepoint to roll back to -
-        # without it, catching the error still leaves the surrounding
-        # transaction (if any) unusable for further queries until an explicit
-        # rollback, including the caller's own re-render or response build.
+        # atomic() gives IntegrityError its own savepoint to roll back to - without it, catching the
+        # error still leaves the surrounding transaction (if any) unusable for further queries until
+        # an explicit rollback, including the caller's own re-render or response build.
         with transaction.atomic():
             alias = PinAlias.objects.create(pin=pin, name=cleaned, kind=kind)
     except IntegrityError as exc:
@@ -206,25 +167,14 @@ def delete_pin_alias(pin: Pin, alias: PinAlias) -> None:
 
 def promote_alias_to_name(pin: Pin, alias: PinAlias) -> Pin:
     """Make one of a pin's aliases its current name ("use this name").
-
-    The outgoing name is preserved as an alias, so the alias list stays the
-    full set of names the pin has ever had and the rename is reversible.
-    ``Pin.save()`` already ensures this on any name change; it is re-asserted
-    here first because losing the old name is unrecoverable, and cheap to
-    prevent - ``get_or_create`` is a no-op in the normal case where the row is
-    already there.
-
-    The pin's ``slug`` deliberately does not change: it is the pin's stable
-    public identifier, and renaming is expected to be a frequent, low-stakes
-    edit rather than something that should break every saved url to the pin.
+    The outgoing name is preserved as an alias, so the alias list stays the full set of names the pin has ever had and the rename is reversible.
 
     Args:
         pin: The alias's owning pin.
         alias: The alias to promote.
 
     Returns:
-        The same *pin* instance, updated in place.
-    """
+        The same *pin* instance, updated in place."""
     old_name = (pin.effective_name or "").strip()
     if is_meaningful_name(old_name):
         try:

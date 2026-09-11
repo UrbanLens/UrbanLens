@@ -1,12 +1,5 @@
 """JSON-shape builders shared by the HTTP controller and the WebSocket consumer.
-
-Mirrors ``services.spotguessr.serializers`` - one source of truth for both
-the HTTP endpoints and the real-time broadcasts. A round's outbound payload
-never differs between an ordinary round and a trust-check round (see
-``models.consensus.model.ConsensusRound.is_check_round``'s docstring) -
-that parity is load-bearing for the whole trust mechanism, so
-``serialize_round`` deliberately has no branch on it at all.
-"""
+A round's outbound payload never differs between an ordinary round and a trust-check round (see ``models.consensus.model.ConsensusRound.is_check_round``'s docstring) - that parity is load-bearing for the whole trust mechanism, so ``serialize_round`` deliberately has no branch on it at all."""
 
 from __future__ import annotations
 

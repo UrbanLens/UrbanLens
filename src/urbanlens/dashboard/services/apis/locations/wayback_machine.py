@@ -21,22 +21,14 @@ _ALWAYS_EXCLUDED_DOMAINS = ("urbanlens.org",)
 
 def is_own_site_url(url: str) -> bool:
     """True when ``url`` points at this deployment's own domain (or urbanlens.org).
-
-    Most pages on this site require being logged in, so archiving them on the
-    Wayback Machine wouldn't produce anything a future anonymous visitor
-    could actually read - checked before submitting any link a user adds for
-    a pin/wiki. The current domain is read from ``settings.SITE_URL`` rather
-    than a request (this runs from a Celery task with no request available);
-    ``urbanlens.org`` and its subdomains (``staging.``, etc.) are always
-    excluded too, independent of ``SITE_URL``, for the self-hosting case.
+    Most pages on this site require being logged in, so archiving them on the Wayback Machine wouldn't produce anything a future anonymous visitor could actually read - checked before submitting any link a user adds for a pin/wiki.
 
     Args:
         url: The URL a user is asking to be archived.
 
     Returns:
         True if the URL's host is this site's own domain or urbanlens.org
-        (or a subdomain of either), meaning it should not be submitted.
-    """
+        (or a subdomain of either), meaning it should not be submitted."""
     from django.conf import settings
 
     hostname = (urlparse(url).hostname or "").lower().rstrip(".")
@@ -113,17 +105,13 @@ class WaybackMachineGateway(Gateway):
     def save_url(self, url: str, **params: Any) -> dict[str, Any]:
         """Ask the Wayback Machine to archive a URL now.
 
-        The save API redirects to the archived copy on success; this method
-        follows the redirect and returns the final location.
-
         Args:
-            url: The URL to archive.
-            **params: Additional query parameters passed to the save endpoint.
+                url: The URL to archive.
+                **params: Additional query parameters passed to the save endpoint.
 
         Returns:
-            Dict with ``"archived_url"`` (the saved copy's URL) and
-            ``"status_code"`` (HTTP status of the final response).
-        """
+                Dict with ``"archived_url"`` (the saved copy's URL) and
+                ``"status_code"`` (HTTP status of the final response)."""
         response = self.session.get(f"{_SAVE_URL}/{url}", params=params, timeout=30, allow_redirects=True)
         response.raise_for_status()
         return {"archived_url": response.url, "status_code": response.status_code}

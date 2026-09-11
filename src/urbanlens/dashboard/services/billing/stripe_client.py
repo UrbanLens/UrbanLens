@@ -1,14 +1,5 @@
 """Thin wrapper around the Stripe SDK for checkout, pledge updates, and the billing portal.
-
-Every checkout/pledge-update uses ``price_data`` inline (never a pre-created Stripe
-``Price``) against a lazily-created Stripe ``Product`` per role - this lets an admin
-freely edit ``SubscriptionRole.monthly_price_cents`` without needing to archive/recreate
-Stripe ``Price`` objects, and lets a pay-what-you-want pledge be any amount.
-
-Uses the module-level ``stripe`` API (``stripe.checkout.Session.create`` etc.) rather
-than a ``StripeClient`` instance, so tests can mock calls directly via
-``mock.patch("stripe.X.Y")``, matching how this codebase mocks other external SDKs.
-"""
+Every checkout/pledge-update uses ``price_data`` inline (never a pre-created Stripe ``Price``) against a lazily-created Stripe ``Product`` per role - this lets an admin freely edit ``SubscriptionRole.monthly_price_cents`` without needing to archive/recreate Stripe ``Price`` objects, and lets a pay-what-you-want pledge be any amount."""
 
 from __future__ import annotations
 
@@ -123,9 +114,9 @@ def create_checkout_session(user: User, role: SubscriptionRole, amount_cents: in
         customer=customer.stripe_customer_id,
         client_reference_id=str(user.pk),
         # Set on both the Session (read by checkout.session.completed) and the resulting
-        # Subscription (read by every other webhook, which never sees the Session) -
-        # otherwise a webhook arriving without the Session in hand has no way to
-        # resolve which role a bare Stripe subscription id belongs to.
+        # Subscription (read by every other webhook, which never sees the Session) - otherwise a
+        # webhook arriving without the Session in hand has no way to resolve which role a bare
+        # Stripe subscription id belongs to.
         metadata=metadata,
         line_items=[
             {
@@ -146,18 +137,14 @@ def create_checkout_session(user: User, role: SubscriptionRole, amount_cents: in
 
 def update_pledge(role_subscription: RoleSubscription, new_amount_cents: int) -> stripe.Subscription:
     """Change an existing pay-what-you-want subscription's pledge amount.
-
-    Takes effect at the next billing cycle (``proration_behavior="none"``) rather than
-    immediately reprorating/charging - matches the site's own "the following month"
-    framing for when a changed pledge starts counting toward a dynamic threshold.
+    Takes effect at the next billing cycle (``proration_behavior="none"``) rather than immediately reprorating/charging - matches the site's own "the following month" framing for when a changed pledge starts counting toward a dynamic threshold.
 
     Args:
         role_subscription: The subscription to update.
         new_amount_cents: The new monthly pledge, in cents.
 
     Returns:
-        The updated Stripe Subscription.
-    """
+        The updated Stripe Subscription."""
     _ensure_configured()
     stripe_subscription = stripe.Subscription.retrieve(role_subscription.stripe_subscription_id).to_dict()
     item_id = stripe_subscription["items"]["data"][0]["id"]

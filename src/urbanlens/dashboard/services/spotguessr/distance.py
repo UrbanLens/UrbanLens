@@ -1,12 +1,5 @@
 """Geodesic distance helpers for SpotGuessr scoring.
-
-Always computed via PostGIS ``ST_Distance`` over a ``geography`` cast (correct
-in meters at any latitude) - never the codebase's other, approximate
-"degrees x 111,320" shortcut (``services.sharing.map_sharing``), since scoring
-fairness depends on being right at sub-kilometer scale, not just
-trip-planning scale. Mirrors the existing ``Distance()`` convention already
-used in ``models/pin/queryset.py`` and ``services/memories/photos.py``.
-"""
+Always computed via PostGIS ``ST_Distance`` over a ``geography`` cast (correct in meters at any latitude) - never the codebase's other, approximate "degrees x 111,320" shortcut (``services.sharing.map_sharing``), since scoring fairness depends on being right at sub-kilometer scale, not just trip-planning scale."""
 
 from __future__ import annotations
 
@@ -25,14 +18,7 @@ if TYPE_CHECKING:
 
 def location_boundary_polygon(location: Location) -> GEOSGeometry | None:
     """The location's *shared* effective property boundary.
-
-    Deliberately bypasses ``Boundary.objects.effective_polygon_for_pin``/
-    ``_for_wiki``: those resolve a specific pin's or wiki's customized
-    boundary, which could differ per participant. Scoring must use exactly
-    one boundary for every participant in a session, so this only ever reads
-    the place's own official outline - falling back to the same circle those
-    helpers use when no provider knows the coordinate.
-    """
+    Scoring must use exactly one boundary for every participant in a session, so this only ever reads the place's own official outline - falling back to the same circle those helpers use when no provider knows the coordinate."""
     from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
 
     polygon = parcel_polygon_for_location(location)
@@ -43,12 +29,7 @@ def location_boundary_polygon(location: Location) -> GEOSGeometry | None:
 
 def geodesic_distance_meters(anchor_location: Location, geometry_a: GEOSGeometry, geometry_b: GEOSGeometry) -> float:
     """Geodesic distance in meters between two geometries (0 when one contains/touches the other).
-
-    ``anchor_location`` only supplies the single database row the
-    annotation runs against - both geometries are passed as literal values,
-    never read from a field, so this works for any point/point,
-    point/polygon, or polygon/polygon pair.
-    """
+    ``anchor_location`` only supplies the single database row the annotation runs against - both geometries are passed as literal values, never read from a field, so this works for any point/point, point/polygon, or polygon/polygon pair."""
     result = (
         Location.objects.filter(pk=anchor_location.pk)
         .annotate(

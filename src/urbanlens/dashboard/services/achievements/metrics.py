@@ -1,19 +1,5 @@
 """The catalogue of things an achievement can be defined against.
-
-A metric is a named, countable query over one profile's contributions. Site
-admins pick a metric plus a threshold when they create an
-:class:`~urbanlens.dashboard.models.achievements.model.Achievement`, so the set
-of metrics is the vocabulary the achievement system understands.
-
-Metrics are registered rather than hard-coded into a match statement so that a
-plugin can contribute its own (see :func:`register`). ``Achievement.metric``
-takes its ``choices`` from :func:`metric_choices` as a callable, which keeps
-registering a metric from generating a migration.
-
-Every ``compute`` callable imports its models inside the function body: this
-module is imported from ``models.achievements.model``, so importing the models
-at the top would be circular.
-"""
+Site admins pick a metric plus a threshold when they create an :class:`~urbanlens.dashboard.models.achievements.model.Achievement`, so the set of metrics is the vocabulary the achievement system understands."""
 
 # Generic imports
 from __future__ import annotations
@@ -39,7 +25,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Grouping labels used to organise the metric dropdown in the admin UI.
 GROUP_CONTENT = "Content"
 GROUP_EXPLORATION = "Exploration"
 GROUP_COMMUNITY = "Community"
@@ -78,8 +63,7 @@ class Metric:
             event name and only the metrics listing it are recomputed, so a new
             pin does not re-run the comment count.
         requirement_template: Sentence describing how to earn the award, with
-            ``{threshold}`` substituted in.
-    """
+            ``{threshold}`` substituted in."""
 
     key: str
     label: str
@@ -110,20 +94,12 @@ class Metric:
     def values_for_many(self, profiles: Sequence[Profile]) -> dict[int, int]:
         """Return this metric's current value for every profile, never raising.
 
-        Uses :attr:`compute_bulk` when the metric provides one, so a chunk of
-        profiles costs a constant number of queries instead of one per
-        profile. A metric without a bulk form - or whose bulk form raises -
-        falls back to :meth:`value_for` per profile, which keeps the failure
-        surface identical to per-profile evaluation rather than zeroing a
-        whole chunk at once.
-
         Args:
-            profiles: The profiles to measure.
+                profiles: The profiles to measure.
 
         Returns:
-            Mapping of profile pk to current value. Every pk in *profiles* is
-            present; ones the bulk query did not mention read as 0.
-        """
+                Mapping of profile pk to current value. Every pk in *profiles* is
+                present; ones the bulk query did not mention read as 0."""
         if self.compute_bulk is not None:
             profile_ids = [profile.pk for profile in profiles]
             try:
@@ -212,10 +188,10 @@ TRIGGER_STREAK = "streak"
 
 
 # ---------------------------------------------------------------------------
-# Metric implementations. Each countable metric has two forms that must agree:
-# ``_x(profile)`` for signal-driven single-profile checks, and ``_x_bulk(ids)``
-# for the nightly sweep, which prices a whole chunk of profiles at a constant
-# number of grouped queries instead of one query per profile.
+# Metric implementations.
+# Each countable metric has two forms that must agree: ``_x(profile)`` for signal-driven
+# single-profile checks, and ``_x_bulk(ids)`` for the nightly sweep, which prices a whole chunk of
+# profiles at a constant number of grouped queries instead of one query per profile.
 # ---------------------------------------------------------------------------
 
 
@@ -250,9 +226,9 @@ def _pins_created_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
 def _photos_uploaded(profile: Profile) -> int:
     from urbanlens.dashboard.models.images.model import Image
 
-    # Only the profile's own photos: rows materialised from Yelp/Wikimedia/etc.
-    # are someone else's photo that this profile merely attached. A photo picked
-    # out of their own Immich or Google Photos library is theirs and counts.
+    # Only the profile's own photos: rows materialised from Yelp/Wikimedia/etc. are someone else's
+    # photo that this profile merely attached.
+    # A photo picked out of their own Immich or Google Photos library is theirs and counts.
     # .photos() excludes documents/videos - the label is "Photos uploaded".
     return Image.objects.filter(profile=profile).own_contributions().photos().count()
 
@@ -330,11 +306,10 @@ def _friends(profile: Profile) -> int:
 def _friends_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
     from urbanlens.dashboard.models.friendship.model import Friendship
 
-    # A profile can sit on either end of the pair's single shared row, so this
-    # groups each side separately and sums. A row joining two profiles in the
-    # same chunk credits both, exactly as the per-profile count does; the
-    # self-referencing exclusion mirrors ``Q(from=p) | Q(to=p)`` counting such
-    # a row once, not twice.
+    # A profile can sit on either end of the pair's single shared row, so this groups each side
+    # separately and sums.
+    # A row joining two profiles in the same chunk credits both, exactly as the per-profile count
+    # does; the self-referencing exclusion mirrors ``Q(from=p) | Q(to=p)`` counting such a row once,
     accepted = Friendship.objects.is_friend()
     counts = _grouped_count(accepted.filter(from_profile_id__in=profile_ids), "from_profile_id")
     to_side = accepted.filter(to_profile_id__in=profile_ids).exclude(from_profile=F("to_profile"))
@@ -451,12 +426,7 @@ def _longest_streak(kind: str) -> Callable[[Profile], int]:
 
 def _longest_streak_bulk(kind: str) -> Callable[[Sequence[int]], dict[int, int]]:
     """Return a bulk compute function reading cached longest streaks for *kind*.
-
-    Streak arithmetic is path-dependent, but this reads none of it: the
-    incremental tracker already collapsed the history into
-    ``ProfileStreak.longest_length``, so the bulk form is a plain grouped read
-    of that column - exactly what the per-profile form does, minus N queries.
-    """
+    Streak arithmetic is path-dependent, but this reads none of it: the incremental tracker already collapsed the history into ``ProfileStreak.longest_length``, so the bulk form is a plain grouped read of that column - exactly what the per-profile form does, minus N queries."""
 
     def compute_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
         from urbanlens.dashboard.models.achievements.model import ProfileStreak
@@ -663,12 +633,7 @@ def compute_values(profile: Profile, keys: Iterable[str] | None = None) -> dict[
 
 def compute_values_bulk(profiles: Sequence[Profile], keys: Iterable[str] | None = None) -> dict[int, dict[str, int]]:
     """Return current values for *keys* (or every metric) for many profiles.
-
-    The bulk counterpart of :func:`compute_values`, used by the nightly sweep:
-    each metric that defines ``compute_bulk`` is computed for the whole batch
-    in a constant number of grouped queries, so the batch costs on the order
-    of the metric count in queries rather than metrics x profiles. Metrics
-    without a bulk form fall back to per-profile computation.
+    The bulk counterpart of :func:`compute_values`, used by the nightly sweep: each metric that defines ``compute_bulk`` is computed for the whole batch in a constant number of grouped queries, so the batch costs on the order of the metric count in queries rather than metrics x profiles.
 
     Args:
         profiles: The profiles to measure.
@@ -677,8 +642,7 @@ def compute_values_bulk(profiles: Sequence[Profile], keys: Iterable[str] | None 
     Returns:
         A mapping of profile pk to that profile's ``{metric key: value}``
         mapping, exactly as :func:`compute_values` would have returned for it.
-        Unknown keys are skipped.
-    """
+        Unknown keys are skipped."""
     selected = all_metrics() if keys is None else [m for k in dict.fromkeys(keys) if (m := get_metric(k))]
     values: dict[int, dict[str, int]] = {profile.pk: {} for profile in profiles}
     for metric in selected:

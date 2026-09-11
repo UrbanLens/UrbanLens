@@ -1,38 +1,5 @@
 """Geometry-based detection of which pins a MarkupMap effectively shares.
-
-When one profile sends a MarkupMap to another (a DM attachment, a standalone
-map share, or a map attached to an explicit pin share), the map's viewport and
-markup may reveal the location of one or more of the sender's own pins even
-though the sender never used the explicit share-a-pin dialog. This module
-answers "which of the sender's pins does this map reveal?" so the caller can
-record those as :class:`~urbanlens.dashboard.models.pin_share.model.PinShare`
-rows via ``services.sharing.map_sharing``.
-
-Two detection modes, chosen by the saved viewport's zoom level relative to
-``settings.UL_MAP_SHARE_ZOOM_THRESHOLD``:
-
-- Zoomed in (a small geographic area is visible): the map is pointing at a
-  specific place, so a pin the view is *aimed at* - inside the central
-  ``AIMED_AT_VIEWPORT_FRACTION`` of the frame - counts as shared even with no
-  markup drawn.
-- Zoomed out (a large geographic area is visible): the sender could be
-  sharing the map for many reasons unrelated to any one pin, so only pins
-  specifically called out by markup count - a pin/text marker sitting in the
-  pin's boundary, an arrow/line pointing toward it, or a shape overlapping it.
-
-Markup matching applies either way; the zoom only decides whether merely being
-aimed at is enough on its own. Being *on screen* never is. A snapshot carries
-the viewport and the drawn shapes and nothing else - the recipient's map does
-not render the sender's pins - so a pin the sender neither centred on nor drew
-anything near is not revealed by sending it, and recording a share for one
-claims an exposure that never happened.
-
-``PinMarkup.geometry`` is a plain JSONField (not a PostGIS field), so this
-module bridges it to GEOS geometries itself; ``MarkupMap`` only ever persists
-a saved center+zoom, never the client's actual viewport pixel size, so
-``viewport_bounds`` is a best-effort approximation rather than an exact
-reproduction of what the sender saw on screen.
-"""
+When one profile sends a MarkupMap to another (a DM attachment, a standalone map share, or a map attached to an explicit pin share), the map's viewport and markup may reveal the location of one or more of the sender's own pins even though the sender never used the explicit share-a-pin dialog."""
 
 from __future__ import annotations
 
@@ -59,25 +26,20 @@ _EARTH_CIRCUMFERENCE_M = 156_543.03392
 _METERS_PER_DEGREE_LAT = 111_320.0
 _METERS_PER_DEGREE_LNG_AT_EQUATOR = 111_320.0
 
-# Assumed client viewport size in CSS pixels, standing in for the real
-# (unknown) container size - MarkupMap only ever persists center+zoom, never
-# the browser's actual container dimensions at save time. Tuned to a typical
-# desktop map panel; see module docstring re: this being an approximation.
+# Assumed client viewport size in CSS pixels, standing in for the real (unknown) container size -
+# MarkupMap only ever persists center+zoom, never the browser's actual container dimensions at save
+# time.
+# Tuned to a typical desktop map panel; see module docstring re: this being an approximation.
 ASSUMED_VIEWPORT_WIDTH_PX = 1000
 ASSUMED_VIEWPORT_HEIGHT_PX = 700
 
 #: Bearing tolerance (degrees either side) for "an arrow points toward a pin."
 ARROW_BEARING_TOLERANCE_DEGREES = 35.0
 
-#: Below this tail-to-target separation (in degrees) the tail-to-target bearing
-#: is numerically meaningless, so "does the arrow point at it" has no answer.
-#: A boundary centroid computed for a pin sitting exactly on an arrow's tail
-#: lands ~1e-14 degrees away from it through ordinary float error, and
-#: ``bearing_degrees`` happily turns that into a confident-looking angle - which
-#: matched within tolerance often enough to record shares of pins the sender
-#: never called out. ``Location`` stores coordinates at 6dp, so two genuinely
-#: distinct points are never closer than 1e-6 degrees; this sits well below
-#: that and well above the float noise.
+#: Below this tail-to-target separation (in degrees) the tail-to-target bearing is numerically
+#: meaningless, so "does the arrow point at it" has no answer.
+#: A boundary centroid computed for a pin sitting exactly on an arrow's tail lands ~1e-14 degrees
+#: away from it through ordinary float error, and ``bearing_degrees`` happily turns that into a
 _DEGENERATE_TAIL_SEPARATION_DEGREES = 1e-7
 
 #: When zoomed out, how far beyond the viewport bounds a candidate pin may
@@ -85,14 +47,10 @@ _DEGENERATE_TAIL_SEPARATION_DEGREES = 1e-7
 #: a pin just outside it) - a query-cost prefilter, not a correctness rule.
 CANDIDATE_RADIUS_MULTIPLIER = 5
 
-#: How much of a zoomed-in frame counts as "what this map is aimed at", as a
-#: fraction of its width and height about the centre. Whole-frame containment
-#: was the old rule and it is far too coarse to mean anything: at the default
-#: threshold zoom the frame spans roughly 9 x 7 km, so sending a map of one
-#: building recorded a share for every unrelated pin the sender happened to own
-#: across the surrounding neighbourhood. A quarter of each dimension keeps the
-#: place the sender actually centred on - the one thing the recipient can read
-#: off the snapshot - without sweeping in the rest of the city.
+#: How much of a zoomed-in frame counts as "what this map is aimed at", as a fraction of its width
+#: and height about the centre.
+#: Whole-frame containment was the old rule and it is far too coarse to mean anything: at the
+#: default threshold zoom the frame spans roughly 9 x 7 km, so sending a map of one building
 AIMED_AT_VIEWPORT_FRACTION = 0.25
 
 #: The boundary type used for pin-share detection matching.
@@ -155,12 +113,7 @@ def is_zoomed_in(zoom: float | None, *, threshold: float | None = None) -> bool:
 
 def viewport_bounds(center_lat: float, center_lng: float, zoom: float) -> MapBounds:
     """Approximate the visible lat/lng bounds for a saved MarkupMap viewport.
-
-    This is necessarily approximate: the real visible bounds depend on the
-    client's actual container pixel size at save time, which ``MarkupMap``
-    never persists (only ``center_latitude``/``center_longitude``/``zoom``
-    are stored). Uses standard Web Mercator meters-per-pixel math against an
-    assumed viewport size.
+    This is necessarily approximate: the real visible bounds depend on the client's actual container pixel size at save time, which ``MarkupMap`` never persists (only ``center_latitude``/``center_longitude``/``zoom`` are stored).
 
     Args:
         center_lat: Saved viewport center latitude.
@@ -168,8 +121,7 @@ def viewport_bounds(center_lat: float, center_lng: float, zoom: float) -> MapBou
         zoom: Saved viewport zoom level.
 
     Returns:
-        The approximated visible bounds.
-    """
+        The approximated visible bounds."""
     meters_per_px = _EARTH_CIRCUMFERENCE_M * math.cos(math.radians(center_lat)) / (2**zoom)
     half_width_m = (ASSUMED_VIEWPORT_WIDTH_PX / 2) * meters_per_px
     half_height_m = (ASSUMED_VIEWPORT_HEIGHT_PX / 2) * meters_per_px
@@ -182,20 +134,11 @@ def viewport_bounds(center_lat: float, center_lng: float, zoom: float) -> MapBou
 def geometry_to_geos(geometry: dict | None) -> GEOSGeometry | None:
     """Convert a ``PinMarkup.geometry`` dict to a GEOS geometry (SRID 4326).
 
-    Standard GeoJSON shapes (``Point``/``LineString``/``Polygon`` - covering
-    the ``line``/``arrow``/``text``/``square``/``polygon``/``pin`` markup
-    types) convert directly. The non-standard ``Circle`` type (
-    ``{"type": "Circle", "coordinates": [lng, lat], "radius": meters}``) has
-    no GeoJSON equivalent and is synthesized as a buffered point via
-    ``models.boundary.queryset.buffer_point_by_meters``, the same
-    latitude-corrected helper ``circle_for_coordinates`` uses.
-
     Args:
         geometry: The raw geometry dict from a PinMarkup row.
 
     Returns:
-        A GEOS geometry, or None if the geometry is missing/malformed.
-    """
+        A GEOS geometry, or None if the geometry is missing/malformed."""
     if not geometry:
         return None
     geom_type = geometry.get("type")
@@ -245,10 +188,6 @@ def bearing_degrees(from_lat: float, from_lng: float, to_lat: float, to_lng: flo
 def arrow_points_toward(item: PinMarkup, target: Point, *, tolerance_degrees: float = ARROW_BEARING_TOLERANCE_DEGREES) -> bool:
     """Whether an arrow/line markup item's direction points toward a target point.
 
-    Direction is inferred from coordinate ordering (no explicit direction
-    field exists on ``PinMarkup`` - the first LineString coordinate is the
-    tail, the last is the head/arrowhead, per the renderer convention).
-
     Args:
         item: A ``line`` or ``arrow`` PinMarkup item.
         target: The point being tested (typically a pin boundary's centroid).
@@ -259,8 +198,7 @@ def arrow_points_toward(item: PinMarkup, target: Point, *, tolerance_degrees: fl
         tail-to-target bearing. False when the target sits on the tail, where
         that bearing is undefined (see
         ``_DEGENERATE_TAIL_SEPARATION_DEGREES``) - an arrow drawn *from* a pin
-        is not an arrow pointing *at* it.
-    """
+        is not an arrow pointing *at* it."""
     coords = (item.geometry or {}).get("coordinates") or []
     if len(coords) < 2:
         return False
@@ -302,12 +240,7 @@ def _item_matches_pin(item: PinMarkup, boundary: GEOSGeometry) -> bool:
 
 def _candidate_pins(sender: Profile, bounds: MapBounds):
     """Sender's own root pins within a bounding box, prefiltered on plain numeric fields.
-
-    ``select_related`` covers every relation :func:`_boundaries_for_pins`
-    dereferences per pin (``location``, the pin's own ``wiki``, and its
-    location's ``wiki`` fallback) so resolving boundaries for the whole
-    candidate set costs a handful of bulk queries rather than several per pin.
-    """
+    ``select_related`` covers every relation :func:`_boundaries_for_pins` dereferences per pin (``location``, the pin's own ``wiki``, and its location's ``wiki`` fallback) so resolving boundaries for the whole candidate set costs a handful of bulk queries rather than several per pin."""
     from urbanlens.dashboard.models.pin.model import Pin
 
     return Pin.objects.filter(
@@ -321,20 +254,7 @@ def _candidate_pins(sender: Profile, bounds: MapBounds):
 
 def _boundaries_for_pins(pins: list[Pin], boundary_type: str) -> dict[int, GEOSGeometry]:
     """Batch-resolve each pin's effective boundary polygon, keyed by pin id.
-
-    A batched counterpart to ``Boundary.objects.effective_polygon_for_pin``
-    for callers that need it for many pins at once - calling that per pin
-    (as ``detect_shared_pins`` used to) is an N+1: each call issues its own
-    "own row" / "place" / "wiki row" queries. This instead fetches each of
-    those in one bulk query for the whole batch and resolves every pin's
-    polygon from the resulting dicts.
-
-    This mirrors ``BoundaryManager.resolve_for_pin``'s property-boundary order
-    (own row -> scope gate -> wiki row -> place -> circle fallback) but
-    *without* the parent-pin inheritance branch, which is safe here only
-    because every candidate pin is guaranteed to be a root pin
-    (``_candidate_pins`` filters ``parent_pin__isnull=True``) - a detail pin
-    would need that branch and should not use this helper.
+    This instead fetches each of those in one bulk query for the whole batch and resolves every pin's polygon from the resulting dicts.
 
     Args:
         pins: Candidate pins to resolve (already ``select_related`` for
@@ -344,8 +264,7 @@ def _boundaries_for_pins(pins: list[Pin], boundary_type: str) -> dict[int, GEOSG
 
     Returns:
         Dict mapping pin id to its effective boundary polygon; pins with no
-        applicable boundary (including no fallback circle) are omitted.
-    """
+        applicable boundary (including no fallback circle) are omitted."""
     from urbanlens.dashboard.models.boundary.model import Boundary
     from urbanlens.dashboard.models.boundary.queryset import circle_for_coordinates
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -452,22 +371,13 @@ def detect_shared_pins(markup_map: MarkupMap, sender: Profile) -> list[Pin]:
 def sync_pin_inferences(markup_map: MarkupMap) -> list[Pin]:
     """Recompute ``markup_map.inferred_pins`` from its current geometry.
 
-    Runs :func:`detect_shared_pins` against the map's own owner and persists
-    the result via a plain M2M ``.set()`` (which diffs and commits the add/
-    remove itself), so ``MarkupMap.inferred_pins`` / ``Pin.inferred_maps``
-    stay a durable record of geometric detection for search and pin-share
-    tracking - independent of whether the map is ever actually shared, and of
-    the separate, user-editable ``MarkupMap.pin`` link. See
-    ``models.markup.signals`` for the save/delete hooks that call this.
-
     Args:
         markup_map: The map to (re)sync.
 
     Returns:
         The freshly-detected list of pins (so callers like
         :func:`~urbanlens.dashboard.services.sharing.map_sharing.share_markup_map_with_profile`
-        that need the current set don't have to run detection twice).
-    """
+        that need the current set don't have to run detection twice)."""
     pins = detect_shared_pins(markup_map, markup_map.profile)
     markup_map.inferred_pins.set(pins)
     return pins

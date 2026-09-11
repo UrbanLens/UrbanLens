@@ -1,46 +1,4 @@
-"""Authenticated media gate - every ``/media/...`` request is served through this view.
-
-Historically nginx served ``location /media/`` straight off disk with no auth
-check, so anyone who guessed (or was leaked) a filename could fetch any user's
-uploaded photos. This view closes that hole: nginx now proxies ``/media/`` to
-Django like any other app route, this view authenticates the requester and
-authorizes them against the owning row for the requested file, and then either:
-
-- **Behind nginx** (``settings.MEDIA_X_ACCEL``): responds with an
-  ``X-Accel-Redirect`` header pointing at the ``internal``-only
-  ``/_protected_media/`` location (see ``src/urbanlens/config/nginx/django.conf``),
-  so nginx streams the bytes efficiently and picks the Content-Type itself.
-- **Local dev / no nginx**: streams the file directly with ``FileResponse``.
-
-Neither half of the decision is implemented here.
-
-*Where the bytes come from* is :class:`MediaByteSource` and its two subclasses.
-The local filesystem is one case; an S3-compatible object store
-(``UL_MEDIA_STORAGE_BACKEND=s3``) is the other, and it exists so media can move
-off a single machine's disk without moving out from behind this view. What the
-object-store case deliberately does **not** do is hand the client a presigned
-URL: that would be a bearer token for one object, valid until it expires,
-readable by anything the URL reaches, and revocable by nothing - the access
-model this module enforces, replaced by a link. The bytes either pass through
-Django or are fetched by nginx from a URL Django signed and nginx strips
-(``MEDIA_X_ACCEL_OBJECT_PREFIX``); in both, the client only ever sees
-``/media/...``.
-
-*Authentication* - "a logged-in session, or a bearer credential holding
-``media:read``" - lives in
-:class:`~urbanlens.dashboard.controllers.media_auth.CredentialOrSessionMediaMixin`,
-because the panel image proxy and the SpotGuessr round image need the identical
-rule and a second copy of it would drift open.
-
-*Authorization* lives in :mod:`urbanlens.dashboard.services.media.access`, as a
-default-deny table keyed by the file's ``upload_to`` prefix. Read that module
-for the per-family policy; a family with no registered authorizer is refused
-here and reported by ``manage.py check``.
-
-This module owns only the path handling in between: resolving the requested
-path against ``MEDIA_ROOT`` without letting it escape, and handing the bytes to
-nginx once someone has said yes.
-"""
+"""Authenticated media gate for ``/media/...`` requests."""
 
 from __future__ import annotations
 

@@ -33,16 +33,10 @@ def add_demolished_status(pin: Pin) -> None:
 
 def add_demolished_status_to_wiki(wiki: Wiki) -> None:
     """Add the canonical global "Demolished" status label to the wiki if not already present.
-
-    Unlike a Pin, a Wiki has no owning profile - its ``labels`` are shared
-    taxonomy visible to every user who can see the location - so this uses the
-    one global (``profile=None``) "Demolished" label seeded by migration
-    ``0087_seed_global_demolished_label`` rather than any one user's private
-    copy.
+    Unlike a Pin, a Wiki has no owning profile - its ``labels`` are shared taxonomy visible to every user who can see the location - so this uses the one global (``profile=None``) "Demolished" label seeded by migration ``0087_seed_global_demolished_label`` rather than any one user's private copy.
 
     Args:
-        wiki: Wiki instance whose statuses should be updated.
-    """
+        wiki: Wiki instance whose statuses should be updated."""
     from urbanlens.dashboard.models.labels.model import Label
 
     demolished_label = Label.objects.filter(profile=None, kind=KIND_STATUS, name="Demolished").first()

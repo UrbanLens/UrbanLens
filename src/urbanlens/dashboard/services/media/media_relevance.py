@@ -1,13 +1,5 @@
 """Effective relevance for a materialized Media-gallery photo, and local-copy lookup.
-
-Blends the wiki's own organic thumbs-up/down (``MediaRelevance`` - a
-per-profile mark on a *transient* gallery item) with SpotGuessr gameplay
-signal (``GamePhotoFeedback`` - an event log on a *materialized* ``Image``
-row) into one score. The two are kept in entirely separate tables rather
-than commingled into one running total, precisely so each signal can still
-be queried/audited on its own - only ``effective_relevance()`` blends them,
-and only for display/ranking purposes.
-"""
+The two are kept in entirely separate tables rather than commingled into one running total, precisely so each signal can still be queried/audited on its own - only ``effective_relevance()`` blends them, and only for display/ranking purposes."""
 
 from __future__ import annotations
 
@@ -41,23 +33,16 @@ GAME_THUMBS_UP_WEIGHT = 0.5
 #: explicit wiki downvote makes.
 GAME_REPORT_WEIGHT = 1.0
 
-#: Half-life for a report's weight, in days. A report is the only signal that
-#: can single-handedly push a photo below the eligibility floor, and an
-#: excluded photo stops being shown - so it can never earn the "shown, no
-#: reaction" impressions that would otherwise rehabilitate it. Without decay
-#: that is a one-way ratchet: one report in one session removes a photo from a
-#: small pin's playable pool permanently. Decaying it means a genuinely bad
-#: photo stays suppressed as long as anyone keeps reporting it, while a photo
-#: reported once years ago quietly returns to the pool to be re-judged.
-#: Matches the recency-weighting approach in ``services/geo/boundary_voting.py``.
+#: Half-life for a report's weight, in days.
+#: A report is the only signal that can single-handedly push a photo below the eligibility floor,
+#: and an excluded photo stops being shown - so it can never earn the "shown, no reaction"
+#: impressions that would otherwise rehabilitate it.
 GAME_REPORT_HALF_LIFE_DAYS = 180.0
 
-#: Weight below which a decayed report is dropped entirely rather than kept as a
-#: vanishing negative. Decay alone is asymptotic - it never reaches zero - and
-#: the eligibility gate is ``>= 0``, so an old report would otherwise leave a
-#: photo at -0.0000009 and keep it excluded forever, which is the exact ratchet
-#: the decay exists to break. This makes a report genuinely expire (~6.6
-#: half-lives, about 3 years at the current setting).
+#: Weight below which a decayed report is dropped entirely rather than kept as a vanishing negative.
+#: Decay alone is asymptotic - it never reaches zero - and the eligibility gate is ``>= 0``, so an
+#: old report would otherwise leave a photo at -0.0000009 and keep it excluded forever, which is the
+#: exact ratchet the decay exists to break.
 GAME_REPORT_MIN_WEIGHT = 0.01
 
 #: Being shown with no reaction at all counts very weakly toward "relevant" -
@@ -65,14 +50,10 @@ GAME_REPORT_MIN_WEIGHT = 0.01
 #: across many plays.
 GAME_NO_REACTION_WEIGHT = 0.01
 
-#: In-game thumbs down counts toward "not relevant" at a token weight only -
-#: "wrong photo for this game" (blurry, ambiguous, gives away the answer too
-#: easily) is not the same claim as "not relevant to this location's wiki",
-#: so it must never be enough on its own (or even in real numbers) to drag a
-#: genuinely relevant photo's score to or below zero and knock it out of
-#: eligibility. It still nudges the *ordering* among already-relevant photos
-#: a little, which is the intended use - a future "sort by relevance"
-#: ranking can use it to break ties among photos that are all positive.
+#: In-game thumbs down counts toward "not relevant" at a token weight only - "wrong photo for this
+#: game" (blurry, ambiguous, gives away the answer too easily) is not the same claim as "not
+#: relevant to this location's wiki", so it must never be enough on its own (or even in real
+#: numbers) to drag a genuinely relevant photo's score to or below zero and knock it out of
 GAME_THUMBS_DOWN_WEIGHT = 0.001
 
 #: Weights for the signals counted in bulk. Reports are handled separately (see
@@ -87,20 +68,14 @@ _GAME_WEIGHTS = {
 
 def _decayed_report_penalty(image: Image, *, now: datetime | None = None) -> float:
     """Total weight of this photo's reports, each decayed by its own age.
-
-    Reports are read row-by-row rather than counted, because each contributes
-    ``GAME_REPORT_WEIGHT * 0.5 ** (age_days / GAME_REPORT_HALF_LIFE_DAYS)``.
-    That is affordable where counting the other kinds in bulk is not: a report
-    is a rare, deliberate act, while ``NO_REACTION`` accrues on every single
-    impression and would be thousands of rows for a popular photo.
+    Reports are read row-by-row rather than counted, because each contributes ``GAME_REPORT_WEIGHT * 0.5 ** (age_days / GAME_REPORT_HALF_LIFE_DAYS)``.
 
     Args:
         image: The materialized image whose reports to weigh.
         now: Reference time, for tests. Defaults to the current time.
 
     Returns:
-        A non-negative total to be subtracted from the photo's score.
-    """
+        A non-negative total to be subtracted from the photo's score."""
     reference = now or timezone.now()
     timestamps = GamePhotoFeedback.objects.filter(round__image=image, kind=GamePhotoFeedbackKind.REPORTED).values_list("created", flat=True)
 
@@ -115,13 +90,7 @@ def _decayed_report_penalty(image: Image, *, now: datetime | None = None) -> flo
 
 def effective_relevance(image: Image) -> float:
     """This photo's blended relevance score, or 0.0 if it has no relevance identity at all.
-
-    Only meaningful for a materialized external-media row (``media_source_key``/
-    ``media_item_key`` set - see ``Image.media_source_key``'s docstring). A
-    plain personal upload was never voted on through the Media gallery and
-    has no ``MediaRelevance``/``GamePhotoFeedback`` history to speak of;
-    callers should treat those as trusted by default rather than reading the
-    0.0 returned here as "not relevant".
+    Only meaningful for a materialized external-media row (``media_source_key``/ ``media_item_key`` set - see ``Image.media_source_key``'s docstring).
 
     Args:
         image: A materialized ``Image`` row.
@@ -130,8 +99,7 @@ def effective_relevance(image: Image) -> float:
         wiki net vote score (each mark counts as +1/-1) plus the weighted
         SpotGuessr gameplay signal (thumbs up/down/no-reaction - see
         ``_GAME_WEIGHTS``) minus the age-decayed report penalty (see
-        :data:`GAME_REPORT_HALF_LIFE_DAYS`).
-    """
+        :data:`GAME_REPORT_HALF_LIFE_DAYS`)."""
     if not image.media_source_key or not image.media_item_key or image.location_id is None:
         return 0.0
 
@@ -145,13 +113,7 @@ def effective_relevance(image: Image) -> float:
 
 def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
     """Cast, flip, or clear one profile's community vote on a materialized media row.
-
-    The same three-state write ``controllers.wiki_media.WikiMediaVoteView``
-    performs, addressed by an ``Image`` row instead of by a raw
-    ``(source, item_key)`` pair from a gallery tile. Both end up in the same
-    Location-scoped :class:`MediaRelevance` table, so a vote cast through the
-    API and one cast on the wiki are the same vote - reusing this rather than
-    reimplementing it is what keeps that true.
+    The same three-state write ``controllers.wiki_media.WikiMediaVoteView`` performs, addressed by an ``Image`` row instead of by a raw ``(source, item_key)`` pair from a gallery tile.
 
     Args:
         image: The materialized media row being voted on. Must carry the
@@ -168,8 +130,7 @@ def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
 
     Raises:
         ValueError: *value* isn't one of -1/0/1, or *image* has no relevance
-            identity to vote on.
-    """
+            identity to vote on."""
     if value not in (-1, 0, 1):
         raise ValueError("Vote value must be -1, 0, or 1.")
     if image.location_id is None or not image.media_source_key or not image.media_item_key:
@@ -212,8 +173,7 @@ class VotePolicy(StrEnum):
             they had before, including a previous down-vote.
         IMPLIED: Relevance is a side effect of some other action (adding the
             item to an album, say). A side effect must never silently reverse
-            a deliberate down-vote, so those are left alone.
-    """
+            a deliberate down-vote, so those are left alone."""
 
     EXPLICIT = "explicit"
     IMPLIED = "implied"
@@ -256,13 +216,7 @@ def record_relevant_and_cache(
     materialize: bool = True,
 ) -> RelevantCacheResult:
     """Mark a transient gallery item relevant and cache a local copy of it.
-
-    The one place the "write a MediaRelevance row, then download the item"
-    sequence lives - shared by the pin and wiki vote endpoints and by the
-    album add path, so the three can't drift.
-
-    A failed download still leaves the vote in place: the user's opinion that
-    this item matters is worth keeping even when today's fetch didn't work.
+    The one place the "write a MediaRelevance row, then download the item" sequence lives - shared by the pin and wiki vote endpoints and by the album add path, so the three can't drift.
 
     Args:
         location: The location whose gallery the item belongs to.
@@ -284,8 +238,7 @@ def record_relevant_and_cache(
             ``photos`` panel is already local, so there's nothing to fetch).
 
     Returns:
-        A :class:`RelevantCacheResult`.
-    """
+        A :class:`RelevantCacheResult`."""
     from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
     from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
@@ -338,12 +291,7 @@ def record_relevant_and_cache(
 
 def local_images_for_gallery_items(location: Location, source: str, urls: Iterable[str]) -> dict[str, Image]:
     """Bulk-lookup already-materialized local copies for a Media gallery panel's live results.
-
-    Lets the pin-detail/wiki gallery prefer a cached local copy over hot-
-    linking the provider whenever *any* profile has already materialized
-    that exact item (e.g. by voting it relevant) - the remote url stays
-    available too, callers should keep offering it as a "view original" link
-    rather than dropping it once a local copy exists.
+    Lets the pin-detail/wiki gallery prefer a cached local copy over hot- linking the provider whenever *any* profile has already materialized that exact item (e.g. by voting it relevant) - the remote url stays available too, callers should keep offering it as a "view original" link rather than dropping it once a local copy exists.
 
     Args:
         location: The location whose gallery is being rendered.
@@ -355,17 +303,15 @@ def local_images_for_gallery_items(location: Location, source: str, urls: Iterab
 
     Returns:
         Mapping of ``url`` to its materialized ``Image`` row, for every url
-        that has one - urls with no local copy are simply absent.
-    """
+        that has one - urls with no local copy are simply absent."""
     from urbanlens.dashboard.models.images.model import Image
 
     keys_by_item_key = {media_item_key(url): url for url in urls}
     if not keys_by_item_key:
         return {}
-    # pending_scan rows excluded: the gallery template prefers `local_url` over
-    # the provider's own thumbnail, so offering a copy that authorize_image will
-    # refuse replaces a working tile with a broken one. Absent is the right
-    # answer until it clears - the caller falls back to the provider URL, which
-    # is exactly what it did before the item was materialized.
+    # pending_scan rows excluded: the gallery template prefers `local_url` over the provider's own
+    # thumbnail, so offering a copy that authorize_image will refuse replaces a working tile with a
+    # broken one.
+    # Absent is the right answer until it clears - the caller falls back to the provider URL, which
     rows = Image.objects.filter(location=location, media_source_key=source, media_item_key__in=keys_by_item_key.keys(), pending_scan=False)
     return {keys_by_item_key[row.media_item_key]: row for row in rows}

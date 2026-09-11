@@ -1,23 +1,5 @@
 """Celery queue depth, exported on the app's ``/metrics``.
-
-Queue depth is the Celery number worth alerting on: it answers "are the workers
-keeping up", and it goes wrong in the direction that matters (a queue nothing
-drains grows without bound and the symptom is a feature that silently stopped
-working). Each queue here is drained by exactly one container - see
-:mod:`urbanlens.dashboard.services.sandbox.queues` - so a rising depth names the
-container to look at.
-
-Collected at scrape time from the broker rather than instrumented in the
-workers, which is what lets it cover the sandbox workers too: they run
-``cap_drop: ALL`` on an isolated network precisely so they have no inbound
-surface, and giving them an HTTP endpoint to scrape would undo that. They talk
-to the broker already, so the broker is where their backlog is visible.
-
-This is deliberately not task-level instrumentation. Per-task success, failure
-and duration need the worker to report what it did - an event stream or a
-push - and that is a separate piece of infrastructure, not a bigger version of
-this one. See docs/METRICS.md.
-"""
+Queue depth is the Celery number worth alerting on: it answers "are the workers keeping up", and it goes wrong in the direction that matters (a queue nothing drains grows without bound and the symptom is a feature that silently stopped working)."""
 
 from __future__ import annotations
 
@@ -43,14 +25,7 @@ _BROKER_TIMEOUT_SECONDS = 2.0
 
 class CeleryQueueDepthCollector:
     """Report the number of messages waiting on each queue.
-
-    A ``prometheus_client`` collector rather than module-level gauges, because
-    the value only exists at scrape time - there is no event in the web process
-    that would update a gauge, and a stale gauge is worse than none.
-
-    Registered by the exporter view rather than at import, so a process that
-    does not serve ``/metrics`` never opens a broker connection for it.
-    """
+    A ``prometheus_client`` collector rather than module-level gauges, because the value only exists at scrape time - there is no event in the web process that would update a gauge, and a stale gauge is worse than none."""
 
     #: Label values are the members of :class:`Queue`, so cardinality is fixed
     #: by the code rather than by anything a request can influence.
@@ -93,19 +68,18 @@ class CeleryQueueDepthCollector:
         try:
             with current_app.connection_for_read(transport_options={"socket_timeout": _BROKER_TIMEOUT_SECONDS}) as connection:
                 channel = connection.default_channel
-                # _size is kombu's own per-transport primitive for this, which
-                # is why it is used in preference to reaching for a redis
-                # client: the memory:// transport used by the test settings
-                # implements it too, so this stays exercisable without a broker.
+                # _size is kombu's own per-transport primitive for this, which is why it is used in
+                # preference to reaching for a redis client: the memory:// transport used by the
+                # test settings implements it too, so this stays exercisable without a broker.
                 sizer = getattr(channel, "_size", None)
                 if sizer is None:
                     logger.debug("Broker transport %r cannot report queue depth", type(channel).__name__)
                     return None
                 return {queue.value: int(sizer(queue.value)) for queue in self.QUEUES}
         except (KombuError, OSError, AttributeError, ValueError):
-            # Broad on purpose. This runs inside a scrape, and a broker problem
-            # must surface as broker_up=0 - a raised exception here would fail
-            # the whole /metrics response, taking the request metrics down with
-            # it and turning a Celery problem into a total observability outage.
+            # Broad on purpose.
+            # This runs inside a scrape, and a broker problem must surface as broker_up=0 - a raised
+            # exception here would fail the whole /metrics response, taking the request metrics down
+            # with it and turning a Celery problem into a total observability outage.
             logger.warning("Celery queue depth unavailable for this scrape", exc_info=True)
             return None

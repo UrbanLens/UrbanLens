@@ -1,18 +1,4 @@
-"""Geographic boundary gating for plugins.
-
-Generalizes the old "USA only" plugin flag (previously three inconsistent,
-partially-enforced mechanisms - see ``services/geo/geo_filter.py``,
-``services/apis/assets/base.py``'s ``MediaProvider.usa_only``, and
-``services/enrichment.py``'s ``EnrichmentSource.usa_only``) into a single
-:class:`GeoBoundary` value type that can express "USA", a single US state, or
-(via :meth:`GeoBoundary.from_bboxes`) any other bounding-box union - not just a
-country.
-
-A :class:`GeoBoundary` is safe to build at plugin-class-body/import time (e.g.
-as a ``ClassVar``): resolving to real geometry is deferred to first use via a
-loader callable, honoring the plugin system's "no database/network in
-``__init__``/import" rule (see ``plugins/base.py``'s module docstring).
-"""
+"""Geographic boundary gating for plugins."""
 
 from __future__ import annotations
 
@@ -37,12 +23,9 @@ BBox = tuple[float, float, float, float]
 _STATE_BOUNDARY_CACHE_SECONDS = 30 * 86400
 
 #: How long a *failed* load is honoured before the next call tries again.
-#: A failure is not memoized like a success is: a boundary is typically held as a
-#: plugin ``ClassVar``, so one transient TIGERweb error would otherwise close that
-#: plugin's gate for the life of the worker - days, for a Celery process. Retrying
-#: on every call instead would hammer the provider and log a traceback per call,
-#: so failures are honoured briefly and then re-attempted. Matches the failure
-#: cadence panel fetches already use.
+#: A failure is not memoized like a success is: a boundary is typically held as a plugin
+#: ``ClassVar``, so one transient TIGERweb error would otherwise close that plugin's gate for the
+#: life of the worker - days, for a Celery process.
 _FAILED_LOAD_RETRY_SECONDS = 300.0
 
 
@@ -66,16 +49,10 @@ class GeoBoundary:
 
     def _geometry(self) -> Polygon | MultiPolygon | None:
         """Resolve the geometry once, or report unavailable until a retry is due.
-
-        A loader that *returns* None has answered - the boundary genuinely does
-        not resolve - and is memoized permanently. A loader that *raises* has not
-        answered, and is only honoured for
-        :data:`_FAILED_LOAD_RETRY_SECONDS`, because the two are otherwise
-        indistinguishable to every caller and the second one heals on its own.
+        A loader that *raises* has not answered, and is only honoured for :data:`_FAILED_LOAD_RETRY_SECONDS`, because the two are otherwise indistinguishable to every caller and the second one heals on its own.
 
         Returns:
-            The boundary geometry, or None when it is unresolved or unavailable.
-        """
+                The boundary geometry, or None when it is unresolved or unavailable."""
         if self._loaded:
             return self._cached
         if self._retry_after is not None and time.monotonic() < self._retry_after:
@@ -104,17 +81,12 @@ class GeoBoundary:
     def contains(self, lat: float | None, lng: float | None) -> bool:
         """Return True if (lat, lng) falls within this boundary.
 
-        Accepts ``None`` inputs and returns False (no coordinates -> cannot
-        confirm the location is in-boundary -> gate closed), matching the
-        behavior of the ``is_usa_coordinates`` helper this generalizes.
-
         Args:
-            lat: WGS-84 latitude.
-            lng: WGS-84 longitude.
+                lat: WGS-84 latitude.
+                lng: WGS-84 longitude.
 
         Returns:
-            True when inside (or touching the edge of) the boundary.
-        """
+                True when inside (or touching the edge of) the boundary."""
         if lat is None or lng is None:
             return False
         geometry = self._geometry()
@@ -151,15 +123,11 @@ class GeoBoundary:
     def from_wkt(cls, wkt: str) -> GeoBoundary:
         """Build a boundary from a hand-authored WKT polygon/multipolygon (pure parsing, no I/O).
 
-        The arbitrary-shape counterpart to :meth:`from_bboxes`, for a boundary
-        that isn't a rectangle union (e.g. a hand-traced district).
-
         Args:
-            wkt: Well-known text, e.g. ``"POLYGON((...))"``.
+                wkt: Well-known text, e.g. ``"POLYGON((...))"``.
 
         Returns:
-            A ``GeoBoundary`` wrapping the parsed geometry.
-        """
+                A ``GeoBoundary`` wrapping the parsed geometry."""
 
         def _load() -> Polygon | MultiPolygon:
             from django.contrib.gis.geos import GEOSGeometry
@@ -173,10 +141,10 @@ class GeoBoundary:
         return cls(_load)
 
 
-# Approximate bounding boxes for US territories - moved here verbatim from
-# ``geo_filter.py``, which now wraps this boundary instead of maintaining its
-# own copy. Intentionally generous - false *negatives* (blocking a US
-# location) are worse than false *positives* (allowing a near-miss).
+# Approximate bounding boxes for US territories - moved here verbatim from ``geo_filter.py``, which
+# now wraps this boundary instead of maintaining its own copy.
+# Intentionally generous - false *negatives* (blocking a US location) are worse than false
+# *positives* (allowing a near-miss).
 _USA_BBOXES: tuple[BBox, ...] = (
     # Continental United States (conterminous)
     (24.396308, 49.384358, -125.000000, -66.934570),
@@ -200,17 +168,12 @@ _USA_BBOXES: tuple[BBox, ...] = (
 )
 
 #: The United States (all territories), as a boundary - the canonical
-#: replacement for every plugin that used to set ``usa_only = True``.
 USA: GeoBoundary = GeoBoundary.from_bboxes(_USA_BBOXES)
 
 
 def state_boundary(state_abbr: str) -> GeoBoundary:
     """Return a lazily-loaded boundary for one US state, from Census TIGERweb.
-
-    The fetched polygon is cached in Django's shared cache (state boundaries
-    are effectively static) so a process restart doesn't re-fetch, and
-    memoized on the returned ``GeoBoundary`` so repeated ``.contains()`` calls
-    within one process never repeat even a cache lookup.
+    The fetched polygon is cached in Django's shared cache (state boundaries are effectively static) so a process restart doesn't re-fetch, and memoized on the returned ``GeoBoundary`` so repeated ``.contains()`` calls within one process never repeat even a cache lookup.
 
     Args:
         state_abbr: Two-letter USPS state abbreviation (e.g. ``"NY"``).
@@ -218,8 +181,7 @@ def state_boundary(state_abbr: str) -> GeoBoundary:
     Returns:
         A ``GeoBoundary`` for the state. Resolves to no geometry (so
         ``.contains()`` always returns False) if TIGERweb has no matching
-        state or the request fails.
-    """
+        state or the request fails."""
 
     def _load() -> Polygon | MultiPolygon | None:
         from django.core.cache import cache

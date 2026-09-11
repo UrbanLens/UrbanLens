@@ -1,20 +1,5 @@
 """Trip activity behavior, shared by the internal HTMX panel and the external REST API.
-
-Everything an itinerary entry can do lives here: building the per-activity
-render rows (index, votes, RSVP, permissions, visibility, driving legs) and
-every mutation (create, update, delete, reposition, vote, status, RSVP,
-complete, reorder).
-
-Cross-cutting obligations that must never be re-implemented by a caller are
-enforced inside these functions rather than beside them:
-
-- share provenance (``trip_share_tracking.record_trip_activity_shares``) on create,
-- ``SiteSettings.max_trip_activities`` quota on create,
-- text limits checked *before* ``save()`` so an over-long note is a 400 rather
-  than an uncaught ``ValidationError``,
-- per-viewer location visibility (``trip_visibility.viewer_hidden_activity_ids``),
-- identity masking for the "added by" attribution.
-"""
+Cross-cutting obligations that must never be re-implemented by a caller are enforced inside these functions rather than beside them:"""
 
 from __future__ import annotations
 
@@ -143,16 +128,13 @@ def get_activity(trip: Trip, activity_id: int) -> TripActivity:
 
 def compute_activity_index_map(activities: Iterable[TripActivity]) -> dict[int, int]:
     """Return ``{activity_id: map_index}`` for activities that get a numbered map marker.
-
-    Completed activities and activities whose location is hidden or has no
-    coordinates are skipped, so the remaining numbers stay contiguous from 1.
+    Completed activities and activities whose location is hidden or has no coordinates are skipped, so the remaining numbers stay contiguous from 1.
 
     Args:
         activities: The trip's activities in itinerary order.
 
     Returns:
-        Mapping of activity id to its 1-based marker number.
-    """
+        Mapping of activity id to its 1-based marker number."""
     index_map: dict[int, int] = {}
     idx = 1
     for act in activities:
@@ -182,17 +164,14 @@ def expand_trip_dates(trip: Trip, activity_date: datetime.date) -> None:
 
 def parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.datetime | None:
     """Combine separate date and time strings into an aware datetime.
-
-    If only a date is provided, midnight is used so the caller can distinguish
-    "date only" from "date + time" by inspecting the time component.
+    If only a date is provided, midnight is used so the caller can distinguish "date only" from "date + time" by inspecting the time component.
 
     Args:
         date_str: An ISO date (``YYYY-MM-DD``), or None/blank.
         time_str: An ISO time (``HH:MM``), or None/blank.
 
     Returns:
-        The combined aware datetime, or None when no usable date was given.
-    """
+        The combined aware datetime, or None when no usable date was given."""
     if not date_str:
         return None
     try:
@@ -212,9 +191,6 @@ def parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.d
 def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[Location | None, Pin | None]:
     """Resolve an activity's target place from submitted location fields.
 
-    Priority: the caller's own selected pin, then a shared location, then
-    supplied coordinates. Raw coordinates get (or reuse) a ``Location`` row.
-
     Args:
         body: Submitted fields - any of ``pin_uuid``/``pin_slug``,
             ``location_uuid``/``location_slug``, ``geocoded_lat``/``geocoded_lng``
@@ -228,8 +204,7 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
         TripValidationError: A ``pin_uuid``/``pin_slug`` was submitted but does
             not resolve to one of *profile*'s own pins - either it does not
             exist, or it belongs to someone else. Both cases answer identically
-            so the response can't be used to probe another account's pins.
-    """
+            so the response can't be used to probe another account's pins."""
     import uuid as uuid_module
 
     from urbanlens.dashboard.models.location.model import Location
@@ -248,23 +223,17 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
                 pin = None
         if pin is not None:
             return pin.location, pin
-        # Unlike location_uuid below, this must not silently fall through to
-        # "no place given": a pin reference is only ever the caller's own (see
-        # the field's docstring on TripActivityCreateSerializer), so failing to
-        # resolve one is bad input, not an absent one - and staying quiet about
-        # it would attach nothing while telling the caller their pin was saved.
+        # Unlike location_uuid below, this must not silently fall through to "no place given": a pin
+        # reference is only ever the caller's own (see the field's docstring on
+        # TripActivityCreateSerializer), so failing to resolve one is bad input, not an absent one -
+        # and staying quiet about it would attach nothing while telling the caller their pin was
         raise TripValidationError("That pin does not exist, or does not belong to you.")
 
     location_ref = (body.get("location_uuid") or body.get("location_slug") or "").strip()
     if location_ref:
-        # Slug first, and the uuid form only once it parses. Handing a
-        # non-uuid string to a ``UUIDField`` filter raises ``ValidationError``
-        # from the ORM - which a plain view does not turn into a 400, so it is
-        # a 500. The web edit dialog does exactly that on every activity that
-        # has a location: the itinerary row's ``data-act-location-uuid``
-        # attribute has always carried the location's *slug*, and the dialog
-        # posts it back as ``location_uuid``. The pin branch above already
-        # converts before filtering for the same reason; this branch did not.
+        # Slug first, and the uuid form only once it parses.
+        # Handing a non-uuid string to a ``UUIDField`` filter raises ``ValidationError`` from the
+        # ORM - which a plain view does not turn into a 400, so it is a 500.
         location = Location.objects.filter(slug=location_ref).first()
         if location is None:
             try:
@@ -300,17 +269,12 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
 
 def create_visit_entries_for_completed_activity(trip: Trip, activity: TripActivity, completer: Profile) -> None:
     """Log the completer's visit and suggest visits to everyone whose effective RSVP was yes.
-
-    The completer's visit is logged immediately since completing the activity
-    IS their confirmation. Everyone else gets a suggestion to accept or reject,
-    because the system can't know they actually went. An activity-level RSVP
-    override takes precedence over the member's trip-wide RSVP.
+    Everyone else gets a suggestion to accept or reject, because the system can't know they actually went.
 
     Args:
         trip: The trip the activity belongs to.
         activity: The activity just marked completed.
-        completer: The profile who marked it completed.
-    """
+        completer: The profile who marked it completed."""
     coords = activity_coords(activity)
     if coords is None:
         return
@@ -350,11 +314,7 @@ HIDDEN_ACTIVITY_TITLE = "Secret Location"
 
 def _masked_activity_title(activity: TripActivity, *, hidden: bool) -> str:
     """The activity's title as this viewer may see it.
-
-    An activity's ``effective_title`` falls back to its location's name, so for
-    a hidden activity the title *is* the location - which is why masking it is
-    not cosmetic. An activity with its own typed title keeps it: the person who
-    wrote "Meet at the gate" chose those words for the other members to read.
+    An activity's ``effective_title`` falls back to its location's name, so for a hidden activity the title *is* the location - which is why masking it is not cosmetic.
 
     Args:
         activity: The activity being rendered.
@@ -362,8 +322,7 @@ def _masked_activity_title(activity: TripActivity, *, hidden: bool) -> str:
 
     Returns:
         A display title safe to put anywhere in the page, including in
-        attributes the eye does not reach.
-    """
+        attributes the eye does not reach."""
     if not hidden:
         return activity.effective_title
     return (activity.title or "").strip() or HIDDEN_ACTIVITY_TITLE
@@ -371,10 +330,7 @@ def _masked_activity_title(activity: TripActivity, *, hidden: bool) -> str:
 
 def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = True) -> list[dict[str, Any]]:
     """Build one render row per activity: index, votes, RSVP, permissions, visibility, leg.
-
-    The single source of the activities-panel context and of the external
-    API's activity list, so the two can never diverge on what a viewer is
-    allowed to see or manage.
+    The single source of the activities-panel context and of the external API's activity list, so the two can never diverge on what a viewer is allowed to see or manage.
 
     Args:
         trip: The trip whose activities are being rendered.
@@ -391,20 +347,16 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
         ``display_location_ref``/``display_child_trip_name``/``display_child_trip_uuid``
         (already masked for this viewer - templates must use these, never
         ``act.location``, ``act.effective_title``, or ``act.child_trip``),
-        ``pin_slug``, ``has_coords`` and ``leg``.
-    """
+        ``pin_slug``, ``has_coords`` and ``leg``."""
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
     activities = list(activity_queryset(trip))
     index_map = compute_activity_index_map(activities)
 
-    # The "Added by" attribution shows even when the adder's privacy settings
-    # don't permit this viewer to see their name/avatar (distinct from the
-    # location-visibility gate below, which hides the activity's *location* -
-    # this only masks who gets credit for adding it).
-    # select_related gives each activity its own added_by instance even for
-    # the same underlying profile, so resolve once per distinct adder and
-    # re-point every activity at that same (now-mutated) instance.
+    # The "Added by" attribution shows even when the adder's privacy settings don't permit this
+    # viewer to see their name/avatar (distinct from the location-visibility gate below, which hides
+    # the activity's *location* - this only masks who gets credit for adding it). select_related
+    # gives each activity its own added_by instance even for the same underlying profile, so resolve
     distinct_adders: dict[int, Profile] = {}
     for act in activities:
         adder = act.added_by
@@ -465,18 +417,15 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
             "trip_rsvp": trip_rsvp,
             "can_manage": viewer_has_joined and (act.added_by_id == viewer.id or viewer_is_organizer),
             "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
-            # Already-masked display values, so no template can leak the place
-            # by reaching past the guard for `act.location` or `effective_title`.
-            # The panel did exactly that: it swapped the visible label for
-            # "Secret Location" and then emitted the real name and slug into the
-            # row's own data attributes and the RSVP `aria-label`, where
-            # view-source and a screen reader both find them.
+            # Already-masked display values, so no template can leak the place by reaching past the
+            # guard for `act.location` or `effective_title`.
+            # The panel did exactly that: it swapped the visible label for "Secret Location" and
+            # then emitted the real name and slug into the row's own data attributes and the RSVP
             "display_title": _masked_activity_title(act, hidden=act.location_hidden or (act.id in viewer_hidden)),
             "display_location_name": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.display_name if act.location else ""),
             "display_location_ref": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.slug if act.location else ""),
-            # A linked child trip's name/uuid are exactly the kind of
-            # identifying information a hidden location is trying to
-            # withhold, so they follow the same mask - never read
+            # A linked child trip's name/uuid are exactly the kind of identifying information a
+            # hidden location is trying to withhold, so they follow the same mask - never read
             # act.child_trip directly in a template.
             "display_child_trip_name": "" if (act.location_hidden or act.id in viewer_hidden) else (act.child_trip.name if act.child_trip else ""),
             "display_child_trip_uuid": "" if (act.location_hidden or act.id in viewer_hidden) else (str(act.child_trip.uuid) if act.child_trip else ""),
@@ -494,17 +443,12 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
 
 def _attach_legs(rows: list[dict[str, Any]], viewer: Profile, *, include_legs: bool) -> None:
     """Attach the driving leg arriving at each activity, or ``None``.
-
-    Legs are only computed between consecutive non-completed stops whose
-    coordinates this viewer may see - a hidden location must not leak even as
-    a distance. Nothing is routed at all when ``include_legs`` is False or the
-    viewer has external lookups turned off.
+    Legs are only computed between consecutive non-completed stops whose coordinates this viewer may see - a hidden location must not leak even as a distance.
 
     Args:
         rows: Render rows from :func:`build_activity_rows`, mutated in place.
         viewer: The viewing profile, whose ``external_apis_enabled`` gates routing.
-        include_legs: False to skip routing entirely.
-    """
+        include_legs: False to skip routing entirely."""
     if not include_legs:
         for item in rows:
             item["leg"] = None
@@ -576,11 +520,10 @@ def create_activity(
     if clean_status not in SETTABLE_STATUSES:
         clean_status = TripActivity.STATUS_PROPOSED
 
-    # Serialised on the trip, and entered only after the slow work (place resolution)
-    # is done, so the lock covers just the read-then-write section. Both the quota
-    # check and the append position count the same rows they are about to add to:
-    # unserialised, two members adding at once both read the same count, so both take
-    # the same `order` and both pass a quota that only one of them should have.
+    # Serialised on the trip, and entered only after the slow work (place resolution) is done, so
+    # the lock covers just the read-then-write section.
+    # Both the quota check and the append position count the same rows they are about to add to:
+    # unserialised, two members adding at once both read the same count, so both take the same
     with transaction.atomic():
         Trip.objects.select_for_update().filter(pk=trip.pk).first()
 
@@ -608,10 +551,9 @@ def create_activity(
 
     record_trip_activity_shares(activity)
 
-    # Mirrors update_activity/set_activity_status/complete_activity: a newly
-    # added confirmed activity outside the trip's current range must widen it
-    # too, or the header/hero date badge and the calendar's default month
-    # window stay stuck at the old range even though the itinerary now
+    # Mirrors update_activity/set_activity_status/complete_activity: a newly added confirmed
+    # activity outside the trip's current range must widen it too, or the header/hero date badge and
+    # the calendar's default month window stay stuck at the old range even though the itinerary now
     # extends past it.
     if activity.status == TripActivity.STATUS_CONFIRMED and activity.scheduled_at:
         expand_trip_dates(trip, activity.scheduled_at.date())
@@ -620,18 +562,14 @@ def create_activity(
 
 def _resolve_child_trip(child_trip_uuid: Any, actor: Profile) -> Trip | None:
     """Resolve a nested child trip, scoped to the linking user's own trips.
-
-    Without this scoping any authenticated user could link an arbitrary trip
-    they have no access to, and its activities (titles, coordinates, schedule)
-    would render as ghost markers on this trip's map for every member.
+    Without this scoping any authenticated user could link an arbitrary trip they have no access to, and its activities (titles, coordinates, schedule) would render as ghost markers on this trip's map for every member.
 
     Args:
         child_trip_uuid: The submitted uuid, possibly blank/None.
         actor: The linking profile.
 
     Returns:
-        The matching trip the actor belongs to, or None.
-    """
+        The matching trip the actor belongs to, or None."""
     ref = str(child_trip_uuid or "").strip()
     if not ref:
         return None
@@ -640,14 +578,7 @@ def _resolve_child_trip(child_trip_uuid: Any, actor: Profile) -> Trip | None:
 
 def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Mapping[str, Any]) -> TripActivity:
     """Apply a presence-keyed partial update to an activity.
-
-    Only keys actually present in *changes* are touched, so the external API's
-    PATCH semantics and the internal form's full-replace semantics are the
-    same call - the internal controller simply supplies every key.
-
-    The permission check runs *before* the activity is looked up, so a caller
-    without edit rights gets the same 403 whether or not the id exists and
-    cannot use this endpoint to enumerate activity ids.
+    Only keys actually present in *changes* are touched, so the external API's PATCH semantics and the internal form's full-replace semantics are the same call - the internal controller simply supplies every key.
 
     Args:
         trip: The trip owning the activity.
@@ -664,8 +595,7 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
         TripPermissionError: The actor may not edit activities on this trip.
         TripNotFoundError: No such activity on this trip.
         TripValidationError: The notes exceed the shared text limit, or
-            ``place`` names a pin that isn't the actor's own.
-    """
+            ``place`` names a pin that isn't the actor's own."""
     require_perform(actor, trip, trip.allow_edit_activities, EDIT_ACTIVITY_DENIED)
     activity = get_activity(trip, activity_id)
 
@@ -718,20 +648,7 @@ def delete_activity(trip: Trip, actor: Profile, activity_id: int) -> None:
 
 def set_activity_position(trip: Trip, actor: Profile, activity_id: int, *, lat: float, lng: float) -> tuple[float, float]:
     """Save a map-drag position override for one activity.
-
-    Only ``lat_override``/``lng_override`` change - the underlying Pin and
-    Location coordinates are never touched.
-
-    Two deliberate behavior changes relative to the endpoint this replaced
-    (``controllers.trip.TripActivityPositionView``), applied to the internal
-    surface as well as the external one:
-
-    1. It now requires the same permission as editing activities generally.
-       Previously it checked only trip *membership*, which admitted
-       invited-but-not-joined members - meaning anyone who had merely been
-       invited could move any marker on the trip's map.
-    2. Coordinates are bounds-checked. Previously any float was accepted and
-       persisted, so a marker could be parked at latitude 5000.
+    Only ``lat_override``/``lng_override`` change - the underlying Pin and Location coordinates are never touched.
 
     Args:
         trip: The trip owning the activity.
@@ -746,8 +663,7 @@ def set_activity_position(trip: Trip, actor: Profile, activity_id: int, *, lat: 
     Raises:
         TripPermissionError: The actor may not edit activities on this trip.
         TripNotFoundError: No such activity on this trip.
-        TripValidationError: The coordinates are non-numeric or out of range.
-    """
+        TripValidationError: The coordinates are non-numeric or out of range."""
     require_perform(actor, trip, trip.allow_edit_activities, MOVE_ACTIVITY_DENIED)
 
     try:
@@ -767,7 +683,6 @@ def set_activity_position(trip: Trip, actor: Profile, activity_id: int, *, lat: 
 
 def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetime.date) -> TripActivity:
     """Reschedule an activity to a new date (calendar drag-and-drop).
-
     Only the date changes - an existing time-of-day component is preserved.
 
     Args:
@@ -781,8 +696,7 @@ def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetim
 
     Raises:
         TripPermissionError: The actor may not edit activities on this trip.
-        TripNotFoundError: No such activity on this trip.
-    """
+        TripNotFoundError: No such activity on this trip."""
     require_perform(actor, trip, trip.allow_edit_activities, MOVE_ACTIVITY_DENIED)
     activity = get_activity(trip, activity_id)
 
@@ -799,9 +713,7 @@ def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetim
 
 def set_activity_vote(trip: Trip, actor: Profile, activity_id: int, *, vote: str | None) -> None:
     """Set (or clear) the actor's vote on a proposed activity.
-
-    An explicit value rather than a toggle: a mobile client retrying over a
-    flaky connection would otherwise flip its own vote back off.
+    An explicit value rather than a toggle: a mobile client retrying over a flaky connection would otherwise flip its own vote back off.
 
     Args:
         trip: The trip owning the activity.
@@ -812,8 +724,7 @@ def set_activity_vote(trip: Trip, actor: Profile, activity_id: int, *, vote: str
     Raises:
         TripPermissionError: The actor has not joined the trip.
         TripNotFoundError: No such activity on this trip.
-        TripValidationError: The activity is not proposed, or the value is invalid.
-    """
+        TripValidationError: The activity is not proposed, or the value is invalid."""
     require_perform(actor, trip, Trip.PERM_EVERYONE, CONTRIBUTE_DENIED)
     activity = get_activity(trip, activity_id)
 
@@ -865,9 +776,7 @@ def set_activity_status(trip: Trip, actor: Profile, activity_id: int, *, status:
 
 def set_activity_rsvp(trip: Trip, actor: Profile, activity_id: int, *, rsvp: str | None) -> None:
     """Set or clear the actor's RSVP override for one activity.
-
-    Clearing removes the override so the activity immediately inherits the
-    member's current trip-wide RSVP again.
+    Clearing removes the override so the activity immediately inherits the member's current trip-wide RSVP again.
 
     Args:
         trip: The trip owning the activity.
@@ -878,8 +787,7 @@ def set_activity_rsvp(trip: Trip, actor: Profile, activity_id: int, *, rsvp: str
     Raises:
         TripPermissionError: The actor has not joined the trip.
         TripValidationError: The RSVP value is not a valid choice.
-        TripNotFoundError: No such activity, or the actor has no membership row.
-    """
+        TripNotFoundError: No such activity, or the actor has no membership row."""
     require_joined(actor, trip, ACTIVITY_RSVP_DENIED)
     activity = get_activity(trip, activity_id)
 
@@ -904,10 +812,7 @@ def set_activity_rsvp(trip: Trip, actor: Profile, activity_id: int, *, rsvp: str
 
 def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed_date: datetime.date | None = None) -> TripActivity:
     """Mark an activity completed, snapping a future date back to today.
-
-    Completing implies the activity was confirmed to have happened, so it
-    expands the trip's date range the same way confirming it would - even if
-    it was only ever "proposed" beforehand.
+    Completing implies the activity was confirmed to have happened, so it expands the trip's date range the same way confirming it would - even if it was only ever "proposed" beforehand.
 
     Args:
         trip: The trip owning the activity.
@@ -922,15 +827,14 @@ def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed
     Raises:
         TripPermissionError: The actor has not joined the trip, or the
             activity's location is hidden from them.
-        TripNotFoundError: No such activity on this trip.
-    """
+        TripNotFoundError: No such activity on this trip."""
     require_perform(actor, trip, Trip.PERM_EVERYONE, CONTRIBUTE_DENIED)
     activity = get_activity(trip, activity_id)
 
-    # Completing materializes the activity's *real* coordinates into the
-    # actor's own Pin/Visit below - a viewer this location is hidden from
-    # (location_hidden, or the adder's own trip_pin_location_visibility
-    # setting) must not be able to bypass that by completing it instead.
+    # Completing materializes the activity's *real* coordinates into the actor's own Pin/Visit below
+    # - a viewer this location is hidden from (location_hidden, or the adder's own
+    # trip_pin_location_visibility setting) must not be able to bypass that by completing it
+    # instead.
     if viewer_hidden_activity_ids([activity], actor):
         raise TripPermissionError("You can't complete an activity whose location is hidden from you.")
 
@@ -954,10 +858,7 @@ def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed
 
 def reorder_activities(trip: Trip, actor: Profile, order: Sequence[int]) -> None:
     """Apply an explicit ordering to the trip's non-completed activities.
-
-    Only ever accepts an exact permutation of the trip's own current
-    non-completed activities - never partial, never containing another trip's
-    ids - so a stale or tampered order can't silently drop or hijack anything.
+    Only ever accepts an exact permutation of the trip's own current non-completed activities - never partial, never containing another trip's ids - so a stale or tampered order can't silently drop or hijack anything.
 
     Args:
         trip: The trip being reordered.
@@ -966,21 +867,13 @@ def reorder_activities(trip: Trip, actor: Profile, order: Sequence[int]) -> None
 
     Raises:
         TripPermissionError: The actor may not reorder activities.
-        TripValidationError: The order is not an exact permutation.
-    """
+        TripValidationError: The order is not an exact permutation."""
     require_perform(actor, trip, trip.allow_edit_activities, REORDER_ACTIVITY_DENIED)
 
-    # Serialised on the trip, and the permutation check has to be inside the same
-    # critical section as the writes it authorises. Two members dragging the itinerary
-    # at once otherwise interleave their per-row updates and the trip lands in an order
-    # neither asked for, with one position written twice and another lost - and an
-    # activity added between the check and the writes invalidates the permutation the
-    # check just approved.
-    #
-    # A unique constraint on (trip, order) would not do this job: positions are applied
-    # one row at a time, so a partial permutation legitimately collides mid-loop, and
-    # completed activities keep their existing positions, which overlap the reassigned
-    # range by design.
+    # Serialised on the trip, and the permutation check has to be inside the same critical section
+    # as the writes it authorises.
+    # Two members dragging the itinerary at once otherwise interleave their per-row updates and the
+    # trip lands in an order neither asked for, with one position written twice and another lost -
     with transaction.atomic():
         Trip.objects.select_for_update().filter(pk=trip.pk).first()
 

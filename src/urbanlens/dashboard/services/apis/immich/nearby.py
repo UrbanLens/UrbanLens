@@ -1,21 +1,5 @@
 """The "photos near this pin" half of the Immich picker, capped and cached.
-
-Immich exposes no coordinate-radius filter on any endpoint - checked against
-the upstream OpenAPI spec on 2026-09-06: ``MetadataSearchDto`` has no
-geographic field beyond the geocoded ``city``/``country``/``state`` strings,
-and ``/map/markers`` takes only date and archive/favourite filters. So "near
-this pin" can only be answered by fetching every geolocated asset in the
-library and measuring in Python, which for a self-hosted library built over
-years is 10k-100k assets over the network.
-
-That is bad enough once. The picker's radius ``<select>`` carries
-``hx-trigger="change"``, so each of its six options did it again. This caches
-the measured, distance-sorted result per pin, so the six options - and a
-mode switch away and back - share one download.
-
-Re-confirm the no-radius-filter claim against the pinned server version before
-removing the fetch-everything shape; the cap and the cache stand either way.
-"""
+So "near this pin" can only be answered by fetching every geolocated asset in the library and measuring in Python, which for a self-hosted library built over years is 10k-100k assets over the network."""
 
 from __future__ import annotations
 
@@ -32,18 +16,12 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.immich.gateway import MapMarker
 
 #: How many of the nearest assets the picker will consider, at any radius.
-#:
-#: Matches the marker caps the app's own maps use (``_MAP_PIN_LIMIT``,
-#: ``_PREVIEW_MAP_PIN_LIMIT``). The widest radius offered is 5km, so a library
-#: that hits this has 500 geolocated photos within 5km of one place - past the
-#: point where a picker grid is how anyone finds the one they want.
+#: Matches the marker caps the app's own maps use (``_MAP_PIN_LIMIT``, ``_PREVIEW_MAP_PIN_LIMIT``).
 NEARBY_ASSET_LIMIT = 500
 
 #: How long a pin's measured neighbourhood stays good.
-#:
-#: Long enough to cover a session of switching radii and modes, short enough
-#: that a photo uploaded to Immich shows up in the picker without the user
-#: wondering why it hasn't.
+#: Long enough to cover a session of switching radii and modes, short enough that a photo uploaded
+#: to Immich shows up in the picker without the user wondering why it hasn't.
 NEARBY_CACHE_SECONDS = 300
 
 

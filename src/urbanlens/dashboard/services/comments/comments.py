@@ -1,30 +1,5 @@
 """Shared comment visibility, creation, and reaction logic.
-
-Extracted from ``controllers/comments.py`` so the internal HTMX panel and the
-external API decide what a viewer may see through **one** implementation.
-
-Why this matters more than a typical de-duplication: a comment is the one place
-in the app where a user's text can name a *location they have pinned*, using an
-``@[Display](loc:<uuid>)`` token. If a viewer who has not pinned that location
-is shown the comment, they learn both that the place exists and that someone
-else is interested in it - the exact inference the whole discovery model is
-built to prevent. That gate lives in :func:`visible_comment_tree` and nowhere
-else; a second caller re-implementing "roughly the same checks" is how it would
-quietly regress.
-
-The four gates, applied in this order:
-
-1. ``profile.can_view_comments_from(author)`` - the author's comment-visibility
-   setting, cached per unique author.
-2. ``pending_scan and author != viewer`` - an image awaiting the async malware
-   scan is visible only to its own uploader.
-3. ``mentions.is_visible_to`` (via ``render_comment_text`` returning ``None``) -
-   a comment mentioning any location the viewer has not pinned is dropped
-   **entirely**. Not redacted, not blanked: the existence of the mention is
-   itself the leak, so the whole comment disappears.
-4. ``mask_profile_references`` - the surviving authors' display identities are
-   masked per their profile-visibility settings.
-"""
+Extracted from ``controllers/comments.py`` so the internal HTMX panel and the external API decide what a viewer may see through **one** implementation."""
 
 from __future__ import annotations
 
@@ -53,13 +28,7 @@ ALLOWED_EMOJIS = {"👍", "👎", "❤️", "😂", "😮", "😢", "🔥", "�
 
 class CommentValidationError(ValueError):
     """A comment or reaction could not be validated as submitted.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below (or this base class as a fallback)
-    and author its own user-facing text, rather than relaying ``message`` -
-    that keeps a future raise site here from being able to smuggle unreviewed
-    text into a response just by adding a new ``raise``.
-    """
+    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class InvalidCommentHostError(CommentValidationError):
@@ -96,10 +65,7 @@ class VisibleComment:
 
 def top_level_comment_queryset(comments_qs: QuerySet[Comment], replies_qs: QuerySet[Comment] | None = None) -> QuerySet[Comment]:
     """Narrow a comment queryset to top-level rows with the right joins preloaded.
-
-    Shared so both callers page over an identically-shaped queryset - the
-    prefetches here are what keep :func:`visible_comment_tree` from issuing a
-    query per comment while it walks replies and reactions.
+    Shared so both callers page over an identically-shaped queryset - the prefetches here are what keep :func:`visible_comment_tree` from issuing a query per comment while it walks replies and reactions.
 
     Args:
         comments_qs: All comments for one pin or wiki.
@@ -111,8 +77,7 @@ def top_level_comment_queryset(comments_qs: QuerySet[Comment], replies_qs: Query
             same filter here that it applied to the top level.
 
     Returns:
-        The top-level subset, with author/markup/reaction relations preloaded.
-    """
+        The top-level subset, with author/markup/reaction relations preloaded."""
     if replies_qs is None:
         reply_lookups: list[Any] = ["replies__reactions__profile", "replies__profile__user", "replies__markup_map__items"]
     else:
@@ -140,9 +105,6 @@ def top_level_comment_queryset(comments_qs: QuerySet[Comment], replies_qs: Query
 def visible_comment_tree(comments: list[Comment], profile: Profile) -> list[VisibleComment]:
     """Filter *comments* to what *profile* may see, resolving mentions.
 
-    Applies the four gates documented in this module's docstring, in that
-    order, to both top-level comments and their replies.
-
     Args:
         comments: Top-level comments to filter - already ordered, prefetched
             (see :func:`top_level_comment_queryset`) and paginated by the
@@ -151,8 +113,7 @@ def visible_comment_tree(comments: list[Comment], profile: Profile) -> list[Visi
 
     Returns:
         The visible subset as :class:`VisibleComment` items. A comment dropped
-        by any gate is absent entirely, as are its replies.
-    """
+        by any gate is absent entirely, as are its replies."""
     pinned = viewer_pinned_uuids(profile)
 
     # Cache can_view_comments_from per unique author rather than recomputing it
@@ -164,11 +125,10 @@ def visible_comment_tree(comments: list[Comment], profile: Profile) -> list[Visi
         authors.update(reply.profile for reply in comment.replies.all())
     can_view: dict[int, bool] = {author.pk: profile.can_view_comments_from(author) for author in authors}
 
-    # Gate 4. A comment's *content* is all-or-nothing gated by
-    # can_view_comments_from below, but once it passes, the author's own
-    # name/avatar still need masking per their profile_visibility. Applied to
-    # every reference at once so the same author is masked consistently
-    # wherever they appear in the thread.
+    # A comment's *content* is all-or-nothing gated by can_view_comments_from below, but once it
+    # passes, the author's own name/avatar still need masking per their profile_visibility.
+    # Applied to every reference at once so the same author is masked consistently wherever they
+    # appear in the thread.
     author_refs: list[Profile] = []
     for comment in comments:
         author_refs.append(comment.profile)
@@ -226,35 +186,14 @@ def _render_if_visible(comment: Comment, profile: Profile, pinned: set[Any], can
 
 def visible_comment_count(comments: QuerySet[Comment], profile: Profile) -> int:
     """How many of *comments* this viewer may actually see.
-
-    The number rendered beside a thread has to agree with the thread, or it
-    reinstates the oracle gate 3 exists to close: a comment mentioning a
-    location the viewer has not pinned vanishes from the list, and a raw
-    ``.count()`` then announces that something was hidden - and, from the
-    position, roughly what.
-
-    Deliberately answers only gates 2 and 3, both O(1) queries regardless of
-    how many comments or authors are in *comments*. Gate 1
-    (``can_view_comments_from``) is left out on purpose: it is evaluated per
-    *author*, and each evaluation is itself several relationship queries
-    (friends, common pin, common trip) for anyone who isn't already a friend -
-    so counting it here scales with the number of distinct authors in the
-    whole thread, not with the page actually being rendered.
-    ``test_query_amplification.WikiPageAmplificationTests`` caught exactly
-    that: every added comment came from a new author, and the query count grew
-    with it. Author-visibility hiding a comment is not the leak gate 3 exists
-    to close - it is an ordinary content setting, not a fact about a specific
-    place - so the count is allowed to include those comments even though the
-    rendered thread (``visible_comment_tree``, applied only to the page being
-    shown) will not.
+    Deliberately answers only gates 2 and 3, both O(1) queries regardless of how many comments or authors are in *comments*.
 
     Args:
         comments: The comments to count (any queryset over ``Comment``).
         profile: The viewing profile.
 
     Returns:
-        The number of comments visible to *profile* under gates 2 and 3.
-    """
+        The number of comments visible to *profile* under gates 2 and 3."""
     from django.db.models import Q
 
     from urbanlens.dashboard.services.notifications.mentions import LOCATION_MENTION_MARKER
@@ -272,24 +211,7 @@ def visible_comment_count(comments: QuerySet[Comment], profile: Profile) -> int:
 
 def comment_is_visible(comment: Comment, profile: Profile) -> bool:
     """Whether *profile* may see this one comment - gates 1-3, same as the list.
-
-    The single-comment counterpart to :func:`visible_comment_tree`, for the
-    endpoints that address a comment **by id** rather than rendering a thread:
-    reacting to one, replying to one, resolving one for a detail response.
-    Those paths bypassed the tree entirely and so bypassed its gates, leaving
-    them scoped only by host ("is this comment on this wiki?"). Comment ids are
-    sequential, so that was enough to walk them:
-
-    - a comment hidden by its author's comment-visibility, by a pending malware
-      scan, or by an ``@loc`` mention the caller has not pinned still answered
-      *differently* from a nonexistent id, which is the existence oracle the
-      mention gate is specifically built to deny (see this module's docstring);
-    - reacting to one notified its author, so a caller could reach a person
-      whose comments they are not permitted to read.
-
-    Gate 4 (identity masking) is not applied here: it shapes how a surviving
-    author is *displayed*, and a caller of this function has not been handed
-    any author identity to mask.
+    The single-comment counterpart to :func:`visible_comment_tree`, for the endpoints that address a comment **by id** rather than rendering a thread: reacting to one, replying to one, resolving one for a detail response.
 
     Args:
         comment: The comment being addressed. Its ``profile`` should be
@@ -298,19 +220,13 @@ def comment_is_visible(comment: Comment, profile: Profile) -> bool:
 
     Returns:
         True when the comment would have survived
-        :func:`visible_comment_tree`.
-    """
+        :func:`visible_comment_tree`."""
     return _render_if_visible(comment, profile, viewer_pinned_uuids(profile), {comment.profile_id: profile.can_view_comments_from(comment.profile)}) is not None
 
 
 def comment_mentions(text: str) -> list[dict[str, str]]:
     """Resolve the ``@[Display](loc:uuid)`` tokens in *text* to display/slug pairs.
-
-    Only safe to call on text that has already passed
-    :func:`visible_comment_tree` - by that point the viewer has provably pinned
-    every location mentioned, so naming them reveals nothing new. Calling it on
-    unfiltered text would hand back exactly the location identifiers the
-    mention gate exists to withhold.
+    Only safe to call on text that has already passed :func:`visible_comment_tree` - by that point the viewer has provably pinned every location mentioned, so naming them reveals nothing new.
 
     Args:
         text: Raw comment text in storage format.
@@ -318,8 +234,7 @@ def comment_mentions(text: str) -> list[dict[str, str]]:
     Returns:
         One ``{"display", "location_slug"}`` dict per mention, in order of
         appearance. ``location_slug`` falls back to the uuid when the Location
-        row has no slug, since wiki routes resolve either.
-    """
+        row has no slug, since wiki routes resolve either."""
     from urbanlens.dashboard.models.location.model import Location
 
     mentions = extract_location_mentions(text)
@@ -338,8 +253,7 @@ def aggregate_reactions(comment: Comment, profile: Profile) -> dict[str, dict[st
         profile: The viewing profile, used to set ``reacted``.
 
     Returns:
-        ``{emoji: {"count": int, "reacted": bool}}``.
-    """
+        ``{emoji: {"count": int, "reacted": bool}}``."""
     summary: dict[str, dict[str, Any]] = {}
     for reaction in comment.reactions.all():
         entry = summary.setdefault(reaction.emoji, {"count": 0, "reacted": False})
@@ -379,12 +293,7 @@ def create_comment(*, profile: Profile, pin: Pin | None = None, wiki: Wiki | Non
 
 def toggle_reaction(profile: Profile, comment: Comment, emoji: str) -> bool:
     """Add *profile*'s reaction to *comment*, or remove it if already present.
-
-    Adding notifies the comment's author (see
-    :func:`~urbanlens.dashboard.services.notifications.comment_notifications.notify_reaction`);
-    removing deliberately does not, because "someone un-reacted to your
-    comment" is not an event worth a notification and sending one would let a
-    reaction be toggled repeatedly to spam the author.
+    Adding notifies the comment's author (see :func:`~urbanlens.dashboard.services.notifications.comment_notifications.notify_reaction`); removing deliberately does not, because "someone un-reacted to your comment" is not an event worth a notification and sending one would let a reaction be toggled repeatedly to spam the author.
 
     Args:
         profile: The reacting profile.
@@ -396,8 +305,7 @@ def toggle_reaction(profile: Profile, comment: Comment, emoji: str) -> bool:
         removed.
 
     Raises:
-        UnsupportedReactionEmojiError: *emoji* is not in :data:`ALLOWED_EMOJIS`.
-    """
+        UnsupportedReactionEmojiError: *emoji* is not in :data:`ALLOWED_EMOJIS`."""
     if emoji not in ALLOWED_EMOJIS:
         raise UnsupportedReactionEmojiError(f"toggle_reaction called with emoji {emoji!r}, which is not in ALLOWED_EMOJIS.")
 
@@ -407,10 +315,9 @@ def toggle_reaction(profile: Profile, comment: Comment, emoji: str) -> bool:
         return False
 
     Reaction.objects.create(profile=profile, emoji=emoji, comment=comment)
-    # The internal HTMX panel has always notified here; the external API's
-    # reaction endpoints route through this service instead of the panel, so
-    # without this line reacting from the mobile client silently notified
-    # nobody - the same reaction produced a notification on the web and none
-    # over the API.
+    # The internal HTMX panel has always notified here; the external API's reaction endpoints route
+    # through this service instead of the panel, so without this line reacting from the mobile
+    # client silently notified nobody - the same reaction produced a notification on the web and
+    # none over the API.
     notify_reaction(profile, comment)
     return True

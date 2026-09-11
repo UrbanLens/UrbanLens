@@ -17,13 +17,10 @@ SITE_ADMIN_GROUP_NAME = "site_admin"
 
 def ensure_site_admin_group_permissions(group: Group) -> None:
     """Attach site-admin panel permissions to ``group`` if missing.
-
-    ``view_site_admin`` is not declared on a model ``Meta.permissions`` and
-    is created here so callers (migrations and runtime promotion) stay aligned.
+    ``view_site_admin`` is not declared on a model ``Meta.permissions`` and is created here so callers (migrations and runtime promotion) stay aligned.
 
     Args:
-        group: The site admin auth group to configure.
-    """
+        group: The site admin auth group to configure."""
     from django.contrib.auth.models import Permission
     from django.contrib.contenttypes.models import ContentType
 
@@ -56,16 +53,13 @@ def add_user_to_site_admin_group(user: User) -> None:
 
 def promote_first_user_if_needed(user: User) -> bool:
     """Grant site admin to the first user created on a fresh site.
-
-    Uses ``SiteSettings.bootstrap_admin_user`` as the authoritative record so
-    concurrent sign-ups cannot both claim the role.
+    Uses ``SiteSettings.bootstrap_admin_user`` as the authoritative record so concurrent sign-ups cannot both claim the role.
 
     Args:
         user: A newly created user.
 
     Returns:
-        True when ``user`` was promoted to site admin.
-    """
+        True when ``user`` was promoted to site admin."""
     from django.contrib.auth.models import User as UserModel
     from django.db import transaction
 
@@ -73,19 +67,10 @@ def promote_first_user_if_needed(user: User) -> bool:
     from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX
     from urbanlens.dashboard.services.integration_testing import INTEGRATION_USERNAME_PREFIX
 
-    # A disposable account must never claim the bootstrap admin slot. The guard
-    # belongs here rather than at the call site, because the caller is a
-    # post_save signal that fires for *every* path that creates a User - so a
-    # call-site guard would have to be repeated at each one and would be missed
-    # by the next one added. On a fresh demo instance the first visitor is by
-    # definition the first user, and the slot is single-claim and permanent:
-    # letting them take it hands a throwaway account the admin panel and leaves
-    # the real operator unable to ever be promoted.
-    #
-    # The integration prefix is here for exactly the same reason: provisioning
-    # against a freshly built staging database creates the first user on it, and
-    # a purged-and-reprovisioned account would leave the slot pointing at a row
-    # that no longer exists.
+    # A disposable account must never claim the bootstrap admin slot.
+    # The guard belongs here rather than at the call site, because the caller is a post_save signal
+    # that fires for *every* path that creates a User - so a call-site guard would have to be
+    # repeated at each one and would be missed by the next one added.
     if user.username.startswith((DEMO_USERNAME_PREFIX, INTEGRATION_USERNAME_PREFIX)):
         return False
 

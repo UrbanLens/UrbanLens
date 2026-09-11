@@ -1,17 +1,5 @@
 """Geographic filtering utilities.
-
-Provides ``is_usa_coordinates`` to determine whether a (lat, lng) pair falls
-within United States territory.  Used to guard USA-centric API services (NPS,
-LoopNet, Library of Congress, etc.) so calls are never wasted on non-US
-locations.
-
-The underlying boundary now lives in ``services.geo.geo_boundary`` (``USA``), the
-generalized replacement for this module's old standalone bbox check - a
-plugin that needs an arbitrary geographic gate (a different country, a state,
-a hand-drawn polygon) should use ``GeoBoundary`` directly rather than adding a
-new bespoke helper here. This module's two functions are kept as thin
-convenience wrappers since several gateways already call them by name.
-"""
+The underlying boundary now lives in ``services.geo.geo_boundary`` (``USA``), the generalized replacement for this module's old standalone bbox check - a plugin that needs an arbitrary geographic gate (a different country, a state, a hand-drawn polygon) should use ``GeoBoundary`` directly rather than adding a new bespoke helper here."""
 
 from __future__ import annotations
 
@@ -21,26 +9,20 @@ from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 def is_usa_coordinates(lat: float | None, lng: float | None) -> bool:
     """Return ``True`` if the given coordinates are within US territory.
-
-    Accepts ``None`` inputs and returns ``False`` (no coordinates → cannot
-    confirm US location → skip USA-only service).
+    Accepts ``None`` inputs and returns ``False`` (no coordinates → cannot confirm US location → skip USA-only service).
 
     Args:
         lat: Latitude in WGS-84 decimal degrees.
         lng: Longitude in WGS-84 decimal degrees.
 
     Returns:
-        ``True`` if within any US territory bounding box, ``False`` otherwise.
-    """
+        ``True`` if within any US territory bounding box, ``False`` otherwise."""
     return USA.contains(lat, lng)
 
 
 def require_usa(service: str, lat: float | None, lng: float | None) -> bool:
     """Log a geo-filtered skip and return ``False`` if coordinates are outside the USA.
-
     Convenience wrapper for gateway methods that need to guard a USA-only call.
-    Logs the skipped attempt via ``rate_limiter.log_api_call`` so it appears in
-    the admin stats page.
 
     Args:
         service: The service key (e.g. ``"nps"``).
@@ -49,8 +31,7 @@ def require_usa(service: str, lat: float | None, lng: float | None) -> bool:
 
     Returns:
         ``True`` if the coordinates are in the USA (call may proceed),
-        ``False`` if outside the USA (call should be skipped).
-    """
+        ``False`` if outside the USA (call should be skipped)."""
     if is_usa_coordinates(lat, lng):
         return True
 

@@ -1,42 +1,5 @@
 """Delete a stored file when the row that named it stops naming it.
-
-Django stopped removing `FileField` files on delete in 1.3, deliberately - a
-rolled-back transaction would otherwise leave a row pointing at a file that no
-longer exists. Nothing has removed them since, so two ordinary actions strand a
-file on disk:
-
-* **Replacing** an icon or avatar. The new upload is written, the column is
-  repointed, and the previous file stays forever.
-* **Deleting** the row. The achievement or profile goes; its icon does not.
-
-Individually small - these are decorative images - but they accumulate with
-normal use, and a stranded file is exactly the "orphan" case
-`services/media/access.py` had to start refusing to serve, because an orphan is
-indistinguishable from a live file whose owner the viewer may not learn about.
-
-**Why receivers rather than per-caller deletes.** The clears already delete
-their file (`controllers/labels.py`, `controllers/achievements.py`), and doing
-the same at every replace and delete site means finding all of them and every
-future one. The write paths include the profile form, the achievement admin and the
-external API's avatar routes, and each replace and delete site among them would
-otherwise have to remember. One rule in one place is the shape that cannot be
-forgotten.
-
-**Ordering, which is the part that has to be right.** `post_save` and
-`post_delete` fire *inside* the transaction, before commit - so deleting there
-would unlink the file and then let a rollback put the row back, pointing at
-nothing. Every unlink is therefore deferred with `transaction.on_commit`, which
-runs it only if the write actually lands (and immediately when there is no
-transaction). That is the direction in which the data survives: the failure it
-leaves possible is a file nobody points at, not a row pointing at a file that is
-gone.
-
-**Connected per sender**, in `connect()` below. A sender-less `@receiver` makes
-*every* model in the project report listeners, which disables Django's
-fast-delete path repo-wide and trips
-`test_bulk_write_signal_guard` - that test asks "which models have receivers a
-bulk write would skip", and the answer became "all of them".
-"""
+Django stopped removing `FileField` files on delete in 1.3, deliberately - a rolled-back transaction would otherwise leave a row pointing at a file that no longer exists."""
 
 from __future__ import annotations
 
@@ -52,31 +15,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 #: ``(app label, model name, field name)`` for every file this manages.
-#:
-#: Deliberately not "every FileField". `Image`'s columns belong to that model's
-#: own delete paths, which understand when two rows legitimately share a file
-#: (`services/media/images.py`'s `delete_stored_file` checks
-#: `file_still_referenced` for `image`, `thumbnail` and `marker_thumbnail`);
-#: adding them here would delete a file another row still points at. Note that
-#: `analysis_thumbnail` is covered by neither - see P14.
+#: Deliberately not "every FileField".
 MANAGED_FILE_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("dashboard", "Achievement", "custom_icon"),
     ("dashboard", "Profile", "avatar"),
 )
 
 #: Deliberately absent: `Pin.custom_icon` and `Label.custom_icon`.
-#:
-#: Both models are restorable by the undo framework, which stashes the icon as
-#: its stored *name* rather than its bytes
-#: (`services/undo/handlers/pin.py`, `.../label.py`). Deleting the file on
-#: delete - or on replace - would leave an undo within the window restoring a
-#: row that names a file no longer there, and it would do so silently: a broken
-#: icon with nothing to explain it, which is worse than the stranded file this
-#: module exists to stop.
-#:
-#: They want deletion deferred to when the `UndoAction` is pruned, so the file
-#: outlives the row for exactly as long as the row can come back. That is a
-#: different mechanism from these receivers, not a longer list - see P14.
+#: Both models are restorable by the undo framework, which stashes the icon as its stored *name*
+#: rather than its bytes (`services/undo/handlers/pin.py`, `.../label.py`).
 UNDO_RESTORABLE_FILE_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("dashboard", "Pin", "custom_icon"),
     ("dashboard", "Label", "custom_icon"),

@@ -17,19 +17,13 @@ logger = logging.getLogger(__name__)
 
 def ensure_location_address(location: Location | None) -> bool:
     """Populate address fields on a Location that has coordinates but no street data.
-
-    Calls the Google Geocoding API (with GeocodedLocation as an intermediate cache),
-    then writes the parsed components back to the Location row so the next request
-    reads directly from the DB with no API call. Used lazily by the pin overview
-    page and proactively by background enrichment
-    (:class:`~urbanlens.dashboard.services.locations.enrichment.AddressEnrichmentSource`).
+    Calls the Google Geocoding API (with GeocodedLocation as an intermediate cache), then writes the parsed components back to the Location row so the next request reads directly from the DB with no API call.
 
     Args:
         location: The location to backfill; no-ops when None or already addressed.
 
     Returns:
-        True when at least one address component was written.
-    """
+        True when at least one address component was written."""
     if not location or location.route:
         return False
     lat = float(location.latitude) if location.latitude is not None else None

@@ -1,17 +1,5 @@
 """How a place's name and address read, as pure functions of their components.
-
-`Location.display_name`, `Location.area_label` and `Pin.effective_address` are
-the model-instance form of these rules, and they are what almost every caller
-should use. This module exists for the one caller that cannot afford a model
-instance: the map payload serializes tens of thousands of pins from a flat
-projection, where building a `Location` per row to read one property is most of
-the cost (measured at 10,000 pins: 63,240 model objects for 10,000 output dicts).
-
-Keeping the rules here rather than reimplementing them against the projection is
-what stops the two from drifting - a fallback chain changed on the model but not
-in the payload is invisible until a user reports the wrong name on their map.
-The model properties delegate here; nothing duplicates them.
-"""
+Keeping the rules here rather than reimplementing them against the projection is what stops the two from drifting - a fallback chain changed on the model but not in the payload is invisible until a user reports the wrong name on their map."""
 
 from __future__ import annotations
 
@@ -22,16 +10,11 @@ USA_COUNTRY_NAMES = frozenset({"united states", "united states of america", "usa
 def is_usa(country: str | None) -> bool:
     """Whether *country* identifies the USA.
 
-    A blank country counts as the USA: address backfill frequently omits the
-    country for domestic geocoding results, and the "City, State" form that
-    choice selects reads correctly either way.
-
     Args:
         country: The location's country component, possibly blank or None.
 
     Returns:
-        True when the country is blank or a recognized USA spelling.
-    """
+        True when the country is blank or a recognized USA spelling."""
     normalized = (country or "").replace(".", "").strip().casefold()
     return not normalized or normalized in USA_COUNTRY_NAMES
 
@@ -39,18 +22,13 @@ def is_usa(country: str | None) -> bool:
 def area_label(*, city: str | None, state: str | None, country: str | None) -> str | None:
     """A short human-readable area, e.g. ``Albany, NY`` or ``Kyiv, Ukraine``.
 
-    USA locations render as "City, State"; elsewhere the country replaces the
-    state ("City, Country"), falling back to "State, Country" when the city is
-    unknown. Missing components are omitted.
-
     Args:
         city: The location's city component.
         state: The location's state component.
         country: The location's country component.
 
     Returns:
-        The area string, or None when no components are available.
-    """
+        The area string, or None when no components are available."""
     city = (city or "").strip()
     state = (state or "").strip()
     country_text = (country or "").strip()
@@ -60,13 +38,7 @@ def area_label(*, city: str | None, state: str | None, country: str | None) -> s
 
 def display_name(*, wiki_name: str | None, official_name: str | None, city: str | None, state: str | None, country: str | None) -> str:
     """The best human-readable name for a place.
-
-    The community wiki's name wins, then the official name. A place with
-    neither falls back to "Unnamed Location in {area}" when address components
-    are known, so a list of unnamed pins stays tellable apart;
-    :func:`~urbanlens.dashboard.services.locations.naming.is_meaningful_name`
-    still rejects that placeholder, so it never reaches an external API query
-    or a saved name.
+    A place with neither falls back to "Unnamed Location in {area}" when address components are known, so a list of unnamed pins stays tellable apart; :func:`~urbanlens.dashboard.services.locations.naming.is_meaningful_name` still rejects that placeholder, so it never reaches an external API query or a saved name.
 
     Args:
         wiki_name: The linked wiki's name, if the place has a wiki.
@@ -76,8 +48,7 @@ def display_name(*, wiki_name: str | None, official_name: str | None, city: str 
         country: The location's country component.
 
     Returns:
-        The name to display. Never empty.
-    """
+        The name to display. Never empty."""
     if wiki_name:
         return wiki_name
     if official_name:

@@ -1,11 +1,5 @@
 """URL-slug construction: parent prefixes, word-boundary truncation, uniqueness.
-
-``PublicDashboardModel._generate_slug`` is the only writer. Child pins and child
-wikis pass a short parent prefix (an existing alias when one is compact enough,
-otherwise one derived from the parent's long name) and a preferred length so a
-building at Hudson River State Hospital lands at ``hrsh-powerhouse`` rather than
-a mid-word clip of the building's own name.
-"""
+``PublicDashboardModel._generate_slug`` is the only writer."""
 
 from __future__ import annotations
 
@@ -74,16 +68,13 @@ _WRAPPING_PUNCTUATION = "()[]{}<>,.;:!?\"'"
 
 def is_uuid_slug(value: str | None) -> bool:
     """Return True when ``value`` is a UUID (the Location fallback slug).
-
-    Child-wiki locations are often created before the wiki has a name, so they
-    mint a UUID slug; once the wiki slug exists we replace that fallback.
+    Child-wiki locations are often created before the wiki has a name, so they mint a UUID slug; once the wiki slug exists we replace that fallback.
 
     Args:
         value: A slug, or None.
 
     Returns:
-        True when the string parses as a UUID.
-    """
+        True when the string parses as a UUID."""
     if not value:
         return False
     try:
@@ -95,17 +86,13 @@ def is_uuid_slug(value: str | None) -> bool:
 
 def name_tokens(name: str) -> list[str]:
     """Split a place name into words, keeping hyphenated compounds together.
-
-    Whitespace (and only whitespace) is the separator, so ``non-contributing``
-    is one token while ``non contributing`` is two. Wrapping punctuation is
-    stripped so a parenthetical still counts as the word inside it.
+    Whitespace (and only whitespace) is the separator, so ``non-contributing`` is one token while ``non contributing`` is two.
 
     Args:
         name: Raw display name.
 
     Returns:
-        Non-empty tokens in order.
-    """
+        Non-empty tokens in order."""
     tokens: list[str] = []
     for raw in name.split():
         token = raw.strip(_WRAPPING_PUNCTUATION).strip("-")
@@ -117,15 +104,11 @@ def name_tokens(name: str) -> list[str]:
 def slug_tokens(name: str) -> list[str]:
     """Slugify each :func:`name_tokens` entry, dropping tokens that slugify empty.
 
-    ``Staff/Tenant`` becomes ``stafftenant`` (the slash is not a word break);
-    ``non-contributing`` stays ``non-contributing``.
-
     Args:
         name: Raw display name.
 
     Returns:
-        Slug tokens in order.
-    """
+        Slug tokens in order."""
     tokens: list[str] = []
     for token in name_tokens(name):
         slug = slugify(token)
@@ -137,18 +120,12 @@ def slug_tokens(name: str) -> list[str]:
 def parent_slug_prefix(names: Sequence[str]) -> str:
     """Choose a short slug prefix from a parent's names and aliases.
 
-    Prefers the shortest existing alias that is already compact enough to lead
-    a child slug. When none is, derives one from the primary (first) name:
-    initials of significant words, or the first word, or a truncation of that
-    word when even the first word is too long.
-
     Args:
         names: Display name first, then aliases and any other candidates
             (including an already-short parent slug). Empty strings are ignored.
 
     Returns:
-        A lowercase slug prefix, or ``""`` when nothing usable can be derived.
-    """
+        A lowercase slug prefix, or ``""`` when nothing usable can be derived."""
     cleaned = [name.strip() for name in names if name and name.strip()]
     if not cleaned:
         return ""
@@ -166,15 +143,11 @@ def parent_slug_prefix(names: Sequence[str]) -> str:
 def generate_short_prefix(name: str) -> str:
     """Build a compact prefix from a long place name.
 
-    ``Hudson River State Hospital`` → ``hrsh``. ``Switzerland`` → ``switz``.
-    ``Ford Motors`` → ``ford`` (the initials ``fm`` are too short).
-
     Args:
         name: The parent's canonical name.
 
     Returns:
-        A lowercase slug prefix, or ``""`` when the name slugifies empty.
-    """
+        A lowercase slug prefix, or ``""`` when the name slugifies empty."""
     words = _significant_words(name)
     if not words:
         slug = slugify(name)
@@ -216,13 +189,7 @@ def unique_slug(
     fallback: str = "item",
 ) -> str:
     """Build a unique slug, preferring whole words over a mid-word clip.
-
-    The ideal candidate is ``prefix`` plus as many leading name tokens as fit
-    inside ``preferred_length``. Hyphenated compounds are one token, so
-    ``non-contributing`` is dropped as a unit rather than becoming
-    ``non-contributi``. When that ideal is taken, too short, or both, dropped
-    tokens (whole, then partial) are added back up to ``max_length`` before a
-    numeric suffix is appended.
+    Hyphenated compounds are one token, so ``non-contributing`` is dropped as a unit rather than becoming ``non-contributi``.
 
     Args:
         name: Raw display name of the entity being slugged.
@@ -237,8 +204,7 @@ def unique_slug(
         fallback: Used when ``name`` slugifies to nothing.
 
     Returns:
-        A non-empty slug no longer than ``max_length``.
-    """
+        A non-empty slug no longer than ``max_length``."""
     preferred = min(preferred_length or max_length, max_length)
     prefix_slug = slugify(prefix) if prefix else ""
     tokens = slug_tokens(name)
@@ -388,9 +354,7 @@ def _grow(
     limit: int,
 ) -> tuple[list[str], list[str], str]:
     """Add dropped tokens until ``min_length`` or ``limit`` is reached.
-
-    Whole tokens are preferred. A partial token is used only when a whole one
-    will not fit and the slug is still short of ``min_length``.
+    A partial token is used only when a whole one will not fit and the slug is still short of ``min_length``.
 
     Args:
         prefix: Parent prefix, possibly empty.
@@ -400,8 +364,7 @@ def _grow(
         limit: Never exceed this length.
 
     Returns:
-        Updated ``(kept, dropped, current_slug)``.
-    """
+        Updated ``(kept, dropped, current_slug)``."""
     kept = list(kept)
     dropped = list(dropped)
     current = _join(prefix, kept) or (prefix or "item")

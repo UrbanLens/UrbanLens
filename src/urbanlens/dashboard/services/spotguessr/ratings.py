@@ -20,14 +20,7 @@ from urbanlens.dashboard.services.spotguessr.scoring import MAX_ROUND_POINTS
 @dataclass(frozen=True)
 class RatingChange:
     """One profile's display-scale Glicko-2 rating, before and after a single round.
-
-    Surfaced all the way out to the frontend (``serializers.serialize_reveal``/
-    ``serialize_round_reveal``) so a round's reveal can show "▲ +14 rating" -
-    see the SpotGuessr audit's "the game computes your rating change every
-    round and never shows it to you" finding. Both values are display-scale
-    (``PlayerModeRating.rating``, centered on 1500), not the raw Glicko-2
-    ``mu``/``phi`` this module otherwise operates on.
-    """
+    Surfaced all the way out to the frontend (``serializers.serialize_reveal``/ ``serialize_round_reveal``) so a round's reveal can show "▲ +14 rating" - see the SpotGuessr audit's "the game computes your rating change every round and never shows it to you" finding."""
 
     rating_before: float
     rating_after: float
@@ -41,28 +34,23 @@ class RatingChange:
 @transaction.atomic
 def apply_round_ratings(round_: GameRound, guesses: list[Guess]) -> dict[int, RatingChange]:
     """Update every participant's PlayerModeRating and the round's LocationModeRating.
-
-    Must be called exactly once per round, after every participant has
-    guessed - calling it twice would double-count the round as two rating
-    periods. ``services.spotguessr.session._finish_round`` is the only
-    caller and enforces this.
+    ``services.spotguessr.session._finish_round`` is the only caller and enforces this.
 
     Returns:
         Each guessing profile's own ``RatingChange`` from this round, keyed
         by profile id - the immediate "how did I do" signal a round's reveal
         can't get from anywhere else, since the before/after ratings only
-        ever exist in-memory here.
-    """
+        ever exist in-memory here."""
     if not guesses:
         return {}
 
     now = timezone.now()
     mode = round_.session.mode
     location_rating = LocationModeRating.objects.get_or_create_for(round_.location, mode)
-    # Locked first, before any player row: this is the row two rounds contend for
-    # (the same location played in two sessions at once), and taking the shared row
-    # first gives every caller one lock order. Without it both rounds compute from
-    # the same location_before and the second save discards the first round entirely.
+    # Locked first, before any player row: this is the row two rounds contend for (the same location
+    # played in two sessions at once), and taking the shared row first gives every caller one lock
+    # order.
+    # Without it both rounds compute from the same location_before and the second save discards the
     location_rating.refresh_from_db(from_queryset=LocationModeRating.objects.select_for_update())
     # Both sides of this round's update must see the location's rating
     # *before* any of this round's guesses touch it - captured once, up front.

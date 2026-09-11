@@ -1,25 +1,5 @@
 """Friendship state transitions, extracted from ``controllers.friendship``.
-
-Every mutation a user can make to a friend relationship lives here as a plain
-``(actor, target)`` function so the HTMX controller and the external API can
-share one implementation.
-
-The functions raise :class:`FriendshipActionError` subclasses rather than
-returning status codes, so each caller maps failures onto its own protocol
-(``HttpResponse`` for the web controller, ``{"error": ...}`` + status for the
-external API). A raised message is for logs only - see
-:class:`FriendshipActionError` - so a catch site must dispatch on exception
-type and author its own user-facing text rather than relay it. Which subclass
-maps to which status code is a caller decision, and the two callers do not
-even agree with each other: ``FriendActionView`` in the external API answers
-400 for anything past :class:`FriendshipNotFoundError`/
-:class:`FriendLimitExceededError`, while ``FriendController._friend_action``
-answers 403 for the same case. Dispatch on the type at each catch site rather
-than assuming either mapping.
-
-``invite_by_email`` is the security-sensitive one - see its docstring for the
-anti-enumeration guarantee it must preserve.
-"""
+Every mutation a user can make to a friend relationship lives here as a plain ``(actor, target)`` function so the HTMX controller and the external API can share one implementation."""
 
 from __future__ import annotations
 
@@ -48,13 +28,7 @@ logger = logging.getLogger(__name__)
 
 class FriendshipActionError(ValueError):
     """Raised when a friendship transition could not be applied.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below (or this base class as a fallback)
-    and author its own user-facing text, rather than relaying ``message`` -
-    that keeps a future raise site here from being able to smuggle unreviewed
-    text into a response just by adding a new ``raise``.
-    """
+    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class FriendshipNotFoundError(FriendshipActionError):
@@ -89,14 +63,7 @@ class MalformedCursorError(FriendshipActionError):
 
 class InviteValidationError(FriendshipActionError):
     """The invite payload itself was rejected - see the subclasses below.
-
-    Every condition here depends solely on what the caller submitted and
-    reveals nothing about who is registered - unlike most of
-    :class:`FriendshipActionError`'s hierarchy, a catch site is free to vary
-    its user-facing text per subclass without weakening the anti-enumeration
-    guarantee documented on :func:`invite_by_email`. All of them still map to
-    HTTP 400.
-    """
+    Every condition here depends solely on what the caller submitted and reveals nothing about who is registered - unlike most of :class:`FriendshipActionError`'s hierarchy, a catch site is free to vary its user-facing text per subclass without weakening the anti-enumeration guarantee documented on :func:`invite_by_email`."""
 
 
 class MalformedEmailAddressError(InviteValidationError):
@@ -143,12 +110,7 @@ def list_friendships(
     limit: int = DEFAULT_FRIEND_PAGE_SIZE,
 ) -> FriendshipPage:
     """Return one page of the relationships ``profile`` is part of.
-
     Only rows naming ``profile`` on one side or the other are ever considered.
-    Defaults to accepted friendships; pass ``FriendshipStatus.REQUESTED`` for
-    the pending queue. Both sides' profiles (and their users) are selected
-    eagerly, because the caller resolves display identity per row and would
-    otherwise issue two queries per friend.
 
     Args:
         profile: The profile whose relationships to list.
@@ -160,8 +122,7 @@ def list_friendships(
         The page of relationships, newest first, and the next page's cursor.
 
     Raises:
-        MalformedCursorError: ``cursor`` is malformed or was never ours.
-    """
+        MalformedCursorError: ``cursor`` is malformed or was never ours."""
     limit = min(max(int(limit or DEFAULT_FRIEND_PAGE_SIZE), 1), MAX_FRIEND_PAGE_SIZE)
 
     query = Friendship.objects.all().profile(profile).filter(status=status).select_related("from_profile__user", "to_profile__user")
@@ -218,10 +179,6 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile, message: s
 def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, message: str | None = None) -> Friendship | None:
     """Send a friend request, auto-accepting instead if one is already pending in reverse.
 
-    If `to_profile` already sent `from_profile` a pending request, the two profiles
-    clearly want to be friends - accept that request instead of creating a redundant
-    crossed request and a duplicate "new friend request" notification.
-
     Args:
         from_profile: Profile initiating this request.
         to_profile: Profile being requested.
@@ -231,8 +188,7 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, mes
 
     Returns:
         The resulting Friendship (pending or newly accepted), or None if the request
-        could not be created.
-    """
+        could not be created."""
     existing = Friendship.objects.all().between(from_profile, to_profile)
     if existing and existing.status == FriendshipStatus.REQUESTED and existing.from_profile_id == to_profile.pk:
         if not existing.accept():
@@ -255,14 +211,9 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, mes
 def _dismiss_friend_request_notifications(viewer_profile: Profile, source_profile_id: int) -> None:
     """Dismiss the viewer's friend-request notification(s) from a source.
 
-    Accepting/declining/ignoring a request (from the bell, profile page, or API)
-    retires the originating notification from the inbox. Historic rows remain on
-    the full notifications page.
-
     Args:
         viewer_profile: Profile who just acted on the request.
-        source_profile_id: pk of the profile that sent the request.
-    """
+        source_profile_id: pk of the profile that sent the request."""
     NotificationLog.objects.filter(
         profile=viewer_profile,
         notification_type=NotificationType.FRIEND_REQUEST,
@@ -295,31 +246,7 @@ def _existing_friendship(actor: Profile, target: Profile) -> Friendship:
 
 def _incoming_pending_request(actor: Profile, target: Profile) -> Friendship:
     """The pending request ``target`` sent ``actor``, or raise.
-
-    Every answer to a friend request - accept, decline, ignore - is a response
-    to *someone else's* pending offer, and this is the only function that
-    establishes that premise. :func:`_existing_friendship` cannot: it resolves
-    the pair's single row in either direction and reports nothing about its
-    status, while ``Friendship.accept``/``decline``/``ignore`` overwrite
-    ``status`` unconditionally. Answering a request through those two together
-    without this premise would apply the transition to *whatever row happened to
-    exist*, which is wrong in two directions at once:
-
-    - **A block is not a request.** ``decline()`` or ``ignore()`` against a
-      ``Blocked`` row rewrites it to ``Declined``/``Ignored``, so the *blocked*
-      party could clear a block placed on them and resume contact operations
-      that consult ``Profile.are_blocked``. That is the same one-call bypass of
-      the site's only hard safety control that :func:`remove_friend` documents
-      and guards against - reachable from the accept/reject/ignore endpoints
-      instead of the remove one.
-    - **A request is not consent.** ``accept()`` against the caller's *own*
-      outgoing ``Requested`` row makes them both parties to the acceptance,
-      creating a friendship the other person never agreed to. The same call
-      against a ``Declined``, ``Ignored`` or ``Removed`` row resurrects a
-      relationship its owner deliberately ended.
-
-    Requiring ``REQUESTED`` **and** ``from_profile == target`` refuses all of
-    the above with the one check the transitions themselves never make.
+    Every answer to a friend request - accept, decline, ignore - is a response to *someone else's* pending offer, and this is the only function that establishes that premise. :func:`_existing_friendship` cannot: it resolves the pair's single row in either direction and reports nothing about its status, while ``Friendship.accept``/``decline``/``ignore`` overwrite ``status`` unconditionally.
 
     Args:
         actor: The profile answering the request (the recipient).
@@ -333,8 +260,7 @@ def _incoming_pending_request(actor: Profile, target: Profile) -> Friendship:
             or it is pending in the other direction. Deliberately one
             indistinguishable error - a caller must not be able to tell "you
             are blocked" from "there is nothing here", which is the whole point
-            of that exception's docstring.
-    """
+            of that exception's docstring."""
     friendship = _existing_friendship(actor, target)
     if friendship.status != FriendshipStatus.REQUESTED or friendship.from_profile_id != target.pk:
         raise FriendshipNotFoundError(
@@ -345,10 +271,6 @@ def _incoming_pending_request(actor: Profile, target: Profile) -> Friendship:
 
 def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
     """Accept ``target``'s pending friend request to ``actor``.
-
-    Notifies the original requester and clears ``actor``'s own now-answered
-    "new friend request" notification, matching what the profile-page button
-    has always done.
 
     Args:
         actor: The profile accepting the request.
@@ -362,8 +284,7 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
             - see :func:`_incoming_pending_request`.
         FriendLimitExceededError: Either profile is already at the site's
             ``max_friends_per_user`` limit.
-        CommunityDisabledError: Either profile has Community disabled.
-    """
+        CommunityDisabledError: Either profile has Community disabled."""
     friendship = _incoming_pending_request(actor, target)
 
     if not friendship.accept():
@@ -382,17 +303,11 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
 
 def _notify_friend_accepted(requester: Profile, actor: Profile) -> None:
     """Raise the FRIEND_ACCEPTED notification for *requester*, honoring their delivery preference.
-
-    Split out so the acceptance flow's post-notification steps (dismissing the
-    request notification, returning the friendship) run whether or not
-    the recipient has silenced this type. Shared by both places a friendship
-    becomes ACCEPTED (an explicit accept, and the auto-accept branch of
-    ``request_or_accept_friendship``) so they can't drift on delivery again.
+    Split out so the acceptance flow's post-notification steps (dismissing the request notification, returning the friendship) run whether or not the recipient has silenced this type.
 
     Args:
         requester: The profile being notified - the one who sent the original request.
-        actor: The profile that just accepted it.
-    """
+        actor: The profile that just accepted it."""
     try:
         pref = requester.notification_preferences.friend_accepted
     except AttributeError:
@@ -413,10 +328,10 @@ def _notify_friend_accepted(requester: Profile, actor: Profile) -> None:
             title=title,
             message=body,
             url=url,
-            # The actor is who accepted - the same profile this notification's message
-            # and url already point at. Without it the external API's
-            # NotificationSerializer reports a null actor, so a mobile client renders
-            # the notification with no one to link back to.
+            # The actor is who accepted - the same profile this notification's message and url
+            # already point at.
+            # Without it the external API's NotificationSerializer reports a null actor, so a mobile
+            # client renders the notification with no one to link back to.
             source_profile=actor,
         )
     if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
@@ -445,11 +360,7 @@ def reject_friend_request(actor: Profile, target: Profile) -> Friendship:
 
 def ignore_friend_request(actor: Profile, target: Profile) -> Friendship:
     """Ignore ``target``'s friend request - silently, and permanently.
-
-    Distinct from :func:`reject_friend_request` in both directions: no
-    notification is sent, and ``FriendshipStatus.can_request`` excludes
-    ``Ignored``, so the requester can never re-send. Without this function the
-    ``Ignored`` state would be unreachable for any API caller.
+    Distinct from :func:`reject_friend_request` in both directions: no notification is sent, and ``FriendshipStatus.can_request`` excludes ``Ignored``, so the requester can never re-send.
 
     Args:
         actor: The profile ignoring the request.
@@ -460,8 +371,7 @@ def ignore_friend_request(actor: Profile, target: Profile) -> Friendship:
 
     Raises:
         FriendshipNotFoundError: ``target`` has no pending request to ``actor``
-            - see :func:`_incoming_pending_request`.
-    """
+            - see :func:`_incoming_pending_request`."""
     friendship = _incoming_pending_request(actor, target)
     friendship.ignore()
     _dismiss_friend_request_notifications(actor, target.pk)
@@ -470,38 +380,20 @@ def ignore_friend_request(actor: Profile, target: Profile) -> Friendship:
 
 def _placed_the_block(actor: Profile, friendship: Friendship) -> bool:
     """Whether ``actor`` is the profile that placed this block.
-
-    ``Friendship`` carries no "blocked_by" column, so the row's *direction* is
-    the only record of who blocked whom - which is exactly why
-    :func:`block_profile` normalizes it (see that function). ``from_profile``
-    is the blocker; ``to_profile`` is the person blocked.
+    ``Friendship`` carries no "blocked_by" column, so the row's *direction* is the only record of who blocked whom - which is exactly why :func:`block_profile` normalizes it (see that function).
 
     Args:
         actor: The profile attempting to act on the block.
         friendship: The relationship row, expected to be ``BLOCKED``.
 
     Returns:
-        True when ``actor`` owns the block and may therefore lift it.
-    """
+        True when ``actor`` owns the block and may therefore lift it."""
     return friendship.from_profile_id == actor.pk
 
 
 def remove_friend(actor: Profile, target: Profile) -> Friendship:
     """End an existing friendship.
-
-    The row is retained at ``Removed`` rather than deleted, which is what lets
-    ``FriendshipStatus.can_request`` allow a later re-request and what
-    ``QuerySet.ever_friends`` reads.
-
-    **A block is not a friendship and cannot be ended from the wrong side.**
-    ``_existing_friendship`` resolves the row direction-agnostically, so before
-    this guard existed the *blocked* party could call this function against the
-    person who blocked them, set the row to ``Removed``, and immediately
-    re-request contact - a one-request bypass of the site's only hard safety
-    control, reachable from both the API's ``DELETE /friends/{uuid}/`` and the
-    profile page's Remove button. A blocked caller now gets exactly the
-    ``FriendshipNotFoundError`` a stranger would, rather than a permission
-    error, so they cannot even confirm the block exists.
+    The row is retained at ``Removed`` rather than deleted, which is what lets ``FriendshipStatus.can_request`` allow a later re-request and what ``QuerySet.ever_friends`` reads.
 
     Args:
         actor: The profile removing the friend.
@@ -512,8 +404,7 @@ def remove_friend(actor: Profile, target: Profile) -> Friendship:
 
     Raises:
         FriendshipNotFoundError: No friendship exists between the pair, or the
-            pair is blocked and ``actor`` is not the one who blocked.
-    """
+            pair is blocked and ``actor`` is not the one who blocked."""
     friendship = _existing_friendship(actor, target)
     if friendship.status == FriendshipStatus.BLOCKED and not _placed_the_block(actor, friendship):
         raise FriendshipNotFoundError(f"friendship {friendship.pk} is BLOCKED and actor {actor.pk} did not place the block")
@@ -523,43 +414,24 @@ def remove_friend(actor: Profile, target: Profile) -> Friendship:
 
 def block_profile(actor: Profile, target: Profile) -> Friendship:
     """Block ``target``, creating the relationship row if none exists yet.
-
-    Unlike every other transition here, blocking must work against a complete
-    stranger - that is the case it exists for - so a missing row is created
-    rather than raising.
-
-    **The row is re-pointed so ``from_profile`` is always the blocker.** There
-    is one relationship row per pair and no column recording who blocked whom,
-    so direction is the only available record - and reusing the existing row
-    untouched got that record backwards half the time. A row created by an
-    inbound friend request has ``from_profile`` = the requester, so blocking
-    that requester without repointing would leave the *blocked* party owning
-    the row, at which point they (and not the blocker) would satisfy
-    :func:`_placed_the_block` and could lift their own block. Swapping the
-    two foreign keys is safe because
-    ``QuerySet.between`` already guarantees a single row per pair in either
-    direction; nothing else reads a blocked row's direction, since every other
-    consumer of ``BLOCKED`` (``Profile.are_blocked``, the direct-message
-    temporary-access veto, the import path) deliberately matches both
-    directions.
+    Unlike every other transition here, blocking must work against a complete stranger - that is the case it exists for - so a missing row is created rather than raising.
 
     Args:
         actor: The profile doing the blocking.
         target: The profile being blocked.
 
     Returns:
-        The blocked Friendship, with ``actor`` as ``from_profile``.
-    """
+        The blocked Friendship, with ``actor`` as ``from_profile``."""
     _revoke_safety_partner_access(actor, target)
     _withdraw_pending_pin_shares(actor, target)
     _revoke_map_shares(actor, target)
 
     friendship = Friendship.objects.all().between(target, actor)
     if friendship:
-        # The mute columns are named for the row's two *ends*, so swapping the
-        # ends without swapping them hands each person the other's preference -
-        # A's mute of B silently becomes B's mute of A, and neither of them did
-        # it. Read before the swap, written with it, in one statement.
+        # The mute columns are named for the row's two *ends*, so swapping the ends without swapping
+        # them hands each person the other's preference - A's mute of B silently becomes B's mute of
+        # A, and neither of them did it.
+        # Read before the swap, written with it, in one statement.
         muted_by_actor = friendship.is_muted_by(actor)
         muted_by_target = friendship.is_muted_by(target)
         friendship.from_profile = actor
@@ -571,12 +443,9 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
         return friendship
     try:
         # A savepoint, for the same reason `Friendship.request` has one: since
-        # `friendship_one_row_per_pair`, a row inserted for the reverse
-        # direction between the `between()` above and this line makes the insert
-        # fail - and a failed insert makes the whole transaction unusable, so
-        # without this the re-read below could not run either. That would be a
-        # 500 in which the block is not applied while its revocations already
-        # are, which is the worst of the three outcomes.
+        # `friendship_one_row_per_pair`, a row inserted for the reverse direction between the
+        # `between()` above and this line makes the insert fail - and a failed insert makes the
+        # whole transaction unusable, so without this the re-read below could not run either.
         with transaction.atomic():
             return Friendship.objects.create(
                 from_profile=actor,
@@ -603,22 +472,11 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
 
 def _revoke_safety_partner_access(actor: Profile, target: Profile) -> None:
     """End any safety-partner relationship between two profiles being blocked apart.
-
-    An accepted partner watches the owner's live location, check-in chat and
-    escalation status, so a block that left those rows in place would be the
-    weakest thing in the app rather than the strongest. ``remove_checkin_partner``
-    is the mechanism: it deletes the row *and* closes any live WebSocket, whose
-    permission was only ever checked at connect() time.
-
-    Both directions go. Blocking is a mutual disengagement, and "still watching
-    someone you blocked" is the same relationship seen from the other end.
-    Outstanding invitations go too - an unaccepted invite is an offer of exactly
-    the access being revoked.
+    An accepted partner watches the owner's live location, check-in chat and escalation status, so a block that left those rows in place would be the weakest thing in the app rather than the strongest.
 
     Args:
         actor: The profile doing the blocking.
-        target: The profile being blocked.
-    """
+        target: The profile being blocked."""
     from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner
     from urbanlens.dashboard.services.visits.safety import remove_checkin_partner
 
@@ -631,26 +489,11 @@ def _revoke_safety_partner_access(actor: Profile, target: Profile) -> None:
 
 def _revoke_map_shares(actor: Profile, target: Profile) -> None:
     """Delete any standalone map share between two profiles being blocked apart.
-
-    A ``MarkupMapShare`` is live access, not a copy: it has no accept/reject
-    step, and ``controllers.markup._map_visible_to`` honours it every time the
-    recipient opens the map, so they keep seeing the owner's *current* map and
-    can still clone it. Blocking has to end that, for the same reason it ends
-    safety-partner access.
-
-    Both directions, matching the rule the other revocations here follow -
-    blocking is a mutual disengagement, and continuing to watch someone you have
-    blocked is the same relationship seen from the other side.
-
-    The map itself is untouched; only the grant is. The other two channels
-    ``_map_visible_to`` accepts are deliberately left alone: a DM attachment,
-    because a past conversation stays readable by design, and a ``PinShare``
-    attachment, which follows the pin share's own fate above.
+    A ``MarkupMapShare`` is live access, not a copy: it has no accept/reject step, and ``controllers.markup._map_visible_to`` honours it every time the recipient opens the map, so they keep seeing the owner's *current* map and can still clone it.
 
     Args:
         actor: The profile doing the blocking.
-        target: The profile being blocked.
-    """
+        target: The profile being blocked."""
     from urbanlens.dashboard.models.markup.share import MarkupMapShare
 
     MarkupMapShare.objects.filter(
@@ -660,20 +503,11 @@ def _revoke_map_shares(actor: Profile, target: Profile) -> None:
 
 def _withdraw_pending_pin_shares(actor: Profile, target: Profile) -> None:
     """Reject any still-pending pin share between two profiles being blocked apart.
-
-    A pending share is a standing offer, and the accept path does not re-check
-    blocking - so without this a blocked profile could accept afterwards and end
-    up owning a copy of a place the blocker had just withdrawn from them.
-
-    Accepted shares are deliberately left alone, following the line
-    ``DirectMessageShare.revoke`` already draws: accepting runs
-    ``create_pin_from_share``, so the recipient owns their own ``Pin`` and there
-    is nothing a status change could take back.
+    A pending share is a standing offer, and the accept path does not re-check blocking - so without this a blocked profile could accept afterwards and end up owning a copy of a place the blocker had just withdrawn from them.
 
     Args:
         actor: The profile doing the blocking.
-        target: The profile being blocked.
-    """
+        target: The profile being blocked."""
     from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
     from urbanlens.dashboard.models.pin_share.model import PinShare
 
@@ -684,27 +518,7 @@ def _withdraw_pending_pin_shares(actor: Profile, target: Profile) -> None:
 
 
 def unblock_profile(actor: Profile, target: Profile) -> Friendship:
-    """Lift a block ``actor`` placed on ``target``.
-
-    The inverse :func:`block_profile` never had. Without it the only way out of
-    a block was :func:`remove_friend`, which is the path the P0 above closed -
-    so the profile page's "Unblock" button pointed at an action that (once
-    hardened) refuses, and API clients had no unblock at all.
-
-    Lands on ``REMOVED`` rather than deleting the row, matching every other
-    ending transition here: ``FriendshipStatus.can_request`` accepts
-    ``Removed``, so the two profiles can contact each other again, and
-    ``QuerySet.ever_friends`` still sees any friendship that preceded the
-    block.
-
-    Every refusal is the same :class:`FriendshipNotFoundError` - unknown pair,
-    no relationship row, a row in some other state, and a block placed by the
-    *other* person all answer identically. Distinguishing them would let the
-    blocked party confirm the block exists, which is the one fact a block is
-    meant to keep ambiguous. It is the catch site's job to answer all of them
-    (and an unknown profile uuid, resolved before this is ever called) with
-    one identical literal - this raises with a log-only detail, not text meant
-    to reach a response.
+    """Lift a block ``actor`` placed on ``target``. The inverse :func:`block_profile` never had.
 
     Args:
         actor: The profile lifting its own block.
@@ -715,8 +529,7 @@ def unblock_profile(actor: Profile, target: Profile) -> Friendship:
 
     Raises:
         FriendshipNotFoundError: No row joins the pair, the row is not
-            blocked, or the block belongs to ``target`` rather than ``actor``.
-    """
+            blocked, or the block belongs to ``target`` rather than ``actor``."""
     friendship = Friendship.objects.all().between(target, actor)
     if friendship is None or friendship.status != FriendshipStatus.BLOCKED or not _placed_the_block(actor, friendship):
         raise FriendshipNotFoundError(f"no block placed by {actor.pk} on {target.pk} to lift")
@@ -727,23 +540,6 @@ def unblock_profile(actor: Profile, target: Profile) -> Friendship:
 def mute_profile(actor: Profile, target: Profile) -> Friendship:
     """Mute an existing relationship with ``target``, without altering it.
 
-    Requires an existing row, matching the profile-page button: muting is a
-    volume control on someone you already have a relationship with, whereas
-    blocking (above) is a veto that must work on strangers.
-
-    Sets ``actor``'s own half of the relationship's mute pair and leaves
-    ``status`` exactly as it was. It used
-    to write ``FriendshipStatus.MUTED`` over the status instead, which meant
-    muting an accepted friend un-friended them for every visibility gate that
-    reads ``Profile.are_friends``, and left no way back - the pre-mute status
-    was gone, and ``FriendshipStatus.can_request`` refuses ``Muted``, so the
-    site's own Unmute button answered 400. Callers that need to know whether a
-    relationship is muted must read the flag; nothing writes the status value
-    any more.
-
-    Idempotent: re-muting an already-muted relationship is a no-op, which is
-    what makes a retried mobile request safe.
-
     Args:
         actor: The profile doing the muting.
         target: The profile being muted.
@@ -752,8 +548,7 @@ def mute_profile(actor: Profile, target: Profile) -> Friendship:
         The muted Friendship.
 
     Raises:
-        FriendshipNotFoundError: No relationship exists between the pair.
-    """
+        FriendshipNotFoundError: No relationship exists between the pair."""
     friendship = _existing_friendship(actor, target)
     friendship.mute(actor)
     return friendship
@@ -761,12 +556,7 @@ def mute_profile(actor: Profile, target: Profile) -> Friendship:
 
 def unmute_profile(actor: Profile, target: Profile) -> Friendship:
     """Un-mute an existing relationship with ``target``.
-
-    The inverse of :func:`mute_profile`. Mute is a boolean flag rather than part
-    of the relationship's status enum, so unmuting is a single boolean write and
-    the relationship underneath is untouched throughout.
-
-    Idempotent, for the same retry-safety reason as :func:`mute_profile`.
+    Mute is a boolean flag rather than part of the relationship's status enum, so unmuting is a single boolean write and the relationship underneath is untouched throughout.
 
     Args:
         actor: The profile doing the unmuting.
@@ -778,8 +568,7 @@ def unmute_profile(actor: Profile, target: Profile) -> Friendship:
     Raises:
         FriendshipNotFoundError: No relationship exists between the pair -
             deliberately the same failure as muting a stranger, so the two
-            halves of the toggle answer identically.
-    """
+            halves of the toggle answer identically."""
     friendship = _existing_friendship(actor, target)
     friendship.unmute(actor)
     return friendship
@@ -787,13 +576,7 @@ def unmute_profile(actor: Profile, target: Profile) -> Friendship:
 
 def notifications_muted(recipient: Profile | int | None, source: Profile | int | None) -> bool:
     """Whether ``recipient`` has muted the relationship notifications from ``source`` travel on.
-
-    The single place the mute preference becomes actual silence. Called from
-    ``NotificationManager.notify``, which every notification producer goes
-    through, so a new notification type honours the preference without its
-    author having to know the preference exists - the reason mute silenced
-    nothing for as long as it did is that each producer would have had to
-    remember.
+    Called from ``NotificationManager.notify``, which every notification producer goes through, so a new notification type honours the preference without its author having to know the preference exists - the reason mute silenced nothing for as long as it did is that each producer would have had to remember.
 
     Args:
         recipient: The profile the notification is addressed to, or its pk.
@@ -808,12 +591,7 @@ def notifications_muted(recipient: Profile | int | None, source: Profile | int |
         possible (see :func:`mute_profile`), so there is nothing to consult.
 
     Note:
-        Asks the same predicate as :func:`profiles_muting` rather than reading
-        the row through ``between()``. Two rows can join one pair (see that
-        method), and the two forms have to reach the same answer - a mute
-        honoured in one-to-one paths and dropped in group ones would be
-        invisible until someone compared them.
-    """
+        Asks the same predicate as :func:`profiles_muting` rather than reading the row through ``between()``. Two rows can join one pair (see that method), and the two forms have to reach the same answer - a mute honoured in one-to-one paths and dropped in group ones would be invisible until someone compared them."""
     if recipient is None or source is None:
         return False
     recipient_id = recipient if isinstance(recipient, int) else recipient.pk
@@ -829,18 +607,11 @@ def notifications_muted(recipient: Profile | int | None, source: Profile | int |
 @dataclass(frozen=True, slots=True)
 class MutedRecipients:
     """A batched mute answer, carrying the source it was computed for.
-
-    The source id is not decoration. A bare set of profile ids passed into
-    ``NotificationLog.objects.notify`` would be applied to whatever source that
-    notification names, so a set computed for one person and reused for another
-    would silence the wrong notifications - silently, and only in the paths
-    that batch. Carrying the source lets the consumer notice and fall back to
-    the per-row query instead of trusting it.
+    A bare set of profile ids passed into ``NotificationLog.objects.notify`` would be applied to whatever source that notification names, so a set computed for one person and reused for another would silence the wrong notifications - silently, and only in the paths that batch.
 
     Attributes:
         source_id: The profile the mutes were resolved against.
-        profile_ids: The recipients who muted them.
-    """
+        profile_ids: The recipients who muted them."""
 
     source_id: int | None
     profile_ids: frozenset[int]
@@ -848,13 +619,7 @@ class MutedRecipients:
 
 def profiles_muting(source: Profile | int, recipient_ids: Iterable[int]) -> MutedRecipients:
     """Which of ``recipient_ids`` have muted notifications from ``source``, in one query.
-
-    The batch form of :func:`notifications_muted`, for the paths that notify a
-    whole membership at once. ``_notify_group_message`` is the one that needs
-    it: it deliberately resolves every per-member fact up front (preferences by
-    ``select_related``, unread state by a single grouped query) because a
-    50-member group otherwise costs a hundred queries on the synchronous send
-    path, and a per-member mute lookup would put them straight back.
+    ``_notify_group_message`` is the one that needs it: it deliberately resolves every per-member fact up front (preferences by ``select_related``, unread state by a single grouped query) because a 50-member group otherwise costs a hundred queries on the synchronous send path, and a per-member mute lookup would put them straight back.
 
     Args:
         source: The profile the notifications are about, or its pk.
@@ -863,8 +628,7 @@ def profiles_muting(source: Profile | int, recipient_ids: Iterable[int]) -> Mute
     Returns:
         The subset of ``recipient_ids`` that muted their side of a
         relationship with ``source``, tagged with that source. Empty when there
-        is nothing to check.
-    """
+        is nothing to check."""
     source_id = source if isinstance(source, int) else source.pk
     ids = {pk for pk in recipient_ids if pk is not None and pk != source_id}
     if source_id is None or not ids:
@@ -886,22 +650,7 @@ def invite_by_email(
     subscription_duration: str = "",
 ) -> None:
     """Invite someone to connect by email address, revealing nothing about them.
-
-    If the address belongs to an existing account (primary or verified
-    secondary), that account gets a friend request. Otherwise a
-    ``FriendInvitation`` is created and the address is emailed a join link;
-    signing up through it auto-accepts the pending request.
-
-    **Anti-enumeration guarantee.** This function returns ``None`` on every
-    non-validation path - registered, unregistered, visibility-rejected, and
-    send-failed alike - and raises only for failures that depend purely on
-    what the caller submitted (:class:`InviteValidationError`) or on the
-    caller's own quota (:class:`InviteRateLimitedError`). Neither depends on
-    whether the address is registered. The rate-limit check therefore runs
-    *before* the registered/unregistered branch: doing it only on the path
-    that actually sends mail would let a capped caller distinguish members
-    from non-members by which error came back. Callers must preserve this by
-    emitting one identical success response for the ``None`` return.
+    Otherwise a ``FriendInvitation`` is created and the address is emailed a join link; signing up through it auto-accepts the pending request.
 
     Args:
         inviter: The profile sending the invitation.
@@ -922,14 +671,11 @@ def invite_by_email(
         SelfInviteError: The address is the inviter's own.
         InviteMessageTooLongError: The optional message exceeds
             ``MAX_FRIEND_REQUEST_MESSAGE_LENGTH``.
-        InviteRateLimitedError: The inviter is over their email budget.
-    """
+        InviteRateLimitedError: The inviter is over their email budget."""
     # Imported inside the function, exactly as the controller version did.
-    # Not a style quirk: the mail classes must be looked up on their own module
-    # at call time so that ``mock.patch("django.core.mail.EmailMultiAlternatives")``
-    # - which several existing tests rely on - actually intercepts the send. A
-    # module-level ``from django.core.mail import ...`` binds the original class
-    # at import time and silently defeats those patches.
+    # Not a style quirk: the mail classes must be looked up on their own module at call time so that
+    # ``mock.patch("django.core.mail.EmailMultiAlternatives")`` - which several existing tests rely
+    # on - actually intercepts the send.
     import smtplib
 
     from django.core.exceptions import ValidationError
@@ -965,10 +711,9 @@ def invite_by_email(
     if existing_user:
         to_profile = existing_user.profile
         # Respect visibility settings silently - no error, no distinguishable response.
-        # Same evaluator request_friend uses (Profile.visibility_permits already
-        # rejects NO_ONE) - a bare "!= NO_ONE" check here would let any
-        # stranger who knew the email bypass a restricted FRIENDS/COMMON_PIN/
-        # COMMON_FRIEND/COMMON_TRIP/ANYTHING_IN_COMMON visibility setting entirely.
+        # Same evaluator request_friend uses (Profile.visibility_permits already rejects NO_ONE) - a
+        # bare "!= NO_ONE" check here would let any stranger who knew the email bypass a restricted
+        # FRIENDS/COMMON_PIN/ COMMON_FRIEND/COMMON_TRIP/ANYTHING_IN_COMMON visibility setting
         if to_profile != inviter and Profile.visibility_permits(to_profile.friend_request_visibility, to_profile, inviter):
             friendship = request_or_accept_friendship(inviter, to_profile, message or None)
             if friendship and subscription_role is not None:
@@ -979,10 +724,7 @@ def invite_by_email(
         return
 
     # No registered account - create an invitation token and send email.
-    # Avoid duplicate pending invitations from the same inviter. Matched on
-    # the normalized address, not the raw one, so re-inviting a Gmail dot/+
-    # variant of an already-invited address replaces the old row instead of
-    # leaving two.
+    # Avoid duplicate pending invitations from the same inviter.
     FriendInvitation.objects.filter(
         inviter=inviter,
         email_normalized=normalize_email(email),

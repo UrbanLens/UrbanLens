@@ -1,13 +1,4 @@
-"""Floorplan endpoints: fetch a building's plan, edit it, save it.
-
-Floorplans are queried only through these routes - a building or pin fetched
-anywhere else never drags plan data along (most buildings have none, and the
-common case must stay free).
-
-Routes hang off the pin, matching how the rest of a pin's map surface works
-(markup, overlays): the pin resolves to its building place, and authorization
-is pin ownership.
-"""
+"""Floorplan endpoints: fetch, edit, and save a building's plan."""
 
 from __future__ import annotations
 

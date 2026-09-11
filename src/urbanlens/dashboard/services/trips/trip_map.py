@@ -1,16 +1,5 @@
 """The trip map's point set, shared byte-for-byte by both map surfaces.
-
-``controllers.trip.TripMapDataView`` (the web map's ``map-data/`` fetch) and
-``external_api.views.TripMapView`` (the mobile map) both return exactly what
-:func:`build_trip_map_points` produces, with no per-surface reshaping. That is
-deliberate: the two maps draw the same markers with the same numbering and the
-same drag affordances, and a divergence would show up as the app and the site
-disagreeing about where a trip's stops are.
-
-``tests.hypothesis.test_trip_map_parity`` asserts the two payloads are equal
-for the same fixture, so the shared-shape guarantee is enforced rather than
-merely intended.
-"""
+``tests.hypothesis.test_trip_map_parity`` asserts the two payloads are equal for the same fixture, so the shared-shape guarantee is enforced rather than merely intended."""
 
 from __future__ import annotations
 
@@ -29,18 +18,7 @@ if TYPE_CHECKING:
 
 def build_trip_map_points(trip: Trip, viewer: Profile, *, include_past: bool = False) -> list[dict[str, Any]]:
     """Build the trip map's marker list for one viewer.
-
-    Two kinds of point come back, distinguishable by ``index``:
-
-    - The trip's own stops, numbered contiguously from 1 in itinerary order
-      and ``draggable``. A stop with no coordinates, or whose location this
-      viewer may not see, is skipped entirely rather than emitted with null
-      coordinates - and skipping it does not consume a number.
-    - Ghost markers contributed by a nested child trip, which carry
-      ``index: None``, ``activity_id: None``, ``draggable: False`` and an extra
-      ``child_trip: True`` key. Their labels are prefixed with the child trip's
-      name. Each child trip contributes its markers only once, however many of
-      this trip's activities link to it.
+    A stop with no coordinates, or whose location this viewer may not see, is skipped entirely rather than emitted with null coordinates - and skipping it does not consume a number. - Ghost markers contributed by a nested child trip, which carry ``index: None``, ``activity_id: None``, ``draggable: False`` and an extra ``child_trip: True`` key.
 
     Args:
         trip: The trip being mapped.
@@ -50,8 +28,7 @@ def build_trip_map_points(trip: Trip, viewer: Profile, *, include_past: bool = F
             instead of being dropped.
 
     Returns:
-        Marker dicts in itinerary order, ready to serialize as-is.
-    """
+        Marker dicts in itinerary order, ready to serialize as-is."""
     activities = list(activity_queryset(trip))
 
     # Activities viewer-hidden due to the adder's privacy setting.
@@ -83,22 +60,18 @@ def build_trip_map_points(trip: Trip, viewer: Profile, *, include_past: bool = F
             )
             index += 1
 
-        # Include child trip's activities as ghost markers - only for a viewer
-        # who actually belongs to the child trip. Without this, linking a
-        # private child trip into a broadly-joined parent trip exposed every
-        # one of its real coordinates/titles to every parent-trip member,
-        # none of whom the child trip's own members ever agreed to share
-        # with - the per-adder privacy check below is not a substitute for
-        # this, since it only withholds an activity from viewers *its own
-        # adder* excluded, not from viewers outside the child trip entirely.
+        # Include child trip's activities as ghost markers - only for a viewer who actually belongs
+        # to the child trip.
+        # Without this, linking a private child trip into a broadly-joined parent trip exposed every
+        # one of its real coordinates/titles to every parent-trip member, none of whom the child
         child_trip = act.child_trip
         if child_trip is not None and child_trip.id not in seen_child_acts and has_joined(viewer, child_trip):
             seen_child_acts.add(child_trip.id)
             child_acts = list(activity_queryset(child_trip))
-            # Same viewer-aware gate the parent trip's own activities get above (line
-            # ~57) - checking only location_hidden left a child activity hidden solely by
-            # its adder's trip_pin_location_visibility setting fully visible as a ghost
-            # marker, coordinates and real label included.
+            # Same viewer-aware gate the parent trip's own activities get above (line ~57) -
+            # checking only location_hidden left a child activity hidden solely by its adder's
+            # trip_pin_location_visibility setting fully visible as a ghost marker, coordinates and
+            # real label included.
             child_viewer_hidden = viewer_hidden_activity_ids(child_acts, viewer)
             for child_act in child_acts:
                 if child_act.id in child_viewer_hidden:

@@ -1,13 +1,5 @@
 """Provider-agnostic Google OAuth 2.0 authorization-code flow helpers.
-
-Extracted from ``dashboard/services/apis/calendar/google.py`` so any feature
-needing its own Google OAuth grant (Calendar, Google Photos, ...) can reuse
-the same token exchange/refresh/revoke mechanics against the site's one
-Google OAuth client (``UL_GOOGLE_CLIENT_ID``/``UL_GOOGLE_CLIENT_SECRET``),
-each requesting whatever scopes its feature needs. Every function here is
-scope-agnostic - callers pass their own ``scopes``/client credentials rather
-than this module hardcoding any one feature's grant.
-"""
+Extracted from ``dashboard/services/apis/calendar/google.py`` so any feature needing its own Google OAuth grant (Calendar, Google Photos, ...) can reuse the same token exchange/refresh/revoke mechanics against the site's one Google OAuth client (``UL_GOOGLE_CLIENT_ID``/``UL_GOOGLE_CLIENT_SECRET``), each requesting whatever scopes its feature needs."""
 
 from __future__ import annotations
 
@@ -40,13 +32,7 @@ class GoogleOAuthNotConfiguredError(RuntimeError):
 
 class GoogleAuthExpiredError(GatewayRequestError):
     """Raised when Google has rejected the stored grant entirely (not a transient failure).
-
-    Covers a refused token refresh (revoked/expired refresh token) and a
-    missing refresh token. Distinct from the generic ``GatewayRequestError``
-    so callers can tell "this connection is dead, prompt the user to
-    reconnect" apart from a transient or unrelated API failure that doesn't
-    warrant discarding the stored credentials.
-    """
+    Distinct from the generic ``GatewayRequestError`` so callers can tell "this connection is dead, prompt the user to reconnect" apart from a transient or unrelated API failure that doesn't warrant discarding the stored credentials."""
 
 
 def build_authorization_url(
@@ -98,8 +84,7 @@ def exchange_code_for_tokens(client_id: str, client_secret: str, code: str, redi
         ``expires_in``, ``id_token``, ``scope``, ...).
 
     Raises:
-        GatewayRequestError: When the token exchange fails.
-    """
+        GatewayRequestError: When the token exchange fails."""
     response = requests.post(
         GOOGLE_TOKEN_URL,
         data={
@@ -166,17 +151,13 @@ def revoke_token(token: str) -> bool:
 
 def extract_email_from_id_token(id_token: str | None) -> str | None:
     """Read the ``email`` claim from an OAuth ``id_token``.
-
-    The token arrives directly from Google's token endpoint over TLS, so the
-    payload is decoded without signature verification - it is used for
-    display only, never for authentication.
+    The token arrives directly from Google's token endpoint over TLS, so the payload is decoded without signature verification - it is used for display only, never for authentication.
 
     Args:
         id_token: Raw JWT string from the token response, if any.
 
     Returns:
-        The email claim, or None when absent or unparsable.
-    """
+        The email claim, or None when absent or unparsable."""
     if not id_token:
         return None
     parts = id_token.split(".")

@@ -1,16 +1,5 @@
 """Simulate viewing your own profile as another type of user.
-
-The preview works by creating a throwaway "ghost" ``User`` (and the real
-relationship rows - friendship, shared pin, mutual friend, or shared trip -
-that the selected audience implies) inside a database transaction, rendering
-the page through the normal view stack as that ghost, and then rolling the
-transaction back so nothing persists.
-
-Because the ghost goes through the exact same controllers, permission checks,
-and templates as a real visitor, the preview never needs to be updated when
-profile-rendering code changes: whatever a real user with that relationship
-would see, the ghost sees.
-"""
+The preview works by creating a throwaway "ghost" ``User`` (and the real relationship rows - friendship, shared pin, mutual friend, or shared trip - that the selected audience implies) inside a database transaction, rendering the page through the normal view stack as that ghost, and then rolling the transaction back so nothing persists."""
 
 from __future__ import annotations
 
@@ -40,16 +29,11 @@ _MODE_LABEL_OVERRIDES = {
 
 def preview_modes() -> list[tuple[str, str]]:
     """Return the selectable preview audiences as ``(mode, label)`` pairs.
-
-    The list is derived from :class:`VisibilityChoice` so it always mirrors
-    the options offered by the privacy controls on the settings page - if a
-    new visibility level is added there, it automatically becomes previewable
-    here (unknown levels fall back to a no-relationship ghost).
+    The list is derived from :class:`VisibilityChoice` so it always mirrors the options offered by the privacy controls on the settings page - if a new visibility level is added there, it automatically becomes previewable here (unknown levels fall back to a no-relationship ghost).
 
     Returns:
         List of ``(mode value, human-readable label)`` tuples, in the same
-        order as the settings-page choices.
-    """
+        order as the settings-page choices."""
     return [(value, _MODE_LABEL_OVERRIDES.get(value, label)) for value, label in VisibilityChoice.choices]
 
 
@@ -67,14 +51,7 @@ def mode_label(mode: str) -> str:
 
 def create_ghost_viewer(owner: Profile, mode: str) -> User:
     """Create a throwaway user standing in the selected relationship to *owner*.
-
-    Must be called inside a transaction that the caller rolls back - every row
-    created here (the ghost user, its auto-created profile, and any
-    relationship rows) is meant to exist only for the duration of one request.
-
-    When the owner has no data to share (no pins, friends, or trips), the
-    minimum synthetic shared objects are created so the requested relationship
-    can still be simulated; these are likewise rolled back.
+    Must be called inside a transaction that the caller rolls back - every row created here (the ghost user, its auto-created profile, and any relationship rows) is meant to exist only for the duration of one request.
 
     Args:
         owner: The profile being previewed (the logged-in user's own profile).
@@ -83,8 +60,7 @@ def create_ghost_viewer(owner: Profile, mode: str) -> User:
 
     Returns:
         The ghost ``User``, whose ``Profile`` was auto-created by the
-        ``post_save`` signal.
-    """
+        ``post_save`` signal."""
     from urbanlens.dashboard.models.profile.model import Profile
 
     ghost_user = User.objects.create_user(username=f"preview_{uuid.uuid4().hex[:16]}")
@@ -125,15 +101,11 @@ def _make_friends(ghost: Profile, owner: Profile) -> None:
 
 def _share_a_pin(ghost: Profile, owner: Profile) -> None:
     """Give *ghost* a pin at a location the owner has also pinned.
-
-    Uses one of the owner's existing pinned locations when available;
-    otherwise fabricates a shared location (and an owner pin) so the
-    relationship can still be simulated.
+    Uses one of the owner's existing pinned locations when available; otherwise fabricates a shared location (and an owner pin) so the relationship can still be simulated.
 
     Args:
         ghost: The throwaway viewer profile.
-        owner: The profile being previewed.
-    """
+        owner: The profile being previewed."""
     from urbanlens.dashboard.models.pin.model import Pin
 
     owner_pin = Pin.objects.filter(profile=owner).select_related("location").first()
@@ -150,13 +122,9 @@ def _share_a_pin(ghost: Profile, owner: Profile) -> None:
 def _share_a_friend(ghost: Profile, owner: Profile) -> None:
     """Give *ghost* a mutual friend with *owner* (without befriending them directly).
 
-    Befriends one of the owner's existing friends when possible; otherwise a
-    second ghost is created to act as the mutual friend.
-
     Args:
         ghost: The throwaway viewer profile.
-        owner: The profile being previewed.
-    """
+        owner: The profile being previewed."""
     from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
     from urbanlens.dashboard.models.friendship.model import Friendship
     from urbanlens.dashboard.models.profile.model import Profile
@@ -184,14 +152,11 @@ def _share_a_friend(ghost: Profile, owner: Profile) -> None:
 
 def _share_a_trip(ghost: Profile, owner: Profile) -> None:
     """Put *ghost* on a trip the owner is also a member of.
-
-    Joins one of the owner's existing trips when available; otherwise
-    fabricates a trip with both of them as members.
+    Joins one of the owner's existing trips when available; otherwise fabricates a trip with both of them as members.
 
     Args:
         ghost: The throwaway viewer profile.
-        owner: The profile being previewed.
-    """
+        owner: The profile being previewed."""
     from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 
     membership = TripMembership.objects.filter(profile=owner).select_related("trip").first()

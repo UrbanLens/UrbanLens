@@ -1,11 +1,4 @@
-"""Custom layer views - user-created, independently-toggleable groupings of
-markup items on a Pin or Wiki map (e.g. a "Tunnels" layer).
-
-Two parents can own a CustomLayer (see ``CustomLayer``): a Pin (personal,
-editable only by its owner) or a Wiki (shared community data, editable by any
-signed-in user with wiki access) - the same permission split as ``PinMarkup``
-itself. Layers never attach to a standalone ``MarkupMap``.
-"""
+"""Custom layer views - toggleable groupings of markup on a Pin or Wiki map."""
 
 from __future__ import annotations
 

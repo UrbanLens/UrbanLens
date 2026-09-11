@@ -1,14 +1,5 @@
 """The assistant's place-evidence tool - "does this place have tunnels?" and friends.
-
-Evidence-gathering, not a verdict from any single authoritative source. A
-``RedataUndergroundGateway`` exists (``plugins/builtin/redata_underground.py``,
-OSM-sourced mapped structures) and would answer this better than keyword
-matching - it is deliberately not used here, the same "no REData" bypass
-rationale as ``routing.py``/``weather.py``: the sandboxed AI worker must never
-depend on REData being reachable at all. So this reads whatever the user's own
-floorplan, this place's photos, and this place's wiki comments already say. A
-tool result of "no_evidence" means nothing visible said so - never "no".
-"""
+A ``RedataUndergroundGateway`` exists (``plugins/builtin/redata_underground.py``, OSM-sourced mapped structures) and would answer this better than keyword matching - it is deliberately not used here, the same "no REData" bypass rationale as ``routing.py``/``weather.py``: the sandboxed AI worker must never depend on REData being reachable at all."""
 
 from __future__ import annotations
 
@@ -39,12 +30,7 @@ def _resolve_own_pin(context: ToolContext, pin_slug: str) -> Pin | None:
 
 def _floorplan_evidence(pin: Pin, context: ToolContext) -> str | None:
     """A note about below-grade levels, from the plan the user would actually see for this place.
-
-    Reuses ``resolve_floorplan_row`` rather than re-deriving its profile/community
-    fallback: the personal-plan-first, then-published-if-the-wiki-is-visible rule
-    lives there once, and ``Floorplan.objects.at()`` itself must never be called
-    without ``profile=``/``community=`` (it returns every profile's plans otherwise).
-    """
+    Reuses ``resolve_floorplan_row`` rather than re-deriving its profile/community fallback: the personal-plan-first, then-published-if-the-wiki-is-visible rule lives there once, and ``Floorplan.objects.at()`` itself must never be called without ``profile=``/``community=`` (it returns every profile's plans otherwise)."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
 
     place = pin.location.place

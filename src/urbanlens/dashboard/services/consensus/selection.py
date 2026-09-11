@@ -1,11 +1,4 @@
-"""Which wiki/field-kind pair becomes a session's next round.
-
-Combines eligibility (``services.consensus.eligibility``), the field-kind
-registry (``services.consensus.fields``), and trust-check injection
-(``services.consensus.trust``) into one pick - mirrors
-``services.spotguessr.session.get_or_create_round``'s location-selection
-loop plus ``services.spotguessr.modes``'s per-mode dispatch, combined.
-"""
+"""Which wiki/field-kind pair becomes a session's next round."""
 
 from __future__ import annotations
 
@@ -23,10 +16,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.consensus.fields import RoundContent
 
-#: Probability of attempting a "recheck" round - reasking about a
-#: Facts-tracked wiki field that's TENTATIVE/CONTESTED - instead of an
-#: ordinary missing-field round. See ``services.facts.consumption.
-#: get_facts_needing_confirmation``.
+#: Probability of attempting a "recheck" round - reasking about a Facts-tracked wiki field that's
+#: TENTATIVE/CONTESTED - instead of an ordinary missing-field round.
+#: See ``services.facts.consumption. get_facts_needing_confirmation``.
 RECHECK_INJECT_PROBABILITY = 0.2
 
 #: The four plain wiki-attribute field kinds Facts tracks confidence for -
@@ -115,14 +107,7 @@ def _pick_normal_round(pool: list[Wiki]) -> RoundSelection | None:
 
 def _pick_recheck_round(pool: list[Wiki]) -> RoundSelection | None:
     """Pick a round re-asking about a wiki field Facts has flagged as TENTATIVE/CONTESTED.
-
-    Additive to ordinary round selection - reuses the same
-    ``ConsensusFieldStrategy.build_round``/``apply_answer`` machinery as a
-    normal round for these four kinds, so a recheck round is
-    indistinguishable from an ordinary one to the client (unlike a
-    trust-check round, it's never disguised - it's a genuine round whose
-    answer really does get applied).
-    """
+    Additive to ordinary round selection - reuses the same ``ConsensusFieldStrategy.build_round``/``apply_answer`` machinery as a normal round for these four kinds, so a recheck round is indistinguishable from an ordinary one to the client (unlike a trust-check round, it's never disguised - it's a genuine round whose answer really does get applied)."""
     from urbanlens.dashboard.models.facts.model import Fact, FactStatus
 
     wiki_ids = [wiki.pk for wiki in pool]

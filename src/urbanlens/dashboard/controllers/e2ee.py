@@ -1,22 +1,6 @@
 """Endpoints for direct-message end-to-end encryption key storage.
 
-Every blob accepted here was encrypted client-side; these views only validate
-shape, enforce ownership, and store. See ``docs/designs/e2ee.md`` for the scheme and
-``services/e2ee.py`` for the shared helpers.
-
-These are *dual-auth* endpoints (see
-``external_api.mixins.DualAuthJsonView``): the same URL serves the site's own
-web client over a session cookie and the mobile client over an OAuth2 access
-token. There is deliberately one implementation rather than a session copy
-here and a credential copy under ``api/external/`` - the key-exchange contract
-(version races, the opaque group-member tokens, the exact 409 bodies clients
-retry on) is delicate enough that two copies would drift, and a drift here
-means someone's messages stop decrypting.
-
-Because they are ``APIView`` subclasses, ``authentication_classes`` /
-``permission_classes`` / ``throttle_classes`` are actually honored - on a
-plain Django ``View`` those attributes are inert decoration, and an endpoint
-carrying them would look converted while remaining session-only.
+Blobs are encrypted client-side; views validate shape and store.
 """
 
 from __future__ import annotations
@@ -63,8 +47,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Confirmation string the reset endpoint requires, to make the destructive
-#: consequence (old encrypted messages become unreadable) an explicit choice.
+#: Confirmation string required by the reset endpoint.
 RESET_CONFIRMATION = "RESET"
 
 
@@ -85,36 +68,17 @@ def _json_body(request: HttpRequest | Request) -> dict[str, Any] | None:
     """Parse the request body as a JSON object.
 
     Args:
-        request: The incoming request. A DRF request has already parsed and
-            validated the body by the time a handler runs, so its ``.data`` is
-            reused rather than re-reading (and re-decoding) ``.body``; the one
-            remaining plain-Django view here has no ``.data`` and still parses
-            for itself.
+        request: The incoming request.
 
     Returns:
         The parsed dict, or None when the body is not a JSON object.
     """
-    # Tested with isinstance rather than ``hasattr(request, "data")``: reading
-    # that attribute is what *runs* the parser, and hasattr only suppresses
-    # AttributeError - a malformed body would raise ParseError straight out of
-    # the probe, before the try block below could catch it, and the caller
-    # would answer with DRF's ``{"detail": ...}`` instead of this module's
-    # ``{"error": ...}``.
+    # isinstance avoids triggering the parser during the probe.
     if isinstance(request, Request):
         try:
             data = request.data
         except ParseError:
-            # Malformed JSON. Returned as None so the caller answers with this
-            # module's own ``{"error": ...}`` 400 rather than DRF's
-            # ``{"detail": ...}`` - the status is the same either way, but the
-            # body shape is part of what clients already parse.
-            #
-            # Reached for session callers only. django-oauth-toolkit's
-            # authenticator inspects the request body while verifying a token,
-            # so for a *credential* caller a malformed body raises ParseError
-            # during authentication and DRF answers with ``{"detail": ...}``
-            # before this handler is entered. Still a JSON 400 either way; the
-            # web client's exact contract is what this branch preserves.
+            # Keep error body shape consistent for session callers.
             return None
         return data if isinstance(data, dict) else None
     try:
@@ -150,25 +114,12 @@ def _require_current_password_proof(user: Any, data: dict[str, Any]) -> Response
 
 
 class E2EELoginParamsView(APIView):
-    """GET (anonymous): report how an identifier's account authenticates.
+    """GET (anonymous): report how an identifier's account authenticates."""
 
-    Enrolled accounts get ``mode: "derived"`` plus their real Argon2id salt;
-    unknown identifiers get a deterministic decoy salt so they are
-    indistinguishable from enrolled accounts. Pre-enrollment accounts report
-    ``mode: "legacy"`` (the raw-password form flow), which leaks their
-    existence until their next login upgrades them - an accepted, shrinking
-    window (the login form already reveals unverified accounts).
-    """
-
-    #: Anonymous by design - this answers a question the login form must ask
-    #: *before* anyone is authenticated.
+    #: Anonymous by design.
     authentication_classes: ClassVar[list] = []
     permission_classes = [AllowAny]
-    #: Unthrottled, as it was as a plain Django view. Inheriting DRF's default
-    #: ``AnonRateThrottle`` (60/minute, keyed per IP) would newly rate-limit
-    #: the *login* flow, since every login attempt calls this first - a shared
-    #: office or CGNAT egress IP would start failing to log in. Enumeration is
-    #: already handled by the decoy salts rather than by rate limiting.
+    #: Unthrottled to avoid rate-limiting the login flow.
     throttle_classes: ClassVar[list] = []
     renderer_classes = [JSONRenderer]
 
@@ -190,13 +141,7 @@ class E2EELoginParamsView(APIView):
 
 
 class E2EEEnrollView(DualAuthJsonView):
-    """POST: store a freshly generated key bundle (and optionally rotate to derived auth).
-
-    Password accounts include ``auth_key``/``auth_salt`` (plus
-    ``current_password`` as proof of possession) - the server replaces the
-    stored credential with the derived key, after which the raw password
-    never reaches the server again. OAuth-only accounts omit all three.
-    """
+    """POST: store a freshly generated key bundle."""
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),

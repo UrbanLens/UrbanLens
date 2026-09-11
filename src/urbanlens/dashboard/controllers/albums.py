@@ -1,14 +1,4 @@
-"""Album views - the Photos subpage on a pin or wiki, and album CRUD.
-
-Three kinds of owner can hold an Album (see
-:class:`~urbanlens.dashboard.models.album.model.Album`): a Pin (personal,
-editable only by its owner), a Wiki (community, editable by any signed-in user
-with wiki access), or a Profile directly (a Vault album - personal, not tied
-to any one place). Pin/wiki resolution follows the same permission split
-``controllers.custom_layers`` uses, by the same optional-URL-kwarg pattern so
-one view class serves both routes; a Vault owner instead resolves from the
-request itself, since there is exactly one vault per profile.
-"""
+"""Album views - Photos subpage on a pin or wiki, and album CRUD."""
 
 from __future__ import annotations
 

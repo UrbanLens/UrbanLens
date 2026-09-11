@@ -1,16 +1,5 @@
 """Floorplan documents: the JSON shape the editor and consumers speak.
-
-One document carries a whole plan version - origin, floors, walls, the
-openings cut into those walls, the locks fitted to those openings, room seeds
-and markers. Coordinates are
-plan-local metres throughout (see ``models.floorplans.model``), never degrees;
-``services.floorplans.features`` is where they become WGS-84 for a map.
-
-Saving is whole-document replacement: an item round-tripping a known uuid is
-updated in place (keeping its identity, labels and references), an item the
-document omits is deleted, an item without a uuid is created. That makes the
-editor's job a single POST of what it currently holds, with no diffing.
-"""
+Coordinates are plan-local metres throughout (see ``models.floorplans.model``), never degrees; ``services.floorplans.features`` is where they become WGS-84 for a map."""
 
 from __future__ import annotations
 
@@ -29,14 +18,7 @@ logger = logging.getLogger(__name__)
 
 class FloorplanValidationError(ValueError):
     """A document failed validation, with a message written for the submitter.
-
-    Subclasses ``ValueError`` so existing handlers keep working. The point of
-    the separate type is that its message is *known* to be safe to echo back:
-    a bare ``ValueError`` reaching a handler may be an incidental one from
-    somewhere deeper (a dict lookup, a conversion inside a library), and
-    returning its text to the caller leaks internals. Handlers echo this type
-    and answer a generic message for anything else.
-    """
+    Subclasses ``ValueError`` so existing handlers keep working."""
 
 
 #: FloorplanFloor.level is a SmallIntegerField; past these a value reaches the
@@ -95,16 +77,13 @@ def _marker_dict(marker: FloorplanMarker, source_uuids: dict, reference_uuids: d
 
 def document_for(floorplan: Floorplan) -> dict[str, Any]:
     """Assemble one plan version's full nested document.
-
-    Bounded query count regardless of plan size - everything is prefetched
-    per relation, never per row.
+    Bounded query count regardless of plan size - everything is prefetched per relation, never per row.
 
     Args:
         floorplan: The version to serialize.
 
     Returns:
-        The document.
-    """
+        The document."""
     source_rows = list(floorplan.source_pool.all())
     reference_rows = list(floorplan.reference_pool.all())
     source_uuids = {row.pk: str(row.uuid) for row in source_rows}
@@ -172,10 +151,9 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
         "building_name": floorplan.building_name,
         "valid_from": floorplan.valid_from.isoformat() if floorplan.valid_from else None,
         "floor_count": floorplan.floor_count,
-        # Deliberately not "origin": resolution.py has long used that key for
-        # provenance ("local" / "community" / "redata"), and the save view
-        # merges that in over the document - so a coordinate anchor stored
-        # under the same name is silently replaced by the string "local".
+        # Deliberately not "origin": resolution.py has long used that key for provenance ("local" /
+        # "community" / "redata"), and the save view merges that in over the document - so a
+        # coordinate anchor stored under the same name is silently replaced by the string "local".
         "plan_origin": ({"lat": float(floorplan.origin_lat), "lng": float(floorplan.origin_lng)} if floorplan.origin_lat is not None and floorplan.origin_lng is not None else None),
         "rotation_degrees": floorplan.rotation_degrees,
         "source_pool": [{"uuid": str(row.uuid), "title": row.title, "url": row.url, "note": row.note, "author": row.author, "attributes": row.attributes or {}} for row in source_rows],
@@ -279,10 +257,9 @@ def _date_in(raw) -> datetime.date | None:
         raise FloorplanValidationError("must be a date in YYYY-MM-DD form") from exc
 
 
-#: Ceilings on how much one document may describe. Generous for any real
-#: building - a 200-storey tower with 500 walls a floor fits - and small enough
-#: that a malformed or hostile POST cannot ask one request to write a million
-#: rows. Checked before anything is saved, so hitting one costs no work.
+#: Ceilings on how much one document may describe.
+#: Generous for any real building - a 200-storey tower with 500 walls a floor fits - and small
+#: enough that a malformed or hostile POST cannot ask one request to write a million rows.
 _MAX_FLOORS = 250
 _MAX_WALLS_PER_FLOOR = 2_000
 _MAX_OPENINGS_PER_WALL = 100
@@ -292,10 +269,7 @@ _MAX_MARKERS_PER_FLOOR = 2_000
 
 def _text_in(raw, field: str, limit: int) -> str:
     """Coerce a payload value to text this column can actually hold.
-
-    Django does not enforce ``max_length`` on save, so an over-long string is
-    not caught until Postgres refuses it - as a ``DataError``, which reaches the
-    client as a 500 with nothing in it that says which field was wrong.
+    Django does not enforce ``max_length`` on save, so an over-long string is not caught until Postgres refuses it - as a ``DataError``, which reaches the client as a 500 with nothing in it that says which field was wrong.
 
     Args:
         raw: The payload value.
@@ -306,8 +280,7 @@ def _text_in(raw, field: str, limit: int) -> str:
         The text, unchanged.
 
     Raises:
-        ValueError: If it is longer than the column allows.
-    """
+        ValueError: If it is longer than the column allows."""
     text = "" if raw is None else str(raw)
     if len(text) > limit:
         raise FloorplanValidationError(f"{field} must be {limit} characters or fewer (got {len(text)})")
@@ -316,42 +289,26 @@ def _text_in(raw, field: str, limit: int) -> str:
 
 class StaleDocumentError(ValueError):
     """A save built on a version of the plan that has since been replaced.
-
-    Separate from the other ValueErrors this module raises because it is not a
-    malformed request: the document is perfectly valid, it is just no longer
-    current. The caller answers it with 409 rather than 400, and the editor
-    treats it as "somebody else got there first" rather than "you sent
-    nonsense".
-    """
+    Separate from the other ValueErrors this module raises because it is not a malformed request: the document is perfectly valid, it is just no longer current."""
 
 
 def _reject_stale(floorplan: Floorplan, document: dict[str, Any]) -> None:
     """Refuse a save whose base version is no longer the current one.
-
-    A whole-document save deletes by omission, so two tabs editing one plan do
-    not merge - the second one to save silently discards everything the first
-    did. Nothing detected that, because nothing recorded which version a
-    document was read at.
-
-    A document with no token at all is let through: it is a save from a client
-    that predates this, or a deliberate fork (which carries no uuid either), and
-    breaking those to catch a rarer problem is the wrong trade.
+    A whole-document save deletes by omission, so two tabs editing one plan do not merge - the second one to save silently discards everything the first did.
 
     Args:
         floorplan: The row about to be written.
         document: The incoming payload.
 
     Raises:
-        StaleDocumentError: If the token names a different version than the row is at.
-    """
+        StaleDocumentError: If the token names a different version than the row is at."""
     token = str(document.get("version_token") or "")
     if not token or floorplan.pk is None or floorplan.updated is None:
         return
-    # The token describes the row the document was *read* from. Writing that
-    # document into a different row is a copy, not an update - publish_to_wiki
-    # does exactly this, and so does every deliberate fork - and the token says
-    # nothing about the row being written. Only a same-row save can lose an
-    # update, so only a same-row save is checked.
+    # The token describes the row the document was *read* from.
+    # Writing that document into a different row is a copy, not an update - publish_to_wiki does
+    # exactly this, and so does every deliberate fork - and the token says nothing about the row
+    # being written.
     if str(document.get("uuid") or "") != str(floorplan.uuid):
         return
     current = floorplan.updated.isoformat()
@@ -517,25 +474,12 @@ _TWIN_FIELDS = ("name", "name_is_user_provided", "pin_type", "pin_type_is_user_p
 
 def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan: Floorplan) -> None:
     """Create, move, or restyle a marker's detail-pin twin to match it.
-
-    A marker only ever gets one on a personal, pin-owned floorplan - the
-    wiki-published copy (see :func:`services.floorplans.resolution.publish_to_wiki`)
-    has no owning pin to parent a detail pin under, and its own markers stay
-    unlinked rather than reaching across to another profile's private pin.
-
-    Coordinates come from the payload's ``lat``/``lng`` (computed client-side
-    from the marker's plan-local x/y via ``PlanProjection.toWorld`` - this
-    module only knows plan-local metres, and duplicating that projection
-    server-side would be a second implementation to keep in step with the
-    first). Silently no-ops without them rather than raising: an older
-    client, or a marker placed before this existed, should not block saving
-    the rest of the document over a twin it doesn't know how to grow yet.
+    A marker only ever gets one on a personal, pin-owned floorplan - the wiki-published copy (see :func:`services.floorplans.resolution.publish_to_wiki`) has no owning pin to parent a detail pin under, and its own markers stay unlinked rather than reaching across to another profile's private pin.
 
     Args:
         marker: The marker to link, already saved (has a pk).
         payload: This marker's document payload.
-        floorplan: The plan version being saved.
-    """
+        floorplan: The plan version being saved."""
     parent_pin = floorplan.pin
     if parent_pin is None:
         return
@@ -547,10 +491,9 @@ def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan
     if lat is None or lng is None:
         return
 
-    # get_exact_or_create, not resolve_child_pin_location: stacked floors
-    # legitimately share a ground-plane point (a stairwell sits at the same
-    # lat/lng on every storey it passes through), and that helper's "no two
-    # of one profile's pins at the exact same point" rule exists for the
+    # get_exact_or_create, not resolve_child_pin_location: stacked floors legitimately share a
+    # ground-plane point (a stairwell sits at the same lat/lng on every storey it passes through),
+    # and that helper's "no two of one profile's pins at the exact same point" rule exists for the
     # manual detail-pin dialog, not for this.
     location, _created = Location.objects.get_exact_or_create(lat, lng)
 
@@ -558,10 +501,10 @@ def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan
     creating = linked is None
     if linked is None:
         linked = Pin(parent_pin=parent_pin, profile=parent_pin.profile)
-    # Every field this function writes, read before it writes them. A Pin save is
-    # not a row write: it runs the whole Pin signal chain, and the editor saves on
-    # a debounce after every edit, so a plan with markers ran that chain per marker
-    # per keystroke-batch whether or not anything about the twin had changed.
+    # Every field this function writes, read before it writes them.
+    # A Pin save is not a row write: it runs the whole Pin signal chain, and the editor saves on a
+    # debounce after every edit, so a plan with markers ran that chain per marker per
+    # keystroke-batch whether or not anything about the twin had changed.
     before = None if creating else [getattr(linked, name) for name in _TWIN_FIELDS]
     linked.name = marker.name or None
     # Not an explicit rename any more than DetailPinPanelView's own creation
@@ -571,14 +514,10 @@ def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan
     linked.pin_type = _MARKER_KIND_TO_PIN_TYPE.get(marker.kind, "other")
     linked.pin_type_is_user_provided = True
     linked.location = location
-    # Appearance is stored on the pin, never on the marker: the document reads
-    # it back through linked.effective_icon/effective_color (see _marker_dict),
-    # so a second copy on FloorplanMarker would be a second answer to the same
-    # question. Only the write half was missing, which is why anything set in
-    # the floorplan editor vanished on save.
-    #
-    # Blank means "no override", so the kind's own default returns - that is
-    # how a marker is un-styled, and it has to be distinguishable from absent.
+    # Appearance is stored on the pin, never on the marker: the document reads it back through
+    # linked.effective_icon/effective_color (see _marker_dict), so a second copy on FloorplanMarker
+    # would be a second answer to the same question.
+    # Only the write half was missing, which is why anything set in the floorplan editor vanished on
     if "icon" in payload:
         linked.icon = (payload.get("icon") or "").strip() or None
     if "color" in payload:
@@ -592,12 +531,7 @@ def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan
 
 def _sync_markers(existing_by_uuid: dict, payloads: list[dict] | None, floor: FloorplanFloor, pools: _Pools, profile: Profile | None, floorplan: Floorplan) -> None:
     """Reconcile one floor's markers, keeping each one's detail-pin twin in step.
-
-    A hand-rolled counterpart to :func:`_sync` rather than a parameter added
-    to it: markers are the only floorplan item with a twin elsewhere on the
-    site, and threading that through the generic helper would make every
-    other caller (walls, openings, locks, rooms) carry a no-op it never uses.
-    """
+    A hand-rolled counterpart to :func:`_sync` rather than a parameter added to it: markers are the only floorplan item with a twin elsewhere on the site, and threading that through the generic helper would make every other caller (walls, openings, locks, rooms) carry a no-op it never uses."""
     from urbanlens.dashboard.models.floorplans.model import FloorplanMarker, FloorplanMarkerKind
 
     for index, payload in enumerate(payloads or []):
@@ -691,16 +625,10 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
     pools = _Pools(floorplan)
     pools.sync(document)
 
-    # Before anything is written, which the placement is load-bearing for.
-    # _apply_item below saves the floorplan row, and `updated` is auto_now - so
-    # a staleness check made after it would be comparing the token against a
-    # timestamp this very request had just moved, and could never match.
-    #
-    # The unique constraint on (floorplan, level) is DEFERRED - it has to be,
-    # since a reorder or a mid-stack renumber necessarily collides part-way
-    # through a save that writes one row at a time - so a genuinely duplicated
-    # level would not surface until the outer commit, as an IntegrityError the
-    # view cannot turn into a useful message. Rejecting it here makes it a 400.
+    # Before anything is written, which the placement is load-bearing for. _apply_item below saves
+    # the floorplan row, and `updated` is auto_now - so a staleness check made after it would be
+    # comparing the token against a timestamp this very request had just moved, and could never
+    # match.
     _reject_stale(floorplan, document)
     _reject_duplicate_levels(document.get("floors"))
     _reject_oversized(document)
@@ -737,19 +665,15 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
         floor.height_meters = _float_in(payload.get("height_meters"), "height_meters")
         return floor
 
-    # Prefetched exactly like document_for() reads it: without this, every
-    # existing wall/opening/lock/room/marker triggers its own query the
-    # moment its parent's .all() is called below, and this whole function
-    # runs on every autosave tick.
+    # Prefetched exactly like document_for() reads it: without this, every existing
+    # wall/opening/lock/room/marker triggers its own query the moment its parent's .all() is called
+    # below, and this whole function runs on every autosave tick.
 
     existing_floors = floorplan.floors.prefetch_related("walls__openings__locks", "rooms", "markers")
 
-    # An opening can change wall - dragging a door round a corner is an
-    # ordinary edit - so openings are matched by uuid across the whole plan
-    # rather than only within the wall they used to sit on. Matched per wall,
-    # a move reads as "deleted from one, unknown to the other": the row is
-    # destroyed and a new one created, so the opening loses its identity and
-    # its locks go with it (FloorplanLock cascades from the opening).
+    # Matched per wall, a move reads as "deleted from one, unknown to the other": the row is
+    # destroyed and a new one created, so the opening loses its identity and its locks go with it
+    # (FloorplanLock cascades from the opening).
     existing_openings: dict[str, FloorplanOpening] = {}
     for existing_floor in existing_floors:
         for existing_wall in existing_floor.walls.all():
@@ -757,12 +681,9 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
                 existing_openings[str(existing_opening.uuid)] = existing_opening
     surviving_openings: set[str] = set()
 
-    # A floor payload that names no uuid means the storey at that level, not a
-    # replacement for it. Matched only by uuid, such a payload built a second
-    # floor and swept the first away as an orphan - taking its walls, openings,
-    # locks and rooms with it by cascade. Levels are unique within a plan
-    # (_reject_duplicate_levels, above), so the level identifies the storey
-    # exactly as well as its uuid does.
+    # A floor payload that names no uuid means the storey at that level, not a replacement for it.
+    # Matched only by uuid, such a payload built a second floor and swept the first away as an
+    # orphan - taking its walls, openings, locks and rooms with it by cascade.
     existing_by_level = {existing_floor.level: existing_floor for existing_floor in existing_floors}
     floor_payloads = document.get("floors")
     if isinstance(floor_payloads, list):
@@ -816,10 +737,9 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
                 opening.sill_meters = _float_in(payload.get("sill_meters"), "sill_meters")
                 return opening
 
-            # Only the rows this wall's payload actually claims, so _sync's
-            # own orphan sweep cannot delete one that has moved to another
-            # wall. What is genuinely gone is collected after every wall has
-            # been seen, below.
+            # Only the rows this wall's payload actually claims, so _sync's own orphan sweep cannot
+            # delete one that has moved to another wall.
+            # What is genuinely gone is collected after every wall has been seen, below.
             opening_payloads = wall_payload.get("openings") or []
             claimed: dict[str, FloorplanOpening] = {}
             if isinstance(opening_payloads, list):
@@ -842,12 +762,10 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
                     lock.state = _choice_in(payload.get("state"), FloorplanLockState.values, "lock state", FloorplanLockState.UNKNOWN)
                     key_attributes = payload.get("key_attributes") or {}
                     if not isinstance(key_attributes, dict):
-                        # Free-form, not shapeless: a list or string here reaches
-                        # the database happily and then breaks every reader that
-                        # expects an object, far from the save that caused it.
-                        # ValueError rather than the TypeError ruff wants, because
-                        # every caller in controllers/floorplans.py turns a
-                        # ValueError from this module into a 400 naming the field.
+                        # Free-form, not shapeless: a list or string here reaches the database
+                        # happily and then breaks every reader that expects an object, far from the
+                        # save that caused it.
+                        # ValueError rather than the TypeError ruff wants, because every caller in
                         raise FloorplanValidationError("key_attributes must be an object")
                     lock.key_attributes = key_attributes
                     return lock
@@ -868,7 +786,6 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
         _sync_markers({str(m.uuid): m for m in floor.markers.all()}, floor_payload.get("markers"), floor, pools, profile, floorplan)
 
     # Deleted last, once every wall has had its say: an opening missing from
-    # the wall it used to be on may simply have moved to another one.
     for opening_uuid, orphan_opening in existing_openings.items():
         if opening_uuid not in surviving_openings:
             orphan_opening.delete()

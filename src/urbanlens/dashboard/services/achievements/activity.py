@@ -40,10 +40,7 @@ def _owner_filter(profile: Profile | int) -> dict[str, Any]:
 
 def record_activity(profile: Profile | int, kind: str, day: datetime.date | None = None) -> bool:
     """Record that *profile* performed *kind* on *day*, advancing their streak.
-
-    Safe to call on every single write - the per-day uniqueness constraint makes
-    repeats within a day a no-op, and only the first call of the day touches the
-    streak counters.
+    Safe to call on every single write - the per-day uniqueness constraint makes repeats within a day a no-op, and only the first call of the day touches the streak counters.
 
     Args:
         profile: Who acted, as a Profile or its PK.
@@ -54,8 +51,7 @@ def record_activity(profile: Profile | int, kind: str, day: datetime.date | None
 
     Returns:
         True when this was the profile's first activity of that kind on that
-        day (so a streak may have changed), False when it was a repeat.
-    """
+        day (so a streak may have changed), False when it was a repeat."""
     from urbanlens.dashboard.models.achievements.model import ProfileActivityDay
 
     if kind not in ActivityKind.values:
@@ -74,9 +70,7 @@ def record_activity(profile: Profile | int, kind: str, day: datetime.date | None
 
 def _advance_streak(profile: Profile | int, kind: str, day: datetime.date) -> ProfileStreak:
     """Move the cached streak for (*profile*, *kind*) forward to include *day*.
-
-    Out-of-order days (a backfill filling in the past) cannot be handled by
-    incrementing, so those fall through to a full rebuild.
+    Out-of-order days (a backfill filling in the past) cannot be handled by incrementing, so those fall through to a full rebuild.
 
     Args:
         profile: Whose streak to advance, as a Profile or its PK.
@@ -84,8 +78,7 @@ def _advance_streak(profile: Profile | int, kind: str, day: datetime.date) -> Pr
         day: The newly recorded day.
 
     Returns:
-        The updated streak row.
-    """
+        The updated streak row."""
     from urbanlens.dashboard.models.achievements.model import ProfileStreak
 
     with transaction.atomic():
@@ -108,16 +101,12 @@ def _advance_streak(profile: Profile | int, kind: str, day: datetime.date) -> Pr
 def rebuild_streak(profile: Profile | int, kind: str) -> ProfileStreak:
     """Recompute a profile's streak for one kind from the raw activity rows.
 
-    Used when days arrive out of order, and available as a repair tool if the
-    cached counters are ever suspected of drifting.
-
     Args:
         profile: Whose streak to rebuild, as a Profile or its PK.
         kind: The activity kind to rebuild.
 
     Returns:
-        The rebuilt streak row.
-    """
+        The rebuilt streak row."""
     from urbanlens.dashboard.models.achievements.model import ProfileActivityDay, ProfileStreak
 
     owner = _owner_filter(profile)

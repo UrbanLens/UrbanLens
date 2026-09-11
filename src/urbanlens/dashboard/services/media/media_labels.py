@@ -1,18 +1,5 @@
 """Replace the media labels on one photo/video/document, by name.
-
-The site's own label UI (``controllers.labels.LabelImageMembershipView``)
-attaches labels one at a time *by id*, from a picker that only ever offers the
-viewer's own ``kind='media'`` labels. An API client has no picker and no ids,
-so it submits names - which means this module, not the caller, has to enforce
-the two invariants the picker enforced implicitly: the labels are media labels,
-and they belong to the submitting profile.
-
-Names are matched case-insensitively against the profile's existing media
-labels before any row is created, mirroring
-``controllers.pin_edit``'s category handling - otherwise every casing variant
-a client sends ("Rooftop", "rooftop") would silently accumulate as a separate
-label.
-"""
+The site's own label UI (``controllers.labels.LabelImageMembershipView``) attaches labels one at a time *by id*, from a picker that only ever offers the viewer's own ``kind='media'`` labels."""
 
 from __future__ import annotations
 
@@ -27,10 +14,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.profile.model import Profile
 
-#: Upper bound on how many media labels one item may carry. Labels exist to
-#: make an item findable in search; past this many they stop discriminating,
-#: and the cap keeps an automated client from turning one photo into a
-#: thousand-row label table.
+#: Upper bound on how many media labels one item may carry.
+#: Labels exist to make an item findable in search; past this many they stop discriminating, and the
+#: cap keeps an automated client from turning one photo into a thousand-row label table.
 MAX_MEDIA_LABELS = 25
 
 #: Matches ``Label.name``'s column width - a longer name would be truncated or
@@ -40,13 +26,7 @@ MAX_MEDIA_LABEL_NAME_LENGTH = 255
 
 class MediaLabelError(ValueError):
     """A media-label submission that cannot be applied.
-
-    The message is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below and author its own user-facing
-    text, rather than relaying the message - that keeps a future raise site
-    here from being able to smuggle unreviewed text into a response just by
-    adding a new ``raise``.
-    """
+    The message is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class TooManyMediaLabelsError(MediaLabelError):
@@ -64,10 +44,6 @@ class MediaLabelNameTooLongError(MediaLabelError):
 def set_media_labels(image: Image, names: Sequence[str], profile: Profile) -> list[Label]:
     """Replace *image*'s media labels with the ones named in *names*.
 
-    This is a replace, not a merge: labels currently on the image that aren't
-    named are detached (the ``Label`` rows themselves survive - they may be on
-    other items). Passing an empty sequence clears the image's labels.
-
     Args:
         image: The photo/video/document whose labels to set.
         names: The label names to apply. Whitespace is stripped and
@@ -83,8 +59,7 @@ def set_media_labels(image: Image, names: Sequence[str], profile: Profile) -> li
         TooManyMediaLabelsError: More than :data:`MAX_MEDIA_LABELS` names were given.
         BlankMediaLabelNameError: One of the names was blank.
         MediaLabelNameTooLongError: One of the names exceeded
-            :data:`MAX_MEDIA_LABEL_NAME_LENGTH`.
-    """
+            :data:`MAX_MEDIA_LABEL_NAME_LENGTH`."""
     if len(names) > MAX_MEDIA_LABELS:
         raise TooManyMediaLabelsError(f"Submission had {len(names)} labels, exceeding the cap of {MAX_MEDIA_LABELS}.")
 
@@ -104,10 +79,9 @@ def set_media_labels(image: Image, names: Sequence[str], profile: Profile) -> li
 
     labels: list[Label] = []
     for name in cleaned:
-        # kind and profile are forced, never taken from the caller: a media
-        # label must not be able to become (or reuse) a tag/category/status
-        # label, which would give it map-icon and filtering effects it is
-        # explicitly not supposed to have.
+        # kind and profile are forced, never taken from the caller: a media label must not be able
+        # to become (or reuse) a tag/category/status label, which would give it map-icon and
+        # filtering effects it is explicitly not supposed to have.
         label = Label.objects.filter(name__iexact=name, kind=KIND_MEDIA, profile=profile).first()
         if label is None:
             label, _created = Label.objects.get_or_create(name=name, kind=KIND_MEDIA, profile=profile)

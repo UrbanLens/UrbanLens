@@ -1,9 +1,4 @@
-"""Server-side proxies for Media-gallery photo sources whose URLs require a private API key.
-
-Never expose the underlying provider URL (and its embedded key) directly to
-the browser - these views fetch the bytes server-side and cache them briefly
-so repeated views/pagination don't re-hit the upstream API.
-"""
+"""Proxies for gallery photo sources requiring a private API key."""
 
 from __future__ import annotations
 

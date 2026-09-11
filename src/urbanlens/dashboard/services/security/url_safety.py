@@ -1,20 +1,5 @@
 """Shared SSRF guard for server-side fetches of a user-supplied url.
-
-Used anywhere the app downloads content from a url a user (not a fixed,
-trusted provider) supplied - each such fetch runs from inside the server's
-own network, so an unvalidated url lets a user direct outbound requests at
-internal services (SSRF), including cloud metadata endpoints.
-
-**Use :func:`fetch_public_url`, not :func:`ensure_public_http_url` followed by
-your own request.** Validating a url and then handing the *url* to ``requests``
-does not work: ``requests`` resolves the hostname again, independently, and an
-attacker serving a short-TTL record can answer with a public address for the
-check and ``127.0.0.1`` for the connection. Re-validating before every redirect
-hop does not help either - it just gives the attacker more attempts per request.
-:func:`fetch_public_url` resolves once and connects to *that address*, so there
-is no second resolution to poison, and it verifies the socket's actual peer
-before any response body is read.
-"""
+Used anywhere the app downloads content from a url a user (not a fixed, trusted provider) supplied - each such fetch runs from inside the server's own network, so an unvalidated url lets a user direct outbound requests at internal services (SSRF), including cloud metadata endpoints."""
 
 from __future__ import annotations
 
@@ -34,11 +19,7 @@ class UnsafeUrlError(ValueError):
     """Raised when a url fails the public-reachability check."""
 
 
-#: RFC 6598 Carrier-Grade-NAT / Shared-Address-Space range. Many cloud providers (AWS NAT
-#: gateways, GCP internal load balancers, some Kubernetes CNI setups) route internal-only
-#: infrastructure through this range, but Python's ipaddress module doesn't classify it as
-#: private/reserved/link-local/loopback, so it previously sailed straight through the checks
-#: below - the only IP-range guard several SSRF-sensitive callers rely on.
+#: RFC 6598 Carrier-Grade-NAT / Shared-Address-Space range.
 _CGNAT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
 
 
@@ -51,10 +32,7 @@ def is_blocked_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -
 
 def resolve_public_http_url(url: str, *, max_length: int = 2048) -> tuple[str, str]:
     """Validate ``url`` and return it alongside the address it resolved to.
-
-    Returning the address is the point: a caller that gets only the url back
-    has no way to connect to the host it was told is safe, because the next
-    resolution is a fresh, unvalidated one.
+    Returning the address is the point: a caller that gets only the url back has no way to connect to the host it was told is safe, because the next resolution is a fresh, unvalidated one.
 
     Args:
         url: The url to validate.
@@ -65,8 +43,7 @@ def resolve_public_http_url(url: str, *, max_length: int = 2048) -> tuple[str, s
         re-resolution of the hostname.
 
     Raises:
-        UnsafeUrlError: On any rejection, with a user-facing message.
-    """
+        UnsafeUrlError: On any rejection, with a user-facing message."""
     url = (url or "").strip()
     if not url or len(url) > max_length:
         raise UnsafeUrlError("That link isn't usable.")
@@ -103,12 +80,7 @@ def resolve_public_http_url(url: str, *, max_length: int = 2048) -> tuple[str, s
 
 def ensure_public_http_url(url: str, *, max_length: int = 2048) -> str:
     """Validate ``url`` is http(s) and doesn't currently resolve to an internal host.
-
-    Prefer :func:`fetch_public_url` for anything that actually connects. This
-    remains for *submission-time* validation, where the point is to reject an
-    obviously-internal link at the moment a user pastes it rather than to
-    protect a fetch: the value it returns is only a url, so a caller that
-    passes it to ``requests`` re-resolves and reopens the rebind window.
+    This remains for *submission-time* validation, where the point is to reject an obviously-internal link at the moment a user pastes it rather than to protect a fetch: the value it returns is only a url, so a caller that passes it to ``requests`` re-resolves and reopens the rebind window.
 
     Args:
         url: The url to validate.
@@ -118,8 +90,7 @@ def ensure_public_http_url(url: str, *, max_length: int = 2048) -> str:
         The validated url, unchanged.
 
     Raises:
-        UnsafeUrlError: On any rejection, with a user-facing message.
-    """
+        UnsafeUrlError: On any rejection, with a user-facing message."""
     return resolve_public_http_url(url, max_length=max_length)[0]
 
 
@@ -133,14 +104,7 @@ _real_getaddrinfo = socket.getaddrinfo
 
 def _pinned_getaddrinfo(host, port, *args, **kwargs):
     """``socket.getaddrinfo`` that answers from the active pin when one exists.
-
-    Installed once, process-wide, but gated on a thread-local: with no pin set
-    it delegates straight to the real resolver, so ordinary DNS is untouched.
-    This is what removes the second resolution - ``requests``/``urllib3`` ask
-    for the hostname as usual and get back the address we already validated,
-    so the hostname stays in the URL and TLS SNI and certificate verification
-    behave exactly as they normally would.
-    """
+    Installed once, process-wide, but gated on a thread-local: with no pin set it delegates straight to the real resolver, so ordinary DNS is untouched."""
     pins = getattr(_PINS, "map", None)
     if pins and host in pins:
         ip = pins[host]
@@ -150,24 +114,18 @@ def _pinned_getaddrinfo(host, port, *args, **kwargs):
     return _real_getaddrinfo(host, port, *args, **kwargs)
 
 
-# Installed by assignment at import, which makes ordering matter: anything that
-# reassigns socket.getaddrinfo *after* this module is imported replaces the
-# wrapper and the pin stops applying, silently. The live case is gevent -
-# gunicorn runs `-k gevent` and monkey-patches the socket module in the worker.
-# Today that is safe because gunicorn's default preload_app=False imports the
-# app after patching, so this wrapper lands on top of gevent's resolver; setting
-# preload_app=True would invert that. This is why _peer_address below is a real
-# check and not decoration: it is what still refuses the response when the pin
-# is not in effect.
+# Installed by assignment at import, which makes ordering matter: anything that reassigns
+# socket.getaddrinfo *after* this module is imported replaces the wrapper and the pin stops
+# applying, silently.
+# The live case is gevent - gunicorn runs `-k gevent` and monkey-patches the socket module in the
 if socket.getaddrinfo is not _pinned_getaddrinfo:  # pragma: no branch - idempotent install
     socket.getaddrinfo = _pinned_getaddrinfo
 
 
-#: Where the live socket hangs off a streamed ``requests`` response, most
-#: current first. These are private attributes, so they move between urllib3
-#: releases - ``_connection.sock`` is the documented-looking one and is
-#: ``None`` on urllib3 2.x for both http and https, which is why more than one
-#: is tried and why a test asserts against a real socket rather than a double.
+#: Where the live socket hangs off a streamed ``requests`` response, most current first.
+#: These are private attributes, so they move between urllib3 releases - ``_connection.sock`` is the
+#: documented-looking one and is ``None`` on urllib3 2.x for both http and https, which is why more
+#: than one is tried and why a test asserts against a real socket rather than a double.
 _SOCKET_PATHS = (
     ("_fp", "fp", "raw", "_sock"),
     ("_connection", "sock"),
@@ -176,18 +134,7 @@ _SOCKET_PATHS = (
 
 def _peer_address(response: requests.Response) -> str | None:
     """The IP the response's socket is actually connected to, if determinable.
-
-    Used as a backstop: if the pin above ever fails to take effect (a urllib3
-    internal change, a proxy, a caller that bypassed us, a monkey-patch that
-    replaced the resolver after import), this still catches a connection to
-    somewhere we did not validate - before any body is read.
-
-    Every step is optional-by-construction, and the result is returned only if
-    it actually parses as an IP address. A response that exposes no socket (a
-    cached response, a non-``requests`` adapter, a test double) yields ``None``
-    - "peer unknown", which leaves the pin as the control - rather than an
-    ``AttributeError`` mid-fetch or a junk string that fails the comparison.
-    """
+    Every step is optional-by-construction, and the result is returned only if it actually parses as an IP address."""
     raw = getattr(response, "raw", None)
     if raw is None:
         return None
@@ -217,12 +164,7 @@ def fetch_public_url(
     session: requests.Session | None = None,
 ) -> requests.Response:
     """Fetch ``url`` with SSRF protection that survives a DNS rebind.
-
-    Each hop is resolved and validated once, then connected to at *that*
-    address - there is no second resolution for an attacker to answer
-    differently. Redirects are followed manually so every hop gets the same
-    treatment. The peer address is verified after connecting, so a pin that
-    silently failed to apply fails the fetch rather than the check.
+    Redirects are followed manually so every hop gets the same treatment.
 
     Args:
         url: The url to fetch.
@@ -243,8 +185,7 @@ def fetch_public_url(
         UnsafeUrlError: A hop failed validation, a redirect had no target, the
             connection landed on an address that was not the validated one, or
             the chain exceeded ``max_redirects``.
-        requests.RequestException: The underlying request failed.
-    """
+        requests.RequestException: The underlying request failed."""
     import requests as _requests
 
     get = _requests.get if session is None else session.get

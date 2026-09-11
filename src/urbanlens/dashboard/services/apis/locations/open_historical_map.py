@@ -1,21 +1,5 @@
 """OpenHistoricalMap gateway: dated vector features via the public OHM Overpass API.
-
-This is a deliberate stopgap ahead of REData's own future temporal-imagery
-endpoint (not built yet) - once that ships, this gateway and the plugin/panel/
-controller wiring built on it exist to be retired, the same way this project's
-direct NASA GIBS/Mapbox/Bing/etc. satellite integrations were already replaced
-by ``RedataSatelliteProvider`` (see ``plugins.builtin.satellite_imagery``'s
-module docstring). It is a direct integration only because there is nothing
-yet on REData's side to swap it for.
-
-https://overpass-api.openhistoricalmap.org/ is OpenHistoricalMap's own fork of
-the Overpass API, queryable over OSM's ``start_date``/``end_date`` tagging
-scheme extended into OHM's dataset of features that existed (or stopped
-existing) at a given time. Free and keyless, but the volunteer-run instance
-documents a hard cap of 2 concurrent request slots and a history of being
-overwhelmed by careless callers - see ``OpenHistoricalMapPlugin`` for how
-conservatively this integration throttles itself as a result.
-"""
+It is a direct integration only because there is nothing yet on REData's side to swap it for."""
 
 from __future__ import annotations
 
@@ -31,22 +15,17 @@ logger = logging.getLogger(__name__)
 
 _OVERPASS_URL = "https://overpass-api.openhistoricalmap.org/api/interpreter"
 
-#: Plausible calendar-year bound shared by every OHM query in this module -
-#: rejects garbage before it reaches Overpass or a caller. Deliberately loose;
-#: OHM's own dataset spans a similarly wide range and this is just a
+#: Plausible calendar-year bound shared by every OHM query in this module - rejects garbage before
+#: it reaches Overpass or a caller.
+#: Deliberately loose; OHM's own dataset spans a similarly wide range and this is just a
 #: plausibility check, not a real historical-coverage bound (that's what
-#: :meth:`OpenHistoricalMapGateway.get_coverage` answers). The single source of
-#: truth for both ends of this: :func:`get_coverage` filters its extracted
-#: years to this range too, so a stray/garbage-tagged year never lands in a
-#: slider's range only to 404 the moment someone picks it.
 MIN_YEAR = 1000
 MAX_YEAR = 2100
 
-#: Matches the leading 1-4 digit year (optionally negative, for BCE dates) at
-#: the start of an OHM ``start_date``/``end_date`` value. Real-world values are
-#: messy (e.g. an EDTF-flavored "1849~" living in the plain, non-``:edtf``
-#: key) - this only needs the leading year, so it matches and ignores whatever
-#: trails it rather than requiring a strict ``YYYY``/``YYYY-MM``/``YYYY-MM-DD``.
+#: Matches the leading 1-4 digit year (optionally negative, for BCE dates) at the start of an OHM
+#: ``start_date``/``end_date`` value.
+#: Real-world values are messy (e.g. an EDTF-flavored "1849~" living in the plain, non-``:edtf``
+#: key) - this only needs the leading year, so it matches and ignores whatever trails it rather than
 _YEAR_RE = re.compile(r"^-?\d{1,4}")
 
 
@@ -131,12 +110,7 @@ def _element_to_feature(element: dict[str, Any]) -> dict[str, Any] | None:
 
 class OpenHistoricalMapUnavailableError(Exception):
     """Raised when an OHM Overpass request fails outright.
-
-    Reserved for network/timeout/malformed-response failure - never for a
-    query that reached OHM and simply found nothing nearby, which is a normal
-    empty result (``OhmCoverage(available=False, years=[])``, or an empty
-    FeatureCollection), not an error.
-    """
+    Reserved for network/timeout/malformed-response failure - never for a query that reached OHM and simply found nothing nearby, which is a normal empty result (``OhmCoverage(available=False, years=[])``, or an empty FeatureCollection), not an error."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,25 +138,21 @@ class OpenHistoricalMapGateway(Gateway):
 
     def get_coverage(self, latitude: float, longitude: float, *, radius_meters: float = 300) -> OhmCoverage:
         """Check whether OHM has any dated features near a point, and for which years.
-
-        Requests tags only (``out tags``, no geometry) - this only needs to
-        answer "does dated data exist nearby" and "what years", so there's no
-        reason to pay for the geometry payload.
+        Requests tags only (``out tags``, no geometry) - this only needs to answer "does dated data exist nearby" and "what years", so there's no reason to pay for the geometry payload.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            radius_meters: Search radius around the point.
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
+                radius_meters: Search radius around the point.
 
         Returns:
-            The coverage summary. ``available=False``/``years=[]`` is a valid,
-            normal answer meaning "queried fine, nothing dated found here" -
-            distinct from raising, which means the query itself failed.
+                The coverage summary. ``available=False``/``years=[]`` is a valid,
+                normal answer meaning "queried fine, nothing dated found here" -
+                distinct from raising, which means the query itself failed.
 
         Raises:
-            OpenHistoricalMapUnavailableError: The request failed outright
-                (network/timeout/malformed response).
-        """
+                OpenHistoricalMapUnavailableError: The request failed outright
+                (network/timeout/malformed response)."""
         query = f'[out:json][timeout:15];\n(\n  nwr(around:{radius_meters},{latitude},{longitude})["start_date"];\n  nwr(around:{radius_meters},{latitude},{longitude})["end_date"];\n);\nout tags;'
         payload = self._query(query)
         elements = payload.get("elements")
@@ -204,30 +174,27 @@ class OpenHistoricalMapGateway(Gateway):
 
     def get_features_at(self, latitude: float, longitude: float, year: int, *, radius_meters: float = 300) -> dict[str, Any]:
         """Fetch OHM features that existed at ``year``, as a GeoJSON FeatureCollection.
-
-        Requests full inline geometry (``out geom``) so ways come back without
-        a separate node-resolution pass.
+        Requests full inline geometry (``out geom``) so ways come back without a separate node-resolution pass.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            year: The calendar year to query for (a feature "existed" at
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
+                year: The calendar year to query for (a feature "existed" at
                 ``year`` when its ``start_date`` is on or before it and, if
                 present, its ``end_date`` is on or after it).
-            radius_meters: Search radius around the point.
+                radius_meters: Search radius around the point.
 
         Returns:
-            ``{"type": "FeatureCollection", "features": [...]}``. Relations
-            are omitted (see :func:`_element_to_feature`); an element with
-            missing/malformed geometry or tags is skipped rather than
-            dropping the whole response.
+                ``{"type": "FeatureCollection", "features": [...]}``. Relations
+                are omitted (see :func:`_element_to_feature`); an element with
+                missing/malformed geometry or tags is skipped rather than
+                dropping the whole response.
 
         Raises:
-            ValueError: ``year`` is outside the plausible :data:`MIN_YEAR`-
+                ValueError: ``year`` is outside the plausible :data:`MIN_YEAR`-
                 :data:`MAX_YEAR` range.
-            OpenHistoricalMapUnavailableError: The request failed outright
-                (network/timeout/malformed response).
-        """
+                OpenHistoricalMapUnavailableError: The request failed outright
+                (network/timeout/malformed response)."""
         if not MIN_YEAR <= year <= MAX_YEAR:
             raise ValueError(f"year must be between {MIN_YEAR} and {MAX_YEAR}, got {year}")
 
@@ -260,21 +227,20 @@ class OpenHistoricalMapGateway(Gateway):
         """POST one Overpass QL query and return its decoded JSON body.
 
         Args:
-            query: A complete Overpass QL query string.
+                query: A complete Overpass QL query string.
 
         Returns:
-            The decoded JSON response body.
+                The decoded JSON response body.
 
         Raises:
-            OpenHistoricalMapUnavailableError: Connection/timeout failure, a
+                OpenHistoricalMapUnavailableError: Connection/timeout failure, a
                 non-200 response, an unparseable/malformed body, or this
                 service's own rate limit/disablement being hit
                 (``RequestCancelledError`` and its ``RateLimitExceededError``/
                 ``ServiceDisabledError`` subclasses - a real, expected outcome
                 here since OHM's global budget is shared across every viewer's
                 on-demand requests plus the background coverage panel, not
-                just a defensive catch-all).
-        """
+                just a defensive catch-all)."""
         try:
             response = self.session.post(_OVERPASS_URL, data={"data": query}, timeout=20)
         except OSError as exc:

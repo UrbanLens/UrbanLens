@@ -1,27 +1,5 @@
 """Suggest and apply hierarchy fixes for a pin that covers a whole property.
-
-Two problems share one answer. A campus pinned once has a hundred unmodelled
-buildings under it; and a user who pinned those buildings *before* child pins
-existed has a hundred top-level pins scattered across their map that all
-belong under one property. Both are "this pin's hierarchy doesn't match the
-ground", both are detectable from the same parcel data, and both are tedious
-to fix by hand - so they are offered together, once, as a single suggestion
-(see ``controllers.pin_restructure``).
-
-Nothing here ever acts on its own: every function is either a read
-("what *would* change?") or an explicit apply the owner asked for. The
-suggestion is gated three ways - the owner's ``Profile.suggest_pin_restructure``
-setting, a permanent per-pin ``Pin.restructure_offer_dismissed``, and simply
-having nothing to suggest.
-
-Matching an existing marker to a building prefers the building's own footprint
-polygon over a proximity radius: on a dense campus, "within 15 m of the
-centroid" both misses a pin at the far end of a long hall and wrongly claims
-one standing on the neighbouring building. REData publishes real footprints for
-most buildings it knows (``geometry``, standard GeoJSON), so containment is
-used whenever one is available and the radius is only the fallback for sources
-that publish a bare centroid.
-"""
+Both are "this pin's hierarchy doesn't match the ground", both are detectable from the same parcel data, and both are tedious to fix by hand - so they are offered together, once, as a single suggestion (see ``controllers.pin_restructure``)."""
 
 from __future__ import annotations
 
@@ -50,11 +28,10 @@ logger = logging.getLogger(__name__)
 #: backstop against a provider returning something pathological.
 MAX_RESTRUCTURE_ITEMS = 500
 
-#: Default icon/background styling for auto-created building pins. The generic
-#: per-type default (a mid-grey building icon, no background) reads poorly
-#: against satellite imagery; these give every imported building marker a
-#: legible black icon on a faint white disc without the owner having to style
-#: a hundred pins by hand. Owners can still override per pin as usual.
+#: Default icon/background styling for auto-created building pins.
+#: The generic per-type default (a mid-grey building icon, no background) reads poorly against
+#: satellite imagery; these give every imported building marker a legible black icon on a faint
+#: white disc without the owner having to style a hundred pins by hand.
 BUILDING_PIN_ICON_COLOR = "#000000"
 BUILDING_PIN_BG_COLOR = "#ffffff"
 BUILDING_PIN_BG_OPACITY = 35
@@ -100,20 +77,12 @@ def _marker_point(marker) -> Point | None:
 def marker_covers_building(building: dict[str, Any], marker) -> bool:
     """Whether an existing marker already stands for this building.
 
-    Prefers the building's real footprint: a marker anywhere inside it counts,
-    however far from the centroid, and a marker just outside it does not -
-    which is exactly the distinction a fixed radius gets wrong on a campus of
-    long halls and tightly packed outbuildings. Falls back to
-    ``site_scope.BUILDING_MATCH_METERS`` from the centroid for sources that
-    publish no footprint.
-
     Args:
         building: A cached building record.
         marker: A child pin or child wiki.
 
     Returns:
-        True when this building is already covered by that marker.
-    """
+        True when this building is already covered by that marker."""
     point = _marker_point(marker)
     if point is None:
         return False
@@ -202,17 +171,11 @@ class RestructurePlan:
 def property_polygon(pin: Pin) -> GEOSGeometry | None:
     """The pin's real property boundary, or None when only the fallback circle exists.
 
-    ``Boundary.effective_polygon_for_pin`` synthesizes a 50 m circle for any
-    location with no known parcel, which must never drive a nesting
-    suggestion - every pin within a city block of a house would look like it
-    belongs to it.
-
     Args:
         pin: The pin whose property boundary to resolve.
 
     Returns:
-        A real (drawn, community, or provider-generated) property polygon, or None.
-    """
+        A real (drawn, community, or provider-generated) property polygon, or None."""
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
     polygon, source = Boundary.objects.resolve_for_pin(pin, BoundaryType.PROPERTY)
@@ -222,18 +185,13 @@ def property_polygon(pin: Pin) -> GEOSGeometry | None:
 def nestable_root_pins(pin: Pin) -> list[Pin]:
     """The owner's other top-level pins standing inside this pin's property.
 
-    These are almost always pins made before child pins existed (or imported
-    in bulk) that describe buildings on a property the owner has since pinned
-    as a whole.
-
     Args:
         pin: The prospective parent pin.
 
     Returns:
         Top-level pins of the same profile whose coordinates fall inside the
         property boundary, excluding this pin and anything that would form a
-        cycle. Empty when the property has no real boundary.
-    """
+        cycle. Empty when the property has no real boundary."""
     if pin.pk is None:
         return []
     polygon = property_polygon(pin)
@@ -252,35 +210,26 @@ def nestable_root_pins(pin: Pin) -> list[Pin]:
 
 def plan_for(pin: Pin) -> RestructurePlan:
     """What this pin's restructure suggestion would change.
-
-    A read-only survey: it consults only already-cached parcel data and the
-    owner's own pins, and never contacts an external service.
+    A read-only survey: it consults only already-cached parcel data and the owner's own pins, and never contacts an external service.
 
     Args:
         pin: The pin being viewed.
 
     Returns:
-        The plan; check ``is_empty`` before offering anything.
-    """
+        The plan; check ``is_empty`` before offering anything."""
     return RestructurePlan(buildings=missing_buildings(pin), nestable=nestable_root_pins(pin))
 
 
 def already_pinned_points(pin: Pin, buildings: list[dict[str, Any]]) -> set[tuple[Any, Any]]:
     """Which of ``buildings``' centroids this profile already has a pin on.
-
-    Mirrors the rule ``pin_creation.resolve_child_pin_location`` enforces: a
-    profile may not hold two pins at one exact point, counting *every* pin it
-    owns rather than only this parcel's children. Compared at the precision
-    ``Location`` stores, via the same quantizer the exact-match lookup uses, so
-    this agrees with what the create path will actually find.
+    Mirrors the rule ``pin_creation.resolve_child_pin_location`` enforces: a profile may not hold two pins at one exact point, counting *every* pin it owns rather than only this parcel's children.
 
     Args:
         pin: The parent pin, for whose profile the check runs.
         buildings: Building records to test.
 
     Returns:
-        The quantized ``(latitude, longitude)`` pairs that are already taken.
-    """
+        The quantized ``(latitude, longitude)`` pairs that are already taken."""
     from urbanlens.dashboard.models.location.queryset import quantize_coordinate
 
     wanted: set[tuple[Any, Any]] = set()
@@ -305,28 +254,13 @@ def already_pinned_points(pin: Pin, buildings: list[dict[str, Any]]) -> set[tupl
 
 def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
     """Buildings on this pin's parcel that no pin of the owner's covers yet.
-
-    Returns nothing for a single-building place: one structure on its own lot
-    *is* the pin, and offering to nest a lone child under it would be noise.
-    See ``site_scope.MULTI_BUILDING_THRESHOLD``.
-
-    Buildings standing on a point the owner has *already* pinned are excluded
-    even when that pin is not one of this parcel's children. Only children were
-    consulted before, so a top-level pin sitting on a building - exactly the
-    kind ``nestable_root_pins`` exists to re-home - left that building counted
-    as unpinned forever: the dialog offered it, ``create_building_pins`` asked
-    for its point, ``resolve_child_pin_location`` refused (a profile may not
-    hold two pins at one point), the building was skipped, and the count came
-    back unchanged. Excluding it here is what makes the offer describe work the
-    import can actually do; the nesting half of the suggestion is what resolves
-    such a pin, by adopting it rather than duplicating it.
+    Only children were consulted before, so a top-level pin sitting on a building - exactly the kind ``nestable_root_pins`` exists to re-home - left that building counted as unpinned forever: the dialog offered it, ``create_building_pins`` asked for its point, ``resolve_child_pin_location`` refused (a profile may not hold two pins at one point), the building was skipped, and the count came back unchanged.
 
     Args:
         pin: The parent pin.
 
     Returns:
-        Uncovered building records, or ``[]``.
-    """
+        Uncovered building records, or ``[]``."""
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
 
     cached = site_scope.parcel_buildings(pin.location) or []
@@ -340,16 +274,7 @@ def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
 
 def importable_building_indexes(pin: Pin, cached: list[dict[str, Any]], children: list, boundary: GEOSGeometry | None) -> frozenset[int]:
     """Which of this parcel's buildings the import could actually create a pin for.
-
-    The rule behind :func:`missing_buildings`, expressed as *positions in*
-    ``buildings_on_property(cached)`` rather than as records. Publishing
-    positions is what lets a surface that has already rendered its rows label
-    them without recomputing a second, drifting rule - which is exactly how the
-    mobile panel's ``unpinned_count`` came to disagree with the web button's,
-    advertising buildings the import would silently skip.
-
-    Positional rather than keyed on the record: two entries can be duplicates of
-    one another, and a hash-based correlation would fold them together.
+    The rule behind :func:`missing_buildings`, expressed as *positions in* ``buildings_on_property(cached)`` rather than as records.
 
     Args:
         pin: The parent pin.
@@ -358,33 +283,27 @@ def importable_building_indexes(pin: Pin, cached: list[dict[str, Any]], children
         boundary: The property's real (non-circle) boundary, or None.
 
     Returns:
-        Positions in ``buildings_on_property(cached)``, possibly empty.
-    """
+        Positions in ``buildings_on_property(cached)``, possibly empty."""
     from urbanlens.dashboard.models.location.queryset import quantize_coordinate
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_within_boundary, buildings_on_property, countable_buildings
 
-    # The panel filters the same way; an unfiltered dialog would offer to
-    # create a child pin per building in a county-scale sensitivity zone.
-    #
-    # Gate on distinct buildings, offer every real one: a building that contains
-    # others is still a building, and nesting a pin under it is the point.
+    # The panel filters the same way; an unfiltered dialog would offer to create a child pin per
+    # building in a county-scale sensitivity zone.
+    # Gate on distinct buildings, offer every real one: a building that contains others is still a
+    # building, and nesting a pin under it is the point.
     if len(countable_buildings(cached)) < site_scope.MULTI_BUILDING_THRESHOLD:
         return frozenset()
 
-    # is_on_property is the provider's own opinion, not ours - it isn't
-    # guaranteed to agree with our own parcel boundary (see
-    # building_within_boundary). Suggesting a building outside it is worse
-    # than useless: the owner would have to place it by hand anyway, in
-    # roughly the wrong spot, undoing whatever pressing the button did. This
-    # only gates the *suggestion* - a building already pinned by hand keeps
-    # showing on the property panel regardless of where the parcel data says
-    # it sits (building_rows applies the same check the same way).
+    # is_on_property is the provider's own opinion, not ours - it isn't guaranteed to agree with our
+    # own parcel boundary (see building_within_boundary).
+    # Suggesting a building outside it is worse than useless: the owner would have to place it by
+    # hand anyway, in roughly the wrong spot, undoing whatever pressing the button did.
     candidates = [(index, building) for index, building in enumerate(buildings_on_property(cached)) if boundary is None or building_within_boundary(building, boundary)]
 
-    # The body of unmatched_buildings, carrying positions. Kept in step with it
-    # deliberately rather than calling it: one marker may cover at most one
-    # building, so the answer depends on iteration order and cannot be
-    # reconstructed by matching the returned records back up afterwards.
+    # The body of unmatched_buildings, carrying positions.
+    # Kept in step with it deliberately rather than calling it: one marker may cover at most one
+    # building, so the answer depends on iteration order and cannot be reconstructed by matching the
+    # returned records back up afterwards.
     available = list(children)
     missing: list[tuple[int, dict[str, Any]]] = []
     for index, building in candidates:
@@ -404,16 +323,13 @@ def importable_building_indexes(pin: Pin, cached: list[dict[str, Any]], children
 
 def should_offer(pin: Pin) -> bool:
     """Whether this pin may show a restructure suggestion at all.
-
-    Checks only the cheap gates (settings, dismissal, hierarchy position), not
-    whether there is anything to suggest - see :func:`plan_for` for that.
+    Checks only the cheap gates (settings, dismissal, hierarchy position), not whether there is anything to suggest - see :func:`plan_for` for that.
 
     Args:
         pin: The pin being viewed.
 
     Returns:
-        True when a suggestion would be welcome.
-    """
+        True when a suggestion would be welcome."""
     if pin.restructure_offer_dismissed or pin.parent_pin_id is not None:
         return False
     return bool(pin.profile.suggest_pin_restructure)
@@ -444,12 +360,7 @@ def building_name(building: dict[str, Any]) -> str:
 
 def building_selection_key(building: dict[str, Any]) -> str:
     """Return a stable, opaque key for selecting a cached building record.
-
-    The dialog sends keys rather than coordinates or serialized building data,
-    then the POST recomputes the current missing-building list and accepts only
-    keys still present there. A stale dialog therefore cannot recreate a
-    building that gained a child pin in the meantime.
-    """
+    The dialog sends keys rather than coordinates or serialized building data, then the POST recomputes the current missing-building list and accepts only keys still present there."""
     canonical = json.dumps(building, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode()).hexdigest()[:24]
 
@@ -462,12 +373,7 @@ def select_buildings(buildings: list[dict[str, Any]], selection_keys: list[str])
 
 def _provisionable_buildings(pin: Pin, selected: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Cached parcel buildings safe to materialize as Places.
-
-    The UI imports a filtered subset of the parcel cache, but provisioning is
-    deliberately broader than the selected rows so the property has a complete
-    building tree. That broader set still has to be scoped to the property:
-    REData can include off-property survey-zone records in the same cache.
-    """
+    The UI imports a filtered subset of the parcel cache, but provisioning is deliberately broader than the selected rows so the property has a complete building tree."""
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_within_boundary, buildings_on_property
 
     known = site_scope.parcel_buildings(pin.location) or selected
@@ -480,23 +386,14 @@ def _provisionable_buildings(pin: Pin, selected: list[dict[str, Any]]) -> list[d
 
 def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
     """Create a child pin for each given building, in one transaction.
-
-    Persists each building as its own ``Place`` first, from the footprint this
-    import already holds. That ordering is what makes the rest of the app
-    behave: the child pins then resolve onto their own structures rather than
-    onto the parcel, so each building's page draws its own outline, its wiki
-    gets its own boundary, and the property stops looking like 124 overlapping
-    copies of itself. Turning a property into a multi-building one also
-    re-derives what every marker on it is - including other users' - since
-    that is a fact about the place, not about whoever pressed the button.
+    That ordering is what makes the rest of the app behave: the child pins then resolve onto their own structures rather than onto the parcel, so each building's page draws its own outline, its wiki gets its own boundary, and the property stops looking like 124 overlapping copies of itself.
 
     Args:
         pin: The parent pin.
         buildings: Building records to create pins for.
 
     Returns:
-        How many child pins were created.
-    """
+        How many child pins were created."""
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_tree_order
     from urbanlens.dashboard.services.locations.site_scope import reclassify_markers_on_place
     from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
@@ -509,11 +406,10 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
     place = pin.location.place if (pin.location_id and pin.location.place_id) else None
     parcel = place.parcel if place is not None else None
 
-    # Places are provisioned for *every* building known on the parcel, not just
-    # the ones this user chose to pin. How many buildings stand on a property
-    # is a fact about the property; which of them somebody pinned is a fact
-    # about that person. Conflating the two would make a campus stop reading as
-    # a campus because one user only imported one of its structures.
+    # Places are provisioned for *every* building known on the parcel, not just the ones this user
+    # chose to pin.
+    # How many buildings stand on a property is a fact about the property; which of them somebody
+    # pinned is a fact about that person.
     known = _provisionable_buildings(pin, selected)
     places = provisioning.ensure_building_places(parcel, known, provider="redata")
     place_by_key = {building_selection_key(record): places[index] for index, record in enumerate(known) if index in places}
@@ -531,11 +427,10 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
                 # skip rather than stacking a second marker on it.
                 logger.debug("create_building_pins: skipping building already pinned at its exact point")
                 continue
-            # Attached directly rather than resolved by containment: this
-            # import knows which structure each marker is for, and a building
-            # centroid can legitimately fall outside its own (concave)
-            # footprint. Containment would quietly hand those back to the
-            # parcel, and the marker would describe the whole property again.
+            # Attached directly rather than resolved by containment: this import knows which
+            # structure each marker is for, and a building centroid can legitimately fall outside
+            # its own (concave) footprint.
+            # Containment would quietly hand those back to the parcel, and the marker would describe
             if (building_place := place_by_key.get(building_selection_key(building))) is not None:
                 attach_location(location, building_place)
             # A building inside another building nests under that building's
@@ -548,10 +443,9 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
                 # external name refreshes may still improve it later.
                 name_is_user_provided=False,
                 pin_type=PinType.BUILDING,
-                # Likewise derived: the coordinate came from a building
-                # footprint, so this is exactly the conclusion the classifier
-                # would have reached on its own - no need to queue one task per
-                # building to re-derive it.
+                # Likewise derived: the coordinate came from a building footprint, so this is
+                # exactly the conclusion the classifier would have reached on its own - no need to
+                # queue one task per building to re-derive it.
                 pin_type_is_user_provided=False,
                 parent_pin=parent,
                 profile=pin.profile,
@@ -573,18 +467,14 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
 
 def nest_root_pins(pin: Pin, candidates: list[Pin]) -> int:
     """Re-parent top-level pins under this pin, keeping everything else about them.
-
-    Only the ``parent_pin`` link changes - names, notes, photos, labels, visit
-    history, and the pins' own children all travel with them. Nothing is
-    deleted or merged.
+    Only the ``parent_pin`` link changes - names, notes, photos, labels, visit history, and the pins' own children all travel with them.
 
     Args:
         pin: The new parent.
         candidates: Top-level pins to nest.
 
     Returns:
-        How many pins were nested.
-    """
+        How many pins were nested."""
     nested = 0
     with transaction.atomic():
         for candidate in candidates[:MAX_RESTRUCTURE_ITEMS]:
@@ -600,10 +490,7 @@ def nest_root_pins(pin: Pin, candidates: list[Pin]) -> int:
 
 def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile: Profile) -> int:
     """Mirror imported buildings as child wikis, when the place already has a wiki.
-
-    Never creates a wiki - community pages are only ever created explicitly
-    (see ``services.wiki.wiki_share.WikiShareService``). When one already
-    exists, though, its readers benefit from the same building markers.
+    Never creates a wiki - community pages are only ever created explicitly (see ``services.wiki.wiki_share.WikiShareService``).
 
     Args:
         pin: The parent pin, whose location's wiki is the parent wiki.
@@ -611,8 +498,7 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
         profile: The profile to attribute the resulting WikiEdit to.
 
     Returns:
-        How many child wikis were created.
-    """
+        How many child wikis were created."""
     from urbanlens.dashboard.controllers.detail_pins import ChildWikiLocationError, _location_for_child_wiki
     from urbanlens.dashboard.models.wiki.model import Wiki, Wiki as WikiModel
     from urbanlens.dashboard.models.wiki_edit import WikiEdit
@@ -621,10 +507,10 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
     try:
         wiki = pin.location.wiki
     except ObjectDoesNotExist:
-        # A draft, never an official page: drafts are already auto-created for
-        # every pinned location (tasks.ensure_draft_wiki_for_location) and stay
-        # invisible until somebody claims them, so seeding one here mirrors the
-        # buildings without publishing a community page behind the user's back.
+        # A draft, never an official page: drafts are already auto-created for every pinned location
+        # (tasks.ensure_draft_wiki_for_location) and stay invisible until somebody claims them, so
+        # seeding one here mirrors the buildings without publishing a community page behind the
+        # user's back.
         wiki, _created = WikiModel.objects.get_or_create_for_location(pin.location)
 
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_tree_order
@@ -656,19 +542,17 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
             try:
                 child_location = _location_for_child_wiki(building["latitude"], building["longitude"])
             except ChildWikiLocationError:
-                # Something already has a wiki marker on that exact point -
-                # most often the parent wiki itself, because a parcel's
-                # coordinate is frequently one of its buildings' centroids.
-                # That building is already represented; skipping it is right,
-                # and it must not take the rest of the import down with it.
+                # Something already has a wiki marker on that exact point - most often the parent
+                # wiki itself, because a parcel's coordinate is frequently one of its buildings'
+                # centroids.
+                # That building is already represented; skipping it is right, and it must not take
                 logger.info("mirror_buildings_to_wiki: skipping %s - a wiki marker already occupies its point", building_name(building) or "building")
                 continue
             child = Wiki.objects.create(
-                # created_by deliberately unset: these are mirrored from
-                # building data, not placed by anyone. That is what makes null
-                # mean "automatic" for a detail pin, and so what lets a
-                # concealed viewer keep seeing them - a brand-new wiki carries
-                # its buildings.
+                # created_by deliberately unset: these are mirrored from building data, not placed
+                # by anyone.
+                # That is what makes null mean "automatic" for a detail pin, and so what lets a
+                # concealed viewer keep seeing them - a brand-new wiki carries its buildings.
                 name=building_name(building) or wiki.name,
                 pin_type=PinType.BUILDING,
                 pin_type_is_user_provided=False,

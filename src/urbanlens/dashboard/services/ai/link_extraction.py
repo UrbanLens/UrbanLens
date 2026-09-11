@@ -1,36 +1,4 @@
-"""AI link extraction - read an external page and fill supported pin fields.
-
-A user with the AI subscription feature clicks the sparkle button next to a
-link on their pin's detail page; the page is fetched and handed to the
-configured AI provider with instructions to return a strict JSON object of
-known field keys. The response is parsed deterministically and every value is
-treated as untrusted input:
-
-* Only keys in :data:`EXTRACTABLE_FIELDS` (the allowlist registry) are ever
-  read from the response - unknown keys are silently ignored, and values are
-  never applied via ``setattr`` from AI-controlled names.
-* Each registry entry owns a ``parse`` step (strict type/bounds/charset
-  validation that raises ``ValueError`` on anything suspect) and an ``apply``
-  step (the only code path that writes to the pin's data).
-* Applies are deliberately non-destructive: a field the user already filled in
-  is never overwritten - the proposal is recorded as skipped instead, and the
-  whole run is reviewable on the (unlinked) AI review page.
-
-The page content itself is also untrusted (it can contain prompt-injection
-text). The registry + parse discipline bounds the blast radius: however the
-model is manipulated, it can only ever produce values for the allowlisted
-keys, each still subject to the same strict parsing, empty-field-only applies,
-and review-page visibility.
-
-Extending the feature to a new pin field means adding one
-:class:`ExtractableField` entry - prompt wording, parsing, applying, and the
-review page all derive from the registry.
-
-After structured fields are applied, the same run optionally expands the pin
-article (and the location wiki article when one exists) via
-:mod:`urbanlens.dashboard.services.ai.article_expansion` — plain-text only,
-with a fail-closed safety review before any article save.
-"""
+"""AI link extraction - read an external page and fill supported pin fields. * Only keys in :data:`EXTRACTABLE_FIELDS` (the allowlist registry) are ever read from the response - unknown keys are silently ignored, and values are never applied via ``setattr`` from AI-controlled names. * Each registry entry owns a ``parse`` step (strict type/bounds/charset validation that raises ``ValueError`` on anything suspect) and an ``apply`` step (the only code path that writes to the pin's data). * Applies are deliberately non-destructive: a field the user already filled in is never overwritten - the proposal is recorded as skipped instead, and the whole run is reviewable on the (unlinked) AI review page."""
 
 from __future__ import annotations
 
@@ -371,18 +339,14 @@ def _require(value: str, label: str) -> str:
 
 def link_extraction_available(user, profile: Profile) -> bool:
     """Whether the AI link-extraction buttons should exist for this user at all.
-
-    Combines the subscription feature, the user's own master AI toggle, and the
-    site-level switches. Per the feature request, users without access must not
-    see the buttons - this is the single check templates and endpoints share.
+    Per the feature request, users without access must not see the buttons - this is the single check templates and endpoints share.
 
     Args:
         user: The authenticated user (subscription features hang off User).
         profile: The user's profile (per-user AI preference).
 
     Returns:
-        True when every gate is open.
-    """
+        True when every gate is open."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 
@@ -412,10 +376,7 @@ def extractions_remaining_today(profile: Profile) -> int:
 
 def recently_requested_urls(pin: Pin, *, within_days: int = RECENT_EXTRACTION_COOLDOWN_DAYS) -> frozenset[str]:
     """URLs on this pin already submitted for AI extraction within the cooldown window.
-
-    The extract button hides for these specific links (any other link on the
-    same pin is unaffected) so the user isn't tempted to immediately re-run an
-    extraction that just started - see :data:`RECENT_EXTRACTION_COOLDOWN_DAYS`.
+    The extract button hides for these specific links (any other link on the same pin is unaffected) so the user isn't tempted to immediately re-run an extraction that just started - see :data:`RECENT_EXTRACTION_COOLDOWN_DAYS`.
 
     Args:
         pin: The pin whose links are being rendered.
@@ -423,8 +384,7 @@ def recently_requested_urls(pin: Pin, *, within_days: int = RECENT_EXTRACTION_CO
 
     Returns:
         The set of recently-requested URLs, exactly as submitted (matched
-        against the button's own ``url`` verbatim - no normalization).
-    """
+        against the button's own ``url`` verbatim - no normalization)."""
     from datetime import timedelta
 
     from django.utils import timezone
@@ -435,10 +395,7 @@ def recently_requested_urls(pin: Pin, *, within_days: int = RECENT_EXTRACTION_CO
 
 def ai_extract_button_context(user, profile: Profile, pin: Pin) -> dict[str, Any]:
     """Shared context for every AI-extract-button render site.
-
-    Single source of truth for both keys ``_ai_extract_button.html`` reads
-    (``can_ai_extract`` and ``recently_extracted_urls``), so every call site
-    stays consistent by construction instead of by convention.
+    Single source of truth for both keys ``_ai_extract_button.html`` reads (``can_ai_extract`` and ``recently_extracted_urls``), so every call site stays consistent by construction instead of by convention.
 
     Args:
         user: The authenticated user (subscription features hang off User).
@@ -448,8 +405,7 @@ def ai_extract_button_context(user, profile: Profile, pin: Pin) -> dict[str, Any
     Returns:
         ``{"can_ai_extract": bool, "recently_extracted_urls": frozenset[str]}``.
         The URL set is only computed when extraction is available at all -
-        the button never renders otherwise, so the query would be wasted.
-    """
+        the button never renders otherwise, so the query would be wasted."""
     available = link_extraction_available(user, profile)
     return {
         "can_ai_extract": available,
@@ -463,18 +419,7 @@ class LinkExtractionError(Exception):
 
 def _validate_extraction_url(url: str) -> str:
     """Validate a user-submitted extraction target url.
-
-    Enforces http(s), a length cap, and rejects loopback/private/link-local/
-    reserved hosts via the shared :func:`url_safety.ensure_public_http_url`
-    guard - the fetch runs from inside the server's network, so without this
-    a user could point the extractor at internal services (SSRF), including
-    via a hostname whose DNS they control.
-
-    This is submission-time validation: it rejects an obviously-internal link
-    at the moment a user pastes it. It does *not* protect the fetch, because
-    the url it returns gets resolved again when something connects to it. The
-    fetch is protected separately, by :func:`fetch_page_text` connecting to
-    the address it validated - see :mod:`services.security.url_safety`.
+    Enforces http(s), a length cap, and rejects loopback/private/link-local/ reserved hosts via the shared :func:`url_safety.ensure_public_http_url` guard - the fetch runs from inside the server's network, so without this a user could point the extractor at internal services (SSRF), including via a hostname whose DNS they control.
 
     Args:
         url: The submitted url.
@@ -483,8 +428,7 @@ def _validate_extraction_url(url: str) -> str:
         The validated url.
 
     Raises:
-        LinkExtractionError: With a user-facing message on any rejection.
-    """
+        LinkExtractionError: With a user-facing message on any rejection."""
     from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
 
     try:
@@ -569,17 +513,7 @@ _MAX_REDIRECTS = 5
 
 def fetch_page_text(url: str) -> str:
     """Fetch the target page and return its visible text.
-
-    Runs from a Celery task that may execute long after the request that
-    queued it, so the submission-time check is far too stale to rely on: the
-    host's DNS can have changed, and a hostile server can redirect to an
-    internal address regardless. Each hop is therefore resolved once and
-    connected to at *that* address, via the shared
-    :func:`~urbanlens.dashboard.services.media.media_materialize.fetch_with_revalidated_redirects`.
-    Note that merely re-validating the url before handing it to ``requests``
-    would not help - ``requests`` resolves it again independently, so a
-    short-TTL record can answer public for the check and loopback for the
-    connection.
+    Runs from a Celery task that may execute long after the request that queued it, so the submission-time check is far too stale to rely on: the host's DNS can have changed, and a hostile server can redirect to an internal address regardless.
 
     Args:
         url: A url already validated by :func:`_validate_extraction_url`.
@@ -589,8 +523,7 @@ def fetch_page_text(url: str) -> str:
 
     Raises:
         LinkExtractionError: On network failure, a non-success status, a
-            non-text body, an empty page, or a rejected/too-deep redirect.
-    """
+            non-text body, an empty page, or a rejected/too-deep redirect."""
     import requests
 
     from urbanlens.dashboard.services.media.media_materialize import fetch_with_revalidated_redirects
@@ -677,18 +610,14 @@ def parse_ai_response(answer: str) -> dict[str, Any]:
 
 def apply_extracted_fields(pin: Pin, payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Run every registry field against the AI payload, applying what's usable.
-
     Only registry keys are consulted; anything else in ``payload`` is ignored.
-    Parse failures are recorded (not applied) rather than aborting the run, so
-    one malformed value never discards the rest.
 
     Args:
         pin: The pin to enrich.
         payload: The parsed AI response object.
 
     Returns:
-        Result rows for ``LinkExtraction.results``.
-    """
+        Result rows for ``LinkExtraction.results``."""
     results: list[dict[str, Any]] = []
     context: dict[str, Any] = {}
     for field in EXTRACTABLE_FIELDS:
@@ -711,13 +640,10 @@ def apply_extracted_fields(pin: Pin, payload: dict[str, Any]) -> list[dict[str, 
 
 def run_extraction(extraction: LinkExtraction) -> None:
     """Execute one queued extraction end to end and record the outcome.
-
-    Never raises - every failure path lands in ``extraction.status``/``error``
-    so the review page always has something honest to show.
+    Never raises - every failure path lands in ``extraction.status``/``error`` so the review page always has something honest to show.
 
     Args:
-        extraction: The pending run to execute.
-    """
+        extraction: The pending run to execute."""
     from urbanlens.dashboard.services.ai.factory import get_gateway
 
     extraction.status = LinkExtractionStatus.RUNNING

@@ -1,18 +1,5 @@
 """Shapefile (.shp/.dbf/.shx bundle) pin import.
-
-Shapefiles are always distributed as a set of same-stem sidecar files rather than
-a single file, so unlike every other format here there is no single-file
-"sniff and parse" step. Bundles must be grouped by filename stem *before* the
-per-file format dispatch in the calling orchestration methods - see
-``extract_shapefile_bundles()``, which is meant to be called once up front,
-mirroring how ``import_pins_streaming`` already splits out Semantic Location
-History files before its main per-file loop.
-
-Only the ZIP-bundle upload path is supported: every real-world Shapefile source
-(county GIS portals, EPA Envirofacts, data.gov, CalTopo) distributes a ``.zip``
-containing the ``.shp``/``.dbf``/``.shx`` (and usually ``.prj``/``.cpg``) bundle,
-and the existing archive extractor already unzips uploads.
-"""
+Shapefiles are always distributed as a set of same-stem sidecar files rather than a single file, so unlike every other format here there is no single-file "sniff and parse" step."""
 
 from __future__ import annotations
 
@@ -94,12 +81,7 @@ def extract_shapefile_bundles(files: list[tuple[str, bytes]]) -> tuple[list[Shap
 @untrusted_parse("geo.shapefile")
 def shapefile_to_dict(bundle: ShapefileBundle, user_profile: Profile) -> list[dict[str, Any]]:
     """Convert one Shapefile bundle into pin dicts.
-
-    Each feature's geometry centroid becomes a pin location (a no-op for Point
-    features); the name/description are guessed from the attribute table via
-    ``pick_name_and_description`` since column names vary by producer (and DBF
-    column names are truncated to 10 characters, so exact matches can't be
-    relied on).
+    Each feature's geometry centroid becomes a pin location (a no-op for Point features); the name/description are guessed from the attribute table via ``pick_name_and_description`` since column names vary by producer (and DBF column names are truncated to 10 characters, so exact matches can't be relied on).
 
     Args:
         bundle: The grouped sidecar files for one Shapefile.
@@ -111,8 +93,7 @@ def shapefile_to_dict(bundle: ShapefileBundle, user_profile: Profile) -> list[di
     Raises:
         OSError: If the bundle can't be written to a temporary directory.
         ValueError: If GDAL rejects the bundle's geometry/attribute data.
-        pyogrio.errors.DataSourceError: If GDAL cannot read the bundle as a Shapefile.
-    """
+        pyogrio.errors.DataSourceError: If GDAL cannot read the bundle as a Shapefile."""
     pins: list[dict[str, Any]] = []
     try:
         with tempfile.TemporaryDirectory(prefix="urbanlens_shp_") as tmp_dir:

@@ -15,12 +15,6 @@ from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedE
 from urbanlens.dashboard.websocket_auth import CREDENTIAL_SCOPE_KEY
 
 if TYPE_CHECKING:
-    # CredentialScopeMixin calls self.scope/self.close/self.send, which every
-    # class it is mixed into inherits from AsyncWebsocketConsumer. Declaring that
-    # base for the type checker only is what makes those calls check out without
-    # a cast or a blanket ignore, while keeping the runtime MRO a plain mixin
-    # (`class Consumer(CredentialScopeMixin, AsyncWebsocketConsumer)`) rather
-    # than a second inheritance path into the consumer machinery.
     class _CredentialScopeBase(AsyncWebsocketConsumer): ...
 
 else:
@@ -30,70 +24,30 @@ else:
 
 logger = logging.getLogger(__name__)
 
-# How often SafetyCheckinChatConsumer re-validates a session-route connection's
-# permission, as a backstop for a dropped partner_access_revoked broadcast. Frequent
-# enough that a revoked partner's live-location stream can't leak for long; infrequent
-# enough not to add meaningful DB load for what's normally a no-op check.
+#: Revalidation interval for partner access and credentials.
 _PARTNER_REVALIDATION_INTERVAL_SECONDS = 60
 
-# How often a credential-authenticated connection re-checks that its ApiKey/OAuth2
-# token is still valid. Revoking a credential has to actually stop delivery, not just
-# block the next HTTP call: a WebSocket authenticates once, at connect(), so without a
-# periodic re-check a user who revokes a leaked key would watch it keep streaming their
-# notifications and messages until the process restarts. Session connections never run
-# this loop at all (they have no credential to revoke), so it costs the web client
-# nothing.
+# How often a credential-authenticated connection re-checks its credential.
 _CREDENTIAL_REVALIDATION_INTERVAL_SECONDS = 60
 
-#: Sent back when a credential-authenticated connection tries to write with a
-#: read-only grant. A frame-level error rather than a close, matching how these
-#: consumers already report a message that failed to save: closing would put the
-#: client into a reconnect loop over a condition that retrying cannot fix.
+#: Refusal when a read-only credential tries to write.
 _INSUFFICIENT_SCOPE_DETAIL = "This credential isn't allowed to send here. Reconnect with a credential granting the matching write scope."
 
-#: Sent when a frame is larger than this connection will parse.
+#: Refusal when a frame exceeds the size cap.
 _OVERSIZED_FRAME_DETAIL = "That message is too large to send over this connection."
 
-#: Sent when a connection has spent one of its volume budgets. An error frame
-#: rather than a close, for the reason _INSUFFICIENT_SCOPE_DETAIL gives.
+#: Refusal when a connection exhausts a volume budget.
 _RATE_LIMITED_DETAIL = "You're sending messages too quickly. Wait a moment and try again."
 
-#: Shortest gap between two refusal frames on one connection. Replying to every
-#: refused frame would answer an inbound flood with an equal outbound one;
-#: replying once per 60-second budget window would leave someone who sent three
-#: messages in a row unaware that two of them never left. A couple of seconds
-#: damps the amplification while still telling a person what happened.
+#: Minimum gap between refusal frames on one connection.
 _LIMIT_REPORT_INTERVAL_SECONDS = 2.0
 
-#: Used only when neither the consumer nor the settings offer a positive cap,
-#: which production cannot reach - ``websocket_max_frame_chars`` is ``ge=1``.
-#: It exists so that combination degrades to the documented default rather than
-#: to no limit at all.
+#: Fallback cap when no consumer or setting provides one.
 _FALLBACK_MAX_FRAME_CHARS = 65_536
 
 
 def _credential_is_still_valid(credential: Any) -> bool:
-    """Re-read *credential* from the database and report whether it can still authenticate.
-
-    Both credential kinds are checked the way their own HTTP authenticator
-    would check them on a fresh request, because that is the guarantee being
-    reproduced - a socket must not outlive the authority that opened it:
-
-    - a PAT-style ``ApiKey`` is revoked in place, by stamping ``revoked_at``
-      (``services.auth.api_keys.revoke_api_key``), so a stamped row is dead;
-    - a django-oauth-toolkit ``AccessToken`` is revoked by *deleting* the row,
-      and separately stops working when it expires, so a missing row or an
-      expired one is dead.
-
-    Args:
-        credential: The ``ApiKey``/``AccessToken`` resolved at connect time, or
-            None for a session-authenticated connection.
-
-    Returns:
-        True when the connection may continue - including for None, since a
-        session connection has no credential to revoke and its own separate
-        checks (if any) are unaffected by this one.
-    """
+    """Whether *credential* can still authenticate, re-read from the DB."""
     if credential is None:
         return True
     refreshed = type(credential).objects.filter(pk=credential.pk).first()
@@ -106,68 +60,24 @@ def _credential_is_still_valid(credential: Any) -> bool:
 
 
 class CredentialScopeMixin(_CredentialScopeBase):
-    """Applies the external API's per-credential scope rules to a WebSocket consumer.
-
-    Over HTTP, resolving an ``ApiKey``/OAuth2 token is only step one: every
-    ``external_api`` view then runs
-    :class:`~urbanlens.dashboard.external_api.permissions.HasApiKeyScope`, so a
-    credential reaches only the domains its grant names. ``ApiKeyAuthMiddleware``
-    gave sockets step one; this mixin gives them step two, using the *same*
-    ``credential_grants`` function rather than a parallel implementation - a
-    second copy of a scope check is a second thing that can silently become the
-    more permissive one.
-
-    Everything here keys off ``scope["api_credential"]``. A browser-session
-    connection has None there and every method below is a no-op for it, which
-    is the whole point: this must not change the web client's behavior in any
-    way. It is the identical discriminator
-    ``external_api.mixins.IsSessionAuthenticated`` uses on the HTTP side
-    (``request.auth is None`` means "a session, not a credential").
-    """
+    """Enforce per-credential API scopes on WebSocket consumers."""
 
     @property
     def credential(self) -> Any:
-        """The ``ApiKey``/``AccessToken`` that opened this connection, or None for a session.
-
-        Read via ``scope.get`` so a consumer instantiated without
-        ``ApiKeyAuthMiddleware`` in the stack (unit tests, any future ASGI
-        entrypoint) degrades to the session path instead of raising KeyError
-        and killing the socket.
-        """
+        """The credential that opened this connection, or None for sessions."""
         return self.scope.get(CREDENTIAL_SCOPE_KEY)
 
     def credential_allows(self, *scopes: str) -> bool:
-        """Whether this connection may exercise *scopes*.
-
-        Args:
-            *scopes: The :class:`~urbanlens.dashboard.models.account.model.ApiKeyScope`
-                values required for the operation being attempted.
-
-        Returns:
-            True for a session connection (no credential, nothing to restrict)
-            and for a credential granting every requested scope; False
-            otherwise. Note that ``credential_grants`` independently refuses
-            ``OAUTH2_ONLY_SCOPES`` to PAT-kind credentials, which is what keeps
-            a ``ulk_`` key out of ``ws/messages/``.
-        """
+        """Whether this connection may exercise *scopes*."""
         from urbanlens.dashboard.external_api.permissions import credential_grants
 
         credential = self.credential
         if credential is None:
             return True
-        # No database access happens here - an ApiKey's ``scopes`` list and an
-        # AccessToken's ``scope`` string are both already loaded on the instance
-        # the middleware resolved - so this is safe to call from the event loop
-        # without a database_sync_to_async hop on every inbound frame.
         return credential_grants(credential, scopes)
 
     def start_credential_revalidation(self) -> None:
-        """Begin periodically re-checking that this connection's credential is still valid.
-
-        A no-op for session connections. Call once, after ``accept()``; pair it
-        with :meth:`stop_credential_revalidation` in ``disconnect()`` so the
-        task doesn't outlive the socket.
-        """
+        """Start re-checking credential validity; no-op for sessions."""
         if self.credential is None:
             return
         self._credential_revalidation_task = asyncio.create_task(self._revalidate_credential_periodically())
@@ -179,7 +89,7 @@ class CredentialScopeMixin(_CredentialScopeBase):
             task.cancel()
 
     async def _revalidate_credential_periodically(self) -> None:
-        """Close this connection with 4404 as soon as its credential stops being valid."""
+        """Close the connection once its credential stops being valid."""
         try:
             while True:
                 await asyncio.sleep(_CREDENTIAL_REVALIDATION_INTERVAL_SECONDS)

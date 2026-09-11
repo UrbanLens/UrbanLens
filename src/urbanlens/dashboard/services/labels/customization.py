@@ -1,14 +1,5 @@
 """Per-profile display overrides for labels (``LabelCustomization``).
-
-A customization is how a user renames or re-styles a label they do not own -
-in practice a global label, which they cannot edit because everyone shares it.
-Each of ``name``/``icon``/``color`` is independently nullable: null means "use
-the label's own value", non-null means "override it".
-
-Extracted from ``controllers.labels.LabelCustomizeView.post`` so the external
-API applies the same normalization, the same delete-when-empty rule, and the
-same map-cache nudge the web UI does.
-"""
+A customization is how a user renames or re-styles a label they do not own - in practice a global label, which they cannot edit because everyone shares it."""
 
 from __future__ import annotations
 
@@ -49,18 +40,7 @@ def upsert_label_customization(
     color: str | None = None,
 ) -> LabelCustomization | None:
     """Create, update, or clear *profile*'s display overrides for *label*.
-
-    Empty strings normalize to None, so "" and null both mean "no override" -
-    there is deliberately no third state. When all three end up None the row is
-    deleted rather than stored as an all-null record, keeping "customized"
-    equivalent to "row exists and carries something", which is what
-    ``Label.is_customized`` assumes.
-
-    A customization changes how this profile's pins render on the map without
-    writing to any Pin row, so the pins carrying the label have to be touched -
-    see ``services.map_pins.touch``. On the store path the model's own
-    ``post_save`` receiver does that; the clear-by-emptying path below deletes
-    the row instead, fires nothing, and so calls it directly.
+    When all three end up None the row is deleted rather than stored as an all-null record, keeping "customized" equivalent to "row exists and carries something", which is what ``Label.is_customized`` assumes.
 
     Args:
         profile: The profile whose overrides these are.
@@ -72,8 +52,7 @@ def upsert_label_customization(
 
     Returns:
         The stored :class:`LabelCustomization`, or None when every override was
-        empty and any existing row was therefore deleted.
-    """
+        empty and any existing row was therefore deleted."""
     from urbanlens.dashboard.models.labels.customization import LabelCustomization
     from urbanlens.dashboard.services.core import icons
     from urbanlens.dashboard.services.core.text_limits import column_max_length

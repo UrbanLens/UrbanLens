@@ -1,33 +1,4 @@
-"""AI chat assistant (UL-293): a strictly allowlisted tool loop over the user's own data.
-
-Security model (this is the UL-163 "sandboxing" answer for v1):
-
-- The model NEVER executes anything itself. It can only *name* one of the
-  tools in ``services.ai.tools.REGISTRY``; every handler runs server-side,
-  scoped to the requesting profile exactly like a normal view would be. No
-  deletes, no sharing, no privacy-surface changes are exposed as tools at
-  all, and ``registry.execute()`` is the single chokepoint enforcing that
-  (unknown tool / bad args / URL args / oversized results / write-refusal
-  under ``ProcessRole.AI`` - see that module).
-- The gateway's prompt-injection scanner runs on every user message (inside
-  ``LLMGateway.send_with_tools``); tool RESULTS are serialized JSON of our
-  own querysets, with any user-supplied field wrapped by ``execute()``
-  itself - never raw user-controlled prose handed to the model unmarked.
-- The loop is budgeted (``MAX_ROUNDS`` provider round-trips, the registry's
-  own ``MAX_TOOL_CALLS`` total tool executions, ``TURN_DEADLINE_SECONDS``
-  wall-clock) and conversation history is capped, so a runaway model can't
-  rack up cost or spin forever.
-
-Tool calling is provider-native (``LLMGateway.send_with_tools``), not the
-text-JSON ``<ANSWER>`` protocol other AI features still use - a model names
-a tool via its own structured ``tool_use`` mechanism instead of being asked
-to emit and self-parse a JSON blob. The running transcript is still a single
-growing prompt string (each round's tool calls/results appended as plain
-text) rather than genuine multi-turn ``tool_use``/``tool_result`` content
-blocks - simpler, and sufficient: the reliability problem native tool
-calling actually solves is the model's *decision* of which tool to call and
-with what arguments, not the transcript's wire shape.
-"""
+"""AI chat assistant (UL-293): a strictly allowlisted tool loop over the user's own data. - The model NEVER executes anything itself."""
 
 from __future__ import annotations
 
@@ -51,15 +22,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Provider round-trips allowed per user message. Independent of (and
-#: smaller than) ``MAX_TOOL_CALLS``: a round can contain several parallel
-#: tool calls, so whichever budget a given turn's shape hits first is the
-#: one that stops it - see the module docstring.
+#: Provider round-trips allowed per user message.
+#: Independent of (and smaller than) ``MAX_TOOL_CALLS``: a round can contain several parallel tool
+#: calls, so whichever budget a given turn's shape hits first is the one that stops it - see the
+#: module docstring.
 MAX_ROUNDS = 4
-#: Wall-clock budget for one turn, checked before every provider call and
-#: every tool execution. Below the Celery task's own ``soft_time_limit``
-#: (90s, ``run_assistant_turn_task``) so a slow turn ends with this
-#: message rather than a bare timeout once that task exists.
+#: Wall-clock budget for one turn, checked before every provider call and every tool execution.
+#: Below the Celery task's own ``soft_time_limit`` (90s, ``run_assistant_turn_task``) so a slow turn
+#: ends with this message rather than a bare timeout once that task exists.
 TURN_DEADLINE_SECONDS = 75
 #: Longest user message the assistant accepts.
 MAX_MESSAGE_CHARS = 2_000
@@ -92,17 +62,14 @@ class AssistantTurn:
 
     reply: str
     actions: list[str] = field(default_factory=list)
-    #: Write tools the model asked for but that did not run - each
-    #: ``{"n", "tool", "args", "confirm_label"}``, ``n`` the index a client
-    #: confirms by (``POST /assistant/turn/<turn_id>/confirm/<n>/``). Built
-    #: from ``ToolResult.proposal`` (``services.ai.tools.registry``); never
-    #: executed here - see that module's ``execute(..., confirmed=False)``.
+    #: Write tools the model asked for but that did not run - each ``{"n", "tool", "args",
+    #: "confirm_label"}``, ``n`` the index a client confirms by (``POST
+    #: /assistant/turn/<turn_id>/confirm/<n>/``).
+    #: Built from ``ToolResult.proposal`` (``services.ai.tools.registry``); never executed here -
     proposals: list[dict[str, Any]] = field(default_factory=list)
     #: Tool results whose effect happens in the browser, not the database
-    #: (``ToolSpec.client_action`` - e.g. ``reopen_explainer``), each the
-    #: tool's raw result dict plus ``"action": spec.client_action``. Never
-    #: persisted to session history - the poll view forwards these once, via
-    #: ``HX-Trigger``, and they're gone.
+    #: (``ToolSpec.client_action`` - e.g.
+    #: ``reopen_explainer``), each the tool's raw result dict plus ``"action": spec.client_action``.
     client_actions: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -147,12 +114,10 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
     Raises:
         AssistantUnavailableError: When AI is off for the site or this profile.
     """
-    # Pinned to Anthropic regardless of the site-wide AI provider: only its
-    # adapter is exercised for native tool calling so far, and small/free
-    # models (e.g. the Cloudflare default) are unreliable tool callers.
-    # formatting="" - send_with_tools ignores it regardless (see its own
-    # docstring), but passing it here documents that this gateway never
-    # speaks the <ANSWER> text protocol.
+    # Pinned to Anthropic regardless of the site-wide AI provider: only its adapter is exercised for
+    # native tool calling so far, and small/free models (e.g. the Cloudflare default) are unreliable
+    # tool callers. formatting="" - send_with_tools ignores it regardless (see its own docstring),
+    # but passing it here documents that this gateway never speaks the <ANSWER> text protocol.
     gateway = get_gateway(profile=profile, provider="anthropic", instructions=_INSTRUCTIONS, formatting="")
     if gateway is None:
         raise AssistantUnavailableError("AI features are turned off.")
@@ -214,9 +179,8 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
 
         return AssistantTurn(reply=_ROUND_LIMIT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
     finally:
-        # One call covering the whole turn, not per gateway.send_with_tools():
-        # the gateway accumulates sent/received tokens across every call made
-        # on this instance, so gateway.cost here already reflects every round
-        # trip the loop made, however many tool calls that took.
+        # One call covering the whole turn, not per gateway.send_with_tools(): the gateway
+        # accumulates sent/received tokens across every call made on this instance, so gateway.cost
+        # here already reflects every round trip the loop made, however many tool calls that took.
         elapsed_ms = int((time.monotonic() - started) * 1000)
         log_api_call("assistant", success=succeeded, response_ms=elapsed_ms, endpoint=gateway.model, cost_estimate=gateway.cost)

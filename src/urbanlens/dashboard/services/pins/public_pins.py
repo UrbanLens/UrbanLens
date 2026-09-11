@@ -1,15 +1,5 @@
 """Public-pin eligibility engine and vote handling (UL-58).
-
-A location becomes a public-pin candidate only when EVERY criterion in
-:class:`PublicPinConfig` holds; the community then votes, and a passed vote
-makes the location public - suggested to every account (opt-out). The rules
-are deliberately never surfaced to users: the UI shows only the vote buttons
-(when a place qualifies) and a plain-language FAQ entry.
-
-Everything here is driven by ``evaluate_public_pin_candidates`` on a Celery
-beat schedule. The only request-path entry points are ``public_vote_context``
-(render the block) and ``cast_public_vote`` (record a ballot), both cheap.
-"""
+A location becomes a public-pin candidate only when EVERY criterion in :class:`PublicPinConfig` holds; the community then votes, and a passed vote makes the location public - suggested to every account (opt-out)."""
 
 from __future__ import annotations
 
@@ -101,13 +91,7 @@ _PLACEHOLDER_NAMES = frozenset({"untitled", "unknown", "unnamed", "new location"
 
 class PublicVoteError(Exception):
     """A ballot was refused.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below (or this base class as a fallback)
-    and author its own user-facing text, rather than relaying ``message`` -
-    that keeps a future raise site here from being able to smuggle unreviewed
-    text into a response just by adding a new ``raise``.
-    """
+    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class VoteNotOpenError(PublicVoteError):
@@ -284,13 +268,9 @@ def _check_hard_fail(candidate: PublicPinCandidate, now: datetime, config: Publi
 def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str, int]:
     """Recompute eligibility, transition candidates, and settle votes.
 
-    Called from the Celery beat task. Idempotent - safe to run at any
-    frequency.
-
     Returns:
         Counters for logging/tests: opened, reopened, suspended, passed,
-        rejected.
-    """
+        rejected."""
     now = timezone.now()
     eligible = _eligible_location_ids(now, config)
     counters = {"opened": 0, "reopened": 0, "suspended": 0, "passed": 0, "rejected": 0}
@@ -341,10 +321,10 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
         counters["passed"] += 1
         logger.info("Location %s voted public (%s yes / %s total)", candidate.location_id, tally.yes, tally.total)
 
-    # Unconditional, not gated on counters["passed"]: a location that passed
-    # in some earlier run still needs backfilling for profiles created (or
-    # opted back in) since then, and this idempotent scan is the only thing
-    # that ever catches those up - see sync_public_pin_suggestions's docstring.
+    # Unconditional, not gated on counters["passed"]: a location that passed in some earlier run
+    # still needs backfilling for profiles created (or opted back in) since then, and this
+    # idempotent scan is the only thing that ever catches those up - see
+    # sync_public_pin_suggestions's docstring.
     sync_public_pin_suggestions()
 
     return counters
@@ -353,14 +333,8 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
 def sync_public_pin_suggestions() -> int:
     """Ensure every opted-in profile has a suggestion for each public location.
 
-    Idempotent backfill: skips profiles that already have a root pin there or
-    any prior suggestion for the location (including rejected ones - declining
-    a public pin is a decision, not something to re-ask). New accounts are
-    picked up on the next beat run.
-
     Returns:
-        Number of suggestions created.
-    """
+        Number of suggestions created."""
     created = 0
     # wiki__isnull=False: a candidate is only suggested - by name, to every
     # community-enabled profile site-wide - once its place has a page, which
@@ -393,10 +367,7 @@ def sync_public_pin_suggestions() -> int:
 
 def public_vote_context(location: Location, profile: Profile | None, *, conceal: bool = False) -> dict | None:
     """Build the template context for the public-vote block on a wiki page.
-
-    Returns None when nothing should render (no candidate, suspended,
-    rejected, or the viewer can't vote) - ineligibility is never explained
-    in the UI.
+    Returns None when nothing should render (no candidate, suspended, rejected, or the viewer can't vote) - ineligibility is never explained in the UI.
 
     Args:
         location: The place being rendered.
@@ -406,8 +377,7 @@ def public_vote_context(location: Location, profile: Profile | None, *, conceal:
             photos and markup - so the block's mere *presence* proves heavy
             community contribution, which is what concealment exists to hide.
             The PASSED branch returns before any profile check, so that half
-            would leak unconditionally.
-    """
+            would leak unconditionally."""
     if conceal:
         return None
     candidate = PublicPinCandidate.objects.filter(location=location).first()

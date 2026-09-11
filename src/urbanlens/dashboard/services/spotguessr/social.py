@@ -23,22 +23,11 @@ def friend_profiles(profile: Profile) -> list[Profile]:
 def visible_friend_ratings(profile: Profile) -> list[dict]:
     """Each visible friend's most-recently-played mode rating, excluding anyone who has opted out.
 
-    Each friend's own most-recently-played mode is used independently
-    (rather than a single fixed mode for everyone) - a Named Place/Street
-    View-only friend previously showed no rating at all, since the lookup
-    was hardcoded to Photos mode.
-
-    Batches the opt-out check and the latest-rating lookup into one query
-    each (rather than two queries per friend) - a `SpotGuessrPreference`
-    lookup and a `PlayerModeRating` lookup for every friend, unbatched, cost
-    2N+1 queries on this page for N friends.
-
     Returns:
         A list of ``{"profile": Profile, "rating": PlayerModeRating | None}``
         dicts, one per visible friend - friends who haven't played yet still
         appear, with ``rating=None``, since the opt-out is about visibility,
-        not about hiding the fact that a friend hasn't played.
-    """
+        not about hiding the fact that a friend hasn't played."""
     friends = friend_profiles(profile)
     if not friends:
         return []

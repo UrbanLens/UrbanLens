@@ -1,14 +1,5 @@
 """Shared (de)serialization for persisted main-map filter criteria.
-
-``SearchForm.cleaned_data`` (``dashboard.forms.search.SearchForm``) is not
-directly JSON-safe: its ``custom_fields`` criteria (from
-``SearchForm.parse_custom_field_criteria()``) carry live ``CustomField``
-model instances rather than ids. ``serialize_form_criteria`` normalizes a
-cleaned-data-shaped dict into a plain JSON-safe dict suitable for storage on
-``SavedFilter.criteria`` or ``PinList.smart_filter``; ``deserialize_criteria``
-is the inverse, rehydrating a stored dict back into the shape
-``Pin.objects.filter_by_criteria()`` expects.
-"""
+``SearchForm.cleaned_data`` (``dashboard.forms.search.SearchForm``) is not directly JSON-safe: its ``custom_fields`` criteria (from ``SearchForm.parse_custom_field_criteria()``) carry live ``CustomField`` model instances rather than ids."""
 
 from __future__ import annotations
 
@@ -99,10 +90,9 @@ def serialize_form_criteria(
     if label_groups:
         out["label_groups"] = label_groups
     else:
-        # Flat tags/exclude_tags only matter as a fallback when label_groups
-        # (the map formula bar's richer AND/OR/NOT logic) isn't set - storing
-        # both would be dead weight since filter_by_criteria always prefers
-        # label_groups when present.
+        # Flat tags/exclude_tags only matter as a fallback when label_groups (the map formula bar's
+        # richer AND/OR/NOT logic) isn't set - storing both would be dead weight since
+        # filter_by_criteria always prefers label_groups when present.
         for key in _LABEL_LIST_KEYS:
             value = cleaned_data.get(key)
             if value:
@@ -156,8 +146,7 @@ def deserialize_criteria(stored: dict[str, Any], profile: Profile) -> dict[str, 
         A criteria dict in the live-object shape ``filter_by_criteria``
         expects (dates parsed back, custom-field ids resolved to instances).
         Custom-field entries whose field was deleted since the filter was
-        saved are silently dropped.
-    """
+        saved are silently dropped."""
     from urbanlens.dashboard.models.custom_fields.model import CustomField
     from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.services.geo.geo import parse_multipolygon_geojson
@@ -190,14 +179,7 @@ def deserialize_criteria(stored: dict[str, Any], profile: Profile) -> dict[str, 
 
 class CriteriaOwnershipError(ValueError):
     """Stored criteria referenced a label or custom field the profile may not use.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below and author its own user-facing
-    text, rather than relaying ``message`` - that keeps a future raise site
-    here from being able to smuggle unreviewed text (including which id was
-    rejected) into a response just by adding a new ``raise``. See
-    :func:`validate_criteria_ownership` for why that distinction matters.
-    """
+    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text (including which id was rejected) into a response just by adding a new ``raise``."""
 
 
 class LabelOwnershipError(CriteriaOwnershipError):
@@ -211,17 +193,13 @@ class CustomFieldOwnershipError(CriteriaOwnershipError):
 def referenced_label_ids(stored: dict[str, Any]) -> set[int]:
     """Every Label primary key a stored criteria dict refers to.
 
-    Label pks appear in three places: the flat ``tags``/``exclude_tags`` lists
-    and the richer ``label_groups`` formula (``[{"op": ..., "ids": [...]}]``).
-
     Args:
         stored: A criteria dict in the stored (JSON-safe) shape.
 
     Returns:
         The set of referenced label pks. Non-integer entries are ignored - they
         cannot match a real label, and this function's job is to enumerate, not
-        to validate the shape.
-    """
+        to validate the shape."""
     ids: set[int] = set()
     for key in _LABEL_LIST_KEYS:
         for value in stored.get(key) or []:
@@ -254,21 +232,7 @@ def referenced_custom_field_ids(stored: dict[str, Any]) -> set[int]:
 
 def validate_criteria_ownership(stored: dict[str, Any], profile: Profile) -> None:
     """Refuse criteria that reference labels or custom fields *profile* may not use.
-
-    This check does not exist on the internal write paths, and its absence is
-    invisible there: the web form builds its label and custom-field pickers
-    from querysets already scoped to the user, so the browser never offers an
-    id the user cannot see. That is a *UI* constraint, not a data-layer one.
-
-    An API client is under no such obligation. Without this, a caller could
-    save a filter naming an arbitrary label or custom-field pk and read the
-    match count back out - turning saved filters into an oracle for probing
-    other users' (and global) primary-key space one id at a time. Any external
-    write path accepting ``criteria`` must call this.
-
-    ``deserialize_criteria`` silently drops unknown custom fields at *read*
-    time, which prevents them from affecting results but happens far too late
-    to stop the probe, and does nothing at all for label ids.
+    This check does not exist on the internal write paths, and its absence is invisible there: the web form builds its label and custom-field pickers from querysets already scoped to the user, so the browser never offers an id the user cannot see.
 
     Args:
         stored: A criteria dict in the stored (JSON-safe) shape.
@@ -279,12 +243,7 @@ def validate_criteria_ownership(stored: dict[str, Any], profile: Profile) -> Non
         CustomFieldOwnershipError: A referenced custom field is not theirs.
 
     Note:
-        Whichever subclass is raised, a catch site must respond with its own
-        hand-authored, generic text rather than anything derived from the
-        exception - it must not say which id was rejected, since
-        distinguishing "exists but not yours" from "does not exist" is the
-        very thing this function exists to deny an API client.
-    """
+        Whichever subclass is raised, a catch site must respond with its own hand-authored, generic text rather than anything derived from the exception - it must not say which id was rejected, since distinguishing "exists but not yours" from "does not exist" is the very thing this function exists to deny an API client."""
     from urbanlens.dashboard.models.custom_fields.model import CustomField
     from urbanlens.dashboard.models.labels.model import Label
 

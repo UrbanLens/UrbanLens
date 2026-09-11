@@ -45,14 +45,7 @@ RESULT_TYPES: dict[str, ResultTypeMeta] = {
 @dataclass(slots=True)
 class SearchResult:
     """One search hit, ready to render.
-
-    ``url`` is a *web* path (``/map/pin/<slug>/``) built for the search dialog's
-    anchor tags. A JSON client cannot follow it - there is no such route on the
-    external API, and no amount of string surgery turns one into the other
-    reliably (a wiki's web route is keyed by its location's slug, a photo has no
-    web route of its own at all). ``object_slug``/``object_uuid`` exist so that
-    surface never has to try: they carry the identifiers this codebase actually
-    addresses the result by, and every provider is required to populate them.
+    ``object_slug``/``object_uuid`` exist so that surface never has to try: they carry the identifiers this codebase actually addresses the result by, and every provider is required to populate them.
 
     Attributes:
         type: A ``RESULT_TYPES`` slug.
@@ -76,8 +69,7 @@ class SearchResult:
             ``TripComment`` all extend the plain ``DashboardModel``). Present
             *alongside* ``object_slug`` rather than instead of it because a pin
             or trip whose slug has not been generated yet is still addressable by
-            uuid - the API's ``<str:pin_slug>`` segment accepts either.
-    """
+            uuid - the API's ``<str:pin_slug>`` segment accepts either."""
 
     type: str
     title: str

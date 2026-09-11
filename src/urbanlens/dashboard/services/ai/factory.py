@@ -29,9 +29,7 @@ _FEATURE_FIELDS: dict[str, str] = {
 
 def get_gateway(feature: str | None = None, profile: Profile | None = None, provider: str | None = None, **kwargs) -> LLMGateway | None:
     """Return a configured AI gateway, or None if AI is disabled.
-
-    Reads provider, model, and feature-flag state from SiteSettings so the
-    site admin can control AI behaviour without a code deploy.
+    Reads provider, model, and feature-flag state from SiteSettings so the site admin can control AI behaviour without a code deploy.
 
     Args:
         feature: Optional feature key (see ``_FEATURE_FIELDS``).  When provided,
@@ -53,8 +51,7 @@ def get_gateway(feature: str | None = None, profile: Profile | None = None, prov
     Returns:
         A configured ``LLMGateway`` subclass instance, or ``None`` if AI is
         globally disabled, disabled for the given profile, or the requested
-        feature is turned off.
-    """
+        feature is turned off."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     site = SiteSettings.get_current()

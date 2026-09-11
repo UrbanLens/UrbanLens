@@ -1,45 +1,4 @@
-"""Wires UrbanLens's tag/category labels up to REData's label-suggestion service.
-
-**Only ``KIND_TAG`` and ``KIND_CATEGORY`` labels are ever synced or suggested.**
-Status, people, and media labels never leave this codebase - they aren't
-"which of my labels applies to this place" in the sense REData models, and
-people/media labels in particular attach to profiles/images rather than
-places at all.
-
-Three kinds of data flow out to REData
-(``services.apis.labels.redata_labels_gateway``):
-
-- **Taxonomy** (``POST /labels/``), whenever a tag/category label is
-  created, edited, reparented, retired (kind changed away from tag/category,
-  or deleted) - see :func:`queue_label_definition_sync` and
-  :func:`queue_label_retirement`. REData's taxonomy is per-profile
-  (``user_id``), so a *global* label (``profile=None``, visible to every
-  profile) is synced once per profile rather than once overall - see
-  :func:`_profile_ids_for_label`.
-- **Assignments** (``POST /labels/assignments/``), whenever a pin's
-  tag/category label set changes - see :func:`queue_pin_assignment_sync`.
-  Always sent as ``replace: true`` with the pin's complete current set: pin
-  labels are mutated from ~20 call sites across the codebase (manual
-  tagging, keyword/AI auto-tag, imports, merges, undo), so resyncing the
-  full set on every change is far simpler and more robust than tracking
-  incremental deltas - and REData explicitly documents a resend of
-  unchanged data as a no-op.
-- **Suggestions** (``POST /labels/suggest/``), a live read called directly
-  from the pin label dialog - see :func:`get_suggestions`. Not queued: the
-  caller needs the answer to render a response.
-
-All three are best-effort: a missing/unreachable REData deployment (the
-common case for most installs - see ``_redata_configured``) is a silent
-no-op, not an error, exactly like every other REData integration in this
-codebase (see ``services.apis.locations.places_resolution._redata_configured``).
-
-The first two send UrbanLens's own content for REData to store and train on,
-so they additionally only fire from production. The gateway is what enforces
-that (see ``services.core.environment``), which is why the queue/sync helpers
-here do not re-check it; :func:`backfill_profile` is the one exception, and
-only so the counts it reports stay truthful. Suggestions are a read and are
-unaffected.
-"""
+"""Wires UrbanLens's tag/category labels up to REData's label-suggestion service. **Only ``KIND_TAG`` and ``KIND_CATEGORY`` labels are ever synced or suggested.** Status, people, and media labels never leave this codebase - they aren't "which of my labels applies to this place" in the sense REData models, and people/media labels in particular attach to profiles/images rather than places at all."""
 
 from __future__ import annotations
 
@@ -76,15 +35,9 @@ def _user_id(profile: Profile) -> str:
 def _label_definition(label: Label, *, is_active: bool) -> dict[str, Any]:
     """Build one ``POST /labels/`` definition dict for ``label``.
 
-    ``name`` is always the label's canonical (non-customized) name: a
-    profile's ``LabelCustomization`` override is cosmetic and per-viewer, and
-    would pollute REData's ``canonical_key`` folding (meant to link *shared*
-    vocabulary across users) with per-user styling.
-
     Args:
         label: The label to describe.
-        is_active: False retires the label - see :func:`queue_label_retirement`.
-    """
+        is_active: False retires the label - see :func:`queue_label_retirement`."""
     return {
         "external_id": str(label.uuid),
         "name": label.name,
@@ -96,13 +49,7 @@ def _label_definition(label: Label, *, is_active: bool) -> dict[str, Any]:
 
 def _profile_ids_for_label(label: Label) -> list[int]:
     """Every profile whose REData taxonomy should carry this label's definition.
-
-    A profile-owned label belongs to just that profile's taxonomy. A global
-    label (``profile=None``) is visible to - and so synced for - every
-    profile, since REData's taxonomy is namespaced per ``user_id`` with no
-    concept of a label shared across namespaces (only ``canonical_key``
-    links them, computed independently on REData's side).
-    """
+    A global label (``profile=None``) is visible to - and so synced for - every profile, since REData's taxonomy is namespaced per ``user_id`` with no concept of a label shared across namespaces (only ``canonical_key`` links them, computed independently on REData's side)."""
     if label.profile_id is not None:
         return [label.profile_id]
     from urbanlens.dashboard.models.profile.model import Profile
@@ -129,17 +76,11 @@ def _pin_assignment_entry(pin: Pin) -> dict[str, Any]:
 
 def sync_label_definitions(profile_ids: list[int], definitions: list[dict[str, Any]]) -> None:
     """Push ``definitions`` into every listed profile's REData taxonomy.
-
-    Called from the ``sync_redata_label_definitions`` Celery task - never
-    call this synchronously from a request/view. One REData call per
-    profile, since ``POST /labels/`` is scoped to a single ``user_id``.
-    Best-effort: a REData request failure is logged and swallowed for that
-    profile, and the remaining profiles are still attempted.
+    Called from the ``sync_redata_label_definitions`` Celery task - never call this synchronously from a request/view.
 
     Args:
         profile_ids: Profiles whose taxonomy should receive ``definitions``.
-        definitions: Definition dicts built by :func:`_label_definition`.
-    """
+        definitions: Definition dicts built by :func:`_label_definition`."""
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.labels.redata_labels_gateway import RedataLabelsGateway
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
@@ -157,15 +98,11 @@ def sync_label_definitions(profile_ids: list[int], definitions: list[dict[str, A
 
 def sync_pin_assignment(pin: Pin) -> None:
     """Push ``pin``'s complete current tag/category label set to REData.
-
-    Called from the ``sync_redata_pin_assignment`` Celery task - never call
-    this synchronously from a request/view. Best-effort like
-    :func:`sync_label_definitions`.
+    Called from the ``sync_redata_pin_assignment`` Celery task - never call this synchronously from a request/view.
 
     Args:
         pin: The pin whose assignment changed. Skipped (not sent) if it has
-            no profile.
-    """
+            no profile."""
     if not _redata_configured() or pin.profile_id is None:
         return
 
@@ -180,14 +117,7 @@ def sync_pin_assignment(pin: Pin) -> None:
 
 def backfill_profile(profile: Profile) -> tuple[int, int]:
     """Push a profile's complete current tag/category taxonomy and pin assignments to REData.
-
-    Safe to call repeatedly - REData's own upsert/resend semantics mean this
-    never duplicates or corrupts existing state. Used by the
-    ``backfill_redata_labels`` management command to prime a fresh (or
-    freshly reset) REData deployment with data that predates this
-    integration; ongoing changes are kept in sync automatically via
-    ``models.labels.signals``/``models.pin.signals`` instead, so this is
-    never queued or triggered from a signal itself.
+    Safe to call repeatedly - REData's own upsert/resend semantics mean this never duplicates or corrupts existing state.
 
     Args:
         profile: The profile to backfill.
@@ -196,16 +126,14 @@ def backfill_profile(profile: Profile) -> tuple[int, int]:
         ``(labels_synced, pins_synced)`` counts - not a success/failure
         signal, since individual batch failures are logged and swallowed
         exactly like every other REData call in this module. ``(0, 0)`` off
-        production, where nothing is sent at all.
-    """
+        production, where nothing is sent at all."""
     from urbanlens.dashboard.services.core.environment import skip_upstream_contribution
 
     if not _redata_configured():
         return (0, 0)
-    # Checked here as well as in the gateway (which is what actually enforces
-    # it) so the counts this returns - and the per-profile totals the
-    # backfill_redata_labels command prints from them - do not claim work that
-    # never left the process.
+    # Checked here as well as in the gateway (which is what actually enforces it) so the counts this
+    # returns - and the per-profile totals the backfill_redata_labels command prints from them - do
+    # not claim work that never left the process.
     if skip_upstream_contribution("REData label backfill", detail=f"profile {profile.pk}"):
         return (0, 0)
 
@@ -237,13 +165,10 @@ def backfill_profile(profile: Profile) -> tuple[int, int]:
 
 def queue_label_definition_sync(label: Label) -> None:
     """Queue an upsert of ``label``'s REData definition, if it's a tag/category label.
-
-    Safe to call unconditionally from any Label save - a status/people/media
-    label is silently skipped, so callers never need their own kind guard.
+    Safe to call unconditionally from any Label save - a status/people/media label is silently skipped, so callers never need their own kind guard.
 
     Args:
-        label: The saved label.
-    """
+        label: The saved label."""
     from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 
     if not _redata_configured() or label.kind not in (KIND_TAG, KIND_CATEGORY):
@@ -253,25 +178,13 @@ def queue_label_definition_sync(label: Label) -> None:
 
 def queue_label_retirement(label: Label) -> None:
     """Queue retirement (``is_active: false``) of a label that used to be tag/category.
-
-    Called when a label is deleted, or its kind changes away from
-    tag/category - REData has no delete endpoint, only retirement, and a
-    retired label "stops being suggested, but its history stays."
-
-    Not gated on ``label.kind`` here - unlike :func:`queue_label_definition_sync`.
-    By the time a kind-change caller reaches this function, ``label.kind`` is
-    already the *new*, non-suggestable kind (that's why it's retiring), so a
-    check against the current kind could never pass. Both real callers
-    (``models.labels.signals``' ``post_delete`` and kind-change handlers)
-    already decide whether retirement is appropriate - based on the kind the
-    label *was* - before calling this.
+    Called when a label is deleted, or its kind changes away from tag/category - REData has no delete endpoint, only retirement, and a retired label "stops being suggested, but its history stays."
 
     Args:
         label: The label being deleted or converted away. ``parent_ids`` are
             deliberately omitted (always ``[]``) rather than queried - a
             label mid-delete may have already lost its M2M rows, and a
-            retired definition's parents are moot.
-    """
+            retired definition's parents are moot."""
     if not _redata_configured():
         return
     definition = {"external_id": str(label.uuid), "name": label.name, "parent_ids": [], "description": label.description or "", "is_active": False}
@@ -289,17 +202,10 @@ def _queue_definitions(profile_ids: list[int], definitions: list[dict[str, Any]]
 
 def queue_pin_assignment_sync(pin_id: int) -> None:
     """Queue a resync of one pin's tag/category assignment set.
-
-    Safe to call unconditionally from any ``Pin.labels`` change - see
-    ``models.pin.signals``' ``m2m_changed`` receiver, which is the only
-    caller. Not gated on the pin's kind mix here: a resync always sends the
-    pin's *current* tag/category set regardless of which label kind actually
-    changed, so an unnecessary call is a harmless no-op resend, not a
-    correctness issue.
+    Safe to call unconditionally from any ``Pin.labels`` change - see ``models.pin.signals``' ``m2m_changed`` receiver, which is the only caller.
 
     Args:
-        pin_id: PK of the pin whose label set changed.
-    """
+        pin_id: PK of the pin whose label set changed."""
     if not _redata_configured():
         return
 
@@ -311,13 +217,7 @@ def queue_pin_assignment_sync(pin_id: int) -> None:
 
 def get_suggestions(pin: Pin, *, limit: int | None = None) -> list[tuple[Label, float]] | None:
     """Ask REData which of the pin owner's own tag/category labels likely apply here.
-
-    Called synchronously from ``controllers.labels.LabelPinSuggestionsView`` -
-    a live read, not queued. REData's ``implied`` (ancestors of what's
-    already applied) is deliberately not surfaced here: UrbanLens already
-    knows its own hierarchy and renders applied labels - including their
-    ancestors - through the existing label-chip UI, so re-deriving that from
-    REData's answer would be redundant.
+    REData's ``implied`` (ancestors of what's already applied) is deliberately not surfaced here: UrbanLens already knows its own hierarchy and renders applied labels - including their ancestors - through the existing label-chip UI, so re-deriving that from REData's answer would be redundant.
 
     Args:
         pin: The pin to suggest labels for.
@@ -328,8 +228,7 @@ def get_suggestions(pin: Pin, *, limit: int | None = None) -> list[tuple[Label, 
         resolve to a real local ``Label`` row, highest confidence first
         (REData's own ordering is preserved). ``None`` when REData isn't
         configured or the request fails - callers should render no
-        suggestions, not an error.
-    """
+        suggestions, not an error."""
     if not _redata_configured() or pin.profile_id is None:
         return None
 

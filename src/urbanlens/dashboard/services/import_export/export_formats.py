@@ -1,18 +1,5 @@
 """Pin export writers: GeoJSON, KML, GPX, and generic CSV.
-
-Mirrors the existing import side (``services/import_formats/``) using the
-same libraries those readers already depend on (``fastkml``, ``gpxpy``) -
-UL-382. Each writer takes an iterable of ``Pin`` instances (already scoped
-to whatever the caller wants exported - a search/filter match or a specific
-list, see ``controllers.pin_bulk.PinBulkExportView`` for UL-377's targeted
-export) and returns the file content as a string.
-
-Only a pin's name, coordinates, and description are portable across every
-one of these formats - richer UrbanLens-specific fields (ratings, security
-indicators, labels, ...) stay in the full JSON account export
-(``services.import_export.export._export_pins``), which remains the source of truth for
-a complete round-trippable backup.
-"""
+Only a pin's name, coordinates, and description are portable across every one of these formats - richer UrbanLens-specific fields (ratings, security indicators, labels, ...) stay in the full JSON account export (``services.import_export.export._export_pins``), which remains the source of truth for a complete round-trippable backup."""
 
 from __future__ import annotations
 
@@ -20,14 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 
 
 class _ExportablePin(Protocol):
-    """The subset of ``Pin`` these writers actually read - lets tests use a
-    lightweight stand-in instead of a real, database-backed ``Pin``.
-
-    ``effective_name``/``effective_latitude``/``effective_longitude`` are
-    read-only properties on ``Pin``, so they're declared as properties here
-    too - a plain attribute in a Protocol is treated as read-write, which a
-    read-only property can never satisfy.
-    """
+    """The subset of ``Pin`` these writers actually read - lets tests use a lightweight stand-in instead of a real, database-backed ``Pin``."""
 
     @property
     def effective_name(self) -> str: ...

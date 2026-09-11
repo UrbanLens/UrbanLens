@@ -1,22 +1,14 @@
 """Best-effort name/description extraction from an arbitrary attribute bag.
-
-GeoJSON properties, Shapefile attribute columns, and OSM tags all pose the same
-problem: the caller does not control the key names (a county GIS portal names its
-"description" column differently than an Overpass export names its tags), so a
-single fixed lookup can't cover every producer. This module centralises the
-fallback heuristic so all three importers behave consistently.
-"""
+GeoJSON properties, Shapefile attribute columns, and OSM tags all pose the same problem: the caller does not control the key names (a county GIS portal names its "description" column differently than an Overpass export names its tags), so a single fixed lookup can't cover every producer."""
 
 from __future__ import annotations
 
 from typing import Any
 
-#: Keys checked (case-insensitively, in order) when guessing which attribute holds
-#: a human-readable name. Covers Google Takeout, GeoJSON/Overpass, Shapefile column
-#: naming conventions (often truncated to 10 characters by the DBF format), and OSM
-#: tags. ``place`` is checked before ``title`` because feeds like USGS earthquake
-#: GeoJSON put a plain location in ``place`` but decorate ``title`` with extra data
-#: (e.g. magnitude).
+#: Keys checked (case-insensitively, in order) when guessing which attribute holds a human-readable
+#: name.
+#: Covers Google Takeout, GeoJSON/Overpass, Shapefile column naming conventions (often truncated to
+#: 10 characters by the DBF format), and OSM tags.
 DEFAULT_NAME_KEYS: tuple[str, ...] = ("name", "place", "title", "label", "site_name", "namealt")
 
 #: Keys checked (case-insensitively, in order) when guessing which attribute holds
@@ -31,19 +23,14 @@ DEFAULT_LONGITUDE_KEYS: tuple[str, ...] = ("longitude", "lng", "lon", "long")
 
 def normalize_header_key(key: Any) -> str:
     r"""Normalize a CSV/attribute header for case-insensitive lookup.
-
-    Strips surrounding whitespace and a leading UTF-8 BOM (``\ufeff``). Excel's
-    "CSV UTF-8" export prefixes a BOM that ``csv.DictReader`` leaves glued to the
-    first column name - without stripping it, a file whose first header is
-    ``latitude`` is seen as ``\ufefflatitude`` and fails coordinate matching.
+    Excel's "CSV UTF-8" export prefixes a BOM that ``csv.DictReader`` leaves glued to the first column name - without stripping it, a file whose first header is ``latitude`` is seen as ``\ufefflatitude`` and fails coordinate matching.
 
     Args:
         key: Raw header from a CSV row, GeoJSON property map, etc.
 
     Returns:
         Lowercased header string safe for equality checks against the
-        ``DEFAULT_*_KEYS`` tuples.
-    """
+        ``DEFAULT_*_KEYS`` tuples."""
     return str(key).strip().lstrip("\ufeff").lower()
 
 

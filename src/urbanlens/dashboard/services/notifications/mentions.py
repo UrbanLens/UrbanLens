@@ -1,14 +1,4 @@
-"""Mention parsing and rendering for comment text.
-
-Storage formats:
-  Location mention : @[Display Name](loc:{uuid})
-  Activity mention : @act:{n}   (trip context only)
-
-Rendering:
-  - @loc mentions whose location UUID the viewer hasn't pinned → entire comment hidden
-  - @loc mentions whose location UUID the viewer has pinned → rendered as hyperlink
-  - @act:{n} → resolved via activity_index_map to an activity link
-"""
+"""Mention parsing and rendering for comment text."""
 
 from __future__ import annotations
 
@@ -29,10 +19,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import TripActivity
 
-#: The literal every location mention contains, exposed so a caller can cheaply
-#: prefilter in SQL for text that *might* carry one - text without it cannot be
-#: dropped by the mention gate, so it need not be fetched and rendered to find
-#: out. The pattern below is built from it, so the two cannot drift apart.
+#: The literal every location mention contains, exposed so a caller can cheaply prefilter in SQL for
+#: text that *might* carry one - text without it cannot be dropped by the mention gate, so it need
+#: not be fetched and rendered to find out.
+#: The pattern below is built from it, so the two cannot drift apart.
 LOCATION_MENTION_MARKER = "](loc:"
 
 _LOC_RE = re.compile(r"@\[([^\]]+)" + re.escape(LOCATION_MENTION_MARKER) + r"([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\)")
@@ -60,18 +50,14 @@ def extract_location_uuids(text: str) -> list[uuid.UUID]:
 
 def extract_location_mentions(text: str) -> list[tuple[str, str]]:
     """Return every ``@[Display](loc:uuid)`` mention as a (display, uuid) pair.
-
-    The display-text counterpart to :func:`extract_location_uuids`, for callers
-    that render mentions themselves rather than taking the HTML from
-    :func:`render_comment_text` (e.g. a native client that has no webview).
+    The display-text counterpart to :func:`extract_location_uuids`, for callers that render mentions themselves rather than taking the HTML from :func:`render_comment_text` (e.g. a native client that has no webview).
 
     Args:
         text: Raw comment text in storage format.
 
     Returns:
         One ``(display_text, location_uuid_string)`` tuple per mention, in
-        order of appearance.
-    """
+        order of appearance."""
     return [(match.group(1), match.group(2)) for match in _LOC_RE.finditer(text)]
 
 

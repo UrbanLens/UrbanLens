@@ -1,22 +1,4 @@
-"""Gateway for REData's label-suggestion endpoints (``/labels/...``).
-
-REData learns each user's own tag/category taxonomy (arbitrarily nested,
-private to its owner) and which of those labels apply to which places, then
-suggests labels for a place from that same user's vocabulary. Every
-suggestion comes back with ``confidence`` (calibrated, ``[0.01, 0.99]``,
-monotone up the hierarchy) and which ``ranker`` produced it (``"heuristic"``
-or ``"model"``).
-
-Same REData account/deployment already used for property records, places
-resolution, and photo relevance - same ``UL_REDATA_API_URL``/
-``UL_REDATA_API_KEY`` settings, same bearer-token convention, hitting
-different endpoints. The API key used must carry REData's ``labels:read``/
-``labels:write`` scopes.
-
-Do not call this directly - go through ``services.labels.redata_suggestions``,
-which decides what is worth syncing (tags and categories only - see that
-module's docstring) and when.
-"""
+"""Gateway for REData's label-suggestion endpoints (``/labels/...``)."""
 
 from __future__ import annotations
 
@@ -41,12 +23,7 @@ MAX_SUGGEST_LIMIT = 50
 
 def _empty_define_result() -> dict[str, Any]:
     """A "no definitions were sent" result.
-
-    Shared by the empty-input and the skipped-off-production paths so the two
-    are indistinguishable to callers. Built fresh per call rather than shared
-    as a module constant - callers receive it as an ordinary response body and
-    may mutate it.
-    """
+    Shared by the empty-input and the skipped-off-production paths so the two are indistinguishable to callers."""
     return {"created": 0, "updated": 0, "unknown_parents": {}, "rejected_edges": [], "implied_created": 0, "implied_removed": 0, "statistics_deferred": False}
 
 
@@ -77,56 +54,42 @@ class RedataLabelsGateway(RedataJsonGateway):
     service_key: ClassVar[str] = "redata_labels"
     paid_service: ClassVar[bool] = False
 
-    # default_factory, not a bare default: a dataclass field's bare default is evaluated
-    # once at class-definition/import time, so a later settings change never reaches
-    # subsequent instantiations - default_factory re-reads it fresh each time.
+    # default_factory so settings changes apply per instance; a bare default freezes at import.
     base_url: str | None = field(default_factory=lambda: settings.redata_api_url)
     api_key: str | None = field(default_factory=lambda: settings.redata_api_key)
 
     def get_model(self) -> dict[str, Any]:
         """Return what is currently producing label suggestions, and how well.
-
-        Aggregate model metadata only - version, holdout metrics, the baselines
-        the promotion decision was made on, and the feature registry. Nothing
-        here is about a person: REData hashes user ids with a keyed HMAC on
-        arrival and never stores the raw value, and this endpoint reports on
-        the model rather than on anyone's labels.
-
-        ``active`` is ``None`` before any model has been promoted, which is a
-        normal state - the heuristic ranker answers in the meantime and is a
-        real answer, not a degraded one, since every user is cold on their
-        first day.
+        Nothing here is about a person: REData hashes user ids with a keyed HMAC on arrival and never stores the raw value, and this endpoint reports on the model rather than on anyone's labels.
 
         Returns:
-            The decoded ``GET /labels/model/`` body.
+                The decoded ``GET /labels/model/`` body.
 
         Raises:
-            GatewayRequestError: The request to REData failed.
-        """
+                GatewayRequestError: The request to REData failed."""
         return self._get_json("/api/v1/labels/model/", timeout=_MODEL_READ_TIMEOUT)
 
     def define_labels(self, user_id: str, labels: list[dict[str, Any]]) -> dict[str, Any]:
         """Upsert (by ``external_id``) one user's tag/category label definitions.
 
         Args:
-            user_id: UrbanLens profile identifier (see
+                user_id: UrbanLens profile identifier (see
                 ``services.labels.redata_suggestions``'s ``_user_id``).
-            labels: Up to :data:`MAX_LABELS_PER_DEFINE_REQUEST` definition
+                labels: Up to :data:`MAX_LABELS_PER_DEFINE_REQUEST` definition
                 dicts, each ``{external_id, name, parent_ids?, description?,
                 is_active?}``. A partial list is fine - labels not mentioned
                 are left alone. Re-sending an identical payload changes
                 nothing.
 
         Returns:
-            ``{created, updated, unknown_parents, rejected_edges,
-            implied_created, implied_removed, statistics_deferred}``. Off
-            production nothing is sent and the all-zero result comes back -
-            see :mod:`services.core.environment`.
+                ``{created, updated, unknown_parents, rejected_edges,
+                implied_created, implied_removed, statistics_deferred}``. Off
+                production nothing is sent and the all-zero result comes back -
+                see :mod:`services.core.environment`.
 
         Raises:
-            GatewayRequestError: The request failed outright, or REData
-                reported a non-2xx status.
-        """
+                GatewayRequestError: The request failed outright, or REData
+                reported a non-2xx status."""
         if not labels:
             return _empty_define_result()
         if skip_upstream_contribution("REData label definitions (POST /labels/)", detail=f"{len(labels)} label(s)"):
@@ -137,8 +100,8 @@ class RedataLabelsGateway(RedataJsonGateway):
         """Sync which labels apply to which of one user's places.
 
         Args:
-            user_id: UrbanLens profile identifier.
-            locations: Up to :data:`MAX_LOCATIONS_PER_ASSIGNMENT_REQUEST`
+                user_id: UrbanLens profile identifier.
+                locations: Up to :data:`MAX_LOCATIONS_PER_ASSIGNMENT_REQUEST`
                 entry dicts, each ``{latitude, longitude, external_id?,
                 names?, label_ids?, removed_label_ids?, replace?,
                 assigned_at?}``. UrbanLens always sends ``replace: true``
@@ -146,16 +109,15 @@ class RedataLabelsGateway(RedataJsonGateway):
                 ``services.labels.redata_suggestions``.
 
         Returns:
-            ``{locations_created, locations_updated, assignments_added,
-            assignments_removed, implied_created, implied_removed,
-            unknown_label_ids, statistics_deferred}``. Off production nothing
-            is sent and the all-zero result comes back - see
-            :mod:`services.core.environment`.
+                ``{locations_created, locations_updated, assignments_added,
+                assignments_removed, implied_created, implied_removed,
+                unknown_label_ids, statistics_deferred}``. Off production nothing
+                is sent and the all-zero result comes back - see
+                :mod:`services.core.environment`.
 
         Raises:
-            GatewayRequestError: The request failed outright, or REData
-                reported a non-2xx status.
-        """
+                GatewayRequestError: The request failed outright, or REData
+                reported a non-2xx status."""
         if not locations:
             return _empty_assignment_result()
         if skip_upstream_contribution("REData label assignments (POST /labels/assignments/)", detail=f"{len(locations)} location(s)"):
@@ -174,31 +136,28 @@ class RedataLabelsGateway(RedataJsonGateway):
         min_confidence: float | None = None,
     ) -> dict[str, Any]:
         """Ask which of this user's own tag/category labels likely apply to a place.
-
-        A POST rather than a GET because the question carries lists; it is
-        still a pure read and stores nothing on REData's end.
+        A POST rather than a GET because the question carries lists; it is still a pure read and stores nothing on REData's end.
 
         Args:
-            user_id: UrbanLens profile identifier.
-            latitude: Place latitude.
-            longitude: Place longitude.
-            names: Known alternate names for the place, if any.
-            applied_label_ids: Labels already applied - excluded from the
+                user_id: UrbanLens profile identifier.
+                latitude: Place latitude.
+                longitude: Place longitude.
+                names: Known alternate names for the place, if any.
+                applied_label_ids: Labels already applied - excluded from the
                 answer and the strongest single input to it.
-            limit: Max results, REData default 10, capped at
+                limit: Max results, REData default 10, capped at
                 :data:`MAX_SUGGEST_LIMIT`.
-            min_confidence: Drop results below this confidence.
+                min_confidence: Drop results below this confidence.
 
         Returns:
-            ``{count, results, implied, ranker, model_version,
-            scored_candidates, total_candidates, statistics_stale}``.
-            ``results`` items are ``{label_id, name, confidence,
-            canonical_key}``. An unknown user gets an empty list, not a 404.
+                ``{count, results, implied, ranker, model_version,
+                scored_candidates, total_candidates, statistics_stale}``.
+                ``results`` items are ``{label_id, name, confidence,
+                canonical_key}``. An unknown user gets an empty list, not a 404.
 
         Raises:
-            GatewayRequestError: The request failed outright, or REData
-                reported a non-2xx status.
-        """
+                GatewayRequestError: The request failed outright, or REData
+                reported a non-2xx status."""
         body: dict[str, Any] = {"user_id": user_id, "latitude": latitude, "longitude": longitude}
         if names:
             body["names"] = names

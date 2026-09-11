@@ -48,61 +48,29 @@ logger = logging.getLogger(__name__)
 _SlideT = TypeVar("_SlideT")
 
 _WEB_SEARCH_CLIENT_PAGE_SIZE = 5
-# How many of the pin's own photos to preview in the combined Media
-# section's default "All" view - matches image_gallery.PinGalleryView's own
-# per-page size, so the preview shows the same "at a glance" amount as the
-# old standalone Photos section did. Browsing beyond this many is still
-# fully supported (unlimited, paginated) via the section's "Mine" tab -
-# Photos+Media merge entry for why the preview
-# is capped instead of listing every photo into the client-side gallery.
+# Preview limit for own photos in Media "All" view.
 _MEDIA_PHOTOS_PREVIEW_LIMIT = 12
 _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
 _WEB_SEARCH_PAGE_SIZE = _WEB_SEARCH_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
 _WEB_SEARCH_MIN_REFRESH_AGE = timedelta(days=1)
 
-# The Private Pin page map's drag-to-resize handle - see set_map_height and
-# _pin-detail.scss. 320px matches the default height's existing min-height
-# floor (the request's "minimum height should be the current height we're
-# using"); 1200px is just a sane ceiling against an accidental huge drag.
+# Drag-to-resize bounds for the pin map.
 _MAP_HEIGHT_MIN_PX = 320
 _MAP_HEIGHT_MAX_PX = 1200
 
-# InfoPanelSource keys condensed into the "Regional Data" tab strip instead of
-# their own standalone card - niche, secondary-to-our-core-purpose data that's
-# only occasionally useful, so each tab's content is fetched only once the
-# user actually clicks it (see pin.panel / _pin_plugin_tabs.html), unlike the
-# rest of simple_info_panels which still auto-fetch on page load. Dict order
-# is the tab display order (US Census, Wildlife, Seismic).
+# Secondary sources shown as tabs, fetched on click.
 _CONDENSED_PLUGIN_TABS = {
     "census_tigerweb": "US Census",
     "inaturalist": "Wildlife",
     "usgs_earthquakes": "Seismic",
 }
 
-# InfoPanelSource keys appended to the same "Regional Data" tab strip (see
-# panel_tabs below) - data about facilities/features *near* the pin rather than
-# at its own coordinates, which is exactly what a free EPA-facility-detail card
-# at this pin's own location doesn't cover. EPA's nearby-facility list (as
-# opposed to its unconditional exact-site detail card, "epa_echo_detail" - see
-# plugins/builtin/epa_echo.py) is the first tab; more sources land here later.
-#
-# This dict decides *ordering and labels only*. Whether a viewer may see any of
-# these tabs is decided by each source's own PanelSource.required_feature (see
-# _viewer_may_see_panel), NOT by membership here - a panel's gate has to be one
-# fact in one place, or the tab strip and the endpoint that serves the tab's
-# content end up disagreeing about who may see it. That disagreement is not
-# hypothetical: this dict must never be read as the access gate - if
-# pin.panel served from it directly instead of each source's own
-# required_feature, every panel here would be visible to anyone who typed
-# the URL.
+# Nearby-source tabs; ordering only, access decided per-source.
 _NEARBY_RESEARCH_TABS = {
     "epa_echo": "EPA",
 }
 
-# InfoPanelSource keys condensed into the "Location Data" tab strip alongside
-# the (bespoke, non-InfoPanelSource) Nominatim/OpenStreetMap panel - see
-# _pin_location_data_tabs.html. Grouped as tabs of one card so it's clear
-# they're independent geocoding/data providers rather than duplicated data.
+# Location Data tab sources.
 _LOCATION_DATA_PLUGIN_TABS = {
     "photon": "Photon",
     "overture_building_attributes": "Building Characteristics",
@@ -110,46 +78,25 @@ _LOCATION_DATA_PLUGIN_TABS = {
 }
 
 
-#: Every panel key rendered inside a tab strip rather than as its own card.
-#: A panel's chrome is decided here, not by the panel: only this module knows
-#: whether a given key ends up inside a strip (which supplies the card) or
-#: standalone (which does not). A panel declaring its own ``nested`` status in
-#: ``render_context`` cannot be trusted here - a wrong self-declaration
-#: renders with no card at all, exactly the shape of "Water & Hydrology is
-#: not styled like the other cards."
+#: Panel keys rendered inside a tab strip rather than as own card.
 _TABBED_PANEL_KEYS = _CONDENSED_PLUGIN_TABS.keys() | _NEARBY_RESEARCH_TABS.keys() | _LOCATION_DATA_PLUGIN_TABS.keys()
 
-# Mirrors plugins.builtin.open_elevation's own module-level constant - kept as
-# a separate copy since importing a private constant across module boundaries
-# would couple this controller to that plugin's internals.
+# Local copy to avoid cross-module import.
 _METERS_PER_FOOT = 0.3048
 
-# All Location Data tabs' source keys, including the bespoke Nominatim panel -
-# used by location_data_overview to build its combined summary. Order here is
-# the order sections appear in the Overview tab.
+# Order for the Overview tab.
 _LOCATION_DATA_OVERVIEW_KEYS = ["nominatim", *_LOCATION_DATA_PLUGIN_TABS.keys()]
 
 
 def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
-    """Whether this request's user holds the subscription feature a panel requires.
-
-    Asked both when the page's tab strip is assembled and again when
-    ``panel_info`` is asked for that panel's content. Both have to consult the
-    same fact: hiding a tab is presentation, and ``pin.panel`` is a plain URL
-    that anyone logged in can type, so a gate applied only during tab assembly
-    withholds nothing at all.
-
-    Delegates to ``services.pins.external_data.panel_visible_to``, which is also
-    what the external API's panel endpoints call - a feature-gated panel must
-    never be visible on one surface and hidden on the other.
+    """Whether the user holds the feature a panel requires.
 
     Args:
         request: The current request, for its authenticated user.
         source: The panel source being considered.
 
     Returns:
-        True when the source is unrestricted (the overwhelming majority) or the
-        viewer holds the feature it requires.
+        True when unrestricted or the viewer holds the required feature.
     """
     from urbanlens.dashboard.services.pins.external_data import panel_visible_to
 
@@ -217,16 +164,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
         from urbanlens.dashboard.services.places.scope import scope_badge
 
-        # Whether this pin covers a whole parcel/site rather than one building,
-        # in which case the building-level cards suppress themselves and the
-        # parcel's building list stands in for them. See services.locations.site_scope.
+        # Parcel pins show child content in place of building cards.
         site_scope = is_site_scope(pin)
 
-        # Page-wide "show child pin details" toggle: when on (?children=1), the
-        # map, photo gallery, and visit history all include content from this
-        # pin's child pins (any depth). Off by default so the page stays
-        # simple for the majority of users who never nest pins - except on a
-        # parcel pin, whose children *are* the content, so it defaults on there.
+        # Include child pins when requested; defaults on for parcel pins.
         include_children = request.GET.get("children", "1" if site_scope else "0") == "1"
 
         from urbanlens.dashboard.models.pin_list.model import PinList
@@ -239,39 +180,22 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_readiness, panel_sources
 
-        # Subscription-gated sources are filtered out once, here, rather than at
-        # each of the four surfaces built from this dict below (three tab strips
-        # plus the auto-loading standalone panels) - a source the viewer may not
-        # see is then absent from all of them by construction, instead of each
-        # surface having to remember to ask.
+        # Filter gated sources once so all surfaces stay consistent.
         all_info_panels = {source.key: source for source in panel_sources().values() if isinstance(source, InfoPanelSource) and _viewer_may_see_panel(request, source)}
         condensed_panel_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _CONDENSED_PLUGIN_TABS.items() if key in all_info_panels]
         nearby_research_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _NEARBY_RESEARCH_TABS.items() if key in all_info_panels]
         location_data_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _LOCATION_DATA_PLUGIN_TABS.items() if key in all_info_panels]
         simple_info_panels = [source for key, source in all_info_panels.items() if key not in _TABBED_PANEL_KEYS]
 
-        # Regional Data and Nearby Research used to be two separate cards, each
-        # with their own tab strip - merged into one "Regional Data" section.
-        # The (subscription-gated) Nearby Research tabs are appended after the
-        # always-available ones rather than interleaved, so the free tabs stay
-        # in a stable position regardless of the viewer's subscription. No
-        # feature check here: nearby_research_tabs is already empty for a viewer
-        # without the feature, because all_info_panels dropped its sources.
+        # Merged Regional Data section; gated tabs already filtered above.
         panel_tabs = condensed_panel_tabs + nearby_research_tabs
 
-        # If any tab already has fresh cached data, show it immediately instead of
-        # making the user click a tab first to discover that - the first tab (in
-        # display order) that's ready wins, matching the order the tabs are shown in.
-        # Readiness is resolved in one bulk pass: asking each source its own
-        # is_ready() is a LocationCache query per tab, all answering the same
-        # "which of this location's cache rows are fresh?" question, and this
-        # runs on every Private Pin page render.
+        # Show first tab with fresh cached data.
+        # Bulk readiness check to avoid per-tab queries.
         tab_readiness = panel_readiness(pin, [all_info_panels[tab["key"]] for tab in panel_tabs])
         default_panel_tab_key = next((tab["key"] for tab in panel_tabs if tab_readiness[tab["key"]]), None)
 
-        # Whether the profile has ever added/kept an alias on ANY pin - not just this
-        # one - so the aliases onboarding card stops nagging once the feature is
-        # familiar, rather than re-introducing it on every new pin.
+        # True once aliases used on any pin, to dismiss onboarding.
         has_ever_used_aliases = PinAlias.objects.filter(pin__profile=profile).exists()
 
         from django.urls import reverse
@@ -385,21 +309,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return 0
 
     def _pending_panel(self, request: HttpRequest, pin: Pin, source_key: str, hide_tab_id: str | None = None):
-        """Schedule a panel's background fetch and return its polling placeholder.
+        """Schedule a panel fetch and return its polling placeholder.
 
         Args:
-            request: The current request (its path doubles as the poll URL).
+            request: The current request.
             pin: The pin whose panel data is being fetched.
             source_key: An ``external_data.panel_sources()`` key.
-            hide_tab_id: DOM id of a tab button that should hide itself once a
-                204 arrives (see ``panel_pending.html``'s own docstring) - only
-                panels also reachable via their own tab (currently just
-                Wikipedia's) need this; every other caller omits it.
+            hide_tab_id: DOM id to hide on 204, if any.
 
         Returns:
-            The self-polling placeholder fragment, or a 204 when the source is
-            suppressed or the poll budget is exhausted (the page's existing
-            htmx 204 handler removes the section quietly).
+            The placeholder fragment, or 204 when suppressed or exhausted.
         """
         from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, get_panel_source, schedule_panel_fetch
 
@@ -427,30 +346,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @staticmethod
     def _notify_panel_ready(request: HttpRequest, response: HttpResponse, *events: str) -> HttpResponse:
-        """Tell other panels on the page to refresh themselves via HX-Trigger.
-
-        Some external-data fetches have side effects beyond their own panel -
-        an alias/link auto-added, or the pin's displayed name changed (see
-        services.locations.naming.update_location_name_from_external_sources,
-        called from NominatimPanelSource.fetch()). Those mutations happen
-        inside a Celery task with no HTTP response to attach a client event
-        to; this attaches it instead the next time the panel that triggered
-        them is rendered from the now-fresh cache - which is exactly the poll
-        request that follows the fetch completing - so sibling panels (e.g.
-        Aliases, Links, the title card) that finished loading first don't
-        stay stale until a manual page reload.
-
-        Only fires on an actual poll (``attempt`` >= 1): the very first,
-        synchronous request for a panel that turns out to already be cached
-        from a previous page view has nothing new to announce, and firing on
-        every one of those would trigger everyone else to needlessly refetch.
+        """Notify sibling panels to refresh via HX-Trigger.
 
         Args:
-            request: The current request (its ``?attempt=`` query param
-                signals a poll cycle - see ``_poll_attempt``).
+            request: The current request.
             response: The response to annotate.
-            *events: Client event names (e.g. ``"pinAliasesChanged"``) other
-                panels on the page listen for via ``hx-trigger="... from:body"``.
+            *events: Client event names other panels listen for.
 
         Returns:
             The same response, for chaining.
@@ -1100,18 +1001,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         )
 
     def satellite_view_carousell(self, request: HttpRequest, **kwargs):
-        """Returns an HTML fragment with a multi-source satellite imagery carousel.
-
-        Sources included (where available):
-        - Google Maps Static API (current, high-res) - fetched server-side
-        - Esri World Imagery Export (current, high-res) - URL-based
-        - USGS National Map Imagery (current, US only) - URL-based
-        - Esri Wayback historical releases - URL-based export
-        - NASA GIBS / Landsat Annual (2011-2019) - WMS URL-based
-        - Mapbox Satellite (current, high-res) - fetched server-side
-        - Bing Maps Aerial (current, high-res) - fetched server-side
-        - OpenAerialMap community imagery - browser-loaded thumbnails
-        """
+        """Return a multi-source satellite imagery carousel fragment."""
         from urbanlens.dashboard.services.pins.external_data import collect_satellite_slides
 
         return self._render_media_carousel(
@@ -1124,13 +1014,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         )
 
     def street_view(self, request: HttpRequest, **kwargs):
-        """Returns an HTML fragment with a multi-source street-view carousel.
-
-        Sources included (where available):
-        - Google Street View (fetched server-side, cached 30 days)
-        - Mapillary crowdsourced imagery (browser-loaded URLs, cached 24 h)
-        - KartaView open imagery (browser-loaded URLs, cached 24 h)
-        """
+        """Return a multi-source street-view carousel fragment."""
         from urbanlens.dashboard.services.pins.external_data import collect_street_view_slides
 
         return self._render_media_carousel(

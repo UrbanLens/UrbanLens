@@ -1,12 +1,4 @@
-"""Markup views - annotation items on pin/wiki maps and standalone MarkupMaps.
-
-Three parents can own markup items (see ``PinMarkup``): a Pin (personal
-markup on the pin detail map), a Wiki (shared community markup), or a
-standalone ``MarkupMap`` - the reusable container behind safety check-in
-route maps, comment maps, and visit maps. The MarkupMap routes here also
-cover creating draft maps (so a map can be drawn before its host object
-exists, e.g. on the check-in creation page) and persisting the viewport.
-"""
+"""Markup views - annotations on pin/wiki maps and standalone maps."""
 
 from __future__ import annotations
 

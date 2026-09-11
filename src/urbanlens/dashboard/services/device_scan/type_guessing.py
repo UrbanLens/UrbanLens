@@ -1,16 +1,5 @@
 """Best-effort wireless-device type classification.
-
-A client-supplied ``device_type_guess`` is always trusted over anything this
-module computes (see :func:`resolve_device_type`) - "generally speaking,
-trust the guessed device type they provide" - this module only fills the gap
-when a client sends no guess and the device has never been classified at
-all. Two independent, deliberately modest-confidence signals are tried, name
-first (a manufacturer's own product naming, e.g. "Wyze Cam", is usually more
-specific than a MAC vendor prefix alone can tell you): a device-name
-substring match, then a MAC-OUI vendor table. Neither is authoritative - a
-miss just leaves the device UNKNOWN pending a client guess, which is always
-the safe default; a wrong guess would not be.
-"""
+A client-supplied ``device_type_guess`` is always trusted over anything this module computes (see :func:`resolve_device_type`) - "generally speaking, trust the guessed device type they provide" - this module only fills the gap when a client sends no guess and the device has never been classified at all."""
 
 from __future__ import annotations
 
@@ -99,13 +88,7 @@ def resolve_device_type(
     display_name: str,
 ) -> tuple[str, str]:
     """Decide a ScannedDevice's device_type/device_type_source for this scan round.
-
-    A client-supplied guess always wins, overwriting any prior heuristic
-    classification. Absent a guess, the heuristic only runs while the device
-    has never been classified at all (``current_source ==
-    DeviceTypeSource.UNSET``); once heuristic- or client-classified, a later
-    scan with no guess of its own leaves the existing classification alone
-    rather than flip-flopping on every upload.
+    Absent a guess, the heuristic only runs while the device has never been classified at all (``current_source == DeviceTypeSource.UNSET``); once heuristic- or client-classified, a later scan with no guess of its own leaves the existing classification alone rather than flip-flopping on every upload.
 
     Args:
         current_type: The device's current ``device_type`` value.
@@ -115,8 +98,7 @@ def resolve_device_type(
         display_name: Advertised device name, for the heuristic fallback.
 
     Returns:
-        ``(device_type, device_type_source)`` to persist.
-    """
+        ``(device_type, device_type_source)`` to persist."""
     if client_guess:
         return client_guess, DeviceTypeSource.CLIENT
 

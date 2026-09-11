@@ -1,14 +1,4 @@
-"""Trust scoring for Consensus - Beta-Bernoulli posterior with exponential forgetting.
-
-A rare "trust-check" round shows a player data that's actually already
-known/confirmed, disguised as an ordinary round (see
-``services.consensus.selection``), to verify they're answering accurately.
-Trust adapts over time rather than accumulating into a nearly-immovable
-lifetime average - a decay factor is applied to the posterior before each
-new observation, so a recent run of wrong answers visibly drags a
-previously-trusted profile's score down (the standard "Beta reputation
-system" forgetting-factor technique - see Jøsang & Ismail, 2002).
-"""
+"""Trust scoring for Consensus - Beta-Bernoulli posterior with exponential forgetting."""
 
 from __future__ import annotations
 
@@ -27,16 +17,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Decay applied to the Beta posterior (relative to the prior) before each
-#: new check-result update - an event ~50 checks ago retains ~36% weight,
-#: ~100 checks ago ~13%, so a recent bad streak dominates within a normal
-#: play session instead of being lost in a lifetime average.
 TRUST_DECAY_GAMMA = 0.98
 
-#: Injection-probability floor/ceiling. Even a maximally trusted veteran is
-#: occasionally re-checked (the floor); even a brand-new/untrusted player
-#: isn't checked on much more than a third of their rounds (the ceiling) -
-#: "periodically re-confirm, but don't overwhelm well-intentioned players."
+#: Injection-probability floor/ceiling.
+#: Even a maximally trusted veteran is occasionally re-checked (the floor); even a
+#: brand-new/untrusted player isn't checked on much more than a third of their rounds (the ceiling)
+#: - "periodically re-confirm, but don't overwhelm well-intentioned players."
 CHECK_PROBABILITY_MIN = 0.02
 CHECK_PROBABILITY_MAX = 0.35
 
@@ -85,13 +71,7 @@ def should_inject_check(profile: Profile) -> bool:
 
 def should_inject_check_for_profiles(profiles: Iterable[Profile]) -> bool:
     """Competitive-mode variant: whether the next round for every joined participant should be a check round.
-
-    A competitive round's content is identical for every participant, so
-    this uses the *minimum* trust score across the roster (the least-
-    trusted participant drives the decision) and honors every participant's
-    individual cooldown - a check round is skipped if any one of them was
-    just checked.
-    """
+    A competitive round's content is identical for every participant, so this uses the *minimum* trust score across the roster (the least- trusted participant drives the decision) and honors every participant's individual cooldown - a check round is skipped if any one of them was just checked."""
     from urbanlens.dashboard.models.consensus.model import ConsensusProfile
 
     consensus_profiles = [ConsensusProfile.objects.get_or_create_for(profile) for profile in profiles]

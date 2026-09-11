@@ -1,15 +1,5 @@
 """Google Photos Picker API gateway.
-
-All calls operate on *one user's own* Google Photos library using tokens from
-that user's :class:`~urbanlens.dashboard.models.google_photos.GooglePhotosAccount`
-row - there is no site-wide grant. Google's Photos Library API stopped
-exposing GPS coordinates and broad library search entirely (see
-``docs/designs/plugins.md`` / this session's Immich research); the **Picker API** is
-the only sanctioned mechanism left, and it's fundamentally a different shape:
-the user picks photos in Google's own UI (``pickerUri``), we poll a session
-until they're done, then list whatever they picked - there is no server-side
-"near this pin" filter to apply.
-"""
+Google's Photos Library API stopped exposing GPS coordinates and broad library search entirely (see ``docs/designs/plugins.md`` / this session's Immich research); the **Picker API** is the only sanctioned mechanism left, and it's fundamentally a different shape: the user picks photos in Google's own UI (``pickerUri``), we poll a session until they're done, then list whatever they picked - there is no server-side "near this pin" filter to apply."""
 
 from __future__ import annotations
 
@@ -43,16 +33,13 @@ class GooglePhotosNotConfiguredError(google_oauth.GoogleOAuthNotConfiguredError)
 
 def _oauth_client() -> tuple[str, str]:
     """Return the site's Google OAuth client id and secret.
-
-    Reuses the same site-wide client as Calendar (``UL_GOOGLE_CLIENT_ID``/
-    ``UL_GOOGLE_CLIENT_SECRET``) - only the requested scopes differ per feature.
+    Reuses the same site-wide client as Calendar (``UL_GOOGLE_CLIENT_ID``/ ``UL_GOOGLE_CLIENT_SECRET``) - only the requested scopes differ per feature.
 
     Returns:
         Tuple of (client_id, client_secret).
 
     Raises:
-        GooglePhotosNotConfiguredError: When either value is missing.
-    """
+        GooglePhotosNotConfiguredError: When either value is missing."""
     client_id = settings.google_client_id
     client_secret = settings.google_client_secret
     if not client_id or not client_secret:
@@ -89,8 +76,7 @@ def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict[str, Any]:
 
     Raises:
         GooglePhotosNotConfiguredError: When the OAuth client is not configured.
-        GatewayRequestError: When the token exchange fails.
-    """
+        GatewayRequestError: When the token exchange fails."""
     client_id, client_secret = _oauth_client()
     return google_oauth.exchange_code_for_tokens(client_id, client_secret, code, redirect_uri)
 
@@ -147,11 +133,8 @@ class PickedMediaItem:
     create_time: datetime.datetime | None
 
 
-#: Longest edge asked of Google for a picker-grid tile. The proxied URL is used
-#: in exactly one place - an `<img>` in `_google_photos_picker_grid.html` - so
-#: the 2048 this used to request was around a megabyte per tile, of provider
-#: bandwidth and of the shared Valkey, to draw a small square. Raising it past a
-#: thumbnail reintroduces that; the import path is unaffected and still takes the
+#: Longest edge asked of Google for a picker-grid tile.
+#: Raising it past a thumbnail reintroduces that; the import path is unaffected and still takes the
 #: original file.
 PREVIEW_MAX_DIMENSION = 512
 
@@ -223,14 +206,13 @@ class GooglePhotosGateway(Gateway):
         """Fetch the current state of a picker session.
 
         Args:
-            session_id: The session id from :meth:`create_session`.
+                session_id: The session id from :meth:`create_session`.
 
         Returns:
-            The session's current state.
+                The session's current state.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response.
-        """
+                GatewayRequestError: On a network error or non-2xx response."""
         response = self.session.get(f"{PICKER_API_BASE}/sessions/{session_id}", headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
         if not response.ok:
             logger.warning("Google Photos get_session failed (%s): %s", response.status_code, response.text[:500])
@@ -251,14 +233,13 @@ class GooglePhotosGateway(Gateway):
         """List every item the user selected in a completed picker session.
 
         Args:
-            session_id: The session id from :meth:`create_session`.
+                session_id: The session id from :meth:`create_session`.
 
         Returns:
-            The picked media items, across all pages.
+                The picked media items, across all pages.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response.
-        """
+                GatewayRequestError: On a network error or non-2xx response."""
         items: list[PickedMediaItem] = []
         page_token: str | None = None
         while True:
@@ -290,17 +271,16 @@ class GooglePhotosGateway(Gateway):
         """Download a picked item's bytes.
 
         Args:
-            base_url: The item's ``base_url`` from :meth:`list_session_media_items`.
-            original: When True (default), request the original file (``=d``
+                base_url: The item's ``base_url`` from :meth:`list_session_media_items`.
+                original: When True (default), request the original file (``=d``
                 suffix per Google's documented download convention); when
                 False, request a :data:`PREVIEW_MAX_DIMENSION` preview instead.
 
         Returns:
-            The file bytes.
+                The file bytes.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response.
-        """
+                GatewayRequestError: On a network error or non-2xx response."""
         suffix = "=d" if original else f"=w{PREVIEW_MAX_DIMENSION}-h{PREVIEW_MAX_DIMENSION}"
         response = self.session.get(f"{base_url}{suffix}", headers=self._auth_headers(), timeout=_REQUEST_TIMEOUT)
         if not response.ok:
@@ -310,17 +290,13 @@ class GooglePhotosGateway(Gateway):
 
 def session_items_cache_key(session_id: str) -> str:
     """Cache key holding a picker session's listed media items (id -> base_url/mime_type/filename).
-
-    Shared between the controller (writes it after listing, reads it for the
-    thumbnail proxy) and the import task (reads it to resolve each selected
-    item's download URL), so both agree on the same key format.
+    Shared between the controller (writes it after listing, reads it for the thumbnail proxy) and the import task (reads it to resolve each selected item's download URL), so both agree on the same key format.
 
     Args:
         session_id: The picker session id.
 
     Returns:
-        The cache key.
-    """
+        The cache key."""
     return f"ul_gphotos_session_items_{session_id}"
 
 
@@ -331,20 +307,13 @@ GOOGLE_PHOTOS_URL_PREFIX = "https://photos.google.com/lr/photo/"
 
 def media_item_web_url(media_item_id: str) -> str:
     """Return the Google Photos web URL for one media item.
-
-    Used both as the "view on Google Photos" attribution link and as the
-    de-dup key stored on ``Image.source_url`` - an item already imported to a
-    pin is recognised by matching this URL, without re-fetching it. Unlike
-    Immich/Flickr, Google Photos gives no per-account context needed to build
-    this - the Picker API's media item id is the same id used in this URL
-    scheme.
+    Used both as the "view on Google Photos" attribution link and as the de-dup key stored on ``Image.source_url`` - an item already imported to a pin is recognised by matching this URL, without re-fetching it.
 
     Args:
         media_item_id: The Picker API media item id.
 
     Returns:
-        The item's URL in the Google Photos web UI.
-    """
+        The item's URL in the Google Photos web UI."""
     return f"{GOOGLE_PHOTOS_URL_PREFIX}{media_item_id}"
 
 

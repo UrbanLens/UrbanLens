@@ -135,9 +135,7 @@ def _make_step_progress_reporter(job_status: ImportJobStatus, key: str, start_pc
 
 def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
     """Parse a UrbanLens export ZIP and import data for the user.
-
-    Idempotent: records that already exist (matched by UUID) are skipped
-    rather than duplicated.
+    Idempotent: records that already exist (matched by UUID) are skipped rather than duplicated.
 
     Args:
         user_id: PK of the user to import data for.
@@ -145,8 +143,7 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
         job_id: UUID string for this import job (for status tracking).
 
     Returns:
-        True on success (even partial), False on unrecoverable error.
-    """
+        True on success (even partial), False on unrecoverable error."""
     from django.contrib.auth import get_user_model
     from django.core.exceptions import ObjectDoesNotExist
     from django.db import DatabaseError
@@ -203,10 +200,10 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
         job_status.write("error", 0, "Import failed. Please check the file and try again.")
         return False
     except Exception:
-        # Catch-all so an unanticipated exception from an individual importer (e.g. a
-        # malformed field in one row) can never leave the job stuck at "running" forever -
-        # without this, the status cache is never written to "error" and the frontend
-        # polls indefinitely with no feedback to the user.
+        # Catch-all so an unanticipated exception from an individual importer (e.g. a malformed
+        # field in one row) can never leave the job stuck at "running" forever - without this, the
+        # status cache is never written to "error" and the frontend polls indefinitely with no
+        # feedback to the user.
         logger.exception("Unexpected import failure for user %s", user_id)
         job_status.write("error", 0, "Import failed unexpectedly. Please check the file and try again.")
         return False
@@ -222,40 +219,30 @@ class _ImportValidationError(Exception):
     pass
 
 
-#: Ceilings on what an uploaded archive may declare before extraction even
-#: starts, guarding against a crafted zip filling the disk (decompression
-#: bomb) or exhausting inodes. The byte ceiling is dynamic (see
-#: ``_extraction_size_ceiling``) because export archives bundle the user's
-#: actual photo files, so a legitimate archive can approach the user's
-#: storage quota - the floor below is only its minimum.
+#: Ceilings on what an uploaded archive may declare before extraction even starts, guarding against
+#: a crafted zip filling the disk (decompression bomb) or exhausting inodes.
+#: The byte ceiling is dynamic (see ``_extraction_size_ceiling``) because export archives bundle the
+#: user's actual photo files, so a legitimate archive can approach the user's storage quota - the
 _EXTRACTED_BYTES_FLOOR = 2 * 1024**3
 _MAX_ARCHIVE_MEMBERS = 50_000
 
 #: Chunk size for the bounded per-member read loop in `_extract_zip_members_bounded`.
-#: Bytes are only ever decompressed (via `zipfile.ZipExtFile.read()`) up to
-#: whatever's actually written to disk before the running total is checked
-#: against the ceiling again - this is what makes the ceiling a real, enforced
-#: limit on decompressed output rather than a check against the (attacker-
-#: controlled, forgeable) declared `file_size` header alone.
+#: Bytes are only ever decompressed (via `zipfile.ZipExtFile.read()`) up to whatever's actually
+#: written to disk before the running total is checked against the ceiling again - this is what
+#: makes the ceiling a real, enforced limit on decompressed output rather than a check against the
 _ZIP_EXTRACT_CHUNK_BYTES = 1024 * 1024
 
 
 def _extraction_size_ceiling(profile: Any | None) -> int:
     """Upper bound on an archive's declared uncompressed size, in bytes.
-
-    Allows twice the profile's resolved storage quota (photo payload plus
-    headroom for the JSON data and quota changes between export and import),
-    never below the 2 GiB floor. Unlimited-quota users get a fixed generous
-    ceiling rather than no ceiling at all - the guard exists to stop
-    decompression bombs, not real exports.
+    Allows twice the profile's resolved storage quota (photo payload plus headroom for the JSON data and quota changes between export and import), never below the 2 GiB floor.
 
     Args:
         profile: The importing profile, or None when unknown (floor-based
             fallback, used by direct callers in tests).
 
     Returns:
-        The maximum declared uncompressed size to accept, in bytes.
-    """
+        The maximum declared uncompressed size to accept, in bytes."""
     from urbanlens.dashboard.services.media.storage import get_quota_bytes
 
     quota_bytes = get_quota_bytes(profile) if profile is not None else None
@@ -271,8 +258,7 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile:
         zip_path: Path to the uploaded archive.
         extract_dir: Directory to extract into.
         job_id: Import job UUID (for log context).
-        profile: The importing profile, used to size the extraction ceiling.
-    """
+        profile: The importing profile, used to size the extraction ceiling."""
     if not os.path.exists(zip_path):
         raise _ImportValidationError("Uploaded file not found. Please try again.")
 
@@ -286,20 +272,16 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile:
         members = zf.infolist()
         if len(members) > _MAX_ARCHIVE_MEMBERS:
             raise _ImportValidationError("Archive contains too many files.")
-        # Fast pre-filter on the declared sizes: cheap, and rejects an obviously
-        # oversized archive before any bytes are read. This is NOT the real
-        # security guard, though - the declared `file_size` on each ZipInfo is
-        # attacker-controlled and independent of the actual compressed payload
-        # (zipfile only detects a declared-vs-actual mismatch via CRC32 *after*
-        # a member is fully decompressed). The real ceiling is enforced live,
-        # against actual decompressed bytes, inside
-        # `_extract_zip_members_bounded` below.
+        # Fast pre-filter on the declared sizes: cheap, and rejects an obviously oversized archive
+        # before any bytes are read.
+        # This is NOT the real security guard, though - the declared `file_size` on each ZipInfo is
+        # attacker-controlled and independent of the actual compressed payload (zipfile only detects
         if sum(member.file_size for member in members) > ceiling:
             raise _ImportValidationError("Archive is too large to import.")
-        # Guard against zip-slip path traversal. The separator is part of the
-        # comparison on purpose: a bare prefix check would accept an entry
-        # escaping into a SIBLING directory whose name merely starts with the
-        # extract dir's (e.g. ".../job1" matching ".../job1evil/...").
+        # Guard against zip-slip path traversal.
+        # The separator is part of the comparison on purpose: a bare prefix check would accept an
+        # entry escaping into a SIBLING directory whose name merely starts with the extract dir's
+        # (e.g.
         for member in members:
             dest = os.path.realpath(os.path.join(extract_root, member.filename))
             if dest != extract_root and not dest.startswith(extract_root + os.sep):
@@ -332,23 +314,7 @@ def _extract_zip_members_bounded(
     ceiling: int,
 ) -> None:
     """Extract *members* from *zf* into *extract_root* under a hard, live-enforced byte ceiling.
-
-    Ports the bounded-read pattern already used by
-    ``archive_extractor._extract_zip`` in place of a bare ``ZipFile.extractall()``
-    call: rather than trusting each member's declared (attacker-forgeable)
-    ``file_size`` header, every member is decompressed and written in capped
-    chunks, and the *actual* decompressed byte count accumulated so far is what
-    gets checked against ``ceiling`` after every chunk - extraction aborts
-    mid-stream the instant the real total is exceeded. This is what actually
-    stops a small, highly-compressible ZIP (forged small ``file_size`` fields,
-    huge real payload) from inflating to hundreds of GB on disk before anything
-    catches it; a declared-size check alone (as previously used here) cannot,
-    since zipfile only notices a declared-vs-actual mismatch via CRC32 *after*
-    a member has already been fully decompressed and written.
-
-    Symlink entries are skipped via the same Unix-mode-bit check
-    ``archive_extractor._extract_zip`` uses, so a crafted archive can't plant a
-    symlink for a later step to unknowingly follow.
+    Ports the bounded-read pattern already used by ``archive_extractor._extract_zip`` in place of a bare ``ZipFile.extractall()`` call: rather than trusting each member's declared (attacker-forgeable) ``file_size`` header, every member is decompressed and written in capped chunks, and the *actual* decompressed byte count accumulated so far is what gets checked against ``ceiling`` after every chunk - extraction aborts mid-stream the instant the real total is exceeded.
 
     Args:
         zf: The already-open ZipFile.
@@ -361,17 +327,16 @@ def _extract_zip_members_bounded(
 
     Raises:
         _ImportValidationError: If the actual decompressed size of the archive,
-            summed across members as extraction proceeds, exceeds ``ceiling``.
-    """
+            summed across members as extraction proceeds, exceeds ``ceiling``."""
     total_written = 0
 
     for member in members:
         if member.is_dir():
             continue
 
-        # Skip symlinks: check Unix mode bits stored in external_attr (same
-        # check as archive_extractor._extract_zip). A symlink entry could
-        # otherwise point extraction output at an arbitrary target path, or
+        # Skip symlinks: check Unix mode bits stored in external_attr (same check as
+        # archive_extractor._extract_zip).
+        # A symlink entry could otherwise point extraction output at an arbitrary target path, or
         # let a later step unknowingly follow it off the extracted tree.
         if (member.external_attr >> 16) & 0o170000 == 0o120000:
             logger.warning("Skipping symlink in import archive: %s", member.filename)
@@ -387,11 +352,10 @@ def _extract_zip_members_bounded(
                 remaining_budget = ceiling - total_written
                 if remaining_budget <= 0:
                     raise _ImportValidationError("Archive is too large to import.")
-                # Never ask for more than the remaining budget: this bounds
-                # the actual number of bytes zipfile decompresses in this call
-                # to what's still allowed, rather than decompressing an
-                # arbitrarily large chunk and discovering only afterwards that
-                # it blew the ceiling.
+                # Never ask for more than the remaining budget: this bounds the actual number of
+                # bytes zipfile decompresses in this call to what's still allowed, rather than
+                # decompressing an arbitrarily large chunk and discovering only afterwards that it
+                # blew the ceiling.
                 chunk = src.read(min(_ZIP_EXTRACT_CHUNK_BYTES, remaining_budget))
                 if not chunk:
                     break
@@ -407,27 +371,14 @@ _STRUCTURED_DATA_EXTENSIONS = (".json", ".csv")
 
 def _scan_extracted_files(extract_root: str) -> None:
     """Malware-scan and content-sniff every non-JSON file extracted from the archive.
-
-    Every extracted file is written to local disk (even if only temporarily -
-    ``run_import``'s ``finally`` block removes ``extract_dir`` once the job
-    ends) and the "photos/" export folder specifically will be turned into
-    permanent ``Image`` rows once a photos importer exists - so scanning has
-    to happen here, right after extraction and before any importer (present
-    or future) ever opens these files, not deferred to whichever importer
-    eventually persists them. Runs the same checks every direct upload endpoint
-    goes through (see ``images.image_upload_error``) rather than a bespoke
-    subset: the extension has to name a media kind we serve, the magic bytes
-    have to agree with it, a file named as a photo has to actually be one, and
-    the whole thing has to pass antivirus. The export's own structured data
-    (``*.json``, ``pins.csv``) is not a media upload and is skipped.
+    Every extracted file is written to local disk (even if only temporarily - ``run_import``'s ``finally`` block removes ``extract_dir`` once the job ends) and the "photos/" export folder specifically will be turned into permanent ``Image`` rows once a photos importer exists - so scanning has to happen here, right after extraction and before any importer (present or future) ever opens these files, not deferred to whichever importer eventually persists them.
 
     Args:
         extract_root: Root directory the archive was extracted into.
 
     Raises:
         _ImportValidationError: On the first infected file, a content/
-            extension mismatch, or the antivirus scanner being unavailable.
-    """
+            extension mismatch, or the antivirus scanner being unavailable."""
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.security.content_sniffing import content_type_mismatch_error, guess_media_kind_from_extension, photo_is_not_an_image_error
     from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
@@ -439,13 +390,9 @@ def _scan_extracted_files(extract_root: str) -> None:
             path = os.path.join(dirpath, filename)
             with open(path, "rb") as file_obj:
                 declared_kind = guess_media_kind_from_extension(filename)
-                # An extension nothing recognises used to skip the mismatch check
-                # entirely, which is how an ``.svg`` got through: no magic bytes
-                # to sniff, no virus signature in scripted markup, and a stored
-                # file nginx then serves as image/svg+xml from this app's own
-                # origin. Everything here that is not the export's own structured
-                # data is destined for media storage, so an extension we would
-                # not serve as a passive image has no business in the archive.
+                # Everything here that is not the export's own structured data is destined for media
+                # storage, so an extension we would not serve as a passive image has no business in
+                # the archive.
                 if declared_kind is None:
                     raise _ImportValidationError(f"'{filename}' in the import archive isn't a supported photo, video, or document and the import was rejected.")
 
@@ -528,13 +475,10 @@ def _import_labels(
             label_uuid = uuid4()
 
         if is_user_label:
-            # Match by UUID first (re-importing the same export), then by name+kind
-            # (the import may be re-run against data that was already imported, or
-            # the export UUID may not round-trip - either way, don't duplicate).
-            # name__iexact, not name: labels are unique on (lower(name), profile,
-            # kind) since migration 0043, so an exact-match lookup would miss
-            # "Abandoned" while importing "abandoned" and then fail the whole
-            # import on the constraint instead of skipping the duplicate.
+            # Match by UUID first (re-importing the same export), then by name+kind (the import may
+            # be re-run against data that was already imported, or the export UUID may not
+            # round-trip - either way, don't duplicate). name__iexact, not name: labels are unique
+            # on (lower(name), profile, kind) since migration 0043, so an exact-match lookup would
             existing = Label.objects.filter(uuid=label_uuid, profile=profile).first() or Label.objects.filter(profile=profile, name__iexact=name, kind=kind).first()
             if existing:
                 label_uuid_map[uuid_str] = existing.pk
@@ -607,26 +551,7 @@ def _import_pins(
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import user pins.
-
-    Pins are imported as bare coordinates, exactly as if the user had dropped
-    a new pin manually or imported a Google Takeout file. Location resolution
-    (matching an existing shared Location nearby, or creating a new one)
-    happens inside ``Pin.objects.get_nearby_or_create``. No community wiki,
-    boundary, or external-API work happens at import time: wikis are created
-    explicitly by the user from the Private Pin page, and default boundaries
-    are generated lazily when a Private Pin page is first viewed.
-
-    Pins are deduped per-profile by proximity via ``Pin.objects.get_nearby_or_create``
-    (the same helper the Google Takeout importer uses) rather than inserted
-    directly. Multiple exported pins commonly resolve to the same effective
-    coordinate (e.g. several pins that all rely on one shared Location for
-    placement), which would otherwise collide with the one-root-pin-per-point
-    per-profile database constraint.
-
-    A pin's review rating and private article are only ever created here (never
-    on a re-import that skips an already-existing pin), matching the same
-    "create-time only" treatment as labels below.
-    """
+    Pins are deduped per-profile by proximity via ``Pin.objects.get_nearby_or_create`` (the same helper the Google Takeout importer uses) rather than inserted directly."""
     from django.db import IntegrityError
 
     from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -644,10 +569,10 @@ def _import_pins(
             report_progress(idx, total_rows)
         uuid_str = row.get("uuid", "")
 
-        # Idempotency: skip pins that already exist FOR THIS USER. The
-        # profile scope is load-bearing: the archive is user-supplied, so a
-        # uuid belonging to another user's pin must not enter pin_uuid_map -
-        # later steps (visit history) create rows against the mapped pks.
+        # Idempotency: skip pins that already exist FOR THIS USER.
+        # The profile scope is load-bearing: the archive is user-supplied, so a uuid belonging to
+        # another user's pin must not enter pin_uuid_map - later steps (visit history) create rows
+        # against the mapped pks.
         existing = Pin.objects.filter(uuid=uuid_str, profile=profile).first() if uuid_str else None
         if existing:
             pin_uuid_map[uuid_str] = existing.pk
@@ -680,11 +605,10 @@ def _import_pins(
             value = security.get(field_name)
             if value in security_level_values:
                 defaults[field_name] = value
-        # Only carry the archive's uuid onto the new pin when it isn't
-        # already taken by another user's pin (uuid is globally unique);
-        # otherwise import as a fresh pin. pin_uuid_map still keys on the
-        # archive's uuid either way - it exists to resolve the archive's own
-        # internal cross-references.
+        # Only carry the archive's uuid onto the new pin when it isn't already taken by another
+        # user's pin (uuid is globally unique); otherwise import as a fresh pin. pin_uuid_map still
+        # keys on the archive's uuid either way - it exists to resolve the archive's own internal
+        # cross-references.
         if uuid_str and not Pin.objects.filter(uuid=uuid_str).exists():
             defaults["uuid"] = uuid_str
 
@@ -732,18 +656,11 @@ def _import_pins(
 
 def _restore_pin_alias(pin: Any, alias_row: Any) -> None:
     """Re-create one user-authored alias on a freshly imported pin.
-
-    Only ``source == "user"`` aliases are restored. An ``official`` alias is
-    written by an external name provider and re-synced by that provider against
-    whatever *this* instance resolves the pin to, so importing one would freeze
-    a stale third-party name in place. Matching is case-insensitive because the
-    ``(lower(name), pin)`` uniqueness constraint is - an exact-match check would
-    miss a case variant and turn a duplicate into a constraint error.
+    An ``official`` alias is written by an external name provider and re-synced by that provider against whatever *this* instance resolves the pin to, so importing one would freeze a stale third-party name in place.
 
     Args:
         pin: The newly created Pin the alias belongs to.
-        alias_row: One entry from the exported pin's ``aliases`` list.
-    """
+        alias_row: One entry from the exported pin's ``aliases`` list."""
     from django.db import IntegrityError
 
     from urbanlens.dashboard.models.aliases.model import AliasSource, AliasType, PinAlias
@@ -838,18 +755,7 @@ def _import_connections(
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import friendship connections as fresh friend requests.
-
-    The archive is user-supplied input, so its rows are treated as requests
-    rather than facts: an import may only re-create actions the importing
-    user could take themselves through the UI. Each outgoing row becomes a
-    new friend REQUEST via ``Friendship.request`` - the chokepoint that
-    enforces the community-enabled and existing/blocked-row guards - except
-    an outgoing BLOCK, which is restored directly since blocking is a
-    unilateral action the importer owns. The exported status, permissions,
-    and incoming rows are otherwise ignored: honoring them would let a
-    crafted archive forge an ACCEPTED friendship (or a row "from" another
-    user) and grant itself friend-level access to that user's data.
-    """
+    The archive is user-supplied input, so its rows are treated as requests rather than facts: an import may only re-create actions the importing user could take themselves through the UI."""
     from django.db.models import Q
 
     from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
@@ -868,10 +774,9 @@ def _import_connections(
         direction = row.get("direction", "outgoing")
 
         if not other_uuid or direction != "outgoing":
-            # Outgoing not-yet-accepted rows export with identity withheld
-            # (nothing to act on), and an incoming row records the OTHER
-            # user's action - it cannot be re-created on their behalf; they
-            # must send the request themselves.
+            # Outgoing not-yet-accepted rows export with identity withheld (nothing to act on), and
+            # an incoming row records the OTHER user's action - it cannot be re-created on their
+            # behalf; they must send the request themselves.
             result.inc_skipped("connections")
             continue
 
@@ -917,10 +822,9 @@ def _import_connections(
             result.inc_skipped("connections")
 
 
-#: Settings that are plain scalar Profile fields, copied through as-is when
-#: present (booleans/ints round-trip through JSON natively; choice fields are
-#: separately validated via ``_safe_set`` below since a foreign instance's
-#: choices module could differ in a future version).
+#: Settings that are plain scalar Profile fields, copied through as-is when present (booleans/ints
+#: round-trip through JSON natively; choice fields are separately validated via ``_safe_set`` below
+#: since a foreign instance's choices module could differ in a future version).
 _SETTINGS_PASSTHROUGH_FIELDS: tuple[str, ...] = (
     "cluster_radius",
     "use_pin_cache",
@@ -951,17 +855,10 @@ _SETTINGS_DECIMAL_FIELDS: tuple[str, ...] = (
 #: of the same name (each group mirrors one settings-page section).
 _SETTINGS_GROUPS: tuple[str, ...] = ("ai", "keyword_tagging", "photos", "places_layers", "tracking", "community")
 
-#: Explicit allowlist of field names per group, mirroring exactly what
-#: ``_export_settings`` writes into each group. The archive is user-supplied
-#: input, so a plain ``hasattr(Profile, key)`` check is not safe here: it
-#: would also be true for fields never meant to be settable this way -
-#: including ``user`` (the OneToOneField to auth.User) and internal
-#: bookkeeping fields such as ``deletion_requested_at``/``tos_accepted_at``/
-#: ``profile_setup_complete``/``slug``/``primary_email_normalized``. A
-#: hand-crafted export file smuggling e.g. ``{"community": {"user": 1}}``
-#: must not be able to repoint identity/bookkeeping columns via this path.
-#: ``sync_aliases`` is deliberately omitted from ``community`` - it's a
-#: choice field, validated separately via ``_safe_set`` below.
+#: Explicit allowlist of field names per group, mirroring exactly what ``_export_settings`` writes
+#: into each group.
+#: The archive is user-supplied input, so a plain ``hasattr(Profile, key)`` check is not safe here:
+#: it would also be true for fields never meant to be settable this way - including ``user`` (the
 _SETTINGS_GROUP_FIELDS: dict[str, frozenset[str]] = {
     "ai": frozenset({"ai_enabled", "ai_label_tags", "ai_label_categories", "ai_label_statuses"}),
     "keyword_tagging": frozenset({"keyword_tagging_enabled", "keyword_label_tags", "keyword_label_categories", "keyword_label_statuses"}),
@@ -1100,13 +997,7 @@ def _import_pin_lists(
     label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
-    """Import pin lists (idempotent by UUID) and their pin membership rows.
-
-    Smart-list config (``smart_filter``/``smart_boundary``) is copied as-is;
-    it is not re-evaluated against the importing profile's pins here - the
-    normal smart-membership signal/service picks it back up the next time a
-    member pin is saved or the list is edited.
-    """
+    """Import pin lists (idempotent by UUID) and their pin membership rows."""
     from django.db import IntegrityError
 
     from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
@@ -1178,15 +1069,7 @@ def _import_custom_fields(
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import custom field definitions, plus values for pin-targeted fields.
-
-    Field *definitions* (name/type/config) are always imported (idempotent by
-    profile+entity_type+name, matching the DB's own uniqueness constraint) -
-    they're useful on their own even with no data. Values are only re-created
-    for entity_type=pin, since that's the only target type this import can
-    resolve a real local object for (photos/people/maps aren't imported by
-    any other step); other entity types' values are skipped with a warning
-    rather than silently dropped.
-    """
+    Values are only re-created for entity_type=pin, since that's the only target type this import can resolve a real local object for (photos/people/maps aren't imported by any other step); other entity types' values are skipped with a warning rather than silently dropped."""
     from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
 
     rows = _read_json(data_dir, "custom_fields.json")
@@ -1305,13 +1188,7 @@ def _safe_uuid(value: Any) -> str | None:
 
 def _resolve_import_target(profile: Any, row: dict[str, Any], pin_uuid_map: dict[str, int]) -> tuple[int | None, Any | None, bool]:
     """Resolve a comment/photo row's exported target to a local pin pk or Wiki.
-
-    Matches on ``target_uuid`` only (names are neither unique nor stable). Pin
-    targets must resolve to the importing user's OWN pin - the archive is
-    user-supplied, so a uuid pointing at someone else's pin must never attach
-    content there. Wiki targets must pass the same access check the wiki page
-    itself enforces (``location_visible_to``): a crafted archive must not
-    attach content to a wiki its owner couldn't even see.
+    Pin targets must resolve to the importing user's OWN pin - the archive is user-supplied, so a uuid pointing at someone else's pin must never attach content there.
 
     Args:
         profile: The importing profile.
@@ -1321,8 +1198,7 @@ def _resolve_import_target(profile: Any, row: dict[str, Any], pin_uuid_map: dict
     Returns:
         ``(pin_pk, wiki, resolved)`` - ``resolved`` False means the row named
         a target that could not (or must not) be matched here; ``(None, None,
-        True)`` means the row genuinely had no target.
-    """
+        True)`` means the row genuinely had no target."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
@@ -1352,12 +1228,7 @@ def _resolve_import_target(profile: Any, row: dict[str, Any], pin_uuid_map: dict
 
 def _apply_exported_created(instance: Any, created_raw: Any) -> None:
     """Backdate an imported row's ``created`` to the exported timestamp.
-
-    ``created`` is ``auto_now_add`` so it can't be set at create time; a
-    queryset ``update`` after the fact preserves the original ordering
-    (comment threads, message history) without fighting the field definition.
-    Unparseable timestamps are simply left at import time.
-    """
+    ``created`` is ``auto_now_add`` so it can't be set at create time; a queryset ``update`` after the fact preserves the original ordering (comment threads, message history) without fighting the field definition."""
     from django.utils.dateparse import parse_datetime
 
     created = parse_datetime(str(created_raw or ""))
@@ -1375,15 +1246,7 @@ def _import_comments(
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import the user's own pin/wiki comments (Notes), matched by ``target_uuid``.
-
-    A comment only means something attached to its target, so rows whose
-    target can't be resolved (pin not in this import or not the user's own;
-    wiki absent on this instance or not visible to the user - the same
-    ``location_visible_to`` gate the wiki page enforces) are skipped with a
-    warning rather than imported as orphans. Idempotent per comment uuid.
-    Only archives from before the ``target_uuid`` export field can hit the
-    "no target_uuid" skip - name-based matching is deliberately not attempted.
-    """
+    A comment only means something attached to its target, so rows whose target can't be resolved (pin not in this import or not the user's own; wiki absent on this instance or not visible to the user - the same ``location_visible_to`` gate the wiki page enforces) are skipped with a warning rather than imported as orphans."""
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH
 
@@ -1412,11 +1275,10 @@ def _import_comments(
             result.inc_skipped("comments")
             continue
 
-        # Content-level idempotency backstop: when the archive's uuid is
-        # already taken by ANOTHER row (same-instance import - the exporter's
-        # own comment still holds it), the imported copy gets a fresh uuid, so
-        # the uuid check above can never catch a re-import. An identical
-        # (target, text, exported-created) row is the same comment.
+        # Content-level idempotency backstop: when the archive's uuid is already taken by ANOTHER
+        # row (same-instance import - the exporter's own comment still holds it), the imported copy
+        # gets a fresh uuid, so the uuid check above can never catch a re-import.
+        # An identical (target, text, exported-created) row is the same comment.
         from django.utils.dateparse import parse_datetime
 
         exported_created = parse_datetime(str(row.get("created") or ""))
@@ -1447,15 +1309,7 @@ def _import_photos(
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import the archive's ``photos/`` files back into storage.
-
-    Every archive file was already malware-scanned at extraction
-    (``_scan_extracted_files``). Each photo re-enters storage through the
-    same quota and max-file-size checks a fresh upload gets; ones that don't
-    fit are skipped with a warning rather than blowing the quota. A photo
-    whose target can't be resolved still imports as an unattached upload
-    (the data is the user's own either way - unlike a comment, a photo
-    doesn't need a target to be meaningful). Idempotent per image uuid.
-    """
+    Each photo re-enters storage through the same quota and max-file-size checks a fresh upload gets; ones that don't fit are skipped with a warning rather than blowing the quota."""
     from decimal import Decimal, InvalidOperation
 
     from django.core.files import File
@@ -1543,15 +1397,7 @@ def _import_trips(
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Re-create the trips the user owned; members become fresh invitations.
-
-    Requests-not-facts, exactly like ``_import_connections``: only trips the
-    user *created* are rebuilt (a membership in someone else's trip records
-    THEIR trip - it cannot be reconstructed on their behalf), and exported
-    members are re-invited through the same guards the trip UI applies
-    (connections only, ``max_trip_members`` cap, ``STATUS_INVITED`` so each
-    person still accepts for themselves). The upcoming-trips cap is honored
-    for trips with a future start date. Idempotent per trip uuid.
-    """
+    Requests-not-facts, exactly like ``_import_connections``: only trips the user *created* are rebuilt (a membership in someone else's trip records THEIR trip - it cannot be reconstructed on their behalf), and exported members are re-invited through the same guards the trip UI applies (connections only, ``max_trip_members`` cap, ``STATUS_INVITED`` so each person still accepts for themselves)."""
     from django.utils.dateparse import parse_date
 
     from urbanlens.dashboard.models.profile.model import Profile
@@ -1612,10 +1458,9 @@ def _import_trips(
         if start_date is not None and start_date >= timezone.localdate():
             upcoming_count += 1
 
-        # Re-invite exported members: connections only (mirroring
-        # TripCreateView - never trust arbitrary identifiers from the
-        # archive), capped, always as an invitation the member accepts or
-        # ignores themselves.
+        # Re-invite exported members: connections only (mirroring TripCreateView - never trust
+        # arbitrary identifiers from the archive), capped, always as an invitation the member
+        # accepts or ignores themselves.
         member_uuids = [_safe_uuid(value) for value in (row.get("member_uuids") or [])]
         invitable = [member_uuid for member_uuid in member_uuids if member_uuid and member_uuid in connection_uuids]
         remaining = max_members - trip.profiles.count()
@@ -1643,26 +1488,7 @@ def _import_direct_messages(
     label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
-    """Restore the user's own SENT plaintext messages into their conversations.
-
-    The narrow slice that can be restored honestly:
-
-    * **Received rows are never imported** - that would let a crafted archive
-      fabricate messages "from" a real user (the same forgery
-      ``_import_connections`` refuses for incoming friendship rows).
-    * **Encrypted rows are never imported** - their ciphertext is sealed to
-      the exporting account's key material and the server can't re-wrap what
-      it can't read; the ciphertext stays available in the archive itself.
-    * Sent plaintext rows are re-created only when the partner exists here,
-      isn't muted either way, and ``can_direct_message`` (the same chokepoint
-      the composer uses) still permits messaging them.
-
-    Rows are inserted directly - deliberately NOT through
-    ``create_direct_message`` - so restoring history never pushes live
-    WebSocket events, bell notifications, or text alerts at the partner.
-    Exported read state is preserved so old messages don't reappear unread.
-    Idempotent per (partner, exported timestamp).
-    """
+    """Restore the user's own SENT plaintext messages into their conversations. * **Received rows are never imported** - that would let a crafted archive fabricate messages "from" a real user (the same forgery ``_import_connections`` refuses for incoming friendship rows). * **Encrypted rows are never imported** - their ciphertext is sealed to the exporting account's key material and the server can't re-wrap what it can't read; the ciphertext stays available in the archive itself. * Sent plaintext rows are re-created only when the partner exists here, isn't muted either way, and ``can_direct_message`` (the same chokepoint the composer uses) still permits messaging them."""
     from django.utils.dateparse import parse_datetime
 
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
@@ -1709,10 +1535,9 @@ def _import_direct_messages(
             sender=profile,
             recipient=partner,
             body=body,
-            # Preserve exported read state (read timestamps aren't exported,
-            # so the deletion moment is approximated by the send moment) - a
-            # restored years-old message must not land as "unread" in the
-            # partner's badge count.
+            # Preserve exported read state (read timestamps aren't exported, so the deletion moment
+            # is approximated by the send moment) - a restored years-old message must not land as
+            # "unread" in the partner's badge count.
             read_at=created if row.get("read") else None,
         )
         _apply_exported_created(message, row.get("created"))
@@ -1764,22 +1589,12 @@ class ImportContext:
 
 class ImportType(ABC):
     """One import step, reading a single file from the archive.
-
-    The original steps are plain ``_import_*`` functions listed in
-    :data:`_IMPORTERS`. Steps added since subclass this instead: declare a
-    key/filename/message, implement :meth:`run`, and append an instance to
-    :data:`_REGISTERED_IMPORT_TYPES` plus its key to :data:`_IMPORT_ORDER` (the
-    order is a real dependency graph - map annotations need pins, safety
-    check-ins need maps - so it stays hand-written).
-
-    Instances are callable with the same signature the legacy importers use, so
-    :func:`run_import` dispatches to both identically.
+    Steps added since subclass this instead: declare a key/filename/message, implement :meth:`run`, and append an instance to :data:`_REGISTERED_IMPORT_TYPES` plus its key to :data:`_IMPORT_ORDER` (the order is a real dependency graph - map annotations need pins, safety check-ins need maps - so it stays hand-written).
 
     Attributes:
         key: Manifest/export-type key this step handles.
         filename: File in the archive's data directory, relative to it.
-        message: Progress message shown while this step runs.
-    """
+        message: Progress message shown while this step runs."""
 
     key: ClassVar[str]
     filename: ClassVar[str]
@@ -1852,15 +1667,11 @@ class RowImportType(ImportType):
     def allowed(self, ctx: ImportContext) -> bool:
         """Whether this step may run at all for the importing profile.
 
-        Overridden by steps behind a privacy setting (the same gate
-        ``_import_visit_history`` applies before creating any visit).
-
         Args:
-            ctx: The shared import context.
+                ctx: The shared import context.
 
         Returns:
-            True to process rows; False to skip the whole step.
-        """
+                True to process rows; False to skip the whole step."""
         return True
 
     @abstractmethod
@@ -1946,23 +1757,7 @@ def _connection_uuids(ctx: ImportContext) -> set[str]:
 
 class ProfileImport(ImportType):
     """Restore the profile's own free-text content and contact handles.
-
-    Identity is deliberately NOT restored. ``username``, ``email``,
-    ``first_name``, ``last_name`` and ``date_joined`` all live on ``auth.User``
-    and identify the *account*, not its content: an archive is routinely
-    imported into a different account (that is the whole point of a portable
-    export), and letting one overwrite the destination account's login identity
-    would be an account-takeover primitive rather than a restore. The fields
-    below are the ones the user typed into their own profile page and can
-    already see sitting in ``profile.json``.
-
-    ``social_links`` and ``secondary_emails`` ride along in the same file
-    (``_export_profile`` writes them there) and are restored here too - deduped
-    against what the profile already has, and always unverified: verification is
-    a claim on an address that only this instance's confirmation flow can grant,
-    so honoring an exported ``is_verified`` would let a hand-edited archive
-    claim someone else's address.
-    """
+    ``username``, ``email``, ``first_name``, ``last_name`` and ``date_joined`` all live on ``auth.User`` and identify the *account*, not its content: an archive is routinely imported into a different account (that is the whole point of a portable export), and letting one overwrite the destination account's login identity would be an account-takeover primitive rather than a restore."""
 
     key = "profile"
     filename = "profile.json"
@@ -2099,25 +1894,7 @@ class ProfileImport(ImportType):
 
 
 class SafetyCheckinsImport(RowImportType):
-    """Restore safety check-ins as historical records, never as live plans.
-
-    A restored check-in is always given a *terminal* status. An exported
-    ``scheduled``/``awaiting_checkin``/``overdue`` row still has a future
-    ``checkin_by``, so importing it as-is would re-arm a plan the user is not
-    actually on and eventually email their emergency contacts about a trip that
-    never happened - an import must not be able to send mail on the user's
-    behalf. Non-terminal rows therefore land as ``cancelled``, with a warning
-    saying so; a check-in that had already concluded keeps the status it had.
-
-    ``notify_community_wiki`` is likewise forced off, so a restore can never
-    post to a community wiki. Contact rows are re-created from the snapshot the
-    user typed, but never their ``token`` (a fresh unguessable one is generated,
-    and the old one was never exported), and a contact is only re-linked to a
-    real account when that account is one of the importer's own connections -
-    the "requests, not facts" rule ``_import_trips`` applies to trip members.
-    Only messages the owner themselves wrote are restored: re-creating a
-    contact's reply would fabricate words attributed to that person.
-    """
+    """Restore safety check-ins as historical records, never as live plans."""
 
     key = "safety_checkins"
     filename = "safety_checkins.json"
@@ -2148,10 +1925,9 @@ class SafetyCheckinsImport(RowImportType):
         if not title or checkin_by is None:
             return False
 
-        # Content-level backstop, same shape as _import_comments': when the
-        # archive's uuid is already taken by another row the uuid check above
-        # can never fire, so an identical (title, checkin_by) pair is the same
-        # check-in.
+        # Content-level backstop, same shape as _import_comments': when the archive's uuid is
+        # already taken by another row the uuid check above can never fire, so an identical (title,
+        # checkin_by) pair is the same check-in.
         if SafetyCheckin.objects.filter(profile=ctx.profile, title=title, checkin_by=checkin_by).exists():
             return False
 
@@ -2217,18 +1993,14 @@ class SafetyCheckinsImport(RowImportType):
 
     def _resolve_map(self, map_uuid: Any, ctx: ImportContext) -> Any:
         """Resolve an exported markup-map uuid to one of the importer's own maps.
-
-        The map annotations step runs first and preserves archive uuids where
-        they were free, so a same-archive restore re-links; a uuid pointing at
-        someone else's map resolves to nothing rather than borrowing it.
+        The map annotations step runs first and preserves archive uuids where they were free, so a same-archive restore re-links; a uuid pointing at someone else's map resolves to nothing rather than borrowing it.
 
         Args:
-            map_uuid: The exported uuid, if any.
-            ctx: The shared import context.
+                map_uuid: The exported uuid, if any.
+                ctx: The shared import context.
 
         Returns:
-            The MarkupMap, or None.
-        """
+                The MarkupMap, or None."""
         from urbanlens.dashboard.models.markup.model import MarkupMap
 
         parsed = _safe_uuid(map_uuid)
@@ -2322,20 +2094,7 @@ class SafetyCheckinsImport(RowImportType):
 
 class MapAnnotationsImport(ImportType):
     """Restore markup maps, their annotations, and georeferenced image overlays.
-
-    Only annotations the importer can own outright come back: standalone maps
-    and everything drawn on them, plus markup and overlays attached to the
-    importer's OWN pins (resolved through ``_resolve_import_target``, the same
-    uuid-only matching comments and photos use). Wiki-scoped annotations are
-    shared community data on someone else's page - exported so the user keeps a
-    copy of what they drew, but skipped here rather than written back into a
-    community map from a user-supplied file.
-
-    An overlay's image re-enters storage through the same quota and file-size
-    checks a fresh upload gets, exactly as ``_import_photos`` does; one that
-    doesn't fit falls back to its external ``image_url`` when it had one, and is
-    otherwise skipped rather than restored as an overlay with nothing to draw.
-    """
+    Only annotations the importer can own outright come back: standalone maps and everything drawn on them, plus markup and overlays attached to the importer's OWN pins (resolved through ``_resolve_import_target``, the same uuid-only matching comments and photos use)."""
 
     key = "map_annotations"
     filename = "map_annotations.json"
@@ -2462,18 +2221,10 @@ class MapAnnotationsImport(ImportType):
             ctx.result.inc_skipped("map_overlays")
             return
 
-        # An imported image_url is rendered client-side as an <img src>, so it
-        # gets the same ensure_public_http_url/is_web_safe gate a live form POST
-        # gets - an import file is just another untrusted source.
-        #
-        # It does NOT match the live path any more: that one now downloads a
-        # pasted url (controllers.map_overlays._image_from_request) so the
-        # column can only hold our own MEDIA_URL, because a stored foreign url
-        # reports every viewer's IP and User-Agent back to whoever supplied it.
-        # Import still stores the url as-is - it has no download step, and
-        # these overlays are pin-scoped, so the only viewer is the importer
-        # themselves. Give this the same treatment if import ever grows a
-        # download step, or if wiki-scoped overlays become importable.
+        # An imported image_url is rendered client-side as an <img src>, so it gets the same
+        # ensure_public_http_url/is_web_safe gate a live form POST gets - an import file is just
+        # another untrusted source.
+        # It does NOT match the live path any more: that one now downloads a pasted url
         image_url = str(row.get("image_url") or "")[:1000]
         if image_url:
             try:
@@ -2606,10 +2357,7 @@ def _valid_layer_mode(value: Any) -> str:
 
 def _build_markup_item(row: dict[str, Any], profile: Any, *, parent_map: Any = None, parent_pin_id: int | None = None) -> Any:
     """Create one PinMarkup from an exported annotation row.
-
-    ``geometry`` is stored as JSON and rendered client-side, so it is only
-    accepted as an object; colours are re-sanitized by ``PinMarkup.save()``
-    itself, which is why they are passed through here rather than re-validated.
+    ``geometry`` is stored as JSON and rendered client-side, so it is only accepted as an object; colours are re-sanitized by ``PinMarkup.save()`` itself, which is why they are passed through here rather than re-validated.
 
     Args:
         row: The exported annotation row.
@@ -2618,8 +2366,7 @@ def _build_markup_item(row: dict[str, Any], profile: Any, *, parent_map: Any = N
         parent_pin_id: The Pin pk this item belongs to, if pin-scoped.
 
     Returns:
-        The created PinMarkup, or None when the row was unusable.
-    """
+        The created PinMarkup, or None when the row was unusable."""
     from urbanlens.dashboard.models.markup.meta import MarkupType, SecurityIndicatorType
     from urbanlens.dashboard.models.markup.model import PinMarkup
 
@@ -2652,14 +2399,7 @@ def _build_markup_item(row: dict[str, Any], profile: Any, *, parent_map: Any = N
 
 
 class SavedFiltersImport(RowImportType):
-    """Restore the user's saved main-map filters.
-
-    ``criteria`` is copied back verbatim, the way ``_import_pin_lists`` copies a
-    smart list's ``smart_filter``: it is the search layer's own normalized
-    payload, and a criterion naming a label that doesn't exist here simply
-    matches nothing when the filter is next replayed. Deduped by uuid and then
-    by the model's own ``(profile, name)`` uniqueness.
-    """
+    """Restore the user's saved main-map filters."""
 
     key = "saved_filters"
     filename = "saved_filters.json"
@@ -2704,14 +2444,7 @@ class SavedFiltersImport(RowImportType):
 
 class RoutesImport(RowImportType):
     """Restore recorded GPS tracks and planned routes.
-
-    Gated on the same ``track_routes`` preference the GPX/Takeout importers
-    check (``services.visits.visits.route_import_allowed``) - a user who turned
-    route tracking off should not get routes back by way of an archive, exactly
-    as ``_import_visit_history`` refuses to create visits when visit logging is
-    off. Deduped by uuid, then by the exported creation timestamp, which
-    ``_apply_exported_created`` preserves so a re-import recognises its own work.
-    """
+    Deduped by uuid, then by the exported creation timestamp, which ``_apply_exported_created`` preserves so a re-import recognises its own work."""
 
     key = "routes"
     filename = "routes.json"
@@ -2816,10 +2549,9 @@ _REGISTERED_IMPORT_TYPES: tuple[ImportType, ...] = (
 
 _REGISTERED_IMPORTERS: dict[str, ImportType] = {import_type.key: import_type for import_type in _REGISTERED_IMPORT_TYPES}
 
-#: Run order. Hand-written because it encodes real dependencies: labels before
-#: pins, pins before anything that attaches to one, markup maps before the
-#: safety check-ins that reference them, and settings last so an imported
-#: preference can't gate an earlier step.
+#: Hand-written because it encodes real dependencies: labels before pins, pins before anything that
+#: attaches to one, markup maps before the safety check-ins that reference them, and settings last
+#: so an imported preference can't gate an earlier step.
 _IMPORT_ORDER = [
     "profile",
     "labels",

@@ -1,14 +1,5 @@
 """REData's basemap tile catalogue and tile bytes.
-
-REData proxies a set of basemap layers and caches them, which buys three
-things over pointing Leaflet straight at each vendor: layers this application
-would otherwise have to register with each vendor itself, a single attribution
-source of truth, and a cache that spares the vendor a request per pan.
-
-The API key must never reach the browser, so the browser talks to
-``controllers.basemap_tiles`` and the fetch happens server-side - the same
-arrangement ``redata_historical_maps_gateway`` uses for warped overlay tiles.
-"""
+REData proxies a set of basemap layers and caches them, which buys three things over pointing Leaflet straight at each vendor: layers this application would otherwise have to register with each vendor itself, a single attribution source of truth, and a cache that spares the vendor a request per pan."""
 
 from __future__ import annotations
 
@@ -22,28 +13,20 @@ _SOURCES_PATH = "/api/v1/tiles/sources/"
 class RedataBasemapTilesGateway(RedataLocationContextGateway):
     """Reads ``GET /tiles/sources/`` and ``GET /tiles/{layer}/{z}/{x}/{y}/``."""
 
-    #: Its own key rather than the inherited one: tile traffic is one request
-    #: per pan, an entirely different shape from the point lookups the base
-    #: class's budget is sized for, and sharing a budget would let map panning
-    #: exhaust the allowance every other location feature draws on.
+    #: Its own key rather than the inherited one: tile traffic is one request per pan, an entirely
+    #: different shape from the point lookups the base class's budget is sized for, and sharing a
+    #: budget would let map panning exhaust the allowance every other location feature draws on.
     service_key: ClassVar[str] = "redata_basemap_tiles"
 
     @staticmethod
     def endpoint_for_log(url: str) -> str:
         """Record the layer, never the tile coordinate.
 
-        A tile path is ``/tiles/{layer}/{z}/{x}/{y}/``, so logging it verbatim
-        would accumulate a record of which places this deployment's users
-        panned over - in an application whose whole premise is that pin
-        locations are private. ``ApiCallLog`` exists to track volume and cost
-        per service, and the layer is all of that question the URL answers.
-
         Args:
-            url: The tile or catalogue URL about to be requested.
+                url: The tile or catalogue URL about to be requested.
 
         Returns:
-            The URL truncated at the layer segment.
-        """
+                The URL truncated at the layer segment."""
         marker = "/api/v1/tiles/"
         if marker not in url:
             return url
@@ -53,28 +36,24 @@ class RedataBasemapTilesGateway(RedataLocationContextGateway):
 
     def list_sources(self) -> list[dict[str, Any]]:
         """Return REData's basemap layer catalogue.
-
-        Documented as "called once per session by whatever then requests
-        tiles", so callers are expected to cache it rather than ask per map.
+        Documented as "called once per session by whatever then requests tiles", so callers are expected to cache it rather than ask per map.
 
         Returns:
-            One entry per layer, carrying ``id``, ``url_template``,
-            ``attribution``, ``name``, ``min_zoom``, ``max_zoom`` and
-            ``requires_auth``. Empty when REData is unconfigured or answers
-            nothing.
+                One entry per layer, carrying ``id``, ``url_template``,
+                ``attribution``, ``name``, ``min_zoom``, ``max_zoom`` and
+                ``requires_auth``. Empty when REData is unconfigured or answers
+                nothing.
 
         Raises:
-            LocationContextUnavailableError: The request to REData failed.
-        """
+                LocationContextUnavailableError: The request to REData failed."""
         body = self.get_json(_SOURCES_PATH, {}) or {}
         if isinstance(body, list):
             rows = body
         elif isinstance(body, dict):
-            # REData answers ``{"sources": [...]}`` for this endpoint - not the
-            # ``results`` envelope its paginated collections use. Both are
-            # accepted because reading the wrong one fails silently as "this
-            # deployment offers no layers", which is indistinguishable from a
-            # deployment that genuinely offers none.
+            # REData answers ``{"sources": [...]}`` for this endpoint - not the ``results`` envelope
+            # its paginated collections use.
+            # Both are accepted because reading the wrong one fails silently as "this deployment
+            # offers no layers", which is indistinguishable from a deployment that genuinely offers
             rows = body.get("sources") or body.get("results") or []
         else:
             rows = []

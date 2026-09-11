@@ -1,28 +1,5 @@
 """The fabricated half of a demo account: friends, messages, trips, visits, lists.
-
-Everything here is invented, unlike the real places in :mod:`.locations` - see
-that module and ``docs/DEMO.md`` for why coordinates are never fabricated. This
-is the opposite case: a friendship, a chat, a trip are not claims about the
-world the way a pin is, so there is nothing they could get wrong by not being
-real. Fabricating them is what makes the account look inhabited rather than
-empty.
-
-**Silent by construction, not by patching.** Every writer here either goes
-straight to the ORM or calls a service function chosen specifically because it
-does not notify - `Friendship.objects.create(status=ACCEPTED)` rather than
-`request()`/`accept()`, `DirectMessage.objects.create(...)` rather than
-`create_direct_message()`, `Comment` via the plain create (the service wrapper
-already does not notify; the controller layer does, and is not called here).
-Two exceptions actually award something and go through the sanctioned path
-regardless: recorded activity (`services.achievements.activity.record_activity`)
-and any `NotificationLog` row this module ever needs, which must go through
-`NotificationLog.objects.notify()` - enforced for all production code by
-`bin/check_notification_choke_point.py`. This module currently writes none.
-
-The seeding caller (`seeding.seed_demo_account`) already holds Celery patched
-and the whole write in one atomic block; nothing here manages either on its
-own.
-"""
+Everything here is invented, unlike the real places in :mod:`.locations` - see that module and ``docs/DEMO.md`` for why coordinates are never fabricated."""
 
 from __future__ import annotations
 
@@ -39,43 +16,30 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import Trip
 
-#: A fixed, non-cryptographic RNG. Demo content only ever needs to look varied,
-#: not be unpredictable, and a fixed seed makes one run's output reproducible
-#: for debugging - the account's own identity (username, password) already
+#: A fixed, non-cryptographic RNG.
+#: Demo content only ever needs to look varied, not be unpredictable, and a fixed seed makes one
+#: run's output reproducible for debugging - the account's own identity (username, password) already
 #: comes from `secrets` where unpredictability actually matters.
 _rng = random.Random(20260820)  # noqa: S311 - demo flavour text, not a security use
 
 
 def _backdate(instance: Any, when: Any) -> None:
     """Set ``created`` (and, for models that carry one, ``visited_at``-like fields) into the past.
-
-    ``created``/``updated`` are ``auto_now_add``/``auto_now`` (see
-    ``models.abstract.model``), so they ignore whatever is passed to
-    ``objects.create()`` - the only way to backdate one is an ``update()``
-    after the fact, which is what this does. Never call ``instance.save()``
-    again afterwards, or ``updated`` (and, on some models, ``created`` itself
-    if it is re-specified) moves back to now.
+    ``created``/``updated`` are ``auto_now_add``/``auto_now`` (see ``models.abstract.model``), so they ignore whatever is passed to ``objects.create()`` - the only way to backdate one is an ``update()`` after the fact, which is what this does.
 
     Args:
         instance: A saved model instance with a ``created`` field.
-        when: The timestamp to backdate it to.
-    """
+        when: The timestamp to backdate it to."""
     type(instance).objects.filter(pk=instance.pk).update(created=when)
 
 
 def seed_friendships(owner: Profile, personas: list[Profile]) -> None:
     """Accepted friendships: the owner with every persona, and a few among them.
-
-    Goes straight to ``Friendship.objects.create(status=ACCEPTED)`` rather than
-    ``request()``/``accept()`` - those exist to run the request flow a real
-    user would; skipping straight to the end state is what a seeder wants, and
-    neither one notifies on its own (notifications are the service layer's
-    job, not the model's - see ``services.social.friendship``).
+    Goes straight to ``Friendship.objects.create(status=ACCEPTED)`` rather than ``request()``/``accept()`` - those exist to run the request flow a real user would; skipping straight to the end state is what a seeder wants, and neither one notifies on its own (notifications are the service layer's job, not the model's - see ``services.social.friendship``).
 
     Args:
         owner: The login account's profile.
-        personas: The other seeded profiles.
-    """
+        personas: The other seeded profiles."""
     from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
     from urbanlens.dashboard.models.friendship.model import Friendship
 
@@ -93,11 +57,7 @@ def seed_friendships(owner: Profile, personas: list[Profile]) -> None:
 
 def seed_wiki_comments(personas_by_pin: dict[Profile, list[Pin]]) -> list[Any]:
     """A few comments on the wikis of pooled locations, where more than one profile can see them.
-
-    Only fires on a location more than one seeded profile actually holds a pin
-    on - the owner holds every pooled location, so that is any location a
-    persona was also given, which is enough for a real (if one-sided)
-    conversation to exist under the owner's own view of the wiki.
+    Only fires on a location more than one seeded profile actually holds a pin on - the owner holds every pooled location, so that is any location a persona was also given, which is enough for a real (if one-sided) conversation to exist under the owner's own view of the wiki.
 
     Args:
         personas_by_pin: Each seeded profile mapped to the pins just created
@@ -105,8 +65,7 @@ def seed_wiki_comments(personas_by_pin: dict[Profile, list[Pin]]) -> list[Any]:
             share.
 
     Returns:
-        Every created comment (openers and replies), in creation order.
-    """
+        Every created comment (openers and replies), in creation order."""
     from urbanlens.dashboard.services.comments.comments import create_comment
 
     created = []
@@ -141,22 +100,14 @@ _WIKI_COMMENT_REPLIES = [
 
 def seed_direct_messages(owner: Profile, personas: list[Profile]) -> list[Any]:
     """A short plaintext exchange between the owner and each persona, and one among personas.
-
-    Plain ``DirectMessage.objects.create`` rather than
-    ``create_direct_message()`` - the service function is what a real send goes
-    through (permission checks, notifications, scheduled email/text alerts,
-    address detection), all of which a seeder wants none of. Plaintext because
-    the demo account has no browser-side E2EE key to encrypt with; the body/
-    ciphertext constraint only forbids both being set, so leaving
-    ``ciphertext``/``nonce`` empty and ``key_version=0`` satisfies it exactly.
+    Plain ``DirectMessage.objects.create`` rather than ``create_direct_message()`` - the service function is what a real send goes through (permission checks, notifications, scheduled email/text alerts, address detection), all of which a seeder wants none of.
 
     Args:
         owner: The login account's profile.
         personas: The other seeded profiles.
 
     Returns:
-        Every created message, in creation order.
-    """
+        Every created message, in creation order."""
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 
     created: list[DirectMessage] = []
@@ -181,17 +132,11 @@ def seed_direct_messages(owner: Profile, personas: list[Profile]) -> list[Any]:
 
 def seed_group_chat(owner: Profile, personas: list[Profile]) -> None:
     """One group chat, memberships created strictly before the messages they should see.
-
-    Ordering is load-bearing: ``GroupChatMembership.created`` is the floor
-    ``visible_window`` uses to decide which messages a member can see (see
-    ``models.group_chats.queryset``), so a message backdated earlier than its
-    sender's own membership would be invisible to everyone else in the group -
-    including, confusingly, its own sender.
+    Ordering is load-bearing: ``GroupChatMembership.created`` is the floor ``visible_window`` uses to decide which messages a member can see (see ``models.group_chats.queryset``), so a message backdated earlier than its sender's own membership would be invisible to everyone else in the group - including, confusingly, its own sender.
 
     Args:
         owner: The login account's profile, and the chat's creator.
-        personas: The other seeded profiles, all invited.
-    """
+        personas: The other seeded profiles, all invited."""
     from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupChatMembership, GroupMessage
 
     if not personas:
@@ -215,13 +160,7 @@ def seed_group_chat(owner: Profile, personas: list[Profile]) -> None:
 
 def seed_visits(profile: Profile, pins: list[Pin], *, on_this_day: bool = False) -> list[Any]:
     """A visit history on most of the profile's pins, spread widely enough to read as real use.
-
-    ``create_manual_visit`` rather than ``PinVisit.objects.create`` directly:
-    it also runs ``sync_last_visited`` and ``add_visited_status`` (the
-    "Visited" label), which are exactly the derived state a real visit would
-    produce and a raw insert would silently skip. Every seeded profile has
-    ``track_pin_visits`` at its default of True, so the service's own gate
-    never refuses.
+    ``create_manual_visit`` rather than ``PinVisit.objects.create`` directly: it also runs ``sync_last_visited`` and ``add_visited_status`` (the "Visited" label), which are exactly the derived state a real visit would produce and a raw insert would silently skip.
 
     Args:
         profile: Pin owner.
@@ -232,8 +171,7 @@ def seed_visits(profile: Profile, pins: list[Pin], *, on_this_day: bool = False)
             show without waiting for a real year to pass.
 
     Returns:
-        The created visits.
-    """
+        The created visits."""
     from urbanlens.dashboard.services.visits.visits import create_manual_visit
 
     visits = []
@@ -250,18 +188,11 @@ def seed_visits(profile: Profile, pins: list[Pin], *, on_this_day: bool = False)
 
 def mark_unlogged_visits(pins: list[Pin]) -> None:
     """Mark a couple of pins visited with no logged ``PinVisit`` - the Memories "Visits" queue's whole reason to exist.
-
-    Deliberately the opposite of :func:`seed_visits`: ``visited_without_record``
-    (the query behind that page) requires ``last_visited`` set *and* zero
-    ``PinVisit`` rows, so this must never route through ``create_manual_visit``,
-    which creates exactly the record that would disqualify a pin. Mirrors how a
-    real one gets into this state - an import, or a status set by hand, with no
-    visit ever logged.
+    Deliberately the opposite of :func:`seed_visits`: ``visited_without_record`` (the query behind that page) requires ``last_visited`` set *and* zero ``PinVisit`` rows, so this must never route through ``create_manual_visit``, which creates exactly the record that would disqualify a pin.
 
     Args:
         pins: Candidate pins; the ones already visited via :func:`seed_visits`
-            must not be passed here, or they no longer qualify either.
-    """
+            must not be passed here, or they no longer qualify either."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.visits.visits import add_visited_status
 
@@ -282,20 +213,12 @@ _VISIT_NOTES = [
 def seed_routes(profile: Profile) -> list[Any]:
     """A couple of short recorded routes, so the Memories map has route markers and a nonzero distance total.
 
-    No creation service exists for Route - GPX/Takeout import is the only real
-    path, and a demo has neither file to import - so this goes straight to the
-    ORM. A simple 3-4 point line is enough: ``services.memories.aggregator``
-    only reads ``route.path.coords[0]`` for the marker and
-    ``route.distance_meters``/``route.path.geojson`` for display, no
-    simplification pipeline required.
-
     Args:
         profile: Route owner - routes have no shared/wiki analog and are
             always personal.
 
     Returns:
-        The created routes.
-    """
+        The created routes."""
     from django.contrib.gis.geos import LineString
 
     from urbanlens.dashboard.models.routes.model import Route, RouteSource
@@ -322,18 +245,10 @@ def seed_routes(profile: Profile) -> list[Any]:
 
 def seed_markup_maps(profile: Profile) -> None:
     """A couple of standalone drawn maps, for the Memories "Maps" page.
-
-    MarkupMap/PinMarkup carry no GeoDjango geometry despite the name -
-    ``center_latitude``/``center_longitude`` are plain floats and
-    ``PinMarkup.geometry`` is a GeoJSON-shaped ``JSONField`` (only
-    :func:`seed_routes`' ``Route.path`` is a real GIS field). Built directly
-    rather than through ``materialize_markup_map`` - that helper exists to
-    sanitize an untrusted client-submitted snapshot, which a seeder does not
-    have.
+    Built directly rather than through ``materialize_markup_map`` - that helper exists to sanitize an untrusted client-submitted snapshot, which a seeder does not have.
 
     Args:
-        profile: Map owner.
-    """
+        profile: Map owner."""
     from urbanlens.dashboard.models.markup.model import MarkupMap, MarkupType, PinMarkup
 
     for title, center in (("Rough plan for the north side", (41.72, -73.91)), ("Access notes", (41.55, -74.12))):
@@ -357,14 +272,10 @@ def seed_markup_maps(profile: Profile) -> None:
 
 def seed_labels(pins_by_profile: dict[Profile, list[Pin]]) -> None:
     """Attach a few of the profile's own default labels to its pins.
-
-    No label is ever created here - ``create_default_tags`` already gave every
-    seeded profile ~43 of them (status/category/tag/media) on creation, the
-    same signal a real signup gets, so this only has to choose and attach.
+    No label is ever created here - ``create_default_tags`` already gave every seeded profile ~43 of them (status/category/tag/media) on creation, the same signal a real signup gets, so this only has to choose and attach.
 
     Args:
-        pins_by_profile: Each seeded profile mapped to its own pins.
-    """
+        pins_by_profile: Each seeded profile mapped to its own pins."""
     from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
     from urbanlens.dashboard.models.labels.model import Label
 
@@ -379,20 +290,10 @@ def seed_labels(pins_by_profile: dict[Profile, list[Pin]]) -> None:
 
 def seed_safety_checkins(profiles: list[Profile]) -> None:
     """A couple of historical, already-resolved safety check-ins.
-
-    Deliberately not ``create_checkin`` - that enforces one-active-check-in
-    exclusivity that is irrelevant to a resolved historical row and this way
-    avoids scheduling anything live. No signal is connected to
-    ``SafetyCheckin`` at all (confirmed by inspection - the only app-wide
-    ``post_save`` receivers are for label defaults and achievements), and
-    notification only ever happens from escalation Celery tasks or explicit
-    calls this never makes, so a plain create is silent by construction, not
-    by luck. ``archive_scheduled_at`` is left unset, which is what keeps a
-    resolved row out of the archival sweep.
+    No signal is connected to ``SafetyCheckin`` at all (confirmed by inspection - the only app-wide ``post_save`` receivers are for label defaults and achievements), and notification only ever happens from escalation Celery tasks or explicit calls this never makes, so a plain create is silent by construction, not by luck.
 
     Args:
-        profiles: Every seeded profile.
-    """
+        profiles: Every seeded profile."""
     from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinStatus
 
     for profile in profiles:
@@ -410,19 +311,12 @@ def seed_safety_checkins(profiles: list[Profile]) -> None:
 def seed_journal_content(pins_by_profile: dict[Profile, list[Pin]]) -> list[Any]:
     """Reviews and pin comments - the two Journal sources ``seed_wiki_comments`` doesn't cover.
 
-    ``get_journal_entries`` merges four sources (visit notes, Review ratings,
-    Comment/TripComment, ArticleRevision); visit notes already exist via
-    :func:`seed_visits`, and this fills in the other two that are cheap to
-    seed. Article revisions are left alone - a demo wiki has no article of its
-    own to revise.
-
     Args:
         pins_by_profile: Each seeded profile mapped to its own pins.
 
     Returns:
         The created pin comments (not the reviews - there is nothing further
-        in this module that needs to reference a review by instance).
-    """
+        in this module that needs to reference a review by instance)."""
     from urbanlens.dashboard.models.reviews.model import Review
     from urbanlens.dashboard.services.comments.comments import create_comment
 
@@ -441,16 +335,11 @@ def seed_journal_content(pins_by_profile: dict[Profile, list[Pin]]) -> list[Any]
 
 def seed_reactions(owner: Profile, personas: list[Profile]) -> None:
     """A few reactions on existing comments and messages.
-
-    Straight to ``Reaction.objects.create`` rather than ``toggle_reaction`` -
-    that service function notifies the comment's author on add, which is
-    exactly the kind of side effect this module stays silent by construction
-    to avoid.
+    Straight to ``Reaction.objects.create`` rather than ``toggle_reaction`` - that service function notifies the comment's author on add, which is exactly the kind of side effect this module stays silent by construction to avoid.
 
     Args:
         owner: The login account's profile.
-        personas: The other seeded profiles.
-    """
+        personas: The other seeded profiles."""
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.models.reactions.model import Reaction
     from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS
@@ -465,19 +354,12 @@ def seed_reactions(owner: Profile, personas: list[Profile]) -> None:
 
 def seed_pin_shares(owner: Profile, personas: list[Profile], pins: list[Pin]) -> None:
     """A couple of accepted pin shares, for the Memories "Sharing" page.
-
-    Replicates the share-creation half of ``create_pin_share`` without its
-    notification - ``resolve_and_stamp_origin_share``/``record_share_exposure``
-    are the exact two calls that function makes to keep the ``LocationExposure``
-    provenance chain intact (CLAUDE.md requires this of every share path, this
-    one included), and are the whole reason this is not a bare
-    ``PinShare.objects.create``.
+    Replicates the share-creation half of ``create_pin_share`` without its notification - ``resolve_and_stamp_origin_share``/``record_share_exposure`` are the exact two calls that function makes to keep the ``LocationExposure`` provenance chain intact (CLAUDE.md requires this of every share path, this one included), and are the whole reason this is not a bare ``PinShare.objects.create``.
 
     Args:
         owner: The sharer.
         personas: Share recipients.
-        pins: The owner's pins to share.
-    """
+        pins: The owner's pins to share."""
     from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
     from urbanlens.dashboard.models.pin_share.model import PinShare
     from urbanlens.dashboard.services.sharing.share_provenance import record_share_exposure, resolve_and_stamp_origin_share
@@ -499,14 +381,6 @@ def seed_pin_shares(owner: Profile, personas: list[Profile], pins: list[Pin]) ->
 def seed_trips(owner: Profile, personas: list[Profile], pool: list[Location]) -> list[Trip]:
     """A past trip (so Memories has a real trip in its history) and an upcoming one.
 
-    Both need an explicit ``start_date``/``scheduled_at`` to appear on the
-    Memories timeline at all: ``_trips_for_range`` computes a trip's effective
-    date as ``Coalesce(start_date, first_activity_date)`` and filters out rows
-    where that is null - a trip created (as this did before) with neither set
-    is dropped from the timeline entirely, though it still counts toward the
-    hero-stat trip count via membership alone. That mismatch - present in the
-    count, absent from the map - is what this backdating avoids.
-
     Args:
         owner: The trips' creator.
         personas: Candidates for trip membership.
@@ -514,8 +388,7 @@ def seed_trips(owner: Profile, personas: list[Profile], pool: list[Location]) ->
             when there is no location pool yet.
 
     Returns:
-        The created trips, in creation order. Empty when the pool is empty.
-    """
+        The created trips, in creation order. Empty when the pool is empty."""
     from urbanlens.dashboard.services.trips.trip_activities import create_activity
     from urbanlens.dashboard.services.trips.trip_crud import create_trip
     from urbanlens.dashboard.services.trips.trip_membership import set_trip_rsvp
@@ -571,10 +444,10 @@ def seed_pin_lists(owner: Profile, pins: list[Pin]) -> None:
         add_pins_to_list(favorites, pins[len(pins) // 2 :])
 
 
-#: Generated, not photographed - flat colours with a caption drawn on, so the
-#: gallery UI has real image files to render (thumbnailing, lightbox, EXIF
-#: panel gracefully showing nothing) without depending on any external host
-#: staying up, or on a network call this instance may not be allowed to make.
+#: Generated, not photographed - flat colours with a caption drawn on, so the gallery UI has real
+#: image files to render (thumbnailing, lightbox, EXIF panel gracefully showing nothing) without
+#: depending on any external host staying up, or on a network call this instance may not be allowed
+#: to make.
 _PHOTO_PALETTE: list[tuple[int, int, int]] = [(74, 62, 54), (58, 74, 66), (70, 60, 74), (76, 70, 52), (54, 62, 74)]
 
 
@@ -603,13 +476,7 @@ def _placeholder_photo(caption: str, color: tuple[int, int, int]) -> Any:
 
 def seed_photos(pins_by_profile: dict[Profile, list[Pin]], *, on_this_day: bool = False) -> list[Any]:
     """A handful of generated photos per profile, attached to their own pins.
-
-    ``source=ImageSource.UPLOAD`` (the field default) is correct here, not a
-    fileless-row workaround: a real file is written to local storage, so this
-    is what a genuine upload looks like, and it is also what
-    ``achievements.signals._is_genuine_upload`` requires for the photo streak
-    - a nice side effect, since it means that surface has something real to
-    show too.
+    ``source=ImageSource.UPLOAD`` (the field default) is correct here, not a fileless-row workaround: a real file is written to local storage, so this is what a genuine upload looks like, and it is also what ``achievements.signals._is_genuine_upload`` requires for the photo streak - a nice side effect, since it means that surface has something real to show too.
 
     Args:
         pins_by_profile: Each seeded profile mapped to its own pins.
@@ -618,8 +485,7 @@ def seed_photos(pins_by_profile: dict[Profile, list[Pin]], *, on_this_day: bool 
             has to be deliberate rather than left to chance.
 
     Returns:
-        The created photos.
-    """
+        The created photos."""
     from urbanlens.dashboard.models.images.model import Image
 
     photos = []
@@ -676,16 +542,11 @@ def seed_comment_photo(comment: Any) -> None:
 
 def seed_dm_photo(sender: Profile, dm: Any) -> None:
     """One photo attached to a direct message, via ``Image.direct_message``.
-
-    ``images_revealed=True`` so the seeded photo renders unblurred by default
-    - that field otherwise governs the blur-reveal state for a photo from
-    someone the recipient hasn't trusted yet, which is irrelevant flavor for a
-    demo and would just make the photo look broken until clicked.
+    ``images_revealed=True`` so the seeded photo renders unblurred by default - that field otherwise governs the blur-reveal state for a photo from someone the recipient hasn't trusted yet, which is irrelevant flavor for a demo and would just make the photo look broken until clicked.
 
     Args:
         sender: The message's sender, credited as the photo's uploader.
-        dm: A ``DirectMessage`` already created by :func:`seed_direct_messages`.
-    """
+        dm: A ``DirectMessage`` already created by :func:`seed_direct_messages`."""
     from urbanlens.dashboard.models.images.model import Image
 
     Image.objects.create(direct_message=dm, profile=sender, image=_placeholder_photo("Shared photo", _rng.choice(_PHOTO_PALETTE)), taken_at=timezone.now() - timedelta(days=_rng.randint(1, 30)))
@@ -695,16 +556,10 @@ def seed_dm_photo(sender: Profile, dm: Any) -> None:
 
 def seed_achievements_and_activity(profiles: list[Profile]) -> None:
     """Award whatever Achievement definitions already exist, and backfill an activity streak.
-
-    Achievement *definitions* are global (no profile FK - see
-    ``models.achievements.model``), so this never creates one: doing so would
-    appear on every real user's achievements page, and saving an active one
-    enqueues a backfill sweep across every profile in the database. Only
-    existing definitions are awarded against.
+    Achievement *definitions* are global (no profile FK - see ``models.achievements.model``), so this never creates one: doing so would appear on every real user's achievements page, and saving an active one enqueues a backfill sweep across every profile in the database.
 
     Args:
-        profiles: Every seeded profile - owner and personas.
-    """
+        profiles: Every seeded profile - owner and personas."""
     from urbanlens.dashboard.models.achievements.meta import ActivityKind
     from urbanlens.dashboard.models.achievements.model import Achievement, ProfileActivityDay, UserAchievement
     from urbanlens.dashboard.services.achievements.activity import rebuild_streak

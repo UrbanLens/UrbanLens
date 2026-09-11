@@ -1,24 +1,5 @@
 """One table of every third-party asset the site loads, and where to load it from.
-
-Third-party scripts and stylesheets were written inline in each template that
-wanted them, which is how the same library came to be requested from two
-different CDNs, one library came to be pinned in most places and unpinned in one,
-and Leaflet's marker images came to be served from a different release of Leaflet
-than the library itself. A table makes a version a property of the asset rather
-than of each of the twenty-seven templates that mention it.
-
-It also decides *where* an asset comes from, once, at render time. An instance
-that mirrors these files sets ``UL_VENDOR_ASSET_BASE_URL`` and every tag points
-there; an instance that sets nothing keeps loading from the public CDNs exactly
-as before. The choice is made when the page is built, so nothing branches at call
-time and nothing waits for a request to fail before trying somewhere else - a
-failover would mean the page has already paid for the timeout.
-
-The mirrored files deliberately do not live in this repository: they are other
-projects' releases, with their own licences, and vendoring them into an
-open-source application is a redistribution decision this project has not made.
-``UL_VENDOR_ASSET_BASE_URL`` points at wherever an operator has put them.
-"""
+A table makes a version a property of the asset rather than of each of the twenty-seven templates that mention it."""
 
 from __future__ import annotations
 
@@ -127,12 +108,8 @@ VENDOR_ASSETS: dict[str, VendorAsset] = {
         "https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js",
         "sha384-VDls8ImYGI8SwVxpmjX2Bn27U2TcNodzTNROTusVEWO55+lmL+H9NczoQJk6mwZR",
     ),
-    # Computed from the bytes unpkg actually serves for this version (which
-    # redirects to dist/htmx.min.js, 48036 bytes), not guessed - see
-    # docs/PROBLEMS.md, "HTMX is loaded from a CDN with no subresource
-    # integrity". HTMX drives essentially every interaction in this
-    # application, so this is worth the recompute-on-upgrade cost the other
-    # entries above don't pay.
+    # HTMX drives essentially every interaction in this application, so this is worth the
+    # recompute-on-upgrade cost the other entries above don't pay.
     "htmx_js": VendorAsset(
         "script",
         "htmx/1.9.11/htmx.min.js",

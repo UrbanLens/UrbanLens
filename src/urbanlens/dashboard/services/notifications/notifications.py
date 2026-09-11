@@ -104,9 +104,8 @@ def _send_gotify(site, subject: str, message: str) -> None:
         logger.exception("Failed to send Gotify notification")
         return
 
-    # A rejected token (401) or a wrong URL (404) answers cleanly, so without
-    # this check a silently-undelivered admin alert looks identical to a
-    # delivered one - the failure mode that matters here, since nobody is
-    # watching for the notification that never arrives.
+    # A rejected token (401) or a wrong URL (404) answers cleanly, so without this check a
+    # silently-undelivered admin alert looks identical to a delivered one - the failure mode that
+    # matters here, since nobody is watching for the notification that never arrives.
     if not response.ok:
         logger.error("Gotify rejected the notification: HTTP %s - check notify_gotify_url/notify_gotify_token", response.status_code)

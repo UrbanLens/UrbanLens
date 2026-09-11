@@ -1,16 +1,5 @@
 """Article rendering and persistence.
-
-Turns the Markdown source of a pin/wiki article into sanitized HTML plus a
-table of contents, and owns the save path (render, cache, revision record).
-
-Authoring format: Markdown ("gfm-like": tables, strikethrough, autolinked
-URLs) plus footnote references (``[^1]`` in the text, ``[^1]: source`` at the
-bottom) which render as a Wikipedia-style numbered References section.
-
-Security: rendered HTML is always sanitized with nh3 against a fixed allowlist
-before it is stored or returned - article HTML is community/user input and
-must never reach a template unsanitized.
-"""
+Security: rendered HTML is always sanitized with nh3 against a fixed allowlist before it is stored or returned - article HTML is community/user input and must never reach a template unsanitized."""
 
 from __future__ import annotations
 
@@ -164,18 +153,13 @@ def _anchor_slug(title: str, used: set[str]) -> str:
 
 def render_article(content: str) -> RenderedArticle:
     """Render Markdown article source to sanitized HTML plus a TOC.
-
-    Headings are demoted one level (``#`` becomes ``<h2>``) so the article can
-    never inject a second ``<h1>`` into the page, and each heading receives a
-    stable ``id`` used by the table of contents. External links open in a new
-    tab. Footnote definitions render as a numbered References section.
+    Headings are demoted one level (``#`` becomes ``<h2>``) so the article can never inject a second ``<h1>`` into the page, and each heading receives a stable ``id`` used by the table of contents.
 
     Args:
         content: The raw Markdown source (may be empty).
 
     Returns:
-        The sanitized HTML, TOC entries, and whether references are present.
-    """
+        The sanitized HTML, TOC entries, and whether references are present."""
     if not content or not content.strip():
         return RenderedArticle()
 
@@ -268,10 +252,6 @@ def save_article(
 ) -> tuple[Article, ArticleRevision | None]:
     """Persist a new version of a pin/wiki article.
 
-    Renders and caches the sanitized HTML, updates the Article row (creating
-    it on first save), and records an :class:`ArticleRevision` carrying the
-    complete new source. Saving identical content is a no-op (no revision).
-
     Args:
         editor: The profile making the edit, or None for a system-initiated
             save (e.g. seeding a new wiki article from a matched Wikipedia
@@ -288,8 +268,7 @@ def save_article(
         Tuple of (article, revision) - revision is None for a no-op save.
 
     Raises:
-        ValueError: Neither or both hosts were provided.
-    """
+        ValueError: Neither or both hosts were provided."""
     from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 
     if (pin is None) == (wiki is None):
@@ -360,16 +339,7 @@ def save_article_checked(
     wiki: Wiki | None = None,
 ) -> tuple[Article, ArticleRevision | None]:
     """Save an article, refusing the write if it would clobber a concurrent edit.
-
-    Wraps :func:`save_article` with the optimistic-concurrency check the
-    article editor has always performed, moved here so the internal view and
-    the external API cannot drift on it.
-
-    The rule, unchanged: if a revision exists and its id is not the one the
-    editor started from, the save is refused. A ``base_revision_id`` of None
-    therefore conflicts with *any* existing revision - which is what makes it
-    safe for the API to require the field explicitly rather than letting an
-    omitted value silently overwrite someone else's work.
+    Wraps :func:`save_article` with the optimistic-concurrency check the article editor has always performed, moved here so the internal view and the external API cannot drift on it.
 
     Args:
         editor: The profile making the edit (None for system saves).
@@ -389,30 +359,22 @@ def save_article_checked(
     Raises:
         ArticleConflictError: The article moved on since *base_revision_id*.
             Nothing is written when this is raised.
-        ValueError: Neither or both hosts were provided.
-    """
+        ValueError: Neither or both hosts were provided."""
     from urbanlens.dashboard.models.article.model import Article
 
     with transaction.atomic():
         article = get_article(pin=pin, wiki=wiki)
         if article is not None:
-            # Lock the article row for the read-check-write below. Without it the
-            # check is a TOCTOU: two editors who both loaded revision R both read
-            # `latest_id == R`, both pass, and both append - so one editor's save
-            # silently stops being the current article even though the conflict
-            # check exists to prevent exactly that. (Their text is not lost -
-            # history is append-only - but they were told the save succeeded.)
-            # Revisions carry no number and no unique constraint, so there is no
-            # database-level guard to fall back on. A *first* save needs no lock:
-            # Article.pin/.wiki are OneToOne, so the second insert loses there.
+            # Lock the article row for the read-check-write below.
+            # Without it the check is a TOCTOU: two editors who both loaded revision R both read
+            # `latest_id == R`, both pass, and both append - so one editor's save silently stops
+            # being the current article even though the conflict check exists to prevent exactly
             Article.objects.select_for_update().filter(pk=article.pk).first()
         latest_id = latest_revision_id(article)
-        # A concealed viewer's editor was handed the newest revision *they* can
-        # see as its baseline, so comparing it against the live newest is a
-        # conflict they can never clear - a permanent 409 on an article that
-        # looks, to them, like nobody else has touched it. Ask the question they
-        # can actually answer: has anything changed that they were shown?
-        # Inside the lock, so it keeps the read-check-write above honest.
+        # A concealed viewer's editor was handed the newest revision *they* can see as its baseline,
+        # so comparing it against the live newest is a conflict they can never clear - a permanent
+        # 409 on an article that looks, to them, like nobody else has touched it.
+        # Ask the question they can actually answer: has anything changed that they were shown?
         if article is not None and viewer is not None and wiki is not None:
             from urbanlens.dashboard.services.wiki.concealment import concealment_active, visible_rows
 
@@ -427,10 +389,7 @@ def save_article_checked(
 
 def restore_revision(*, scope_article: Article, revision: ArticleRevision, editor: Profile | None) -> tuple[Article, ArticleRevision | None]:
     """Restore an older revision's content as a new revision.
-
-    History is append-only: restoring does not delete anything, it writes the
-    old content forward as the newest revision, tagged with ``restored_from``
-    so the lineage stays visible in the history list.
+    History is append-only: restoring does not delete anything, it writes the old content forward as the newest revision, tagged with ``restored_from`` so the lineage stays visible in the history list.
 
     Args:
         scope_article: The article being restored. *revision* must belong to
@@ -443,8 +402,7 @@ def restore_revision(*, scope_article: Article, revision: ArticleRevision, edito
         already held exactly that content.
 
     Raises:
-        ValueError: *revision* does not belong to *scope_article*.
-    """
+        ValueError: *revision* does not belong to *scope_article*."""
     if revision.article_id != scope_article.pk:
         raise ValueError("That revision belongs to a different article.")
 
@@ -460,14 +418,7 @@ def restore_revision(*, scope_article: Article, revision: ArticleRevision, edito
 
 def article_payload(article: Article, viewer: Profile) -> dict[str, Any]:
     """Render one article as the external API's article body.
-
-    An article is host-agnostic - the same row shape backs a pin's private
-    article and a community wiki's - so the payload is built here rather than
-    in either host's view module. Two endpoints in different files rendering
-    "the same" dict by hand is how one of them ends up omitting
-    ``base_revision_id`` (silently breaking that host's conflict detection,
-    because a client with no revision to echo back always looks like a fresh
-    save) or leaking an unmasked editor name that the other correctly masks.
+    An article is host-agnostic - the same row shape backs a pin's private article and a community wiki's - so the payload is built here rather than in either host's view module.
 
     Args:
         article: The article to render.
@@ -478,8 +429,7 @@ def article_payload(article: Article, viewer: Profile) -> dict[str, Any]:
     Returns:
         A JSON-serializable dict with the article's source, rendered HTML,
         table of contents, word count, masked last editor, update timestamp,
-        and the ``base_revision_id`` a client must echo back on save.
-    """
+        and the ``base_revision_id`` a client must echo back on save."""
     # Local import: ``services.wiki.wiki_detail`` imports this module for its own
     # article summary, so a module-level import here would close the cycle.
     from urbanlens.dashboard.services.wiki.wiki_detail import masked_editor_name

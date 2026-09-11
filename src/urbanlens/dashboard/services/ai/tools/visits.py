@@ -1,11 +1,4 @@
-"""The assistant's visit-history tool - "have I been here?"
-
-Three tiers of confidence, never collapsed into one another: a logged
-``PinVisit`` or the "Visited" status label is a *confirmed* visit; a pending
-``VisitSuggestion`` or a recorded ``Route`` passing within 150m is evidence the
-user was *nearby*, not proof they went in. Reporting the second tier as
-confirmed would upgrade a GPS track into a visit the user never actually logged.
-"""
+"""The assistant's visit-history tool - "have I been here?" Three tiers of confidence, never collapsed into one another: a logged ``PinVisit`` or the "Visited" status label is a *confirmed* visit; a pending ``VisitSuggestion`` or a recorded ``Route`` passing within 150m is evidence the user was *nearby*, not proof they went in."""
 
 from __future__ import annotations
 

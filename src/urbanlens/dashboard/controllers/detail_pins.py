@@ -31,20 +31,12 @@ from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, r
 
 logger = logging.getLogger(__name__)
 
-#: Type a marker gets while automatic classification hasn't run (or found no
-#: building). Point of Interest is the honest provisional answer - most
-#: hand-placed sub-markers really are landmarks rather than structures, and
-#: it was this dialog's effective default before "Auto" existed.
+#: Provisional type until automatic classification runs.
 _PROVISIONAL_PIN_TYPE = PinType.POINT_OF_INTEREST
 
 
 def _requested_pin_type(body) -> tuple[str, bool]:
-    """Resolve a submitted ``pin_type`` into a value plus "the user chose it".
-
-    The dialog's Type select offers "Auto" as a blank value, so a blank
-    submission means "work it out for me" rather than "no opinion recorded" -
-    the distinction ``pin_type_is_user_provided`` exists to keep (see
-    ``services.locations.site_scope.classify_building_pin_type``).
+    """Resolve a submitted ``pin_type`` into a value plus user-chose flag.
 
     Args:
         body: The parsed request body (JSON dict or QueryDict).

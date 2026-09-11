@@ -1,19 +1,5 @@
 """Trip comment visibility and mutation, shared by the panel and the REST API.
-
-The visible tree is built once, here, so both surfaces apply the same three
-independent gates in the same order:
-
-1. the author's ``comment_visibility`` hides the whole comment from viewers
-   they don't allow (all-or-nothing),
-2. an image still awaiting its background malware scan (``pending_scan``)
-   keeps the comment visible only to its own author,
-3. mention rendering can itself decline to render (a mention of a pin the
-   viewer can't see), which drops the comment.
-
-Once a comment passes those, the author's *profile* visibility separately
-masks their name and avatar while the content stays visible - see
-``services.profile.identity_visibility``.
-"""
+The visible tree is built once, here, so both surfaces apply the same three independent gates in the same order:"""
 
 from __future__ import annotations
 
@@ -42,13 +28,10 @@ class TripReplyData(TypedDict):
     rendered_text: str
     reactions: dict[str, _ReactionData]
     can_delete: bool
-    #: True when this is a reply whose own parent was deleted (UL-219) - such
-    #: a reply also has parent=None and so queries identically to a genuine
-    #: top-level comment; this distinguishes the two for the template. Always
-    #: False for a row still nested under its live parent's `replies` - by
-    #: the time this flips True the row is no longer found there at all (its
-    #: parent FK was just nulled), so it surfaces as a top-level row instead
-    #: on the next fetch.
+    #: True when this is a reply whose own parent was deleted (UL-219) - such a reply also has
+    #: parent=None and so queries identically to a genuine top-level comment; this distinguishes the
+    #: two for the template.
+    #: Always False for a row still nested under its live parent's `replies` - by the time this
     parent_was_deleted: bool
 
 
@@ -58,10 +41,9 @@ class TripCommentData(TripReplyData):
     replies: list[TripReplyData]
 
 
-#: The reactions a trip (or pin, or wiki) comment may carry. Re-exported from
-#: ``services.comments.comments`` (the single source of truth for the set) so the
-#: external API's trip serializers can bound their ``emoji`` field without
-#: importing a controller.
+#: The reactions a trip (or pin, or wiki) comment may carry.
+#: Re-exported from ``services.comments.comments`` (the single source of truth for the set) so the
+#: external API's trip serializers can bound their ``emoji`` field without importing a controller.
 ALLOWED_COMMENT_EMOJIS = frozenset(ALLOWED_EMOJIS)
 
 COMMENT_DENIED = "You don't have permission to comment on this trip."
@@ -301,21 +283,14 @@ def delete_comment(trip: Trip, actor: Profile, comment: TripComment) -> None:
 
 def trip_comment_is_visible(comment: TripComment, viewer: Profile) -> bool:
     """Whether one trip comment survives every gate :func:`build_comment_tree` applies.
-
-    The single-comment counterpart to that function, for the paths that address
-    a comment by id rather than rendering the panel. It must stay in step with
-    the three gates in the tree builder's loop - author comment-visibility, the
-    pending malware scan, and mention rendering - because a caller reaching a
-    comment by id that the tree would have dropped can both confirm the id
-    exists and act on it.
+    The single-comment counterpart to that function, for the paths that address a comment by id rather than rendering the panel.
 
     Args:
         comment: The comment being addressed.
         viewer: The profile acting on it.
 
     Returns:
-        True when ``viewer`` would have been shown this comment.
-    """
+        True when ``viewer`` would have been shown this comment."""
     from urbanlens.dashboard.services.notifications.mentions import render_comment_text, viewer_pinned_uuids
     from urbanlens.dashboard.services.trips.trip_activities import activity_queryset, compute_activity_index_map
 
@@ -337,10 +312,7 @@ def trip_comment_is_visible(comment: TripComment, viewer: Profile) -> bool:
 
 def set_comment_reaction(comment: TripComment, profile: Profile, emoji: str, *, reacted: bool) -> None:
     """Add or remove one emoji reaction on a trip comment.
-
-    An explicit target state rather than a toggle, so a retried request can't
-    silently undo itself. The internal panel keeps its toggle UX by passing
-    ``reacted=not already_reacted``.
+    An explicit target state rather than a toggle, so a retried request can't silently undo itself.
 
     Args:
         comment: The comment being reacted to.
@@ -353,20 +325,15 @@ def set_comment_reaction(comment: TripComment, profile: Profile, emoji: str, *, 
         TripNotFoundError: Any of the gates :func:`build_comment_tree` applies
             hides this comment from the reacting profile. Reported as "not
             found" rather than "forbidden" so reacting can't be used to probe
-            for comments the viewer was never shown.
-    """
+            for comments the viewer was never shown."""
     from urbanlens.dashboard.models.reactions.model import Reaction
 
     if emoji not in ALLOWED_COMMENT_EMOJIS:
         raise TripValidationError("Invalid emoji.")
-    # *All* the gates the panel render applies, not just the first. Checking
-    # only comment_visibility left the other two reachable by id: a comment
-    # whose image is still pending_scan, and one naming a trip activity or
-    # @loc the viewer can't resolve, are both dropped from build_comment_tree
-    # but were still reactable. That let a member with a guessed sequential id
-    # confirm the comment exists and fire a reaction notification at its
-    # author - the exact probe this function's "not found" answer exists to
-    # prevent.
+    # *All* the gates the panel render applies, not just the first.
+    # Checking only comment_visibility left the other two reachable by id: a comment whose image is
+    # still pending_scan, and one naming a trip activity or @loc the viewer can't resolve, are both
+    # dropped from build_comment_tree but were still reactable.
     if not trip_comment_is_visible(comment, profile):
         raise TripNotFoundError(COMMENT_NOT_FOUND)
 

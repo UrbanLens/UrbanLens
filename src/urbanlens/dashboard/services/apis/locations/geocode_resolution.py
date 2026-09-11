@@ -1,27 +1,5 @@
 """Resolves forward-geocoding (address -> coordinates) to REData or direct Nominatim.
-
-Single chokepoint for the "which provider answers a forward-geocode call"
-decision, mirroring ``cid_resolution.py``/``places_resolution.py``/
-``weather_resolution.py``/``routing_resolution.py``'s precedent:
-
-- REData configured (``UL_REDATA_API_URL``/``UL_REDATA_API_KEY`` both set) -
-  the primary deployment's path. ``GET /geocode/`` dispatches across every
-  registered provider (nominatim/photon/google/azure_maps/openhistoricalmap)
-  in one call; the first result of the first provider REData lists is used,
-  matching the "take the first result of the first provider you trust"
-  guidance in REData's own ``../REData/docs/api-reference.md``.
-- REData not configured, or its request fails - falls back to a direct
-  Nominatim search through :class:`NominatimGateway`, so the fallback is
-  rate-limited, cost-logged and timeout-bounded like every other outbound
-  call (it used to construct a raw geopy client under a tutorial user agent
-  Nominatim's operators block - see the 2026-08-15 STATUS entry in
-  ``docs/reports/2026-08-11-codebase-audit.md``).
-
-Only used for the simple "resolve an address typed into a pin-creation form"
-flow - the richer, OSM-metadata-heavy Nominatim reverse-geocode panel
-(``plugins.builtin.nominatim``) is a different, deliberately direct-only
-integration (see that module's own docstring).
-"""
+Only used for the simple "resolve an address typed into a pin-creation form" flow - the richer, OSM-metadata-heavy Nominatim reverse-geocode panel (``plugins.builtin.nominatim``) is a different, deliberately direct-only integration (see that module's own docstring)."""
 
 from __future__ import annotations
 
@@ -66,13 +44,7 @@ def geocode_address(address: str) -> tuple[float | None, float | None]:
 
 def nominatim_geocode(address: str) -> tuple[float | None, float | None]:
     """Forward-geocode one address through the project's Nominatim gateway.
-
-    The shared direct-Nominatim fallback (also used by
-    ``controllers.settings.geocode_address``). Goes through
-    :class:`~urbanlens.dashboard.services.apis.locations.nominatim.NominatimGateway`
-    rather than a raw geopy client so the call is rate-limited (Nominatim's
-    usage policy is one request/second; the app-wide budget enforces it),
-    cost-logged, timeout-bounded, and sent under the project's own user agent.
+    Goes through :class:`~urbanlens.dashboard.services.apis.locations.nominatim.NominatimGateway` rather than a raw geopy client so the call is rate-limited (Nominatim's usage policy is one request/second; the app-wide budget enforces it), cost-logged, timeout-bounded, and sent under the project's own user agent.
 
     Args:
         address: The address string to geocode.
@@ -85,8 +57,7 @@ def nominatim_geocode(address: str) -> tuple[float | None, float | None]:
     Raises:
         RateLimitExceededError: The app-wide Nominatim budget refused the
             call - propagated so a caller cannot mistake "we did not ask"
-            for "no such place".
-    """
+            for "no such place"."""
     from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
 
     results = NominatimGateway().search(address, limit=1)

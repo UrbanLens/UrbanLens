@@ -1,12 +1,5 @@
 """Which floorplan a building shows: the user's own first, REData's as backfill.
-
-Local plans are authored by people standing in the building; REData's (none
-exist yet - the endpoint is speculative) would be aggregated from whatever
-provider it eventually finds. When both exist, local wins. When only REData
-answers, its document is returned read-only (``"origin": "redata"``) rather
-than silently copied into rows, so a future better upstream version is never
-shadowed by a stale mirror.
-"""
+When only REData answers, its document is returned read-only (``"origin": "redata"``) rather than silently copied into rows, so a future better upstream version is never shadowed by a stale mirror."""
 
 from __future__ import annotations
 
@@ -25,12 +18,7 @@ logger = logging.getLogger(__name__)
 
 def resolve_document(place: Place, *, profile: Profile | None = None, on_date: datetime.date | None = None) -> dict[str, Any] | None:
     """The floorplan document for a building, resolved by date.
-
-    A local plan is the author's own: it records where the doors are, what
-    locks them and what opens those locks, which is not something to hand to
-    everyone who pins the same building. So local lookup is profile-scoped,
-    and REData's aggregated plans - external, non-personal by construction -
-    are what a user without their own plan sees.
+    So local lookup is profile-scoped, and REData's aggregated plans - external, non-personal by construction - are what a user without their own plan sees.
 
     Args:
         place: The building.
@@ -41,8 +29,7 @@ def resolve_document(place: Place, *, profile: Profile | None = None, on_date: d
     Returns:
         The document with an ``origin`` key (``"local"`` or ``"redata"``), or
         None when neither side has a plan - the overwhelmingly common case,
-        answered by one indexed query and, at most, one upstream call.
-    """
+        answered by one indexed query and, at most, one upstream call."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
     from urbanlens.dashboard.services.floorplans.serialization import document_for
 
@@ -59,12 +46,7 @@ def resolve_document(place: Place, *, profile: Profile | None = None, on_date: d
 
 def resolve_floorplan_row(place: Place, *, profile: Profile | None = None, on_date: datetime.date | None = None) -> Floorplan | None:
     """The floorplan *row* (not a serialized document) a building shows, resolved by date.
-
-    Same local-then-community fallback as :func:`resolve_document`, for a
-    caller that needs the actual row to query its geometry - the GeoJSON
-    features endpoint - rather than the pre-serialized document dict. REData
-    plans have no local row to return (see :func:`_redata_document`), so a
-    caller relying on this instead of :func:`resolve_document` never sees one.
+    Same local-then-community fallback as :func:`resolve_document`, for a caller that needs the actual row to query its geometry - the GeoJSON features endpoint - rather than the pre-serialized document dict.
 
     Args:
         place: The building.
@@ -73,8 +55,7 @@ def resolve_floorplan_row(place: Place, *, profile: Profile | None = None, on_da
         on_date: Resolve the plan as of this date; None for current.
 
     Returns:
-        The matching row, or None when neither side has one.
-    """
+        The matching row, or None when neither side has one."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
 
     if profile is None:
@@ -102,12 +83,7 @@ def _community_plan(place: Place, profile: Profile | None, on_date: datetime.dat
 
 def _redata_document(place: Place, on_date: datetime.date | None) -> dict[str, Any] | None:
     """REData's plan for this building, or None for any form of absence.
-
-    Two steps, matching REData's API: the parcel-scoped summary list names the
-    version in force, then the detail endpoint returns its document. The
-    parcel uuid comes from the building place's parent parcel when that was
-    provisioned from REData; without one there is nothing to ask.
-    """
+    The parcel uuid comes from the building place's parent parcel when that was provisioned from REData; without one there is nothing to ask."""
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
     from urbanlens.UrbanLens.settings.app import settings
 
@@ -136,19 +112,14 @@ def _redata_document(place: Place, on_date: datetime.date | None) -> dict[str, A
 
 def publish_to_wiki(floorplan: Floorplan, profile: Profile) -> Floorplan | None:
     """Copy a personal plan onto the place's community wiki.
-
-    A copy rather than a hand-over: the author keeps their own version, and
-    the community one is a separate row anyone who can see the wiki may edit
-    from then on. Publishing is explicit for the reason the read scope is
-    narrow - a plan names doors, locks and what opens them.
+    A copy rather than a hand-over: the author keeps their own version, and the community one is a separate row anyone who can see the wiki may edit from then on.
 
     Args:
         floorplan: The personal version to publish.
         profile: The publishing author, credited on the wiki edit.
 
     Returns:
-        The community plan, or None when the place has no wiki to publish to.
-    """
+        The community plan, or None when the place has no wiki to publish to."""
     from django.core.exceptions import ObjectDoesNotExist
     from django.db import transaction
 
@@ -191,16 +162,12 @@ def publish_to_wiki(floorplan: Floorplan, profile: Profile) -> Floorplan | None:
 def can_edit_community(floorplan: Floorplan, profile: Profile) -> bool:
     """Whether this profile may edit a published plan.
 
-    The wiki's own rule, not a second one: anyone who can see the wiki can
-    edit its content.
-
     Args:
         floorplan: A community (wiki-owned) plan.
         profile: The would-be editor.
 
     Returns:
-        True when the plan is community-owned and its wiki is visible here.
-    """
+        True when the plan is community-owned and its wiki is visible here."""
     from urbanlens.dashboard.services.wiki.wiki_access import place_visible_to
 
     if floorplan.place is None:
@@ -218,29 +185,7 @@ def floorplan_for_editing(
     allow_community: bool = False,
 ):
     """The local floorplan version a save should write into.
-
-    Writing is deliberately narrow, because a floorplan is expensive hand
-    work and a save must never destroy someone else's:
-
-    - A save naming a version *this profile owns* updates it in place.
-    - A save naming a *published* version updates it too, when the wiki is
-      visible here and the caller passed *allow_community* - community
-      content is edited in place by design, but only deliberately.
-    - Anything else - no uuid, an unknown uuid, a REData-origin document, or
-      another user's personal version - creates a new version owned by the
-      saver. The document's item uuids simply won't match the new
-      version's (empty) contents, so its contents are recreated rather than
-      moved.
-
-    That also makes dating explicit: changing ``valid_from`` on a loaded plan
-    edits that plan's date, while "save as a new version" (the editor drops
-    the plan uuid) creates a second version and leaves the original standing.
-
-    A plan need not belong to a known building. When *place* is None the plan
-    is scoped to *pin* instead - a placeless plan is one person's drawing of
-    one pin, so the pin is its identity. Scoping by ``place=None`` would match
-    every placeless plan on the site at once, which is why *pin* is required
-    in that case.
+    Writing is deliberately narrow, because a floorplan is expensive hand work and a save must never destroy someone else's:
 
     Args:
         place: The building, or None for a plan not tied to one.
@@ -259,8 +204,7 @@ def floorplan_for_editing(
 
     Raises:
         ValueError: If neither a place nor a pin is given, which would leave
-            the plan unreachable.
-    """
+            the plan unreachable."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
 
     if place is None and pin is None:
@@ -272,11 +216,10 @@ def floorplan_for_editing(
         named = Floorplan.objects.filter(uuid=version_uuid, **scope).first()
         if named is not None and named.wiki_id is None and named.profile_id == profile.pk:
             return named
-        # A published plan is community content: anyone who can see the wiki
-        # edits the same row, the way every other wiki field works - but only
-        # when the caller says it meant to. A save arriving here with a
-        # community plan's uuid and no such intent replaces the author's work
-        # with whatever happened to be on the saver's screen.
+        # A published plan is community content: anyone who can see the wiki edits the same row, the
+        # way every other wiki field works - but only when the caller says it meant to.
+        # A save arriving here with a community plan's uuid and no such intent replaces the author's
+        # work with whatever happened to be on the saver's screen.
         if named is not None and allow_community and can_edit_community(named, profile):
             return named
     return Floorplan.objects.create(

@@ -1,10 +1,4 @@
-"""Alias views - list, add, remove, and adopt alternate names for Pins and Wikis.
-
-The alias list is the full set of names a pin or place is known by, *including*
-the current name (marked in the UI). "Use this name" promotes any other alias
-to be the current name; the old name needs no special handling because it is
-already an alias.
-"""
+"""Alias views - alternate names for Pins and Wikis."""
 
 from __future__ import annotations
 

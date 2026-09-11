@@ -29,12 +29,10 @@ LEVEL_SCALE_K = 100.0
 #: shouldn't exist regardless.
 MAX_LEVEL = 500
 
-#: Point awards, by how the point was earned. Solo answers earn less than a
-#: competitive vote win (a competitive win reflects the extra work of
-#: convincing other players), but every path earns *something* so no
-#: contribution feels wasted - including a plain out-of-game wiki edit,
-#: which is deliberately worth less than any in-game path so playing the
-#: game is still the primary way to rack up points.
+#: Point awards, by how the point was earned.
+#: Solo answers earn less than a competitive vote win (a competitive win reflects the extra work of
+#: convincing other players), but every path earns *something* so no contribution feels wasted -
+#: including a plain out-of-game wiki edit, which is deliberately worth less than any in-game path
 SOLO_ANSWER_POINTS = 10
 COMPETITIVE_AGREE_POINTS = 15
 VOTE_WINNER_POINTS = 20
@@ -45,39 +43,26 @@ TENTATIVE_POINTS = 1
 MANUAL_EDIT_POINTS = 3
 PHOTO_UPLOAD_BONUS_POINTS = 5
 
-#: What a change to something other than a substantive wiki field is worth -
-#: an alias, a link, a markup map, an imported child wiki. These are real
-#: contributions but far cheaper to make than writing a description, and they
-#: used to earn the same 3 as one.
+#: What a change to something other than a substantive wiki field is worth - an alias, a link, a
+#: markup map, an imported child wiki.
 MANUAL_EDIT_EXTRA_POINTS = 1
 
-#: Ceiling on a single edit's award, however many fields it touched. One dialog
-#: submit can change every editable field at once, and without a cap that would
-#: out-earn a whole Consensus round. Held below ``SOLO_ANSWER_POINTS`` by
-#: ``test_consensus_points``, so a later retune cannot quietly make editing the
-#: best points-per-effort path in the game - which is the opposite of what the
-#: award comment above says this is for.
+#: Ceiling on a single edit's award, however many fields it touched.
+#: One dialog submit can change every editable field at once, and without a cap that would out-earn
+#: a whole Consensus round.
 MANUAL_EDIT_POINTS_CAP = 6
 
 
 def points_required_for_level(level: int) -> int:
     """Cumulative lifetime points required to advance from ``level`` to ``level + 1``.
-
-    ``threshold(n) = round(K * n * ln(n + 1))`` - absolute per-level cost
-    keeps rising (leveling up never becomes free), but cost-*density*
-    ``threshold(n) / n = K * ln(n + 1)`` grows only logarithmically, so
-    going from level 10 to level 100 costs roughly 19x, not the ~100x a
-    quadratic curve (or the unreachable multiple an exponential curve) would
-    demand - "harder every level, but achievable even at high levels," per
-    the design spec.
+    ``threshold(n) = round(K * n * ln(n + 1))`` - absolute per-level cost keeps rising (leveling up never becomes free), but cost-*density* ``threshold(n) / n = K * ln(n + 1)`` grows only logarithmically, so going from level 10 to level 100 costs roughly 19x, not the ~100x a quadratic curve (or the unreachable multiple an exponential curve) would demand - "harder every level, but achievable even at high levels," per the design spec.
 
     Args:
         level: The level being advanced *from* (1-indexed). Levels below 1
             require no points - every profile starts at level 1 for free.
 
     Returns:
-        Points required, or 0 for ``level < 1``.
-    """
+        Points required, or 0 for ``level < 1``."""
     if level < 1:
         return 0
     return round(LEVEL_SCALE_K * level * math.log(level + 1))
@@ -97,10 +82,7 @@ def level_for_points(points: int) -> int:
 
 def award_points(profile_id: int, amount: int, *, reason: str) -> bool:
     """Award ``amount`` lifetime Consensus points to ``profile_id``, recomputing their level.
-
-    Race-safe: locks the profile's ``ConsensusProfile`` row for the duration
-    of the update, so two concurrent awards (e.g. two rounds resolving at
-    once) can't read-modify-write past each other.
+    Race-safe: locks the profile's ``ConsensusProfile`` row for the duration of the update, so two concurrent awards (e.g. two rounds resolving at once) can't read-modify-write past each other.
 
     Args:
         profile_id: The profile earning points.
@@ -110,8 +92,7 @@ def award_points(profile_id: int, amount: int, *, reason: str) -> bool:
             anywhere yet, just surfaced in the log line below.
 
     Returns:
-        True if this award pushed the profile to a new level.
-    """
+        True if this award pushed the profile to a new level."""
     from urbanlens.dashboard.models.consensus.model import ConsensusProfile
 
     with transaction.atomic():
@@ -138,34 +119,13 @@ def award_points_for_manual_edit(editor_id: int) -> None:
 
 def points_for_changes(changes: Mapping[str, object] | None) -> int:
     """Value one wiki edit's diff, by what it actually changed.
-
-    A first cut, and deliberately a coarse one: substantive wiki fields are
-    worth :data:`MANUAL_EDIT_POINTS` each, everything else
-    :data:`MANUAL_EDIT_EXTRA_POINTS`, and the total is capped. The point is not
-    to price contributions accurately - it is that an alias and a rewritten
-    description used to be worth the same, and that a single dialog submit
-    touching every field used to pay per field with no ceiling.
-
-    Unrecognised keys fall to the cheaper tier rather than the dearer one, so
-    a new edit kind cannot become the best rate in the game by being added.
-
-    TODO: reassess this whole scheme once there is real usage to look at. It is
-    a first cut aimed at "reward contribution, make farming unattractive", and
-    two things about it are known to be imperfect and accepted for now:
-
-    - Reverting somebody drains their score, so a bad actor can attack a good
-      contributor's total by reverting them. Reverts are themselves revertible
-      and :func:`restore_wiki_edit_award` puts the points back, so the damage is
-      recoverable rather than permanent - but nothing rate-limits the attack.
-    - The two tiers are a guess. Nothing here measures how much work an edit
-      actually was, and a long description is worth the same as a one-word one.
+    Unrecognised keys fall to the cheaper tier rather than the dearer one, so a new edit kind cannot become the best rate in the game by being added.
 
     Args:
         changes: A ``WikiEdit.changes`` diff, or None.
 
     Returns:
-        Points in ``[0, MANUAL_EDIT_POINTS_CAP]``.
-    """
+        Points in ``[0, MANUAL_EDIT_POINTS_CAP]``."""
     from urbanlens.dashboard.services.wiki.wiki_edits import WIKI_EDITABLE_FIELDS
 
     if not changes:
@@ -180,18 +140,13 @@ def points_for_changes(changes: Mapping[str, object] | None) -> int:
 
 def points_for_wiki_edit(edit: WikiEdit) -> int:
     """What ``edit`` should pay its editor.
-
-    Zero for the four cases that must never earn: a revert (undoing somebody
-    else's work is not a contribution, and paying for it means an edit war pays
-    both sides on every pass), a Consensus-sourced edit (already paid, more, at
-    round resolution), an edit whose editor row is gone, and an empty diff.
+    Zero for the four cases that must never earn: a revert (undoing somebody else's work is not a contribution, and paying for it means an edit war pays both sides on every pass), a Consensus-sourced edit (already paid, more, at round resolution), an edit whose editor row is gone, and an empty diff.
 
     Args:
         edit: The edit to value.
 
     Returns:
-        Points to award, possibly 0.
-    """
+        Points to award, possibly 0."""
     if edit.is_revert or edit.consensus_round_id is not None or edit.editor_id is None:
         return 0
     return points_for_changes(edit.changes)
@@ -199,18 +154,14 @@ def points_for_wiki_edit(edit: WikiEdit) -> int:
 
 def _adjust_points(profile_id: int, delta: int, *, reason: str) -> None:
     """Move a profile's lifetime total by ``delta`` and recompute its level.
-
-    Unlike :func:`award_points` this never creates a ``ConsensusProfile``: a
-    retraction for a profile that has no row is a no-op, not a reason to
-    materialise one at zero.
+    Unlike :func:`award_points` this never creates a ``ConsensusProfile``: a retraction for a profile that has no row is a no-op, not a reason to materialise one at zero.
 
     Args:
         profile_id: The profile whose total moves.
         delta: Signed points. Negative deltas clamp at zero - ``total_points``
             is a ``PositiveIntegerField``, so a legacy row awarded under
             different weights must not be able to drive it negative.
-        reason: Short machine-readable label, for the log line.
-    """
+        reason: Short machine-readable label, for the log line."""
     from urbanlens.dashboard.models.consensus.model import ConsensusProfile
 
     with transaction.atomic():
@@ -225,15 +176,10 @@ def _adjust_points(profile_id: int, delta: int, *, reason: str) -> None:
 
 def record_wiki_edit_award(edit: WikiEdit) -> None:
     """Pay ``edit``'s editor and record on the row what was paid.
-
-    The amount is stored rather than left to be recomputed later because the
-    weights above are expected to be retuned, and
-    :func:`retract_wiki_edit_award` has to return exactly what this paid - not
-    what the same diff would earn under whatever weights are current then.
+    The amount is stored rather than left to be recomputed later because the weights above are expected to be retuned, and :func:`retract_wiki_edit_award` has to return exactly what this paid - not what the same diff would earn under whatever weights are current then.
 
     Args:
-        edit: The freshly created edit.
-    """
+        edit: The freshly created edit."""
     from urbanlens.dashboard.models.wiki_edit.model import WikiEdit as WikiEditModel
 
     amount = points_for_wiki_edit(edit)
@@ -247,19 +193,13 @@ def record_wiki_edit_award(edit: WikiEdit) -> None:
 
 def retract_wiki_edit_award(edit: WikiEdit) -> bool:
     """Take back what ``edit`` paid, once.
-
-    Compare-and-swap on ``consensus_points_retracted``, the same shape
-    ``services.reputation.scoring.retract_event`` uses and for the same reason:
-    several paths can reach this for one row (the revert itself, an admin
-    toggling the flag, deleting an already-reverted edit), and only the first
-    may move the total.
+    Compare-and-swap on ``consensus_points_retracted``, the same shape ``services.reputation.scoring.retract_event`` uses and for the same reason: several paths can reach this for one row (the revert itself, an admin toggling the flag, deleting an already-reverted edit), and only the first may move the total.
 
     Args:
         edit: The edit whose award is being withdrawn.
 
     Returns:
-        Whether this call changed anything.
-    """
+        Whether this call changed anything."""
     from urbanlens.dashboard.models.wiki_edit.model import WikiEdit as WikiEditModel
 
     if edit.editor_id is None or not edit.consensus_points:
@@ -295,14 +235,10 @@ def restore_wiki_edit_award(edit: WikiEdit) -> bool:
 
 def restore_consensus_points_for(edit_ids: list[int]) -> None:
     """Reinstate awards for edits whose revert was itself reverted.
-
-    The batch form, called directly rather than left to the signal for the same
-    reason ``services.wiki.wiki_edits._restore_reputation_for`` is: the caller
-    clears the flag with a queryset ``update()``, which emits no ``post_save``.
+    The batch form, called directly rather than left to the signal for the same reason ``services.wiki.wiki_edits._restore_reputation_for`` is: the caller clears the flag with a queryset ``update()``, which emits no ``post_save``.
 
     Args:
-        edit_ids: WikiEdit pks whose reverts have just been undone.
-    """
+        edit_ids: WikiEdit pks whose reverts have just been undone."""
     from urbanlens.dashboard.models.wiki_edit.model import WikiEdit as WikiEditModel
 
     for edit in WikiEditModel.objects.filter(pk__in=edit_ids, consensus_points_retracted=True):
@@ -311,21 +247,10 @@ def restore_consensus_points_for(edit_ids: list[int]) -> None:
 
 def backfill_wiki_edit_points(wiki_edit_model: type[WikiEdit]) -> None:
     """Record on every existing row what it was actually paid.
-
-    Extracted from the migration that calls it so it can be exercised by a test
-    - this repo has no migration-test harness, so logic left inline in a
-    ``RunPython`` is logic nothing runs until deploy.
-
-    Every legacy row was paid a flat :data:`MANUAL_EDIT_POINTS`, whatever it
-    changed, so that is what is recorded - not what the new weights would give
-    it. Rows that are some other row's ``reverted_by`` are marked
-    ``is_revert``, but their award is left in place: draining points people
-    have already been shown is a bigger change than declining to pay new ones,
-    and is not what this is for.
+    Extracted from the migration that calls it so it can be exercised by a test - this repo has no migration-test harness, so logic left inline in a ``RunPython`` is logic nothing runs until deploy.
 
     Args:
-        wiki_edit_model: The historical ``WikiEdit`` model from the migration.
-    """
+        wiki_edit_model: The historical ``WikiEdit`` model from the migration."""
     # A revert row is one some other row names as its `reverted_by` - i.e. one
     # whose reverse `reverts` set is non-empty. Collected as ids first because
     # update() cannot follow a reverse relation.

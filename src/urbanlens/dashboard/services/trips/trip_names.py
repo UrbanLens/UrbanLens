@@ -1,10 +1,5 @@
 """Trip name generation (UL-360): varied suggestions, and defaults for unnamed trips.
-
-The create-trip dialog used to hardcode one placeholder suggestion and require
-a name. Now the name is optional - a blank submission gets a generated name -
-and the dialog draws its placeholder from this same pool so suggestions don't
-go stale.
-"""
+Now the name is optional - a blank submission gets a generated name - and the dialog draws its placeholder from this same pool so suggestions don't go stale."""
 
 from __future__ import annotations
 

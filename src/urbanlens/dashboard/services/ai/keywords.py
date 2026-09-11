@@ -5,14 +5,8 @@ import re
 
 logger = logging.getLogger(__name__)
 
-# Ordered so that more specific multi-word patterns (e.g. "Fire Tower") beat their
-# single-word subsets (e.g. "Firehouse") - first match wins.
-#
-# Separator convention:
-#   [\s-]+  between words where a gap is always expected  ("fire station", "fire-station")
-#   [\s-]*  where the gap is sometimes absent             ("traincar" / "train car" / "train-car")
-#
-# All patterns are compiled with re.IGNORECASE | re.UNICODE.
+# Ordered so that more specific multi-word patterns (e.g.
+# "Fire Tower") beat their single-word subsets (e.g.
 CATEGORY_PATTERNS: dict[str, list[str]] = {
     "Airport": [
         r"\bair(port|field|strip)\b",
@@ -258,20 +252,14 @@ def _get_compiled() -> dict[str, list[re.Pattern[str]]]:
 
 
 def categorize_by_keywords(text: str) -> str | None:
-    """
-    Attempt to categorize a location using regex keyword matching.
-
-    Iterates through known urbex categories in priority order and returns the first
-    category whose patterns match the supplied text.  Only name and place_name fields
-    should be passed in - avoid addresses, which produce too many false positives
-    (e.g. "Church Street" → Church).
+    """Attempt to categorize a location using regex keyword matching.
+    Only name and place_name fields should be passed in - avoid addresses, which produce too many false positives (e.g.
 
     Args:
         text: Combined wiki name / description text to search.
 
     Returns:
-        The matched category name, or None if no pattern matched.
-    """
+        The matched category name, or None if no pattern matched."""
     if not text:
         return None
 

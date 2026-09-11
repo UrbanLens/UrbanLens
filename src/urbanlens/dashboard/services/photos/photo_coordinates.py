@@ -20,41 +20,24 @@ MIN_GUESSES_FOR_ESTIMATE = 5
 #: statistically; just average everything.
 MIN_GUESSES_FOR_OUTLIER_TRIM = 10
 
-#: Loose, cheap outlier rejection: drop this share of guesses (the ones
-#: farthest from the centroid) before recomputing the average. Not a
-#: rigorous statistical test - just enough to keep one wild misclick from
-#: skewing a small sample, at minimal cost.
+#: Loose, cheap outlier rejection: drop this share of guesses (the ones farthest from the centroid)
+#: before recomputing the average.
+#: Not a rigorous statistical test - just enough to keep one wild misclick from skewing a small
+#: sample, at minimal cost.
 OUTLIER_TRIM_FRACTION = 0.15
 
 
 def recompute_estimated_coordinates(image_id: int) -> None:
     """Recompute and cache one photo's estimated position from its correct guesses so far.
 
-    Called after every new correct guess (see
-    ``services.spotguessr.photo_coordinates.record_guess``). Recomputes from
-    the full current set each time rather than maintaining a running
-    average: per-photo guess volume is small enough that this stays cheap
-    (the cost scales with guesses on *this* photo, never with the size of
-    the guess table overall), and it keeps the outlier trim's boundary
-    correct as more data arrives instead of needing separate bookkeeping to
-    "undo" an old point's contribution.
-
-    A no-op below ``MIN_GUESSES_FOR_ESTIMATE`` correct guesses - deliberately
-    leaves any previously-cached estimate in place rather than clearing it,
-    though in practice a photo's correct-guess count never decreases, so
-    that situation cannot actually arise.
-
     Args:
         image_id: pk of the ``Image`` being estimated - not the object
             itself, since callers already have just the id and this never
-            needs to touch the rest of the row until the final update.
-    """
-    # Read via the deserialized GEOS Point's own .y/.x rather than an
-    # ST_X/ST_Y annotation - guess_point is a `geography` column, and
-    # PostGIS's X()/Y() functions expect `geometry`, not `geography`. Fine
-    # either way at this scale: per-photo guess volume is small, so fetching
-    # full Point objects and reading coordinates in Python costs nothing
-    # extra worth optimizing away.
+            needs to touch the rest of the row until the final update."""
+    # Read via the deserialized GEOS Point's own .y/.x rather than an ST_X/ST_Y annotation -
+    # guess_point is a `geography` column, and PostGIS's X()/Y() functions expect `geometry`, not
+    # `geography`.
+    # Fine either way at this scale: per-photo guess volume is small, so fetching full Point objects
     points = [(point.y, point.x) for point in PhotoCoordinateGuess.objects.filter(image_id=image_id, is_correct=True).values_list("guess_point", flat=True)]
     if len(points) < MIN_GUESSES_FOR_ESTIMATE:
         return
@@ -71,13 +54,7 @@ def recompute_estimated_coordinates(image_id: int) -> None:
 
 
 def _drop_farthest(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    """Drop the ``OUTLIER_TRIM_FRACTION`` of points farthest from the centroid of all of them.
-
-    Distance is plain (lat, lng) degree distance, not a geodesic one - a
-    location's boundary is small enough (building/property scale) that this
-    is a fine approximation for a deliberately loose trim, and far cheaper
-    than a real haversine/PostGIS distance per point.
-    """
+    """Drop the ``OUTLIER_TRIM_FRACTION`` of points farthest from the centroid of all of them."""
     centroid_lat = sum(lat for lat, _lng in points) / len(points)
     centroid_lng = sum(lng for _lat, lng in points) / len(points)
     ranked = sorted(points, key=lambda point: (point[0] - centroid_lat) ** 2 + (point[1] - centroid_lng) ** 2)

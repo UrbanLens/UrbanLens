@@ -1,17 +1,5 @@
 """One account's map pins as a single streamed document.
-
-The map page used to fetch its pins 500 at a time, which for a 10,000-pin account
-is 20 sequential round trips before the last marker appears. This is the same
-data in one response.
-
-NDJSON rather than a JSON array: the client can split a `ReadableStream` on
-newlines in a few dozen lines, each line is a complete value, and a missing `end`
-line detects a truncated response, which a bare array cannot.
-
-The server holds one batch at a time, never the whole account, so response size
-does not become worker memory. Accounts above `UL_MAP_DOCUMENT_MAX_PINS` are told
-to use the paged endpoint instead.
-"""
+NDJSON rather than a JSON array: the client can split a `ReadableStream` on newlines in a few dozen lines, each line is a complete value, and a missing `end` line detects a truncated response, which a bare array cannot."""
 
 from __future__ import annotations
 
@@ -48,36 +36,32 @@ CONTENT_TYPE = "application/x-ndjson"
 #: Pins serialized per database round trip while streaming.
 BATCH_SIZE = 1_000
 
-#: Bytes accumulated before a chunk is yielded, so a 20,000-line document is not
-#: 20,000 socket writes each with its own chunked-encoding frame. Precautionary:
-#: Django's test client consumes the generator directly and never writes to a
-#: socket, so the suite cannot measure this either way.
+#: Bytes accumulated before a chunk is yielded, so a 20,000-line document is not 20,000 socket
+#: writes each with its own chunked-encoding frame.
+#: Precautionary: Django's test client consumes the generator directly and never writes to a socket,
+#: so the suite cannot measure this either way.
 CHUNK_BYTES = 64 * 1024
 
 #: A cache that cannot answer is a miss, never an error. RuntimeError is the test
 #: suite's network guard.
 _CACHE_ERRORS = (RedisError, ConnectionError, OSError, RuntimeError)
 
-#: How long one account's claim suppresses further build tasks for it. Long
-#: enough to cover a build, short enough that a lost one is retried promptly -
-#: and it is what bounds the worker time an editing user can cost: at most one
-#: rebuild per account per window, however often they edit.
+#: How long one account's claim suppresses further build tasks for it.
+#: Long enough to cover a build, short enough that a lost one is retried promptly - and it is what
+#: bounds the worker time an editing user can cost: at most one rebuild per account per window,
+#: however often they edit.
 _BUILD_CLAIM_SECONDS = 120
 
 
 def document_etag(profile: Profile) -> tuple[str, int]:
     """The document's identity, and how many pins it would carry.
-
-    Derived rather than stored: a hash over the pin collection's fingerprint and
-    the two version numbers. No writes, so it cannot drift from the data, and
-    every path that changes a pin already moves the fingerprint.
+    Derived rather than stored: a hash over the pin collection's fingerprint and the two version numbers.
 
     Args:
         profile: Whose map document to identify.
 
     Returns:
-        The ETag value (without quotes) and the profile's root pin count.
-    """
+        The ETag value (without quotes) and the profile's root pin count."""
     state = pin_collection_state(profile)
     seed = f"{FORMAT_VERSION}:{PAYLOAD_VERSION}:{state.fingerprint}"
     return hashlib.sha256(seed.encode()).hexdigest()[:16], state.total
@@ -178,13 +162,10 @@ def _line(value: dict[str, Any]) -> bytes:
 
 def make_binary_client() -> Any:
     """A Valkey client that does not decode what it reads.
-
-    Documents are stored gzipped, so the client must not try to read what it
-    gets back as UTF-8.
+    Documents are stored gzipped, so the client must not try to read what it gets back as UTF-8.
 
     Returns:
-        The client, or None when no cache is configured.
-    """
+        The client, or None when no cache is configured."""
     url = os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
     if not url:
         return None
@@ -193,13 +174,7 @@ def make_binary_client() -> Any:
 
 class MapDocumentCache:
     """Gzipped documents in Valkey, keyed by the content they hold.
-
-    The key contains the ETag, and the ETag is a pure function of the content, so
-    two builders racing write identical bytes. There is no lock, no rename and no
-    generation flag - the failure modes of the per-pin cache this sits beside
-    (P101) have nowhere to live in this shape. A stale entry is never read
-    because nothing asks for its key again; it simply expires.
-    """
+    The key contains the ETag, and the ETag is a pure function of the content, so two builders racing write identical bytes."""
 
     PREFIX = "ul:map-doc"
 
@@ -259,23 +234,11 @@ class MapDocumentCache:
         return self._decoded(stored)
 
     def claim_build(self) -> bool:
-        """Whether this caller should be the one to enqueue a build.
-
-        Without it every miss enqueues its own task: an account open in several
-        tabs schedules several identical multi-megabyte builds, and - because
-        every edit makes a new version - one person editing their own map
-        schedules one per edit, each of them seconds of worker time on a large
-        account and each discarded if the next edit lands while it runs.
-
-        Keyed on the account rather than the version for that reason. Whoever
-        claims next builds whatever version is current by then, which is the one
-        worth having. The marker expires on its own, so a build that dies simply
-        lets the next reader try again.
+        """Whether this caller should be the one to enqueue a build. Keyed on the account rather than the version for that reason.
 
         Returns:
-            True at most once per account per window, and True whenever there is
-            no cache to co-ordinate through - one task is better than none.
-        """
+                True at most once per account per window, and True whenever there is
+                no cache to co-ordinate through - one task is better than none."""
         if not self.client or self.ttl() <= 0:
             return True
         try:
@@ -308,10 +271,7 @@ def build_and_store(
     decorate: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
 ) -> int:
     """Build a profile's document and cache it.
-
-    Holds the whole document in memory, so it belongs in a worker rather than in
-    a request - the streaming path above exists precisely so a request never has
-    to.
+    Holds the whole document in memory, so it belongs in a worker rather than in a request - the streaming path above exists precisely so a request never has to.
 
     Args:
         profile: Whose document to build.
@@ -319,8 +279,7 @@ def build_and_store(
         decorate: Applied to each batch, exactly as the request path applies it.
 
     Returns:
-        Bytes stored, or 0 if the document was not stored.
-    """
+        Bytes stored, or 0 if the document was not stored."""
     etag, total = document_etag(profile)
     if total > max_pins():
         return 0

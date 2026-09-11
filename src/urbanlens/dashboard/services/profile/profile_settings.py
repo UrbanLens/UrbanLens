@@ -1,25 +1,5 @@
 """Read and patch a profile's preferences as one flat document.
-
-The site's own settings page (``controllers.settings.SettingsView``) splits
-these across a dozen small ModelForms, each posted independently by its own
-HTMX form. That shape suits a page with a dozen cards; it suits a sync client
-badly, since fetching "the current settings" would mean knowing which form owns
-which field. This module exposes the same writable surface as a single
-allowlist, so the external API can serve one GET and one PATCH over it.
-
-Two deliberate divergences from the internal view:
-
-- A field belonging to a feature the user doesn't have is a **400 here**, where
-  the internal view silently ignores the whole form. A browser user simply
-  never sees a disabled card, but a sync client retrying a rejected field
-  forever needs to be told the field is unavailable rather than watching its
-  write vanish.
-- Community-gated fields that ``Profile.save()`` coerces are **reported back
-  post-coercion**, not rejected. That coercion is the model's own invariant
-  (``community_enabled=False`` forces every visibility to "no one"), and a
-  client that asked for something it can't have is better served by being
-  shown what it actually got.
-"""
+This module exposes the same writable surface as a single allowlist, so the external API can serve one GET and one PATCH over it."""
 
 from __future__ import annotations
 
@@ -34,22 +14,20 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.profile.model import Profile
 
-#: Mirrors ``forms.settings_form._DISCORD_USERNAME_RE`` - this is private
-#: contact info rather than a public identity claim, so it stays permissive
-#: (no discriminator-length enforcement) rather than duplicating Discord's own
-#: 100-char ceiling.
+#: Mirrors ``forms.settings_form._DISCORD_USERNAME_RE`` - this is private contact info rather than a
+#: public identity claim, so it stays permissive (no discriminator-length enforcement) rather than
+#: duplicating Discord's own 100-char ceiling.
 _DISCORD_USERNAME_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
 
 #: Profile columns that hold a private contact method (ContactMethodsForm).
-#: Free text with no uniqueness constraint - unlike the OAuth-linked login
-#: identity this module's own docstring excludes, these are just a way for
-#: someone else to reach you and carry no side effects on write.
+#: Free text with no uniqueness constraint - unlike the OAuth-linked login identity this module's
+#: own docstring excludes, these are just a way for someone else to reach you and carry no side
+#: effects on write.
 _CONTACT_FIELDS: tuple[str, ...] = ("phone_number", "signal_username", "discord_username", "whatsapp_number", "telegram_username", "matrix_handle")
 
-#: Read-through ``User`` fields exposed here rather than living on ``Profile``
-#: itself - see ``apply_settings_patch``/``read_settings`` for why they need
-#: their own handling instead of the flat ``getattr``/``setattr`` the rest of
-#: ``SETTINGS_FIELDS`` uses.
+#: Read-through ``User`` fields exposed here rather than living on ``Profile`` itself - see
+#: ``apply_settings_patch``/``read_settings`` for why they need their own handling instead of the
+#: flat ``getattr``/``setattr`` the rest of ``SETTINGS_FIELDS`` uses.
 _USER_PASSTHROUGH_FIELDS: tuple[str, ...] = ("first_name", "last_name")
 
 
@@ -71,23 +49,10 @@ class SettingsValidationError(Exception):
         super().__init__("; ".join(f"{field}: {message}" for field, message in sorted(errors.items())))
 
 
-#: The writable settings allowlist, mirroring the forms in
-#: ``forms/settings_form.py`` that ``controllers.settings.SettingsView`` posts.
-#:
-#: Explicitly enumerated rather than derived from the model: a new preference
-#: field on ``Profile`` must be added here on purpose before an external client
-#: can read or write it, so the surface can never widen by accident.
-#:
-#: Account **login identity** (``username``, ``email``, and the linked OAuth
-#: social-auth accounts) is deliberately absent - changing one of those is not
-#: a preference sync, and the internal views apply uniqueness checks and side
-#: effects (availability lookups, session/social-auth implications) that don't
-#: belong behind a scope grant. ``first_name``/``last_name`` and the six
-#: ``ContactMethodsForm`` fields below are a different thing - free-text
-#: display/contact info with no uniqueness constraint and no side effects,
-#: matching how ``controllers.userprofile.ProfileFieldUpdateView`` already
-#: treats them (see its ``_USER_FIELDS``/``_PROFILE_CONTACT``, which this
-#: mirrors) - so they belong here, unlike the identity fields above them.
+#: The writable settings allowlist, mirroring the forms in ``forms/settings_form.py`` that
+#: ``controllers.settings.SettingsView`` posts.
+#: Explicitly enumerated rather than derived from the model: a new preference field on ``Profile``
+#: must be added here on purpose before an external client can read or write it, so the surface can
 SETTINGS_FIELDS: tuple[str, ...] = (
     # Name (User passthrough - see _USER_PASSTHROUGH_FIELDS below).
     "first_name",
@@ -192,15 +157,10 @@ _FEATURE_GATED_FIELDS: dict[str, SiteFeature] = {
 def _validate_storage_dimensions(profile: Profile, data: dict[str, Any], errors: dict[str, str]) -> None:
     """Reject downscale caps above what the profile's plan entitles it to.
 
-    Mirrors the inline checks in ``SettingsView``: ``None`` (meaning "no
-    downscaling preference") is always allowed, any other value must appear in
-    the entitled set.
-
     Args:
         profile: The profile being patched.
         data: The submitted patch.
-        errors: Accumulator mutated in place with any failures.
-    """
+        errors: Accumulator mutated in place with any failures."""
     if "image_downscale_max_dimension" in data:
         value = data["image_downscale_max_dimension"]
         if value is not None and value not in allowed_user_dimension_values(profile):
@@ -225,13 +185,7 @@ def _validate_discord_username(data: dict[str, Any], errors: dict[str, str]) -> 
 
 def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) -> list[str]:
     """Validate and apply a partial settings update to *profile* (and, for name fields, *user*) in memory.
-
-    Does not save *profile* - the caller owns its transaction and the
-    ``update_fields`` list, which is what the returned names are for.
-    ``first_name``/``last_name`` are the one exception: they live on ``User``,
-    not ``Profile``, so this function saves *user* itself immediately when
-    either is touched, rather than asking the caller to manage a second
-    model's save alongside the one it already owns.
+    ``first_name``/``last_name`` are the one exception: they live on ``User``, not ``Profile``, so this function saves *user* itself immediately when either is touched, rather than asking the caller to manage a second model's save alongside the one it already owns.
 
     Args:
         profile: The profile to mutate.
@@ -251,8 +205,7 @@ def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) 
         SettingsValidationError: If any submitted field is unknown, gated
             behind a feature the user lacks, outside the values their plan
             entitles them to, or (for ``discord_username``) outside the
-            allowed character set.
-    """
+            allowed character set."""
     errors: dict[str, str] = {}
 
     unknown = set(data) - set(SETTINGS_FIELDS)
@@ -282,10 +235,9 @@ def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) 
             continue
         if getattr(profile, field) != value:
             setattr(profile, field, value)
-        # Reported as touched even when the value matches: the caller builds
-        # update_fields from this, and a no-op field costs one column in the
-        # UPDATE, whereas omitting a field the model later coerces would drop
-        # that coercion on the floor.
+        # Reported as touched even when the value matches: the caller builds update_fields from
+        # this, and a no-op field costs one column in the UPDATE, whereas omitting a field the model
+        # later coerces would drop that coercion on the floor.
         touched.append(field)
 
     if user_touched:
@@ -296,11 +248,7 @@ def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) 
 
 def read_settings(profile: Profile, *, user: User) -> dict[str, Any]:
     """Build the full settings document for *profile*.
-
-    Includes read-only context a client needs to render a settings UI without a
-    second round-trip: which features are available (so it can hide the AI and
-    Places cards), which downscale values the plan permits, and the distance
-    unit actually in effect once the profile's inferred fallback is applied.
+    Includes read-only context a client needs to render a settings UI without a second round-trip: which features are available (so it can hide the AI and Places cards), which downscale values the plan permits, and the distance unit actually in effect once the profile's inferred fallback is applied.
 
     Args:
         profile: The profile to read. Should be re-read from the instance
@@ -310,8 +258,7 @@ def read_settings(profile: Profile, *, user: User) -> dict[str, Any]:
     Returns:
         Every allowlisted field's current value, plus the read-only keys
         ``updated``, ``effective_distance_units``, ``features``,
-        ``allowed_image_dimensions`` and ``allowed_video_heights``.
-    """
+        ``allowed_image_dimensions`` and ``allowed_video_heights``."""
     payload: dict[str, Any] = {field: getattr(profile, field) for field in SETTINGS_FIELDS}
     payload["updated"] = profile.updated
     payload["effective_distance_units"] = profile.effective_distance_units

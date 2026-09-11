@@ -44,34 +44,14 @@ _CONTACT_FIELDS = ("email", "name", "notified_at", "found_safe_at")
 _PARTNER_FIELDS = ("status", "accepted_at")
 
 
-#: Registry key for this handler. Exposed as a module-level constant so call
-#: sites can import it (``from ...handlers.safety_checkin import MODEL_LABEL``)
-#: instead of hand-typing ``"safety_checkin"`` - a typo in a hand-typed string
-#: only fails at runtime via ``get_handler``'s ``ValueError``.
+#: Registry key for this handler. Import it instead of hand-typing the string.
 MODEL_LABEL = "safety_checkin"
 
 
 @register
 class SafetyCheckinUndoHandler(UndoHandler):
     """Restores a check-in's own fields, its emergency-contact snapshots, and its partners.
-
-    Chat messages and per-contact opt-outs are conversational/audit history,
-    not state needed to resume the check-in, and are not restored. A partner
-    assignment, unlike chat history, *is* state needed to resume the
-    check-in - so it's restored the same way contacts are. The attached
-    ``markup_map``/``markup_maps`` survive independently of the check-in
-    (deleting a SafetyCheckin does not cascade to its maps), so those are
-    simply relinked by id.
-
-    ``SafetyCheckinArchive`` (the encrypted post-resolution remnant) is
-    deliberately not restored as its own row: a check-in that reached
-    archival already has its plaintext PII scrubbed on the very row being
-    serialized here, so restoring that row naturally reproduces the
-    already-scrubbed state. If ``archive_scheduled_at`` is still in the past
-    on a restored row, the periodic archival sweep
-    (``tasks.sweep_due_safety_checkin_archival``) picks it up within 5
-    minutes on its own - no explicit re-scheduling needed here.
-    """
+    A partner assignment, unlike chat history, *is* state needed to resume the check-in - so it's restored the same way contacts are."""
 
     model_label = MODEL_LABEL
     model = SafetyCheckin

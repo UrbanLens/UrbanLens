@@ -1,11 +1,5 @@
 """`@pin` / `@trip` / `@friend` sharing embedded in direct messages.
-
-Each function creates the underlying share/invite/recommendation through the
-same code the standalone features use (pin sharing, trip membership,
-friendship), sends the chat message via `create_direct_message`, and wraps
-the two together in a `DirectMessageShare` so deleting the message can revoke
-the offer later (see `DirectMessageShare.revoke`).
-"""
+Each function creates the underlying share/invite/recommendation through the same code the standalone features use (pin sharing, trip membership, friendship), sends the chat message via `create_direct_message`, and wraps the two together in a `DirectMessageShare` so deleting the message can revoke the offer later (see `DirectMessageShare.revoke`)."""
 
 from __future__ import annotations
 
@@ -36,16 +30,7 @@ FRIEND_RECOMMENDATION_ACCESS_DURATION = datetime.timedelta(days=1)
 
 class ShareTargetNotFoundError(LookupError):
     """A share referenced a pin/trip/profile the sender can't address.
-
-    Carried as its own type rather than a bare `LookupError` so an API layer
-    can map it to 404 without also swallowing genuine lookup bugs.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below and author its own user-facing
-    text, rather than relaying ``message`` - that keeps a future raise site
-    here from being able to smuggle unreviewed text into a response just by
-    adding a new ``raise``.
-    """
+    Carried as its own type rather than a bare `LookupError` so an API layer can map it to 404 without also swallowing genuine lookup bugs."""
 
 
 class SharedPinNotFoundError(ShareTargetNotFoundError):
@@ -61,14 +46,7 @@ class SharedProfileNotFoundError(ShareTargetNotFoundError):
 
 
 class ShareTargetPermissionError(PermissionError):
-    """A share was refused because of who the sender or target is.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below and author its own user-facing
-    text, rather than relaying ``message`` - that keeps a future raise site
-    here from being able to smuggle unreviewed text into a response just by
-    adding a new ``raise``.
-    """
+    """A share was refused because of who the sender or target is."""
 
 
 class TripInviteNotConnectedError(ShareTargetPermissionError):
@@ -89,23 +67,12 @@ class RecommendedProfileNotConnectedError(ShareTargetPermissionError):
 
 class FriendRecommendationUnavailableError(ShareTargetPermissionError):
     """The recommendation can't go through: opted out, or a block exists.
-
-    Deliberately raised for both conditions - ``allow_friend_recommendations``
-    is off, or a block exists in either direction between the recommended
-    profile and the recipient - so a catch site that maps this one type to
-    one response can never let the sender learn which of the two it was.
-    """
+    Deliberately raised for both conditions - ``allow_friend_recommendations`` is off, or a block exists in either direction between the recommended profile and the recipient - so a catch site that maps this one type to one response can never let the sender learn which of the two it was."""
 
 
 class ShareValidationError(ValueError):
     """A share request itself was malformed.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch this and author its own user-facing text, rather than
-    relaying ``message`` - that keeps a future raise site here from being
-    able to smuggle unreviewed text into a response just by adding a new
-    ``raise``.
-    """
+    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch this and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 def send_message_with_share(
@@ -125,22 +92,7 @@ def send_message_with_share(
     client_uuid: UUID | None = None,
 ) -> DirectMessage:
     """Send one direct message, resolving and attaching an optional `@`-share.
-
-    The single entry point an API layer should use for "send a message that
-    may carry a share". Resolution of the share reference happens *here*, not
-    in the caller, and each kind is dispatched to the existing service that
-    already knows how to create it correctly.
-
-    That indirection is the whole point for pins. A pin share is not just a
-    row: `share_pin_in_message` -> `create_pin_share` ->
-    `resolve_and_stamp_origin_share` + `record_share_exposure` is what keeps
-    the `LocationExposure` provenance chain intact, so that a location's
-    re-share history stays traceable back to whoever first exposed it.
-    Constructing a `PinShare` or a `DirectMessageShare(kind=PIN)` directly
-    from a view would produce a share that *works* - the recipient sees the
-    card, can accept it - while silently recording no exposure at all. There
-    is no error to notice; the chain just quietly has a hole in it. Never do
-    it. Always come through here.
+    A pin share is not just a row: `share_pin_in_message` -> `create_pin_share` -> `resolve_and_stamp_origin_share` + `record_share_exposure` is what keeps the `LocationExposure` provenance chain intact, so that a location's re-share history stays traceable back to whoever first exposed it.
 
     Args:
         sender: The sending profile.
@@ -176,8 +128,7 @@ def send_message_with_share(
         ValueError: More than one share field was given, or `create_direct_message`
             rejected the content.
         PermissionError: Propagated from the underlying share service (not
-            connected, trip non-membership, recommendations disabled, ...).
-    """
+            connected, trip non-membership, recommendations disabled, ...)."""
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage as DirectMessageModel
 
     provided = [field for field in (shared_pin_slug, shared_trip_slug, shared_profile_slug) if field]
@@ -214,10 +165,9 @@ def send_message_with_share(
     if shared_trip_slug:
         from urbanlens.dashboard.models.trips.model import Trip as TripModel
 
-        # Membership is enforced by invite_to_trip_in_message; this lookup is
-        # deliberately not scoped to the sender's trips, so "you aren't a
-        # member of that trip" stays a PermissionError rather than being
-        # flattened into a 404.
+        # Membership is enforced by invite_to_trip_in_message; this lookup is deliberately not
+        # scoped to the sender's trips, so "you aren't a member of that trip" stays a
+        # PermissionError rather than being flattened into a 404.
         trip = TripModel.objects.filter(slug=shared_trip_slug).first()
         if trip is None:
             raise SharedTripNotFoundError(f"No trip with slug {shared_trip_slug!r}.")
@@ -251,12 +201,10 @@ def send_message_with_share(
             client_uuid=client_uuid,
         )
 
-    # No share - a plain message, possibly with a map attached. An attached
-    # MarkupMap does stamp the provenance chain now (`create_direct_message` ->
-    # `share_markup_map_with_profile`), but only for places the *sender* has a
-    # pin at: detection matches the map against their own pins. A marker drawn
-    # on somewhere they have never pinned still discloses it and still records
-    # nothing - see P21.
+    # No share - a plain message, possibly with a map attached.
+    # An attached MarkupMap does stamp the provenance chain now (`create_direct_message` ->
+    # `share_markup_map_with_profile`), but only for places the *sender* has a pin at: detection
+    # matches the map against their own pins.
     return create_direct_message(
         sender,
         recipient,
@@ -317,23 +265,18 @@ def share_pin_in_message(
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage as DirectMessageModel
     from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_share
 
-    # Replay is settled before the PinShare is created, not after. Deferring to
-    # create_direct_message's own idempotency check was too late: create_pin_share
-    # had already run, so a retry minted a *second* PinShare - and a second
-    # LocationExposure, the provenance row resolve_origin_share walks - before
-    # the message call returned the original. The share row insert below then
-    # collided with the winner's (one-to-one shares are unique per message) and
-    # raised an uncaught IntegrityError, so a send the caller was promised was
-    # idempotent answered 500 while having already corrupted the exposure chain.
+    # Replay is settled before the PinShare is created, not after.
+    # Deferring to create_direct_message's own idempotency check was too late: create_pin_share had
+    # already run, so a retry minted a *second* PinShare - and a second LocationExposure, the
+    # provenance row resolve_origin_share walks - before the message call returned the original.
     if client_uuid is not None:
         replayed = DirectMessageModel.objects.filter(sender=sender, client_uuid=client_uuid).first()
         if replayed is not None:
             return replayed
 
-    # One transaction: if the message itself is refused (e.g. the recipient's
-    # DM visibility rejects this sender despite the friendship), the PinShare
-    # and its exposure record must roll back with it - a share offer must
-    # never exist without the message that carries it.
+    # One transaction: if the message itself is refused (e.g. the recipient's DM visibility rejects
+    # this sender despite the friendship), the PinShare and its exposure record must roll back with
+    # it - a share offer must never exist without the message that carries it.
     try:
         with transaction.atomic():
             pin_share = create_pin_share(sender, recipient, pin)
@@ -352,10 +295,10 @@ def share_pin_in_message(
             )
             DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.PIN, pin_share=pin_share)
     except IntegrityError:
-        # Two retries raced past the check above. The whole block rolled back,
-        # including this call's PinShare and its exposure, so the winner's
-        # message is canonical and complete - return it rather than surfacing
-        # the collision.
+        # Two retries raced past the check above.
+        # The whole block rolled back, including this call's PinShare and its exposure, so the
+        # winner's message is canonical and complete - return it rather than surfacing the
+        # collision.
         replayed = DirectMessageModel.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
         if replayed is None:
             raise
@@ -411,10 +354,9 @@ def invite_to_trip_in_message(
     if not trip.memberships.filter(profile=sender).exists():
         raise NotATripMemberError(f"Profile {sender.pk} tried to invite {recipient.pk} to trip {trip.pk} without being a member of it.")
 
-    # One transaction: if the message itself is refused (e.g. the recipient's
-    # DM visibility rejects this sender despite the friendship), the invited
-    # TripMembership must roll back with it - a membership must never be
-    # created without the recipient ever receiving the invitation.
+    # One transaction: if the message itself is refused (e.g. the recipient's DM visibility rejects
+    # this sender despite the friendship), the invited TripMembership must roll back with it - a
+    # membership must never be created without the recipient ever receiving the invitation.
     with transaction.atomic():
         membership, _created = TripMembership.objects.get_or_create(trip=trip, profile=recipient, defaults={"status": TripMembership.STATUS_INVITED})
         message = create_direct_message(
@@ -440,10 +382,9 @@ def invite_to_trip_in_message(
 
         from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
-        # profile_visibility permits NO_ONE even for accepted friends (see
-        # VisibilityChoice's docstring) - being connected doesn't guarantee
-        # sender is visible to recipient, so this must still be resolved
-        # (and masked if needed) before formatting the stored message text.
+        # profile_visibility permits NO_ONE even for accepted friends (see VisibilityChoice's
+        # docstring) - being connected doesn't guarantee sender is visible to recipient, so this
+        # must still be resolved (and masked if needed) before formatting the stored message text.
         sender_name = resolve_visible_identity(recipient, sender)["display_name"]
         NotificationLog.objects.notify(
             profile=recipient,
@@ -471,10 +412,7 @@ def recommend_friend_in_message(
     client_uuid: UUID | None = None,
 ) -> DirectMessage:
     """Recommend `recommended` (one of sender's own friends) to `recipient` as a chat message.
-
-    Grants `recipient` temporary access to view `recommended`'s profile (as if
-    they were already friends) for `FRIEND_RECOMMENDATION_ACCESS_DURATION`, so
-    they can decide whether to connect.
+    Grants `recipient` temporary access to view `recommended`'s profile (as if they were already friends) for `FRIEND_RECOMMENDATION_ACCESS_DURATION`, so they can decide whether to connect.
 
     Args:
         sender: The profile making the recommendation.
@@ -499,8 +437,7 @@ def recommend_friend_in_message(
             sender's connections.
         FriendRecommendationUnavailableError: `recommended` has turned off
             friend recommendations, or has a block with `recipient`.
-        ValueError: Propagated from `create_direct_message` for bad input.
-    """
+        ValueError: Propagated from `create_direct_message` for bad input."""
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
     if recommended.pk in (recipient.pk, sender.pk):
@@ -510,12 +447,10 @@ def recommend_friend_in_message(
     if not recommended.allow_friend_recommendations:
         raise FriendRecommendationUnavailableError(f"Profile {recommended.pk} has allow_friend_recommendations=False.")
     if ProfileModel.are_blocked(recommended, recipient):
-        # A block in either direction vetoes the recommendation - it would
-        # otherwise grant the recipient temporary profile access the block
-        # exists to prevent. Deliberately the same exception *type* as the
-        # opt-out branch above (never a distinguishable subclass), so a catch
-        # site's response can't let the sender tell "blocked" apart from
-        # "recommendations disabled".
+        # A block in either direction vetoes the recommendation - it would otherwise grant the
+        # recipient temporary profile access the block exists to prevent.
+        # Deliberately the same exception *type* as the opt-out branch above (never a
+        # distinguishable subclass), so a catch site's response can't let the sender tell "blocked"
         raise FriendRecommendationUnavailableError(f"Profile {recommended.pk} and recipient {recipient.pk} have a block between them.")
 
     from django.db import transaction

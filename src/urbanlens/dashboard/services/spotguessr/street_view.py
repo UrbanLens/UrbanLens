@@ -41,33 +41,7 @@ class StreetViewPanorama:
 
 def candidate_street_view_for_location(location: Location) -> StreetViewPanorama | None:
     """Fetch a Street View panorama for ``location``, or None if unavailable.
-
-    Reuses the existing ``GoogleMapsGateway`` (the same server-side,
-    cache-backed fetch already powering the pin-detail Street View
-    carousel), including its coverage-metadata check.
-
-    The returned panorama's coordinates are handed to the client so it can
-    render an interactive ``google.maps.StreetViewPanorama`` there (pan/zoom/
-    walk between connected panos) - unlike the rest of a SpotGuessr round
-    payload, this is a deliberate exception to "never reveal the answer
-    before a guess": true client-side panning requires the browser to talk
-    to Google directly, which is only possible if it knows where to look.
-    See "Street View mode" in docs/designs/drafts/spotguessr.md for the
-    trade-off this accepts (mirrors how GeoGuessr itself works).
-
-    A paid, rate-limited external API sits on the critical path of picking
-    a round here, so any failure (no coverage, network error, rate limit)
-    is swallowed and treated as "not eligible" - round generation must
-    degrade to trying another location, never crash (mirrors how Photos
-    mode treats "no usable photo"). This is called once per candidate
-    location - up to ``session._MAX_LOCATION_ATTEMPTS`` times synchronously
-    inside the SpotGuessr start/round request - so, same as the pin-detail
-    carousel's own fetch of this method (``controllers.pin``), the call is
-    bounded by ``call_with_deadline`` rather than trusting the gateway's own
-    per-socket timeout: a slow trickle of bytes from a degraded provider can
-    keep a request handler blocked far longer than one candidate's share of
-    the request should cost.
-    """
+    The returned panorama's coordinates are handed to the client so it can render an interactive ``google.maps.StreetViewPanorama`` there (pan/zoom/ walk between connected panos) - unlike the rest of a SpotGuessr round payload, this is a deliberate exception to "never reveal the answer before a guess": true client-side panning requires the browser to talk to Google directly, which is only possible if it knows where to look."""
     no_coverage = SlideFetch([], from_cache=False)
     try:
         # Indexed rather than attribute-read: `call_with_deadline` may return

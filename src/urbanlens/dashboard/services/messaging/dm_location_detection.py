@@ -1,29 +1,5 @@
 r"""Detect coordinates and street addresses in direct-message text.
-
-Typing a place into a chat is sharing it, so it must count in the sender's
-reshare chain exactly like an explicit pin share. When a plaintext message is
-sent, its body is scanned for:
-
-- decimal coordinates ("40.7128, -74.0060")
-- hemisphere-suffixed decimal degrees ("40.7128 N, 74.0060 W")
-- degrees/minutes/seconds ("40°42'46\"N 74°00'22\"W") and degrees + decimal
-  minutes ("40°42.767'N 74°00.367'W")
-- Google Maps URLs ("…/maps/@40.7128,-74.0060,17z", "…?q=40.7128,-74.0060")
-  and ``geo:`` URIs
-- street addresses ("123 Main St, Springfield" - forward-geocoded, so this
-  path runs async in a Celery task; see ``tasks.detect_dm_address_mentions``)
-
-Each detected place becomes a
-:class:`~urbanlens.dashboard.models.direct_messages.location_mention.DirectMessageLocationMention`
-(what the chat UI renders under the bubble), and - when the recipient didn't
-already have the place pinned - a ``PinShare`` with ``origin=DM_DETECTED``
-plus the recipient's ``LocationExposure``. A recipient who already has the
-pin gets no share (it wasn't new information), just the mention row so their
-own pin's name can be shown back to them (to them only - it's private data).
-
-End-to-end encrypted messages are never scanned - the server has no
-plaintext, by design.
-"""
+Typing a place into a chat is sharing it, so it must count in the sender's reshare chain exactly like an explicit pin share."""
 
 from __future__ import annotations
 
@@ -68,27 +44,18 @@ class CoordinateMatch(NamedTuple):
 _DECIMAL_PAIR_RE = re.compile(r"(?<![\d.-])(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})(?![\d.])")
 
 # "40.7128 N, 74.0060 W" / "40.7128°N 74.0060°W" - hemisphere letters carry the sign.
-#
-# The `\s*°?\s*` runs are wrapped in an atomic group `(?>...)`: whitespace and
-# `°` are disjoint character classes, so there is only ever one way to split
-# them for a *successful* match - the atomic group just stops the engine from
-# also re-exploring all the other (doomed) splits when the match ultimately
-# fails, which is what let adversarial runs of whitespace-with-no-hemisphere-
-# letter cause polynomial backtracking (py/polynomial-redos).
+# The `\s*°?\s*` runs are wrapped in an atomic group `(?>...)`: whitespace and `°` are disjoint
+# character classes, so there is only ever one way to split them for a *successful* match - the
+# atomic group just stops the engine from also re-exploring all the other (doomed) splits when the
 _DECIMAL_HEMI_RE = re.compile(
     r"(\d{1,2}\.\d+)(?>\s*°?\s*)([NS])[,;\s]+(\d{1,3}\.\d+)(?>\s*°?\s*)([EW])",
     re.IGNORECASE,
 )
 
-# DMS ("40°42'46\"N") and degrees-decimal-minutes ("40°42.767'N") in one
-# pattern - seconds are optional, minutes may carry decimals.
-#
-# Same atomic-group treatment as _DECIMAL_HEMI_RE above for the `\s*[deg]\s*`
-# and `\s*[apostrophe/prime/m]?\s*` runs, plus the whole optional seconds group
-# `(?:...)?` is itself wrapped atomically: once the engine has decided
-# whether a seconds component is present, it commits to that choice instead
-# of retrying every combination of "consume some of it" x "split the
-# whitespace around it" when the following [NS]/[EW] fails to match.
+# DMS ("40°42'46\"N") and degrees-decimal-minutes ("40°42.767'N") in one pattern - seconds are
+# optional, minutes may carry decimals.
+# Same atomic-group treatment as _DECIMAL_HEMI_RE above for the `\s*[deg]\s*` and
+# `\s*[apostrophe/prime/m]?\s*` runs, plus the whole optional seconds group `(?:...)?` is itself
 _DMS_RE = re.compile(
     r"(\d{1,3})(?>\s*[°d]\s*)(\d{1,2}(?:\.\d+)?)(?>\s*['′m]?\s*)"
     r"(?>(?:(\d{1,2}(?:\.\d+)?)(?>\s*[\"″s]\s*))?)([NS])"
@@ -130,17 +97,13 @@ def _dms_to_decimal(degrees: str, minutes: str, seconds: str | None, hemisphere:
 
 def parse_coordinates(text: str) -> list[CoordinateMatch]:
     r"""Extract every coordinate pair from free-form text.
-
-    Formats are tried most-specific first (URLs, DMS, hemisphere-suffixed
-    decimals, then plain decimal pairs) and overlapping matches are dropped,
-    so "40°42'46\"N 74°00'22\"W" never double-matches its embedded numbers.
+    Formats are tried most-specific first (URLs, DMS, hemisphere-suffixed decimals, then plain decimal pairs) and overlapping matches are dropped, so "40°42'46\"N 74°00'22\"W" never double-matches its embedded numbers.
 
     Args:
         text: The message body to scan.
 
     Returns:
-        In-order unique matches, capped at :data:`MAX_MENTIONS_PER_MESSAGE`.
-    """
+        In-order unique matches, capped at :data:`MAX_MENTIONS_PER_MESSAGE`."""
     text = text[:_MAX_SCAN_LENGTH]
     matches: list[tuple[int, int, CoordinateMatch]] = []
 
@@ -180,15 +143,11 @@ def parse_coordinates(text: str) -> list[CoordinateMatch]:
 def parse_addresses(text: str) -> list[str]:
     """Extract street-address-looking substrings from free-form text.
 
-    Purely lexical - each candidate still has to survive forward geocoding
-    (see :func:`detect_address_mentions`) before it produces anything.
-
     Args:
         text: The message body to scan.
 
     Returns:
-        In-order unique candidates, capped at :data:`MAX_MENTIONS_PER_MESSAGE`.
-    """
+        In-order unique candidates, capped at :data:`MAX_MENTIONS_PER_MESSAGE`."""
     text = text[:_MAX_SCAN_LENGTH]
     seen: set[str] = set()
     results: list[str] = []
@@ -205,11 +164,6 @@ def parse_addresses(text: str) -> list[str]:
 def _record_mention(message: DirectMessage, location: Location, kind: str, matched_text: str) -> DirectMessageLocationMention | None:
     """Create the mention row (and, when it counts, the DM_DETECTED share) for one place.
 
-    Applies the sharing dedup rule: the recipient already having their own
-    pin at the place means this wasn't new information - the mention is still
-    stored (to render their pin's name back to them) but no share and no
-    exposure are recorded, and it does not count in the sender's chain.
-
     Args:
         message: The message the place was detected in.
         location: The resolved Location.
@@ -218,8 +172,7 @@ def _record_mention(message: DirectMessage, location: Location, kind: str, match
 
     Returns:
         The mention row, or None when one already exists for this
-        (message, location) or the write failed.
-    """
+        (message, location) or the write failed."""
     from urbanlens.dashboard.services.sharing.share_provenance import (
         find_profile_pin_near_location,
         profile_is_exposed_to,
@@ -306,17 +259,13 @@ def detect_coordinate_mentions(message: DirectMessage) -> list[DirectMessageLoca
 
 def _geocode_address(address: str) -> tuple[float, float] | None:
     """Forward-geocode one address candidate to coordinates.
-
-    Uses the Google Geocoding gateway (DB-cached via ``GeocodedLocation``).
-    Only street-level results are accepted - a bare city/region match means
-    the candidate wasn't really a street address.
+    Only street-level results are accepted - a bare city/region match means the candidate wasn't really a street address.
 
     Args:
         address: The candidate address text.
 
     Returns:
-        ``(latitude, longitude)``, or None when unconfigured/no match.
-    """
+        ``(latitude, longitude)``, or None when unconfigured/no match."""
     try:
         from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
         from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -343,16 +292,13 @@ def _geocode_address(address: str) -> tuple[float, float] | None:
 
 def detect_address_mentions(message: DirectMessage) -> list[DirectMessageLocationMention]:
     """Scan a message for street addresses and record mentions/shares.
-
-    Forward-geocodes each candidate, so this belongs in a Celery task
-    (``tasks.detect_dm_address_mentions``), never in the request path.
+    Forward-geocodes each candidate, so this belongs in a Celery task (``tasks.detect_dm_address_mentions``), never in the request path.
 
     Args:
         message: The message to scan (plaintext; encrypted bodies skip).
 
     Returns:
-        Newly created mention rows (may be empty).
-    """
+        Newly created mention rows (may be empty)."""
     if message.is_encrypted or not message.body:
         return []
     from urbanlens.dashboard.models.location.model import Location

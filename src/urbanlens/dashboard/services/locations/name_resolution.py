@@ -1,18 +1,5 @@
 """Plugin-driven place-name candidates and the resolver that picks a winner.
-
-Plugins contribute :class:`NameProvider` objects (via
-``UrbanLensPlugin.get_name_providers``) that yield raw name candidates for a
-:class:`~urbanlens.dashboard.models.location.model.Location`, usually read
-from :class:`~urbanlens.dashboard.models.cache.location_cache.LocationCache`
-rows their panels already populate. The candidates are cleaned and
-quality-gated in :mod:`urbanlens.dashboard.services.locations.naming`, then a
-:class:`NameResolver` picks the official name.
-
-The resolver is a strategy interface: :class:`RuleBasedNameResolver` is the
-default (source agreement first, then admin-configured priority), and a future
-AI-backed arbiter can slot in behind :func:`default_name_resolver` without any
-caller changing.
-"""
+The resolver is a strategy interface: :class:`RuleBasedNameResolver` is the default (source agreement first, then admin-configured priority), and a future AI-backed arbiter can slot in behind :func:`default_name_resolver` without any caller changing."""
 
 from __future__ import annotations
 
@@ -49,12 +36,7 @@ class NameCandidate:
 
 class NameProvider:
     """One source of place-name candidates, contributed by a plugin.
-
-    Providers are instantiated by plugins at discovery time and must not touch
-    the database or the network in ``__init__``; :meth:`candidates` runs
-    lazily at request/Celery time and should only read already-cached data
-    (fetching happens in the plugin's panel/task machinery, not here).
-    """
+    Providers are instantiated by plugins at discovery time and must not touch the database or the network in ``__init__``; :meth:`candidates` runs lazily at request/Celery time and should only read already-cached data (fetching happens in the plugin's panel/task machinery, not here)."""
 
     def __init__(self, *, source: str, verbose_name: str = "") -> None:
         """Initialize the provider.
@@ -68,16 +50,13 @@ class NameProvider:
 
     def candidates(self, location: Location) -> list[str | None]:
         """Return raw name candidates for a location.
-
-        Values are cleaned and quality-gated by the caller, so returning
-        ``None`` or junk entries is acceptable.
+        Values are cleaned and quality-gated by the caller, so returning ``None`` or junk entries is acceptable.
 
         Args:
-            location: The location to name.
+                location: The location to name.
 
         Returns:
-            Raw candidate values in this provider's own preference order.
-        """
+                Raw candidate values in this provider's own preference order."""
         return []
 
 
@@ -142,28 +121,7 @@ class NameResolver(ABC):
 
 class RuleBasedNameResolver(NameResolver):
     """Default resolver: source agreement beats priority, priority beats arrival order.
-
-    Candidates are grouped by
-    :func:`~urbanlens.dashboard.services.locations.naming.normalize_name_for_comparison`
-    so trivially different spellings of the same name count as agreement.
-    Groups are ranked by:
-
-    1. Whether two or more distinct sources agree on the name (agreement wins
-       over any single source, however prioritized).
-    2. The best priority rank among the group's sources. Rank is the index in
-       the configured priority list; sources not in the list rank after all
-       listed ones, in arrival order.
-    3. First-seen order, as a stable tiebreak.
-
-    The winning group's surface form is the member from its highest-priority
-    source. There are deliberately no numeric confidence scores - agreement
-    count and admin-configured priority are the only signals.
-
-    ``override_source``, when set, skips all of the above: the first
-    candidate from that source wins outright, even against a two-source
-    agreement. Used to make REData's building name dominate when naming a
-    detail (child) pin's location - see :func:`default_name_resolver`.
-    """
+    Candidates are grouped by :func:`~urbanlens.dashboard.services.locations.naming.normalize_name_for_comparison` so trivially different spellings of the same name count as agreement."""
 
     def __init__(self, priority: Sequence[str] = (), *, override_source: str | None = None) -> None:
         """Initialize the resolver.
@@ -225,21 +183,15 @@ class RuleBasedNameResolver(NameResolver):
         return min(groups[best_key], key=lambda item: self._rank(item[1].source, item[0]))[1]
 
 
-#: Name-provider source whose candidate wins outright when naming a detail
-#: (child) pin's location - see the ``location`` handling below. Hardcodes a
-#: specific plugin's source slug into this core module, the same kind of
-#: named-source special-case as ``naming._FALLBACK_ONLY_SOURCES``.
+#: Name-provider source whose candidate wins outright when naming a detail (child) pin's location -
+#: see the ``location`` handling below.
+#: Hardcodes a specific plugin's source slug into this core module, the same kind of named-source
+#: special-case as ``naming._FALLBACK_ONLY_SOURCES``.
 _CHILD_PIN_PREFERRED_SOURCE = "redata_building"
 
 
 def default_name_resolver(profile: Profile | None = None, *, location: Location | None = None) -> NameResolver:
     """Return the resolver used for official-name selection.
-
-    This is the single seam where a future AI-backed resolver plugs in (e.g.
-    switched by a SiteSettings choice); today it is always the rule-based
-    resolver driven by the site-wide admin-configured source priority. Name
-    resolution is an intentionally system-driven decision - individual users
-    cannot override the source ordering with their own preference.
 
     Args:
         profile: The profile whose action triggered this resolution, if any.
@@ -268,8 +220,7 @@ def default_name_resolver(profile: Profile | None = None, *, location: Location 
             still competes normally via the admin-configured priority order.
 
     Returns:
-        The resolver to use for official-name selection.
-    """
+        The resolver to use for official-name selection."""
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
     override_source = None

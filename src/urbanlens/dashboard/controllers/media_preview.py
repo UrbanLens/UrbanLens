@@ -1,24 +1,4 @@
-"""Generic server-side preview endpoint for non-web-renderable gallery items.
-
-The Media gallery puts external items straight into an ``<img>``, which fails
-for the TIFFs, scanned PDFs and HEICs that archival providers routinely
-return. This view fetches one such source URL server-side and returns a
-browser-renderable JPEG/PNG of it (see ``services.media.previews``).
-
-The URL is fully client-supplied and this view will fetch it, so - exactly
-like ``media_proxy.GoogleMapsPhotoProxyView`` - it is gated on a signature the
-server itself issued when it rendered the item into a gallery. Without that,
-this is an open image-fetching relay: an SSRF vector and a way to launder
-outbound requests through the site. The signature is checked before anything
-else happens, and the fetch is additionally SSRF-validated on every redirect
-hop the way every other outbound fetch in this project is.
-
-No login is required, matching the other unauthenticated media proxies
-(``PinCrisAttachmentView``, ``PinLoopnetPhotoView``): the sources reachable
-here are public archival material the server already chose to publish into a
-gallery, and ``services.media.media_materialize`` re-downloads these same URLs
-with no session of its own.
-"""
+"""Server-side preview for gallery items browsers cannot render."""
 
 from __future__ import annotations
 

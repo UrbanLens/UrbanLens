@@ -37,39 +37,28 @@ class GooglePlacesGateway(Gateway):
         return response.json().get("results", [])
 
     # Places API (New) bills fields by SKU tier - id/displayName/location/types/
-    # shortFormattedAddress are Essentials/Pro tier, but rating and
-    # userRatingCount are Enterprise tier, billed extra regardless of whether
-    # the caller actually uses them. Phone numbers (nationalPhoneNumber/
-    # internationalPhoneNumber) and websiteUri are in this SAME Enterprise
-    # tier as rating/userRatingCount, not a cheaper one - don't add them to
-    # this default mask under the assumption they're cheap:
-    # https://developers.google.com/maps/documentation/places/web-service/place-details
-    # Only requested by default here because callers that display ratings
-    # (the map's nearby-landmarks search) need it - callers that don't should
-    # pass a narrower field_mask (see find_nearest_place_id below).
+    # shortFormattedAddress are Essentials/Pro tier, but rating and userRatingCount are Enterprise
+    # tier, billed extra regardless of whether the caller actually uses them.
+    # Phone numbers (nationalPhoneNumber/ internationalPhoneNumber) and websiteUri are in this SAME
     _DEFAULT_SEARCH_NEARBY_FIELD_MASK: ClassVar[str] = "places.id,places.displayName,places.location,places.types,places.rating,places.userRatingCount,places.shortFormattedAddress"
 
     def search_nearby(self, latitude, longitude, radius=2000, included_types=None, max_results=20, field_mask=None):
         """Search nearby places using the new Places API v1 (Nearby Search New).
 
-        This endpoint supports types like ``historical_landmark`` that are not available
-        in the legacy Nearby Search API.
-
         Args:
-            latitude: Centre latitude.
-            longitude: Centre longitude.
-            radius: Search radius in metres (max 50000).
-            included_types: List of place type strings (e.g. ``["historical_landmark"]``).
-            max_results: Maximum number of results (1-20).
-            field_mask: Explicit ``X-Goog-FieldMask`` value. Defaults to
+                latitude: Centre latitude.
+                longitude: Centre longitude.
+                radius: Search radius in metres (max 50000).
+                included_types: List of place type strings (e.g. ``["historical_landmark"]``).
+                max_results: Maximum number of results (1-20).
+                field_mask: Explicit ``X-Goog-FieldMask`` value. Defaults to
                 :attr:`_DEFAULT_SEARCH_NEARBY_FIELD_MASK` (includes the
                 billed-extra rating/userRatingCount fields) - pass a narrower
                 mask when the caller only needs e.g. the place id, to avoid
                 paying for Enterprise-tier data that goes unused.
 
         Returns:
-            List of place dicts, shaped per the requested field_mask.
-        """
+                List of place dicts, shaped per the requested field_mask."""
         url = "https://places.googleapis.com/v1/places:searchNearby"
         body: dict = {
             "locationRestriction": {
@@ -133,29 +122,23 @@ class GooglePlacesGateway(Gateway):
         Returns:
             The nearest place's id, or None when nothing was found.
         """
-        # Only the id is ever used below - a minimal field_mask avoids paying
-        # for the default mask's rating/userRatingCount (Enterprise-tier)
-        # fields, which this per-pin lookup (see GoogleMapsPhotosPanelSource)
-        # has no use for.
+        # Only the id is ever used below - a minimal field_mask avoids paying for the default mask's
+        # rating/userRatingCount (Enterprise-tier) fields, which this per-pin lookup (see
+        # GoogleMapsPhotosPanelSource) has no use for.
         results = self.search_nearby(latitude, longitude, radius=radius, max_results=1, field_mask="places.id")
         return results[0]["id"] if results else None
 
     def get_place_photo_names(self, place_id: str, max_photos: int = 10) -> list[str]:
         """Fetch the Places API (New) ``photos[].name`` identifiers for a place.
-
-        Each name is an opaque resource path (e.g. ``places/ChIJ.../photos/AelY...``)
-        used with :meth:`get_photo_media` to fetch the actual image bytes -
-        never expose these URLs directly to the browser since resolving them
-        requires the API key.
+        ``places/ChIJ.../photos/AelY...``) used with :meth:`get_photo_media` to fetch the actual image bytes - never expose these URLs directly to the browser since resolving them requires the API key.
 
         Args:
-            place_id: The Google Place id.
-            max_photos: Maximum number of photo names to return.
+                place_id: The Google Place id.
+                max_photos: Maximum number of photo names to return.
 
         Returns:
-            Up to ``max_photos`` photo resource names; empty when the place
-            has none on file.
-        """
+                Up to ``max_photos`` photo resource names; empty when the place
+                has none on file."""
         url = f"https://places.googleapis.com/v1/places/{place_id}"
         headers = {"X-Goog-Api-Key": self.api_key, "X-Goog-FieldMask": "photos"}
         response = self.session.get(url, headers=headers)
@@ -164,17 +147,14 @@ class GooglePlacesGateway(Gateway):
         return [p["name"] for p in photos[:max_photos] if p.get("name")]
 
     def get_photo_media(self, photo_name: str, max_width: int = 1200) -> tuple[bytes, str]:
-        """Fetch the raw bytes of one Places API (New) photo.
-
-        Server-side only - the API key must never reach the browser.
+        """Fetch the raw bytes of one Places API (New) photo. Server-side only - the API key must never reach the browser.
 
         Args:
-            photo_name: A resource name from :meth:`get_place_photo_names`.
-            max_width: Maximum width in pixels for the returned image.
+                photo_name: A resource name from :meth:`get_place_photo_names`.
+                max_width: Maximum width in pixels for the returned image.
 
         Returns:
-            Tuple of (image bytes, Content-Type header value).
-        """
+                Tuple of (image bytes, Content-Type header value)."""
         url = f"https://places.googleapis.com/v1/{photo_name}/media"
         params = {"maxWidthPx": str(max_width), "key": self.api_key}
         response = self.session.get(url, params=params, stream=True)

@@ -1,12 +1,5 @@
 """Account-wide 2FA orchestration: which factors an account has, and backup codes.
-
-Two independent second factors are supported - passkeys (``services.auth.webauthn``)
-and an authenticator app (TOTP, RFC 6238) - either is sufficient to satisfy
-the login gate in ``CustomLoginView``/``LoginTwoFactorView``. Backup codes are
-not a factor of their own; they're a recovery mechanism that only makes sense
-once at least one real factor is enabled, and they're cleared automatically
-once an account no longer has any (see ``maybe_clear_backup_codes``).
-"""
+Backup codes are not a factor of their own; they're a recovery mechanism that only makes sense once at least one real factor is enabled, and they're cleared automatically once an account no longer has any (see ``maybe_clear_backup_codes``)."""
 
 from __future__ import annotations
 
@@ -36,11 +29,10 @@ BACKUP_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I - avoids
 BACKUP_CODE_LENGTH = 10  # rendered as two 5-char groups, e.g. "AB3XZ-9KLMN"
 SESSION_PENDING_TOTP_SECRET = "pending_totp_secret"  # noqa: S105 - session key, not a credential
 
-# Session keys for a password-verified (or SSO-verified) login that's paused
-# pending a second factor. Shared between CustomLoginView (password login,
-# account.py), LoginTwoFactorView and friends (the challenge page itself,
-# account.py), and the social-auth pipeline step below (SSO login) - all
-# three need to agree on where the pending user id/redirect live.
+# Session keys for a password-verified (or SSO-verified) login that's paused pending a second
+# factor.
+# Shared between CustomLoginView (password login, account.py), LoginTwoFactorView and friends (the
+# challenge page itself, account.py), and the social-auth pipeline step below (SSO login) - all
 SESSION_WEBAUTHN_PENDING_USER = "webauthn_pending_user_id"
 SESSION_WEBAUTHN_PENDING_REDIRECT = "webauthn_pending_redirect"
 
@@ -64,23 +56,13 @@ def has_second_factor(user: User) -> bool:
 
 def security_settings_context(user: User, request: HttpRequest, **extra: object) -> dict:
     """Context for Settings > Security: passkeys, TOTP status, backup codes.
-
-    Shared by the full settings page render and every 2FA action view
-    (``TOTPSetupStartView`` etc.) so an htmx request can re-render just the
-    security section with fully up-to-date state after a mutation, instead
-    of falling back to a full page redirect.
-
-    Also pops ``new_backup_codes`` from the session, which
-    ``BackupCodesGenerateView`` stashes there as a one-time flash - the
-    plaintext codes are only ever available on the response immediately
-    after generating them.
+    Shared by the full settings page render and every 2FA action view (``TOTPSetupStartView`` etc.) so an htmx request can re-render just the security section with fully up-to-date state after a mutation, instead of falling back to a full page redirect.
 
     Args:
         user: The account whose security state to describe.
         request: The current request (used for the session).
         **extra: Additional context to merge in, e.g. ``code_error`` for an
-            inline TOTP-confirm failure message.
-    """
+            inline TOTP-confirm failure message."""
     from urbanlens.dashboard.services.auth.webauthn import has_passkeys, list_credentials
 
     return {
@@ -129,10 +111,8 @@ def _totp_matched_step(secret: str, code: str, valid_window: int = 1) -> int | N
     for replay protection, which ``verify()`` alone can't provide.
     """
     totp = pyotp.TOTP(secret)
-    # Some authenticator apps display/copy the code with a middle space
-    # (e.g. "123 456") - strip all whitespace, not just the ends, so a
-    # pasted code still matches. Client-side JS does the same, but this is
-    # the authoritative check and must not depend on JS having run.
+    # Some authenticator apps display/copy the code with a middle space (e.g.
+    # "123 456") - strip all whitespace, not just the ends, so a pasted code still matches.
     normalized = "".join(code.split())
     current_step = int(time.time() / totp.interval)
     for step in range(current_step - valid_window, current_step + valid_window + 1):
@@ -163,9 +143,6 @@ def disable_totp(user: User) -> None:
 def verify_totp_code(user: User, code: str) -> bool:
     """Verify a submitted code against the account's TOTP device, if any.
 
-    Rejects reuse of a previously-accepted time-step (replay protection) and
-    persists the newly-used step on success.
-
     Args:
         user: The account attempting to verify.
         code: The 6-digit code the user typed in.
@@ -173,26 +150,14 @@ def verify_totp_code(user: User, code: str) -> bool:
     Returns:
         True if the code is valid and freshly-used; False otherwise (including
         when the account has no TOTP device, or its secret can no longer be
-        decrypted - see the ``InvalidToken`` handling below).
-    """
+        decrypted - see the ``InvalidToken`` handling below)."""
     try:
         device = TOTPDevice.objects.for_user(user).first()
     except InvalidToken:
-        # A field_encryption_key rotation (see models.fields.EncryptedTextField)
-        # leaves this device's secret permanently undecryptable - this used to
-        # raise straight out of verify_login_code(), which `or`-chains this
-        # function with the backup-code fallback: an uncaught exception here
-        # skips that fallback entirely (Python's `or` only short-circuits on a
-        # falsy return, not an exception), locking every TOTP-enrolled user out
-        # of login completely, even those who still have working backup codes
-        # or a passkey. Treating it as "no device" - same self-healing verdict
-        # ImmichAccountManager/GoogleCalendarAccountManager/etc. reach for their
-        # own encrypted credentials - restores the fallback instead of crashing.
-        # Deliberately NOT deleting the row the way those managers do: silently
-        # dropping a user's own 2FA factor is a bigger security-posture change
-        # than dropping a stale third-party API connection, so it's left for
-        # the user to notice (their code stops working) and re-enroll via
-        # Settings > Security themselves.
+        # Treating it as "no device" - same self-healing verdict
+        # ImmichAccountManager/GoogleCalendarAccountManager/etc. reach for their own encrypted
+        # credentials - restores the fallback instead of crashing.
+        # Deliberately NOT deleting the row the way those managers do: silently dropping a user's
         logger.warning("TOTPDevice for user %s is undecryptable (stale field_encryption_key) - treating as no match", user.pk)
         return False
     if device is None or not code:
@@ -204,11 +169,10 @@ def verify_totp_code(user: User, code: str) -> bool:
     if device.last_used_step is not None and step <= device.last_used_step:
         return False
 
-    # Claim the step in the same statement that checks it. Reading last_used_step and then
-    # writing it unconditionally lets two submissions of one intercepted code (a phishing
-    # proxy replaying it against a parallel session) both pass the check before either
-    # writes - the whole point of tracking the step. Postgres serialises the row update, so
-    # exactly one caller sees a row matched.
+    # Claim the step in the same statement that checks it.
+    # Reading last_used_step and then writing it unconditionally lets two submissions of one
+    # intercepted code (a phishing proxy replaying it against a parallel session) both pass the
+    # check before either writes - the whole point of tracking the step.
     claimed = TOTPDevice.objects.filter(pk=device.pk).filter(Q(last_used_step__isnull=True) | Q(last_used_step__lt=step)).update(last_used_step=step)
     return claimed == 1
 
@@ -232,17 +196,13 @@ def _normalize_backup_code(code: str) -> str:
 
 def generate_backup_codes(user: User) -> list[str]:
     """Replace this account's backup codes with a fresh set and return them in plaintext.
-
-    The plaintext is only ever available here, at generation time - only
-    salted hashes are persisted. Call site is responsible for showing these
-    to the user exactly once.
+    The plaintext is only ever available here, at generation time - only salted hashes are persisted.
 
     Args:
         user: The account generating new codes.
 
     Returns:
-        The new codes, formatted for display (e.g. "AB3XZ-9KLMN").
-    """
+        The new codes, formatted for display (e.g. "AB3XZ-9KLMN")."""
     BackupCode.objects.for_user(user).delete()
     codes = ["".join(secrets.choice(BACKUP_CODE_ALPHABET) for _ in range(BACKUP_CODE_LENGTH)) for _ in range(BACKUP_CODE_COUNT)]
     BackupCode.objects.bulk_create(BackupCode(user=user, code_hash=make_password(raw)) for raw in codes)
@@ -269,12 +229,10 @@ def verify_and_consume_backup_code(user: User, code: str) -> bool:
         return False
     for candidate in BackupCode.objects.unused_for(user):
         if check_password(normalized, candidate.code_hash):
-            # Consume with a conditional UPDATE, for the same reason verify_totp_code
-            # claims its step conditionally: `unused_for` reading the row and this
-            # marking it used are two statements, so two submissions of one
-            # intercepted code can both match before either writes. Filtering on
-            # used_at here means Postgres serialises them and only one caller sees a
-            # row matched - a backup code is single-use or it is not a second factor.
+            # Consume with a conditional UPDATE, for the same reason verify_totp_code claims its
+            # step conditionally: `unused_for` reading the row and this marking it used are two
+            # statements, so two submissions of one intercepted code can both match before either
+            # writes.
             claimed = BackupCode.objects.filter(pk=candidate.pk, used_at__isnull=True).update(used_at=timezone.now())
             return claimed == 1
     return False

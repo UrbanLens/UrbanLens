@@ -87,30 +87,19 @@ def effective_monthly_cost(as_of: datetime.datetime | None = None) -> CostBreakd
 def total_hardware_cost() -> Decimal:
     """Return the total (non-amortized) replacement cost of every hardware component on record.
 
-    Unlike ``effective_monthly_cost().hardware``, this isn't divided by each component's
-    deprecation period - it's the actual amount spent, including retired components (the
-    money was already spent regardless of retirement, same convention as
-    ``total_recorded_expenses`` below).
-
     Returns:
-        The all-time hardware total, in USD.
-    """
+        The all-time hardware total, in USD."""
     return CostComponent.objects.aggregate(total=Sum("replacement_cost"))["total"] or _ZERO
 
 
 def total_recorded_expenses(as_of: datetime.datetime | None = None) -> Decimal:
     """Return total money spent to date across every cost source.
 
-    Sums one-time component replacement costs (counted once, regardless of
-    retirement - the money was already spent), recurring operating costs accumulated
-    over their active lifespan, and actual recorded API spend.
-
     Args:
         as_of: Point in time to total expenses up to; defaults to now.
 
     Returns:
-        The all-time total, in USD.
-    """
+        The all-time total, in USD."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
     as_of = as_of or timezone.now()
@@ -128,15 +117,11 @@ def total_recorded_expenses(as_of: datetime.datetime | None = None) -> Decimal:
 def average_monthly_expense(as_of: datetime.datetime | None = None) -> Decimal | None:
     """Return the historical average monthly expense.
 
-    ``total_recorded_expenses`` divided by the number of months since the earliest
-    cost record (component, operating cost, or API call).
-
     Args:
         as_of: Point in time to evaluate against; defaults to now.
 
     Returns:
-        The average, or None when there is no cost data yet.
-    """
+        The average, or None when there is no cost data yet."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
     as_of = as_of or timezone.now()
@@ -157,18 +142,13 @@ def average_monthly_expense(as_of: datetime.datetime | None = None) -> Decimal |
 
 def active_user_count(as_of: datetime.datetime | None = None) -> int:
     """Return the number of "active" users, for cost-per-user calculations.
-
-    An active user is one who logged in within the trailing 30 days *and* has placed
-    at least 2 (root) pins - a one-time signup who created an account and never
-    returned would otherwise dilute the per-user figure and understate the real cost
-    of an engaged user.
+    An active user is one who logged in within the trailing 30 days *and* has placed at least 2 (root) pins - a one-time signup who created an account and never returned would otherwise dilute the per-user figure and understate the real cost of an engaged user.
 
     Args:
         as_of: Point in time to evaluate the 30-day login window against; defaults to now.
 
     Returns:
-        The number of active users.
-    """
+        The number of active users."""
     as_of = as_of or timezone.now()
     window_start = as_of - timedelta(days=_ACTIVE_USER_WINDOW_DAYS)
     return (
@@ -194,20 +174,11 @@ def cost_per_user(as_of: datetime.datetime | None = None) -> Decimal | None:
 def active_supporter_count(as_of: datetime.datetime | None = None) -> int:
     """Return the number of distinct users currently holding a paying subscription.
 
-    A "supporter" is a user with at least one ``RoleSubscription`` currently granting
-    access (see ``RoleSubscriptionQuerySet.currently_granting``) - active/trialing with
-    its role's pay-what-you-want threshold cleared, or coasting on unexpired banked
-    usage-ledger coverage. Deduplicated by user, since one user can hold more than one
-    paid role. Unlike ``active_user_count``, admin-granted (non-billed) ``UserSubscription``
-    rows don't count here - this is specifically "people currently paying", to contrast
-    against the general active-user population.
-
     Args:
         as_of: Point in time to evaluate against; defaults to now.
 
     Returns:
-        The number of distinct paying supporters.
-    """
+        The number of distinct paying supporters."""
     from urbanlens.dashboard.models.billing import RoleSubscription
 
     return RoleSubscription.objects.currently_granting(as_of).values("user_id").distinct().count()
@@ -215,17 +186,13 @@ def active_supporter_count(as_of: datetime.datetime | None = None) -> int:
 
 def cost_per_supporter(as_of: datetime.datetime | None = None) -> Decimal | None:
     """Return the current effective monthly cost divided by paying supporters.
-
-    Intentionally a much larger figure than ``cost_per_user`` - most users never pay,
-    so this highlights how much of the site's real cost each paying supporter is
-    effectively covering.
+    Intentionally a much larger figure than ``cost_per_user`` - most users never pay, so this highlights how much of the site's real cost each paying supporter is effectively covering.
 
     Args:
         as_of: Point in time to evaluate against; defaults to now.
 
     Returns:
-        The per-supporter monthly cost, or None when there are no current supporters.
-    """
+        The per-supporter monthly cost, or None when there are no current supporters."""
     supporters = active_supporter_count(as_of)
     if not supporters:
         return None
@@ -242,21 +209,13 @@ def _advance_month(cursor: datetime.datetime) -> datetime.datetime:
 def monthly_cost_series(months: int = 12, as_of: datetime.datetime | None = None) -> dict[str, list]:
     """Reconstruct the effective monthly cost for each of the last *months* calendar months.
 
-    For each month, sums the amortized cost of every component and the monthly cost of
-    every operating cost that existed and wasn't yet retired at any point during that
-    month (from their ``created``/``retired_at`` timestamps), plus the actual API spend
-    recorded that month. There is no separate expense ledger - this is a reconstruction
-    from the admin-defined items' own timestamps, consistent with how the rest of the
-    admin stats pages build monthly series.
-
     Args:
         months: How many trailing calendar months to include.
         as_of: The "current" month to count backward from; defaults to now.
 
     Returns:
         ``{"labels": [...], "hardware": [...], "operating": [...], "api": [...]}``,
-        one entry per month, oldest first.
-    """
+        one entry per month, oldest first."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
     as_of = as_of or timezone.now()
@@ -300,25 +259,12 @@ def monthly_cost_series(months: int = 12, as_of: datetime.datetime | None = None
 
 def api_spend_summary_30d() -> dict[str, list | int | Decimal | None]:
     """Return the trailing-30-day external API spend, split by pricing status.
-
-    A service contributes to the total when it actually *recorded* cost, not when
-    it happens to carry a flat ``ServiceDefaults.cost_per_call``. Those are not the
-    same set, and keying off the flat rate lost the expensive half: exactly one of
-    the 46 registered services declares a flat rate, while every AI service prices
-    each call from real token usage and writes that to ``ApiCallLog.cost_estimate``
-    (see ``services/ai/vision.py``). Asking the flat-rate question counted all of
-    them as unpriced and dropped their spend from the figure shown on both the
-    site-admin cost page and the public running-costs page.
-
-    ``unpriced_service_count`` keeps its original meaning - services that produced
-    no cost at all, because they are free, not priced here yet, or priced in a way
-    that doesn't reduce to a number per call.
+    ``unpriced_service_count`` keeps its original meaning - services that produced no cost at all, because they are free, not priced here yet, or priced in a way that doesn't reduce to a number per call.
 
     Returns:
         ``{"priced_services": [{"display_name": str, "cost_30d": Decimal}, ...],
         "unpriced_service_count": int, "total_cost_30d": Decimal | None}``, with
-        ``priced_services`` sorted by cost descending.
-    """
+        ``priced_services`` sorted by cost descending."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
     from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults
 

@@ -1,22 +1,5 @@
 """REData-backed gateway for its public-locations catalog (state capitols, county seats, national capitals).
-
-Backs the demo instance's location pool (``services.demo.locations``), not any
-user-facing panel - ``GET /api/v1/public-locations/`` answers from REData's own
-local catalog with no per-source attribution (``{"count","results"}``, no
-``providers``/``complete`` block), which is why this does not go through
-:meth:`RedataLocationContextGateway.near_point` the way every other gateway in
-this package does: ``near_point`` always sends ``lat``/``lng``, but this
-endpoint's whole point for the demo is browsing the catalog *without* a
-coordinate - see REData's ``../REData/docs/api-reference.md``, "Public locations".
-
-As of 2026-08-20 this endpoint exists on REData's own working tree but is not
-yet deployed anywhere UrbanLens can reach. Every caller here is written to
-degrade to an empty list rather than raise when it 404s or the configured key
-lacks the ``public_locations:read`` scope, since "REData doesn't have this yet"
-and "REData is unreachable" must both leave demo seeding with no pins - not
-with a stack trace - see ``services.demo.locations.pool_locations``' own
-"empty pool is correct" precedent.
-"""
+Every caller here is written to degrade to an empty list rather than raise when it 404s or the configured key lacks the ``public_locations:read`` scope, since "REData doesn't have this yet" and "REData is unreachable" must both leave demo seeding with no pins - not with a stack trace - see ``services.demo.locations.pool_locations``' own "empty pool is correct" precedent."""
 
 from __future__ import annotations
 
@@ -31,10 +14,9 @@ logger = logging.getLogger(__name__)
 _PATH = "/api/v1/public-locations/"
 
 #: REData's own enum (parcels.models.public_location.meta.PublicLocationKind).
-#: Duplicated here rather than fetched, matching how this project already
-#: treats REData enums elsewhere (e.g. redata_historic_registers.py) - it is
-#: REData's contract to keep stable, not a value this project can discover any
-#: other way, and a value outside this set is REData's own 400 to raise.
+#: Duplicated here rather than fetched, matching how this project already treats REData enums
+#: elsewhere (e.g. redata_historic_registers.py) - it is REData's contract to keep stable, not a
+#: value this project can discover any other way, and a value outside this set is REData's own 400
 PUBLIC_LOCATION_KINDS = ("state_capitol", "county_seat", "national_capital")
 
 

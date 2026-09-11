@@ -29,11 +29,10 @@ DIFFICULTY_BANDWIDTH = 200.0
 MIN_GAMES_FOR_DIFFICULTY_WEIGHTING = 5
 MIN_SEPARATION_KM = 0.5
 
-#: Proxy-seeding saturation points (services.spotguessr.selection._proxy_difficulty_rating) -
-#: a location with this many pins/photos or more is treated as "as
-#: well-documented as it gets" for the proxy estimate; there's no reward for
-#: exceeding it, since the point is only to distinguish "probably easy to
-#: recognize" from "nobody's ever seen this place" before real play data exists.
+#: Proxy-seeding saturation points (services.spotguessr.selection._proxy_difficulty_rating) - a
+#: location with this many pins/photos or more is treated as "as well-documented as it gets" for the
+#: proxy estimate; there's no reward for exceeding it, since the point is only to distinguish
+#: "probably easy to recognize" from "nobody's ever seen this place" before real play data exists.
 _PROXY_PIN_SATURATION = 20
 _PROXY_PHOTO_SATURATION = 10
 
@@ -76,13 +75,10 @@ def pick_next_location(
             pool = separated
 
     location_ids = [location.pk for location in pool]
-    # Two bulk aggregate queries instead of location.pins.count()/location.images.count()
-    # per candidate (see _proxy_difficulty_rating) - with a large pool this loop runs
-    # once per attempt of the caller's location-retry loop
-    # (session.get_or_create_round), so an O(pool size) query count there compounds
-    # into thousands of round trips and was the dominant cause of SpotGuessr /start/
-    # being slow-to-timing-out (see "Unit 24/25 (deferred item, now fixed): round
-    # generation re-ran the eligibility query per retry" in docs/archive/PROBLEMS-ARCHIVE.md).
+    # Two bulk aggregate queries instead of location.pins.count()/location.images.count() per
+    # candidate (see _proxy_difficulty_rating) - with a large pool this loop runs once per attempt
+    # of the caller's location-retry loop (session.get_or_create_round), so an O(pool size) query
+    # count there compounds into thousands of round trips and was the dominant cause of SpotGuessr
     pin_counts = dict(Pin.objects.filter(location_id__in=location_ids).values_list("location_id").annotate(n=Count("pk")).values_list("location_id", "n"))
     photo_counts = dict(Image.objects.filter(location_id__in=location_ids).values_list("location_id").annotate(n=Count("pk")).values_list("location_id", "n"))
 
@@ -105,18 +101,7 @@ def pick_next_location(
 
 def _proxy_difficulty_rating(location: Location, *, pin_count: int | None = None, photo_count: int | None = None) -> float:
     """Estimate a difficulty rating from proxies the database already has, before anyone's ever played it.
-
-    A location with earned play history (``LocationModeRating.games_played``)
-    doesn't need this - see ``_difficulty_weight``. Before that history
-    exists, every location otherwise looks identically "neutral" (the flat
-    ``DEFAULT_RATING``), which makes the difficulty slider a placebo for the
-    vast majority of locations under per-user pin pools (see the SpotGuessr
-    audit's "difficulty slider is mostly a placebo" finding). How many users
-    have pinned a location and how many photos exist for it both proxy
-    "well-documented and recognizable" - never assumed *harder* than neutral
-    purely for lack of data (mirroring ``_difficulty_weight``'s own "never
-    excluded for lack of data" contract), only ever easier as the signal
-    strengthens.
+    Before that history exists, every location otherwise looks identically "neutral" (the flat ``DEFAULT_RATING``), which makes the difficulty slider a placebo for the vast majority of locations under per-user pin pools (see the SpotGuessr audit's "difficulty slider is mostly a placebo" finding).
 
     Args:
         location: The candidate location.
@@ -125,8 +110,7 @@ def _proxy_difficulty_rating(location: Location, *, pin_count: int | None = None
             ``pick_next_location``) - avoids a per-location query. Falls back
             to counting it directly here when omitted, so this stays callable
             (and testable) with just a location.
-        photo_count: Same idea for ``location.images.count()``.
-    """
+        photo_count: Same idea for ``location.images.count()``."""
     if pin_count is None:
         pin_count = location.pins.count()
     if photo_count is None:
@@ -139,14 +123,7 @@ def _proxy_difficulty_rating(location: Location, *, pin_count: int | None = None
 
 def _difficulty_weight(location: Location, rating: LocationModeRating | None, target_rating: float, *, pin_count: int | None = None, photo_count: int | None = None) -> float:
     """Gaussian kernel weight, blending toward a proxy-seeded estimate for locations with too little game history.
-
-    A location with at least ``MIN_GAMES_FOR_DIFFICULTY_WEIGHTING`` played
-    rounds uses its own earned rating outright. Below that, it blends the
-    proxy estimate (``_proxy_difficulty_rating``) with whatever real rating
-    exists so far, weighted by how close it is to that threshold - a smooth
-    handoff rather than a discontinuous jump the instant the threshold is
-    crossed. A location with *zero* games played uses the proxy estimate
-    outright, never the flat neutral default.
+    Below that, it blends the proxy estimate (``_proxy_difficulty_rating``) with whatever real rating exists so far, weighted by how close it is to that threshold - a smooth handoff rather than a discontinuous jump the instant the threshold is crossed.
 
     Args:
         location: The candidate location.
@@ -154,8 +131,7 @@ def _difficulty_weight(location: Location, rating: LocationModeRating | None, ta
             mode, or None if it's never been played.
         target_rating: The difficulty slider's target rating band.
         pin_count: See ``_proxy_difficulty_rating``.
-        photo_count: See ``_proxy_difficulty_rating``.
-    """
+        photo_count: See ``_proxy_difficulty_rating``."""
     if rating is not None and rating.games_played >= MIN_GAMES_FOR_DIFFICULTY_WEIGHTING:
         location_rating = rating.rating
     elif rating is not None and rating.games_played:

@@ -6,23 +6,18 @@ import hashlib
 
 
 def make_cache_key(namespace: str, *parts: str | float) -> str:
-    """Build a memcached-safe cache key from a namespace and variable parts.
-
-    Memcached keys must not contain spaces or control characters. Variable
-    user-supplied values are hashed so keys remain safe regardless of content.
+    """Build a memcached-safe cache key from a namespace and parts.
 
     Args:
-        namespace: Short identifier for the cache entry type (e.g. ``smithsonian``).
+        namespace: Short identifier for the cache entry type.
         *parts: Values that distinguish entries within the namespace.
 
     Returns:
-        A cache key safe for all Django cache backends, including memcached.
+        A cache key safe for all Django cache backends.
     """
     if not parts:
         return namespace
-    # Length-prefixed rather than joined on a separator: ":" can occur inside a
-    # part, and ("a:b",) joined that way is indistinguishable from ("a", "b"),
-    # so the two hash alike and one caller reads the other's entry.
+    # Length-prefix parts so ("a:b",) and ("a", "b") hash differently.
     raw = "".join(f"{len(encoded := str(part))}:{encoded}" for part in parts)
     digest = hashlib.sha256(raw.encode()).hexdigest()
     return f"{namespace}:{digest}"

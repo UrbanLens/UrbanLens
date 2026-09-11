@@ -1,11 +1,5 @@
 """Accept/reject lifecycle for PinMergeSuggestion.
-
-Thin wrapper around ``services.pins.pin_merge.merge_pins`` - this module only
-resolves "which pin is the survivor" and flips the suggestion's status;
-``pin_merge`` owns the actual data-consolidating merge mechanics so any future
-"merge these two pins" affordance can call it directly without going through a
-suggestion at all.
-"""
+Thin wrapper around ``services.pins.pin_merge.merge_pins`` - this module only resolves "which pin is the survivor" and flips the suggestion's status; ``pin_merge`` owns the actual data-consolidating merge mechanics so any future "merge these two pins" affordance can call it directly without going through a suggestion at all."""
 
 from __future__ import annotations
 
@@ -20,11 +14,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
 
-#: No merge-specific undo: reversing a merge would mean un-repointing every
-#: relation merge_pins just moved, which the shared undo-stash framework has
-#: no mechanism for (it only restores a deleted instance's own fields - see
-#: services.undo.handlers.pin.PinUndoHandler's docstring). Accepting a merge
-#: suggestion is final; the UI must say so plainly before the user confirms.
+#: No merge-specific undo: reversing a merge would mean un-repointing every relation merge_pins just
+#: moved, which the shared undo-stash framework has no mechanism for (it only restores a deleted
+#: instance's own fields - see services.undo.handlers.pin.PinUndoHandler's docstring).
+#: Accepting a merge suggestion is final; the UI must say so plainly before the user confirms.
 
 
 def _resolve_survivor_loser(suggestion: PinMergeSuggestion, survivor_pk: int | None) -> tuple[Pin, Pin]:
@@ -83,10 +76,10 @@ def accept_pin_merge_suggestion(
     """
     survivor, loser = _resolve_survivor_loser(suggestion, survivor_pk)
     merged = merge_pins(survivor, loser, profile, resolutions)
-    # A plain queryset .update() rather than suggestion.save(): survivor/loser
-    # are suggestion.pin_a/pin_b themselves, and merge_pins just deleted loser -
-    # save()'s related-field check would refuse to persist a suggestion still
-    # holding a cached (now-unsaved) reference to the pin it just deleted.
+    # A plain queryset .update() rather than suggestion.save(): survivor/loser are
+    # suggestion.pin_a/pin_b themselves, and merge_pins just deleted loser - save()'s related-field
+    # check would refuse to persist a suggestion still holding a cached (now-unsaved) reference to
+    # the pin it just deleted.
     now = timezone.now()
     PinMergeSuggestion.objects.filter(pk=suggestion.pk).update(status=PinMergeSuggestionStatus.ACCEPTED, updated=now)
     suggestion.status = PinMergeSuggestionStatus.ACCEPTED

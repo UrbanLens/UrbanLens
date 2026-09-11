@@ -1,26 +1,5 @@
 """Background-enrichment sources that cache small, wiki-attached location photos.
-
-Three sources, contributed to the hourly scheduled-enrichment cycle
-(``services.locations.enrichment.run_enrichment_cycle``) by ``plugins.builtin.google_places``
-(:class:`PlacePhotoEnrichmentSource`) and ``plugins.builtin.google_maps``
-(:class:`StreetViewEnrichmentSource`, :class:`SatelliteEnrichmentSource`):
-
-- Google Places business photos.
-- A static Street View image.
-- A static satellite image.
-
-Each is persisted as an ordinary, small (resized + WebP) ``Image`` row, attached to the
-location's Wiki (lazily created if absent, exactly like the "share to wiki" action any user can
-already take) rather than a pin or profile - these are site-owned, publicly-sourced reference
-imagery, not anyone's private upload, so there is no profile to charge storage quota against and
-no privacy concern in making them wiki-visible. Attaching to the wiki is deliberate: it means
-these photos become eligible for SpotGuessr's Photos mode (``services.spotguessr.photos``)
-through that mode's existing, unmodified ``Image.wiki_id`` gate - no changes needed there at all.
-
-Each source tracks its own "attempted, even if nothing was found" completion via a dedicated
-``LocationCache`` marker row, mirroring ``services.locations.enrichment.AddressEnrichmentSource`` - so a
-location with no coverage/photos is tried exactly once, never retried forever.
-"""
+Each is persisted as an ordinary, small (resized + WebP) ``Image`` row, attached to the location's Wiki (lazily created if absent, exactly like the "share to wiki" action any user can already take) rather than a pin or profile - these are site-owned, publicly-sourced reference imagery, not anyone's private upload, so there is no profile to charge storage quota against and no privacy concern in making them wiki-visible."""
 
 from __future__ import annotations
 
@@ -48,7 +27,6 @@ MAX_PLACE_PHOTOS = 3
 #: full-resolution original nobody asked to keep.
 _PLACE_PHOTO_MAX_DIMENSION = 1024
 
-#: Street View Static / Static Maps responses already come back ~640x400 - this mostly just
 #: forces the WebP re-encode rather than actually shrinking anything.
 _STATIC_IMAGE_MAX_DIMENSION = 800
 
@@ -60,18 +38,13 @@ DEFAULT_ENRICHED_MAX_DIMENSION = 1024
 
 def enriched_max_dimension(source: str) -> int:
     """The longest-edge cap a provider photo from *source* was stored under.
-
-    Lets a recovery path (``tasks.requeue_stalled_pending_uploads``) reprocess a
-    profile-less row at the size it was meant to have, rather than at whatever
-    the provider returned - these rows have no subscriber plan to read a policy
-    from, and the cap is otherwise only known at the call site that created them.
+    Lets a recovery path (``tasks.requeue_stalled_pending_uploads``) reprocess a profile-less row at the size it was meant to have, rather than at whatever the provider returned - these rows have no subscriber plan to read a policy from, and the cap is otherwise only known at the call site that created them.
 
     Args:
         source: The row's ``ImageSource`` value.
 
     Returns:
-        The longest-edge cap in pixels.
-    """
+        The longest-edge cap in pixels."""
     # dict[str, int], not dict[ImageSource, int]: ImageSource members are str
     # subclasses (TextChoices) but a distinct type to mypy, and source (a raw
     # values_list() column, not an ImageSource instance) is looked up as one.
@@ -132,11 +105,9 @@ def _save_enriched_image(location: Location, content: bytes, *, source: str, sou
         caption=caption.strip() or None,
         checksum=checksum,
         file_size=len(content),
-        # Provider bytes, decoded nowhere yet. This function runs inside the
-        # enrichment tasks, which hold every third-party API key - exactly the
-        # process a decoder bug must not be reachable from. The decode happens
-        # in the sandbox worker instead, and pending_scan keeps the row out of
-        # every gallery until it has.
+        # Provider bytes, decoded nowhere yet.
+        # This function runs inside the enrichment tasks, which hold every third-party API key -
+        # exactly the process a decoder bug must not be reachable from.
         pending_scan=True,
     )
 
@@ -177,13 +148,7 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
     @property
     def service_keys(self) -> tuple[str, ...]:
         """Whichever of REData/Google Places ``places_resolution`` would actually dispatch to.
-
-        Not a fixed ``ClassVar`` like most sources: which service this source's calls are
-        actually billed/rate-limited against depends on runtime REData configuration, exactly
-        like ``services.apis.locations.places_resolution``'s own internal dispatch. Budgeting
-        against the *other*, unused path (e.g. a REData-only install's disabled/never-touched
-        ``google_places`` service row) would wrongly throttle or skip this source.
-        """
+        Budgeting against the *other*, unused path (e.g. a REData-only install's disabled/never-touched ``google_places`` service row) would wrongly throttle or skip this source."""
         if _redata_configured():
             return ("redata_places",)
         return ("google_places",)

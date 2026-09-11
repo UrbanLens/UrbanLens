@@ -84,10 +84,7 @@ logger = logging.getLogger(__name__)
 
 _GALLERY_PAGE_SIZE = 12
 
-# Safety check-in maps offer the same base layers as the shared map composer
-# (street / satellite / topo, plus the borders overlay). Attribution is
-# rendered as static text in the page footer covering all of them, matching
-# the main map's "attributionControl: false" + footer-attribution convention.
+# Base-layer attribution for check-in maps.
 _MAP_ATTRIBUTION = "© OpenStreetMap contributors · Tiles © Esri · © OpenTopoMap (CC-BY-SA) · Leaflet"
 
 

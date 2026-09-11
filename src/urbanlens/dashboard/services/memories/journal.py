@@ -68,12 +68,7 @@ class JournalEntry:
 
 def _visit_entries(profile: Profile, limit: int | None = None) -> Iterator[JournalEntry]:
     """Yield a JournalEntry for each PinVisit the profile wrote notes for.
-
-    Selects the whole pin -> location -> wiki chain, as every source here does:
-    each entry's title is ``Pin.effective_name``, which falls through to
-    ``Location.display_name``, which reads the linked ``Wiki``. Selecting only
-    the pin left two queries per rendered row.
-    """
+    Selecting only the pin left two queries per rendered row."""
     from urbanlens.dashboard.models.visits.model import PinVisit
 
     visits = _newest(PinVisit.objects.filter(pin__profile=profile).exclude(notes__isnull=True).exclude(notes=""), "-visited_at", limit).select_related("pin__location__wiki")
@@ -113,12 +108,7 @@ def _review_entries(profile: Profile, limit: int | None = None) -> Iterator[Jour
 
 def _comment_entries(profile: Profile, limit: int | None = None) -> Iterator[JournalEntry]:
     """Yield a JournalEntry for each comment the profile has posted, on pins, wikis, or trips.
-
-    Two querysets, each limited separately: this source can therefore yield up
-    to twice ``limit``, which the merge above discards down to one page. Taking
-    ``limit`` across the pair instead would be wrong - all of it could come from
-    whichever half happened to sort first.
-    """
+    Taking ``limit`` across the pair instead would be wrong - all of it could come from whichever half happened to sort first."""
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.models.trips.model import TripComment
 
@@ -179,19 +169,9 @@ def _article_entries(profile: Profile, limit: int | None = None) -> Iterator[Jou
 
 
 #: Journal sources by key, in the order they are declared.
-#:
-#: Keyed rather than a bare tuple because the journal is a *multi-domain*
-#: aggregate: a visit note, a pin comment, a trip comment and a wiki article
-#: body are four different privacy domains that happen to share one feed. The
-#: internal Memories page always wants all four, but the external API must be
-#: able to serve only the subset a credential's scopes cover, and it can only
-#: do that if the sources are individually addressable. See
-#: ``external_api.views.MemoriesJournalView.JOURNAL_SOURCE_SCOPES``, which maps
-#: these keys onto scopes.
-#:
-#: Adding a source means adding an entry here *and* a scope entry there - the
-#: view fails closed on an unmapped key, so a new domain cannot be exposed by
-#: forgetting the second half.
+#: Keyed rather than a bare tuple because the journal is a *multi-domain* aggregate: a visit note, a
+#: pin comment, a trip comment and a wiki article body are four different privacy domains that
+#: happen to share one feed.
 JOURNAL_SOURCES: dict[str, Callable[[Profile, int | None], Iterator[JournalEntry]]] = {
     "visits": _visit_entries,
     "reviews": _review_entries,
@@ -222,11 +202,10 @@ def get_journal_entries(profile: Profile, sources: Iterable[str] | None = None, 
     selected = JOURNAL_SOURCES.items() if sources is None else [(key, JOURNAL_SOURCES[key]) for key in sources if key in JOURNAL_SOURCES]
     entries: list[JournalEntry] = []
     for key, source in selected:
-        # Isolated per source, for the reason the docstring above already gives for
-        # unknown keys: a journal missing one domain beats a 500. That reasoning only
-        # covered a key that isn't registered; a registered source that *raises* took
-        # the whole journal down with it. extend() consumes the generator incrementally,
-        # so a source failing partway keeps what it already yielded.
+        # Isolated per source, for the reason the docstring above already gives for unknown keys: a
+        # journal missing one domain beats a 500.
+        # That reasoning only covered a key that isn't registered; a registered source that *raises*
+        # took the whole journal down with it. extend() consumes the generator incrementally, so a
         try:
             entries.extend(source(profile, limit))
         except Exception:
@@ -265,13 +244,9 @@ def _article_count(profile: Profile) -> int:
 
 
 #: How many entries each source holds, without building any of them.
-#:
-#: A parallel mapping rather than a second return value from the sources
-#: themselves, because counting is one `.count()` per queryset while yielding is
-#: a full fetch - the whole point of the count is not to pay for the rows. Its
-#: keys must match :data:`JOURNAL_SOURCES`, which
-#: ``test_memories_journal.py`` asserts, since a source counted but not rendered
-#: (or the reverse) shows a page count that does not match its own list.
+#: A parallel mapping rather than a second return value from the sources themselves, because
+#: counting is one `.count()` per queryset while yielding is a full fetch - the whole point of the
+#: count is not to pay for the rows.
 JOURNAL_SOURCE_COUNTS: dict[str, Callable[[Profile], int]] = {
     "visits": _visit_count,
     "reviews": _review_count,
@@ -287,21 +262,11 @@ def _source_count(key: str, profile: Profile) -> int:
 
 class JournalFeed(Sequence[JournalEntry]):
     """A profile's journal as a sliceable sequence, fetched one slice at a time.
-
-    Both consumers - the Memories page and the external API's journal endpoint -
-    want a page of a merged feed plus its total. A plain list gives them that by
-    building every entry from four unbounded querysets first, which is what this
-    replaces. ``Paginator`` and DRF's paginator both ask a sequence only for its
-    length and one slice, so this satisfies them without ever materialising the
-    rest.
-
-    The total is counted rather than derived from the entries, so it stays exact
-    while the rows stay bounded.
+    ``Paginator`` and DRF's paginator both ask a sequence only for its length and one slice, so this satisfies them without ever materialising the rest.
 
     Args:
         profile: The profile whose journal this is.
-        sources: Keys from :data:`JOURNAL_SOURCES`, or None for all of them.
-    """
+        sources: Keys from :data:`JOURNAL_SOURCES`, or None for all of them."""
 
     def __init__(self, profile: Profile, sources: Iterable[str] | None = None) -> None:
         self.profile = profile
@@ -322,15 +287,7 @@ class JournalFeed(Sequence[JournalEntry]):
 
     def __getitem__(self, index: int | slice) -> Any:
         """One entry, or one slice of them, fetched no deeper than it needs.
-
-        A bound counted from the end (``feed[-1]``, ``feed[:-2]``) needs the
-        whole feed, and says so by building it: there is no prefix of a merged
-        feed that answers "the last one". Both paginators only ever ask for a
-        non-negative window, so nothing pays that today - but a ``Sequence``
-        that answered ``feed[-1]`` with the wrong entry, or with an empty list
-        because a negative limit reached a queryset slice, would be worse than
-        one that is merely slow.
-        """
+        A bound counted from the end (``feed[-1]``, ``feed[:-2]``) needs the whole feed, and says so by building it: there is no prefix of a merged feed that answers "the last one"."""
         if isinstance(index, slice):
             # A negative step counts too, and its bounds can both be positive:
             # `feed[5:2:-1]` is the three entries at 5, 4 and 3, which a prefix

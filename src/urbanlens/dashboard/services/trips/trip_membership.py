@@ -1,14 +1,5 @@
 """Who is on a trip: inviting, joining, leaving, RSVPs, and organizer status.
-
-Shared by the internal members panel and the external REST API. The
-cross-cutting obligations a caller must never skip are enforced here:
-
-- ``Profile.are_blocked`` is checked before an invitation can be forced on someone,
-- ``SiteSettings.max_trip_members`` caps the roster,
-- joining records share provenance (``record_trip_shares_for_member``),
-- leaving or being removed revokes calendar sync (``disconnect_member_calendar_sync``),
-- member identities are resolved through ``resolve_visible_identities``.
-"""
+The cross-cutting obligations a caller must never skip are enforced here:"""
 
 from __future__ import annotations
 
@@ -43,13 +34,7 @@ NOT_A_MEMBER = "You are not a member of this trip."
 
 def resolve_trip_member(trip: Trip, *, profile_id: int | str | None = None, slug: str | None = None) -> Profile:
     """Resolve a target member of *trip*, scoped to that trip's own roster.
-
-    Previously the member-management views resolved the target with a global
-    ``get_object_or_404(Profile, pk=profile_id)`` *before* narrowing to the
-    trip, so any member of any trip could probe arbitrary profile ids and
-    learn from the status code which ones existed. Lookups here never leave
-    the trip: a real profile that simply isn't on this trip is indistinguishable
-    from one that doesn't exist.
+    Lookups here never leave the trip: a real profile that simply isn't on this trip is indistinguishable from one that doesn't exist.
 
     Args:
         trip: The trip whose roster bounds the lookup.
@@ -63,8 +48,7 @@ def resolve_trip_member(trip: Trip, *, profile_id: int | str | None = None, slug
         The matching profile - a current member, or the trip's creator.
 
     Raises:
-        TripNotFoundError: Nobody on this trip matches.
-    """
+        TripNotFoundError: Nobody on this trip matches."""
     from django.db.models import Q
 
     scope = Q(trip_memberships__trip=trip)
@@ -94,10 +78,7 @@ def resolve_trip_member(trip: Trip, *, profile_id: int | str | None = None, slug
 
 def require_trip_creator(trip: Trip, actor: Profile, message: str = ORGANIZER_DENIED) -> None:
     """Raise unless *actor* is the trip's creator.
-
-    Called before :func:`resolve_trip_member` on the organizer endpoints so a
-    non-creator is refused identically whether or not the member they named
-    exists - the permission answer must not depend on the target.
+    Called before :func:`resolve_trip_member` on the organizer endpoints so a non-creator is refused identically whether or not the member they named exists - the permission answer must not depend on the target.
 
     Args:
         trip: The trip.
@@ -105,8 +86,7 @@ def require_trip_creator(trip: Trip, actor: Profile, message: str = ORGANIZER_DE
         message: The refusal message shown to the user.
 
     Raises:
-        TripPermissionError: The actor is not the trip's creator.
-    """
+        TripPermissionError: The actor is not the trip's creator."""
     if trip.creator_id != actor.id:
         raise TripPermissionError(message)
 
@@ -114,18 +94,13 @@ def require_trip_creator(trip: Trip, actor: Profile, message: str = ORGANIZER_DE
 def list_members(trip: Trip, viewer: Profile) -> list[TripMembership]:
     """Return the trip's memberships with each member's identity resolved for *viewer*.
 
-    A trip can include people who aren't friends with everyone else on it,
-    whose privacy settings may not permit some viewers to see their name or
-    avatar - RSVP status and trip activity involving them still show.
-
     Args:
         trip: The trip whose roster is wanted.
         viewer: The profile viewing the roster.
 
     Returns:
         Memberships ordered by username, each with ``membership.profile``
-        carrying resolved ``display_name``/``display_avatar_url``/``is_masked``.
-    """
+        carrying resolved ``display_name``/``display_avatar_url``/``is_masked``."""
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
     # "trip" is preloaded so a serializer marking the creator's row doesn't
@@ -181,15 +156,11 @@ def notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> None
 
 def suggest_connections_for_new_member(new_member: Profile, existing_members: Iterable[Profile]) -> None:
     """Soft-introduce a newly added trip member to existing members they aren't friends with.
-
-    Both sides must allow friend recommendations (see
-    ``services.social.connections.recommendable_strangers``) - never presumes on
-    anyone's behalf, just makes an already-opted-in connection discoverable.
+    Both sides must allow friend recommendations (see ``services.social.connections.recommendable_strangers``) - never presumes on anyone's behalf, just makes an already-opted-in connection discoverable.
 
     Args:
         new_member: The profile that was just added to the trip.
-        existing_members: The trip's other current members.
-    """
+        existing_members: The trip's other current members."""
     from urbanlens.dashboard.services.social.connections import recommendable_strangers, suggest_mutual_connection
 
     for other in recommendable_strangers(new_member, list(existing_members)):
@@ -198,10 +169,7 @@ def suggest_connections_for_new_member(new_member: Profile, existing_members: It
 
 def addable_friends(trip: Trip, profile: Profile) -> list[Profile]:
     """The viewer's friends not already on this trip, for the add-member picker.
-
-    Empty unless the viewer currently has permission to add members, so the
-    picker reflects the trip's "Allow members to add people" setting instead
-    of only ever working for the creator.
+    Empty unless the viewer currently has permission to add members, so the picker reflects the trip's "Allow members to add people" setting instead of only ever working for the creator.
 
     Args:
         trip: The trip being added to.
@@ -209,8 +177,7 @@ def addable_friends(trip: Trip, profile: Profile) -> list[Profile]:
 
     Returns:
         Friends eligible to be invited, or an empty list when the viewer may
-        not invite anyone.
-    """
+        not invite anyone."""
     if not can_perform(profile, trip, trip.allow_add_members):
         return []
     from urbanlens.dashboard.services.social.connections import get_connections
@@ -223,10 +190,7 @@ def addable_friends(trip: Trip, profile: Profile) -> list[Profile]:
 
 def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[TripMembership, bool]:
     """Invite a user to the trip by their username.
-
-    Idempotent: re-inviting someone already on the roster returns their
-    existing membership with ``created`` False and sends no second
-    notification, so a client retrying an unacknowledged invite is harmless.
+    Idempotent: re-inviting someone already on the roster returns their existing membership with ``created`` False and sends no second notification, so a client retrying an unacknowledged invite is harmless.
 
     Args:
         trip: The trip to invite to.
@@ -244,18 +208,16 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
             used to infer whether an arbitrary username exists.
         TripMemberNotFoundError: No user has that username, or a block
             exists between the two profiles - both answer identically so a
-            block can't be distinguished from a nonexistent account.
-    """
+            block can't be distinguished from a nonexistent account."""
     require_perform(actor, trip, trip.allow_add_members, ADD_MEMBER_DENIED)
 
     clean_username = (username or "").strip()
     if not clean_username:
         raise TripValidationError("Username is required.")
 
-    # Checked before the username is even looked up: if this ran after
-    # resolving the user, "trip full" would only ever fire for a real,
-    # unblocked account, turning trip capacity into a free username-existence
-    # oracle for anyone who can fill their own trip with known accounts once.
+    # Checked before the username is even looked up: if this ran after resolving the user, "trip
+    # full" would only ever fire for a real, unblocked account, turning trip capacity into a free
+    # username-existence oracle for anyone who can fill their own trip with known accounts once.
     max_members = SiteSettings.get_current().max_trip_members
     current_count = trip.profiles.count()
     if current_count >= max_members:
@@ -271,10 +233,9 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
         raise TripMemberNotFoundError(f'No user found with username "{clean_username}".', clean_username) from exc
 
     new_profile, _ = Profile.objects.get_or_create(user=user)
-    # A block answers exactly like a nonexistent username (see
-    # TripMemberNotFoundError above) instead of TripPermissionError: telling a
-    # caller "this account exists and is blocking you" is itself the same
-    # enumeration leak as confirming any other account's existence.
+    # A block answers exactly like a nonexistent username (see TripMemberNotFoundError above)
+    # instead of TripPermissionError: telling a caller "this account exists and is blocking you" is
+    # itself the same enumeration leak as confirming any other account's existence.
     if Profile.are_blocked(actor, new_profile):
         raise TripMemberNotFoundError(f'No user found with username "{clean_username}".', clean_username)
 
@@ -286,10 +247,7 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
 
 
 def remove_member(trip: Trip, actor: Profile, target: Profile) -> None:
-    """Remove a member from a trip.
-
-    Members may remove themselves; only the creator may remove anyone else.
-    The creator can never be removed.
+    """Remove a member from a trip. Members may remove themselves; only the creator may remove anyone else.
 
     Args:
         trip: The trip to remove from.
@@ -298,8 +256,7 @@ def remove_member(trip: Trip, actor: Profile, target: Profile) -> None:
 
     Raises:
         TripValidationError: The target is the trip's creator.
-        TripPermissionError: The actor is neither the target nor the creator.
-    """
+        TripPermissionError: The actor is neither the target nor the creator."""
     if target.id == trip.creator_id:
         raise TripValidationError(CREATOR_CANNOT_BE_REMOVED)
     if actor.id not in {target.id, trip.creator_id}:
@@ -313,11 +270,7 @@ def remove_member(trip: Trip, actor: Profile, target: Profile) -> None:
 
 def set_member_organizer(trip: Trip, actor: Profile, target: Profile, *, is_organizer: bool) -> TripMembership:
     """Set (not toggle) a member's organizer flag.
-
-    An explicit target value rather than a toggle: a mobile client retrying a
-    request it never saw acknowledged would otherwise flip the flag back. The
-    internal panel keeps its toggle UX by passing
-    ``is_organizer=not membership.is_organizer``.
+    An explicit target value rather than a toggle: a mobile client retrying a request it never saw acknowledged would otherwise flip the flag back.
 
     Args:
         trip: The trip.
@@ -331,8 +284,7 @@ def set_member_organizer(trip: Trip, actor: Profile, target: Profile, *, is_orga
     Raises:
         TripPermissionError: The actor is not the trip's creator.
         TripValidationError: The target is the creator, who is always an organizer.
-        TripNotFoundError: The target has no membership row on this trip.
-    """
+        TripNotFoundError: The target has no membership row on this trip."""
     if trip.creator_id != actor.id:
         raise TripPermissionError(ORGANIZER_DENIED)
     if target.id == trip.creator_id:
@@ -348,16 +300,12 @@ def set_member_organizer(trip: Trip, actor: Profile, target: Profile, *, is_orga
 
 def join_trip(trip: Trip, profile: Profile) -> None:
     """Accept a trip invitation, unlocking contribution rights.
-
     Separate from RSVP, which only says whether the member expects to show up.
-    Joining reveals every place already on the itinerary, so each one is
-    recorded in its sharer's reshare chain like any other pin share.
 
     Args:
         trip: The trip being joined.
         profile: The joining profile. The creator is already joined; the call
-            is a harmless no-op for them.
-    """
+            is a harmless no-op for them."""
     if trip.creator_id == profile.id:
         return
     TripMembership.objects.for_trip_and_profile(trip, profile).update(status=TripMembership.STATUS_JOINED)

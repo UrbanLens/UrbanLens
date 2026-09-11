@@ -1,23 +1,5 @@
 """Gateway for REData's ``/maps/`` historical-map endpoints.
-
-See ``../REData/docs/api-reference.md``, "Historical maps": scanned fire
-insurance plans, cadastral atlases and panoramic views indexed by *where
-they sit on the earth*, with community georeferences (Allmaps, Map Warper,
-REData's own) stored as real polygons. Distinct from ``/imagery/`` ("what
-pictures exist of this place") - this answers "what maps were drawn of it,
-and where exactly do they sit".
-
-Each match pairs a ``sheet`` (the scan and its catalogue record) with its
-preferred ``georeference``, whose ``tile_url_template`` serves warped
-``{z}/{x}/{y}.png`` overlay tiles. Those tiles require REData API auth, so
-browser-facing consumers go through UrbanLens's tile proxy
-(``controllers.historical_map_tiles``) rather than using REData's template
-directly.
-
-``source=allmaps,redata,map_warper`` filters out ``derived_bounds``
-placements - corner-derived affines good enough for coverage queries but not
-overlay-grade (they assume a north-up scan cropped exactly to its map area).
-"""
+Those tiles require REData API auth, so browser-facing consumers go through UrbanLens's tile proxy (``controllers.historical_map_tiles``) rather than using REData's template directly."""
 
 from __future__ import annotations
 
@@ -49,38 +31,35 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch georeferenced historical maps covering (or near) a point.
-
-        Reads only REData's own spatial index - never an external source - so
-        it is cheap enough to call per page view.
+        Reads only REData's own spatial index - never an external source - so it is cheap enough to call per page view.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            radius_meters: How far beyond the point to accept a nearby sheet
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
+                radius_meters: How far beyond the point to accept a nearby sheet
                 (REData default 1000, max 50000).
-            covering_only: Require the point to fall inside the map's
+                covering_only: Require the point to fall inside the map's
                 footprint.
-            kinds: Comma-separated sheet kinds (``fire_insurance``,
+                kinds: Comma-separated sheet kinds (``fire_insurance``,
                 ``cadastral``, ``topographic``, ``panoramic``, ``nautical``,
                 ``other``).
-            overlay_grade_only: Restrict to georeferences with real control
+                overlay_grade_only: Restrict to georeferences with real control
                 points (see :data:`OVERLAY_GRADE_SOURCES`). Off, approximate
                 ``derived_bounds`` placements are included too.
-            limit: Maximum matches (REData default 25, max 200).
+                limit: Maximum matches (REData default 25, max 200).
 
         Returns:
-            Match dicts ordered by containment then tightest footprint, so
-            the first is the most detailed map of the spot. Each carries
-            ``sheet`` (title, ``date_text``/``year_start``/``year_end``,
-            ``kind``, ``attribution``), ``georeference`` (``uuid``,
-            ``tile_url_template``, ``bounds`` as
-            ``[min_lon, min_lat, max_lon, max_lat]``, ``rmse_meters``),
-            ``contains_point`` and ``distance_meters``.
+                Match dicts ordered by containment then tightest footprint, so
+                the first is the most detailed map of the spot. Each carries
+                ``sheet`` (title, ``date_text``/``year_start``/``year_end``,
+                ``kind``, ``attribution``), ``georeference`` (``uuid``,
+                ``tile_url_template``, ``bounds`` as
+                ``[min_lon, min_lat, max_lon, max_lat]``, ``rmse_meters``),
+                ``contains_point`` and ``distance_meters``.
 
         Raises:
-            LocationContextUnavailableError: The request failed or REData
-                rejected a parameter.
-        """
+                LocationContextUnavailableError: The request failed or REData
+                rejected a parameter."""
         params: dict[str, Any] = {"lat": latitude, "lng": longitude}
         if radius_meters is not None:
             params["radius_meters"] = radius_meters

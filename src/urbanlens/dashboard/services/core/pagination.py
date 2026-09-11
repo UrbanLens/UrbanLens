@@ -19,12 +19,7 @@ def get_page(
     param: str = "page",
 ) -> Page:
     """Slice ``items`` into a Django ``Page`` for the requested page number.
-
-    Reads the page number from the request's ``page`` GET or POST parameter
-    (matching how every paginated card re-fetches itself via HTMX, whether
-    that's a plain ``hx-get`` pagination click or a form ``POST``). Invalid or
-    out-of-range page numbers are clamped to the nearest valid page rather
-    than raising, so a stale pagination link can never produce an error page.
+    Invalid or out-of-range page numbers are clamped to the nearest valid page rather than raising, so a stale pagination link can never produce an error page.
 
     Args:
         request: The current request; checked for a ``page`` parameter.
@@ -41,8 +36,7 @@ def get_page(
             and a shared ``?page=`` would move both of them at once.
 
     Returns:
-        The requested ``Page`` of ``items``.
-    """
+        The requested ``Page`` of ``items``."""
     paginator = Paginator(items, page_size)
     page_param = request.GET.get(param) or request.POST.get(param)
     if page_param:

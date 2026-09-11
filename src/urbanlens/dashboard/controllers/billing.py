@@ -1,11 +1,4 @@
-"""User-facing paid subscription controller: browse/subscribe/manage from Settings.
-
-Checkout and the billing portal are genuine cross-site redirects to Stripe-hosted
-pages, so those views use plain (non-HTMX) form POSTs that 302 the whole browser -
-HTMX would try to swap the redirect target's HTML into the page instead of navigating
-to it. Everything that stays on-site (viewing the section, updating a pledge,
-cancelling) uses the same lazy-HTMX-subsection pattern as Immich/Flickr/Google Photos.
-"""
+"""Paid subscription controller: browse/subscribe/manage from Settings."""
 
 from __future__ import annotations
 

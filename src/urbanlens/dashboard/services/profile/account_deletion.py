@@ -89,12 +89,8 @@ def cancel_deletion(profile: Profile) -> None:
 def send_deletion_reminder(profile: Profile) -> None:
     """Send the "1 day left" notice for a profile about to be hard-deleted.
 
-    Idempotent via ``deletion_reminder_sent_at`` - safe to call once per
-    profile returned by ``ProfileQuerySet.due_for_deletion_reminder``.
-
     Args:
-        profile: The profile whose grace period is about to end.
-    """
+        profile: The profile whose grace period is about to end."""
     settings_path = reverse("settings.view")
     NotificationLog.objects.notify(
         profile=profile,
@@ -135,20 +131,7 @@ def _delete_file_field(instance, field_name: str, *, label: str) -> None:
 
 def _delete_profile_files(profile: Profile) -> None:
     """Best-effort delete of storage files owned by this profile, before the DB rows go.
-
-    Every model below cascade-deletes its row when the profile's User row is
-    deleted (see ``hard_delete_profile``) - Django never deletes a FileField's
-    underlying file on row deletion, so each one must be cleaned up here first
-    or the physical file is orphaned forever. ``TripComment.image`` is
-    deliberately excluded: ``TripComment.author`` is ``SET_NULL`` (the row and
-    its content survive account deletion, rendered with an "Unknown" author,
-    so other trip members keep the conversation) - deleting that file would
-    break an image the app intentionally keeps showing.
-
-    A failure deleting any single file is logged and skipped rather than
-    aborting the account deletion - a leaked file is a much smaller problem
-    than a user stuck unable to delete their account.
-    """
+    Every model below cascade-deletes its row when the profile's User row is deleted (see ``hard_delete_profile``) - Django never deletes a FileField's underlying file on row deletion, so each one must be cleaned up here first or the physical file is orphaned forever."""
     _delete_file_field(profile, "avatar", label="profile")
 
     for image in profile.uploaded_images.all():
@@ -167,18 +150,9 @@ def _delete_profile_files(profile: Profile) -> None:
 def hard_delete_profile(profile: Profile) -> None:
     """Permanently delete a profile's account and all of its data.
 
-    Sends the final "your account has been deleted" email (using the email
-    address captured before the ``User`` row disappears), best-effort
-    cleans up storage files, then deletes the ``User`` row - which cascades
-    through every ``CASCADE`` foreign key onto the profile's own data. Rows
-    belonging to *other* users that merely referenced this profile (e.g. as
-    someone else's emergency contact) are left alone: their FKs are
-    ``SET_NULL`` by design, since that data belongs to the other user.
-
     Args:
         profile: The profile whose grace period has fully elapsed (see
-            ``ProfileQuerySet.due_for_hard_delete``).
-    """
+            ``ProfileQuerySet.due_for_hard_delete``)."""
     email = profile.user.email if profile.user else ""
     username = profile.username
 

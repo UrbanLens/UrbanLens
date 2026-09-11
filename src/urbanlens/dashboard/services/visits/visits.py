@@ -58,13 +58,7 @@ def geolocation_tracking_allowed(profile: Profile) -> bool:
 
 def build_visit_suggestion_message(*, location: Location | None = None, fallback: str = "at a location", **kwargs: str | None) -> str:
     """Build a privacy-safe place description for a visit-suggestion notification.
-
-    Prefers the shared Location. When there is no Location - e.g. the origin pin is
-    private and was never linked to one - falls back to the origin pin's own
-    official_name/city/state. Pin.official_name is populated only from external
-    APIs, exactly like Location.official_name, and is never the user's private
-    custom label; Pin.name and PinVisit.notes are never read here or anywhere else
-    in this module, so this function is structurally incapable of leaking them.
+    When there is no Location - e.g. the origin pin is private and was never linked to one - falls back to the origin pin's own official_name/city/state.
 
     Args:
         location: Shared Location identifying the place, if one exists. Wins over
@@ -76,8 +70,7 @@ def build_visit_suggestion_message(*, location: Location | None = None, fallback
 
     Returns:
         A short phrase like "at Old Mill" or "in Springfield, IL", or `fallback`
-        when no usable name or city/state is available from either source.
-    """
+        when no usable name or city/state is available from either source."""
     official_name = location.official_name if location else kwargs.get("official_name")
     canonical_name = kwargs.get("canonical_name")
     if location is not None:
@@ -128,11 +121,6 @@ def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: f
 def find_nearest_pin(latitude: float, longitude: float, profile: Profile, radius_m: int) -> Pin | None:
     """Return a profile's closest pin within radius_m metres of a point, or None.
 
-    Used to match ambient/imported location signals (Google Takeout Location
-    History placeVisits, My Activity "Directions to X" entries) against a
-    profile's existing pins, rather than creating a new pin for every
-    everyday-life coordinate an import file happens to carry.
-
     Args:
         latitude: Point latitude.
         longitude: Point longitude.
@@ -140,18 +128,16 @@ def find_nearest_pin(latitude: float, longitude: float, profile: Profile, radius
         radius_m: Maximum match distance in metres.
 
     Returns:
-        Nearest matching Pin, or None if no pin is within range.
-    """
+        Nearest matching Pin, or None if no pin is within range."""
     from django.contrib.gis.db.models.functions import Distance
     from django.contrib.gis.geos import Point
     from django.contrib.gis.measure import D
 
     point = Point(longitude, latitude, srid=4326)
-    # Ordering by the geometry column itself is not ordering by distance - it
-    # sorts by PostGIS's internal representation, so this returned an arbitrary
-    # pin inside the radius. Measured: a pin 75m away was picked over one 11m
-    # away, which attributes an imported visit to the wrong place whenever a
-    # profile has two pins inside VISIT_MATCH_RADIUS_M.
+    # Ordering by the geometry column itself is not ordering by distance - it sorts by PostGIS's
+    # internal representation, so this returned an arbitrary pin inside the radius.
+    # Measured: a pin 75m away was picked over one 11m away, which attributes an imported visit to
+    # the wrong place whenever a profile has two pins inside VISIT_MATCH_RADIUS_M.
     return Pin.objects.filter(location__point__distance_lte=(point, D(m=radius_m)), profile=profile).annotate(_match_distance=Distance("location__point", point)).order_by("_match_distance").first()
 
 
@@ -230,8 +216,6 @@ def resolve_location_for_point(latitude: float | Decimal, longitude: float | Dec
 def create_minimal_pin(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal) -> Pin:
     """Create a bare pin for a profile at a place, deliberately copying nothing private.
 
-    This leaves ``name`` unset so ``effective_name`` falls back to the Location's own name.
-
     Args:
         profile: Profile the new pin belongs to.
         location: Shared Location to attach, if one exists.
@@ -239,8 +223,7 @@ def create_minimal_pin(profile: Profile, *, location: Location | None, latitude:
         longitude: Longitude for the new pin.
 
     Returns:
-        The newly created Pin.
-    """
+        The newly created Pin."""
     if location is None:
         location = resolve_location_for_point(latitude, longitude)
     return Pin.objects.create(profile=profile, location=location)
@@ -282,18 +265,7 @@ def _mutual_candidates(suggested_to: Profile, suggested_by: Profile | None, cand
 
 def _suggester_name(recipient: Profile, suggested_by: Profile | None) -> str:
     """Name the person a visit suggestion came from, as this recipient may see them.
-
-    Masked at *write* time, not render time, for the reason
-    ``calendar_sync._invite_participants`` records for its own identical
-    notification: the message is stored as plain text and is picked up by push
-    delivery and by ``notification_text_alerts``, which builds an SMS body from
-    the stored text. A name masked only in the template has already left the
-    app.
-
-    Being connected is not sufficient permission - ``VisibilityChoice``'s own
-    docstring notes accepted friends qualify for every level *except*
-    ``NO_ONE`` - so someone who has hidden their identity is named by the
-    placeholder here, exactly as they are everywhere else.
+    A name masked only in the template has already left the app.
 
     Args:
         recipient: The profile the suggestion is addressed to.
@@ -301,8 +273,7 @@ def _suggester_name(recipient: Profile, suggested_by: Profile | None) -> str:
             suggestion.
 
     Returns:
-        A display name safe to store in the notification body.
-    """
+        A display name safe to store in the notification body."""
     if suggested_by is None:
         return "A connection"
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
@@ -328,19 +299,7 @@ def create_visit_suggestion(
     destination_label: str | None = None,
 ) -> VisitSuggestion | None:
     """Create a VisitSuggestion, and its delivery notification unless the recipient opted out.
-
-    Exactly one of ``origin_visit``/``trip_activity``/``safety_checkin``/``origin_image``/
-    ``from_my_activity`` must be given - it determines both which flow raised this
-    suggestion and, on acceptance, which VisitSource the resulting PinVisit gets (see
-    ``_visit_source_for``).
-
-    If suggested_to already has a visit logged for this place on this date, and
-    every mutually-connected candidate this suggestion would add is already listed
-    as a participant on that visit, nothing would change by accepting - so no
-    suggestion or notification is created at all. Otherwise, if suggested_to has
-    such a visit but it *would* gain new participants, the suggestion is linked to
-    it via ``existing_visit`` so the recipient is offered a merge-or-separate choice
-    instead of a plain accept/reject.
+    If suggested_to already has a visit logged for this place on this date, and every mutually-connected candidate this suggestion would add is already listed as a participant on that visit, nothing would change by accepting - so no suggestion or notification is created at all.
 
     Args:
         suggested_to: Profile being asked to confirm the visit.
@@ -367,8 +326,7 @@ def create_visit_suggestion(
     Returns:
         The created VisitSuggestion, or None if nothing would change for
         suggested_to, or if suggested_to has turned off visit-history
-        tracking - a pending suggestion is itself a location-history record.
-    """
+        tracking - a pending suggestion is itself a location-history record."""
     if not visit_logging_allowed(suggested_to):
         return None
 
@@ -474,11 +432,6 @@ def _visit_source_for(suggestion: VisitSuggestion) -> str:
 def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Profile) -> PinVisit | None:
     """Accept a visit suggestion by logging a new, separate PinVisit.
 
-    Ensures a pin exists at the suggested place (reusing suggested_to's existing
-    one there, including ``suggestion.existing_visit``'s own pin, if any), then
-    always creates a brand-new PinVisit - used both for first-time suggestions and
-    for the "log separately" choice offered when a same-day visit already exists.
-
     Args:
         suggestion: The pending suggestion being accepted.
         accepting_profile: The profile accepting (must be suggestion.suggested_to).
@@ -486,8 +439,7 @@ def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Prof
     Returns:
         The newly created PinVisit for the accepting profile, or None (no-op,
         suggestion left pending) if accepting_profile has turned off visit-history
-        tracking.
-    """
+        tracking."""
     if not visit_logging_allowed(accepting_profile):
         return None
 
@@ -576,14 +528,10 @@ def add_visited_status(pin: Pin) -> None:
 
 def remove_visited_status(pin: Pin) -> None:
     """Clear a pin's "Visited" marking - the profile's status label and last_visited.
-
-    Used when a pin was marked visited by mistake (e.g. a stray status label or
-    an import glitch) and the user doesn't want to log a dated visit for it, so
-    it should stop being surfaced in the Memories "log your visits" queue.
+    Used when a pin was marked visited by mistake (e.g. a stray status label or an import glitch) and the user doesn't want to log a dated visit for it, so it should stop being surfaced in the Memories "log your visits" queue.
 
     Args:
-        pin: Pin instance to update in-place.
-    """
+        pin: Pin instance to update in-place."""
     from urbanlens.dashboard.models.labels.model import Label
 
     visited_label = Label.objects.filter(profile=pin.profile, kind=KIND_STATUS, name="Visited").first()
@@ -631,12 +579,6 @@ MAX_VISIT_CLOCK_SKEW = datetime.timedelta(minutes=5)
 def create_manual_visit(pin: Pin, *, visited_at: datetime.datetime, notes: str | None = None, markup_map: MarkupMap | None = None) -> PinVisit:
     """Log a user-entered visit to a pin, with the same side effects the web form has.
 
-    Deliberately narrower than what ``controllers.visits.VisitHistoryView.post``
-    does: participants and photo uploads stay that controller's concern (they
-    come from multipart form fields it owns), while the parts every caller must
-    get right - the tracking gate, the source marking, and the two derived-state
-    updates - live here.
-
     Args:
         pin: The pin that was visited.
         visited_at: When the visit happened.
@@ -658,8 +600,7 @@ def create_manual_visit(pin: Pin, *, visited_at: datetime.datetime, notes: str |
             both the external API and the web form go through, and the damage is
             not local: :func:`sync_last_visited` feeds ``Pin.last_visited``,
             which is displayed and ordered by, so one mistyped year makes a pin
-            permanently the most recently visited thing its owner has.
-    """
+            permanently the most recently visited thing its owner has."""
     if not visit_logging_allowed(pin.profile):
         raise VisitLoggingDisabledError(f"profile {pin.profile_id} has track_pin_visits=False (pin {pin.pk})")
     if visited_at > timezone.now() + MAX_VISIT_CLOCK_SKEW:
@@ -673,14 +614,10 @@ def create_manual_visit(pin: Pin, *, visited_at: datetime.datetime, notes: str |
 
 def delete_visit(visit: PinVisit) -> None:
     """Delete one visit and any map snapshot it owned, then re-derive last_visited.
-
-    The visit's ``markup_map`` is deleted alongside it rather than orphaned:
-    the FK is ``SET_NULL``, so a plain visit delete would leave the snapshot
-    behind with nothing referencing it.
+    The visit's ``markup_map`` is deleted alongside it rather than orphaned: the FK is ``SET_NULL``, so a plain visit delete would leave the snapshot behind with nothing referencing it.
 
     Args:
-        visit: The visit to delete.
-    """
+        visit: The visit to delete."""
     pin = visit.pin
     markup_map = visit.markup_map
     visit.delete()
@@ -692,17 +629,13 @@ def delete_visit(visit: PinVisit) -> None:
 def _pin_contains_point(pin: Pin, point: GEOSPoint) -> bool:
     """Whether a pin's effective property boundary contains a point.
 
-    Falls back to a 50 m proximity check (mirroring the default circle
-    boundary) for pins with no resolvable boundary polygon at all.
-
     Args:
         pin: Pin to test (its ``location`` should be prefetched to avoid an
             extra query per candidate).
         point: GEOS point to test containment for.
 
     Returns:
-        True if the point falls within the pin's effective boundary.
-    """
+        True if the point falls within the pin's effective boundary."""
     from django.contrib.gis.measure import D
 
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
@@ -716,11 +649,6 @@ def _pin_contains_point(pin: Pin, point: GEOSPoint) -> bool:
 def find_pin_containing_point(profile: Profile, point: GEOSPoint, *, pins: Iterable[Pin] | None = None) -> Pin | None:
     """Return the first of a profile's root pins whose effective boundary contains a point.
 
-    This is the codebase's actual "is this point inside one of my pins"
-    check - a pin's effective *property boundary* (its own drawing, a wiki
-    drawing, the API-generated default, or the 50 m circle/coordinate
-    fallback), not a literal stored bounding box.
-
     Args:
         profile: Profile whose root pins should be checked.
         point: GEOS point to test.
@@ -729,8 +657,7 @@ def find_pin_containing_point(profile: Profile, point: GEOSPoint, *, pins: Itera
             to a fresh query of the profile's root pins.
 
     Returns:
-        The first matching Pin, or None.
-    """
+        The first matching Pin, or None."""
     candidates = pins if pins is not None else Pin.objects.filter(profile=profile).root_pins().select_related("location")
     for pin in candidates:
         if _pin_contains_point(pin, point):
@@ -741,12 +668,6 @@ def find_pin_containing_point(profile: Profile, point: GEOSPoint, *, pins: Itera
 def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime | None = None) -> list[PinVisit]:
     """Record geolocation-based visits for the profile's pins containing a point.
 
-    A visit is created for each of the user's top-level pins whose effective
-    property boundary (pin drawing, wiki drawing, generated default, or the
-    50 m circle/coordinate fallback) contains the supplied latitude/longitude.
-    Existing visits on the same calendar day prevent another row from being
-    created for that pin.
-
     Args:
         profile: Profile whose personal pins should be checked.
         latitude: Device-provided WGS-84 latitude.
@@ -755,8 +676,7 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
 
     Returns:
         List of newly-created ``PinVisit`` rows. Always empty if the profile has
-        turned off live geolocation tracking.
-    """
+        turned off live geolocation tracking."""
     if not geolocation_tracking_allowed(profile):
         return []
 
@@ -765,15 +685,10 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
 
     timestamp = visited_at or timezone.now()
     point = Point(float(longitude), float(latitude), srid=4326)
-    # Pre-filter with an indexed PostGIS distance query before running the
-    # per-pin boundary-containment loop below - without this, a profile with
-    # many pins (e.g. after a bulk import) forces an unbounded, unbatched
-    # boundary-resolution chain over every single root pin on every geolocation
-    # ping, which was blowing well past nginx's 60s upstream timeout in
-    # production. 5km is a deliberately generous upper bound on any real
-    # property boundary's size, so this can only ever exclude pins that
-    # couldn't possibly contain the point anyway - it doesn't change which
-    # pins end up matching, just how many are checked.
+    # Pre-filter with an indexed PostGIS distance query before running the per-pin
+    # boundary-containment loop below - without this, a profile with many pins (e.g. after a bulk
+    # import) forces an unbounded, unbatched boundary-resolution chain over every single root pin on
+    # every geolocation ping, which was blowing well past nginx's 60s upstream timeout in
     pins = Pin.objects.filter(profile=profile).near_point(point, radius_km=5).select_related("location")
     created_visits: list[PinVisit] = []
 

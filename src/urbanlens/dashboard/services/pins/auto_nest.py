@@ -1,33 +1,4 @@
-"""Turning confident building data into child pins without being asked.
-
-A new pin on a multi-building property *is* a parcel pin - the user pinned the
-grounds, and the buildings on those grounds describe it. Historically the split
-into parcel + building children only happened when the user worked for it
-(opened the dialog, selected buildings, confirmed), which made the correct
-structure the exception. This module makes it the default: when the building
-list for a location arrives (or is already cached when a pin is created), the
-buildings the data is *sure* about become child pins - and child wikis, where a
-community wiki already exists - on their own.
-
-What "sure" means is decided by ``parcel_buildings.confident_buildings``: on
-the property, and carrying no ``overlap_refs`` - the one relationship REData's
-reconciliation deliberately refuses to resolve. Ambiguous records never become
-pins on their own; they stay in the "Buildings on this Property" list behind
-the existing "add buildings" dialog, which remains the approval step for
-exactly the cases where approval means something.
-
-The user keeps control at three levels:
-
-- ``Profile.auto_create_building_pins`` turns the behaviour off wholesale.
-- The sweep is one-shot per pin (``Pin.buildings_auto_nested_at``): deleting an
-  auto-created child sticks, because nothing ever re-runs the sweep for that
-  pin. Buildings discovered later wait in the dialog.
-- Deleting the children costs one bulk delete, which the undo framework can
-  reverse.
-
-A dismissed restructure offer is honoured as a "no" here too - the user already
-declined this exact reorganization once.
-"""
+"""Turning confident building data into child pins without being asked."""
 
 from __future__ import annotations
 
@@ -70,17 +41,13 @@ def eligible(pin: Pin) -> bool:
 
 def auto_nest_pin(pin: Pin) -> int:
     """Create child pins (and child wikis) for this pin's confident buildings.
-
-    A no-op unless the property confidently holds several distinct buildings -
-    an ordinary house stays one pin, and stays unswept so it can nest later if
-    more buildings become known.
+    A no-op unless the property confidently holds several distinct buildings - an ordinary house stays one pin, and stays unswept so it can nest later if more buildings become known.
 
     Args:
         pin: The parent pin.
 
     Returns:
-        How many child pins were created.
-    """
+        How many child pins were created."""
     from urbanlens.dashboard.models.pin.model import Pin as PinModel
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import confident_buildings, countable_buildings
     from urbanlens.dashboard.services.pins import pin_restructure
@@ -112,16 +79,11 @@ def auto_nest_pin(pin: Pin) -> int:
 def auto_nest_location(location: Location) -> int:
     """Sweep every eligible root pin standing on a location.
 
-    Called when a building list lands in the cache - the moment the data
-    arrives is the moment the default structure can be built, for every user
-    pinned there, since what stands on a property is a fact about the property.
-
     Args:
         location: The location whose building list just arrived.
 
     Returns:
-        How many child pins were created across all pins.
-    """
+        How many child pins were created across all pins."""
     from urbanlens.dashboard.models.pin.model import Pin as PinModel
 
     created = 0

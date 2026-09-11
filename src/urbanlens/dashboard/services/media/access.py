@@ -1,47 +1,5 @@
 """Who may fetch which file under ``MEDIA_ROOT``.
-
-Every ``/media/...`` request is authorized here, from
-:class:`~urbanlens.dashboard.controllers.media.MediaGateView` (browser and
-external-API clients alike). The policy lives in a service rather than in the
-view so that :mod:`urbanlens.dashboard.checks` can inspect it without importing
-a controller, and so a second byte-serving surface can reuse it rather than
-restate it.
-
-**Default deny.** A request is authorized only when a *registered* authorizer
-for the file's family says yes. The family is the leading path segment, which
-is the ``upload_to`` prefix of the model field that wrote the file. An
-unregistered family is refused, and ``dashboard.checks.check_media_authorizers``
-turns that refusal into a ``manage.py check`` error - so adding a media field
-without deciding who may read it breaks the build instead of quietly serving
-the files to every logged-in account.
-
-**A file with no owning row is refused too.** An orphan left behind by a
-deleted row is indistinguishable from a live file whose owner this viewer is
-not allowed to learn about, and guessing which one it is was the hole that
-served every thumbnail to everybody: a thumbnail is stored in a second column,
-so a lookup against ``image`` alone never matched and every thumbnail took the
-permissive orphan branch. Refusing costs nothing - nobody holds a URL for an
-orphan except by guessing one.
-
-Authorizers answer about a *stored path*, not a model instance, because a media
-URL carries nothing else. They must therefore resolve the owning row from every
-field that can hold that path, which for ``Image`` means ``image``,
-``thumbnail``, and ``marker_thumbnail``.
-
-Guessing a path is separately useless: the upload-path callables in
-:mod:`urbanlens.dashboard.models.images.model` file each upload under a random
-directory *and* an opaque filename, so a photo's URL cannot be derived from
-either its storage location or the name it was uploaded under. That is
-defence in depth, not the control - this module is the control.
-
-Two subtrees of ``MEDIA_ROOT`` hold no model's files and so appear in no
-registry: ``exports/<job_id>/`` and ``imports/<job_id>/``, where the data
-export and import jobs stage their archives. Both are reached through their own
-owner-checked views (``controllers.tools.ExportDownloadView``), never through
-``/media/``, so refusing them here is correct - and closes a real hole, since
-under the old permissive fallback a guessed job uuid served any user's complete
-data export to any logged-in account.
-"""
+The policy lives in a service rather than in the view so that :mod:`urbanlens.dashboard.checks` can inspect it without importing a controller, and so a second byte-serving surface can reuse it rather than restate it."""
 
 from __future__ import annotations
 
@@ -145,32 +103,14 @@ def authorize_media(profile: Profile, rel_path: str) -> bool:
 @media_authorizer("pin_images")
 def authorize_image(profile: Profile, rel_path: str) -> bool:
     """Authorize a ``pin_images/`` file via its ``Image`` row.
-
-    The uploader always qualifies. Direct-message-only attachments are
-    restricted to the DM's sender and recipient. Anything else (pin/wiki
-    gallery photos, memories uploads, safety check-in photos) follows the same
-    ``Image.objects.visible_to`` filtering the gallery views apply.
-
-    All three file columns are searched. A thumbnail (or marker thumbnail) is
-    a separate stored file in a separate column that nothing else authorizes,
-    so matching only ``image`` left every preview unowned - and therefore,
-    under the old permissive orphan fallback, readable by anyone with an
-    account.
-
-    Several rows can point at one stored file: accepting a pin share gives the
-    recipient their own row over the sender's bytes rather than a second copy,
-    and so does re-uploading a file already stored (see ``QuotaExemption``). The
-    requester's own row is the one that answers, because any of them would
-    otherwise be picked arbitrarily - which for a share recipient means being
-    refused a photo they were explicitly given.
+    Direct-message-only attachments are restricted to the DM's sender and recipient.
 
     Args:
         profile: The authenticated requester's profile.
         rel_path: Path relative to ``MEDIA_ROOT``.
 
     Returns:
-        True when the requester may see the image.
-    """
+        True when the requester may see the image."""
     from django.db.models import Case, IntegerField, Q, When
 
     from urbanlens.dashboard.models.images.model import Image
@@ -200,31 +140,23 @@ def authorize_image(profile: Profile, rel_path: str) -> bool:
             # image that *also* lives in a pin/wiki gallery falls through
             # to the normal photo-visibility check below.
             return False
-    # pk filter first: `visible_to` eagerly resolves the uploader set of
-    # whatever queryset it is handed, so calling it on the unfiltered
-    # manager would walk every uploader on the site to answer about one
-    # image - on the path that serves every media file.
+    # pk filter first: `visible_to` eagerly resolves the uploader set of whatever queryset it is
+    # handed, so calling it on the unfiltered manager would walk every uploader on the site to
+    # answer about one image - on the path that serves every media file.
     return Image.objects.filter(pk=image.pk).visible_to(profile).exists()
 
 
 @media_authorizer("comment_images")
 def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
     """Authorize a ``comment_images/`` file via its Comment/TripComment row.
-
-    The author always qualifies. Everyone else is gated by the author's
-    ``comment_visibility`` setting on top of host membership, mirroring the
-    gates ``services.comments.comments.visible_comment_tree`` and
-    ``services.trips.trip_comments.build_comment_tree`` apply to the comment's
-    text - so tightening the setting after a viewer already has the image URL
-    revokes access to the file too.
+    Everyone else is gated by the author's ``comment_visibility`` setting on top of host membership, mirroring the gates ``services.comments.comments.visible_comment_tree`` and ``services.trips.trip_comments.build_comment_tree`` apply to the comment's text - so tightening the setting after a viewer already has the image URL revokes access to the file too.
 
     Args:
         profile: The authenticated requester's profile.
         rel_path: Path relative to ``MEDIA_ROOT``.
 
     Returns:
-        True when the requester may see the comment image.
-    """
+        True when the requester may see the comment image."""
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.models.trips.model import TripComment, TripMembership
     from urbanlens.dashboard.services.comments.comments import comment_is_visible
@@ -252,12 +184,10 @@ def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
             host_visible = location_visible_to(comment.wiki.location, profile)
         else:
             return False
-        # Host-level (pin/wiki) visibility is necessary but not sufficient - an
-        # @loc mention naming a place this viewer hasn't pinned still drops the
-        # whole comment (services.comments.comments's gate 3), same as
-        # visible_comment_tree applies to its text. Without this, the image
-        # was servable even though the comment thread that carries it hid the
-        # comment entirely.
+        # Host-level (pin/wiki) visibility is necessary but not sufficient - an @loc mention naming
+        # a place this viewer hasn't pinned still drops the whole comment
+        # (services.comments.comments's gate 3), same as visible_comment_tree applies to its text.
+        # Without this, the image was servable even though the comment thread that carries it hid
         return host_visible and comment_is_visible(comment, profile)
 
     trip_comment = TripComment.objects.filter(image=rel_path).select_related("author", "trip").first()
@@ -281,19 +211,14 @@ def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
 @media_authorizer("avatars")
 def authorize_avatar(profile: Profile, rel_path: str) -> bool:
     """Allow any authenticated user to fetch a profile avatar.
-
-    Avatars render site-wide beside their owner's username - comments, friend
-    lists, message threads, leaderboards - so an owner-scoped rule would blank
-    most of the site. Uploading one is a deliberate act of publishing a picture
-    of yourself to the other members.
+    Avatars render site-wide beside their owner's username - comments, friend lists, message threads, leaderboards - so an owner-scoped rule would blank most of the site.
 
     Args:
         profile: The authenticated requester's profile (unused).
         rel_path: Path relative to ``MEDIA_ROOT`` (unused).
 
     Returns:
-        True.
-    """
+        True."""
     return True
 
 
@@ -302,24 +227,12 @@ def authorize_avatar(profile: Profile, rel_path: str) -> bool:
 @media_authorizer("achievement_icons")
 def authorize_icon(profile: Profile, rel_path: str) -> bool:
     """Allow any authenticated user to fetch a map/label/achievement icon.
-
-    These are decorations drawn next to somebody else's content by design: a
-    custom pin icon renders on shared pins and trip member maps, a label icon
-    renders wherever that label is applied, and achievement icons are chosen by
-    an administrator for everyone. ``Label.objects.visible_to`` is
-    global-or-owned, so authorizing through it would blank another member's
-    labelled pin.
-
-    TODO(media-auth): an icon is still a user-uploaded image, so this is looser
-    than the pixels deserve. Narrowing it needs a "which icons does this viewer
-    render" query that does not exist yet; see "Authenticated media gate -
-    residual per-family risk" in docs/PROBLEMS.md.
+    ``Label.objects.visible_to`` is global-or-owned, so authorizing through it would blank another member's labelled pin.
 
     Args:
         profile: The authenticated requester's profile (unused).
         rel_path: Path relative to ``MEDIA_ROOT`` (unused).
 
     Returns:
-        True.
-    """
+        True."""
     return True

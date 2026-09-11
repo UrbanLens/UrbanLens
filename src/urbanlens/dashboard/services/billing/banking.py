@@ -1,24 +1,5 @@
-"""Banked pay-what-you-want access: a running usage ledger on RoleSubscription that can
-keep granting access after a subscription stops being actively billed.
-
-Kept separate from services.billing.webhooks (dispatch + Stripe-shaped dicts) and
-services.billing.pricing (pure role/threshold math with no model mutation) - this is
-the one place that turns a payment into ledger state.
-
-The ledger tracks two running totals - ``total_paid_cents`` (everything ever paid) and
-``amount_used_cents`` (cost "spent" from that total so far) - and walks forward one
-fixed-length billing period at a time, pricing each period at the role's pay-what-you-want
-threshold *as of that period's start*, not today's threshold. A period is entered (and its
-cost "spent") once its start has been reached and it's affordable
-(``total_paid_cents >= amount_used_cents + that period's threshold``); as soon as one isn't
-affordable, advancement stops - coverage lands at the end of the last affordable period,
-which is typically still ahead of *as_of* (paying for a period covers you through its end,
-not just up to the moment you paid). This is deliberately period-by-period rather than a
-single ``total_paid / current_threshold`` division: a role's threshold can change over time
-(admin edits, or a dynamic cost-per-user that moves month to month), and a single division
-would apply today's price to every historical period instead of the price that actually
-applied then.
-"""
+"""Banked pay-what-you-want access: a running usage ledger on RoleSubscription that can keep granting access after a subscription stops being actively billed.
+The ledger tracks two running totals - ``total_paid_cents`` (everything ever paid) and ``amount_used_cents`` (cost "spent" from that total so far) - and walks forward one fixed-length billing period at a time, pricing each period at the role's pay-what-you-want threshold *as of that period's start*, not today's threshold."""
 
 from __future__ import annotations
 
@@ -46,23 +27,13 @@ _PERIOD = timedelta(days=30)
 @contextmanager
 def _locked(role_subscription: RoleSubscription) -> Iterator[RoleSubscription]:
     """Hold a row lock on this subscription for the body of the block.
-
-    Every ledger mutation is a read-modify-write of running totals, and Stripe
-    delivers concurrently: two partial refunds on one charge, or a payment
-    landing beside a refund, otherwise read the same ``total_paid_cents``,
-    subtract independently, and the second write erases the first. The
-    webhook's ``StripeProcessedRefund`` row still commits, so the lost debit is
-    never retried - access stays funded by refunded money.
-
-    Yields the locked instance; the caller's original object is refreshed from
-    it on the way out so it does not go on holding pre-lock values.
+    Every ledger mutation is a read-modify-write of running totals, and Stripe delivers concurrently: two partial refunds on one charge, or a payment landing beside a refund, otherwise read the same ``total_paid_cents``, subtract independently, and the second write erases the first.
 
     Args:
         role_subscription: The subscription to lock.
 
     Yields:
-        The freshly-read, locked subscription.
-    """
+        The freshly-read, locked subscription."""
     with transaction.atomic():
         locked = type(role_subscription).objects.select_for_update().get(pk=role_subscription.pk)
         yield locked
@@ -73,24 +44,15 @@ def _locked(role_subscription: RoleSubscription) -> Iterator[RoleSubscription]:
 def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.datetime | None = None) -> None:
     """Advance a pay-what-you-want subscription's usage ledger as of *as_of*.
 
-    Walks forward from ``usage_covered_until`` (or ``created`` if nothing's been ticked
-    yet) one ``_PERIOD`` at a time, pricing each period at the role's pay-what-you-want
-    threshold as of that period's start. A period is entered once its start is reached
-    (``cursor <= as_of``); stops as soon as a period isn't affordable (``total_paid_cents``
-    no longer covers ``amount_used_cents`` plus that period's threshold) or the next
-    period hasn't started yet. Coverage lands at the end of the last affordable period -
-    which can be, and usually is, later than *as_of* itself. A no-op for non-PWYW roles.
-
     Args:
         role_subscription: The subscription to advance. Reads role_subscription.role, so
             callers should have it select_related.
-        as_of: Point in time to advance as of; defaults to now.
-    """
+        as_of: Point in time to advance as of; defaults to now."""
     as_of = as_of or timezone.now()
     # Locked here, not only by callers: ``advance_pwyw_usage_ledgers`` sweeps every
-    # pay-what-you-want subscription and calls this directly, holding each row's
-    # snapshot for as long as its loop takes to reach that row. Re-locking inside
-    # apply_payment's block costs one redundant SELECT, since the row is held already.
+    # pay-what-you-want subscription and calls this directly, holding each row's snapshot for as
+    # long as its loop takes to reach that row.
+    # Re-locking inside apply_payment's block costs one redundant SELECT, since the row is held
     with _locked(role_subscription) as locked:
         # Carry the caller's already-loaded role across: the lock re-reads the row
         # without select_related, so every pricing lookup below would refetch it.
@@ -119,14 +81,11 @@ def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.da
 def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, as_of: datetime.datetime | None = None) -> None:
     """Record a successful pay-what-you-want charge and advance its usage ledger.
 
-    A no-op for non-PWYW roles or a non-positive amount.
-
     Args:
         role_subscription: The subscription to credit. Reads role_subscription.role, so
             callers should have it select_related.
         amount_paid_cents: The invoice's actual amount paid, in cents.
-        as_of: Point in time the payment is being processed; defaults to now.
-    """
+        as_of: Point in time the payment is being processed; defaults to now."""
     if not role_subscription.role.pay_what_you_want or amount_paid_cents <= 0:
         return
     with _locked(role_subscription) as locked:
@@ -140,19 +99,12 @@ def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, a
 
 def apply_refund(role_subscription: RoleSubscription, amount_refunded_cents: int) -> None:
     """Claw back a refunded (or lost-dispute) amount from the banked balance, in full.
-
-    Policy: the refunded amount comes straight out of ``total_paid_cents`` (clamped at
-    zero), so future periods simply stop being affordable. Access already consumed is
-    forgiven - ``amount_used_cents`` and ``usage_covered_until`` are left untouched, so
-    periods the ledger has already entered stay covered through their end.
-
-    A no-op for non-PWYW roles or a non-positive amount.
+    Policy: the refunded amount comes straight out of ``total_paid_cents`` (clamped at zero), so future periods simply stop being affordable.
 
     Args:
         role_subscription: The subscription to debit. Reads role_subscription.role, so
             callers should have it select_related.
-        amount_refunded_cents: The amount refunded or lost to a dispute, in cents.
-    """
+        amount_refunded_cents: The amount refunded or lost to a dispute, in cents."""
     if not role_subscription.role.pay_what_you_want or amount_refunded_cents <= 0:
         return
     with _locked(role_subscription) as locked:

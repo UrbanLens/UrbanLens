@@ -1,19 +1,5 @@
 """Flickr OAuth 1.0a (3-legged) authorization flow.
-
-Flickr has no OAuth2 option for accessing a user's private photos, so this is
-the one integration in the app that needs the older 3-legged dance:
-
-1. :func:`start_authorization` fetches a *temporary* request token and
-   returns the URL to send the user to. The temporary token's secret is
-   needed again in step 3 but Flickr's callback only echoes back the token
-   itself (no generic ``state`` passthrough like OAuth2), so the caller must
-   stash ``(oauth_token -> oauth_token_secret)`` somewhere keyed by the token
-   (short-TTL cache) and look it up again on callback.
-2. The user approves on Flickr's site; Flickr redirects back with the same
-   ``oauth_token`` plus an ``oauth_verifier``.
-3. :func:`finish_authorization` exchanges the temporary token + verifier for
-   the permanent access token pair, using the secret stashed in step 1.
-"""
+Flickr has no OAuth2 option for accessing a user's private photos, so this is the one integration in the app that needs the older 3-legged dance:"""
 
 from __future__ import annotations
 

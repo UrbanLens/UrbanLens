@@ -1,24 +1,5 @@
 """AI wiki-incorporation for well-upvoted user-submitted Trivia questions.
-
-Once a ``USER_SUBMITTED``, ``APPROVED`` question's community vote score
-crosses :data:`WIKI_INCORPORATION_SCORE_THRESHOLD`, this module drafts a new
-plain-text paragraph folding the trivia fact into the location's wiki
-article - reusing the exact same draft -> sanitize -> safety-classify ->
-append pipeline as :mod:`services.ai.article_expansion` (same
-``sanitize_article_plain_text``, same ``article_safety.classify_article_text``,
-same ``article_expansion.append_to_article``), with only the writing step
-itself carrying a dedicated AI feature (``trivia_wiki_incorporation``) so it
-has its own SiteSettings toggle and cost tracking. The safety bar for what
-belongs in a wiki article does not depend on where the source material came
-from, so that classifier is shared outright rather than duplicated.
-
-``TriviaQuestion.wiki_incorporated_at`` is set once a question has been fully
-processed - approved-and-appended, safety-rejected, or nothing new to say -
-so it is never proposed to the writing model a second time. An AI-unavailable
-outcome deliberately leaves it unset so a later sweep retries, mirroring
-``services.trivia.submission.classify_and_update``'s "never mass-finalize
-during an outage" rule.
-"""
+Once a ``USER_SUBMITTED``, ``APPROVED`` question's community vote score crosses :data:`WIKI_INCORPORATION_SCORE_THRESHOLD`, this module drafts a new plain-text paragraph folding the trivia fact into the location's wiki article - reusing the exact same draft -> sanitize -> safety-classify -> append pipeline as :mod:`services.ai.article_expansion` (same ``sanitize_article_plain_text``, same ``article_safety.classify_article_text``, same ``article_expansion.append_to_article``), with only the writing step itself carrying a dedicated AI feature (``trivia_wiki_incorporation``) so it has its own SiteSettings toggle and cost tracking."""
 
 from __future__ import annotations
 
@@ -38,11 +19,10 @@ from urbanlens.dashboard.services.wiki.articles import get_article
 
 logger = logging.getLogger(__name__)
 
-#: Net weighted vote score (see services.trivia.voting's weights) a
-#: USER_SUBMITTED question must reach before it's considered for wiki
-#: incorporation - "to-be-tuned" per the Trivia spec; set well above the
-#: eligibility.py rotation gate (>= 0) so only genuinely well-received
-#: questions, not merely non-negative ones, ever reach the wiki.
+#: Net weighted vote score (see services.trivia.voting's weights) a USER_SUBMITTED question must
+#: reach before it's considered for wiki incorporation - "to-be-tuned" per the Trivia spec; set well
+#: above the eligibility.py rotation gate (>= 0) so only genuinely well-received questions, not
+#: merely non-negative ones, ever reach the wiki.
 WIKI_INCORPORATION_SCORE_THRESHOLD = 5.0
 
 #: How many not-yet-processed candidate questions one sweep considers.
@@ -124,12 +104,7 @@ def _mark_processed(question: TriviaQuestion) -> None:
 
 def incorporate_question_into_wiki(question: TriviaQuestion) -> bool:
     """Draft, sanitize, safety-check, and append one well-upvoted question's fact to its wiki.
-
-    Skipped without any AI call when the question is already processed, isn't
-    a still-approved ``USER_SUBMITTED`` question, has no location wiki, or
-    hasn't crossed :data:`WIKI_INCORPORATION_SCORE_THRESHOLD`. Never raises -
-    an unexpected failure anywhere in the pipeline is logged and treated as a
-    skip, so one bad question can't abort a whole sweep batch.
+    Skipped without any AI call when the question is already processed, isn't a still-approved ``USER_SUBMITTED`` question, has no location wiki, or hasn't crossed :data:`WIKI_INCORPORATION_SCORE_THRESHOLD`.
 
     Args:
         question: The candidate question. Callers processing a batch should
@@ -140,8 +115,7 @@ def incorporate_question_into_wiki(question: TriviaQuestion) -> bool:
         False covers every skip reason, including "processed but nothing was
         added" (safety-rejected, or nothing new to say) - callers that need
         to distinguish those should inspect ``question.wiki_incorporated_at``
-        afterward.
-    """
+        afterward."""
     try:
         if question.wiki_incorporated_at is not None:
             return False
@@ -190,14 +164,11 @@ def incorporate_question_into_wiki(question: TriviaQuestion) -> bool:
 def sweep_questions_for_wiki_incorporation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) -> dict[str, int]:
     """Consider a bounded batch of not-yet-processed, well-upvoted questions for wiki incorporation.
 
-    Called from a scheduled Celery task (``tasks.run_scheduled_trivia_wiki_incorporation``).
-
     Args:
         batch_size: Maximum number of candidate questions to consider in this run.
 
     Returns:
-        ``{"questions_considered": int, "questions_incorporated": int}``.
-    """
+        ``{"questions_considered": int, "questions_incorporated": int}``."""
     candidates = (
         TriviaQuestion.objects.filter(
             source=TriviaQuestionSource.USER_SUBMITTED,

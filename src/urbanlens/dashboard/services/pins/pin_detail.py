@@ -1,11 +1,5 @@
 """Full pin-detail payload for the external API's ``GET /pins/{slug}/``.
-
-Builds on top of ``services.pins.pin_sync.serialize_sync_pin`` (the map payload
-plus sync-only fields) rather than duplicating it, then layers on everything
-a sync client already has but a detail view still needs: description-adjacent
-dates, security indicators, personal notes/aliases/links, custom fields, the
-property boundary, the cover photo, and the discovered wiki slug.
-"""
+Builds on top of ``services.pins.pin_sync.serialize_sync_pin`` (the map payload plus sync-only fields) rather than duplicating it, then layers on everything a sync client already has but a detail view still needs: description-adjacent dates, security indicators, personal notes/aliases/links, custom fields, the property boundary, the cover photo, and the discovered wiki slug."""
 
 from __future__ import annotations
 
@@ -66,11 +60,10 @@ def build_pin_detail(pin: Pin, profile: Profile) -> dict[str, Any]:
     payload = serialize_sync_pin(service, pin)
 
     payload["official_name"] = pin.effective_official_name or None
-    # Address components, split out from the combined "address" string the
-    # sync payload already carries - geocoded from the pin's Location, never
-    # user-writable. Location itself is never exposed directly (it would leak
-    # a place's existence to a caller who hasn't pinned it), but reading these
-    # through a pin the caller already owns is safe.
+    # Address components, split out from the combined "address" string the sync payload already
+    # carries - geocoded from the pin's Location, never user-writable.
+    # Location itself is never exposed directly (it would leak a place's existence to a caller who
+    # hasn't pinned it), but reading these through a pin the caller already owns is safe.
     payload["city"] = pin.effective_city
     payload["state"] = pin.effective_state
     payload["county"] = pin.effective_county
@@ -81,10 +74,10 @@ def build_pin_detail(pin: Pin, profile: Profile) -> dict[str, Any]:
     payload["date_last_active"] = _isoformat_or_none(pin.date_last_active)
     payload["security"] = {field: getattr(pin, field) for field, _label in SECURITY_FIELDS}
     wiki = pin.wiki
-    # The slug that actually routes to this pin's wiki. Every wiki-scoped
-    # endpoint resolves through services.wiki.wiki_access.resolve_visible_wiki,
-    # which takes a *Location* slug/uuid - so this, not wiki_slug below, is
-    # what a client feeds to /wikis/{location_slug}/.
+    # The slug that actually routes to this pin's wiki.
+    # Every wiki-scoped endpoint resolves through services.wiki.wiki_access.resolve_visible_wiki,
+    # which takes a *Location* slug/uuid - so this, not wiki_slug below, is what a client feeds to
+    # /wikis/{location_slug}/.
     payload["location_slug"] = pin.location.ensure_slug()
     # Informational only: Wiki.slug is an independent field from the Location's
     # slug and is NOT accepted by any wiki route. Kept for clients that already
@@ -97,11 +90,10 @@ def build_pin_detail(pin: Pin, profile: Profile) -> dict[str, Any]:
     notes = list(pin.notes.order_by("-created"))
     aliases = list(pin.aliases.all())
     links = list(pin.links.all())
-    # The same serializers the dedicated sub-resource endpoints use, so a pin's
-    # nested notes/aliases/links and the ones served by
-    # ``pins/{slug}/notes/`` et al. cannot describe the same row differently.
-    # ``pin`` goes into the alias context so is_current is resolved without a
-    # query per row.
+    # The same serializers the dedicated sub-resource endpoints use, so a pin's nested
+    # notes/aliases/links and the ones served by ``pins/{slug}/notes/`` et al. cannot describe the
+    # same row differently.
+    # ``pin`` goes into the alias context so is_current is resolved without a query per row.
     payload["notes"] = PinNoteSerializer(notes, many=True).data
     payload["aliases"] = PinAliasSerializer(aliases, many=True, context={"pin": pin}).data
     payload["links"] = PinLinkSerializer(links, many=True).data

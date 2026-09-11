@@ -1,19 +1,5 @@
 """Per-viewer visibility of a trip activity's location.
-
-An activity's location is hidden from a given viewer when its adder set
-``trip_pin_location_visibility`` to something more restrictive than "anyone",
-unless the viewer qualifies (friend, shares the pin, shares the trip - see
-below). Shared by the trip controllers (activities panel, map data) and
-anything else - like AI trip suggestions - that must never show a viewer a
-location their trip-mate chose not to reveal to them specifically.
-
-Deliberately stricter than ``Profile.visibility_permits`` in two ways: pending
-friend requests do not qualify, and COMMON_PIN means a pin at *this activity's
-location*, not any shared pin. Both differences fail closed and are pinned by
-``tests/hypothesis/test_trip_visibility_is_stricter.py``; loosening either is a
-product decision about other users' privacy, to be made in the same commit that
-updates those tests.
-"""
+Shared by the trip controllers (activities panel, map data) and anything else - like AI trip suggestions - that must never show a viewer a location their trip-mate chose not to reveal to them specifically."""
 
 from __future__ import annotations
 
@@ -33,15 +19,13 @@ def apply_trip_visibility_filter(
     viewer: Profile,
     hidden_out: set[int],
 ) -> None:
-    """Populate *hidden_out* with the IDs of activities whose location the viewer
-    may not see, based on each adder's trip_pin_location_visibility setting.
+    """Populate *hidden_out* with the IDs of activities whose location the viewer may not see, based on each adder's trip_pin_location_visibility setting.
 
     Args:
         sensitive: Activities already filtered to non-ANYONE visibility and
-                   non-owner viewer.
+            non-owner viewer.
         viewer:    The profile viewing the trip.
-        hidden_out: Mutable set to add hidden activity IDs into.
-    """
+        hidden_out: Mutable set to add hidden activity IDs into."""
     from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
     from urbanlens.dashboard.models.pin.model import Pin
 
@@ -69,12 +53,10 @@ def apply_trip_visibility_filter(
         viewer_friend_ids.discard(viewer.id)
 
     if common_pin_acts:
-        # Place-aware, not a raw Location match: the viewer's own pin fifty
-        # metres away on the same parcel must still qualify as "common pin"
-        # (see services.pins.common_pins.pinned_place_keys, which this
-        # mirrors). Resolve each activity's location to its place_id (falling
-        # back to the location itself when it has none), then check whether
-        # the viewer has a pin resolving to that same key.
+        # Place-aware, not a raw Location match: the viewer's own pin fifty metres away on the same
+        # parcel must still qualify as "common pin" (see
+        # services.pins.common_pins.pinned_place_keys, which this mirrors).
+        # Resolve each activity's location to its place_id (falling back to the location itself when
         from urbanlens.dashboard.models.location.model import Location
 
         loc_ids = {a.location_id for a in common_pin_acts if a.location_id is not None}
@@ -118,22 +100,16 @@ def apply_trip_visibility_filter(
 def viewer_hidden_activity_ids(activities: list[TripActivity], viewer: Profile) -> set[int]:
     """Convenience wrapper: compute the full hidden-activity-id set for a viewer.
 
-    Combines the activity's own ``location_hidden`` flag with the per-adder
-    visibility rule above - the two checks every call site needs together.
-
     Args:
         activities: Candidate activities (any status/location state).
         viewer: The profile viewing the trip.
 
     Returns:
-        IDs of activities whose location this viewer may not see.
-    """
+        IDs of activities whose location this viewer may not see."""
     hidden = {act.id for act in activities if act.location_hidden}
-    # An activity whose adder is NULL reaches the filter too. Every production
-    # path sets added_by to a real profile, so NULL means that account was
-    # deleted (the FK is SET_NULL) - their setting is gone and the filter treats
-    # it as most restrictive. Excluding them here, as this previously did, made
-    # that branch unreachable and left their locations visible to everyone.
+    # An activity whose adder is NULL reaches the filter too.
+    # Every production path sets added_by to a real profile, so NULL means that account was deleted
+    # (the FK is SET_NULL) - their setting is gone and the filter treats it as most restrictive.
     sensitive = [act for act in activities if not act.location_hidden and act.location_id and act.added_by_id != viewer.id and (act.added_by is None or act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE)]
     if sensitive:
         apply_trip_visibility_filter(sensitive, viewer, hidden)

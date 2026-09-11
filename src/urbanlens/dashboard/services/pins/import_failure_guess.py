@@ -1,39 +1,5 @@
 """Guess where an unplaceable imported pin belongs, from its name alone.
-
-When a Google Maps CID never resolves, the import records a
-:class:`~urbanlens.dashboard.models.pin_import_failures.model.PinImportFailure`
-carrying little more than the place's *name*. The user is then asked to supply an
-address or coordinates by hand, once per failure - and a single import can
-produce hundreds.
-
-A name is often enough to do better than nothing:
-
-- Many exported names are literally addresses, frequently without a city or
-  postcode ("123 Main St"). Those are geocodable directly.
-- A name that is not an address is still a place name, and OpenStreetMap can
-  usually find a well-known one.
-
-Both routes produce a *suggestion*, never a placement: the user confirms it. That
-distinction is the whole safety argument here, because a guess that is quietly
-applied is how pins end up silently wrong.
-
-**On S2-cell decoding.** A Maps CID URL embeds an S2 cell that decodes to an
-approximate position. Until 2026-07-25 the importer *placed pins* that way and it
-was "wrong roughly a third of the time" (see
-``services.apis.locations.legacy_cid_coordinate_fix``), which needed a dedicated
-repair module to undo. Right two times in three is useless for placing a pin
-silently and genuinely useful for proposing one the owner confirms, so it is used
-here - but only ever to *corroborate*:
-
-- when the cell agrees with a geocoded candidate, two independent signals point
-  at the same place and the guess is offered with high confidence;
-- when there is no geocoded candidate at all, the cell alone is offered as a
-  rough area, clearly labelled as such;
-- it never *filters*. Rejecting an OSM match because a cell that is wrong a third
-  of the time disagrees would discard good guesses at exactly that rate. An
-  explicit ``near`` from a caller that trusts its own hint still filters; the
-  cell does not.
-"""
+When a Google Maps CID never resolves, the import records a :class:`~urbanlens.dashboard.models.pin_import_failures.model.PinImportFailure` carrying little more than the place's *name*."""
 
 from __future__ import annotations
 
@@ -65,15 +31,9 @@ _MIN_NAME_IMPORTANCE = 0.35
 #: sanity bound, not a precision filter.
 _MAX_HINT_KM = 55.0
 
-#: How close a decoded S2 cell must be to a geocoded candidate to count as
-#: corroboration. The cell locates a rough area rather than a point, so this asks
-#: "same place?", not "same coordinates?".
-#:
-#: Both bounds are true distances rather than degree deltas. A degree of longitude
-#: shrinks with latitude - at 60 deg it is half its equatorial width, at 70 deg a
-#: third - so a degree-based box silently tightened the further north the pin was,
-#: costing corroboration (and therefore confidence) in exactly the high-latitude
-#: places this feature is useful.
+#: How close a decoded S2 cell must be to a geocoded candidate to count as corroboration.
+#: The cell locates a rough area rather than a point, so this asks "same place?", not "same
+#: coordinates?".
 _AGREEMENT_KM = 16.0
 
 #: Confidence for a guess backed by both a geocoder match and an agreeing S2
@@ -199,11 +159,7 @@ def _candidate(raw: dict, *, source: str, confidence: float) -> LocationGuess | 
 
 def guess_for_failure(failure: PinImportFailure, *, near: tuple[float, float] | None = None) -> LocationGuess | None:
     """Suggest where an unplaceable imported pin belongs.
-
-    Combines two independent signals - what the pin's *name* geocodes to, and the
-    rough position of the S2 cell in its Maps URL - so that agreement between them
-    raises confidence, and neither is trusted alone more than it deserves. See the
-    module docstring for why the cell never rejects a geocoded match.
+    Combines two independent signals - what the pin's *name* geocodes to, and the rough position of the S2 cell in its Maps URL - so that agreement between them raises confidence, and neither is trusted alone more than it deserves.
 
     Args:
         failure: The unresolved import row.
@@ -214,8 +170,7 @@ def guess_for_failure(failure: PinImportFailure, *, near: tuple[float, float] | 
     Returns:
         The best guess, or None when nothing clears the bar. Returning None is the
         normal outcome for a vague name with no URL, and is preferable to a wrong
-        pin.
-    """
+        pin."""
     name = (failure.name or "").strip()
     hint = s2_hint_for(failure)
 
@@ -226,18 +181,17 @@ def guess_for_failure(failure: PinImportFailure, *, near: tuple[float, float] | 
 
     gateway = NominatimGateway()
 
-    # An address in the name is the strong signal: it is specific by
-    # construction, so it does not have to clear the importance bar a bare name
-    # does. parse_addresses is shared with DM location detection rather than
-    # re-derived here, so both agree on what "looks like an address" means.
+    # An address in the name is the strong signal: it is specific by construction, so it does not
+    # have to clear the importance bar a bare name does. parse_addresses is shared with DM location
+    # detection rather than re-derived here, so both agree on what "looks like an address" means.
     for address in parse_addresses(name):
         try:
             results = gateway.search(address, limit=3)
         except RateLimitExceededError:
-            # Routine, not exceptional: Nominatim's policy caps us at one call a
-            # minute, and the queue reveals a card per scroll. Logging a traceback
-            # per refused card would bury the real geocoder failures below in
-            # hundreds of expected ones. The S2 area guess still stands in.
+            # Routine, not exceptional: Nominatim's policy caps us at one call a minute, and the
+            # queue reveals a card per scroll.
+            # Logging a traceback per refused card would bury the real geocoder failures below in
+            # hundreds of expected ones.
             logger.debug("guess_for_failure: geocoder rate limit reached for import failure %s", failure.pk)
             return _area_only_guess(hint, near)
         except Exception:

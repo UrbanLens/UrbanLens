@@ -1,12 +1,5 @@
 """Gateway for REData's ``GET /geocode/`` and ``GET /geocode/reverse/``.
-
-See ``../REData/docs/api-reference.md``, "GET /geocode/ - free text to
-places" and "GET /geocode/reverse/ - a coordinate to the place there".
-Results are not merged into one cross-provider ranking - each provider's own
-``rank`` is preserved and results are concatenated in registry order (see the
-doc) - so callers that want "the best answer" take the first result of
-whichever provider they trust, not the first result overall.
-"""
+Results are not merged into one cross-provider ranking - each provider's own ``rank`` is preserved and results are concatenated in registry order (see the doc) - so callers that want "the best answer" take the first result of whichever provider they trust, not the first result overall."""
 
 from __future__ import annotations
 
@@ -26,27 +19,20 @@ class RedataGeocodeGateway(RedataLocationContextGateway):
         """Resolve free text to places (``GET /geocode/``).
 
         Args:
-            query: The free-text search string.
-            latitude: Optional bias center - narrows results toward this
+                query: The free-text search string.
+                latitude: Optional bias center - narrows results toward this
                 point without excluding others. Only meaningful together with
                 ``longitude``.
-            longitude: Optional bias center - see ``latitude``.
-            limit: Bounded positive integer.
-            provider: Restrict which source(s) actually run.
+                longitude: Optional bias center - see ``latitude``.
+                limit: Bounded positive integer.
+                provider: Restrict which source(s) actually run.
 
         Returns:
-            The parsed envelope - ``results`` in registry order, one entry
-            per provider's own hit (not merged/re-ranked - see the module docstring).
+                The parsed envelope - ``results`` in registry order, one entry
+                per provider's own hit (not merged/re-ranked - see the module docstring).
 
         Note:
-            REData's own ``../REData/docs/api-reference.md`` documents this endpoint's
-            request parameters and its shared envelope, but doesn't show a
-            full worked example of one result entry's own fields. Callers
-            here read ``latitude``/``longitude`` off each result, following
-            the convention used throughout the rest of this API - verify
-            against a live REData instance once its geocoding endpoint is
-            confirmed deployed, and adjust if its real field names differ.
-        """
+            REData's own ``../REData/docs/api-reference.md`` documents this endpoint's request parameters and its shared envelope, but doesn't show a full worked example of one result entry's own fields. Callers here read ``latitude``/``longitude`` off each result, following the convention used throughout the rest of this API - verify against a live REData instance once its geocoding endpoint is confirmed deployed, and adjust if its real field names differ."""
         params: dict[str, Any] = {"q": query}
         if latitude is not None:
             params["lat"] = latitude

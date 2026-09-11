@@ -29,11 +29,10 @@ class HomeWidget:
     template: str
 
 
-#: The full catalog of homepage widgets, in default display order. Adding a
-#: new widget here makes it available to every profile automatically (shown,
-#: enabled, at the end of the default order) - no backfill needed since
-#: ``effective_widget_layout`` treats a profile's saved layout as an ordered
-#: subset, not an exhaustive list.
+#: The full catalog of homepage widgets, in default display order.
+#: Adding a new widget here makes it available to every profile automatically (shown, enabled, at
+#: the end of the default order) - no backfill needed since ``effective_widget_layout`` treats a
+#: profile's saved layout as an ordered subset, not an exhaustive list.
 HOME_WIDGETS: tuple[HomeWidget, ...] = (
     HomeWidget("stats", "Your Stats", "bar_chart", "dashboard/partials/home/_widget_stats.html"),
     HomeWidget("safety_checkin", "Active Check-In", "emergency_home", "dashboard/partials/home/_widget_safety_checkin.html"),
@@ -98,20 +97,13 @@ def save_widget_layout(profile: Profile, enabled_keys: list[str]) -> list[str]:
 
 def home_dashboard_context(profile: Profile) -> dict[str, Any]:
     """Build the data context every homepage widget partial draws from.
-
-    Most entries below are unevaluated querysets, so a widget the user has
-    switched off costs nothing - the template never iterates it. Two were not:
-    the ten counts behind ``home_stats`` all execute as the dict is built, and
-    ``home_recent_comments`` is forced by the ``sorted()`` that merges two
-    sources. Those are now built only when their widget is enabled, which is a
-    dozen queries a user who turned both off was paying on every homepage load.
+    Most entries below are unevaluated querysets, so a widget the user has switched off costs nothing - the template never iterates it.
 
     Args:
         profile: The signed-in user's profile.
 
     Returns:
-        The ``home_*`` context vars consumed by ``partials/home/_widget_*.html``.
-    """
+        The ``home_*`` context vars consumed by ``partials/home/_widget_*.html``."""
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.labels.meta import KIND_STATUS

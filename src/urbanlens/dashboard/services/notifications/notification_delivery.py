@@ -1,17 +1,5 @@
 """Shared email/WhatsApp/SMS dispatch helpers for per-notification-type delivery preferences.
-
-Each is a thin wrapper that no-ops quietly rather than raising, since a
-missing destination (email address, phone number, unconfigured Twilio
-credentials) shouldn't break the caller's own request/task.
-
-``send_notification_email`` is the generic case: most notification types
-already build nothing more than a title, a plain-text message and a url for
-their in-app row (see ``NotificationLog.objects.notify``), so one shared
-template and function covers all of them rather than each growing its own
-copy. A type whose email needs real structure beyond that - multiple
-fields, several call-to-action links - still hand-rolls its own template and
-send call the way ``services/visits/safety.py``'s ``_send_email`` does.
-"""
+Each is a thin wrapper that no-ops quietly rather than raising, since a missing destination (email address, phone number, unconfigured Twilio credentials) shouldn't break the caller's own request/task."""
 
 from __future__ import annotations
 
@@ -58,10 +46,9 @@ def send_notification_email(recipient: Profile, *, title: str, body_text: str, u
     except (smtplib.SMTPException, OSError):
         logger.exception("Failed to send notification email to %s", recipient_email)
     except Exception:
-        # A caller-supplied title/body isn't validated against the template
-        # ahead of time, so a rendering bug must be logged like every other
-        # delivery failure here, not raised uncaught into the notify function
-        # that's often mid-write on the actual event (a friend request, an
+        # A caller-supplied title/body isn't validated against the template ahead of time, so a
+        # rendering bug must be logged like every other delivery failure here, not raised uncaught
+        # into the notify function that's often mid-write on the actual event (a friend request, an
         # award) this email is secondary to.
         logger.exception("Failed to render/send notification email to %s", recipient_email)
 

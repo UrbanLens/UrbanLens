@@ -1,12 +1,6 @@
-"""Celery tasks for the dashboard application.
+"""Celery tasks for the dashboard app.
 
-Tasks that hand untrusted uploaded bytes to a parser declare
-``queue=SANDBOX_QUEUE`` (or ``SANDBOX_BATCH_QUEUE`` when the parse is a
-minutes-long batch job), which routes them to an isolated ``media-worker``
-container rather than the general-purpose worker. The queue is declared on the
-task instead of at each ``apply_async`` site on purpose - see
-:mod:`urbanlens.dashboard.services.sandbox.queues` for why, and
-:mod:`urbanlens.dashboard.services.sandbox.guard` for what the isolation buys.
+Untrusted-parse tasks declare a sandbox queue and run on the media worker.
 """
 
 from __future__ import annotations
@@ -35,39 +29,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Resolved once, at import, so it lands in each decorated task's own exec
-#: options. Falls back to the default queue where no sandbox worker is deployed
-#: (``UL_SANDBOX_ENABLED=false``), so those installs keep processing uploads
-#: rather than filling a queue nothing drains.
+#: Sandbox queue for untrusted parses; falls back to default when disabled.
 SANDBOX_QUEUE = sandbox_queue()
-#: For untrusted parses that run for minutes, not milliseconds - same isolation,
-#: separate worker, so they cannot occupy the interactive pool.
+#: Sandbox queue for minutes-long untrusted parses.
 SANDBOX_BATCH_QUEUE = sandbox_queue(batch=True)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def ensure_wiki_for_location(location_id: int) -> int | None:
-    """Auto-create the Wiki for a Location, so enrichment can get a head start.
-
-    Queued by the ``Pin`` post_save signal (``models.pin.signals``) whenever a
-    pin gets a shared Location, for any community-enabled profile - covering
-    every pin-creation path (manual add, CSV/Google Maps import, Flickr,
-    Immich, GPX) with one hook. The row itself is a cheap DB-only write; no
-    external API is touched here or by the signal that queued this - that
-    only happens below, once, when the draft is first created.
-
-    The page is published from the moment it exists - there is no draft state
-    and nothing for a user to "create". It starts empty and fills in as
-    enrichment lands, which is what a place nobody has written up looks like
-    anyway.
-
-    Args:
-        location_id: PK of the Location that just gained a pin.
-
-    Returns:
-        PK of the Wiki (new or pre-existing), or None if the Location no
-        longer exists.
-    """
+    """Auto-create the Wiki for a Location when missing."""
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
@@ -80,11 +50,6 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
     wiki, created = Wiki.objects.get_or_create_for_location(location)
     if created:
         safely_enqueue_task(enrich_wiki_location, wiki.pk)
-        # Covers a Wikipedia article matched and cached for this location
-        # *before* there was a wiki to seed. The other direction - a match
-        # caching after the wiki exists - is handled by models.cache.signals.
-        # This used to hang off the "Create wiki" click, which was the moment
-        # the page appeared; that moment is here now.
         from urbanlens.dashboard.services.wiki.wiki_seed import seed_wiki_article_from_wikipedia
 
         seed_wiki_article_from_wikipedia(location)
@@ -93,20 +58,7 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def enrich_wiki_location(self, wiki_id: int) -> bool:
-    """Enrich a Wiki's Location with external data.
-
-    Runs right after ``ensure_wiki_for_location`` creates the page: links the
-    Location to its Google Place, resolves a canonical
-    name when the wiki is still unnamed, and generates the location's default
-    property/building boundaries. This is the only place these APIs are hit
-    for a wiki - pin creation and bulk imports never call them synchronously.
-
-    Args:
-        wiki_id: PK of the Wiki to enrich.
-
-    Returns:
-        True when the wiki still existed and enrichment ran.
-    """
+    """Enrich a Wiki's Location with place link, name, and boundaries."""
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
     from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
@@ -137,18 +89,7 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
         except Exception:
             logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
             place_name = None
-        # This bypasses Wiki.save() (a bulk .update()), so sanitize here too -
-        # location.official_name is already sanitized by Location.save(), but
-        # name_resolver.resolve() is a live external-source result that isn't.
-        # The name= filter re-checks the wiki still carries the exact
-        # non-meaningful name read above (atomically, in the same query), so a
-        # concurrent user-driven rename isn't clobbered. Filtering on the name
-        # actually read - rather than reconstructing the set of possible
-        # placeholders - also can't drift out of sync with whatever variant
-        # was seeded: an area-suffixed placeholder built from an OLDER
-        # area_label (the address backfill may have changed it since),
-        # a coordinate-style name, or any future placeholder shape all pass
-        # the is_meaningful_name gate above and match here.
+        # Bulk update bypasses Wiki.save(), so sanitize the external name here.
         if place_name := sanitize_name(place_name):
             Wiki.objects.filter(pk=wiki.pk, name=wiki.name).update(name=place_name)
 
@@ -162,24 +103,7 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
-    """Mirror imported buildings onto the community wiki, off the request.
-
-    The pin side of a building import has already succeeded by the time this
-    runs, so nothing here may fail it: a wiki-side problem must not surface as
-    a 500 for work that was already done (see docs/PROBLEMS.md, 2026-08-18).
-
-    Takes selection keys rather than the building records themselves so the
-    task body stays small and re-resolves against the current cache - a stale
-    key simply finds nothing.
-
-    Args:
-        pin_id: The parent pin whose buildings were imported.
-        selection_keys: ``building_selection_key`` values for the imported
-            buildings.
-
-    Returns:
-        How many child wikis were created.
-    """
+    """Mirror imported buildings onto the community wiki off-request."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.locations import site_scope
     from urbanlens.dashboard.services.pins import pin_restructure
@@ -195,20 +119,7 @@ def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def auto_nest_building_pins(pin_id: int) -> int:
-    """Build a new pin's default child-pin structure from cached building data.
-
-    Enqueued at pin creation when the location's building list is already
-    cached (another user pinned it first) - creating up to a campus worth of
-    child pins is not request-time work. When nothing is cached yet, the
-    fetch/enrichment paths run the same sweep once the list arrives instead.
-
-    Args:
-        pin_id: The freshly-created root pin.
-
-    Returns:
-        How many child pins were created, or 0 when the pin is gone or not
-        eligible.
-    """
+    """Build a new pin's default child-pin structure from cached buildings."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.pins.auto_nest import auto_nest_pin
 
@@ -220,20 +131,7 @@ def auto_nest_building_pins(pin_id: int) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def generate_boundaries_for_location(location_id: int) -> bool:
-    """Generate (or, if stale, refresh) the default property/building boundaries for a Location.
-
-    Scheduled single-flight by ``schedule_location_boundary_generation`` (wiki
-    page, and the Private Pin page's stale-refresh path) - the pin detail
-    page's first-ever generation uses the "boundary" panel source instead,
-    which calls the same ``generate_location_boundaries`` function.
-
-    Args:
-        location_id: PK of the Location.
-
-    Returns:
-        True when the location existed and generation ran (or was already
-        fresh).
-    """
+    """Generate or refresh default boundaries for a Location."""
     from django.core.cache import cache
 
     from urbanlens.dashboard.models.location.model import Location
@@ -254,26 +152,7 @@ def generate_boundaries_for_location(location_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def classify_detail_marker(kind: str, marker_id: int) -> bool:
-    """Decide whether a newly placed child pin/wiki stands on a building.
-
-    Queued whenever a sub-marker is created or moved without the user
-    choosing a type themselves (see ``controllers.detail_pins``). Generating
-    the marker's own boundaries first is the whole point: the provider chain
-    only fills a location's ``BUILDING`` boundary when some provider has a
-    footprint polygon containing that exact point, which is precisely the
-    question being asked.
-
-    Runs on the default (prefork) queue rather than ``panel_fetch``: boundary
-    generation does real CPU-bound geometry work, and a campus import queues
-    one of these per building. See ``PanelSource.queue`` for the same reasoning.
-
-    Args:
-        kind: ``"pin"`` or ``"wiki"``.
-        marker_id: PK of the Pin or Wiki to classify.
-
-    Returns:
-        True when the marker was reclassified as a building.
-    """
+    """Decide whether a new child pin/wiki stands on a building."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
@@ -296,19 +175,7 @@ def classify_detail_marker(kind: str, marker_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def warm_saved_filter_cache(profile_id: int) -> int:
-    """Precompute and cache a profile's saved-filter matching-pin uuid lists.
-
-    Queued right after login (see ``models.profile.signals``) so the bottom-right
-    map toolbar's first filter toggle of the session hits a warm
-    ``services.search.saved_filter_cache`` entry instead of a cold query.
-
-    Args:
-        profile_id: PK of the ``Profile`` to warm - never a bare user-supplied
-            uuid, so this can't be used to warm (or probe) another user's data.
-
-    Returns:
-        Number of saved filters warmed, or 0 if the profile no longer exists.
-    """
+    """Precompute a profile's saved-filter match lists."""
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.search.saved_filter_cache import warm_all_for_profile
 
@@ -320,18 +187,7 @@ def warm_saved_filter_cache(profile_id: int) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def push_trip_to_calendar(trip_id: int) -> int:
-    """Push a trip's current state to every calendar it is auto-synced with.
-
-    Queued after a trip or trip activity is saved, so calendar events created
-    by the "keep in sync" import option stay current without the user having
-    to re-export manually. Sync is one-way (UrbanLens to Google) only.
-
-    Args:
-        trip_id: PK of the trip that changed.
-
-    Returns:
-        The number of calendars the trip was successfully pushed to.
-    """
+    """Push a changed trip to its auto-synced calendars."""
     from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.services.trips.calendar_sync import push_auto_synced_trip_changes
 
@@ -513,22 +369,7 @@ def backfill_location_address(location_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
-    """Best-effort archive a PinLink's or WikiLink's URL to the Wayback Machine.
-
-    Prefers an existing recent snapshot (cheap availability check) over asking
-    the Wayback Machine to crawl the page again. HTTP-level failures (dead
-    link, the Archive refusing the URL, ...) are logged and left for the user
-    to retry later rather than retried automatically - only transport-level
-    errors (OSError) get Celery's automatic retry, since a permanently
-    unarchivable URL would otherwise retry forever.
-
-    Args:
-        link_model: ``"PinLink"`` or ``"WikiLink"``.
-        link_id: PK of the link row to archive.
-
-    Returns:
-        True when a wayback_url was saved, False otherwise.
-    """
+    """Best-effort archive a link URL to the Wayback Machine."""
     import requests
 
     from urbanlens.dashboard.models.links.model import PinLink, WikiLink
@@ -544,8 +385,6 @@ def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
         return False
 
     if is_own_site_url(link.url):
-        # Most of our own pages require being logged in - archiving them would
-        # only ever save an unreadable login wall, not the actual content.
         return False
 
     gateway = WaybackMachineGateway()
@@ -618,10 +457,6 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         except Exception:
             logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)
 
-    # NPS: caches the nearest park unit to the location, if any is within
-    # REData's search radius (see plugins.builtin.nps for why this is a
-    # proximity search rather than the boundary-containment lookup this used
-    # to be).
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
     if redata_configured() and LocationCache.get_fresh(location, "nps") is None:
@@ -634,8 +469,6 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         except Exception:
             logger.exception("prefetch_location_external_data: NPS lookup failed for location %s", location_id)
 
-    # Google Places - migrate from Django request cache into LocationCache so the
-    # Private Pin page can display it without a fresh API call.
     if google_place_id and LocationCache.get_fresh(location, "google_places") is None:
         try:
             from django.core.cache import cache as django_cache
@@ -653,9 +486,6 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
                 location_id,
             )
 
-    # Resolve the official name once, after every cache write above has landed,
-    # so the plugin name providers see all fresh candidates in a single pass
-    # (per-source refreshes let whichever source ran last win).
     try:
         update_location_name_from_external_sources(location, profile=profile)
     except Exception:
@@ -664,30 +494,16 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
 
 @dataclass
 class _UploadProcessResult:
-    """What each media-type-specific processing step produced."""
+    """Fields produced by one media-type processing step."""
 
     update_fields: dict[str, object]
     coords: tuple[float, float] | None = None
     new_stored_size: int | None = None
-    #: Stored name a rewrite replaced, still on disk. Deleted only once the row
-    #: names its successor - see ``media.images.discard_superseded_file``.
     superseded_name: str | None = None
 
 
 def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max_dimension_override: int | None = None) -> _UploadProcessResult | None:
-    """Photo-specific metadata extraction and downscaling.
-
-    Args:
-        image: The row to process.
-        image_id: Its pk, for log lines that must survive a deleted row.
-        strip_location: Whether to discard the coordinates rather than record them.
-        max_dimension_override: Longest-edge cap for a row with no profile to
-            derive a plan policy from - see :func:`process_image_upload`.
-
-    Returns:
-        The fields to write back, or None on unrecoverable read failure (the
-        caller treats that as a failed task run).
-    """
+    """Extract photo metadata and downscale; None on unreadable file."""
     from decimal import Decimal
 
     from PIL.Image import DecompressionBombError as PILDecompressionBombError
@@ -720,12 +536,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
     try:
         with image.image.open("rb") as image_file:
             coords = None if strip_location else extract_gps_coords(image_file)
-            # Same GPS-IFD-derived, same privacy opt-out as coords above - the
-            # compass bearing is only ever meaningful alongside a location.
             direction = None if strip_location else extract_gps_direction(image_file)
-            # exif_altitude/exif_pitch/exif_roll are write-once (never
-            # overwritten once set, unlike coords/direction above), so skip the
-            # read entirely once a row already carries them.
             altitude = None if strip_location or image.exif_altitude is not None else extract_gps_altitude(image_file)
             orientation = None if strip_location or image.exif_pitch is not None else extract_gps_orientation(image_file)
             taken_at = extract_taken_at(image_file)
@@ -744,21 +555,9 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return None
 
-    # Dropping GPSInfo makes "what did the EXIF say" permanently unanswerable
-    # for this photo - the deliberate exception to exif_data being the surviving
-    # record of EXIF provenance. That is the point of the opt-out, not an
-    # oversight; any future coordinate-provenance work must treat a
-    # location-stripped photo as having no EXIF position rather than an unknown one.
     if strip_location and exif_data:
         exif_data.pop("GPSInfo", None)
 
-    # An upload accepted through services.photos reads its metadata in the
-    # request and stores the file already stripped, so by the time this task
-    # runs there is nothing left in the bytes to find - the row is where the
-    # coordinates are. Falling back to them keeps location resolution and the
-    # visit suggestion below working for those rows, and is a no-op for a file
-    # that still carries its own (an older row, or a format the byte-level
-    # stripper leaves to the re-encode).
     if coords is None and not strip_location and image.latitude is not None and image.longitude is not None:
         coords = (float(image.latitude), float(image.longitude))
 

@@ -1,27 +1,5 @@
 """Resolves Google Places API calls to REData or direct Google, per call.
-
-Single chokepoint for the "which provider answers a Places call" decision,
-mirroring ``cid_resolution.py``'s precedent for the same REData-vs-Google
-choice on CID resolution:
-
-- REData configured (``UL_REDATA_API_URL``/``UL_REDATA_API_KEY`` both set) -
-  the primary deployment's path. REData owns Google Places API access and
-  does its own cost optimization (permanent caching, Essentials/Pro-tier-only
-  field selection - see ``google.redata_places_gateway``'s module docstring
-  for exactly which fields that excludes: no rating, reviews, opening hours,
-  price level, phone numbers, or website, ever, on this path).
-- REData not configured - assumed to be an install without access to it.
-  Falls back to calling Google Places directly via the existing
-  ``google.places.GooglePlacesGateway``, preserving each call site's current
-  field-cost footprint exactly (see each function's own docstring - a
-  function that only ever asked Google for cheap fields must keep asking for
-  only those same cheap fields on this fallback path, never more).
-
-Each function below corresponds to exactly one pre-existing call site in this
-codebase; there is deliberately no single unified "get place details"
-function - see the module-level comment above ``get_place_details_full`` for
-why merging would silently change what gets billed.
-"""
+REData owns Google Places API access and does its own cost optimization (permanent caching, Essentials/Pro-tier-only field selection - see ``google.redata_places_gateway``'s module docstring for exactly which fields that excludes: no rating, reviews, opening hours, price level, phone numbers, or website, ever, on this path). - REData not configured - assumed to be an install without access to it."""
 
 from __future__ import annotations
 
@@ -95,12 +73,10 @@ def search_nearby_landmarks(latitude: float, longitude: float, radius: float, in
     return GooglePlacesGateway(api_key=api_key).search_nearby(latitude, longitude, radius=radius, included_types=included_types)
 
 
-# Deliberately one function per call site rather than a single unified
-# "get place details" function: resolve_place_coordinates below asks Google
-# for only ["geometry","name"] because that's all the pin-add-autocomplete
-# flow ever needs - merging it with this function's full field list would
-# silently make every pin-add pay for Enterprise-tier fields it never uses,
-# the exact SKU-tier cost mistake this whole integration originated from.
+# Deliberately one function per call site rather than a single unified "get place details" function:
+# resolve_place_coordinates below asks Google for only ["geometry","name"] because that's all the
+# pin-add-autocomplete flow ever needs - merging it with this function's full field list would
+# silently make every pin-add pay for Enterprise-tier fields it never uses, the exact SKU-tier cost
 def get_place_details_full(place_id: str, *, api_key: str) -> dict[str, Any]:
     """Fetch full place details for the VIP-only pin-detail panel (``controllers.maps.place_details``).
 
@@ -224,12 +200,7 @@ def download_photo(photo_identifier: str, *, api_key: str) -> tuple[bytes, str]:
             before for a non-REData identifier.
 
     Note:
-        Dispatches on the identifier's own prefix, not on whether REData is
-        *currently* configured - an identifier already encodes which
-        provider produced it (it was persisted into ``LocationCache`` when
-        first fetched), so a config change must not orphan already-cached
-        identifiers.
-    """
+        Dispatches on the identifier's own prefix, not on whether REData is *currently* configured - an identifier already encodes which provider produced it (it was persisted into ``LocationCache`` when first fetched), so a config change must not orphan already-cached identifiers."""
     if photo_identifier.startswith(_REDATA_PHOTO_PREFIX):
         _, place_id, record_id = photo_identifier.split(":", 2)
         result = RedataPlacesGateway().download_photo(place_id, int(record_id))
@@ -316,10 +287,6 @@ def resolve_place_coordinates(place_id: str, *, api_key: str) -> tuple[float | N
 def resolve_name_from_nearby(latitude: float, longitude: float, radius: float, *, api_key: str) -> str | None:
     """Resolve a place name from nearby-search results (``services.locations.google.GooglePlacesNameResolver``).
 
-    Skips any result whose ``types`` are exclusively administrative/regional
-    ones (see ``LOCALITY_PLACE_TYPES``) - a bare "locality" hit shouldn't name
-    a pin after its city.
-
     Args:
         latitude: WGS-84 latitude.
         longitude: WGS-84 longitude.
@@ -327,17 +294,15 @@ def resolve_name_from_nearby(latitude: float, longitude: float, radius: float, *
         api_key: Google Places API key, used only on the Google fallback path.
 
     Returns:
-        The first meaningful nearby place name, or None.
-    """
+        The first meaningful nearby place name, or None."""
     if _redata_configured():
         try:
             candidates = RedataPlacesGateway().search_nearby(latitude, longitude, radius_meters=radius)
         except GatewayRequestError as exc:
-            # Unlike this module's other functions, the caller
-            # (GooglePlacesNameResolver.resolve) only ever expected a narrow
-            # set of Google-specific exceptions - GatewayRequestError isn't
-            # one of them, so it must be swallowed here rather than left to
-            # propagate into an unhandled exception one layer up.
+            # Unlike this module's other functions, the caller (GooglePlacesNameResolver.resolve)
+            # only ever expected a narrow set of Google-specific exceptions - GatewayRequestError
+            # isn't one of them, so it must be swallowed here rather than left to propagate into an
+            # unhandled exception one layer up.
             logger.debug("REData nearby search failed for name resolution at %s,%s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return None
     else:

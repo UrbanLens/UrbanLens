@@ -1,12 +1,5 @@
 """Creating a photo from a browser upload, for a Pin, a Wiki, or a Vault.
-
-Four surfaces turn an uploaded file into an :class:`Image`: the pin gallery,
-the wiki gallery, an album's own upload button (pin, wiki, or Vault), and the
-Vault Photos page's own dropzone. They must agree on every gate an upload
-passes - file-type/malware validation, the per-uploader duplicate check, and
-the storage quota - so those gates live here rather than being restated per
-view. A surface that skips one would let a file in that the others reject.
-"""
+They must agree on every gate an upload passes - file-type/malware validation, the per-uploader duplicate check, and the storage quota - so those gates live here rather than being restated per view."""
 
 from __future__ import annotations
 
@@ -41,26 +34,13 @@ class UploadRejection:
 
 def _owner_fields(owner: Pin | Wiki | Profile) -> dict:
     """Return the Image ownership FKs for *owner*.
-
-    A pin photo belongs to the pin and to its location. It is **not** attached to
-    the location's wiki: everything on a wiki is there because somebody put it
-    there. This used to stamp the wiki as well, which made "send to wiki" a no-op
-    for anything uploaded after the wiki existed - and meant a photo of your own
-    house appeared in that place's community Photos panel, and became votable
-    there, without you choosing to share it. The visibility gate narrowed who saw
-    it (``photo_upload_visibility`` defaults to "anything in common", and having a
-    pin at the same place is a thing in common); it did not make it deliberate.
-
-    A wiki photo has no pin. A Vault (Profile-owned album) upload has neither -
-    it's unfiled, exactly like any other photo uploaded straight to the Vault
-    gallery rather than to a place.
+    It is **not** attached to the location's wiki: everything on a wiki is there because somebody put it there.
 
     Args:
         owner: The Pin, Wiki, or Profile (Vault) the photo is being uploaded to.
 
     Returns:
-        Kwargs for ``Image.objects.create``.
-    """
+        Kwargs for ``Image.objects.create``."""
     if isinstance(owner, Pin):
         return {"pin": owner, "location": owner.location}
     if isinstance(owner, Profile):
@@ -76,10 +56,7 @@ def existing_photo_for_upload(
     checksum: str | None = None,
 ) -> Image | None:
     """Return this uploader's existing photo of the same file on *owner*, if any.
-
-    The duplicate gate is per (owner, uploader, checksum): the same bytes on
-    this pin/wiki by this person. Album upload uses this to file the existing
-    row instead of treating a 409 as a hard failure.
+    Album upload uses this to file the existing row instead of treating a 409 as a hard failure.
 
     Args:
         owner: The Pin, Wiki, or Profile (Vault) the upload was aimed at.
@@ -88,8 +65,7 @@ def existing_photo_for_upload(
         checksum: Pre-computed SHA-256 hex digest of *image_file*.
 
     Returns:
-        The existing :class:`Image`, or None when this file is new here.
-    """
+        The existing :class:`Image`, or None when this file is new here."""
     if checksum is None:
         if image_file is None:
             return None
@@ -100,18 +76,14 @@ def existing_photo_for_upload(
 
 def existing_photo_for_profile(profile: Profile, checksum: str) -> Image | None:
     """Return this uploader's existing row of the same file, on any pin or wiki.
-
-    Same bytes and the same person: a second upload should reuse the stored
-    file rather than charge quota twice. Different bytes (an edited export
-    with the same filename) hash differently and are a new photo.
+    Same bytes and the same person: a second upload should reuse the stored file rather than charge quota twice.
 
     Args:
         profile: The uploading profile.
         checksum: SHA-256 hex digest of the file.
 
     Returns:
-        An existing :class:`Image` with a stored file, or None.
-    """
+        An existing :class:`Image` with a stored file, or None."""
     return Image.objects.filter(profile=profile, checksum=checksum).exclude(image="").order_by("pk").first()
 
 
@@ -157,31 +129,7 @@ def _queue_metadata_conflict(existing: Image, new_row: Image, incoming_caption: 
 
 def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: Profile, caption: str) -> Image:
     """Create a new Image row that reuses *existing*'s stored file.
-
-    Does not copy the bytes, does not charge quota, and does not re-run
-    ``process_image_upload`` (that would rewrite the shared file). Metadata
-    is copied from *existing*; an incoming caption that disagrees is kept on
-    the new row and queued for the owner to pick.
-
-    Also copies ``pending_scan``. Skipping the task means nothing else will
-    ever clear it on this row directly - a still-pending *existing* means the
-    shared stored file is still the uploader's raw bytes, and this new row
-    would otherwise be immediately visible in its own (different) pin/wiki
-    with ``pending_scan`` defaulting False, serving exactly the file the
-    original's own pending state exists to hide. ``tasks._sync_deduped_siblings``
-    clears it here once *existing*'s own processing completes, the same way it
-    already re-points this row at the processed file - and only clears it,
-    never reads it, so it does not matter that ``existing`` itself may be a
-    request-scoped object read before this call.
-
-    ``pending_scan`` is re-read fresh from the database (not taken off
-    *existing* as every other copied field is) to close - not eliminate, but
-    narrow to essentially this one query - the gap between ``existing`` being
-    looked up earlier in the request and this row actually being inserted: if
-    the original's own processing finished and synced its siblings in between,
-    trusting a stale in-memory ``existing.pending_scan`` would create a new
-    sibling nothing will ever revisit (``_sync_deduped_siblings`` only runs
-    once, right when the original's task completes).
+    Skipping the task means nothing else will ever clear it on this row directly - a still-pending *existing* means the shared stored file is still the uploader's raw bytes, and this new row would otherwise be immediately visible in its own (different) pin/wiki with ``pending_scan`` defaulting False, serving exactly the file the original's own pending state exists to hide.
 
     Args:
         existing: The earlier row with the same checksum.
@@ -190,8 +138,7 @@ def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: P
         caption: Caption from this upload, if any.
 
     Returns:
-        The new :class:`Image` row.
-    """
+        The new :class:`Image` row."""
     incoming = caption.strip()
     pending_scan = Image.objects.filter(pk=existing.pk).values_list("pending_scan", flat=True).first()
     if pending_scan is None:
@@ -301,17 +248,12 @@ def resolve_photo_metadata_conflict(conflict, choices: dict[str, int]) -> int:
 def _duplicate_scope(owner: Pin | Wiki | Profile) -> tuple[dict, str]:
     """Return the filter isolating *owner*'s photos, and the noun for the error.
 
-    A Vault (Profile) owner's "own photos" are its unfiled ones - the same
-    bytes already filed to a pin or wiki are a different, legitimate copy to
-    also keep unfiled in the Vault, not a duplicate of it.
-
     Args:
         owner: The Pin, Wiki, or Profile (Vault) being uploaded to.
 
     Returns:
         Tuple of (queryset filter kwargs, the word to use in "already uploaded
-        this photo to this <noun>").
-    """
+        this photo to this <noun>")."""
     if isinstance(owner, Pin):
         return {"pin": owner}, "pin"
     if isinstance(owner, Profile):
@@ -321,16 +263,7 @@ def _duplicate_scope(owner: Pin | Wiki | Profile) -> tuple[dict, str]:
 
 def upload_photo_for_owner(owner: Pin | Wiki | Profile, profile: Profile, image_file: UploadedFile, caption: str = "") -> Image | UploadRejection:
     """Validate and store one uploaded photo against *owner*.
-
-    The duplicate check is per (owner, uploader, checksum): two people may each
-    upload the same photo to a shared wiki, but one person can't upload it to
-    the same place twice. The same person uploading the same bytes to a
-    *different* pin reuses the stored file (``QuotaExemption.DEDUPLICATED``)
-    instead of charging quota twice.
-
-    The quota check and the row insert are taken under ``per_profile_upload_lock``
-    so two concurrent uploads can't both read the same pre-upload usage figure
-    and jointly exceed the profile's quota.
+    The same person uploading the same bytes to a *different* pin reuses the stored file (``QuotaExemption.DEDUPLICATED``) instead of charging quota twice.
 
     Args:
         owner: The Pin, Wiki, or Profile (Vault) to attach the photo to.
@@ -344,12 +277,11 @@ def upload_photo_for_owner(owner: Pin | Wiki | Profile, profile: Profile, image_
         than assume success.
 
 
-    **The caller must enqueue ``tasks.process_image_upload`` for a newly stored
-    row.** Deduplicated copies skip that task: they point at a file that is
-    already (or will be) processed on the original row. Enforced by a test
-    rather than by this function because the task dispatch belongs to the
-    request cycle; see ``test_photo_upload_dispatches_processing.py``.
-    """
+        **The caller must enqueue ``tasks.process_image_upload`` for a newly stored
+        row.** Deduplicated copies skip that task: they point at a file that is
+        already (or will be) processed on the original row. Enforced by a test
+        rather than by this function because the task dispatch belongs to the
+        request cycle; see ``test_photo_upload_dispatches_processing.py``."""
     # Scanned asynchronously instead: prepare_photo_upload below marks the row
     # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
     if (upload_error := image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)) is not None:

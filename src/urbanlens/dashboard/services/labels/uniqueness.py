@@ -1,20 +1,4 @@
-"""One place that answers "would this label name collide?".
-
-`Label` is unique on ``(lower(name), profile, kind)`` (migration 0042). Two things
-follow that every write path needs:
-
-- the check has to be **case-insensitive**, because the constraint is - refusing
-  only exact matches would let "Abandoned" through and then fail at the database
-  with an `IntegrityError`, which reaches the user as a 500;
-- it has to also refuse a *personal* label that shadows a **global** one. That is
-  deliberately wider than the constraint: a global label and a personal label
-  differ in ``profile``, so the database permits both, but the user sees two
-  identically-named labels in one list with no way to tell them apart. Migration
-  0042 merges the pre-existing ones; this stops new ones being made.
-
-Kept separate from ``services.labels.merge`` because it is used on the *write*
-path, before anything exists to merge.
-"""
+"""One place that answers "would this label name collide?". - the check has to be **case-insensitive**, because the constraint is - refusing only exact matches would let "Abandoned" through and then fail at the database with an `IntegrityError`, which reaches the user as a 500; - it has to also refuse a *personal* label that shadows a **global** one."""
 
 from __future__ import annotations
 
@@ -50,11 +34,9 @@ def find_conflicting_label(*, profile: Profile, name: str, kind: str, exclude_pk
     candidates = Label.objects.filter(Q(profile=profile) | Q(profile__isnull=True), name__iexact=cleaned, kind=kind)
     if exclude_pk is not None:
         candidates = candidates.exclude(pk=exclude_pk)
-    # Own labels first: "you already have a tag called X" is more actionable than
-    # naming a global label the user cannot edit. A global label has
-    # ``profile IS NULL``, and ``nulls_last`` puts those after real ids.
-    # `order_by("profile__isnull")` is not an option - Django rejects `isnull` as
-    # an ordering lookup.
+    # Own labels first: "you already have a tag called X" is more actionable than naming a global
+    # label the user cannot edit.
+    # A global label has ``profile IS NULL``, and ``nulls_last`` puts those after real ids.
     return candidates.order_by(F("profile").asc(nulls_last=True)).first()
 
 

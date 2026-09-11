@@ -1,21 +1,5 @@
 """Equivalence-group resolution and admin mutations over the tag vocabulary.
-
-Two distinct provider tags (OSM ``amenity=restaurant``, Overture
-``building_subtype=restaurant``) can describe the same real-world concept.
-This module decides, for one Place's actual tags, which ones are equivalent
-and which single tag to show - and gives the admin page the mutations
-(create/join/leave a group, change the preferred member) it needs.
-
-Two ways two vocabulary entries end up equivalent:
-
-- **Explicit**: an admin (or a confirmed "suggested" match) put them in the
-  same :class:`ExternalTagGroup`. Always wins, even for a single-member
-  ("singleton") group - the only way an admin can veto a coincidental
-  default match is to give the colliding entries separate explicit groups.
-- **Default**: neither has an explicit group, and they humanize to the same
-  display text (see :func:`default_group_key`). Applies automatically, with
-  no persisted record, to any two ungrouped entries regardless of source.
-"""
+Always wins, even for a single-member ("singleton") group - the only way an admin can veto a coincidental default match is to give the colliding entries separate explicit groups. - **Default**: neither has an explicit group, and they humanize to the same display text (see :func:`default_group_key`)."""
 
 from __future__ import annotations
 
@@ -35,12 +19,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.place.external_tag import PlaceExternalTag
     from urbanlens.dashboard.models.place.model import Place
 
-# The whole vocabulary table, materialized. Small and admin-curated (see the
-# module docstring) but reloaded on every search keystroke through
-# matching_vocabulary()/tag_match_q() - once per term, per provider - so it is
-# worth caching wholesale rather than per-query. Invalidated explicitly by
-# _invalidate_vocabulary_cache() rather than left to the default TTL: a write
-# must be visible on the very next call, not up to five minutes later.
+# The whole vocabulary table, materialized.
+# Small and admin-curated (see the module docstring) but reloaded on every search keystroke through
+# matching_vocabulary()/tag_match_q() - once per term, per provider - so it is worth caching
+# wholesale rather than per-query.
 _VOCABULARY_CACHE_KEY = "external_tag_vocabulary:all"
 
 
@@ -58,26 +40,13 @@ def _cached_vocabulary_entries() -> list[ExternalTagVocabularyEntry]:
 
 
 def _invalidate_vocabulary_cache() -> None:
-    """Drop the cached vocabulary table so the next read reloads it.
-
-    Call this from anything that changes an entry's group membership or
-    preference, or that changes which groups exist - not just the three
-    obvious admin actions below: :meth:`PlaceExternalTag.sync_for_source`
-    also writes new rows here (see ``ExternalTagVocabularyEntry``'s
-    docstring) and invalidates through this same helper.
-    """
+    """Drop the cached vocabulary table so the next read reloads it."""
     cache.delete(_VOCABULARY_CACHE_KEY)
 
 
 class ExternalTagGroupError(Exception):
     """A mapping action was refused.
-
-    The message is for logs, not the response: an HTTP-facing caller should
-    catch a specific subclass below (or this base class as a fallback) and
-    author its own user-facing text, rather than relaying the message - that
-    keeps a future raise site here from being able to smuggle unreviewed text
-    into a response just by adding a new ``raise``.
-    """
+    The message is for logs, not the response: an HTTP-facing caller should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class EmptySelectionError(ExternalTagGroupError):
@@ -103,47 +72,29 @@ class EntryNotInGroupError(ExternalTagGroupError):
 def default_group_key(value: str) -> str:
     """The default-matching key for a tag value: its normalized display text.
 
-    Two ungrouped entries with the same key are treated as equivalent with
-    no admin action required - this is what makes two providers both
-    reporting "Restaurant" collapse to one chip out of the box.
-
     Args:
         value: A raw tag value (not yet humanized).
 
     Returns:
-        The case-folded, trimmed humanized value.
-    """
+        The case-folded, trimmed humanized value."""
     return humanize_tag_value(value).strip().lower()
 
 
 def _bucket_key(entry: ExternalTagVocabularyEntry) -> str:
-    """The equivalence-bucket key for one vocabulary entry.
-
-    Shared by :func:`visible_tags_for_place` (resolving what to *show*) and
-    :func:`matching_vocabulary` (resolving what a search term *reaches*) -
-    both are the same "which tags count as the same thing" question, just
-    run in opposite directions.
-    """
+    """The equivalence-bucket key for one vocabulary entry."""
     return f"group:{entry.group_id}" if entry.group_id else f"value:{default_group_key(entry.value)}"
 
 
 def visible_tags_for_place(place: Place) -> list[PlaceExternalTag]:
     """One representative :class:`PlaceExternalTag` per equivalence group on ``place``.
-
-    Only ever compares tags ``place`` actually has - dedup is between tags on
-    the same place, so there's no need to know about a group's other members
-    elsewhere. Within a group of 2+ tags this place carries, the vocabulary
-    entry marked ``is_preferred`` wins if that specific tag is present here;
-    otherwise the first tag in the existing ``-is_primary, source, key``
-    order is kept.
+    Only ever compares tags ``place`` actually has - dedup is between tags on the same place, so there's no need to know about a group's other members elsewhere.
 
     Args:
         place: The place whose tags to resolve.
 
     Returns:
         A subset of ``place.external_tags.all()``, in the same relative
-        order, with equivalent tags collapsed to one each.
-    """
+        order, with equivalent tags collapsed to one each."""
     rows = list(place.external_tags.all())
     if not rows:
         return rows
@@ -189,14 +140,10 @@ class SuggestedCluster:
 
 def suggested_clusters() -> list[SuggestedCluster]:
     """Currently-ungrouped entries clustered by default-matching key.
-
-    Computed live, never persisted - an admin can "confirm" a cluster into a
-    real :class:`ExternalTagGroup` via :func:`create_group`, or leave it: the
-    default match keeps applying either way.
+    Computed live, never persisted - an admin can "confirm" a cluster into a real :class:`ExternalTagGroup` via :func:`create_group`, or leave it: the default match keeps applying either way.
 
     Returns:
-        Clusters with 2 or more members, ordered by key.
-    """
+        Clusters with 2 or more members, ordered by key."""
     clusters: dict[str, list[ExternalTagVocabularyEntry]] = {}
     for entry in ExternalTagVocabularyEntry.objects.ungrouped():
         clusters.setdefault(default_group_key(entry.value), []).append(entry)
@@ -205,19 +152,14 @@ def suggested_clusters() -> list[SuggestedCluster]:
 
 def _loosely_contains(haystack: str, needle: str) -> bool:
     """Substring match tolerant of a simple trailing-``s`` plural mismatch.
-
-    Exists so searching "restaurants" finds a tag whose humanized value is
-    "Restaurant" - plain ``in`` fails there since the longer word is never a
-    substring of the shorter one. Deliberately not a general stemmer: one
-    trailing-``s`` strip, used only for tag search matching.
+    Exists so searching "restaurants" finds a tag whose humanized value is "Restaurant" - plain ``in`` fails there since the longer word is never a substring of the shorter one.
 
     Args:
         haystack: Lowercased text to search within.
         needle: Lowercased search term.
 
     Returns:
-        Whether ``needle`` (or its de-pluralized form) appears in ``haystack``.
-    """
+        Whether ``needle`` (or its de-pluralized form) appears in ``haystack``."""
     if not needle:
         return False
     if needle in haystack:
@@ -228,14 +170,7 @@ def _loosely_contains(haystack: str, needle: str) -> bool:
 
 def matching_vocabulary(term: str) -> list[ExternalTagVocabularyEntry]:
     """Every vocabulary entry equivalent to any entry whose display text matches ``term``.
-
-    "Equivalent" is the same bucketing :func:`visible_tags_for_place` uses -
-    an explicit group, or a shared :func:`default_group_key` - run in the
-    opposite direction: starting from a search term rather than a place's
-    tags. This is what makes searching one provider's wording (e.g. OSM's
-    "amenity=restaurant") also reach an admin-grouped equivalent from another
-    provider (Overture's "building_subtype=restaurant"), the same way the
-    wiki chip already collapses them to one.
+    "Equivalent" is the same bucketing :func:`visible_tags_for_place` uses - an explicit group, or a shared :func:`default_group_key` - run in the opposite direction: starting from a search term rather than a place's tags.
 
     Args:
         term: A single search token (already lowercased or not - normalized
@@ -243,8 +178,7 @@ def matching_vocabulary(term: str) -> list[ExternalTagVocabularyEntry]:
 
     Returns:
         Matching entries across every matched equivalence bucket. Empty for
-        a blank term or no match.
-    """
+        a blank term or no match."""
     normalized = term.strip().lower()
     if not normalized:
         return []
@@ -284,11 +218,6 @@ def tag_match_q(term: str, path: str) -> Q:
 def create_group(entry_ids: Sequence[int], *, preferred_id: int | None = None) -> ExternalTagGroup:
     """Create a new group containing the given vocabulary entries.
 
-    A single entry is allowed - it creates a singleton group, which is how an
-    admin vetoes a coincidental default match (see the module docstring):
-    the entry now has an explicit group, so :func:`visible_tags_for_place`
-    stops applying default same-text matching to it.
-
     Args:
         entry_ids: Vocabulary entry ids to group together. Must have at
             least 1 entry, none of which already belong to a group.
@@ -302,8 +231,7 @@ def create_group(entry_ids: Sequence[int], *, preferred_id: int | None = None) -
         EmptySelectionError: ``entry_ids`` was empty.
         UnknownVocabularyEntryError: One or more ids don't resolve to an
             existing entry.
-        AlreadyGroupedError: One or more entries already belong to a group.
-    """
+        AlreadyGroupedError: One or more entries already belong to a group."""
     if len(entry_ids) < 1:
         raise EmptySelectionError("create_group called with an empty entry_ids.")
 
@@ -328,13 +256,6 @@ def create_group(entry_ids: Sequence[int], *, preferred_id: int | None = None) -
 def move_entry(entry_id: int, target_group_id: int | None) -> int | None:
     """Move one entry to a different group, or ungroup it (``target_group_id=None``).
 
-    Covers every drag-and-drop outcome on the admin page: dropped onto a
-    group's list (join it), dragged straight from one group's list to
-    another's (leave the first, join the second), or dropped back on the
-    "Ungrouped" pool (leave whichever group it was in). Always joins as a
-    non-preferred member - use :func:`set_preferred` to change that
-    afterward.
-
     Args:
         entry_id: The vocabulary entry to move.
         target_group_id: The group to join, or ``None`` to ungroup.
@@ -346,8 +267,7 @@ def move_entry(entry_id: int, target_group_id: int | None) -> int | None:
 
     Raises:
         UnknownVocabularyEntryError: ``entry_id`` doesn't exist.
-        UnknownGroupError: ``target_group_id`` was given but doesn't exist.
-    """
+        UnknownGroupError: ``target_group_id`` was given but doesn't exist."""
     entry = ExternalTagVocabularyEntry.objects.filter(pk=entry_id).first()
     if entry is None:
         raise UnknownVocabularyEntryError(f"move_entry: entry_id {entry_id} does not exist.")
@@ -365,10 +285,9 @@ def move_entry(entry_id: int, target_group_id: int | None) -> int | None:
     entry.group = target_group
     entry.is_preferred = False
     entry.save(update_fields=["group", "is_preferred", "updated"])
-    # Covers the old-group-delete branch below too: that deletion never
-    # changes any surviving entry's bucket by itself (the group was already
-    # empty), so one invalidation here - for the group_id change just saved -
-    # is enough for both outcomes.
+    # Covers the old-group-delete branch below too: that deletion never changes any surviving
+    # entry's bucket by itself (the group was already empty), so one invalidation here - for the
+    # group_id change just saved - is enough for both outcomes.
     _invalidate_vocabulary_cache()
 
     if old_group is not None and not old_group.members.exists():

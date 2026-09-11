@@ -1,14 +1,5 @@
 """Per-mode strategy registry - the single place a new SpotGuessr mode is wired in.
-
-Before this module existed, adding a mode meant editing an if/elif chain in
-three separate places that all had to agree on the same mode list: round
-generation (``services.spotguessr.session.get_or_create_round``), round
-serialization (``services.spotguessr.serializers.serialize_round``), and the
-photo-feedback "does this round even have visual content" gate
-(``services.spotguessr.relevance``). Adding a fourth mode now means adding one
-``ModeStrategy`` entry to ``_STRATEGIES`` below - everything else reads the
-registry instead of repeating its own copy of the mode list.
-"""
+Adding a fourth mode now means adding one ``ModeStrategy`` entry to ``_STRATEGIES`` below - everything else reads the registry instead of repeating its own copy of the mode list."""
 
 from __future__ import annotations
 
@@ -93,14 +84,9 @@ def _build_photos(location: Location, config: GameConfig, participants: list[Pro
 
 
 def _serialize_photos(round_: GameRound, data: dict[str, Any]) -> None:
-    # Only the image itself. The photo's caption is deliberately NOT included:
-    # it is EXIF/IPTC-derived and routinely reads "Old Mill House, Troy NY",
-    # i.e. it names the answer outright. The web client never rendered it, so
-    # the leak was invisible from the UI while sitting in the JSON the whole
-    # time - and a scriptable JSON API turns that into a lookup table for the
-    # whole game. It now rides on the *reveal* payloads instead (see
-    # ``services.spotguessr.serializers.serialize_reveal``), where the answer
-    # is already public.
+    # Only the image itself.
+    # The photo's caption is deliberately NOT included: it is EXIF/IPTC-derived and routinely reads
+    # "Old Mill House, Troy NY", i.e. it names the answer outright.
     if round_.image_id and round_.image is not None and round_.image.image:
         data["image_url"] = round_.image.image.url
 

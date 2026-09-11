@@ -1,17 +1,5 @@
 """AI-generated trivia questions mined from wiki article content.
-
-Every wiki already implies at least one profile can see it (a Wiki only
-ever exists because its creator had pinned that location - see
-``services.wiki.wiki_access``'s visibility rule) - so, unlike a per-viewer
-request, this background generator needs no additional profile-scoping
-before reading a wiki's article text.
-
-Generated questions are classified by the exact same
-``services.trivia.classifier`` used for user submissions before ever being
-persisted - a rejected candidate was never shown to anyone, so (unlike a
-user's own rejected submission) there is no "show it back to the author
-very rarely" leniency to apply here; it is simply discarded.
-"""
+Every wiki already implies at least one profile can see it (a Wiki only ever exists because its creator had pinned that location - see ``services.wiki.wiki_access``'s visibility rule) - so, unlike a per-viewer request, this background generator needs no additional profile-scoping before reading a wiki's article text."""
 
 from __future__ import annotations
 
@@ -59,11 +47,7 @@ If the article doesn't contain enough concrete facts to write a good question, r
 
 def generate_questions_for_wiki(wiki: Wiki) -> list[TriviaQuestion]:
     """Generate, classify, and persist approved AI trivia questions from one wiki's article.
-
-    Idempotent per location: a location that already has at least one
-    AI_GENERATED question is skipped entirely, so this is safe to call
-    repeatedly (e.g. from a periodic sweep) without regenerating or
-    re-spending tokens on the same wiki.
+    Idempotent per location: a location that already has at least one AI_GENERATED question is skipped entirely, so this is safe to call repeatedly (e.g. from a periodic sweep) without regenerating or re-spending tokens on the same wiki.
 
     Args:
         wiki: The wiki to mine for trivia questions.
@@ -71,8 +55,7 @@ def generate_questions_for_wiki(wiki: Wiki) -> list[TriviaQuestion]:
     Returns:
         Every newly-created (APPROVED) question - empty if the wiki was
         skipped (no substantial content, already generated, AI unavailable)
-        or nothing survived classification.
-    """
+        or nothing survived classification."""
     if TriviaQuestion.objects.filter(location=wiki.location, source=TriviaQuestionSource.AI_GENERATED).exists():
         return []
     if not wiki.description or len(wiki.description) < MIN_DESCRIPTION_LENGTH:
@@ -122,14 +105,11 @@ def generate_questions_for_wiki(wiki: Wiki) -> list[TriviaQuestion]:
 def sweep_wikis_for_generation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) -> dict[str, int]:
     """Generate AI trivia questions for a bounded batch of not-yet-processed wikis.
 
-    Called from a scheduled Celery task (``tasks.run_scheduled_trivia_generation``).
-
     Args:
         batch_size: Maximum number of wikis to consider in this run.
 
     Returns:
-        ``{"wikis_considered": int, "questions_created": int}``.
-    """
+        ``{"wikis_considered": int, "questions_created": int}``."""
     from urbanlens.dashboard.models.wiki.model import Wiki
 
     already_generated_location_ids = TriviaQuestion.objects.filter(source=TriviaQuestionSource.AI_GENERATED).values_list("location_id", flat=True)

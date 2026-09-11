@@ -1,21 +1,4 @@
-"""Backend support for the beta pin/wiki "time slider": OHM coverage plus per-year features.
-
-This is a deliberate stopgap ahead of REData's own future temporal-imagery
-endpoint (not built yet) - see ``services.apis.locations.open_historical_map``'s
-module docstring for the fuller framing (this project's precedent of a direct
-integration later being retired once REData ships the equivalent).
-
-Two concerns live here:
-
-* :class:`OhmTemporalCoveragePanelSource` is a background panel (registered
-  via ``plugins.builtin.open_historical_map``) that answers, once per
-  Location, "does OpenHistoricalMap have any dated coverage nearby, and for
-  which years" - it renders nothing itself.
-* :func:`temporal_slider_years` reads that panel's cached answer to decide
-  whether a viewer should see the slider at all, and :func:`get_temporal_features`
-  fetches (and per-year caches) the actual GeoJSON the slider overlays on the
-  map once a viewer picks a year.
-"""
+"""Backend support for the beta pin/wiki "time slider": OHM coverage plus per-year features."""
 
 from __future__ import annotations
 
@@ -42,22 +25,15 @@ OHM_COVERAGE_CACHE_SOURCE = "ohm_temporal_coverage"
 
 class OhmTemporalCoveragePanelSource(LocationCachePanelSource):
     """Whether OpenHistoricalMap has dated coverage near a pin's location, and for which years.
-
-    Purely a background data source - it has no tab/template of its own (it
-    is not an :class:`~urbanlens.dashboard.services.pins.external_data.InfoPanelSource`),
-    so it never appears in the pin detail tab strip. Its only consumer is
-    :func:`temporal_slider_years`.
-    """
+    Purely a background data source - it has no tab/template of its own (it is not an :class:`~urbanlens.dashboard.services.pins.external_data.InfoPanelSource`), so it never appears in the pin detail tab strip."""
 
     key = "ohm_temporal_coverage"
     cache_source = OHM_COVERAGE_CACHE_SOURCE
 
-    # Deliberately no `required_feature` here: this source is a background-only
-    # LocationCache panel (not an InfoPanelSource, no api_kinds), so it never
-    # reaches the tab strip or the external API - `required_feature` would sit
-    # unread by both surfaces panel_visible_to() actually gates. The real
-    # BETA_FEATURES check lives where the data is shown: temporal_slider_years()
-    # below and the temporal-imagery view (controllers/temporal_imagery.py).
+    # Deliberately no `required_feature` here: this source is a background-only LocationCache panel
+    # (not an InfoPanelSource, no api_kinds), so it never reaches the tab strip or the external API
+    # - `required_feature` would sit unread by both surfaces panel_visible_to() actually gates.
+    # The real BETA_FEATURES check lives where the data is shown: temporal_slider_years() below and
 
     def gate(self, pin: Pin) -> bool:
         """Skip pins with no usable coordinates - mirrors ``CoordinateGatedInfoPanelSource``."""
@@ -65,16 +41,7 @@ class OhmTemporalCoveragePanelSource(LocationCachePanelSource):
 
     def fetch(self, pin: Pin) -> None:
         """Query OHM for dated coverage near the pin and cache the result.
-
-        A transient failure (network/timeout/malformed response) is logged
-        and left uncached so the next scheduled fetch retries it - a
-        temporary outage is not the same fact as "confirmed no coverage",
-        matching how ``RedataSatelliteProvider`` distinguishes the two (see
-        ``plugins.builtin.satellite_imagery``). A successful query is always
-        cached, even when it found nothing nearby: an explicit empty result is
-        still a real answer, and caching it is what stops this from re-querying
-        OHM on every cycle.
-        """
+        A transient failure (network/timeout/malformed response) is logged and left uncached so the next scheduled fetch retries it - a temporary outage is not the same fact as "confirmed no coverage", matching how ``RedataSatelliteProvider`` distinguishes the two (see ``plugins.builtin.satellite_imagery``)."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         try:
@@ -89,10 +56,6 @@ class OhmTemporalCoveragePanelSource(LocationCachePanelSource):
 def temporal_slider_years(location: Location | None, user: AbstractBaseUser | AnonymousUser) -> list[int]:
     """Years the beta time slider should offer for ``location``, or ``[]`` to hide it entirely.
 
-    The one place both the pin-detail and wiki controllers call to decide
-    whether to render the slider at all - do not duplicate this logic at
-    either call site.
-
     Args:
         location: The location being viewed, or None (e.g. a pin with no
             Location).
@@ -102,8 +65,7 @@ def temporal_slider_years(location: Location | None, user: AbstractBaseUser | An
         Sorted distinct years, or ``[]`` when the viewer lacks
         ``BETA_FEATURES``, the coverage panel has never run (or its result has
         gone stale) for this location, or it ran and OHM had no dated coverage
-        nearby.
-    """
+        nearby."""
     if location is None or not user_has_feature(user, SiteFeature.BETA_FEATURES):
         return []
 
@@ -118,15 +80,7 @@ def temporal_slider_years(location: Location | None, user: AbstractBaseUser | An
 
 def get_temporal_features(location: Location, year: int) -> dict[str, Any]:
     """A GeoJSON FeatureCollection of OHM features near ``location`` as of ``year``.
-
-    Cached per year using a *per-year* ``LocationCache`` source string
-    (``f"ohm_features_{year}"``) rather than one fixed source with
-    ``query_key=str(year)``: ``LocationCache.get_fresh``/``set`` both key
-    uniqueness on ``(location, source)`` alone - ``query_key`` plays no part in
-    the lookup (see ``models.cache.location_cache.LocationCache``) - so a
-    single shared source across years would silently overwrite/misread
-    whichever year was cached last. This trades one row per (location, year)
-    ever viewed for correctness.
+    Cached per year using a *per-year* ``LocationCache`` source string (``f"ohm_features_{year}"``) rather than one fixed source with ``query_key=str(year)``: ``LocationCache.get_fresh``/``set`` both key uniqueness on ``(location, source)`` alone - ``query_key`` plays no part in the lookup (see ``models.cache.location_cache.LocationCache``) - so a single shared source across years would silently overwrite/misread whichever year was cached last.
 
     Args:
         location: The location to query around.
@@ -139,8 +93,7 @@ def get_temporal_features(location: Location, year: int) -> dict[str, Any]:
         features that year".
 
     Raises:
-        ValueError: ``year`` is outside the plausible ``MIN_YEAR``-``MAX_YEAR`` range.
-    """
+        ValueError: ``year`` is outside the plausible ``MIN_YEAR``-``MAX_YEAR`` range."""
     if not MIN_YEAR <= year <= MAX_YEAR:
         raise ValueError(f"year must be between {MIN_YEAR} and {MAX_YEAR}, got {year}")
 

@@ -1,12 +1,5 @@
 """Applying a completed round's results to Glicko-2 ratings.
-
-Mirrors ``services.spotguessr.ratings.apply_round_ratings`` exactly, reusing
-``services.spotguessr.glicko2``'s pure math directly rather than
-reimplementing it. A round is one rating period for both the players and the
-question, treating "answered correctly" as score 1.0 and "answered
-incorrectly" as score 0.0 - a binary outcome, unlike SpotGuessr's continuous
-distance-based fraction, but the same player-skill/content-difficulty pairing.
-"""
+Mirrors ``services.spotguessr.ratings.apply_round_ratings`` exactly, reusing ``services.spotguessr.glicko2``'s pure math directly rather than reimplementing it."""
 
 from __future__ import annotations
 
@@ -20,21 +13,16 @@ from urbanlens.dashboard.services.spotguessr import glicko2
 @transaction.atomic
 def apply_round_ratings(round_: TriviaRound, answers: list[TriviaAnswer]) -> None:
     """Update every participant's PlayerTriviaRating and the round's TriviaQuestionRating.
-
-    Must be called exactly once per round, after every participant has
-    answered - calling it twice would double-count the round as two rating
-    periods. ``services.trivia.session.submit_answer`` is the only caller
-    and enforces this.
-    """
+    ``services.trivia.session.submit_answer`` is the only caller and enforces this."""
     if not answers:
         return
 
     now = timezone.now()
     question_rating = TriviaQuestionRating.objects.get_or_create_for(round_.question)
-    # Locked first, before any player row: this is the row two rounds contend for
-    # (the same question asked in two sessions at once), and taking the shared row
-    # first gives every caller one lock order. Without it both rounds compute from
-    # the same question_before and the second save discards the first round entirely.
+    # Locked first, before any player row: this is the row two rounds contend for (the same question
+    # asked in two sessions at once), and taking the shared row first gives every caller one lock
+    # order.
+    # Without it both rounds compute from the same question_before and the second save discards the
     question_rating.refresh_from_db(from_queryset=TriviaQuestionRating.objects.select_for_update())
     # Both sides of this round's update must see the question's rating
     # *before* any of this round's answers touch it - captured once, up front.

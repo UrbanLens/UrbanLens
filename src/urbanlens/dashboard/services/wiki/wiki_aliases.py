@@ -22,16 +22,7 @@ if TYPE_CHECKING:
 
 def alias_is_current_name(alias: WikiAlias, wiki: Wiki | None) -> bool:
     """Whether *alias* is the name the wiki currently goes by.
-
-    The comparison is loose - :func:`normalize_name_for_comparison` folds case,
-    spacing and punctuation - because that is the same rule the alias uniqueness
-    constraint and the "you can't delete the current name" guard use. A stricter
-    comparison here would let a UI show two aliases that the delete guard treats
-    as one, and the user would be told they cannot remove a name that is not
-    visibly the current one.
-
-    *wiki* is passed in rather than read off ``alias.wiki`` so that flagging a
-    whole list of aliases costs no per-row query.
+    The comparison is loose - :func:`normalize_name_for_comparison` folds case, spacing and punctuation - because that is the same rule the alias uniqueness constraint and the "you can't delete the current name" guard use.
 
     Args:
         alias: The alias under consideration.
@@ -39,8 +30,7 @@ def alias_is_current_name(alias: WikiAlias, wiki: Wiki | None) -> bool:
             hand (in which case nothing can be the current name).
 
     Returns:
-        True when *alias* names the wiki as it currently stands.
-    """
+        True when *alias* names the wiki as it currently stands."""
     if wiki is None:
         return False
     current = normalize_name_for_comparison(wiki.name)
@@ -49,27 +39,7 @@ def alias_is_current_name(alias: WikiAlias, wiki: Wiki | None) -> bool:
 
 def promote_wiki_alias_to_name(wiki: Wiki, profile: Profile, alias: WikiAlias) -> WikiEdit | None:
     """Make *alias* the wiki's community name, recording it in the edit history.
-
-    Promoting the alias that is *already* the name is a no-op rather than an
-    error: "use this name" is an idempotent statement of intent, and a client
-    that retries a request whose response it never saw must not be punished for
-    it. ``apply_wiki_edit`` supplies that behavior by refusing to record a
-    change whose new value equals the old one. Note that comparison is exact
-    while :func:`alias_is_current_name` is loose, and the gap between them is
-    reachable: the alias table cannot hold two names differing only in case, but
-    the *wiki's* name can drift out of case with its alias (a PATCH rename
-    touches no alias row). Such an alias reads as current and promoting it still
-    records an edit, which is right - recasing a place's name is a deliberate
-    change to how it is displayed.
-
-    The outgoing name is re-asserted as an alias first. ``Wiki.save()`` already
-    ensures an alias row for whatever name is being set, and the outgoing name
-    got its own row the same way when it was set - so in practice this is a
-    no-op ``get_or_create``. It is here anyway because losing the previous name
-    is unrecoverable (nothing else records it) and preventing that costs one
-    indexed lookup. ``created_by`` is left unset: the outgoing name was not
-    contributed by whoever is renaming away from it, and claiming otherwise
-    would put a wrong name on the attribution.
+    Promoting the alias that is *already* the name is a no-op rather than an error: "use this name" is an idempotent statement of intent, and a client that retries a request whose response it never saw must not be punished for it.
 
     Args:
         wiki: The wiki to rename. Mutated and saved in place.
@@ -86,15 +56,13 @@ def promote_wiki_alias_to_name(wiki: Wiki, profile: Profile, alias: WikiAlias) -
         WikiEditValidationError: Never in practice - ``apply_wiki_edit``
             validates only security levels, dates and description length, and
             ``name`` is none of them - but propagated rather than swallowed so a
-            future rule added there is not silently ignored here.
-    """
+            future rule added there is not silently ignored here."""
     outgoing = (wiki.name or "").strip()
     if is_meaningful_name(outgoing):
         try:
-            # atomic() gives the IntegrityError its own savepoint: without it, a
-            # concurrent writer winning this race would leave the surrounding
-            # transaction unusable, and the caller could not even build its
-            # response afterwards.
+            # atomic() gives the IntegrityError its own savepoint: without it, a concurrent writer
+            # winning this race would leave the surrounding transaction unusable, and the caller
+            # could not even build its response afterwards.
             with transaction.atomic():
                 # Case-insensitive lookup matches the alias uniqueness rule, so
                 # a differently-cased row already covering this name is reused

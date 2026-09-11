@@ -1,12 +1,5 @@
 """Resolving coordinates onto places, and keeping that cache honest.
-
-``Location.place`` is a cache, not an identity. It answers "what is this
-coordinate standing on?" and is recomputed whenever the answer could have
-changed - a provider corrects a parcel outline, a building footprint arrives,
-a split lands. Nothing keyed off ``Location`` (pin provenance, share exposure,
-wiki routing) is disturbed when it moves, which is the whole reason place
-membership is resolved rather than stored as an FK users' data depends on.
-"""
+Nothing keyed off ``Location`` (pin provenance, share exposure, wiki routing) is disturbed when it moves, which is the whole reason place membership is resolved rather than stored as an FK users' data depends on."""
 
 from __future__ import annotations
 
@@ -26,11 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_location_place(location: Location, *, save: bool = True) -> Place | None:
-    """Resolve which place a Location's coordinate sits on.
-
-    Never calls a provider - it only asks what is already known. Provisioning
-    new geometry is :mod:`services.places.provisioning`'s job, so page renders
-    and bulk re-resolution can call this freely.
+    """Resolve which place a Location's coordinate sits on. Never calls a provider - it only asks what is already known.
 
     Args:
         location: The Location to resolve.
@@ -38,24 +27,19 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
 
     Returns:
         The most specific current place containing the coordinate, or None
-        when it is on no known parcel or building.
-    """
+        when it is on no known parcel or building."""
     place = Place.objects.resolve_for_point(location.latitude, location.longitude)
     if save and location.place_id != (place.pk if place else None):
-        # Deliberately not stamped when the answer is unchanged, and in
-        # particular not when it is "no known place". ``place_resolved_at`` is
-        # what ``services.locations.boundaries.generation_status`` reads as
-        # "the provider chain has run here", and this function calls no
-        # provider - so stamping an unresolved coordinate told the scheduler
-        # that REData had already been asked about ground nothing had ever
-        # looked at, and it was never asked again until the row went stale.
-        # The chain stamps its own genuine miss in ``generate_location_boundaries``.
+        # Deliberately not stamped when the answer is unchanged, and in particular not when it is
+        # "no known place".
+        # ``place_resolved_at`` is what ``services.locations.boundaries.generation_status`` reads as
+        # "the provider chain has run here", and this function calls no provider - so stamping an
         stamped = timezone.now()
         Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=stamped)
         # Mirrored onto the instance because callers act on it immediately:
-        # ``generate_location_boundaries`` reads this attribute right after
-        # provisioning to decide whether to record a miss, and a stale None
-        # there makes it clear the place that was just resolved.
+        # ``generate_location_boundaries`` reads this attribute right after provisioning to decide
+        # whether to record a miss, and a stale None there makes it clear the place that was just
+        # resolved.
         location.place_resolved_at = stamped
     location.place = place
     return place
@@ -63,11 +47,7 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
 
 def resolve_locations_in(polygon, *, exclude_place: Place | None = None) -> int:
     """Re-resolve every Location whose coordinate falls inside a polygon.
-
-    Called after any change that could move locations between places: new or
-    corrected geometry, a new building footprint carving itself out of its
-    parcel, a split. Scoped by polygon so a boundary refresh never walks the
-    whole table.
+    Scoped by polygon so a boundary refresh never walks the whole table.
 
     Args:
         polygon: The area to re-resolve within; None is tolerated (no-op).
@@ -75,8 +55,7 @@ def resolve_locations_in(polygon, *, exclude_place: Place | None = None) -> int:
             caller knows their answer cannot have changed.
 
     Returns:
-        How many locations changed place.
-    """
+        How many locations changed place."""
     if polygon is None:
         return 0
     candidates = Location.objects.filter(point__within=polygon)
@@ -95,17 +74,13 @@ def resolve_locations_in(polygon, *, exclude_place: Place | None = None) -> int:
 
 def refresh_area(place: Place) -> float | None:
     """Recompute and store a place's cached area in square metres.
-
-    The area is what makes "most specific wins" an indexed sort rather than a
-    PostGIS computation per candidate per request, so it has to be refreshed
-    with the geometry it describes.
+    The area is what makes "most specific wins" an indexed sort rather than a PostGIS computation per candidate per request, so it has to be refreshed with the geometry it describes.
 
     Args:
         place: The place whose geometry has just changed.
 
     Returns:
-        The area in square metres, or None when the place has no geometry.
-    """
+        The area in square metres, or None when the place has no geometry."""
     if place.geometry is None:
         Place.objects.filter(pk=place.pk).update(area_sqm=None)
         place.area_sqm = None
@@ -120,13 +95,9 @@ def refresh_area(place: Place) -> float | None:
 def attach_location(location: Location, place: Place | None) -> None:
     """Point a Location at a place without re-running containment.
 
-    For callers that already know the answer - the bulk building import knows
-    exactly which footprint it just created a pin for.
-
     Args:
         location: The Location to update.
-        place: The resolved place, or None to clear.
-    """
+        place: The resolved place, or None to clear."""
     Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=timezone.now())
     location.place = place
     location.place_resolved_at = timezone.now()

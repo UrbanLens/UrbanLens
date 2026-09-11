@@ -1,31 +1,5 @@
 """Server-side page context resolution (plan §9, batch 3).
-
-The client sends only its own URL path (``location.pathname``, query string
-stripped server-side) - never DOM text, never an object id beyond what the
-URL itself already names. :func:`resolve_page_context` resolves that path
-the same way Django would for the request that rendered it
-(``django.urls.resolve()``), then re-runs the *same* access check the page's
-own view would before returning an object id - a spoofed or unresolvable
-path resolves to nothing (never an error), and a URL naming an object the
-requesting profile can't see resolves to nothing too, never that object.
-Both failure modes look identical to a caller: ``None``.
-
-Only a handful of pages are wired up so far - the ones with an existing,
-already-tested access-check entry point this module can call straight
-through (:func:`Pin.objects.by_profile`, :func:`get_trip_for_viewer`). Pages
-whose access check needs researching first (wikis - the plan names
-``visible_wiki_location_ids_cached``, which lives on a queryset this module
-hasn't audited yet) are deliberately not registered here; ``resolve_page_context``
-already returns ``None`` for anything unregistered, so adding one later is
-purely additive.
-
-Nothing here is wired to any tool yet: no shipped tool declares
-``needs_page=True`` on its :class:`~services.ai.tools.registry.ToolSpec`
-(that starts in batch 4, per the plan). This module - and getting its result
-onto :attr:`~services.ai.tools.registry.ToolContext.page` - exists so a page
-tool, when one ships, only has to ask "what kind of object is context.page"
-rather than waiting on this resolution machinery to be built too.
-"""
+The client sends only its own URL path (``location.pathname``, query string stripped server-side) - never DOM text, never an object id beyond what the URL itself already names. :func:`resolve_page_context` resolves that path the same way Django would for the request that rendered it (``django.urls.resolve()``), then re-runs the *same* access check the page's own view would before returning an object id - a spoofed or unresolvable path resolves to nothing (never an error), and a URL naming an object the requesting profile can't see resolves to nothing too, never that object."""
 
 from __future__ import annotations
 
@@ -77,10 +51,10 @@ class _ObjectLoader(Protocol):
 class _PageResolver:
     #: None for a page with no single object of its own (e.g. the map).
     load_object: _ObjectLoader | None = None
-    #: The "kind" load_object's own PageObject carries, when load_object is
-    #: set. Must have a matching _EXISTENCE_CHECKS entry - a mismatch means
-    #: verify_page_object always refuses this page's object, silently
-    #: dropping it on every turn (see test_every_resolver_with_an_object_kind_has_a_verification_check).
+    #: The "kind" load_object's own PageObject carries, when load_object is set.
+    #: Must have a matching _EXISTENCE_CHECKS entry - a mismatch means verify_page_object always
+    #: refuses this page's object, silently dropping it on every turn (see
+    #: test_every_resolver_with_an_object_kind_has_a_verification_check).
     object_kind: str | None = None
 
 
@@ -159,10 +133,10 @@ def _pin_still_visible(profile: Profile, obj_id: int) -> bool:
 
 
 def _trip_still_visible(profile: Profile, obj_id: int) -> bool:
-    # Mirrors get_trip_for_viewer's own access check exactly (creator OR
-    # membership) - Trip.objects.for_list_page(profile) looked equivalent
-    # but isn't: it missed a trip the profile created but never joined as a
-    # member, which get_trip_for_viewer (and so _load_trip above) allows.
+    # Mirrors get_trip_for_viewer's own access check exactly (creator OR membership) -
+    # Trip.objects.for_list_page(profile) looked equivalent but isn't: it missed a trip the profile
+    # created but never joined as a member, which get_trip_for_viewer (and so _load_trip above)
+    # allows.
     from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 
     trip = Trip.objects.filter(pk=obj_id).first()
@@ -172,9 +146,9 @@ def _trip_still_visible(profile: Profile, obj_id: int) -> bool:
 
 
 #: kind -> "does this profile still have access to this id" check, used by
-#: :func:`verify_page_object`. Each entry re-applies the same profile-scoping
-#: filter its loader above uses, but by id rather than by URL kwargs, since
-#: verification only ever has the id round-tripped through a task queue.
+#: :func:`verify_page_object`.
+#: Each entry re-applies the same profile-scoping filter its loader above uses, but by id rather
+#: than by URL kwargs, since verification only ever has the id round-tripped through a task queue.
 _EXISTENCE_CHECKS: dict[str, Callable[[Profile, int], bool]] = {
     "pin": _pin_still_visible,
     "trip": _trip_still_visible,
@@ -183,15 +157,7 @@ _EXISTENCE_CHECKS: dict[str, Callable[[Profile, int], bool]] = {
 
 def verify_page_object(profile: Profile, page_object: PageObject) -> bool:
     """Re-confirm that ``profile`` may still see ``page_object``.
-
-    The web view resolves a turn's page once, before enqueueing, and only
-    ``{kind, id}`` round-trips through the task queue to ``ai-worker`` (see
-    ``services.ai.tasks.run_assistant_turn_task``) - never the raw URL path,
-    and never anything the loader itself derived beyond that id. This is the
-    task's own check on that id, scoped by the *current* task's profile, so a
-    queue payload can't smuggle access to an object that profile can't (or
-    can no longer) see - not by trusting the web view's earlier resolution,
-    and not by skipping verification because "the web view already checked".
+    The web view resolves a turn's page once, before enqueueing, and only ``{kind, id}`` round-trips through the task queue to ``ai-worker`` (see ``services.ai.tasks.run_assistant_turn_task``) - never the raw URL path, and never anything the loader itself derived beyond that id.
 
     Args:
         profile: The task's own resolved profile.
@@ -200,8 +166,7 @@ def verify_page_object(profile: Profile, page_object: PageObject) -> bool:
     Returns:
         True if ``profile`` may still see this object. False for an unknown
         ``kind`` (a payload this version of the code doesn't recognize) as
-        well as a real access failure - both mean "don't use this".
-    """
+        well as a real access failure - both mean "don't use this"."""
     check = _EXISTENCE_CHECKS.get(page_object.kind)
     return False if check is None else check(profile, page_object.id)
 

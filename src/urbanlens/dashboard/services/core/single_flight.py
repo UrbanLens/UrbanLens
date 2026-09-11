@@ -1,23 +1,5 @@
 """One expensive background job per account at a time.
-
-"Scan your library" and "Export my data" each enqueued a full sweep on every
-press, with nothing checking whether one was already running. Four presses meant
-four concurrent sweeps, each able to hold one of only four worker slots for the
-length of the task's hard limit - so one person's impatience became everyone
-else's queue depth.
-
-The claim is `cache.add`, which is atomic on every backend this deployment uses.
-A read-then-write check would leave exactly the race a double-click produces.
-
-It **fails closed**, the opposite of `services/security/throttle.py`, and for a
-reason worth stating: a throttle that cannot read its counter should let the
-request through, because refusing turns a cache outage into a lockout. A
-single-flight guard that cannot read its counter should refuse, because
-proceeding starts a second copy of the most expensive work in the application.
-The asymmetry is deliberate. In practice the question rarely arises - the cache
-and the Celery broker are the same Valkey, so a broker that cannot be read
-cannot be enqueued to either.
-"""
+Four presses meant four concurrent sweeps, each able to hold one of only four worker slots for the length of the task's hard limit - so one person's impatience became everyone else's queue depth."""
 
 from __future__ import annotations
 

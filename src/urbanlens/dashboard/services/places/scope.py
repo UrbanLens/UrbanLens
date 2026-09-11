@@ -1,18 +1,5 @@
 """Parcel-or-building scope: what a marker describes, and what it draws.
-
-One rule, in one place, consulted by boundary resolution, every building-level
-panel, and the type badge on both detail pages.
-
-A parcel and a building are the same thing for an ordinary house, and calling
-it either would be drawing a distinction that isn't there - so a marker on a
-single-building property stays neutral and shows both outlines, exactly as it
-always has. On a property with several buildings they are emphatically not the
-same thing, and a marker has to commit: the campus marker describes the
-grounds, a marker on one of its structures describes that structure. That
-commitment is what stops a campus page rendering "TOOL SHED (1937)" as if it
-were the whole hospital, and what stops a building's page drawing 200 acres of
-parcel around a 90-foot footprint.
-"""
+A parcel and a building are the same thing for an ordinary house, and calling it either would be drawing a distinction that isn't there - so a marker on a single-building property stays neutral and shows both outlines, exactly as it always has."""
 
 from __future__ import annotations
 
@@ -89,19 +76,14 @@ def place_polygon(place: Place | None, boundary_type: str) -> MultiPolygon | Non
 
 def parcel_polygon_for_location(location) -> MultiPolygon | None:
     """The real parcel outline a coordinate stands on, or None.
-
-    "Real" excludes the synthesized fallback circle: counting the buildings
-    inside an arbitrary 50 m disc, or nesting every pin within one, would be
-    worse than doing nothing. Callers that need a shape to *draw* should use
-    ``Boundary.objects.resolve_for_*`` instead, which does fall back.
+    Callers that need a shape to *draw* should use ``Boundary.objects.resolve_for_*`` instead, which does fall back.
 
     Args:
         location: The location to look up; None is tolerated.
 
     Returns:
         The parcel's official geometry, or None when the coordinate is on no
-        known parcel.
-    """
+        known parcel."""
     if location is None or not location.place_id or location.place is None:
         return None
     parcel = location.place.parcel
@@ -109,10 +91,9 @@ def parcel_polygon_for_location(location) -> MultiPolygon | None:
 
 
 #: What each scope badge tells a viewer, keyed by
-#: :class:`~urbanlens.dashboard.models.pin.model.PinType` value. Only types
-#: that say something a viewer can't already see get an entry - the neutral
-#: default is absent on purpose, since badging every ordinary house "Location"
-#: would be noise.
+#: :class:`~urbanlens.dashboard.models.pin.model.PinType` value.
+#: Only types that say something a viewer can't already see get an entry - the neutral default is
+#: absent on purpose, since badging every ordinary house "Location" would be noise.
 SCOPE_BADGES: dict[str, tuple[str, str]] = {
     "parcel": ("Parcel", "This page describes the grounds - the buildings on it have their own pages."),
     "building": ("Building", "This page describes one building, not the property it stands on."),
@@ -171,9 +152,8 @@ def effective_pin_type(target: Pin | Wiki) -> str:
         return target.pin_type
     if building_child_count(target) >= MULTI_BUILDING_THRESHOLD:
         return PinType.PARCEL
-    # A stored PARCEL that nobody chose was a guess, and with no buildings
-    # under it there is nothing left supporting the guess - so it doesn't get
-    # to decide. A stored BUILDING is different: it was written by
-    # ``classify_building_pin_type`` because the marker stands on a footprint,
-    # which is an observation rather than a guess.
+    # A stored PARCEL that nobody chose was a guess, and with no buildings under it there is nothing
+    # left supporting the guess - so it doesn't get to decide.
+    # A stored BUILDING is different: it was written by ``classify_building_pin_type`` because the
+    # marker stands on a footprint, which is an observation rather than a guess.
     return PinType.BUILDING if target.pin_type == PinType.BUILDING else PinType.LOCATION_MARKER

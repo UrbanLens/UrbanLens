@@ -1,19 +1,5 @@
 """Undo handler for MarkupMap.
-
-A markup map is hand-drawn work - shapes, arrows, labels, security indicators
-placed one by one - and deleting it cascades away every ``PinMarkup`` annotation
-it holds. That drawing time is the most expensive thing any of the undo handlers
-protect, and it was the last of the designed follow-ups from the undo coverage
-audit.
-
-**Shares are deliberately not restored.** ``MarkupMapShare`` rows cascade with
-the map, and recreating them would silently re-expose the map to every past
-recipient - the delete severed those relationships, and an undo should bring back
-the owner's work, not other people's access to it. The owner can re-share.
-Inbound attachments (a comment's or message's ``markup_map`` FK) are ``SET_NULL``
-and already nulled by the time the stash could run, so they are out of scope by
-construction rather than by choice.
-"""
+Inbound attachments (a comment's or message's ``markup_map`` FK) are ``SET_NULL`` and already nulled by the time the stash could run, so they are out of scope by construction rather than by choice."""
 
 from __future__ import annotations
 
@@ -39,23 +25,14 @@ _ANNOTATION_FIELDS = (
     "security_indicator",
 )
 
-#: Registry key for this handler. Exposed as a module-level constant so call
-#: sites can import it (``from ...handlers.markup_map import MODEL_LABEL``)
-#: instead of hand-typing ``"markup_map"`` - a typo in a hand-typed string only
-#: fails at runtime via ``get_handler``'s ``ValueError``.
+#: Registry key for this handler. Import it instead of hand-typing the string.
 MODEL_LABEL = "markup_map"
 
 
 @register
 class MarkupMapUndoHandler(UndoHandler):
     """Restores a map's own fields and every annotation drawn on it.
-
-    ``MarkupMap`` carries no unique constraints, so restore never refuses over a
-    collision - same reasoning as ``LabelUndoHandler``. The optional links
-    (``pin``, ``cloned_from``, ``shared_by``, an annotation's ``layer``) restore
-    leniently: all are ``SET_NULL`` on their targets' own deletes, so dropping a
-    link whose target is gone matches what would have happened to a live map.
-    """
+    ``MarkupMap`` carries no unique constraints, so restore never refuses over a collision - same reasoning as ``LabelUndoHandler``."""
 
     model_label = MODEL_LABEL
     model = MarkupMap
@@ -138,11 +115,10 @@ class MarkupMapUndoHandler(UndoHandler):
                 ],
             )
             if created_items:
-                # bulk_create fires no post_save, so the per-item pin-inference
-                # signals never run - and the map's own created-save defers its
-                # resync at a moment when, under autocommit, the annotations may
-                # not exist yet. Scheduling it here, after the items, is what
-                # guarantees the resync sees the restored drawing.
+                # bulk_create fires no post_save, so the per-item pin-inference signals never run -
+                # and the map's own created-save defers its resync at a moment when, under
+                # autocommit, the annotations may not exist yet.
+                # Scheduling it here, after the items, is what guarantees the resync sees the
                 defer_pin_inference_sync(markup_map.pk)
             restored.append(markup_map)
         return restored

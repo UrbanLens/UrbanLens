@@ -1,11 +1,5 @@
 """Document processing utilities - convert uploads to PDF and make them searchable.
-
-Requires ``soffice`` (LibreOffice headless, for non-PDF conversion),
-``pdftoppm``/``pdftocairo`` (via the ``pdf2image`` package, for OCR fallback),
-and ``tesseract`` (via ``pytesseract``) on PATH - see the Dockerfile. Every
-function here degrades gracefully (logs and returns None/unchanged) when a
-binary is missing, rather than failing the upload.
-"""
+Every function here degrades gracefully (logs and returns None/unchanged) when a binary is missing, rather than failing the upload."""
 
 from __future__ import annotations
 
@@ -28,26 +22,12 @@ _SOFFICE_TIMEOUT_SECONDS = 120
 _OCR_MAX_PAGES = 25
 
 #: Longest edge, in pixels, any page may be rasterised to for OCR.
-#:
-#: A page's dimensions come from its own MediaBox, and the PDF spec allows up
-#: to 14400pt (200 inches) a side - so without this, `pdf2image`'s default of
-#: 200 DPI and no size limit renders a 426-byte PDF to 40,000 x 40,000 px,
-#: about 4.8 GB as RGB, per page, 25 pages deep. Verified against poppler:
-#: `pdfinfo` reports the declared 14400 x 14400 pts for exactly such a file.
-#:
-#: 2200 is chosen to be a no-op for real documents rather than a compromise:
-#: a US-Letter page is 11 inches tall, which at the current default of 200 DPI
-#: is 2200 px, so ordinary uploads rasterise exactly as they do today and only
-#: pathological geometry is scaled down. Passed as a bare int, which pdf2image
-#: turns into poppler's `-scale-to` - longest side, aspect preserved - so one
-#: number bounds both axes whatever the page shape.
+#: Passed as a bare int, which pdf2image turns into poppler's `-scale-to` - longest side, aspect
+#: preserved - so one number bounds both axes whatever the page shape.
 _OCR_MAX_PIXELS = 2200
 
-#: Ceiling on stored OCR text. 25 pages of dense text is roughly 125 KB, so
-#: this is generous for anything real; it exists because both extraction paths
-#: append per page into a `TextField` with no bound of its own, and the input
-#: is an untrusted upload. Truncated rather than discarded - partial text still
-#: serves the search it was extracted for.
+#: Ceiling on stored OCR text.
+#: Truncated rather than discarded - partial text still serves the search it was extracted for.
 _OCR_MAX_CHARS = 200_000
 
 # Extensions LibreOffice can convert to PDF. Anything else that isn't already
@@ -73,10 +53,7 @@ def soffice_available() -> bool:
 @untrusted_parse("document.convert")
 def convert_to_pdf(image: Image) -> StoredFileReplacement | None:
     """Convert a non-PDF document upload to PDF in place, via LibreOffice headless.
-
-    A file that's already a PDF is left untouched (returns None). The stored
-    file is replaced via the storage abstraction so this works regardless of
-    storage backend.
+    The stored file is replaced via the storage abstraction so this works regardless of storage backend.
 
     Args:
         image: The Image row whose stored document to convert.
@@ -85,8 +62,7 @@ def convert_to_pdf(image: Image) -> StoredFileReplacement | None:
         The replacement when the file was converted, else None. Its
         ``superseded_name`` is still on disk; the caller deletes it once the row
         names the PDF - see
-        :func:`~urbanlens.dashboard.services.media.images.discard_superseded_file`.
-    """
+        :func:`~urbanlens.dashboard.services.media.images.discard_superseded_file`."""
     old_name = image.image.name
     if not old_name:
         return None
@@ -136,19 +112,13 @@ def convert_to_pdf(image: Image) -> StoredFileReplacement | None:
 @untrusted_parse("document.ocr")
 def extract_pdf_text(image: Image) -> str | None:
     """Extract searchable text from a stored PDF: its native text layer plus OCR.
-
-    The native text layer (via ``pypdf``) is cheap and accurate for born-
-    digital PDFs; OCR (via ``pdf2image`` + ``pytesseract``) additionally
-    covers scanned pages or embedded images that have no text layer. Both are
-    best-effort - missing binaries or unparseable PDFs simply contribute no
-    text rather than failing the upload.
+    Both are best-effort - missing binaries or unparseable PDFs simply contribute no text rather than failing the upload.
 
     Args:
         image: The Image row whose stored PDF to extract text from.
 
     Returns:
-        The combined text, or None if nothing could be extracted.
-    """
+        The combined text, or None if nothing could be extracted."""
     if not image.image.name or posixpath.splitext(image.image.name)[1].lower() != ".pdf":
         return None
 

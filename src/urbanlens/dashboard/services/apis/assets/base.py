@@ -1,13 +1,4 @@
-"""Shared abstraction for gateways that return captioned media (photos, scans, etc.).
-
-Mirrors the template-method pattern used by ``SatelliteViewProvider``
-(``urbanlens.dashboard.services.apis.locations.base``): a subclass implements
-one abstract generator, and the base class owns caching and result limiting.
-Unlike the satellite/street-view providers -- which cache by lat/lon in
-Django's low-level cache -- media providers are scoped to a shared
-``Location`` and cache through ``LocationCache`` (7-day TTL), consistent with
-the other Location-scoped external-data lookups (Wikipedia, Nominatim, NPS, ...).
-"""
+"""Shared abstraction for gateways that return captioned media (photos, scans, etc.)."""
 
 from __future__ import annotations
 
@@ -79,28 +70,20 @@ class MediaProvider(Gateway, ABC):
     geo_boundary: ClassVar[GeoBoundary | None] = None
     search_with_country: ClassVar[bool] = True
     quote_name: ClassVar[bool] = False
-    # Whether "city state" is wrapped as one quoted phrase instead of two
-    # loose keywords. Same rationale as ``quote_name``: a provider whose
-    # relevance ranking treats query words as independent OR terms will
-    # otherwise let a bare city or state name (e.g. "Ohio") surface unrelated
-    # nationwide records - see the general web-search panel, which pioneered
-    # this flag on ``Pin.get_unique_search_name``.
+    # Whether "city state" is wrapped as one quoted phrase instead of two loose keywords.
+    # Same rationale as ``quote_name``: a provider whose relevance ranking treats query words as
+    # independent OR terms will otherwise let a bare city or state name (e.g.
     quote_locality: ClassVar[bool] = False
     multi_query: ClassVar[bool] = False
-    # Whether the street address is included in the search query at all. A
-    # provider whose full-text relevance ranking treats every word as an
-    # independent OR term (rather than requiring a phrase match) can turn a
-    # street address into noise instead of a useful narrowing signal - a
-    # street number or a generic street-type word ("Road", "Street") is
-    # liable to coincidentally match unrelated records nationwide. Such a
-    # provider should set this False to search on name + city/state only.
+    # Whether the street address is included in the search query at all.
+    # A provider whose full-text relevance ranking treats every word as an independent OR term
+    # (rather than requiring a phrase match) can turn a street address into noise instead of a
+    # useful narrowing signal - a street number or a generic street-type word ("Road", "Street") is
     include_address: ClassVar[bool] = True
-    # Whether to skip this provider entirely (no search attempted) for a pin
-    # whose only available "name" is address-derived (see
-    # services.locations.naming.is_address_derived_name) - a query built from
-    # a raw street address has no real narrowing power for a provider whose
-    # relevance ranking isn't a phrase match, so searching guarantees noise
-    # rather than useful results for such a pin.
+    # Whether to skip this provider entirely (no search attempted) for a pin whose only available
+    # "name" is address-derived (see services.locations.naming.is_address_derived_name) - a query
+    # built from a raw street address has no real narrowing power for a provider whose relevance
+    # ranking isn't a phrase match, so searching guarantees noise rather than useful results for
     reject_address_derived_names: ClassVar[bool] = False
 
     @abstractmethod
@@ -141,19 +124,15 @@ class MediaProvider(Gateway, ABC):
         if (service_key := self.service_key) is None:
             raise RuntimeError(f"{type(self).__name__} has no service_key configured")
 
-        # Truncated to LocationCache.query_key's own max_length so the value
-        # compared below is the value that can actually be stored - otherwise
-        # an over-long key would never match what came back and every request
-        # would re-fetch, hammering the provider instead of caching.
+        # Truncated to LocationCache.query_key's own max_length so the value compared below is the
+        # value that can actually be stored - otherwise an over-long key would never match what came
+        # back and every request would re-fetch, hammering the provider instead of caching.
         query_key = " | ".join(term for term in search_terms if term)[:_QUERY_KEY_MAX_LENGTH]
         cached = LocationCache.get_fresh(location, service_key)
         # A cache row is only a hit for the query that produced it.
-        # LocationCache.get_fresh answers "is this row still fresh?" by age
-        # alone, so without this check a provider whose query construction has
-        # been changed (e.g. tightened for relevance) keeps serving results
-        # fetched by the *old* query for the rest of the 7-day TTL - the fix
-        # would appear not to have worked. Comparing against the query_key the
-        # row was written with makes a query change invalidate its own cache.
+        # LocationCache.get_fresh answers "is this row still fresh?" by age alone, so without this
+        # check a provider whose query construction has been changed (e.g. tightened for relevance)
+        # keeps serving results fetched by the *old* query for the rest of the 7-day TTL - the fix
         if cached is not None and (cached.query_key or "") == query_key:
             return [MediaItem(**item) for item in (cached.data or {}).get("items", [])], True
 

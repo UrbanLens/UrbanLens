@@ -85,13 +85,6 @@ def has_eligible_locations(
 ) -> bool:
     """Whether ``eligible_locations`` would return anything at all, without materializing it.
 
-    Used as a cheap pre-check before creating a solo session - a profile
-    with no pins (or whose pins all fall outside a chosen ``geo_bounds``)
-    should never get an ACTIVE session with zero possible rounds; see
-    ``controllers.spotguessr.SpotGuessrStartView`` for how this replaces
-    the old "create a session, then discover it can't play, then fake a
-    completed summary" flow.
-
     Args:
         profiles: Every participant in the session.
         require_visited_by_all: See ``eligible_locations``.
@@ -99,8 +92,7 @@ def has_eligible_locations(
         label_id: See ``eligible_locations``.
 
     Returns:
-        True if at least one location is eligible for every profile.
-    """
+        True if at least one location is eligible for every profile."""
     return eligible_locations(
         profiles,
         require_visited_by_all=require_visited_by_all,

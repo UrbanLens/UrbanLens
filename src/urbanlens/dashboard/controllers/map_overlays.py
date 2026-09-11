@@ -1,27 +1,4 @@
-"""Georeferenced image overlays on a Pin's or Wiki's map.
-
-A user drops a historical map image - a Sanborn fire-insurance sheet, a site
-plan, an old survey - onto the live map and drags its four corners until it
-lines up with the real streets. See
-:class:`~urbanlens.dashboard.models.map_overlay.model.MapImageOverlay` for why
-four free corners rather than a bounding box.
-
-Three ways to supply the image, all landing on the same model:
-
-* **Upload** - a file straight from the user's device.
-* **Pick from this pin's/wiki's Media** - a gallery item (a Sanborn sheet from
-  REData's Library of Congress imagery, a CRIS survey scan, ...). Gallery items
-  are transient by design, so the picked one is materialized into a real
-  ``Image`` first (``services.media.media_materialize``) - otherwise the
-  overlay would break the moment the provider rotated its URL.
-* **External URL** - referenced in place, for a user who would rather not
-  store a copy. Validated against SSRF the same way every other user-supplied
-  URL in this project is.
-
-Same two-parents permission split as ``custom_layers``/``markup``: a
-pin-scoped overlay is personal and editable only by its owner; a wiki-scoped
-one is community data any signed-in user with wiki access may edit.
-"""
+"""Georeferenced image overlays on a Pin's or Wiki's map."""
 
 from __future__ import annotations
 
@@ -52,21 +29,14 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayQuerySet
 
-#: Read from the column, not repeated: this truncates writes to
-#: MapImageOverlay.name, so a widened column would otherwise keep clipping at
-#: the old width with nothing to show why.
+#: Truncation width for overlay names.
 logger = logging.getLogger(__name__)
 
 _MAX_NAME_LENGTH = column_max_length(MapImageOverlay, "name")
-#: How many overlays one pin or wiki may hold. Each is a full-resolution image
-#: composited on every map frame, so a page with dozens would be unusable long
-#: before it hit any storage limit - this is a rendering budget, not a quota.
+#: Max overlays per map (rendering budget).
 MAX_OVERLAYS_PER_MAP = 12
 
-#: Stand-in uuid used to build a per-overlay URL *template* for the map JS,
-#: which substitutes the real uuid client-side. Django's ``<uuid:...>``
-#: converter will not reverse against a placeholder like "__uuid__", so a
-#: real (and obviously synthetic) all-zero uuid stands in.
+#: Placeholder uuid for building per-overlay URL templates.
 OVERLAY_UUID_PLACEHOLDER = "00000000-0000-0000-0000-000000000000"
 
 
@@ -110,15 +80,11 @@ def _owner_location(owner: Pin | Wiki):
 def _wants_json(request: HttpRequest) -> bool:
     """True when the caller asked for JSON rather than the HTMX list partial.
 
-    The manage-overlays dialog is HTMX (``HX-Request``) and always wants the
-    swapped HTML. The pin-detail lightbox's "use as floorplan overlay" action
-    fetches this same POST as JSON so it can redirect to the editor.
-
     Args:
         request: The current request.
 
     Returns:
-        True when the response should be a JSON body instead of the list partial.
+        True when the response should be JSON.
     """
     if request.headers.get("HX-Request"):
         return False

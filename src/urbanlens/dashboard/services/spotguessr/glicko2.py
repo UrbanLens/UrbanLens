@@ -1,15 +1,5 @@
 """Glicko-2 rating math (Glickman, "Example of the Glicko-2 system", 2012).
-
-Pure math, deliberately with no Django/ORM dependency - ``services.spotguessr.ratings``
-is the layer that reads/writes ``PlayerModeRating``/``LocationModeRating`` rows around this.
-
-SpotGuessr repurposes plain, unmodified Glicko-2 as a symmetric player-skill /
-location-difficulty pairing (see ``docs/designs/drafts/spotguessr.md``): a round is one
-rating period for both the player (opponent = the location, score = normalized
-points) and the location (opponents = every participant, score = ``1 - their
-normalized points``). Only the *meaning* of "opponent" and "score" is chosen to
-fit the game; the algorithm below is the paper's, unmodified.
-"""
+Only the *meaning* of "opponent" and "score" is chosen to fit the game; the algorithm below is the paper's, unmodified."""
 
 from __future__ import annotations
 
@@ -40,13 +30,7 @@ class Rating:
 
 @dataclass(frozen=True)
 class Opponent:
-    """One game result to rate against: an opponent's rating plus the outcome score.
-
-    ``score`` is in [0, 1] - 1.0 is a full win, 0.0 a full loss, and (unlike
-    plain Elo) any fraction in between is a legitimate, meaningful result:
-    SpotGuessr uses it directly as "how close was the guess," not just as a
-    draw indicator.
-    """
+    """One game result to rate against: an opponent's rating plus the outcome score."""
 
     mu: float
     phi: float
@@ -104,12 +88,7 @@ def rate(rating: Rating, opponents: Sequence[Opponent], *, tau: float = DEFAULT_
 
 def _new_volatility(phi: float, sigma: float, v: float, delta: float, tau: float) -> float:
     """Solve for the period's new volatility via the paper's Illinois-algorithm root find.
-
-    Finds the root of ``f`` (the paper's eq. (5)) bracketed between the
-    current log-variance and a bound chosen so the root is guaranteed to lie
-    within it, then narrows the bracket until it's within
-    ``CONVERGENCE_TOLERANCE``.
-    """
+    (5)) bracketed between the current log-variance and a bound chosen so the root is guaranteed to lie within it, then narrows the bracket until it's within ``CONVERGENCE_TOLERANCE``."""
     a = math.log(sigma**2)
 
     def f(x: float) -> float:

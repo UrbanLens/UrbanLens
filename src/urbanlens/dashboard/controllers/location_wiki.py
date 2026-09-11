@@ -1,10 +1,4 @@
-"""Wiki controller - community-editable page for a shared place.
-
-Routes are keyed by the Location slug (the stable URL token) but every view
-operates on the :class:`~urbanlens.dashboard.models.wiki.model.Wiki` for that
-Location. Wikis are user-created (from the Private Pin page); these views 404
-when the place has no wiki yet.
-"""
+"""Wiki controller - community-editable page for a shared place."""
 
 from __future__ import annotations
 

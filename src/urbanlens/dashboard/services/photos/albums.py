@@ -1,12 +1,5 @@
 """Album membership and ordering for a pin's, wiki's, or Vault's photos.
-
-Albums group photos that already belong to their owner - a place (pin/wiki)
-or a profile's own Vault; they never widen who can see a photo. Every listing
-helper here chains ``ImageQuerySet.visible_to`` so an album can't surface a
-photo the viewer wouldn't otherwise be shown, and :func:`eligible_images_for`
-is the single definition of "which photos may go in this album" for both the
-add-photo picker and the add endpoint's own validation.
-"""
+Albums group photos that already belong to their owner - a place (pin/wiki) or a profile's own Vault; they never widen who can see a photo."""
 
 from __future__ import annotations
 
@@ -72,21 +65,11 @@ def owner_kwargs(owner: Pin | Wiki | Profile) -> dict:
 def owner_kwargs_to_image_scope(owner: Pin | Wiki | Profile) -> dict:
     """Return the ``Image`` filter kwargs (``pin``/``wiki``/``profile``) scoping *owner*'s photos.
 
-    Distinct from :func:`owner_kwargs` (which names the ``Album`` FK, not the
-    ``Image`` one). For a vault (``Profile``) owner this is deliberately *every*
-    photo the profile has ever uploaded (``Image.profile``), filed or not -
-    matching what Vault Photos' own gallery shows, and letting a vault album
-    reference a photo that's also filed to one of the profile's pins/wikis.
-    This is a different, wider question than "is this a duplicate upload,"
-    which stays scoped to unfiled photos only - see
-    :func:`urbanlens.dashboard.services.photos.uploads._duplicate_scope`.
-
     Args:
         owner: The Pin, Wiki, or Profile (Vault) whose photos to scope to.
 
     Returns:
-        A dict suitable for splatting into an ``Image`` queryset filter.
-    """
+        A dict suitable for splatting into an ``Image`` queryset filter."""
     if isinstance(owner, Pin):
         return {"pin": owner}
     if isinstance(owner, Profile):
@@ -147,17 +130,14 @@ def albums_for_owners(owners: Sequence[Pin | Wiki | Profile]) -> QuerySet[Album]
 
 def _owner_conceal(owner: Pin | Wiki | Profile, viewer: Profile | None) -> bool:
     """Whether *viewer* sees the concealed form of *owner*'s wiki.
-
-    Always False for a Pin or a Vault (Profile-owned) album - concealment is a
-    wiki-only concept.
+    Always False for a Pin or a Vault (Profile-owned) album - concealment is a wiki-only concept.
 
     Args:
         owner: The Pin, Wiki, or Profile whose albums/photos are being resolved.
         viewer: The browsing profile, or None for anonymous.
 
     Returns:
-        Whether album/photo visibility here must also apply concealment.
-    """
+        Whether album/photo visibility here must also apply concealment."""
     if isinstance(owner, (Pin, Profile)):
         return False
     from urbanlens.dashboard.services.wiki.concealment import concealment_active
@@ -167,10 +147,7 @@ def _owner_conceal(owner: Pin | Wiki | Profile, viewer: Profile | None) -> bool:
 
 def _visible_image_ids(image_ids: Collection[int], viewer: Profile | None, *, conceal: bool = False) -> set[int]:
     """Which of *image_ids* this viewer may see.
-
-    Resolved in one query for the whole set - ``visible_to`` computes the
-    viewer's allowed-uploader set on every call, so running it per album would
-    repeat that work once per album on the Photos tab.
+    Resolved in one query for the whole set - ``visible_to`` computes the viewer's allowed-uploader set on every call, so running it per album would repeat that work once per album on the Photos tab.
 
     Args:
         image_ids: Candidate image primary keys.
@@ -181,8 +158,7 @@ def _visible_image_ids(image_ids: Collection[int], viewer: Profile | None, *, co
             full upload set through the album path.
 
     Returns:
-        The subset the viewer is allowed to see.
-    """
+        The subset the viewer is allowed to see."""
     from urbanlens.dashboard.models.images.model import Image
 
     if not image_ids:
@@ -198,18 +174,13 @@ def _visible_image_ids(image_ids: Collection[int], viewer: Profile | None, *, co
 def albums_with_images(owner: Pin | Wiki | Profile, viewer: Profile | None) -> list[tuple[Album, list[Image]]]:
     """Every album of *owner* paired with its viewer-visible photos.
 
-    Costs a fixed three queries (albums, memberships, visibility) no matter
-    how many albums there are - the Photos tab renders a cover and a count for
-    each one, and resolving those per album is an N+1.
-
     Args:
         owner: The Pin, Wiki, or Profile whose albums to list.
         viewer: The browsing profile, for the photo-visibility gate.
 
     Returns:
         ``(album, images)`` pairs in album order, each image carrying an
-        ``album_item_id`` attribute for the membership row.
-    """
+        ``album_item_id`` attribute for the membership row."""
     conceal = _owner_conceal(owner, viewer)
     albums_qs = albums_for_owner(owner)
     if conceal:
@@ -241,18 +212,14 @@ def albums_with_images(owner: Pin | Wiki | Profile, viewer: Profile | None) -> l
 
 def albums_listing(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> list[AlbumListEntry]:
     """Every album of *owner* with cover, count, and date range.
-
-    Same visibility rules as :func:`albums_with_images`. Membership rows are
-    loaded so each album can be sorted by its own method without an N+1.
-    Pass a sequence of pins to include child-pin albums on a parent Photos tab.
+    Membership rows are loaded so each album can be sorted by its own method without an N+1.
 
     Args:
         owner: The Pin, Wiki, or Profile whose albums to list, or several of them.
         viewer: The browsing profile, for the photo-visibility gate.
 
     Returns:
-        One :class:`AlbumListEntry` per album, in album order.
-    """
+        One :class:`AlbumListEntry` per album, in album order."""
     owners: list[Pin | Wiki | Profile] = [owner] if isinstance(owner, (Pin, Wiki, Profile)) else list(owner)
     conceal = _owner_conceal(owners[0], viewer) if len(owners) == 1 else False
     albums_qs = albums_for_owners(owners)
@@ -265,10 +232,7 @@ def albums_listing(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile],
 
 def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, conceal: bool = False) -> list[AlbumListEntry]:
     """Cover, photo count and date range for each of *albums*.
-
-    Split out of :func:`albums_listing` so a caller that has already narrowed
-    the albums - a paginated panel, say - pays for a page of membership rows
-    rather than for every album the owner has.
+    Split out of :func:`albums_listing` so a caller that has already narrowed the albums - a paginated panel, say - pays for a page of membership rows rather than for every album the owner has.
 
     Args:
         albums: The albums to describe, in the order they should be rendered.
@@ -280,8 +244,7 @@ def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, conceal:
             count towards each album.
 
     Returns:
-        One :class:`AlbumListEntry` per album, in the given order.
-    """
+        One :class:`AlbumListEntry` per album, in the given order."""
     from urbanlens.dashboard.models.images.model import Image
 
     albums = list(albums)
@@ -313,24 +276,14 @@ def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, conceal:
 
 def eligible_images_for(owner: Pin | Wiki | Profile, viewer: Profile | None) -> QuerySet[Image]:
     """Photos that may be placed in one of *owner*'s albums.
-
-    An album is strictly scoped to its owner: a pin album may only hold that
-    pin's photos, a wiki album only that wiki's, and a vault album only its
-    owning profile's own uploads. That keeps a private pin photo from being
-    pulled onto a shared community surface just by adding it to an album there.
-
-    Photos only. Album tiles are ``<img>`` elements throughout, so a document
-    added here renders as a broken image (and can be picked as the album
-    cover). This is the chokepoint for both the picker listing and
-    ``AlbumAddPhotosView``, which re-scopes submitted ids through it.
+    An album is strictly scoped to its owner: a pin album may only hold that pin's photos, a wiki album only that wiki's, and a vault album only its owning profile's own uploads.
 
     Args:
         owner: The Pin, Wiki, or Profile (Vault) that owns the album.
         viewer: The profile browsing, for the standard photo-visibility gate.
 
     Returns:
-        Matching, viewer-visible photos, newest first.
-    """
+        Matching, viewer-visible photos, newest first."""
     from urbanlens.dashboard.models.images.model import Image
 
     qs = Image.objects.filter(**owner_kwargs_to_image_scope(owner)).photos().visible_to(viewer).order_by("-created")
@@ -343,10 +296,7 @@ def eligible_images_for(owner: Pin | Wiki | Profile, viewer: Profile | None) -> 
 
 def album_images(album: Album, viewer: Profile | None, owner: Pin | Wiki | Profile | None = None) -> list[Image]:
     """The photos in *album*, in the album's current sort.
-
-    Date and name sorts read live photo metadata. Custom order is only
-    written when the user drags; photos added after that have null ``order``
-    and appear at the end.
+    Custom order is only written when the user drags; photos added after that have null ``order`` and appear at the end.
 
     Args:
         album: The album to read.
@@ -359,8 +309,7 @@ def album_images(album: Album, viewer: Profile | None, owner: Pin | Wiki | Profi
     Returns:
         The album's viewer-visible photos, ordered for display. Each carries
         an ``album_item_id`` attribute so templates can address the membership
-        row (for removal/reordering) without a second lookup.
-    """
+        row (for removal/reordering) without a second lookup."""
     pairs = visible_album_item_pairs(album, viewer, owner)
     return _hydrate_album_items(pairs)
 
@@ -388,10 +337,10 @@ def _hydrate_album_items(pairs: Sequence[tuple[int, int]]) -> list[Image]:
     items_by_pk = {item.pk: item for item in AlbumItem.objects.filter(pk__in=page_item_ids).select_related("image")}
     images = []
     for item_id, _image_id in pairs:
-        # *pairs* came from an earlier query, so a membership row removed in
-        # between (another tab, the optimistic remove on the grid) is simply
-        # gone now. Skipping it renders the album a photo short; indexing it
-        # would 500 the whole page over a photo the user just deleted anyway.
+        # *pairs* came from an earlier query, so a membership row removed in between (another tab,
+        # the optimistic remove on the grid) is simply gone now.
+        # Skipping it renders the album a photo short; indexing it would 500 the whole page over a
+        # photo the user just deleted anyway.
         item = items_by_pk.get(item_id)
         if item is None:
             continue
@@ -411,11 +360,6 @@ def album_images_page(
 ) -> tuple[list[Image], int]:
     """One page of *album*'s photos, plus the un-paged total.
 
-    Resolves visibility against the full membership list (so a page isn't
-    padded with photos the viewer can't see), then instantiates only the
-    ``Image`` rows on this page - album grids used to dump every file URL
-    into the first HTML response.
-
     Args:
         album: The album to read.
         viewer: The profile browsing, for the photo-visibility gate.
@@ -424,8 +368,7 @@ def album_images_page(
         limit: Maximum photos to return.
 
     Returns:
-        ``(page, total)`` where *page* items each carry ``album_item_id``.
-    """
+        ``(page, total)`` where *page* items each carry ``album_item_id``."""
     pairs = visible_album_item_pairs(album, viewer, owner)
     return _hydrate_album_items(pairs[offset : offset + limit]), len(pairs)
 
@@ -470,16 +413,12 @@ def cover_from_ids(album: Album, visible_ids: Sequence[int]) -> Image | None:
 def loose_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> QuerySet[Image]:
     """*owner*'s photos that aren't in any of its albums yet.
 
-    Pass a sequence of pins to include child-pin photos when the parent
-    Photos tab is showing descendant details.
-
     Args:
         owner: The Pin, Wiki, or Profile whose photos to list, or several of them.
         viewer: The profile browsing, for the standard photo-visibility gate.
 
     Returns:
-        Matching photos not referenced by any of these owners' albums, newest first.
-    """
+        Matching photos not referenced by any of these owners' albums, newest first."""
     owners: list[Pin | Wiki | Profile] = [owner] if isinstance(owner, (Pin, Wiki, Profile)) else list(owner)
     album_ids = albums_for_owners(owners).values_list("pk", flat=True)
     filed_image_ids = AlbumItem.objects.filter(album_id__in=album_ids).values_list("image_id", flat=True)
@@ -499,10 +438,6 @@ def loose_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile
 def add_images_to_album(album: Album, images: Sequence[Image], added_by: Profile | None) -> int:
     """Add photos to *album*, skipping any already in it.
 
-    New items are stored with null ``order``. Under date/name sorts they
-    slot in by metadata; under custom order they appear after the photos
-    the user has already arranged.
-
     Args:
         album: The album to add to.
         images: The photos to add.
@@ -510,17 +445,16 @@ def add_images_to_album(album: Album, images: Sequence[Image], added_by: Profile
             community wiki albums keep per-photo attribution.
 
     Returns:
-        How many photos were actually added.
-    """
+        How many photos were actually added."""
     existing_ids = set(AlbumItem.objects.for_album(album).values_list("image_id", flat=True))
     to_add = [image for image in images if image.pk not in existing_ids]
     if not to_add:
         return 0
 
-    # The insert is not atomic with the existence read, and there are two callers -
-    # one of them the Celery task cache_media_item_into_album, which Celery may deliver
-    # more than once. Without ignore_conflicts the loser of that race hits uq_album_item
-    # and raises, turning a duplicate add into a 500 instead of a no-op.
+    # The insert is not atomic with the existence read, and there are two callers - one of them the
+    # Celery task cache_media_item_into_album, which Celery may deliver more than once.
+    # Without ignore_conflicts the loser of that race hits uq_album_item and raises, turning a
+    # duplicate add into a 500 instead of a no-op.
     before = AlbumItem.objects.filter(album=album).count()
     AlbumItem.objects.bulk_create(
         [AlbumItem(album=album, image=image, added_by=added_by, order=None) for image in to_add],
@@ -534,16 +468,12 @@ def add_images_to_album(album: Album, images: Sequence[Image], added_by: Profile
 def remove_images_from_album(album: Album, image_ids: Sequence[int]) -> int:
     """Remove photos from *album*. Photos not in it are ignored.
 
-    Only the membership rows are deleted - the photos themselves survive and
-    fall back to the loose-photos section.
-
     Args:
         album: The album to remove from.
         image_ids: Primary keys of the photos to remove.
 
     Returns:
-        How many membership rows were deleted.
-    """
+        How many membership rows were deleted."""
     deleted, _ = AlbumItem.objects.for_album(album).filter(image_id__in=list(image_ids)).delete()
     if album.cover_image_id is not None and album.cover_image_id in set(image_ids):
         Album.objects.filter(pk=album.pk).update(cover_image=None)
@@ -552,20 +482,14 @@ def remove_images_from_album(album: Album, image_ids: Sequence[int]) -> int:
 
 def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
     """Freeze *album* into custom order following *item_ids*.
-
-    The first drag (or any later one) numbers every current membership row
-    so later uploads can stay null and sort after the arranged photos. Ids
-    that don't belong to this album are ignored. A partial list - the grid
-    only sending currently loaded tiles - is spliced into the album's
-    existing display order rather than dropping the rest.
+    The first drag (or any later one) numbers every current membership row so later uploads can stay null and sort after the arranged photos.
 
     Args:
         album: The album whose items are being reordered.
         item_ids: ``AlbumItem`` primary keys in their new display order.
 
     Returns:
-        How many items now have an explicit ``order``.
-    """
+        How many items now have an explicit ``order``."""
     current = list(AlbumItem.objects.in_display_order(album).values_list("pk", flat=True))
     if not current:
         return 0
@@ -582,10 +506,10 @@ def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
     updated: list[AlbumItem] = []
     processed = 0
     for order, item_id in enumerate(ordered_ids):
-        # *current* (and so *ordered_ids*) came from an earlier query, so a
-        # membership row removed in between (another tab, a concurrent
-        # remove-from-album request) is simply gone now. Skipping it drops the
-        # photo from the reorder instead of raising over one that's already gone.
+        # *current* (and so *ordered_ids*) came from an earlier query, so a membership row removed
+        # in between (another tab, a concurrent remove-from-album request) is simply gone now.
+        # Skipping it drops the photo from the reorder instead of raising over one that's already
+        # gone.
         item = items_by_id.get(item_id)
         if item is None:
             continue
@@ -603,22 +527,13 @@ def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
 
 def album_date_range(images: Sequence[Image]) -> tuple[datetime | None, datetime | None]:
     """Earliest and latest capture date across *images*.
-
-    Uses ``Image.taken_at`` (the EXIF capture time) and falls back to
-    ``created`` for photos that carry no EXIF date - a scan or a screenshot
-    still belongs somewhere on the album's timeline, and dropping it would
-    make the range silently narrower than the album really is.
-
-    Takes the already-resolved list rather than aggregating in SQL so the
-    Photos tab keeps its fixed query count no matter how many albums it shows
-    (see :func:`albums_with_images`).
+    Takes the already-resolved list rather than aggregating in SQL so the Photos tab keeps its fixed query count no matter how many albums it shows (see :func:`albums_with_images`).
 
     Args:
         images: The album's viewer-visible photos, in any order.
 
     Returns:
-        ``(first, last)``, or ``(None, None)`` for an empty album.
-    """
+        ``(first, last)``, or ``(None, None)`` for an empty album."""
     stamps = [image.taken_at or image.created for image in images]
     if not stamps:
         return None, None
@@ -627,19 +542,14 @@ def album_date_range(images: Sequence[Image]) -> tuple[datetime | None, datetime
 
 def cover_from_images(album: Album, images: list[Image]) -> Image | None:
     """Pick *album*'s cover out of an already-resolved image list.
-
-    Prefers the explicitly chosen ``cover_image``, but only when it's actually
-    among the photos this viewer can see - otherwise (and when none is set)
-    falls back to the first photo in display order. Takes the list rather than
-    re-querying so batched callers don't pay per album.
+    Prefers the explicitly chosen ``cover_image``, but only when it's actually among the photos this viewer can see - otherwise (and when none is set) falls back to the first photo in display order.
 
     Args:
         album: The album to pick a cover for.
         images: Its viewer-visible photos, in display order.
 
     Returns:
-        The cover photo, or None for an empty album.
-    """
+        The cover photo, or None for an empty album."""
     if album.cover_image_id is not None:
         for image in images:
             if image.pk == album.cover_image_id:
@@ -683,14 +593,11 @@ def pin_tree(pin: Pin) -> list[Pin]:
 def move_album_targets(album: Album) -> list[Pin]:
     """Pins this album can move to: the rest of its parent's tree.
 
-    Wiki albums have no pin tree and return an empty list.
-
     Args:
         album: The album to consider moving.
 
     Returns:
-        Other pins in the same parent/child tree, excluding the current owner.
-    """
+        Other pins in the same parent/child tree, excluding the current owner."""
     pin = album.parent_pin
     if pin is None:
         return []
@@ -699,10 +606,7 @@ def move_album_targets(album: Album) -> list[Pin]:
 
 def move_album_to_pin(album: Album, target: Pin) -> Album:
     """Move *album* onto *target*, re-slug on collision, and take its photos.
-
-    Photos currently attached to the source pin that are in this album are
-    re-pointed at *target* so the grouping and the files travel together.
-    Photos already on another pin (or a wiki) are left where they are.
+    Photos currently attached to the source pin that are in this album are re-pointed at *target* so the grouping and the files travel together.
 
     Args:
         album: A pin-owned album.
@@ -713,8 +617,7 @@ def move_album_to_pin(album: Album, target: Pin) -> Album:
 
     Raises:
         ValueError: The album is a wiki album, *target* is the current parent,
-            or *target* is not in the same tree / same profile.
-    """
+            or *target* is not in the same tree / same profile."""
     source = album.parent_pin
     if source is None:
         raise ValueError("Community albums stay on their wiki.")

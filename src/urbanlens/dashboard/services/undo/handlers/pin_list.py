@@ -16,31 +16,19 @@ from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-#: Plain-JSON fields copied verbatim. ``smart_boundary`` is deliberately not
-#: here - it is a GEOS geometry and travels as EWKT (see ``_serialize_one``).
-#: ``slug`` is also absent: it is regenerated on save, and reusing the deleted
-#: list's slug could collide with a list created since.
+#: Plain-JSON fields copied verbatim.
+#: ``smart_boundary`` is deliberately not here - it is a GEOS geometry and travels as EWKT (see
+#: ``_serialize_one``).
 _RESTORABLE_FIELDS = ("name", "description", "is_smart", "smart_filter")
 
-#: Registry key for this handler. Exposed as a module-level constant so call
-#: sites can import it (``from ...handlers.pin_list import MODEL_LABEL``)
-#: instead of hand-typing ``"pin_list"`` - a typo in a hand-typed string only
-#: fails at runtime via ``get_handler``'s ``ValueError``.
+#: Registry key for this handler. Import it instead of hand-typing the string.
 MODEL_LABEL = "pin_list"
 
 
 @register
 class PinListUndoHandler(UndoHandler):
     """Restores a list's own fields and its membership (pin ids + order).
-
-    The two optional links a list can carry restore leniently rather than
-    blocking: ``source_saved_filter`` and ``markup_map`` are both ``SET_NULL``
-    on their own deletes, so a restored list simply drops a link whose target
-    is gone - exactly what would have happened had the list never been deleted.
-    Likewise items whose pin has since been deleted are skipped rather than
-    refusing the whole restore: the pins were never part of this deletion, and
-    a list of survivors beats no list at all.
-    """
+    The two optional links a list can carry restore leniently rather than blocking: ``source_saved_filter`` and ``markup_map`` are both ``SET_NULL`` on their own deletes, so a restored list simply drops a link whose target is gone - exactly what would have happened had the list never been deleted."""
 
     model_label = MODEL_LABEL
     model = PinList

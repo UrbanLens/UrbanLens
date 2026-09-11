@@ -17,17 +17,11 @@ if TYPE_CHECKING:
 def visible_friend_ratings(profile: Profile) -> list[dict]:
     """Friends' Trivia ratings, excluding anyone who has opted out.
 
-    Batches the opt-out check and the rating lookup into one query each
-    (rather than two queries per friend) - an unbatched `TriviaPreference`
-    lookup and `PlayerTriviaRating` lookup for every friend cost 2N+1 queries
-    on this page for N friends.
-
     Returns:
         A list of ``{"profile": Profile, "rating": PlayerTriviaRating | None}``
         dicts, one per visible friend - friends who haven't played yet still
         appear, with ``rating=None``, since the opt-out is about visibility,
-        not about hiding the fact that a friend hasn't played.
-    """
+        not about hiding the fact that a friend hasn't played."""
     friends = list(get_connections(profile))
     if not friends:
         return []

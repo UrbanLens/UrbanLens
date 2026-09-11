@@ -1,13 +1,4 @@
-"""OSRM gateway - free, open-source routing.
-
-http://project-osrm.org/ - self-hostable routing engine over OpenStreetMap
-data. ``base_url`` comes from ``UL_OSRM_BASE_URL`` and falls back to the public
-demo server (router.project-osrm.org), which the OSRM project itself documents
-as dev/testing use only - rate-limited, with no uptime guarantee. A deployment
-whose drive-time answers matter should set that variable to a self-hosted
-instance (``docker run osrm/osrm-backend`` with a pre-processed ``.osrm``
-extract). No API key is required either way.
-"""
+"""OSRM gateway - free, open-source routing."""
 
 from __future__ import annotations
 

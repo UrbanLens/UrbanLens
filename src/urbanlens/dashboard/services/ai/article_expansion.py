@@ -1,15 +1,5 @@
 """AI writing assistant that expands pin/wiki articles from a linked page.
-
-Called as a post-step of link extraction: after structured fields are applied,
-this module asks a writing model for **new plain-text paragraphs** grounded in
-the page, strips all markup, runs the draft through
-:mod:`article_safety`, and on approval appends the text to the pin article and
-(when present) the location wiki article via :func:`save_article`.
-
-Applies are append-only and non-destructive to existing article Markdown.
-Failures at any writing/safety step are recorded as review-page result rows
-and never raise out of :func:`expand_articles_from_page`.
-"""
+Applies are append-only and non-destructive to existing article Markdown."""
 
 from __future__ import annotations
 
@@ -45,10 +35,10 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _MD_IMAGE = re.compile(r"!\[[^\]]*]\([^)]*\)")
 _MD_LINK = re.compile(r"\[([^\]]*)]\([^)]*\)")
 _MD_HEADING = re.compile(r"(?m)^\s{0,3}#{1,6}\s+")
-# Paired-marker emphasis stripping (keeps the enclosed text, drops only the
-# markers) so stray, non-markdown uses of these characters - "~500 degrees",
-# "Foo_Bar Mill", "5*3=15" - survive untouched. Order matters: longer/more
-# specific markers first so "**bold**" isn't left as a mangled "*bold*".
+# Paired-marker emphasis stripping (keeps the enclosed text, drops only the markers) so stray,
+# non-markdown uses of these characters - "~500 degrees", "Foo_Bar Mill", "5*3=15" - survive
+# untouched.
+# Order matters: longer/more specific markers first so "**bold**" isn't left as a mangled "*bold*".
 _MD_STRIKETHROUGH = re.compile(r"~~(.+?)~~", re.DOTALL)
 _MD_BOLD = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
 _MD_ITALIC_STAR = re.compile(r"\*(.+?)\*", re.DOTALL)
@@ -82,16 +72,11 @@ paragraph two
 def sanitize_article_plain_text(raw: str | None) -> str:
     """Force AI/writing output down to bounded plain text with no markup.
 
-    Strips HTML (nh3 with an empty tag allowlist), code fences, Markdown
-    link/image/heading/emphasis markers, and control characters. Paragraph
-    breaks (blank lines) are preserved.
-
     Args:
         raw: Untrusted model output (may already have ANSWER tags stripped).
 
     Returns:
-        Sanitized plain text, or ``""`` when nothing usable remains.
-    """
+        Sanitized plain text, or ``""`` when nothing usable remains."""
     if not raw or not isinstance(raw, str):
         return ""
 
@@ -100,10 +85,9 @@ def sanitize_article_plain_text(raw: str | None) -> str:
         return ""
 
     text = _CODE_FENCE.sub(" ", text)
-    # Decode first, then sanitize HTML.  Doing this in the opposite order lets
-    # entity-encoded markup (``&lt;script&gt;``) turn back into live markup
-    # after the HTML sanitizer has already run.  A second pass is cheap
-    # defense-in-depth for nested/double-encoded model output.
+    # Decode first, then sanitize HTML.
+    # Doing this in the opposite order lets entity-encoded markup (``&lt;script&gt;``) turn back
+    # into live markup after the HTML sanitizer has already run.
     text = nh3.clean(unescape(text), tags=set())
     text = unescape(text)
     text = nh3.clean(text, tags=set())
@@ -154,12 +138,7 @@ def append_to_article(
     edit_summary: str = EDIT_SUMMARY_EXPANDED_FROM_LINK,
 ) -> tuple[bool, str]:
     """Append sanitized text to a host article when room remains.
-
-    Shared by every caller that appends AI-drafted plain text to a pin/wiki
-    article (this module's own link-based expansion, and
-    ``services.trivia.wiki_incorporation``'s upvoted-question incorporation)
-    so the dedupe/length-budget/persistence rules stay identical regardless
-    of where the text came from.
+    Shared by every caller that appends AI-drafted plain text to a pin/wiki article (this module's own link-based expansion, and ``services.trivia.wiki_incorporation``'s upvoted-question incorporation) so the dedupe/length-budget/persistence rules stay identical regardless of where the text came from.
 
     Args:
         editor: Profile credited on the revision.
@@ -170,8 +149,7 @@ def append_to_article(
         edit_summary: One-line revision summary.
 
     Returns:
-        ``(applied, note)`` describing the outcome.
-    """
+        ``(applied, note)`` describing the outcome."""
     # Treat every boundary as untrusted.  The caller already sanitized before
     # moderation, but sanitizing again immediately before persistence prevents
     # a future caller from accidentally bypassing the plain-text guarantee.
@@ -207,12 +185,7 @@ def append_to_article(
 
 def _known_facts_block(wiki: Wiki) -> str:
     """Render this wiki's trusted Facts as a short bullet list for the writing prompt.
-
-    Handing the model our already-confirmed data (rather than only the raw
-    page text) lets it defer to what we're confident about instead of
-    re-guessing or restating a conflicting value from the linked source. See
-    ``services.facts.consumption.get_trusted_facts``.
-    """
+    Handing the model our already-confirmed data (rather than only the raw page text) lets it defer to what we're confident about instead of re-guessing or restating a conflicting value from the linked source."""
     from urbanlens.dashboard.services.facts import registry
     from urbanlens.dashboard.services.facts.consumption import get_trusted_facts
 

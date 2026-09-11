@@ -1,16 +1,4 @@
-"""REData media client plus the street-view carousel providers (Mapillary, KartaView, Panoramax).
-
-:class:`RedataMediaGateway` wraps ``GET /api/v1/media/lookup/``
-(``../REData/docs/api-reference.md``, "Media") - each network's current
-photos near a point. The three :class:`StreetViewProvider` subclasses below
-used to draw from it, but now source their slides from REData's
-``/street-view/timeline/`` (see ``redata_street_view_gateway``) instead: one
-dated slide per capture date rather than an undated handful of recent
-frames. UrbanLens used to call each network directly
-(``mapillary.py``/``kartaview.py``/``panoramax.py``, now deleted) with its
-own auth/parsing quirks; REData is now the only outbound caller, so there is
-no fallback.
-"""
+"""REData media client plus the street-view carousel providers (Mapillary, KartaView, Panoramax)."""
 
 from __future__ import annotations
 
@@ -29,15 +17,7 @@ _MEDIA_LOOKUP_PATH = "/api/v1/media/lookup/"
 @dataclass(slots=True, kw_only=True)
 class RedataMediaGateway(RedataLocationContextGateway):
     """REST client for REData's ``/api/v1/media/lookup/`` near-point endpoint.
-
-    Shares one outbound rate-limit bucket (``redata_media``) across every media
-    lookup UrbanLens makes through REData, regardless of which upstream
-    ``provider`` tag was requested - REData is the actual caller of
-    Mapillary/KartaView/Panoramax now, and pools its own outbound budget for
-    them server-side (see the base gateway's docstring), so the meaningful unit
-    to rate-limit from UrbanLens's side is "calls to REData's media endpoint",
-    not one bucket per upstream network.
-    """
+    Shares one outbound rate-limit bucket (``redata_media``) across every media lookup UrbanLens makes through REData, regardless of which upstream ``provider`` tag was requested - REData is the actual caller of Mapillary/KartaView/Panoramax now, and pools its own outbound budget for them server-side (see the base gateway's docstring), so the meaningful unit to rate-limit from UrbanLens's side is "calls to REData's media endpoint", not one bucket per upstream network."""
 
     service_key: ClassVar[str] = "redata_media"
 
@@ -107,48 +87,24 @@ class RedataMediaGateway(RedataLocationContextGateway):
 @dataclass(slots=True, kw_only=True)
 class _RedataStreetViewProvider(StreetViewProvider):
     """Base for one REData ``media/lookup`` provider surfaced in the street-view carousel.
-
-    Subclasses set ``_redata_provider`` (REData's own ``?provider=`` tag) and
-    ``_display_name``. ``service_key`` stays each provider's own historical tag
-    (``mapillary``/``kartaview``/``panoramax``) rather than sharing
-    :class:`RedataMediaGateway`'s - it namespaces this provider's own 24h slide
-    cache (see ``StreetViewProvider.get_street_view_slides``) and the debug
-    overlay's per-provider breakdown, both of which must stay distinct per
-    network even though the actual HTTP call is now made (and rate-limited)
-    through one shared REData gateway instance.
-
-    A REData failure is deliberately left to propagate out of
-    :meth:`_generate_street_view_slides` rather than being caught here - the
-    street-view carousel's collector (``collect_street_view_slides``) already
-    tolerates any one provider raising, logging it and recording
-    ``ProviderFetchResult(..., ok=False)`` for the admin debug overlay instead
-    of silently returning an empty, indistinguishable-from-no-coverage result.
-    """
+    ``service_key`` stays each provider's own historical tag (``mapillary``/``kartaview``/``panoramax``) rather than sharing :class:`RedataMediaGateway`'s - it namespaces this provider's own 24h slide cache (see ``StreetViewProvider.get_street_view_slides``) and the debug overlay's per-provider breakdown, both of which must stay distinct per network even though the actual HTTP call is now made (and rate-limited) through one shared REData gateway instance."""
 
     _redata_provider: ClassVar[str] = ""
     _display_name: ClassVar[str] = ""
 
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
         """Yield one dated slide per capture *date* from this provider, newest first.
-
-        Sourced from REData's ``/street-view/timeline/`` rather than
-        ``/media/lookup/``: the timeline holds every date a camera passed the
-        point (not just each network's current nearby photos), and its
-        ``representative`` is the frame taken nearest the query point - an
-        arbitrary pick shows a picture down the street about half the time.
-        The result is a decay progression: the same site on every date it was
-        photographed.
+        Sourced from REData's ``/street-view/timeline/`` rather than ``/media/lookup/``: the timeline holds every date a camera passed the point (not just each network's current nearby photos), and its ``representative`` is the frame taken nearest the query point - an arbitrary pick shows a picture down the street about half the time.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            radius: Unused - REData pins the street-view search at 100 m per
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
+                radius: Unused - REData pins the street-view search at 100 m per
                 provider; kept for the ``StreetViewProvider`` signature.
-            limit: Maximum number of dated slides to yield.
+                limit: Maximum number of dated slides to yield.
 
         Yields:
-            ``StreetViewSlide`` entries, newest capture date first.
-        """
+                ``StreetViewSlide`` entries, newest capture date first."""
         from urbanlens.dashboard.services.apis.locations.redata_street_view_gateway import RedataStreetViewGateway
 
         timeline = RedataStreetViewGateway().get_timeline(latitude, longitude, provider=self._redata_provider)

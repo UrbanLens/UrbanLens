@@ -1,13 +1,5 @@
 """Extensible registry of known Fact keys - the single place a new fact key is declared.
-
-Mirrors ``services.consensus.fields``'s ``ConsensusFieldStrategy`` registry
-and ``services.spotguessr.modes``'s ``ModeStrategy`` registry: adding a new
-fact key means adding one ``FactKeyDefinition`` here (or, for a future
-plugin-contributed key, calling ``register()`` at import time), never
-touching ``Fact.key``'s schema - it is a plain, unconstrained ``CharField``
-(see ``models.facts.model``), specifically so new keys never require a
-migration.
-"""
+Mirrors ``services.consensus.fields``'s ``ConsensusFieldStrategy`` registry and ``services.spotguessr.modes``'s ``ModeStrategy`` registry: adding a new fact key means adding one ``FactKeyDefinition`` here (or, for a future plugin-contributed key, calling ``register()`` at import time), never touching ``Fact.key``'s schema - it is a plain, unconstrained ``CharField`` (see ``models.facts.model``), specifically so new keys never require a migration."""
 
 from __future__ import annotations
 

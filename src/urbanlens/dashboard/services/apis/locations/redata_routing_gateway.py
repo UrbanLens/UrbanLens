@@ -15,11 +15,10 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import R
 
 #: Matches REData's own ``profile`` values.
 RoutingProfile = Literal["driving", "walking", "cycling"]
-#: ``"as_given"`` visits waypoints in the supplied order (OSRM, keyless);
-#: ``"optimized"`` reorders them to minimise travel (RouteXL, needs REData's
-#: own ``RD_ROUTEXL_USERNAME``/``RD_ROUTEXL_PASSWORD``) - REData returns
-#: ``503`` rather than silently downgrading when the requested capability
-#: isn't configured on its end.
+#: ``"as_given"`` visits waypoints in the supplied order (OSRM, keyless); ``"optimized"`` reorders
+#: them to minimise travel (RouteXL, needs REData's own
+#: ``RD_ROUTEXL_USERNAME``/``RD_ROUTEXL_PASSWORD``) - REData returns ``503`` rather than silently
+#: downgrading when the requested capability isn't configured on its end.
 RoutingCapability = Literal["as_given", "optimized"]
 
 
@@ -33,34 +32,25 @@ class RedataRoutingGateway(RedataLocationContextGateway):
         """Route between an ordered list of waypoints.
 
         Args:
-            waypoints: Ordered ``(latitude, longitude)`` pairs, 2-20 per
+                waypoints: Ordered ``(latitude, longitude)`` pairs, 2-20 per
                 REData's own limit.
-            capability: ``"as_given"`` or ``"optimized"`` - see the module
+                capability: ``"as_given"`` or ``"optimized"`` - see the module
                 docstring; never substituted for one another server-side.
-            profile: ``"driving"``, ``"walking"``, or ``"cycling"``.
+                profile: ``"driving"``, ``"walking"``, or ``"cycling"``.
 
         Returns:
-            ``{"distance_meters", "duration_seconds"}`` for the whole route
-            (matching ``OSRMGateway.get_route``'s shape, its direct-fallback
-            counterpart), or None when REData confirmed no route connects
-            these points (``route: null``), or found nothing to report.
+                ``{"distance_meters", "duration_seconds"}`` for the whole route
+                (matching ``OSRMGateway.get_route``'s shape, its direct-fallback
+                counterpart), or None when REData confirmed no route connects
+                these points (``route: null``), or found nothing to report.
 
         Raises:
-            LocationContextUnavailableError: The requested ``capability``
+                LocationContextUnavailableError: The requested ``capability``
                 isn't configured on REData's end, or the request itself
                 failed outright.
 
         Note:
-            REData's own ``../REData/docs/api-reference.md`` documents the request body
-            for this endpoint and the ``route: null``/``waypoint_order``/
-            ``available_capabilities`` fields, but doesn't show a full
-            worked example of a non-null ``route`` object's own fields.
-            ``distance_meters``/``duration_seconds`` here follow the naming
-            convention used everywhere else in that same API (e.g. the
-            buildings endpoint's own ``distance_meters``) - verify against a
-            live REData instance once its routing endpoint is confirmed
-            deployed, and adjust if its real field names differ.
-        """
+            REData's own ``../REData/docs/api-reference.md`` documents the request body for this endpoint and the ``route: null``/``waypoint_order``/ ``available_capabilities`` fields, but doesn't show a full worked example of a non-null ``route`` object's own fields. ``distance_meters``/``duration_seconds`` here follow the naming convention used everywhere else in that same API (e.g. the buildings endpoint's own ``distance_meters``) - verify against a live REData instance once its routing endpoint is confirmed deployed, and adjust if its real field names differ."""
         body = self.post_json(
             "/api/v1/routes/",
             {

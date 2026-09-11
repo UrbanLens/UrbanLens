@@ -1,33 +1,5 @@
 """Merging one or more labels into a single surviving target label.
-
-Extracted from ``controllers.labels``'s ``LabelMergeView`` (single-source, form
-POST) and ``LabelMultiMergeView`` (multi-source, JSON POST), which each grew
-their own copy of the logic. Both now delegate here, as does the external API's
-merge endpoint.
-
-Three real bugs in the controller versions are fixed rather than carried over:
-
-1. **Non-atomic.** Both views performed a multi-step "move the attachments,
-   then delete the source" sequence with no transaction. A failure partway
-   through - an ``images.add`` that raised after the pins had moved, say -
-   left attachments split across a label that was about to be deleted and one
-   that wasn't, with no way to tell what had already run.
-2. **Children were orphaned.** Neither view reparented ``source.children``
-   before deleting the source. ``Label.parents`` is a plain M2M, so deleting a
-   parent silently drops the edge and the whole subtree below it detached to
-   the root - a data loss that is invisible until someone notices their
-   hierarchy has flattened. Children are now reparented onto the target first.
-3. **Wiki attachments were silently dropped by the multi-source path.**
-   ``LabelMergeView`` moved ``wikis`` for every kind it supported;
-   ``LabelMultiMergeView`` moved them only for ``KIND_CATEGORY``, so merging
-   two tags or statuses through the bulk path lost their wiki attachments
-   outright. This module moves ``wikis`` for every pin-style kind, which is
-   the non-lossy reading and matches the single-merge path.
-
-Merging is destructive and is **not** covered by the undo framework: once the
-sources are gone there is no staged entry to restore them from. Callers
-exposing this to a client should say so plainly.
-"""
+Three real bugs in the controller versions are fixed rather than carried over:"""
 
 from __future__ import annotations
 
@@ -50,13 +22,7 @@ logger = logging.getLogger(__name__)
 
 class LabelMergeError(Exception):
     """A merge was refused.
-
-    ``message`` is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below and author its own user-facing
-    text, rather than relaying ``message`` - that keeps a future raise site
-    here from being able to smuggle unreviewed text into a response just by
-    adding a new ``raise``.
-    """
+    ``message`` is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below and author its own user-facing text, rather than relaying ``message`` - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class NoSourceLabelsError(LabelMergeError):
@@ -129,10 +95,9 @@ def _validate(target: Label, sources: Sequence[Label], profile: Profile) -> None
     if not sources:
         raise NoSourceLabelsError(f"merge_labels called with no sources (target={target.pk}, profile={profile.pk}).")
 
-    # The target must be one this profile can actually see. Global labels are
-    # legitimate *targets* (merging your own tag into a global category is a
-    # normal cleanup), which is why this is visible_to rather than an
-    # ownership check.
+    # The target must be one this profile can actually see.
+    # Global labels are legitimate *targets* (merging your own tag into a global category is a
+    # normal cleanup), which is why this is visible_to rather than an ownership check.
     if not LabelModel.objects.visible_to(profile).filter(pk=target.pk).exists():
         raise TargetLabelNotFoundError(f"Target label {target.pk} is not visible to profile {profile.pk}.")
 
@@ -154,15 +119,11 @@ def _validate(target: Label, sources: Sequence[Label], profile: Profile) -> None
 
 def _reparent_children(target: Label, source: Label) -> None:
     """Move *source*'s children onto *target* before *source* is deleted.
-
-    Skips the target itself - a target that happens to be a child of the
-    source must not be made its own parent, which would create the exact cycle
-    ``services.labels.hierarchy.would_create_cycle`` exists to prevent.
+    Skips the target itself - a target that happens to be a child of the source must not be made its own parent, which would create the exact cycle ``services.labels.hierarchy.would_create_cycle`` exists to prevent.
 
     Args:
         target: The surviving label the children are moved onto.
-        source: The label about to be deleted.
-    """
+        source: The label about to be deleted."""
     children = list(source.children.exclude(pk=target.pk))
     for child in children:
         child.parents.add(target)
@@ -171,22 +132,7 @@ def _reparent_children(target: Label, source: Label) -> None:
 
 @transaction.atomic
 def merge_labels(*, target: Label, sources: Sequence[Label], profile: Profile) -> LabelMergeResult:
-    """Merge every label in *sources* into *target*, then delete the sources.
-
-    What "merging" moves depends on the kind, mirroring where labels of that
-    kind actually attach:
-
-    - ``KIND_USER`` - ``ProfileLabelAssignment`` rows are reassigned to the
-      target via ``get_or_create``, so an author/subject pair already carrying
-      the target is not duplicated.
-    - ``KIND_MEDIA`` - the sources' images.
-    - everything else (tag, category, status) - the sources' pins *and* wikis.
-
-    In all cases the sources' children are reparented onto the target first,
-    and the sources are deleted last. The whole operation is one transaction,
-    so a failure anywhere leaves the labels exactly as they were.
-
-    This is destructive and not undoable - see the module docstring.
+    """Merge every label in *sources* into *target*, then delete the sources. - ``KIND_USER`` - ``ProfileLabelAssignment`` rows are reassigned to the target via ``get_or_create``, so an author/subject pair already carrying the target is not duplicated. - ``KIND_MEDIA`` - the sources' images. - everything else (tag, category, status) - the sources' pins *and* wikis.
 
     Args:
         target: The label that survives.
@@ -199,8 +145,7 @@ def merge_labels(*, target: Label, sources: Sequence[Label], profile: Profile) -
 
     Raises:
         LabelMergeError: If the merge is refused - see :func:`_validate` for
-            the specific subclass raised for each condition.
-    """
+            the specific subclass raised for each condition."""
     _validate(target, sources, profile)
 
     merged_ids: list[int] = []

@@ -1,27 +1,5 @@
 """Delta-sync pages of a profile's pins and pin deletions, for external clients.
-
-This is the read half of the external API's pin surface (the write half is
-``services.pins.pin_creation``). A sync client calls ``pins/`` repeatedly with the
-``sync_watermark`` it was handed on its previous sync as ``modified_since``,
-pages through changed pins with the opaque cursor, then does the same against
-``pins/deleted/`` for tombstones - after which its local copy matches the
-server without ever downloading unchanged rows.
-
-Correctness notes baked into the design:
-
-- The cursor is a composite ``(updated, pk)`` keyset, not the map endpoint's
-  plain pk keyset: sync pages are ordered by modification time, and the pk
-  tiebreak keeps the order total when several pins share an ``updated``
-  microsecond (bulk imports do exactly that).
-- ``sync_watermark`` is server time minus a small grace lap, not
-  ``Max(updated)``: a transaction that committed mid-sync stamped its rows
-  slightly in the past, and the grace window guarantees the next sync's
-  ``modified_since`` still overlaps them. Clients must treat re-delivered
-  pins as idempotent upserts.
-- Deletions are served from ``PinTombstone`` rows (written in the same
-  transaction as each pin's hard delete) because ``Max(updated)`` over
-  surviving rows never moves when a pin disappears.
-"""
+A sync client calls ``pins/`` repeatedly with the ``sync_watermark`` it was handed on its previous sync as ``modified_since``, pages through changed pins with the opaque cursor, then does the same against ``pins/deleted/`` for tombstones - after which its local copy matches the server without ever downloading unchanged rows."""
 
 from __future__ import annotations
 
@@ -48,40 +26,20 @@ if TYPE_CHECKING:
 SYNC_WATERMARK_GRACE = timedelta(seconds=10)
 
 #: How long deletion tombstones are retained before the scheduled pruning task
-#: (``tasks.prune_pin_tombstones``) removes them. This is the longest supported
-#: sync-client offline gap: a client that hasn't synced within this window can
-#: no longer trust the deletions feed incrementally (pruned tombstones are
-#: unrecoverable) and is told to full-resync via ``StaleDeletedSinceError`` /
-#: HTTP 410. 400 days = "over a year offline" with margin, while still bounding
-#: unbounded row growth.
+#: (``tasks.prune_pin_tombstones``) removes them.
+#: This is the longest supported sync-client offline gap: a client that hasn't synced within this
+#: window can no longer trust the deletions feed incrementally (pruned tombstones are unrecoverable)
 TOMBSTONE_RETENTION = timedelta(days=400)
 
 
 class InvalidSyncCursorError(ValueError):
     """The supplied cursor is not one this service issued.
-
-    The message is for logs, not the response: a caller's HTTP-facing code
-    should catch this and author its own user-facing text, rather than
-    relaying the exception's message - that keeps a future raise site here
-    from being able to smuggle unreviewed text into a response just by
-    adding a new ``raise``.
-    """
+    The message is for logs, not the response: a caller's HTTP-facing code should catch this and author its own user-facing text, rather than relaying the exception's message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class StaleDeletedSinceError(ValueError):
     """``deleted_since`` predates the tombstone retention floor.
-
-    Tombstones older than :data:`TOMBSTONE_RETENTION` are pruned, so a client
-    asking for deletions from before that floor could silently miss some -
-    incremental sync is no longer trustworthy and the client must resync its
-    pins from scratch (drop local rows absent from a full ``pins/`` walk).
-
-    The message is for logs, not the response: a caller's HTTP-facing code
-    should catch this and author its own user-facing text, rather than
-    relaying the exception's message - that keeps a future raise site here
-    from being able to smuggle unreviewed text into a response just by
-    adding a new ``raise``.
-    """
+    Tombstones older than :data:`TOMBSTONE_RETENTION` are pruned, so a client asking for deletions from before that floor could silently miss some - incremental sync is no longer trustworthy and the client must resync its pins from scratch (drop local rows absent from a full ``pins/`` walk)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,8 +76,7 @@ def _decode_cursor(cursor: str) -> tuple[datetime, int]:
         The ``(timestamp, pk)`` position the next page starts after.
 
     Raises:
-        InvalidSyncCursorError: The token is malformed or was never ours.
-    """
+        InvalidSyncCursorError: The token is malformed or was never ours."""
     try:
         raw = base64.urlsafe_b64decode(cursor.encode()).decode()
         stamp_raw, _, pk_raw = raw.rpartition("|")
@@ -151,10 +108,7 @@ def sync_pins_page(
     include_total: bool = False,
 ) -> PinSyncPage:
     """Return one page of the profile's pins changed at or after ``modified_since``.
-
-    Serves *all* of the profile's pins - root and detail/child alike - unlike
-    the web map's root-only payload; a sync client mirrors the full dataset
-    and reconstructs the hierarchy from each pin's ``parent_uuid``.
+    Serves *all* of the profile's pins - root and detail/child alike - unlike the web map's root-only payload; a sync client mirrors the full dataset and reconstructs the hierarchy from each pin's ``parent_uuid``.
 
     Args:
         profile: The profile whose pins to page through.
@@ -169,8 +123,7 @@ def sync_pins_page(
         The page of serialized pins, ordered by ``(updated, pk)``.
 
     Raises:
-        InvalidSyncCursorError: ``cursor`` is malformed or was never ours.
-    """
+        InvalidSyncCursorError: ``cursor`` is malformed or was never ours."""
     watermark = _watermark()
     limit = min(max(int(limit or MapPinPayloadService.DEFAULT_LIMIT), 1), MapPinPayloadService.MAX_LIMIT)
 
@@ -193,23 +146,13 @@ def sync_pins_page(
 
 
 def serialize_sync_pin(service: MapPinPayloadService, pin: Pin) -> dict[str, Any]:
-    """The map payload shape plus the sync-only fields layered on top.
-
-    Wraps rather than changes ``MapPinPayloadService.serialize`` - the map
-    payload's shape is version-pinned by the web client's localStorage cache
-    (``pin-cache.ts`` ``CACHE_VERSION``), so growing it here would force a
-    frontend cache bump for fields only sync clients read.
-
-    Public (not ``pin_sync``-private) because ``services.pins.pin_detail`` also
-    uses it as the base of the richer external-API pin-detail payload.
-    """
+    """The map payload shape plus the sync-only fields layered on top."""
     payload = service.serialize(pin)
     payload["pin_type"] = pin.pin_type
-    # The map payload names its labels by id and sends the dictionary once per
-    # response; a sync client holds one pin at a time and offline, so it gets the
-    # labels themselves - each already carrying its id, which is why the ids are
-    # dropped rather than sent alongside. Labels are already prefetched by
-    # prepare_queryset, so this adds no query.
+    # The map payload names its labels by id and sends the dictionary once per response; a sync
+    # client holds one pin at a time and offline, so it gets the labels themselves - each already
+    # carrying its id, which is why the ids are dropped rather than sent alongside.
+    # Labels are already prefetched by prepare_queryset, so this adds no query.
     payload.pop("label_ids", None)
     chips = service.display_labels(pin)
     payload["tags"] = [{"id": label.id, "name": label.name, "color": label.effective_color, "icon": label.effective_icon, "kind": label.kind} for label in chips]

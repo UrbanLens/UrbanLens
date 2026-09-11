@@ -15,10 +15,10 @@ from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-# Fields restored verbatim on undo. Deliberately excludes uuid/slug/created/updated
-# (regenerated fresh by Pin.save()) and the location/profile/wiki/parent_pin FKs
-# (handled separately below, since FK columns need their `_id` attname, not the
-# relation name, to be passed to Pin.objects.create()).
+# Fields restored verbatim on undo.
+# Deliberately excludes uuid/slug/created/updated (regenerated fresh by Pin.save()) and the
+# location/profile/wiki/parent_pin FKs (handled separately below, since FK columns need their `_id`
+# attname, not the relation name, to be passed to Pin.objects.create()).
 _RESTORABLE_FIELDS = (
     "name_is_user_provided",
     "name",
@@ -51,10 +51,7 @@ _RESTORABLE_FIELDS = (
 )
 
 
-#: Registry key for this handler. Exposed as a module-level constant so call
-#: sites can import it (``from ...handlers.pin import MODEL_LABEL``) instead
-#: of hand-typing ``"pin"`` - a typo in a hand-typed string only fails at
-#: runtime via ``get_handler``'s ``ValueError``.
+#: Registry key for this handler. Import it instead of hand-typing the string.
 MODEL_LABEL = "pin"
 
 
@@ -85,10 +82,9 @@ class PinUndoHandler(UndoHandler):
             "wiki_id": pin.wiki_id,
             "parent_pin_old_pk": pin.parent_pin_id,
             "label_ids": list(pin.labels.values_list("id", flat=True)),
-            # Image.pin is SET_NULL, so deleting a pin detaches its photos rather
-            # than destroying them - the ids are captured here because nothing
-            # else records which pin they were on, and without them an undo
-            # brings the pin back empty while the photos sit unattached.
+            # Image.pin is SET_NULL, so deleting a pin detaches its photos rather than destroying
+            # them - the ids are captured here because nothing else records which pin they were on,
+            # and without them an undo brings the pin back empty while the photos sit unattached.
             "image_ids": list(pin.images.values_list("pk", flat=True)),
         }
 
@@ -99,12 +95,7 @@ class PinUndoHandler(UndoHandler):
     @classmethod
     def _resolved_parent_pk(cls, entry: dict[str, Any], in_batch: set[int]) -> int | None:
         """The old pk of the parent this entry will end up under, or None if it will be a root pin.
-
-        Three outcomes, matching what :meth:`restore` actually does: no parent
-        recorded; a parent that is part of this same batch (relinked to its new
-        row); or a parent outside the batch, reattached only if it still exists.
-        A parent that has since been deleted leaves the pin at the top level.
-        """
+        Three outcomes, matching what :meth:`restore` actually does: no parent recorded; a parent that is part of this same batch (relinked to its new row); or a parent outside the batch, reattached only if it still exists."""
         old_parent_pk = entry["parent_pin_old_pk"]
         if not old_parent_pk:
             return None
@@ -117,22 +108,15 @@ class PinUndoHandler(UndoHandler):
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Pin]:
         """Recreate pins with fresh pks/uuids/slugs, relinking hierarchy and labels.
-
-        Parents are created before their children and the link is set at creation
-        rather than in a second pass. That ordering is not cosmetic:
-        ``db_pin_unique_location_per_profile`` allows one *root* pin per location
-        per profile, so a detail pin created parent-less and adopted afterwards is
-        momentarily a root pin, and collides with whatever root pin already stands
-        at its location.
+        Parents are created before their children and the link is set at creation rather than in a second pass.
 
         Raises:
-            UndoExpiredError: If the profile, location, wiki, or any label this
+                UndoExpiredError: If the profile, location, wiki, or any label this
                 batch referenced was independently deleted during the retention
                 window, since recreating the row would otherwise fail with an
                 uncaught IntegrityError. Also raised when a pin that would come
                 back as a root pin finds its location already re-pinned by this
-                profile - the same constraint, refused cleanly instead of 500ing.
-        """
+                profile - the same constraint, refused cleanly instead of 500ing."""
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.services.undo.service import UndoExpiredError

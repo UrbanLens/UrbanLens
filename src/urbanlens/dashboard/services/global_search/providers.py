@@ -1,14 +1,4 @@
-"""Per-entity search providers for global search.
-
-Each provider owns one result type: it knows how to scope its queryset to
-content the requesting user actually has access to, which text fields to
-match, how to apply the parsed date/place filters, and how to turn a row into
-a rendered :class:`~urbanlens.dashboard.services.global_search.results.SearchResult`.
-
-Typo tolerance comes from PostgreSQL trigram similarity on each provider's
-primary name field (pg_trgm, installed by migration 0022), OR-ed with plain
-``icontains`` term matching across all searchable fields.
-"""
+"""Per-entity search providers for global search."""
 
 from __future__ import annotations
 
@@ -35,41 +25,24 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.global_search.parser import ParsedQuery
 from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
 
-#: Preserves the concrete queryset class through the shared helpers. Without it
-#: they hand back a plain QuerySet, and a provider that then calls a custom
-#: manager method - PhotoSearchProvider's visible_to() is the one that matters -
-#: is calling something the type no longer admits exists.
+#: Preserves the concrete queryset class through the shared helpers.
+#: Without it they hand back a plain QuerySet, and a provider that then calls a custom manager
+#: method - PhotoSearchProvider's visible_to() is the one that matters - is calling something the
+#: type no longer admits exists.
 _QS = TypeVar("_QS", bound="QuerySet[Any, Any]")
 
 logger = logging.getLogger(__name__)
 
-#: A concealed wiki's field/alias match cannot be expressed as a SQL predicate
-#: - name/description are versioned fields resolved per viewer, and whether a
-#: given wiki is concealed at all depends on the reputation ledger, not on any
-#: column search can filter by. So the SQL query over-fetches candidates and
-#: each is re-verified in Python against exactly what its viewer would be
-#: shown, before the page's own limit is applied - see _concealment_survivors.
-#: 4x keeps the extra cost bounded (a handful of rows, not a table scan) while
-#: giving real headroom against a page mostly filled by wikis that turn out to
-#: be concealed for this viewer; docs/PROBLEMS.md's 2026-08-24 entry has the
-#: full reasoning for why the three cheaper patches were rejected.
+#: A concealed wiki's field/alias match cannot be expressed as a SQL predicate - name/description
+#: are versioned fields resolved per viewer, and whether a given wiki is concealed at all depends on
+#: the reputation ledger, not on any column search can filter by.
+#: So the SQL query over-fetches candidates and each is re-verified in Python against exactly what
 _CONCEALMENT_OVERFETCH = 4
 
 
 def _concealed_wiki_haystacks(wiki: Any, viewer: Profile) -> list[str]:
     """Lowercased name/description/alias/tag text *viewer* may actually see on *wiki*.
-
-    The shared building block behind every concealed-candidate re-check
-    below: what a concealed viewer's own search may match against is exactly
-    what the page would render them, never the live row.
-
-    Place tags are included even though they aren't versioned/concealed
-    fields at all: they're provider (OSM/Overture) facts about the place,
-    not wiki-authored content, the same kind of thing
-    ``location.official_name`` already is - so a wiki that matched only via
-    its own place's tag must not be dropped by a concealment re-check meant
-    to hide a stranger's live name/description/alias.
-    """
+    The shared building block behind every concealed-candidate re-check below: what a concealed viewer's own search may match against is exactly what the page would render them, never the live row."""
     from urbanlens.dashboard.services.locations.external_tags import humanize_tag_value
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealed_field_values
 
@@ -88,13 +61,7 @@ def _terms_survive(terms: list[str], haystacks: list[str]) -> bool:
 
 def _concealed_wiki_survives(wiki: Any, viewer: Profile, terms: list[str]) -> bool:
     """Whether *wiki*'s name/description/aliases, as *viewer* would actually see them, still match *terms*.
-
-    Called only once :func:`concealment_active` has already said this wiki is
-    concealed for this viewer. Re-verification is a strict substring check
-    against the resolved values, never trigram/fuzzy similarity - fuzzy
-    matching is what admitted some candidates to the pre-filter set in the
-    first place, and re-deriving it against concealed values would let a
-    query that merely *resembles* a stranger's hidden name keep matching.
+    Called only once :func:`concealment_active` has already said this wiki is concealed for this viewer.
 
     Args:
         wiki: A candidate Wiki row (the live one - resolution happens here).
@@ -104,8 +71,7 @@ def _concealed_wiki_survives(wiki: Any, viewer: Profile, terms: list[str]) -> bo
     Returns:
         True when there is nothing to re-verify (no free-text terms - a
         near-me-only or date-only query carries no textual oracle) or every
-        term appears in what this viewer may see.
-    """
+        term appears in what this viewer may see."""
     if not terms:
         return True
     return _terms_survive(terms, _concealed_wiki_haystacks(wiki, viewer))
@@ -113,12 +79,7 @@ def _concealed_wiki_survives(wiki: Any, viewer: Profile, terms: list[str]) -> bo
 
 def _concealed_article_survives(article: Any, viewer: Profile, terms: list[str]) -> bool:
     """Whether an article's viewer-visible content and host still match *terms* once its wiki is concealed.
-
-    Only called for wiki-hosted articles a concealment gate has already
-    fired for. ``visible_article_revision`` is the same function the Article
-    tab itself renders through, so a term must appear in prose this viewer
-    could actually open, not merely in the live (possibly a stranger's)
-    revision the SQL match ran against.
+    Only called for wiki-hosted articles a concealment gate has already fired for.
 
     Args:
         article: A candidate Article row.
@@ -128,8 +89,7 @@ def _concealed_article_survives(article: Any, viewer: Profile, terms: list[str])
     Returns:
         True when there is nothing to re-verify, or every term appears in
         the newest revision this viewer may see (content) or in the host
-        wiki's own concealed name/description/aliases.
-    """
+        wiki's own concealed name/description/aliases."""
     if not terms:
         return True
     from urbanlens.dashboard.services.wiki.concealment import visible_article_revision
@@ -142,20 +102,14 @@ def _concealed_article_survives(article: Any, viewer: Profile, terms: list[str])
 
 def _concealed_comment_survives(comment: Any, viewer: Profile) -> bool:
     """Whether *comment* is one of *viewer*'s own or a friend's, per the same rule ``conceal_rows`` applies elsewhere.
-
-    A comment's text doesn't change per viewer - unlike a wiki's merged
-    fields, there's nothing to re-resolve - so the only question concealment
-    raises for search is row-level visibility, answered by the actor id
-    exactly as :func:`conceal_rows` would filter the comment queryset the
-    page itself renders from.
+    A comment's text doesn't change per viewer - unlike a wiki's merged fields, there's nothing to re-resolve - so the only question concealment raises for search is row-level visibility, answered by the actor id exactly as :func:`conceal_rows` would filter the comment queryset the page itself renders from.
 
     Args:
         comment: A candidate Comment row.
         viewer: The searching profile.
 
     Returns:
-        Whether this comment survives concealment for this viewer.
-    """
+        Whether this comment survives concealment for this viewer."""
     from urbanlens.dashboard.services.wiki.concealment import visible_actor_ids
 
     return comment.profile_id in visible_actor_ids(viewer)
@@ -163,17 +117,6 @@ def _concealed_comment_survives(comment: Any, viewer: Profile) -> bool:
 
 def _concealment_survivors(queryset: Any, viewer: Profile, limit: int, wiki_of, survives) -> list:
     """Fetch up to *limit* SQL-matched candidates, re-fetching with headroom only if concealment needs it.
-
-    Shared by every provider whose text match can land on a concealed wiki's
-    versioned fields, own-authored content, or another viewer's row - see the
-    module-level note on :data:`_CONCEALMENT_OVERFETCH` for why this can't be
-    a queryset filter. Fetches the ordinary ``limit``-sized page first; only
-    when at least one of those candidates' wiki is actually concealed for
-    this viewer does it re-fetch at ``limit * _CONCEALMENT_OVERFETCH`` for
-    headroom to drop non-survivors and still fill the page. While
-    ``concealment_active`` returns False everywhere (today, in production),
-    this never re-fetches and never re-verifies anything - one query, same
-    as before this mechanism existed.
 
     Args:
         queryset: The already SQL-matched, ordered, unsliced queryset.
@@ -189,8 +132,7 @@ def _concealment_survivors(queryset: Any, viewer: Profile, limit: int, wiki_of, 
         what was fetched - a page can come back under ``limit`` when
         concealed drops are a large share of the over-fetched set; that is a
         disclosed trade-off of over-fetching rather than a full second-pass
-        query, not a bug.
-    """
+        query, not a bug."""
     from urbanlens.dashboard.services.wiki.concealment import concealment_active
 
     candidates = list(queryset[:limit])
@@ -216,11 +158,10 @@ FUZZY_THRESHOLD = 0.25
 #: rather than an exact circle - adequate for "nearby" intent.
 NEAR_ME_RADIUS_KM = 50.0
 
-#: Score bonus for a "near me" hit, well above the 0-1 range of text/fuzzy
-#: scores so nearby results always sort above distant ones with the same
-#: relevance - but a strong text match is never *excluded* for being far away
-#: (a pin literally named "Church Near Me" must still be found even if it
-#: isn't actually nearby).
+#: Score bonus for a "near me" hit, well above the 0-1 range of text/fuzzy scores so nearby results
+#: always sort above distant ones with the same relevance - but a strong text match is never
+#: *excluded* for being far away (a pin literally named "Church Near Me" must still be found even if
+#: it isn't actually nearby).
 NEAR_ME_SCORE_BOOST = 10.0
 
 #: Location sub-fields checked when the query names a place ("in Cincinnati").
@@ -299,10 +240,7 @@ def date_range_filter(field_path: str, parsed: ParsedQuery) -> Q:
 
 def distance_filter(location_path: str, parsed: ParsedQuery, *, radius_km: float = NEAR_ME_RADIUS_KM) -> Q:
     """Build a bounding-box predicate for a "near me" query.
-
-    Approximates a circle of ``radius_km`` around the searching user's known
-    location with a lat/lng box, since Location stores plain decimals rather
-    than a PostGIS point field.
+    Approximates a circle of ``radius_km`` around the searching user's known location with a lat/lng box, since Location stores plain decimals rather than a PostGIS point field.
 
     Args:
         location_path: ORM path prefix to the Location relation.
@@ -312,8 +250,7 @@ def distance_filter(location_path: str, parsed: ParsedQuery, *, radius_km: float
 
     Returns:
         Q constraining the location to the box; empty Q when the query has no
-        near-me coordinates.
-    """
+        near-me coordinates."""
     if parsed.near_lat is None or parsed.near_lng is None:
         return Q()
     lat_delta = radius_km / 111.0
@@ -331,12 +268,6 @@ def distance_filter(location_path: str, parsed: ParsedQuery, *, radius_km: float
 def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[str, Concat | Exists], Q]:
     """Build the annotation and predicate to match a person by name.
 
-    At a minimum, matches on username, first name, last name, full name (the
-    concatenation of first and last - not derivable from a single field
-    lookup, hence the annotation), and any private nickname ``viewer`` has
-    assigned that profile. Used for any "from <person>" clause (DM
-    counterparty, pin-share sender, ...).
-
     Args:
         other_path: ORM path prefix to the Profile being matched (e.g.
             ``"sender"``, ``"recipient"``, ``"source_share__from_profile"``).
@@ -347,8 +278,7 @@ def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[st
     Returns:
         (annotation dict to merge into ``queryset.annotate(**...)``, Q to
         filter with) - both keyed/scoped to ``other_path`` so multiple calls
-        for different paths can be combined without colliding.
-    """
+        for different paths can be combined without colliding."""
     from urbanlens.dashboard.models.profile.nickname import ProfileNickname
 
     key = other_path.replace("__", "_")
@@ -370,12 +300,7 @@ def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[st
 
 def apply_label_clause(queryset: _QS, parsed: ParsedQuery, relation: str = "labels") -> _QS:  # noqa: UP047
     """Filter *queryset* by `label:`/`-label:` (aliases `tag`, `labels`).
-
-    Applied as two separate ``.filter()``/``.exclude()`` calls rather than one
-    combined ``Q()`` - Django's well-known multi-valued-relation pitfall means
-    an OR-inclusion and a NOT-exclusion on the *same* M2M combined in a single
-    filter call don't mean what they look like they mean; two calls each get
-    their own join and are unambiguous.
+    Applied as two separate ``.filter()``/``.exclude()`` calls rather than one combined ``Q()`` - Django's well-known multi-valued-relation pitfall means an OR-inclusion and a NOT-exclusion on the *same* M2M combined in a single filter call don't mean what they look like they mean; two calls each get their own join and are unambiguous.
 
     Args:
         queryset: The already access-scoped queryset.
@@ -383,8 +308,7 @@ def apply_label_clause(queryset: _QS, parsed: ParsedQuery, relation: str = "labe
         relation: ORM path to the Label M2M relation (e.g. ``"labels"``).
 
     Returns:
-        The filtered queryset; unchanged when neither field is set.
-    """
+        The filtered queryset; unchanged when neither field is set."""
     if parsed.labels:
         included = Q()
         for name in parsed.labels:
@@ -401,11 +325,6 @@ def apply_label_clause(queryset: _QS, parsed: ParsedQuery, relation: str = "labe
 def author_clause(path: str, parsed: ParsedQuery, profile: Profile) -> tuple[dict[str, Concat | Exists], Q] | None:
     """The annotation/Q pair for `by:`/`author:`/`creator:`, or None when unset.
 
-    "me" (case-insensitive) matches ``path`` against the searching profile
-    directly, mirroring how `near:me` is special-cased in the parser. Any
-    other value reuses :func:`person_match` against the same path - the exact
-    mechanism `from:` already uses for a different relation.
-
     Args:
         path: ORM path prefix to the Profile being matched (e.g. ``"profile"``,
             ``"creator"``, ``"last_edited_by"``, ``"sender"``).
@@ -414,8 +333,7 @@ def author_clause(path: str, parsed: ParsedQuery, profile: Profile) -> tuple[dic
 
     Returns:
         None when ``parsed.author`` is unset; otherwise an (annotation dict,
-        Q) pair the caller applies exactly as :func:`person_match`'s result.
-    """
+        Q) pair the caller applies exactly as :func:`person_match`'s result."""
     if not parsed.author:
         return None
     if parsed.author.strip().lower() == "me":
@@ -425,21 +343,14 @@ def author_clause(path: str, parsed: ParsedQuery, profile: Profile) -> tuple[dic
 
 def apply_pin_has_clause(queryset: _QS, parsed: ParsedQuery) -> _QS:  # noqa: UP047
     """Filter a Pin queryset by `has:`/`-has:` (see the operator's choice list).
-
-    Each recognized choice is applied as its own ``Exists()``/``isnull``
-    check - mirroring ``PinQuerySet.filter_by_criteria``'s existing
-    ``has_links`` pattern - so choices compose safely regardless of order.
-    ``coords`` and any unrecognized value contribute nothing here; they're
-    already surfaced to the user via ``parsed.unsupported``/an unknown key,
-    never silently treated as a match.
+    Each recognized choice is applied as its own ``Exists()``/``isnull`` check - mirroring ``PinQuerySet.filter_by_criteria``'s existing ``has_links`` pattern - so choices compose safely regardless of order.
 
     Args:
         queryset: The already access-scoped Pin queryset.
         parsed: The structured query, carrying ``has``.
 
     Returns:
-        The filtered queryset; unchanged when ``parsed.has`` is empty.
-    """
+        The filtered queryset; unchanged when ``parsed.has`` is empty."""
     if not parsed.has:
         return queryset
 
@@ -488,14 +399,6 @@ _UNIVERSAL_SORT_FIELDS: dict[str, str] = {"recent": "-updated", "updated": "-upd
 def apply_sort(queryset: _QS, parsed: ParsedQuery, *, location_path: str | None = None, visited_field: str | None = None) -> tuple[_QS, bool]:  # noqa: UP047
     """Reorder *queryset* for `sort:`, when this provider understands the requested mode.
 
-    `nearest` additionally needs `location_path` and a known searcher point
-    (`parsed.near_lat`/`near_lng`, resolved by the engine); `visited`
-    additionally needs `visited_field` (the model's own "last visited"/
-    "visited at" field). A mode this provider has no concept of - or none
-    given - leaves `queryset` untouched, letting the caller's own default
-    ordering (`apply_text`'s near_hit/search_sim/-created, or a bespoke
-    fallback) stand; the caller uses the returned bool to know which it got.
-
     Args:
         queryset: The already filtered/access-scoped queryset.
         parsed: The structured query, carrying ``sort``.
@@ -505,8 +408,7 @@ def apply_sort(queryset: _QS, parsed: ParsedQuery, *, location_path: str | None 
             enabling `visited`; omit for models with no such concept.
 
     Returns:
-        (queryset, whether a sort mode was actually applied).
-    """
+        (queryset, whether a sort mode was actually applied)."""
     mode = parsed.sort or ""
     if mode == "nearest" and location_path is not None and parsed.near_lat is not None and parsed.near_lng is not None:
         point = Point(parsed.near_lng, parsed.near_lat, srid=4326)
@@ -553,45 +455,27 @@ class SearchProvider(ABC):
 
     def apply_text(self, queryset: _QS, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None, tag_path: str | None = None) -> _QS:
         """Apply term matching plus fuzzy title matching and relevance ordering.
-
-        With no free-text terms (a purely structured query like "photos from
-        last summer") the queryset is left unfiltered, ordered newest-first by
-        ``created`` - except that a "near me" query with nothing else to go
-        on filters to rows that are *either* in the near-me box *or* whose
-        text literally contains the near-me phrase (e.g. "Belnear Medical
-        Center" matches "near me" as a literal substring), since otherwise a
-        result literally named after the phrase could be silently dropped.
-
-        With free-text terms present alongside "near me" (e.g. "church near
-        me"), distance is deliberately *not* a filter: a pin literally named
-        "Church Near Me" must still be found even if it is not actually
-        nearby. Instead, near-me hits are annotated and boosted to the top via
-        :meth:`score_of`, so proximity affects ranking rather than silently
-        dropping results. The near-me phrase itself is not folded into this
-        branch's matching - once there's a real term, only that term (and
-        proximity, for ranking) governs inclusion.
+        "Belnear Medical Center" matches "near me" as a literal substring), since otherwise a result literally named after the phrase could be silently dropped.
 
         Args:
-            queryset: The access-scoped queryset.
-            parsed: The structured query.
-            fields: ORM field paths for exact (icontains) term matching.
-            location_path: ORM path to this row's Location relation, enabling
+                queryset: The access-scoped queryset.
+                parsed: The structured query.
+                fields: ORM field paths for exact (icontains) term matching.
+                location_path: ORM path to this row's Location relation, enabling
                 near-me handling; omit for models with no location.
-            tag_path: ORM path to this row's ``PlaceExternalTag`` relation
+                tag_path: ORM path to this row's ``PlaceExternalTag`` relation
                 (e.g. ``"location__place__external_tags"``), enabling
                 external-tag matching alongside the plain field list - see
                 :func:`~urbanlens.dashboard.services.locations.external_tag_groups.tag_match_q`.
                 Omit for models with no place-tagged location.
 
         Returns:
-            Filtered queryset annotated with ``search_sim``/``near_hit`` where
-            applicable, ordered most relevant first.
-        """
-        # parsed.near_me is required explicitly, not just near_lat/lng being set:
-        # `sort:nearest` alone (no "near me" wording) also needs a resolved point
-        # (for apply_sort's Distance() ordering below), but must NOT also impose
-        # the near-me radius filter/boost - sort:nearest ranks everything by
-        # distance, it doesn't exclude anything far away.
+                Filtered queryset annotated with ``search_sim``/``near_hit`` where
+                applicable, ordered most relevant first."""
+        # parsed.near_me is required explicitly, not just near_lat/lng being set: `sort:nearest`
+        # alone (no "near me" wording) also needs a resolved point (for apply_sort's Distance()
+        # ordering below), but must NOT also impose the near-me radius filter/boost - sort:nearest
+        # ranks everything by distance, it doesn't exclude anything far away.
         has_near = location_path is not None and parsed.near_me and parsed.near_lat is not None and parsed.near_lng is not None
         geo_q = distance_filter(location_path, parsed) if has_near and location_path is not None else Q()
         extra = None
@@ -651,10 +535,9 @@ class PinSearchProvider(SearchProvider):
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
         if parsed.person:
-            # Matched via an Exists subquery on PinShare (keyed by location,
-            # not Pin.source_share) so this also finds shares the recipient
-            # already had pinned - accepting those never sets source_share,
-            # since no new Pin was created (see PinShare.resulting_pin).
+            # Matched via an Exists subquery on PinShare (keyed by location, not Pin.source_share)
+            # so this also finds shares the recipient already had pinned - accepting those never
+            # sets source_share, since no new Pin was created (see PinShare.resulting_pin).
             sharer_ann, sharer_q = person_match("from_profile", parsed.person, profile)
             shared_with_me = PinShare.objects.filter(to_profile=profile, status=PinShareStatus.ACCEPTED, pin__location_id=OuterRef("location_id")).annotate(**sharer_ann).filter(sharer_q)
             queryset = queryset.filter(Exists(shared_with_me))
@@ -697,13 +580,10 @@ class PinSearchProvider(SearchProvider):
         results = []
         for pin in queryset[:limit]:
             location = pin.location
-            # An address ("123 Main St, Springfield, IL") is what actually
-            # tells same-named pins apart in a result list - location.display_name
-            # is a NAME (wiki/official name), which for a generic tag like
-            # "Hospital" is often identical to the pin's own title, leaving
-            # duplicate-named pins with an equally-duplicate subtitle. Only
-            # fall back to the name when no address is known at all (e.g. a
-            # pin with coordinates but no reverse-geocoded address yet).
+            # An address ("123 Main St, Springfield, IL") is what actually tells same-named pins
+            # apart in a result list - location.display_name is a NAME (wiki/official name), which
+            # for a generic tag like "Hospital" is often identical to the pin's own title, leaving
+            # duplicate-named pins with an equally-duplicate subtitle.
             subtitle = pin.effective_address or (location.display_name if location else "")
             image_url = None
             if pin.cover_photo is not None and pin.cover_photo.image:
@@ -726,13 +606,7 @@ class PinSearchProvider(SearchProvider):
 
 
 class PhotoSearchProvider(SearchProvider):
-    """Photos the user can see: own uploads plus images on their pins/pinned places.
-
-    Matches captions, attribution, plugin-generated keywords, user-applied
-    media labels, and the names of the pin/place each photo belongs to. This
-    includes media materialized from external providers (Yelp, Wikimedia, ...)
-    for pins and wikis the user has access to.
-    """
+    """Photos the user can see: own uploads plus images on their pins/pinned places."""
 
     slug = "photos"
     fuzzy_field = "caption"
@@ -740,16 +614,12 @@ class PhotoSearchProvider(SearchProvider):
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.images import Image
 
-        # visible_wiki_location_ids_cached is a superset of "locations with my own
-        # pin" (it includes those plus domain-earned wiki locations - e.g. a
-        # boundary-mate pin on a different Location row of the same place), so
-        # this only widens what was previously an exact-Location-only match.
         queryset = (
             Image.objects.filter(
-                # The third disjunct deliberately reaches other people's photos:
-                # it is a candidate net, and visible_to() below is the gate. It
-                # follows wiki reach so the candidates match what that gate now
-                # admits - a photo on a wiki reached through the place domain.
+                # The third disjunct deliberately reaches other people's photos: it is a candidate
+                # net, and visible_to() below is the gate.
+                # It follows wiki reach so the candidates match what that gate now admits - a photo
+                # on a wiki reached through the place domain.
                 Q(profile=profile) | Q(pin__profile=profile) | Q(location_id__in=visible_wiki_location_ids_cached(profile)),
             )
             .select_related("pin", "location__wiki", "profile")
@@ -783,17 +653,10 @@ class PhotoSearchProvider(SearchProvider):
             location_path="location",
         ).distinct()
 
-        # Applied here, and applied at all. This queryset reaches other people's
-        # photos deliberately - the third disjunct above is "any image at a location
-        # I have a pin at", which is how you find pictures of a place you follow -
-        # but it returned them whatever the uploader had said about who may see
-        # their photos. A result carries the caption, the owning pin's name and a
-        # link to that pin, so what leaked was not only the picture.
-        #
-        # Last, because visible_to is eager (see ImageQuerySet.visible_to): it
-        # resolves the allowed-uploader set from whatever the queryset already
-        # narrows to, so narrowing first is what stops it inspecting every uploader
-        # on the site.
+        # Applied here, and applied at all.
+        # This queryset reaches other people's photos deliberately - the third disjunct above is
+        # "any image at a location I have a pin at", which is how you find pictures of a place you
+        # follow - but it returned them whatever the uploader had said about who may see their
         queryset = queryset.visible_to(profile)
         queryset, _ = apply_sort(queryset, parsed, location_path="location")
 
@@ -821,9 +684,9 @@ class PhotoSearchProvider(SearchProvider):
                     date=image.taken_at or image.created,
                     score=self.score_of(image),
                     # Photos are the one type this API addresses by uuid alone
-                    # (``photos/<uuid:image_uuid>/``); there is no photo slug to
-                    # offer, and handing back the *host* pin's slug here would
-                    # quietly turn "open this photo" into "open some pin".
+                    # (``photos/<uuid:image_uuid>/``); there is no photo slug to offer, and handing
+                    # back the *host* pin's slug here would quietly turn "open this photo" into
+                    # "open some pin".
                     object_slug="",
                     object_uuid=str(image.uuid),
                 ),
@@ -843,10 +706,6 @@ class WikiSearchProvider(SearchProvider):
         if not profile.community_enabled:
             return []
         # Asks the access authority rather than restating one of its clauses.
-        # This used to be "a pin on the exact location, or you created it": too
-        # narrow, because a pin sharing the place's domain opens the page; and
-        # too broad, because creating a wiki was not one of the four clauses, so
-        # a creator with no pin was offered a result whose page answers 404.
         queryset = Wiki.objects.filter(
             location_id__in=visible_wiki_location_ids_cached(profile),
         ).select_related("location")
@@ -868,11 +727,10 @@ class WikiSearchProvider(SearchProvider):
             location = wiki.location
             if location is None or not location.slug:
                 continue
-            # Surviving the concealment gate says this candidate is
-            # ALLOWED to appear in the result list; it says nothing about
-            # what its title/snippet should say. conceal_wiki is a no-op
-            # when the viewer isn't concealed for this wiki, so this costs
-            # nothing in the common case.
+            # Surviving the concealment gate says this candidate is ALLOWED to appear in the result
+            # list; it says nothing about what its title/snippet should say. conceal_wiki is a no-op
+            # when the viewer isn't concealed for this wiki, so this costs nothing in the common
+            # case.
             shown = conceal_wiki(wiki, profile)
             results.append(
                 SearchResult(
@@ -923,11 +781,10 @@ class ArticleSearchProvider(SearchProvider):
 
         results = []
         for article in articles:
-            # An Article extends the plain DashboardModel, so it carries no uuid
-            # of its own and no route addresses it directly: it is always read
-            # as a sub-resource of its host (``pins/<slug>/article/``,
-            # ``wikis/<location_slug>/article/``). The host's identifiers are
-            # therefore what a client needs, and the only ones that exist.
+            # An Article extends the plain DashboardModel, so it carries no uuid of its own and no
+            # route addresses it directly: it is always read as a sub-resource of its host
+            # (``pins/<slug>/article/``, ``wikis/<location_slug>/article/``).
+            # The host's identifiers are therefore what a client needs, and the only ones that
             content = article.content
             if article.pin is not None:
                 pin = article.pin
@@ -989,10 +846,9 @@ class TripSearchProvider(SearchProvider):
             negated = raw_state.startswith("-")
             state = raw_state[1:] if negated else raw_state
             if state in ("upcoming", "past"):
-                # Raw start_date/end_date, not the effective_start/end_date
-                # properties (which fall back to scheduled activities) - those
-                # aren't filterable at the DB level. Neither side matches a
-                # trip with no dates at all, so it participates in neither
+                # Raw start_date/end_date, not the effective_start/end_date properties (which fall
+                # back to scheduled activities) - those aren't filterable at the DB level.
+                # Neither side matches a trip with no dates at all, so it participates in neither
                 # state rather than defaulting into one.
                 today = timezone.localdate()
                 if state == "upcoming":
@@ -1083,25 +939,14 @@ class VisitSearchProvider(SearchProvider):
 
 def _display_names(viewer: Profile, subjects: list) -> dict[int, str]:
     """Map profile pk to the name *viewer* is allowed to see for that person.
-
-    Search results name other people - a conversation partner, a comment's
-    author - and every other surface that does resolves the name first: the
-    messages page and the DM export via ``display_identity_for``, the comment
-    list and trip comments via ``resolve_visible_identities`` (whose
-    ``is_masked``/``display_name`` the comment template branches on). Building a
-    result title straight from ``.username`` put names in the search box that the
-    page rendering the very same row would have withheld.
-
-    Resolved for the whole batch in one call rather than per row: the resolver
-    recomputes the viewer's allowed-subject set each time it is invoked.
+    Resolved for the whole batch in one call rather than per row: the resolver recomputes the viewer's allowed-subject set each time it is invoked.
 
     Args:
         viewer: The searching profile.
         subjects: The people named in this batch of results; duplicates are fine.
 
     Returns:
-        Mapping of profile pk to display name.
-    """
+        Mapping of profile pk to display name."""
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
     unique = {subject.pk: subject for subject in subjects if subject is not None}
@@ -1135,10 +980,10 @@ class DirectMessageSearchProvider(SearchProvider):
         from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for
 
         messages = list(queryset[:limit])
-        # display_identity_for rather than the generic resolver: it makes the same
-        # visibility decision but labels a hidden partner "Former contact", which is
-        # what the inbox and the conversation header already call them. Two different
-        # words for the same person across two views is its own small bug.
+        # display_identity_for rather than the generic resolver: it makes the same visibility
+        # decision but labels a hidden partner "Former contact", which is what the inbox and the
+        # conversation header already call them.
+        # Two different words for the same person across two views is its own small bug.
         partners = {(message.recipient if message.sender_id == profile.pk else message.sender).pk: (message.recipient if message.sender_id == profile.pk else message.sender) for message in messages}
         from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
@@ -1159,12 +1004,10 @@ class DirectMessageSearchProvider(SearchProvider):
                     snippet=excerpt(message.body, parsed.terms),
                     date=message.created,
                     score=self.score_of(message),
-                    # A conversation is addressed by the counterpart's profile
-                    # slug (``messages/<peer_slug>/``). DirectMessage extends the
-                    # plain DashboardModel and has no uuid of its own - its
-                    # ``client_uuid`` is the sender's offline-outbox idempotency
-                    # key, is null for anything composed on the web, and is not a
-                    # server-side identity, so it must not be passed off as one.
+                    # A conversation is addressed by the counterpart's profile slug
+                    # (``messages/<peer_slug>/``).
+                    # DirectMessage extends the plain DashboardModel and has no uuid of its own -
+                    # its ``client_uuid`` is the sender's offline-outbox idempotency key, is null
                     object_slug=peer_slug,
                     object_uuid=None,
                 ),
@@ -1333,14 +1176,10 @@ class CommentSearchProvider(SearchProvider):
         from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
 
         for comment in comments:
-            # Comments are read through their host's collection
-            # (``pins/<slug>/comments/``, ``wikis/<location_slug>/comments/``),
-            # so the host's slug is the addressable half; the comment's own uuid
-            # says which row in that collection matched. The comment's own text
-            # is legitimately visible (it's the viewer's own or a friend's), so
-            # only the host wiki's name needs the concealed value - a
-            # concealed viewer's own comment must not name the wiki's true
-            # (possibly stranger-renamed) title.
+            # Comments are read through their host's collection (``pins/<slug>/comments/``,
+            # ``wikis/<location_slug>/comments/``), so the host's slug is the addressable half; the
+            # comment's own uuid says which row in that collection matched.
+            # The comment's own text is legitimately visible (it's the viewer's own or a friend's),
             if comment.pin is not None:
                 url = reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)})
                 host = comment.pin.effective_name or "a pin"

@@ -1,15 +1,5 @@
 """The reputation rule registry.
-
-A rule is not a constant. The whole point of this system, and the reason
-Consensus points could not host it, is that *a contribution's value is a
-function of how badly the target needed it at the moment it arrived* - so a
-rule receives the target and works its own value out, rather than looking a
-number up in a table.
-
-Registration mirrors ``services.achievements.metrics``: a module-level dict, a
-``register()`` function, and choices exposed as a callable so adding a rule
-never generates a migration.
-"""
+The whole point of this system, and the reason Consensus points could not host it, is that *a contribution's value is a function of how badly the target needed it at the moment it arrived* - so a rule receives the target and works its own value out, rather than looking a number up in a table."""
 
 from __future__ import annotations
 
@@ -110,18 +100,14 @@ def rule_choices() -> list[tuple[str, str]]:
 
 def score_with(rule: Rule, target: Any) -> ScoreResult | None:
     """Run *rule* against *target*, converting a failure into "no award".
-
-    A rule that raises - a plugin's model went away, a target was deleted
-    between the row being written and the scorer reaching it - must not take
-    down the batch it happens to be in. Mirrors ``Metric.value_for``.
+    A rule that raises - a plugin's model went away, a target was deleted between the row being written and the scorer reaching it - must not take down the batch it happens to be in.
 
     Args:
         rule: The rule to run.
         target: The object it scores, or None for target-less rules.
 
     Returns:
-        The result, or None when the contribution does not qualify.
-    """
+        The result, or None when the contribution does not qualify."""
     try:
         return rule.score(target)
     except Exception:

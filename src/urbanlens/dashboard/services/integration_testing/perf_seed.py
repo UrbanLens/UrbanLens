@@ -1,35 +1,5 @@
 """Seed one account large enough for the neighbour test to mean something.
-
-The performance work this exists for is about what *one* user's account costs
-everyone else, so its measurements need an account big enough for per-row costs
-to dominate the constants. Twenty thousand pins is the working size: R27
-measured the map payload at 10,000 (5.79s wall before the fix, 88% of it Python
-object construction), and the endpoints still on the model path scale from there.
-
-Three things this does that a loop of `baker.make` would not, each of which was
-a real defect in something before it was one here:
-
-- **It runs `ANALYZE` afterwards.** Seeding leaves `pg_class.reltuples`
-  describing an empty table, so the planner chooses for a table that no longer
-  exists. Measured at 5,000 pins: 4.683s without, 0.384s with (N10). A seeded
-  benchmark that skips this measures the planner's ignorance and reads exactly
-  like a regression.
-- **It spreads coordinates widely.** `Location` is unique on
-  `(latitude, longitude)`, and beyond the constraint the importer treats points
-  ~11m apart as the same place - three pins at 0.0001 degrees created one row
-  when this was checked. Rows that silently merge make a seed size a lie.
-- **It gives every pin the same label.** That is the P102 trigger: the
-  label-edit fan-out is proportional to the pins carrying the label, so a seed
-  that spreads labels evenly across pins would make the heaviest action in the
-  neighbour scenario look cheap.
-
-Deliberately `bulk_create` rather than `Model.save`: signals on `Pin` enqueue
-cache work and wiki creation per row, and seeding is not the thing under test.
-The consequence is that seeded rows have not been through those signals, nor
-through `save`, so anything `save` computes is set here explicitly or is absent.
-That is correct for a load fixture and wrong for a correctness fixture - do not
-reuse this to test behaviour that a signal or `save` produces.
-"""
+The performance work this exists for is about what *one* user's account costs everyone else, so its measurements need an account big enough for per-row costs to dominate the constants."""
 
 from __future__ import annotations
 
@@ -48,9 +18,9 @@ from urbanlens.dashboard.models.profile.model import Profile
 #: parameter list stays well inside Postgres' 65,535 bound.
 BATCH_SIZE = 1_000
 
-#: Degrees between seeded pins, in both axes. Chosen against the importer's own
-#: matching behaviour rather than against the unique constraint: 0.0001 degrees
-#: (~11m) is unique but is treated as the same place, so a seed at that spacing
+#: Degrees between seeded pins, in both axes.
+#: Chosen against the importer's own matching behaviour rather than against the unique constraint:
+#: 0.0001 degrees (~11m) is unique but is treated as the same place, so a seed at that spacing
 #: reports a row count it did not create.
 COORDINATE_STEP = 0.01
 
@@ -59,12 +29,10 @@ COORDINATE_STEP = 0.01
 ORIGIN_LATITUDE = -30.0
 ORIGIN_LONGITUDE = -140.0
 
-#: Pins per row of the grid. A constant, and it has to be: the mapping from
-#: index to coordinate must be the same in every run against the same account,
-#: or a top-up lays a differently-shaped grid over the first one and collides on
-#: the `(latitude, longitude)` unique constraint. Deriving it from the run's own
-#: batch size looked reasonable and failed the first time a top-up asked for a
-#: different number than the run before it.
+#: Pins per row of the grid.
+#: A constant, and it has to be: the mapping from index to coordinate must be the same in every run
+#: against the same account, or a top-up lays a differently-shaped grid over the first one and
+#: collides on the `(latitude, longitude)` unique constraint.
 GRID_SIDE = 200
 
 #: Largest seed this coordinate scheme can lay out without leaving valid
@@ -72,8 +40,7 @@ GRID_SIDE = 200
 #: starting at `ORIGIN_LATITUDE` and running north.
 MAX_SEEDED_PINS = int((90.0 - ORIGIN_LATITUDE) / COORDINATE_STEP) * GRID_SIDE
 
-#: Name of the label every seeded pin carries. One shared label is what makes a
-#: label edit expensive; see this module's docstring.
+#: Name of the label every seeded pin carries. One shared label keeps the label-edit fan-out at its heaviest.
 HEAVY_LABEL_NAME = "Perf Heavy"
 
 #: Names drawn from when a seed is asked for more than one label per pin. Small
@@ -109,19 +76,14 @@ _ANALYZED_TABLES = ("dashboard_locations", "dashboard_user_pins", "dashboard_lab
 
 def _grid(index: int) -> tuple[str, str]:
     """One pin's coordinates, laid out on a fixed grid.
-
-    A grid rather than a line so a bounding-box query over the seeded block
-    returns a realistic subset rather than everything or nothing. A *fixed*
-    grid because this must be a pure function of ``index`` and nothing else -
-    two runs against the same account have to agree about where pin 8,000 goes.
+    A grid rather than a line so a bounding-box query over the seeded block returns a realistic subset rather than everything or nothing.
 
     Args:
         index: Which pin, zero-based.
 
     Returns:
         ``(latitude, longitude)`` as strings, since the columns are decimals and
-        a float would round differently on the way in.
-    """
+        a float would round differently on the way in."""
     latitude = ORIGIN_LATITUDE + (index // GRID_SIDE) * COORDINATE_STEP
     longitude = ORIGIN_LONGITUDE + (index % GRID_SIDE) * COORDINATE_STEP
     return f"{latitude:.6f}", f"{longitude:.6f}"
@@ -130,30 +92,13 @@ def _grid(index: int) -> tuple[str, str]:
 def _precompute_map_center(profile: Profile, total: int) -> tuple[float, float] | None:
     """Store the account's map centre without computing it the expensive way.
 
-    `Profile.compute_map_center` finds the densest cluster of an account's pins,
-    on the critical path of `view_map`. It used to do that by comparing every
-    point with every other one, which at 20,000 pins was around seven minutes of
-    a process serving nothing — a load run against a seeded account measured that
-    one defect in every phase and nothing else (P108, since fixed: the same
-    answer now costs about 99 ms at that size).
-
-    Still stored directly, because a variable held constant is worth holding
-    whether or not it is currently large, and because the harness should not
-    silently start measuring this again if the algorithm regresses.
-
-    The stored value is the same answer, not an approximation. The seeded grid
-    spans well under the 1,000 km cluster radius, so every point is in the one
-    cluster and the densest-cluster centroid *is* the arithmetic mean — which
-    this computes in one pass.
-
     Args:
         profile: The seeded account.
         total: How many pins it now has.
 
     Returns:
         The stored ``(latitude, longitude)``, or None when there was nothing to
-        average.
-    """
+        average."""
     if total <= 0:
         return None
     points = [_grid(index) for index in range(total)]
@@ -174,10 +119,7 @@ def seed_heavy_account(
     labels_per_pin: int = 1,
 ) -> dict[str, Any]:
     """Give *profile* *pins* root pins, all carrying one shared label.
-
-    Idempotent in the sense that matters for a fixture: it counts what the
-    profile already has and creates only the difference, so re-running against a
-    seeded account is fast and does not double it.
+    Idempotent in the sense that matters for a fixture: it counts what the profile already has and creates only the difference, so re-running against a seeded account is fast and does not double it.
 
     Args:
         profile: The account to seed.
@@ -204,8 +146,7 @@ def seed_heavy_account(
         against an unanalysed account is visible in its own output rather than
         inferred later from a strange number, and `label_id` because the load
         harness edits that label by id - looking it up by name would break the
-        moment a run renamed it.
-    """
+        moment a run renamed it."""
     if pins > MAX_SEEDED_PINS:
         raise ValueError(f"{pins} pins would run the grid past the north pole; this coordinate scheme tops out at {MAX_SEEDED_PINS}.")
     # One short of the vocabulary, so the window can rotate: a pin that took every
@@ -242,12 +183,10 @@ def seed_heavy_account(
                         profile=profile,
                         location=location,
                         name=f"{PIN_NAME_PREFIX} {existing + start + offset}",
-                        # Set explicitly because `bulk_create` does not call
-                        # `save`, which is where `ensure_slug` runs. A null slug
-                        # is legal - the payload falls back to the uuid - but it
-                        # would put every seeded pin on a code path real pins do
-                        # not take, which is the wrong thing for a fixture whose
-                        # whole job is to behave like production at size.
+                        # Set explicitly because `bulk_create` does not call `save`, which is where
+                        # `ensure_slug` runs.
+                        # A null slug is legal - the payload falls back to the uuid - but it would
+                        # put every seeded pin on a code path real pins do not take, which is the
                         slug=f"perf-pin-{existing + start + offset}",
                     )
                     for offset, location in enumerate(locations)
@@ -300,13 +239,6 @@ def _vocabulary_labels(profile: Profile) -> list[Label]:
 def _locations_for(coordinates: list[tuple[str, str]], *, first_index: int) -> list[Location]:
     """The `Location` rows for *coordinates*, creating only the missing ones.
 
-    `Location` is unique on ``(latitude, longitude)`` **globally**, not per
-    profile, so the grid is a shared resource: a second seeded account lands on
-    the same coordinates as the first and cannot simply create them. Reusing the
-    existing row is also the truthful thing to do - it is what the importer does
-    when two users pin the same place - and it makes the seeder idempotent
-    against a previous run that failed halfway.
-
     Args:
         coordinates: ``(latitude, longitude)`` string pairs, in pin order.
         first_index: Index of the first coordinate, for naming new rows.
@@ -317,8 +249,7 @@ def _locations_for(coordinates: list[tuple[str, str]], *, first_index: int) -> l
     Raises:
         RuntimeError: A coordinate was neither found nor created, which would
             mean the grid produced a value the database rounded differently -
-            silently pairing pins with the wrong places.
-    """
+            silently pairing pins with the wrong places."""
     Location.objects.bulk_create(
         [Location(latitude=lat, longitude=lng, official_name=f"Perf Place {first_index + offset}") for offset, (lat, lng) in enumerate(coordinates)],
         ignore_conflicts=True,
@@ -338,14 +269,9 @@ def _locations_for(coordinates: list[tuple[str, str]], *, first_index: int) -> l
 def _analyze() -> bool:
     """Refresh planner statistics for the tables the seed wrote to.
 
-    Named tables rather than a bare ``ANALYZE``: measured on this schema's 237
-    tables, whole-database is 3.55s cold and 1.70s warm against 45ms for three
-    named ones.
-
     Returns:
         Whether it ran. False on a non-PostgreSQL backend, which no deployment
-        uses but a developer's sqlite experiment might.
-    """
+        uses but a developer's sqlite experiment might."""
     if connection.vendor != "postgresql":
         return False
     with connection.cursor() as cursor:

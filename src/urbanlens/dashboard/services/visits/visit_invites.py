@@ -1,28 +1,5 @@
 """External visit participants: creation from the visit form, email invites, and deferred delivery.
-
-The "Log a Visit" dialog lets a pin owner add two kinds of participants:
-
-- **Members** (their connections): recorded on ``PinVisit.participants``. For
-  each, the owner chooses whether to *send* them a visit suggestion; unchecked
-  participants are recorded on the owner's own copy of the visit without the
-  other user being contacted.
-- **External people**: a free-form name plus an optional email address,
-  stored as :class:`~urbanlens.dashboard.models.visits.participant.ExternalVisitParticipant`.
-  When an email is given and the owner opts to send the suggestion:
-
-  - an address that already belongs to a member delivers a visit suggestion
-    and a friend request immediately;
-  - an unknown address receives a single join-the-site invitation email
-    (subject to the per-user email caps and the one-join-invite-per-address
-    rule in ``services.security.email_safety``), and the friend request + visit
-    suggestion are delivered whenever an account with that (primary or
-    verified secondary) email appears - even long after the invitation
-    email itself expired.
-
-Only a one-way hash of the address is stored (the person hasn't consented to
-being in our database); the deferred matching in
-:func:`process_pending_visit_invites` compares hashes.
-"""
+For each, the owner chooses whether to *send* them a visit suggestion; unchecked participants are recorded on the owner's own copy of the visit without the other user being contacted. - **External people**: a free-form name plus an optional email address, stored as :class:`~urbanlens.dashboard.models.visits.participant.ExternalVisitParticipant`."""
 
 from __future__ import annotations
 
@@ -75,8 +52,7 @@ def _send_visit_invite_email(request: HttpRequest, owner: Profile, email: str) -
         email: The recipient address.
 
     Returns:
-        True when the email was actually sent.
-    """
+        True when the email was actually sent."""
     if has_sent_join_email(owner, email):
         return False
     if email_rate_limit_error(owner):
@@ -170,14 +146,9 @@ def _handle_external_email(request: HttpRequest, participant: ExternalVisitParti
 def sync_external_participants(request: HttpRequest, visit: PinVisit) -> None:
     """Create/remove external participants for a visit from the submitted form.
 
-    The form submits indexed field groups (``external_name_N``,
-    ``external_email_N``, ``external_invite_N``) for new people, and
-    ``external_remove`` ids for existing rows to drop.
-
     Args:
         request: Request carrying the visit form.
-        visit: The visit being created or edited.
-    """
+        visit: The visit being created or edited."""
     remove_ids = {int(pid) for pid in request.POST.getlist("external_remove") if pid.strip().isdigit()}
     if remove_ids:
         ExternalVisitParticipant.objects.filter(visit=visit, pk__in=remove_ids).delete()
@@ -215,19 +186,13 @@ def sync_external_participants(request: HttpRequest, visit: PinVisit) -> None:
 def process_pending_visit_invites(user: User, email: str | None = None) -> int:
     """Deliver deferred friend requests + visit suggestions for a (newly verified) email.
 
-    Called when a new account's email is verified and when a member verifies
-    an additional (secondary) address: any external visit participants whose
-    hashed email matches are resolved to this account, and - where the visit
-    owner asked for it - the friend request and visit suggestion are sent.
-
     Args:
         user: The account the email belongs to.
         email: The specific address that was just verified; defaults to the
             account's primary email.
 
     Returns:
-        The number of participant rows resolved to this account.
-    """
+        The number of participant rows resolved to this account."""
     from urbanlens.dashboard.models.profile.model import Profile
 
     address = (email or user.email or "").strip()

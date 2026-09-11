@@ -70,23 +70,16 @@ class CensusTigerwebGateway(Gateway):
     def get_state_boundary(self, state_abbr: str) -> dict[str, Any] | None:
         """Return the raw Esri ring geometry of one US state's boundary.
 
-        Unlike :meth:`get_geography`, this is an attribute query (matching on
-        the state's USPS abbreviation), not a point-in-polygon lookup - it
-        answers "what does this state's polygon look like", not "what state is
-        this point in". Used by ``services.geo.geo_boundary.state_boundary`` to
-        build a point-containment gate for state-scoped plugins.
-
         Args:
-            state_abbr: Two-letter USPS state abbreviation (e.g. ``"NY"``).
+                state_abbr: Two-letter USPS state abbreviation (e.g. ``"NY"``).
 
         Returns:
-            The raw ``{"rings": [...]}`` Esri geometry dict, or None when the
-            state isn't found or the request fails.
+                The raw ``{"rings": [...]}`` Esri geometry dict, or None when the
+                state isn't found or the request fails.
 
         Raises:
-            ValueError: ``state_abbr`` isn't exactly two letters - guards the
-                ``where`` clause below, which interpolates it directly.
-        """
+                ValueError: ``state_abbr`` isn't exactly two letters - guards the
+                ``where`` clause below, which interpolates it directly."""
         if len(state_abbr) != 2 or not state_abbr.isalpha():
             raise ValueError(f"state_abbr must be a two-letter USPS abbreviation, got {state_abbr!r}")
         params: dict[str, str | int] = {

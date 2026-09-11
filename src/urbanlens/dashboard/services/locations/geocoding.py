@@ -13,10 +13,6 @@ from urbanlens.dashboard.services.apis.locations.geocode_resolution import geoco
 def get_pin_by_address(address: str) -> tuple[float | None, float | None]:
     """Resolve a free-text address to coordinates.
 
-    Tries REData first when configured, then falls back to the direct
-    geopy/Nominatim gateway - see
-    ``services.apis.locations.geocode_resolution``.
-
     Args:
         address: The address string to geocode.
 
@@ -26,6 +22,5 @@ def get_pin_by_address(address: str) -> tuple[float | None, float | None]:
 
     Raises:
         RateLimitExceededError: The app-wide Nominatim budget refused the
-            direct fallback call.
-    """
+            direct fallback call."""
     return geocode_address(address)

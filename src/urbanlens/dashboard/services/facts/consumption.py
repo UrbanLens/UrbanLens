@@ -54,16 +54,12 @@ def get_facts_needing_confirmation(
 ) -> list[Fact]:
     """Facts worth asking a player (or reviewer) to help confirm - contested first, then least confident.
 
-    Used by Consensus's recheck-round selection
-    (``services.consensus.selection._pick_recheck_round``).
-
     Args:
         subject_type: Restrict to one ``FactSubjectType``, or None for any.
         limit: Maximum rows to return.
 
     Returns:
-        Matching facts, ordered contested-first, then ascending confidence.
-    """
+        Matching facts, ordered contested-first, then ascending confidence."""
     facts = Fact.objects.filter(status__in=[FactStatus.TENTATIVE, FactStatus.CONTESTED])
     if subject_type is not None:
         facts = facts.filter(subject_type=subject_type)

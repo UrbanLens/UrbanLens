@@ -52,10 +52,9 @@ def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> 
     for activity in activities:
         record_trip_activity_shares(activity)
 
-    # bulk_create fires no post_save, so sync_trip_on_activity_save never runs and
-    # a list copied into an auto-synced trip never reached the user's calendar.
-    # Queued once for the trip rather than per activity - the push sends the whole
-    # trip anyway.
+    # bulk_create fires no post_save, so sync_trip_on_activity_save never runs and a list copied
+    # into an auto-synced trip never reached the user's calendar.
+    # Queued once for the trip rather than per activity - the push sends the whole trip anyway.
     if activities:
         queue_calendar_push(trip.pk)
     return len(items)

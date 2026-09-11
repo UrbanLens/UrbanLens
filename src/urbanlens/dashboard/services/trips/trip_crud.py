@@ -31,10 +31,10 @@ DELETE_TRIP_DENIED = "Only the trip creator can delete it."
 #: framework's retention, so it is quoted rather than reworded per surface.
 TRIP_DELETED_MESSAGE = "Trip deleted. Undo within 7 days from Settings → Undo History."
 
-#: The trip's four configurable permission fields, in the order the settings
-#: form presents them. Exported so every writer - the HTMX settings form, the
-#: external API's serializer, and the tests - agrees on the field set rather
-#: than each repeating the four names and drifting when a fifth is added.
+#: The trip's four configurable permission fields, in the order the settings form presents them.
+#: Exported so every writer - the HTMX settings form, the external API's serializer, and the tests -
+#: agrees on the field set rather than each repeating the four names and drifting when a fifth is
+#: added.
 TRIP_PERMISSION_FIELDS: tuple[str, ...] = (
     "allow_add_members",
     "allow_add_activities",
@@ -112,15 +112,10 @@ def create_trip(
         create_kwargs["uuid"] = client_uuid
 
     try:
-        # Nested atomic so a lost idempotency race fails inside its own
-        # savepoint rather than poisoning any enclosing transaction - the same
-        # shape `services.messaging.direct_messages.create_direct_message` uses.
-        #
-        # The quota check sits inside it, behind a lock on the creator's own
-        # profile row, because check-then-create is not safe unserialised: two
-        # concurrent creates both read the same upcoming count and both pass a
-        # limit only one of them should have. `services.ai.tools.trips` had this
-        # lock and this function did not, which is the drift that put it here.
+        # Nested atomic so a lost idempotency race fails inside its own savepoint rather than
+        # poisoning any enclosing transaction - the same shape
+        # `services.messaging.direct_messages.create_direct_message` uses.
+        # The quota check sits inside it, behind a lock on the creator's own profile row, because
         with transaction.atomic():
             Profile.objects.select_for_update().filter(pk=creator.pk).first()
 
@@ -130,12 +125,10 @@ def create_trip(
 
             trip = Trip.objects.create(**create_kwargs)
     except IntegrityError:
-        # Two offline retries carrying the same client uuid arrived close
-        # enough together that both passed the existence check above. The uuid
-        # is globally unique, so the loser lands here - and must replay the
-        # winner's trip, exactly as a sequential retry would, rather than
-        # surfacing the collision as a 500 for a request the client was
-        # promised would be idempotent.
+        # Two offline retries carrying the same client uuid arrived close enough together that both
+        # passed the existence check above.
+        # The uuid is globally unique, so the loser lands here - and must replay the winner's trip,
+        # exactly as a sequential retry would, rather than surfacing the collision as a 500 for a
         if client_uuid is None:
             raise
         existing = Trip.objects.filter(uuid=client_uuid).first()
@@ -186,16 +179,7 @@ def invite_members(trip: Trip, inviter: Profile, invite_profile_ids: Sequence[An
 
 def update_trip(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Trip:
     """Apply a presence-keyed partial update to a trip's own metadata.
-
-    Only keys present in *changes* are touched, so a client syncing one field
-    never clobbers another changed elsewhere in the meantime.
-
-    Name and description deliberately differ on blank input, preserving the
-    existing behavior of the internal edit form: a blank ``name`` is ignored
-    (a trip always has a name - clearing it would leave the header empty and
-    break the slug's basis), whereas a blank ``description`` clears the field
-    (there is a real difference between "no description" and one nobody has
-    written yet).
+    Only keys present in *changes* are touched, so a client syncing one field never clobbers another changed elsewhere in the meantime.
 
     Args:
         trip: The trip to update.
@@ -207,8 +191,7 @@ def update_trip(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Tr
 
     Raises:
         TripPermissionError: The actor has not joined the trip.
-        TripValidationError: The description exceeds the shared text limit.
-    """
+        TripValidationError: The description exceeds the shared text limit."""
     require_joined(actor, trip, EDIT_TRIP_DENIED)
 
     if "name" in changes:
@@ -231,18 +214,14 @@ def update_trip(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Tr
 
 def delete_trip(trip: Trip, actor: Profile) -> None:
     """Delete a trip, stashing it for Undo History first.
-
-    The stash is not optional: a trip delete cascades to its activities,
-    comments, memberships and calendar links, and Undo History is the only way
-    any of that comes back.
+    The stash is not optional: a trip delete cascades to its activities, comments, memberships and calendar links, and Undo History is the only way any of that comes back.
 
     Args:
         trip: The trip to delete.
         actor: The profile deleting it - must be the creator.
 
     Raises:
-        TripPermissionError: The actor is not the trip's creator.
-    """
+        TripPermissionError: The actor is not the trip's creator."""
     from urbanlens.dashboard.services.undo.handlers.trip import MODEL_LABEL as TRIP_MODEL_LABEL
     from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -254,21 +233,7 @@ def delete_trip(trip: Trip, actor: Profile) -> None:
 
 def set_trip_permissions(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Trip:
     """Apply a presence-keyed partial update to a trip's permission levels.
-
     Only keys present in *changes* are touched, matching :func:`update_trip`.
-    That is not a stylistic choice, it is a correctness one: this function used
-    to walk a hardcoded ``{field: default}`` table and assign *every* entry, so
-    a field the caller had simply not mentioned was reset to that default. The
-    only caller was the site's settings form, which submits all four radio
-    groups on every save, so the behaviour was invisible - but a partial writer
-    (the external API's ``PATCH /trips/{slug}/settings/``, an offline client
-    syncing one toggle) would have silently rewritten three unrelated
-    permissions on a trip other people share, with nothing in the response to
-    show it had happened.
-
-    An unrecognized level is refused rather than coerced, for the same reason:
-    quietly substituting a default tells the caller their write succeeded while
-    moving the permission somewhere they never asked for.
 
     Args:
         trip: The trip to configure.
@@ -285,8 +250,7 @@ def set_trip_permissions(trip: Trip, actor: Profile, *, changes: Mapping[str, An
     Raises:
         TripPermissionError: The actor is neither the creator nor an organizer.
         TripValidationError: A submitted field carries a level that is not one
-            of the three the model defines.
-    """
+            of the three the model defines."""
     from urbanlens.dashboard.services.trips.trip_access import is_organizer
 
     if not is_organizer(actor, trip):

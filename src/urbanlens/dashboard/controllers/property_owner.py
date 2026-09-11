@@ -1,23 +1,4 @@
-"""Property owner and sale-history views.
-
-Pin-scoped views (``Pin*``) manage ``PinOwner``/``PinPropertySale`` - private
-to one pin, never shared with other users or the wiki, never intermingled
-with wiki data on the Private Pin page. Wiki-scoped views (``Wiki*``) manage
-``WikiOwner``/``WikiPropertySale`` - shared with everyone who has this
-location pinned, visible only on the wiki page, never on any individual
-pin's own card. This mirrors the ``PinAlias``/``WikiAlias`` split
-(``models.aliases.model``, ``controllers.aliases``) exactly - two separate
-models, two separate view groups, one shared template per concept
-configured entirely via context (see ``partials/pins/_ownership_panel.html``'s
-own header comment).
-
-``WikiOwner``/``WikiPropertySale`` carry a ``source`` distinguishing
-user-contributed data from a future automated source (``source=OFFICIAL``) -
-never directly user-editable (see the guards in ``WikiOwnerUpdateView``/
-``WikiOwnerRemoveView``/``WikiPropertySaleDeleteView``). Nothing creates
-OFFICIAL records yet. ``PinOwner``/``PinPropertySale`` have no such concept -
-private, per-pin data is definitionally user-entered.
-"""
+"""Property owner and sale-history views."""
 
 from __future__ import annotations
 

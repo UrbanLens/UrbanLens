@@ -1,16 +1,5 @@
 """Base gateway class for external API integrations.
-
-Subclasses declare a ``service_key`` class variable (e.g. ``"nps"``) to opt
-into automatic rate limiting and call logging via ``_RateLimitedSession``.
-When ``service_key`` is set the plain ``requests.Session`` is replaced in
-``__post_init__`` with a wrapper that checks ``ApiRateLimit`` config before
-every request and writes an ``ApiCallLog`` row after.
-
-Subclasses that override ``__post_init__`` **must** call
-``Gateway.__post_init__(self)`` so the session swap takes effect.
-Do not use zero-argument ``super()`` - it fails in ``slots=True`` dataclasses
-when the ``__class__`` cell references the pre-slots class object.
-"""
+Subclasses that override ``__post_init__`` **must** call ``Gateway.__post_init__(self)`` so the session swap takes effect."""
 
 from __future__ import annotations
 
@@ -92,18 +81,11 @@ class Gateway(Service, ABC):
     def endpoint_for_log(url: str) -> str:
         """How this gateway's URLs are described in ``ApiCallLog``.
 
-        Defaults to the URL itself, which is what every point-lookup service
-        wants. Override where the URL encodes something not worth keeping - a
-        map tile's path *is* a coordinate somebody was looking at, and the log
-        exists to track volume and cost per service, which the coordinate does
-        not contribute to.
-
         Args:
-            url: The URL about to be requested.
+                url: The URL about to be requested.
 
         Returns:
-            The string to record as the call's endpoint.
-        """
+                The string to record as the call's endpoint."""
         return url
 
 
@@ -117,10 +99,4 @@ class GatewayRequestError(RuntimeError):
 
 class GatewayRateLimitedError(GatewayRequestError):
     """Raised when an external gateway reports that its own request budget is exhausted.
-
-    A subclass rather than a sibling of :class:`GatewayRequestError`, so every
-    existing ``except GatewayRequestError`` keeps working unchanged. Callers
-    that loop over many candidates in one run (e.g. scheduled enrichment) can
-    catch this specific type to stop early instead of retrying every
-    remaining candidate against a budget that will not refill mid-run.
-    """
+    A subclass rather than a sibling of :class:`GatewayRequestError`, so every existing ``except GatewayRequestError`` keeps working unchanged."""

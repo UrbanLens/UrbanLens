@@ -1,22 +1,5 @@
 """Resolves weather/sun-times lookups to REData or direct providers, per call.
-
-Single chokepoint for the "which provider answers a weather call" decision,
-mirroring ``cid_resolution.py``/``places_resolution.py``'s precedent for the
-same REData-vs-direct choice:
-
-- REData configured (``UL_REDATA_API_URL``/``UL_REDATA_API_KEY`` both set) -
-  the primary deployment's path. One call to REData's ``GET /weather/``
-  returns every registered provider's (``open_meteo``, ``openweathermap``)
-  current/forecast/sun data at once - see ``redata_weather_gateway``.
-- REData not configured, or its request fails - falls back to the existing
-  direct chain: OpenWeatherMap first when a key is configured, then the free,
-  keyless Open-Meteo gateway, preserving each call site's current behavior
-  exactly.
-
-Every path converts into the same ``ForecastSlot``/``SunTimes`` shapes
-(``services.apis.weather.forecast``), so callers never branch on which
-provider actually answered.
-"""
+Every path converts into the same ``ForecastSlot``/``SunTimes`` shapes (``services.apis.weather.forecast``), so callers never branch on which provider actually answered."""
 
 from __future__ import annotations
 
@@ -75,10 +58,9 @@ def get_forecast_slots(latitude: float, longitude: float) -> list[ForecastSlot]:
     if results is not None:
         entry = _pick_entry(results, _FORECAST_PROVIDER_PREFERENCE, key="forecast")
         if entry is not None:
-            # Near-term hourly slots read as "today/tomorrow's weather" the
-            # way the widget is meant to - REData's further-out daily slots
-            # are for get_raw_forecast_slots' longer-range trip matching below,
-            # not this compact strip.
+            # Near-term hourly slots read as "today/tomorrow's weather" the way the widget is meant
+            # to - REData's further-out daily slots are for get_raw_forecast_slots' longer-range
+            # trip matching below, not this compact strip.
             hourly = [item for item in (entry.get("forecast") or []) if item.get("granularity") == "hourly"]
             slots = redata_forecast_to_slots(hourly or entry.get("forecast") or [])
             if slots:
@@ -104,20 +86,14 @@ def get_forecast_slots(latitude: float, longitude: float) -> list[ForecastSlot]:
 
 def get_raw_forecast_slots(latitude: float, longitude: float) -> list[ForecastSlot]:
     """Return the finest-grained forecast slots available, for matching against a specific time.
-
-    Unlike :func:`get_forecast_slots` (which OpenWeatherMap's own path filters
-    to a morning/evening strip - see ``OpenWeatherMapGateway.filter_forecast``),
-    this returns every slot REData/OpenWeatherMap published, so a caller can
-    find the single closest slot to an arbitrary timestamp (e.g. a trip
-    activity's scheduled time - see ``controllers.trip._build_activity_forecasts``).
+    Unlike :func:`get_forecast_slots` (which OpenWeatherMap's own path filters to a morning/evening strip - see ``OpenWeatherMapGateway.filter_forecast``), this returns every slot REData/OpenWeatherMap published, so a caller can find the single closest slot to an arbitrary timestamp (e.g. a trip activity's scheduled time - see ``controllers.trip._build_activity_forecasts``).
 
     Args:
         latitude: WGS-84 latitude.
         longitude: WGS-84 longitude.
 
     Returns:
-        Normalized ``ForecastSlot`` entries, unfiltered, oldest first.
-    """
+        Normalized ``ForecastSlot`` entries, unfiltered, oldest first."""
     results = _redata_results(latitude, longitude)
     if results is not None:
         entry = _pick_entry(results, _FORECAST_PROVIDER_PREFERENCE, key="forecast")
@@ -143,17 +119,12 @@ def get_raw_forecast_slots(latitude: float, longitude: float) -> list[ForecastSl
 def get_sun_times(latitude: float, longitude: float) -> SunTimes | None:
     """Return today's sunrise/sunset and golden-hour windows, trying REData then Open-Meteo.
 
-    Always prefers Open-Meteo's own answer (UL-345: OpenWeatherMap's 5-day/
-    3-hour endpoint has no sunrise/sunset field), independent of which
-    provider serves the temperature/condition forecast above.
-
     Args:
         latitude: WGS-84 latitude.
         longitude: WGS-84 longitude.
 
     Returns:
-        Today's sun times, or None when unavailable everywhere.
-    """
+        Today's sun times, or None when unavailable everywhere."""
     results = _redata_results(latitude, longitude)
     if results is not None:
         entry = _pick_entry(results, _SUN_PROVIDER_PREFERENCE, key="sun")

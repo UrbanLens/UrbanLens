@@ -1,15 +1,5 @@
 """Who is allowed to read a metrics endpoint.
-
-Two transports serve metrics in this deployment - the Django view on the web
-process, and a bare ``http.server`` in the Celery event exporter, which has no
-Django request to work with. They must not drift apart: a second, subtly
-different copy of "is this scraper authorized" is how one endpoint ends up open
-while the other is guarded, and nothing says so.
-
-So the decision lives here, over primitives (an ``Authorization`` header value
-and a client address) rather than over a request object, and both transports
-call it.
-"""
+They must not drift apart: a second, subtly different copy of "is this scraper authorized" is how one endpoint ends up open while the other is guarded, and nothing says so."""
 
 from __future__ import annotations
 

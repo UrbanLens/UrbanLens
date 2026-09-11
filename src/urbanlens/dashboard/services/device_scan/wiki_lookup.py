@@ -12,21 +12,14 @@ if TYPE_CHECKING:
 
 def wikis_containing_point(point: Point) -> list[Wiki]:
     """Every wiki (including child wikis) whose official geometry contains *point*.
-
-    Reads ``Place.geometry``, which only the provider chain and boundary voting
-    ever write - never a user- or community-drawn shape, so a device sighting
-    can't be attributed to somebody's inflated drawing. A scan on a campus
-    legitimately lands on both the building it was taken in and the parcel
-    around it, so the whole containing lineage is returned rather than only the
-    most specific match: each wiki records the sighting at its own scope.
+    Reads ``Place.geometry``, which only the provider chain and boundary voting ever write - never a user- or community-drawn shape, so a device sighting can't be attributed to somebody's inflated drawing.
 
     Args:
         point: The device's estimated location (SRID 4326).
 
     Returns:
         Matching wikis, each with its ``location`` pre-selected. Empty when
-        the point falls inside no known place at all.
-    """
+        the point falls inside no known place at all."""
     from urbanlens.dashboard.models.place.model import Place
     from urbanlens.dashboard.models.wiki.model import Wiki
 

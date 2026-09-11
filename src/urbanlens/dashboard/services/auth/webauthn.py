@@ -1,18 +1,5 @@
 """WebAuthn (passkey) registration and authentication ceremonies.
-
-Two-factor login is opt-in per account: a user with at least one saved
-``WebAuthnCredential`` (or a confirmed ``TOTPDevice`` - see
-``services.auth.two_factor.has_second_factor``, the actual gate
-``CustomLoginView``/``LoginTwoFactorView`` use) is routed through a challenge
-after a successful password login; accounts with neither skip the step
-entirely. This module only ever deals with the passkey half of that; TOTP and
-backup codes live in ``services.auth.two_factor``.
-
-The Relying Party ID and origin are derived from the incoming request rather
-than a fixed setting, so this works unmodified across local/staging/prod
-hosts the same way ``request.build_absolute_uri()`` is already used elsewhere
-for email links.
-"""
+This module only ever deals with the passkey half of that; TOTP and backup codes live in ``services.auth.two_factor``."""
 
 from __future__ import annotations
 
@@ -55,13 +42,7 @@ MAX_CREDENTIALS_PER_USER = 10
 
 class WebAuthnError(Exception):
     """Raised when a registration or authentication ceremony can't be completed.
-
-    The message is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below (or this base class as a fallback)
-    and author its own user-facing text, rather than relaying the message -
-    that keeps a future raise site here from being able to smuggle unreviewed
-    text into a response just by adding a new ``raise``.
-    """
+    The message is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class MaxCredentialsReachedError(WebAuthnError):
@@ -125,14 +106,7 @@ def _to_transports(values: list[str]) -> list[AuthenticatorTransport] | None:
 
 def has_passkeys(user: User) -> bool:
     """True when ``user`` has enrolled at least one *login-factor* passkey.
-
-    This is the single source of truth behind ``has_second_factor`` and every
-    2FA routing decision (``CustomLoginView``, the SSO pipeline's
-    ``enforce_two_factor_for_sso``). Unlock-only credentials
-    (``is_login_factor=False`` - enrolled to decrypt E2EE data, see
-    ``E2EEPasskeyWrap``) are deliberately excluded: adding one must never flip
-    the account into mandatory 2FA.
-    """
+    Unlock-only credentials (``is_login_factor=False`` - enrolled to decrypt E2EE data, see ``E2EEPasskeyWrap``) are deliberately excluded: adding one must never flip the account into mandatory 2FA."""
     return WebAuthnCredential.objects.for_user(user).filter(is_login_factor=True).exists()
 
 
@@ -146,14 +120,7 @@ def list_credentials(user: User):
 
 
 def _with_prf_extension(options_json: str, *, eval_by_credential: dict[str, str] | None = None) -> str:
-    """Add the WebAuthn ``prf`` extension to ceremony-options JSON.
-
-    py_webauthn's ``options_to_json()`` emits no ``extensions`` member and its
-    option dataclasses have nowhere to carry one, so the extension is spliced
-    into the JSON after the fact. The client's option builders
-    (``webauthn-client.ts``) understand this shape and convert the base64url
-    inputs to the ``BufferSource``s the browser API wants - the same encoding
-    WebAuthn Level 3's ``parseRequestOptionsFromJSON`` uses.
+    """Add the WebAuthn ``prf`` extension to ceremony-options JSON. py_webauthn's ``options_to_json()`` emits no ``extensions`` member and its option dataclasses have nowhere to carry one, so the extension is spliced into the JSON after the fact.
 
     Args:
         options_json: The JSON produced by ``options_to_json()``.
@@ -164,8 +131,7 @@ def _with_prf_extension(options_json: str, *, eval_by_credential: dict[str, str]
             evaluate it, and prompts capability detection client-side).
 
     Returns:
-        The options JSON with the ``prf`` extension attached.
-    """
+        The options JSON with the ``prf`` extension attached."""
     data = json.loads(options_json)
     if eval_by_credential:
         data.setdefault("extensions", {})["prf"] = {"evalByCredential": {cred_id: {"first": prf_input} for cred_id, prf_input in eval_by_credential.items()}}
@@ -205,10 +171,10 @@ def build_registration_options(request: HttpRequest, user: User) -> str:
         exclude_credentials=[PublicKeyCredentialDescriptor(id=bytes(cred.credential_id), transports=_to_transports(cred.transports)) for cred in existing],
     )
     request.session[SESSION_REGISTRATION_CHALLENGE] = bytes_to_base64url(options.challenge)
-    # PRF is requested on EVERY registration, not just unlock-only ones, so any
-    # passkey created from now on can later gain an E2EE wrap without
-    # re-registration. Authenticators that don't support it simply ignore the
-    # extension; nothing else about the ceremony changes.
+    # PRF is requested on EVERY registration, not just unlock-only ones, so any passkey created from
+    # now on can later gain an E2EE wrap without re-registration.
+    # Authenticators that don't support it simply ignore the extension; nothing else about the
+    # ceremony changes.
     return _with_prf_extension(options_to_json(options))
 
 
@@ -276,14 +242,7 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
 
 def build_authentication_options(request: HttpRequest, user: User) -> str:
     """Start a login-2FA passkey ceremony scoped to ``user``'s sign-in credentials.
-
-    Only ``is_login_factor`` credentials are offered - an unlock-only key is
-    not a second factor, by the owner's own choice. When any offered
-    credential carries an ``E2EEPasskeyWrap``, its PRF input rides along in the
-    assertion options, so the same biometric tap that completes 2FA also hands
-    the browser the secret that unlocks the user's encrypted messages - a
-    cold device gets both for zero extra prompts. The PRF output never
-    reaches this server; ``verify_authentication`` neither sees nor checks it.
+    Only ``is_login_factor`` credentials are offered - an unlock-only key is not a second factor, by the owner's own choice.
 
     Args:
         request: The incoming request (used for RP ID and to stash the challenge).
@@ -293,8 +252,7 @@ def build_authentication_options(request: HttpRequest, user: User) -> str:
         JSON string suitable for ``navigator.credentials.get()`` on the client.
 
     Raises:
-        NoLoginPasskeysError: If the account has no sign-in passkeys.
-    """
+        NoLoginPasskeysError: If the account has no sign-in passkeys."""
     credentials = list(WebAuthnCredential.objects.for_user(user).filter(is_login_factor=True).select_related("e2ee_wrap__bundle"))
     if not credentials:
         raise NoLoginPasskeysError(f"user {user.pk} has no login-factor passkeys")

@@ -19,19 +19,7 @@ if TYPE_CHECKING:
 
 class UndoHandler(abc.ABC):
     """Serializes/restores instances of one model for the undo framework.
-
-    Delete handlers (``supports_delete`` True, the default) capture a snapshot
-    before the row is removed and recreate it on undo. Mutation handlers
-    (``MutationUndoHandler``) record a reversible change instead.
-
-    Cascade-deleted children (comments, notes, contacts, markup annotations,
-    etc.) are gone the instant the parent is deleted - before ``serialize``
-    gets a chance to capture them - so ``restore`` only brings back each
-    instance's own core fields plus whichever relations are cheap and safe
-    to relink (self-referential hierarchy, labels, membership rosters).
-    Callers must surface this scope limit to the user before they confirm
-    the delete.
-    """
+    Mutation handlers (``MutationUndoHandler``) record a reversible change instead."""
 
     model_label: ClassVar[str]
     #: The Django model this delete handler recreates. Used to re-delete the
@@ -64,10 +52,10 @@ class UndoHandler(abc.ABC):
         pks = payload.get("restored_pks") or []
         if cls.model is None or not pks:
             return
-        # _default_manager, not objects: django-stubs only types `objects` on
-        # a concrete model subclass (via its mypy plugin), not on a `type[Model]`
-        # classvar like this one - `_default_manager` is the same manager,
-        # typed directly on the base class for exactly this situation.
+        # _default_manager, not objects: django-stubs only types `objects` on a concrete model
+        # subclass (via its mypy plugin), not on a `type[Model]` classvar like this one -
+        # `_default_manager` is the same manager, typed directly on the base class for exactly this
+        # situation.
         cls.model._default_manager.filter(pk__in=pks).delete()  # noqa: SLF001
 
     @classmethod
@@ -75,8 +63,7 @@ class UndoHandler(abc.ABC):
         """Apply the inverse of a stashed mutation.
 
         Args:
-            payload: The dict previously given to ``stash_mutation``.
-        """
+                payload: The dict previously given to ``stash_mutation``."""
         raise TypeError(f"{cls.model_label} does not support mutations.")
 
     @classmethod
@@ -84,8 +71,7 @@ class UndoHandler(abc.ABC):
         """Re-apply a stashed mutation after it was undone.
 
         Args:
-            payload: The dict previously given to ``stash_mutation``.
-        """
+                payload: The dict previously given to ``stash_mutation``."""
         raise TypeError(f"{cls.model_label} does not support mutations.")
 
 

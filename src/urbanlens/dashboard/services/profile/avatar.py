@@ -1,24 +1,5 @@
 """Avatar resolution, download, emoji-avatar generation, and avatar writes.
-
-:class:`AvatarService` is the read/generate half - it answers "what image
-should this account have" from an OAuth payload, a Gravatar hash, or a
-generated emoji SVG. The module-level ``set_profile_avatar*`` functions are the
-*write* half, and exist because the two call sites that previously wrote
-``Profile.avatar`` did not agree with each other: the profile hero's upload
-form ran the shared ``image_upload_error`` gauntlet (size cap, magic-byte
-sniffing, antivirus) while the inline auto-save field
-(``ProfileFieldUpdateView``, ``field=avatar``) assigned the uploaded file
-straight onto the model with no checks at all - an unauthenticated-by-content
-write of arbitrary bytes into media storage, reachable by any logged-in user.
-Putting the write behind one function means a new surface (the external API's
-``PUT /profiles/{slug}/avatar/``) cannot pick the unguarded variant by
-accident, because the unguarded variant no longer exists.
-
-The gravatar path is deliberately *not* offered here as a reusable function:
-it makes an outbound HTTP fetch keyed on the account's email address, which is
-fine as an explicit button the account owner presses and is not something an
-API credential should be able to trigger on the owner's behalf.
-"""
+Putting the write behind one function means a new surface (the external API's ``PUT /profiles/{slug}/avatar/``) cannot pick the unguarded variant by accident, because the unguarded variant no longer exists."""
 
 from __future__ import annotations
 
@@ -47,24 +28,16 @@ DEFAULT_AVATAR_ANIMAL = "fox"
 #: Background used when a caller names no colour at all.
 DEFAULT_AVATAR_COLOR = MaterialColor.GREEN.value
 
-#: Background substituted when a caller names a colour outside
-#: ``MaterialColor``. Restricting to the palette is not cosmetic: the value is
-#: interpolated into generated SVG markup, so an arbitrary caller-supplied
-#: string there would be an injection point into a file the site then serves.
-#: Kept distinct from :data:`DEFAULT_AVATAR_COLOR` so "you sent nothing" and
-#: "you sent something we refused" stay visibly different in the result.
+#: Background substituted when a caller names a colour outside ``MaterialColor``.
+#: Restricting to the palette is not cosmetic: the value is interpolated into generated SVG markup,
+#: so an arbitrary caller-supplied string there would be an injection point into a file the site
+#: then serves.
 UNRECOGNIZED_AVATAR_COLOR_FALLBACK = MaterialColor.GREY.value
 
 
 class AvatarUploadError(Exception):
     """Base class: an avatar write was refused before anything was stored.
-
-    ``args[0]`` is log-only detail from whichever ``services.media.images.image_upload_error``
-    check failed - never surface it to a user. A catch site should catch one
-    of the subclasses below (or this class as a fallback) and author its own
-    user-facing text, dispatching on the exception TYPE rather than relaying
-    this message.
-    """
+    ``args[0]`` is log-only detail from whichever ``services.media.images.image_upload_error`` check failed - never surface it to a user."""
 
 
 class AvatarTooLargeError(AvatarUploadError):
@@ -73,13 +46,7 @@ class AvatarTooLargeError(AvatarUploadError):
 
 class AvatarUnsupportedFormatError(AvatarUploadError):
     """The upload isn't an accepted image type, or its declared type doesn't match its bytes.
-
-    Covers every 400 `image_upload_error` can return for an avatar: an
-    unsupported extension, bytes that don't look like an image at all, and a
-    declared content-type that mismatches the sniffed one. The three checks
-    live upstream in ``services.security.content_sniffing`` and are collapsed
-    here because no catch site in this app treats them differently.
-    """
+    The three checks live upstream in ``services.security.content_sniffing`` and are collapsed here because no catch site in this app treats them differently."""
 
 
 class AvatarMalwareDetectedError(AvatarUploadError):
@@ -90,12 +57,10 @@ class AvatarScanUnavailableError(AvatarUploadError):
     """The antivirus scanner couldn't be reached to scan the upload. Maps to HTTP 503."""
 
 
-#: Dispatches on the HTTP status ``image_upload_error`` paired with its
-#: message - the only structured signal available for which check failed,
-#: since that function hands back a plain ``(message, status_code)`` tuple
-#: shared by a dozen other, unrelated upload call sites this refactor does
-#: not own. Falls back to the base class for a status this table doesn't
-#: recognize, rather than raising on an unmapped code.
+#: Dispatches on the HTTP status ``image_upload_error`` paired with its message - the only
+#: structured signal available for which check failed, since that function hands back a plain
+#: ``(message, status_code)`` tuple shared by a dozen other, unrelated upload call sites this
+#: refactor does not own.
 _AVATAR_ERROR_TYPES_BY_STATUS: dict[int, type[AvatarUploadError]] = {
     413: AvatarTooLargeError,
     400: AvatarUnsupportedFormatError,
@@ -206,16 +171,13 @@ class AvatarService:
     @classmethod
     def random_options(cls, n: int = 4) -> list[dict[str, str]]:
         """Return *n* random (animal, emoji, color) dicts for the avatar picker.
-
-        Both animals and colors are sampled without replacement so that no two
-        suggestions share the same animal or the same background color.
+        Both animals and colors are sampled without replacement so that no two suggestions share the same animal or the same background color.
 
         Args:
-            n: Number of options to generate.
+                n: Number of options to generate.
 
         Returns:
-            List of dicts with keys ``animal``, ``emoji``, and ``color``.
-        """
+                List of dicts with keys ``animal``, ``emoji``, and ``color``."""
         import random as _random
 
         candidates = list(cls.ANIMAL_EMOJIS.items())
@@ -228,19 +190,13 @@ class AvatarService:
     def resolve_provider_url(cls, backend: Any, user: User, response: dict[str, Any]) -> str | None:
         """Return the provider-specific or Gravatar avatar URL for this user.
 
-        Provider-specific URL resolution:
-        - **Google OAuth2**: ``response['picture']``
-        - **Discord OAuth2**: ``https://cdn.discordapp.com/avatars/{id}/{avatar}.png``
-        - **Gravatar fallback**: ``https://www.gravatar.com/avatar/{md5(email)}``
-
         Args:
-            backend: The social-auth backend in use.
-            user: The authenticated Django User.
-            response: Raw OAuth response payload.
+                backend: The social-auth backend in use.
+                user: The authenticated Django User.
+                response: Raw OAuth response payload.
 
         Returns:
-            A URL string or None if no avatar could be determined.
-        """
+                A URL string or None if no avatar could be determined."""
         name = getattr(backend, "name", "")
 
         if name == "google-oauth2":
@@ -269,17 +225,14 @@ class AvatarService:
     @classmethod
     def download(cls, url: str, timeout: int = 5) -> bytes | None:
         """Fetch image bytes from a URL, returning None on any failure.
-
-        Only http and https URLs are accepted; any other scheme is rejected before
-        the network request is made.
+        Only http and https URLs are accepted; any other scheme is rejected before the network request is made.
 
         Args:
-            url: The full URL of the image to download.
-            timeout: Request timeout in seconds.
+                url: The full URL of the image to download.
+                timeout: Request timeout in seconds.
 
         Returns:
-            Raw image bytes, or None if the download failed or returned a non-200 status.
-        """
+                Raw image bytes, or None if the download failed or returned a non-200 status."""
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
             logger.warning("Rejecting avatar URL with unexpected scheme: %s", parsed.scheme)
@@ -314,17 +267,7 @@ class AvatarService:
 
 def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile:
     """Store an uploaded image as ``profile``'s avatar.
-
-    Runs the shared ``services.media.images.image_upload_error`` gauntlet first -
-    site-wide size cap, magic-byte content sniffing, antivirus - and stores
-    nothing at all when any check fails. The sniffing step is the one that
-    matters most here: an avatar is rendered by every page that names its
-    owner, so a file that claims to be a PNG and isn't gets the widest possible
-    distribution of anything a user can upload.
-
-    No ``Image`` row is created and no photo quota is consumed: an avatar is a
-    field on the profile, not a library item. That is why the external API
-    gates this on ``social:write`` rather than ``photos:write``.
+    The sniffing step is the one that matters most here: an avatar is rendered by every page that names its owner, so a file that claims to be a PNG and isn't gets the widest possible distribution of anything a user can upload.
 
     Args:
         profile: The profile whose avatar is being replaced.
@@ -338,8 +281,7 @@ def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile
         AvatarUnsupportedFormatError: The file isn't an accepted image type,
             or its declared type doesn't match its bytes.
         AvatarMalwareDetectedError: The antivirus scan flagged the file.
-        AvatarScanUnavailableError: The antivirus scanner couldn't be reached.
-    """
+        AvatarScanUnavailableError: The antivirus scanner couldn't be reached."""
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.media.images import image_upload_error
 
@@ -356,20 +298,7 @@ def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile
 
 def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> Profile:
     """Generate an emoji avatar and store it as ``profile``'s avatar.
-
-    Both inputs are coerced to known-good values rather than rejected, because
-    the site's own picker offers a fixed set of suggestions and a stale one
-    should still produce *an* avatar rather than an error dialog. The coercion
-    is a security boundary as well as a convenience: ``color`` is interpolated
-    directly into the generated SVG, so anything outside ``MaterialColor``
-    would be markup injection into a file the site subsequently serves.
-    Surfaces that want strict validation (the external API does, so a client
-    learns it sent a typo) validate before calling.
-
-    No ``image_upload_error`` pass here, deliberately: the bytes are generated
-    by :meth:`AvatarService.generate_emoji_svg` from a fixed template and two
-    values this function has just restricted to enum members, so there is no
-    untrusted content to sniff or scan.
+    Both inputs are coerced to known-good values rather than rejected, because the site's own picker offers a fixed set of suggestions and a stale one should still produce *an* avatar rather than an error dialog.
 
     Args:
         profile: The profile whose avatar is being replaced.
@@ -377,8 +306,7 @@ def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> 
         color: A ``MaterialColor`` hex value.
 
     Returns:
-        The same profile, with the generated SVG saved to ``avatar``.
-    """
+        The same profile, with the generated SVG saved to ``avatar``."""
     from django.core.files.base import ContentFile
 
     emoji = AvatarService.ANIMAL_EMOJIS.get(animal) or AvatarService.ANIMAL_EMOJIS[DEFAULT_AVATAR_ANIMAL]
@@ -392,21 +320,13 @@ def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> 
 
 def clear_profile_avatar(profile: Profile) -> Profile:
     """Remove ``profile``'s avatar, deleting the stored file.
-
-    Idempotent - clearing an already-empty avatar is a no-op rather than an
-    error, so a retried mobile DELETE stays safe.
-
-    Uses ``FieldFile.delete`` rather than assigning ``None``, so the underlying
-    file leaves storage too. Leaving it behind would keep a previous avatar
-    fetchable by anyone who had ever seen its URL, which is precisely what a
-    user removing their avatar is asking not to happen.
+    Idempotent - clearing an already-empty avatar is a no-op rather than an error, so a retried mobile DELETE stays safe.
 
     Args:
         profile: The profile whose avatar is being cleared.
 
     Returns:
-        The same profile, with ``avatar`` empty.
-    """
+        The same profile, with ``avatar`` empty."""
     if profile.avatar:
         profile.avatar.delete(save=True)
     return profile

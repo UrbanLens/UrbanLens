@@ -1,11 +1,5 @@
 """Recording anonymized coordinate guesses toward a photo's own position.
-
-See ``services.photos.photo_coordinates`` for how these accumulate into an
-estimate; this module is only the SpotGuessr-side hook that records every
-Photos-mode guess and decides whether it's also worth feeding into that
-estimate. See ``docs/designs/drafts/spotguessr.md``'s "Crowd-sourced photo
-coordinates" for the full design.
-"""
+See ``services.photos.photo_coordinates`` for how these accumulate into an estimate; this module is only the SpotGuessr-side hook that records every Photos-mode guess and decides whether it's also worth feeding into that estimate."""
 
 from __future__ import annotations
 
@@ -22,18 +16,7 @@ if TYPE_CHECKING:
 
 def record_guess(round_: GameRound, guess_point: Point, distance: float) -> None:
     """Anonymously record one guess toward ``round_``'s photo's own coordinates.
-
-    Recorded for every Photos-mode round regardless of whether the photo
-    already has its own coordinates - a photo that's already placed still
-    gets its guesses saved (no current use, but plausibly useful later for,
-    e.g., flagging/correcting a wrong placement); only the *estimate*
-    recompute below stays conditional, since it would be moot for a photo
-    that isn't relying on it. A no-op only for Named Place/Street View
-    rounds, which have no ``round_.image`` at all.
-
-    Deliberately takes no ``profile``: per spec, only the guessed
-    coordinate, a correct/incorrect flag, and a timestamp are ever recorded,
-    never who made it.
+    Recorded for every Photos-mode round regardless of whether the photo already has its own coordinates - a photo that's already placed still gets its guesses saved (no current use, but plausibly useful later for, e.g., flagging/correcting a wrong placement); only the *estimate* recompute below stays conditional, since it would be moot for a photo that isn't relying on it.
 
     Args:
         round_: The round the guess was submitted for.
@@ -47,8 +30,7 @@ def record_guess(round_: GameRound, guess_point: Point, distance: float) -> None
             point-target round (photo already placed), 0 instead means
             "guessed the exact point" - a much rarer bar, but the same
             underlying value and consistent with how scoring treats the two
-            cases everywhere else.
-    """
+            cases everywhere else."""
     if round_.image_id is None:
         return
 

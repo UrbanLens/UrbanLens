@@ -1,11 +1,4 @@
-"""Open-Meteo gateway - free, keyless weather forecast API.
-
-https://open-meteo.com/ - a free, open-source-friendly weather API requiring
-no API key, unlike the existing OpenWeatherMap integration. Used as an
-automatic fallback when OpenWeatherMap isn't configured or its call fails,
-and normalizes to the same provider-agnostic forecast shape OpenWeatherMap's
-gateway also produces (see ``ForecastSlot``).
-"""
+"""Open-Meteo gateway - free, keyless weather forecast API."""
 
 from __future__ import annotations
 
@@ -103,12 +96,10 @@ class OpenMeteoGateway(Gateway):
             logger.warning("Open-Meteo forecast unavailable for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude), exc_info=True)
             return None
 
-        # `timezone=auto` makes the timestamps local to the coordinates, and
-        # names the zone they are local to. Prefer that name over the
-        # accompanying utc_offset_seconds: one fixed offset cannot anchor a
-        # five-day window that crosses a daylight-saving transition, and slots
-        # on the far side of one would land an hour out - enough to pick the
-        # wrong morning or evening slot for an activity.
+        # `timezone=auto` makes the timestamps local to the coordinates, and names the zone they are
+        # local to.
+        # Prefer that name over the accompanying utc_offset_seconds: one fixed offset cannot anchor
+        # a five-day window that crosses a daylight-saving transition, and slots on the far side of
         local_tz: tzinfo | None = None
         zone_name = payload.get("timezone")
         if isinstance(zone_name, str) and zone_name:
@@ -154,23 +145,14 @@ class OpenMeteoGateway(Gateway):
 
     def get_sun_times(self, latitude: float, longitude: float) -> SunTimes | None:
         """Return today's sunrise/sunset and approximate golden-hour windows.
-
-        Fetched independently of ``get_weather_forecast`` (UL-345): the main
-        forecast strip may come from OpenWeatherMap instead, but its 5-day/
-        3-hour endpoint doesn't carry sunrise/sunset, so this always goes
-        through Open-Meteo regardless of which provider serves the
-        temperature/condition forecast. ``timezone=auto`` resolves the
-        correct local timezone for the coordinates server-side, so the
-        returned datetimes are already in local time with no separate
-        timezone lookup needed on our end.
+        Fetched independently of ``get_weather_forecast`` (UL-345): the main forecast strip may come from OpenWeatherMap instead, but its 5-day/ 3-hour endpoint doesn't carry sunrise/sunset, so this always goes through Open-Meteo regardless of which provider serves the temperature/condition forecast.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
 
         Returns:
-            Today's sun times, or None on failure.
-        """
+                Today's sun times, or None on failure."""
         params: dict[str, Any] = {
             "latitude": latitude,
             "longitude": longitude,

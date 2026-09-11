@@ -1,28 +1,5 @@
 """Seed a wiki's or pin's article from a confidently-matched Wikipedia article.
-
-Wikis are created empty (see ``tasks.ensure_wiki_for_location``'s
-docstring: "Wikis are never created automatically") - but once a Wikipedia
-article has been confidently matched to the wiki's location (see
-``WikipediaGateway.get_article_for_location``, which only ever returns a
-candidate that passed its own address/title verification), that's a natural
-starting point rather than an empty page. This module turns the cached
-match into the wiki's initial article, once, the first time either becomes
-true:
-
-- a Wikipedia match is (re)cached for a location that already has a wiki
-  with no article yet (see ``models.cache.signals``), or
-- a wiki is created for a location that already has a cached Wikipedia
-  match (see ``services.wiki.wiki_share.WikiShareService``).
-
-Never overwrites: any existing Article row (seeded or human-written) is left
-untouched - see ``seed_wiki_article_from_wikipedia``'s own guard.
-
-``seed_pin_article_from_wikipedia`` does the same thing for a single pin,
-gated on the pin owner's own ``Profile.auto_create_pin_article_from_wikipedia``
-setting (on by default) - unlike a community wiki, a pin's article is
-private to its owner, so seeding it is opt-out per-user rather than
-something that always happens.
-"""
+Wikis are created empty (see ``tasks.ensure_wiki_for_location``'s docstring: "Wikis are never created automatically") - but once a Wikipedia article has been confidently matched to the wiki's location (see ``WikipediaGateway.get_article_for_location``, which only ever returns a candidate that passed its own address/title verification), that's a natural starting point rather than an empty page."""
 
 from __future__ import annotations
 
@@ -55,18 +32,13 @@ _HEADING_MD_PREFIX = {"h2": "##", "h3": "###", "h4": "####", "h5": "#####", "h6"
 
 def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
     """Write the wiki's first article from a cached Wikipedia match, if applicable.
-
-    No-ops (returns None) unless all of: the location has a wiki, that wiki
-    has no article yet (seeded or human-written - never overwrites either),
-    and a Wikipedia article is actually cached for the location with a
-    non-empty extract.
+    No-ops (returns None) unless all of: the location has a wiki, that wiki has no article yet (seeded or human-written - never overwrites either), and a Wikipedia article is actually cached for the location with a non-empty extract.
 
     Args:
         location: The location to seed a wiki article for.
 
     Returns:
-        The newly created Article, or None if nothing was seeded.
-    """
+        The newly created Article, or None if nothing was seeded."""
     wiki = getattr(location, "wiki", None)
     if wiki is None:
         return None
@@ -87,19 +59,13 @@ def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
 
 def seed_pin_article_from_wikipedia(pin: Pin) -> Article | None:
     """Write a pin's first article from a cached Wikipedia match, if applicable.
-
-    No-ops (returns None) unless all of: the pin owner's
-    ``auto_create_pin_article_from_wikipedia`` setting is on, the pin has a
-    location, the pin has no article yet (seeded or human-written - never
-    overwrites either), and a Wikipedia article is actually cached for the
-    pin's location with a non-empty extract.
+    No-ops (returns None) unless all of: the pin owner's ``auto_create_pin_article_from_wikipedia`` setting is on, the pin has a location, the pin has no article yet (seeded or human-written - never overwrites either), and a Wikipedia article is actually cached for the pin's location with a non-empty extract.
 
     Args:
         pin: The pin to seed an article for.
 
     Returns:
-        The newly created Article, or None if nothing was seeded.
-    """
+        The newly created Article, or None if nothing was seeded."""
     if not pin.profile.auto_create_pin_article_from_wikipedia:
         return None
 
@@ -153,19 +119,13 @@ def _seed_content_for_location(location: Location) -> str | None:
 
 def _lead_image_markdown(article_data: dict) -> str:
     """Render the article's lead thumbnail (already cached alongside the extract) as a Markdown image.
-
-    Uses ``WikipediaGateway._normalise``'s own ``thumbnail`` field - no extra
-    fetch - rather than pulling in the separate, multi-image
-    ``get_article_media`` gallery source (used for the pin's Media tab, a
-    different feature): a seeded article calls for the one image Wikipedia
-    itself leads with, not every image on the page.
+    Uses ``WikipediaGateway._normalise``'s own ``thumbnail`` field - no extra fetch - rather than pulling in the separate, multi-image ``get_article_media`` gallery source (used for the pin's Media tab, a different feature): a seeded article calls for the one image Wikipedia itself leads with, not every image on the page.
 
     Args:
         article_data: The cached Wikipedia article dict (``title``/``thumbnail``).
 
     Returns:
-        A Markdown image block, or "" when there's no thumbnail cached.
-    """
+        A Markdown image block, or "" when there's no thumbnail cached."""
     url = (article_data.get("thumbnail") or "").strip()
     if not url:
         return ""
@@ -175,22 +135,7 @@ def _lead_image_markdown(article_data: dict) -> str:
 
 def _infobox_markdown(pairs: object) -> str:
     """Render a Wikipedia infobox's label/value fact pairs as a Markdown bullet list.
-
-    ``WikipediaGateway._fetch_infobox`` reaches Wikipedia's real rendered
-    HTML (the only response of theirs that carries the infobox at all - the
-    lead/extended extracts are both backed by an extension that strips
-    tables before returning) and already reduces it to plain-text ``[label,
-    value]`` pairs, skipping the infobox's own title row, section dividers,
-    and any image/map-only row (the embedded Kartographer map has no
-    Markdown equivalent) - this only needs to format what's left.
-
-    A GFM table was tried first, but a Markdown table always needs a header
-    row, and a blank one (there's no natural two-column header for an
-    arbitrary facts list) renders as a visibly empty header row once parsed
-    into the article editor - ProseMirror fills any truly empty cell with
-    its own placeholder paragraph (the ``<tr><th>...<br
-    class="ProseMirror-trailingBreak">...`` artifact reported against the
-    seeded article). A bullet list has no such requirement.
+    ``WikipediaGateway._fetch_infobox`` reaches Wikipedia's real rendered HTML (the only response of theirs that carries the infobox at all - the lead/extended extracts are both backed by an extension that strips tables before returning) and already reduces it to plain-text ``[label, value]`` pairs, skipping the infobox's own title row, section dividers, and any image/map-only row (the embedded Kartographer map has no Markdown equivalent) - this only needs to format what's left.
 
     Args:
         pairs: The cached ``infobox`` value (``list[list[str]]`` when
@@ -199,8 +144,7 @@ def _infobox_markdown(pairs: object) -> str:
             existed, or genuinely empty when the article had no infobox.
 
     Returns:
-        A Markdown bullet list, or "" if there are no usable pairs.
-    """
+        A Markdown bullet list, or "" if there are no usable pairs."""
     if not isinstance(pairs, list):
         return ""
     lines: list[str] = []
@@ -236,17 +180,13 @@ def _attribution_line(article_data: dict) -> str:
 
 def _extract_html_to_markdown(html: str) -> str:
     """Convert a WikipediaGateway extract to Markdown source.
-
-    The input is always sanitized HTML restricted to a small, known tag set
-    (see ``_ALLOWED_TAGS`` in ``services.apis.assets.wikipedia``) - this only
-    needs to handle exactly those tags, not arbitrary HTML.
+    The input is always sanitized HTML restricted to a small, known tag set (see ``_ALLOWED_TAGS`` in ``services.apis.assets.wikipedia``) - this only needs to handle exactly those tags, not arbitrary HTML.
 
     Args:
         html: The extract HTML (e.g. ``LocationCache`` row's ``data["extract"]``).
 
     Returns:
-        Markdown source, blocks separated by blank lines.
-    """
+        Markdown source, blocks separated by blank lines."""
     root = lxml_html.fromstring(f"<div>{html}</div>")
     blocks: list[str] = []
     for el in root:

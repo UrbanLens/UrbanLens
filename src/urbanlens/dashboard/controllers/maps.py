@@ -45,16 +45,10 @@ from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
-#: Stand-in slug used to reverse the pin detail route once, then split it, so
-#: per-pin URLs are string formatting rather than a resolver call each.
-
-#: Default/fallback page size for the pin-list sidebar, used when the client
-#: hasn't measured a "how many rows fit in the container" size yet (e.g. the
-#: very first request of a session) or sends an invalid/missing page_size.
+#: Placeholder slug for building per-pin URLs.
+#: Default page size for the pin-list sidebar.
 _PIN_LIST_PAGE_SIZE = 25
-#: Bounds for the client-supplied page_size (see pin_list_panel) - the sidebar
-#: adapts this to the visible container height, but a corrupted or malicious
-#: value must not be able to force an unbounded query.
+#: Bounds for client-supplied page size.
 _PIN_LIST_MIN_PAGE_SIZE = 5
 _PIN_LIST_MAX_PAGE_SIZE = 100
 

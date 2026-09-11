@@ -69,10 +69,10 @@ def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
         raise RuntimeError("Failed to generate a unique API key prefix.")
 
     secret = secrets.token_urlsafe(_SECRET_ENTROPY_BYTES)
-    # No separator between prefix and secret: token_urlsafe's alphabet
-    # includes "_", so a delimiter-based split could misparse a randomly
-    # generated prefix/secret that happens to contain one. Fixed-length
-    # slicing in authenticate_api_key recovers the boundary unambiguously.
+    # No separator between prefix and secret: token_urlsafe's alphabet includes "_", so a
+    # delimiter-based split could misparse a randomly generated prefix/secret that happens to
+    # contain one.
+    # Fixed-length slicing in authenticate_api_key recovers the boundary unambiguously.
     raw_key = f"{KEY_LABEL}_{prefix}{secret}"
     # sanitize_name strips control characters (including NUL, which Postgres
     # rejects outright) and markup-significant characters - this label is
@@ -89,11 +89,7 @@ def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
 
 def authenticate_api_key(raw_key: str) -> ApiKey | None:
     """Resolve a presented raw key to its ``ApiKey`` row, or None if invalid.
-
-    Looks the key up by its public prefix first (cheap, indexed) before
-    hashing the secret half, rather than iterating every active key's hash -
-    see :class:`~urbanlens.dashboard.models.account.model.ApiKey`'s docstring
-    for why that matters here specifically.
+    Looks the key up by its public prefix first (cheap, indexed) before hashing the secret half, rather than iterating every active key's hash - see :class:`~urbanlens.dashboard.models.account.model.ApiKey`'s docstring for why that matters here specifically.
 
     Args:
         raw_key: The full presented key, e.g. the ``Authorization`` header's
@@ -101,8 +97,7 @@ def authenticate_api_key(raw_key: str) -> ApiKey | None:
 
     Returns:
         The matching, non-revoked ``ApiKey`` if the secret checks out; None
-        for a malformed, unknown, revoked, or mismatched key.
-    """
+        for a malformed, unknown, revoked, or mismatched key."""
     label_prefix = f"{KEY_LABEL}_"
     if not raw_key.startswith(label_prefix):
         return None
@@ -121,16 +116,11 @@ def authenticate_api_key(raw_key: str) -> ApiKey | None:
 
 def record_api_key_usage(api_key: ApiKey, endpoint: str) -> None:
     """Log one activity entry for ``api_key``, trimming older entries beyond ``USAGE_LOG_LIMIT``.
-
-    Called only for successfully authenticated requests (see
-    ``external_api.authentication.ApiKeyAuthentication.authenticate``) - never
-    for a rejected/unresolved key, so this table can't be grown or mined by
-    probing with invalid keys.
+    Called only for successfully authenticated requests (see ``external_api.authentication.ApiKeyAuthentication.authenticate``) - never for a rejected/unresolved key, so this table can't be grown or mined by probing with invalid keys.
 
     Args:
         api_key: The key that was just used to authenticate a request.
-        endpoint: The request path that was called, e.g. ``request.path``.
-    """
+        endpoint: The request path that was called, e.g. ``request.path``."""
     ApiKeyUsageLog.objects.create(api_key=api_key, endpoint=endpoint)
     stale_ids = list(ApiKeyUsageLog.objects.for_api_key(api_key).order_by("-created").values_list("pk", flat=True)[USAGE_LOG_LIMIT:])
     if stale_ids:
@@ -166,12 +156,7 @@ def active_api_key_count(user: User) -> int:
 
 def revoke_all_api_keys(user: User) -> int:
     """Revoke every one of ``user``'s active API keys at once.
-
-    Revoked, not deleted: ``ApiKeyUsageLog`` rows hang off the key, and the
-    settings page shows a revoked key so its owner can see it went away.
-
-    Already-revoked keys are untouched, so their original ``revoked_at`` still
-    records when they actually stopped working rather than when this ran.
+    Revoked, not deleted: ``ApiKeyUsageLog`` rows hang off the key, and the settings page shows a revoked key so its owner can see it went away.
 
     Args:
         user: The owner. Scoping by user is what keeps a caller from revoking
@@ -180,26 +165,13 @@ def revoke_all_api_keys(user: User) -> int:
             revoke every key on the site.
 
     Returns:
-        How many keys this revoked.
-    """
+        How many keys this revoked."""
     return ApiKey.objects.for_user(user).active().update(revoked_at=timezone.now())
 
 
 def api_keys_settings_context(user: User, request: HttpRequest, **extra: object) -> dict:
     """Context for the Security section's API Keys subsection.
-
-    Shared by the full settings page render and ``ApiKeyCreateView``/``ApiKeyRevokeView``,
-    which re-render just the Security section for an htmx request after a
-    mutation - mirrors ``services.auth.two_factor.security_settings_context``.
-
-    Pops ``new_api_key`` from the session, which ``ApiKeyCreateView`` stashes
-    there as a one-time flash: the plaintext key is only ever available on the
-    response immediately after generating it.
-
-    Also builds the real, host-correct URLs for the two external API
-    endpoints (dev/prod both resolve correctly) so the settings page can show
-    a copy-pasteable "how to use this key" example instead of leaving the
-    user to find the routes in source.
+    Pops ``new_api_key`` from the session, which ``ApiKeyCreateView`` stashes there as a one-time flash: the plaintext key is only ever available on the response immediately after generating it.
 
     Args:
         user: The account whose API keys to list.
@@ -211,17 +183,15 @@ def api_keys_settings_context(user: User, request: HttpRequest, **extra: object)
         Context dict with ``api_keys`` (one page of them, working keys first
         and newest first within each group, each with its ``usage_log``
         prefetched), ``api_keys_page_obj``, ``new_api_key``,
-        ``external_api_whoami_url``, and ``external_api_pins_url``.
-    """
+        ``external_api_whoami_url``, and ``external_api_pins_url``."""
     from django.urls import reverse
 
     from urbanlens.dashboard.services.core.pagination import get_page
 
-    # Revoked keys stay listed on purpose (see `revoke_all_api_keys`), so this
-    # list only ever grows and has to page rather than be trimmed. Working keys
-    # sort first because they are the ones with an action attached: an account
-    # that had revoked a page's worth of keys would otherwise have to page
-    # forward to reach the key it actually uses.
+    # Revoked keys stay listed on purpose (see `revoke_all_api_keys`), so this list only ever grows
+    # and has to page rather than be trimmed.
+    # Working keys sort first because they are the ones with an action attached: an account that had
+    # revoked a page's worth of keys would otherwise have to page forward to reach the key it
     keys = ApiKey.objects.for_user(user).alias(still_working=Q(revoked_at__isnull=True)).order_by("-still_working", "-created").prefetch_related("usage_log")
     page = get_page(request, keys, API_KEYS_PAGE_SIZE, param=API_KEYS_PAGE_PARAM)
     return {

@@ -1,14 +1,5 @@
 """Who may see a trip, and who may act on it.
-
-The single source of truth for trip authorization, shared by the internal
-HTMX controllers and the external REST API so a permission-level change can
-never apply to one surface and not the other.
-
-Historically these lived as private helpers on ``controllers.trip``
-(``_trip_or_403``, ``_is_organizer``, ``_viewer_has_joined``,
-``_can_perform``). They moved here when the external API needed the same
-rules; the controller now calls these directly.
-"""
+The single source of truth for trip authorization, shared by the internal HTMX controllers and the external REST API so a permission-level change can never apply to one surface and not the other."""
 
 from __future__ import annotations
 
@@ -27,17 +18,7 @@ TRIP_NOT_FOUND_MESSAGE = "No such trip."
 
 def get_trip_for_viewer(trip_slug: str, viewer: Profile) -> Trip:
     """Return the trip identified by *trip_slug*, if *viewer* may see it at all.
-
-    Membership (or being the creator) is the viewing gate; contributing is a
-    separate, stricter question handled by :func:`can_perform`. An invited
-    member who has not yet joined can still read the trip.
-
-    A missing trip and a trip the viewer has no access to raise the *same*
-    error with the *same* message. The previous implementation
-    (``controllers.trip._trip_or_403``) rendered the same "not found" page for
-    both but answered 404 for one and 403 for the other, which let anyone
-    enumerate valid private trip slugs by reading the status code alone -
-    exactly what the identical page was meant to prevent. Both are 404 now.
+    The previous implementation (``controllers.trip._trip_or_403``) rendered the same "not found" page for both but answered 404 for one and 403 for the other, which let anyone enumerate valid private trip slugs by reading the status code alone - exactly what the identical page was meant to prevent.
 
     Args:
         trip_slug: The trip's URL slug.
@@ -48,8 +29,7 @@ def get_trip_for_viewer(trip_slug: str, viewer: Profile) -> Trip:
 
     Raises:
         TripNotFoundError: No such trip, or the viewer is neither its creator
-            nor one of its members.
-    """
+            nor one of its members."""
     trip = Trip.objects.filter(slug=trip_slug).select_related("creator__user").first()
     if trip is None:
         raise TripNotFoundError(TRIP_NOT_FOUND_MESSAGE)
@@ -76,17 +56,12 @@ def is_organizer(profile: Profile, trip: Trip) -> bool:
 def has_joined(profile: Profile, trip: Trip) -> bool:
     """Return True when *profile* may contribute at all - creator, or a joined member.
 
-    An invited member can view the trip (see :func:`get_trip_for_viewer`) but
-    cannot contribute (add/edit activities, comment, vote, add members) until
-    they accept the invitation.
-
     Args:
         profile: The profile to test.
         trip: The trip.
 
     Returns:
-        True for the creator or a member whose status is ``joined``.
-    """
+        True for the creator or a member whose status is ``joined``."""
     if trip.creator_id == profile.id:
         return True
     return TripMembership.objects.for_trip_and_profile(trip, profile).filter(status=TripMembership.STATUS_JOINED).exists()
@@ -94,12 +69,7 @@ def has_joined(profile: Profile, trip: Trip) -> bool:
 
 def can_perform(profile: Profile, trip: Trip, level: str) -> bool:
     """Return True when *profile* is allowed to act at the given permission level.
-
-    Requires the profile to have joined (see :func:`has_joined`) - an
-    invited-but-not-yet-joined member can never act, regardless of level.
-    Otherwise the creator is always allowed, ``everyone`` allows any joined
-    member, ``organizers`` requires organizer/creator status, and ``none``
-    allows only the creator.
+    Requires the profile to have joined (see :func:`has_joined`) - an invited-but-not-yet-joined member can never act, regardless of level.
 
     Args:
         profile: The profile attempting the action.
@@ -108,8 +78,7 @@ def can_perform(profile: Profile, trip: Trip, level: str) -> bool:
             normally read from the matching ``trip.allow_*`` field.
 
     Returns:
-        True when the action is permitted.
-    """
+        True when the action is permitted."""
     if trip.creator_id == profile.id:
         return True
     if not has_joined(profile, trip):
@@ -139,10 +108,7 @@ def require_perform(profile: Profile, trip: Trip, level: str, message: str) -> N
 
 def require_joined(profile: Profile, trip: Trip, message: str) -> None:
     """Raise unless *profile* has joined *trip*.
-
-    The level-independent counterpart to :func:`require_perform`, for actions
-    (RSVP, viewing suggestions, editing trip metadata) gated only on having
-    accepted the invitation.
+    The level-independent counterpart to :func:`require_perform`, for actions (RSVP, viewing suggestions, editing trip metadata) gated only on having accepted the invitation.
 
     Args:
         profile: The profile attempting the action.
@@ -150,7 +116,6 @@ def require_joined(profile: Profile, trip: Trip, message: str) -> None:
         message: The refusal message shown to the user.
 
     Raises:
-        TripPermissionError: The profile has not joined the trip.
-    """
+        TripPermissionError: The profile has not joined the trip."""
     if not has_joined(profile, trip):
         raise TripPermissionError(message)

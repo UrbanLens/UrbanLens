@@ -1,38 +1,5 @@
 """Scheduled background enrichment of Locations (and thereby pins and wikis).
-
-Most external data is fetched lazily - a Private Pin page schedules a panel
-fetch, a new wiki triggers :func:`~urbanlens.dashboard.tasks.enrich_wiki_location`,
-and so on. A small set of high-value data (official names, aliases, street
-addresses, and property/building boundaries) is worth having for *every*
-location up front, so an hourly Celery task (``tasks.run_scheduled_enrichment``)
-drips those fetches into whatever API budget is left over after real traffic.
-
-The design has three moving parts:
-
-1. :class:`EnrichmentSource` - one kind of enrichable data. Core sources
-   (street address, boundaries) live in this module; integration-specific
-   sources are contributed by plugins via
-   :meth:`~urbanlens.dashboard.plugins.base.UrbanLensPlugin.get_enrichment_sources`,
-   which keeps the system extensible. Each source declares which rate-limited
-   service keys it consumes and knows which Locations still lack its data -
-   completion is tracked *per source* (usually via the presence of that
-   source's ``LocationCache`` row, regardless of freshness), so one provider
-   having run never masks another that hasn't.
-2. :func:`compute_service_budget` - how many API calls a service can spare
-   right now. Every window keeps ``enrichment_buffer_percent`` (default 10%)
-   of the configured limit in reserve for traffic spikes, and multi-day
-   windows are spread evenly so the whole 30-day budget can't be burned in a
-   day (e.g. a 300-calls/30-days limit with 6 calls already made today
-   yields ``270 // 30 - 6 = 3``).
-3. :func:`run_enrichment_cycle` - one pass: per source, compute the budget,
-   pick the highest-impact candidate Locations, enrich them sequentially with
-   a per-item stagger derived from the service's per-minute limit (so even
-   very generous limits are never hammered in a burst), then re-resolve
-   official names/aliases once per touched location.
-
-Everything is admin-tunable via ``SiteSettings`` (enable toggle, UTC run
-window, buffer percent, per-service per-run cap) on the site-admin page.
-"""
+Most external data is fetched lazily - a Private Pin page schedules a panel fetch, a new wiki triggers :func:`~urbanlens.dashboard.tasks.enrich_wiki_location`, and so on."""
 
 from __future__ import annotations
 
@@ -82,12 +49,7 @@ _DENSITY_SCORE_CAP = 20
 
 class EnrichmentSource(ABC):
     """One kind of background-enrichable data for a Location.
-
-    Subclasses declare which rate-limited services they consume and implement
-    the "which locations still need this" filter plus the actual fetch. Core
-    sources are registered in :func:`enrichment_sources`; integrations
-    contribute theirs via ``UrbanLensPlugin.get_enrichment_sources`` so new
-    enrichment kinds can be added without touching this module.
+    Core sources are registered in :func:`enrichment_sources`; integrations contribute theirs via ``UrbanLensPlugin.get_enrichment_sources`` so new enrichment kinds can be added without touching this module.
 
     Attributes:
         key: Unique slug identifying this source in run summaries and logs.
@@ -105,8 +67,7 @@ class EnrichmentSource(ABC):
             geographic region (see ``services.geo.geo_boundary``); None means
             unrestricted.
         refreshes_names: When True, official names/aliases are re-resolved for
-            every location this source successfully enriches in a cycle.
-    """
+            every location this source successfully enriches in a cycle."""
 
     key: ClassVar[str] = ""
     verbose_name: ClassVar[str] = ""
@@ -126,40 +87,25 @@ class EnrichmentSource(ABC):
     @abstractmethod
     def missing_filter(self) -> Q:
         """Filter selecting Locations that still lack this source's data.
-
-        This is the per-source completion tracker: it must consider only this
-        source's own marker (its ``LocationCache`` row, a stamped column, ...)
-        so sources are tracked independently of one another. "Attempted but
-        found nothing" must count as complete - otherwise the same hopeless
-        location would be retried every cycle, burning budget forever.
+        This is the per-source completion tracker: it must consider only this source's own marker (its ``LocationCache`` row, a stamped column, ...) so sources are tracked independently of one another.
 
         Returns:
-            A ``Q`` usable in ``Location.objects.filter``.
-        """
+                A ``Q`` usable in ``Location.objects.filter``."""
 
     @abstractmethod
     def enrich(self, location: Location) -> bool:
         """Fetch and persist this source's data for one location.
 
-        Implementations must persist a completion marker even when the
-        upstream API finds nothing (see :meth:`missing_filter`).
-
         Args:
-            location: The location to enrich.
+                location: The location to enrich.
 
         Returns:
-            True when data (or an empty "nothing found" marker) was stored.
-        """
+                True when data (or an empty "nothing found" marker) was stored."""
 
 
 class LocationCacheEnrichmentSource(EnrichmentSource):
     """Base for sources whose data and completion marker is a ``LocationCache`` row.
-
-    The *existence* of the row - fresh or stale - marks the source as having
-    run for a location, so background enrichment only ever backfills
-    never-fetched locations; refreshing stale rows stays the job of the lazy
-    panel-fetch machinery that already knows a user is looking.
-    """
+    The *existence* of the row - fresh or stale - marks the source as having run for a location, so background enrichment only ever backfills never-fetched locations; refreshing stale rows stays the job of the lazy panel-fetch machinery that already knows a user is looking."""
 
     cache_source: ClassVar[str] = ""
     refreshes_names: ClassVar[bool] = True
@@ -195,13 +141,7 @@ class LocationCacheEnrichmentSource(EnrichmentSource):
 
 class AddressEnrichmentSource(EnrichmentSource):
     """Backfills street-address components via the Google Geocoding API.
-
-    Uses the same :func:`~urbanlens.dashboard.services.locations.addresses.ensure_location_address`
-    helper the pin-edit page uses lazily. Because a failed geocode leaves the
-    address columns empty, completion is tracked with a dedicated
-    ``address_backfill`` LocationCache marker rather than the columns
-    themselves - one attempt per location, ever.
-    """
+    Because a failed geocode leaves the address columns empty, completion is tracked with a dedicated ``address_backfill`` LocationCache marker rather than the columns themselves - one attempt per location, ever."""
 
     key: ClassVar[str] = "address"
     verbose_name: ClassVar[str] = "Street address (Google Geocoding)"
@@ -242,13 +182,7 @@ class AddressEnrichmentSource(EnrichmentSource):
 
 class BoundaryEnrichmentSource(EnrichmentSource):
     """Generates default property/building boundaries via the boundary provider chain.
-
-    ``generate_location_boundaries`` stamps ``generated_at`` even when nothing
-    is found, so each location is attempted exactly once. Overpass is the
-    chain's first (and rate-tightest) provider, so it anchors the budget; the
-    remaining footprint providers are guarded by their own rate-limit rows at
-    call time.
-    """
+    ``generate_location_boundaries`` stamps ``generated_at`` even when nothing is found, so each location is attempted exactly once."""
 
     key: ClassVar[str] = "boundary"
     verbose_name: ClassVar[str] = "Property/building boundaries"
@@ -308,18 +242,7 @@ def enrichment_sources() -> list[EnrichmentSource]:
 
 def compute_service_budget(service: str, site_settings: SiteSettings | None = None) -> int | None:
     """How many API calls background enrichment may spend on a service right now.
-
-    Keeps ``enrichment_buffer_percent`` of every configured limit in reserve
-    for organic traffic spikes, and spreads multi-day windows evenly so one
-    cycle can't burn a month's budget: with a 300-calls/30-days limit and a
-    10% buffer, the drip allowance is ``270 // 30 = 9`` calls per rolling day,
-    so 6 calls already made in the last 24 hours leaves a budget of 3.
-
-    Windows are measured against ``ApiCallLog`` with rolling lookbacks
-    (last 24 hours / last 30 days), matching how ``check_rate_limit`` counts
-    its 30-day window and staying strictly more conservative than its
-    calendar-day daily count. Geo-filtered rows never hit the network, so
-    they are excluded just as the rate limiter excludes them.
+    Geo-filtered rows never hit the network, so they are excluded just as the rate limiter excludes them.
 
     Args:
         service: The rate-limiter service key.
@@ -329,8 +252,7 @@ def compute_service_budget(service: str, site_settings: SiteSettings | None = No
         Remaining call budget (never negative), ``0`` when the service is
         disabled or exhausted, or ``None`` when the service configures
         neither a daily nor a 30-day limit (i.e. unbounded - callers should
-        apply their own per-run cap).
-    """
+        apply their own per-run cap)."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
@@ -374,18 +296,13 @@ def compute_service_budget(service: str, site_settings: SiteSettings | None = No
 
 def stagger_seconds(source: EnrichmentSource) -> float:
     """Pause between one source's consecutive enrichments, from its per-minute limits.
-
-    Even a service with an enormous daily limit shouldn't see a burst of
-    back-to-back requests from the background job, so the pause is derived
-    from the tightest per-minute limit among the source's services and
-    clamped to [MIN_STAGGER_SECONDS, MAX_STAGGER_SECONDS].
+    Even a service with an enormous daily limit shouldn't see a burst of back-to-back requests from the background job, so the pause is derived from the tightest per-minute limit among the source's services and clamped to [MIN_STAGGER_SECONDS, MAX_STAGGER_SECONDS].
 
     Args:
         source: The enrichment source about to run a batch.
 
     Returns:
-        Seconds to sleep between items.
-    """
+        Seconds to sleep between items."""
     per_minute_limits: list[int] = []
     for service in source.service_keys:
         try:
@@ -406,16 +323,12 @@ def stagger_seconds(source: EnrichmentSource) -> float:
 def enrichment_window_open(site_settings: SiteSettings, *, now: datetime | None = None) -> bool:
     """Whether the admin-scheduled daily run window currently allows enrichment.
 
-    The window is ``[start, end)`` in UTC hours and may wrap midnight
-    (e.g. 22 -> 4). Equal start and end means "any hour".
-
     Args:
         site_settings: Current settings holding the configured hours.
         now: Injected current time for tests; defaults to ``timezone.now()``.
 
     Returns:
-        True when a cycle may run now.
-    """
+        True when a cycle may run now."""
     from django.utils import timezone
 
     start = site_settings.enrichment_start_hour
@@ -430,18 +343,7 @@ def enrichment_window_open(site_settings: SiteSettings, *, now: datetime | None 
 
 def prioritized_location_candidates(missing: Q, *, limit: int, geo_boundary: GeoBoundary | None = None) -> list[Location]:
     """Pick the Locations most worth enriching next, highest impact first.
-
-    Impact scoring favors places more users will actually see:
-
-    * distinct users with a pin at the location (x3),
-    * pin-list memberships across those pins (x2),
-    * an existing community wiki (+2),
-    * raw pin count (x1),
-    * and, as a refinement among the shortlisted leaders, the number of other
-      pinned locations within ~2 km (capped) - a proxy for high-traffic areas.
-
-    Only locations somebody actually references (a pin or a wiki) are
-    considered; orphaned Location rows can wait for lazy loading.
+    Only locations somebody actually references (a pin or a wiki) are considered; orphaned Location rows can wait for lazy loading.
 
     Args:
         missing: The source's :meth:`EnrichmentSource.missing_filter`.
@@ -451,8 +353,7 @@ def prioritized_location_candidates(missing: Q, *, limit: int, geo_boundary: Geo
             no restriction.
 
     Returns:
-        Up to ``limit`` locations, best candidates first.
-    """
+        Up to ``limit`` locations, best candidates first."""
     from django.db.models import Case, Count, Exists, F, IntegerField, OuterRef, Value, When
 
     from urbanlens.dashboard.models.location.model import Location
@@ -511,13 +412,7 @@ def _nearby_density_score(location: Location) -> int:
 
 def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
     """Run one background-enrichment pass across every source.
-
-    For each source: verify availability, compute the per-run item budget
-    (minimum service budget divided by calls-per-item, capped by the admin's
-    per-service-per-run limit), pick the highest-impact candidate locations,
-    and enrich them sequentially with a stagger pause between items. Official
-    names and aliases are re-resolved once per touched location at the end,
-    reading only the freshly cached data (no extra API calls).
+    Official names and aliases are re-resolved once per touched location at the end, reading only the freshly cached data (no extra API calls).
 
     Args:
         force: Ignore the enabled toggle and run window (admin "run now").
@@ -525,8 +420,7 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
 
     Returns:
         A summary dict (also cached at ``LAST_RUN_CACHE_KEY``) with per-source
-        enriched/failed counts and skip reasons.
-    """
+        enriched/failed counts and skip reasons."""
     from django.core.cache import cache
     from django.utils import timezone
 
@@ -536,13 +430,10 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
     site_settings = SiteSettings.get_current()
     summary: dict[str, Any] = {"started": timezone.now().isoformat(), "sources": {}}
 
-    # Every source here calls a real external API and spends shared rate-limit
-    # quota (see compute_service_budget) - never worth doing outside
-    # production, where there's no real traffic to backfill for and no
-    # deployment depending on the result. Checked ahead of `force` (unlike the
-    # enabled-toggle/run-window checks below, which `force` deliberately
-    # bypasses for an admin's manual "run now") since this is a deployment
-    # safety rail, not a site-configurable preference.
+    # Every source here calls a real external API and spends shared rate-limit quota (see
+    # compute_service_budget) - never worth doing outside production, where there's no real traffic
+    # to backfill for and no deployment depending on the result.
+    # Checked ahead of `force` (unlike the enabled-toggle/run-window checks below, which `force`
     if site_settings.get_effective_environment_type() != EnvironmentTypes.PRODUCTION:
         summary["skipped"] = "non_production"
         return summary
@@ -596,11 +487,8 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
                     entry["skipped"] = "rate_limited"
                     break
                 except GatewayRateLimitedError as exc:
-                    # The upstream service reported its own request budget is
-                    # exhausted (e.g. REData's Google Places budget) - expected
-                    # and self-clearing, not a bug. Every remaining candidate
-                    # would fail identically, so stop this source now instead
-                    # of logging a traceback per candidate.
+                    # The upstream service reported its own request budget is exhausted (e.g.
+                    # REData's Google Places budget) - expected and self-clearing, not a bug.
                     logger.info("Enrichment source %s stopped early: %s", source.key, exc)
                     entry["skipped"] = "rate_limited"
                     break
@@ -657,16 +545,13 @@ def self_reported_skip(source: EnrichmentSource) -> str | None:
 
 def refresh_official_names(location_ids: Iterable[int]) -> int:
     """Re-resolve official names and aliases for freshly enriched locations.
-
-    Reads only cached candidates (the rows enrichment just wrote), so this
-    makes no API calls of its own.
+    Reads only cached candidates (the rows enrichment just wrote), so this makes no API calls of its own.
 
     Args:
         location_ids: PKs of locations whose caches changed this cycle.
 
     Returns:
-        Number of locations whose name, wiki name, or alias list changed.
-    """
+        Number of locations whose name, wiki name, or alias list changed."""
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
 

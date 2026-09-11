@@ -1,21 +1,5 @@
 """Every tunable number in the reputation model, in one place.
-
-Settled 2026-08-24 (decision 3 in ``docs/designs/reputation-and-gating.md``):
-coefficients live in code, named, gathered here, and are promoted to
-runtime-editable only once real data shows which ones actually need retuning.
-Thirty admin knobs nobody has calibrated is its own cost.
-
-Two things deliberately do **not** live here, and belong in ``SiteSettings``
-when they are built: the gate thresholds, and the reveal-budget caps. Those are
-operational safety valves rather than tuning - if the gate is wrong on launch
-day it has to be loosened without a deploy.
-
-Nothing here is calibrated yet. These are starting values chosen to hold the
-*relative ordering* the source memo gave, which is the part that was actually
-specified: a photo is worth notably more than an alias; up-voting somebody
-else's photo is worth very little; a contribution to something that had nothing
-is worth far more than the Nth of its kind.
-"""
+Those are operational safety valves rather than tuning - if the gate is wrong on launch day it has to be loosened without a deploy."""
 
 from __future__ import annotations
 
@@ -37,10 +21,9 @@ BASE_VALUES: dict[str, Decimal] = {
     "active_day": Decimal("0.25"),
 }
 
-#: How much the target's prior emptiness multiplies a contribution. The memo's
-#: worked example, for a photo: nothing at all on the wiki is worth "a
-#: significant amount more" than external-only, which in turn beats adding to a
-#: pile. Applied to every contribution type, not just photos.
+#: How much the target's prior emptiness multiplies a contribution.
+#: The memo's worked example, for a photo: nothing at all on the wiki is worth "a significant amount
+#: more" than external-only, which in turn beats adding to a pile.
 NEED_FIRST_OF_ITS_KIND = Decimal("4.0")
 NEED_FIRST_BY_A_USER = Decimal("2.0")
 NEED_ROUTINE = Decimal("1.0")
@@ -63,11 +46,10 @@ PER_WIKI_PERIOD_CAP = Decimal(60)
 #: single activity can dominate a total.
 PER_RULE_PERIOD_CAP = Decimal(120)
 
-#: Quality bonuses. Strictly *additive bonuses for metadata present*, never a
-#: penalty for absence - EXIF extraction is skipped entirely when the uploader
-#: has ``track_pin_visits`` off, so a penalty would quietly pay users less for
-#: having a privacy setting enabled. See the design doc's implementation
-#: findings.
+#: Quality bonuses.
+#: Strictly *additive bonuses for metadata present*, never a penalty for absence - EXIF extraction
+#: is skipped entirely when the uploader has ``track_pin_visits`` off, so a penalty would quietly
+#: pay users less for having a privacy setting enabled.
 QUALITY_HAS_CAPTURE_DATE = Decimal("1.5")
 QUALITY_HAS_REAL_GPS = Decimal("1.5")
 

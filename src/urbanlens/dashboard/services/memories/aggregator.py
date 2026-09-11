@@ -133,14 +133,10 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
     """Yield a MemoryEvent for each Trip whose effective date range overlaps the given range."""
     from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 
-    # Mirrors Trip.effective_start_date/effective_end_date: explicit start_date/end_date
-    # win, else fall back to the earliest/latest scheduled activity. A trip with no
-    # end_date and no later activity is treated as ending on its effective start date,
-    # same as Trip.duration_days/timeline_status do. The last-activity date takes
-    # scheduled_end into account as well as scheduled_at, because the property does -
-    # without it a trip whose final activity runs past the last start time is filtered
-    # against one definition of "ends" and then displayed with another. Postgres's
-    # GREATEST ignores NULLs, so an activity with no scheduled_end doesn't erase the max.
+    # Mirrors Trip.effective_start_date/effective_end_date: explicit start_date/end_date win, else
+    # fall back to the earliest/latest scheduled activity.
+    # A trip with no end_date and no later activity is treated as ending on its effective start
+    # date, same as Trip.duration_days/timeline_status do.
     trips = (
         Trip.objects.filter(profiles=profile)
         .annotate(
@@ -221,15 +217,10 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
     """Yield a MemoryEvent for each of the profile's own geotagged photos within the given range."""
     from urbanlens.dashboard.models.images.model import Image
 
-    # Named `_effective_taken_at`, not `effective_taken_at`: annotating the
-    # latter collides with Image.effective_taken_at (a real @property), and
-    # Django raises AttributeError trying to setattr the annotated column
-    # onto that name during row materialization - silently swallowed by
-    # get_memory_events' broad exception guard, so every photo vanished from
-    # the feed. The Coalesce fallback matches the property's own chain
-    # (EXIF taken_at, else a filename-parsed date) so the two stay in sync;
-    # reading the real property below (not this annotation) keeps that the
-    # single source of truth.
+    # Named `_effective_taken_at`, not `effective_taken_at`: annotating the latter collides with
+    # Image.effective_taken_at (a real @property), and Django raises AttributeError trying to
+    # setattr the annotated column onto that name during row materialization - silently swallowed by
+    # get_memory_events' broad exception guard, so every photo vanished from the feed.
     photos = Image.objects.filter(profile=profile).with_coords().annotate(_effective_taken_at=Coalesce("taken_at", "filename_taken_at")).filter(_effective_taken_at__date__range=(start, end)).select_related("pin", "wiki", "wiki__location")
     if bbox is not None:
         photos = photos.filter(
@@ -281,15 +272,7 @@ def _event_sources() -> tuple[Callable[[Profile, date, date, BBox | None], Itera
 
 def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | None = None) -> list[MemoryEvent]:
     """Merge every registered event source over [start, end], sorted newest-first.
-
-    Each source contributes independently. This is the page's extensibility seam -
-    adding a memory type is one new function in ``_event_sources`` - so an unguarded
-    fan-out means any single source raising (a corrupt row, a missing relation, a bug
-    in a newly added source) discards the other three and 500s the whole feed. A
-    Memories page missing one kind of memory is worth far more than no page at all.
-
-    Sources are generators, so they are drained one at a time: whatever a source
-    yielded before failing is kept rather than thrown away with it.
+    This is the page's extensibility seam - adding a memory type is one new function in ``_event_sources`` - so an unguarded fan-out means any single source raising (a corrupt row, a missing relation, a bug in a newly added source) discards the other three and 500s the whole feed.
 
     Args:
         profile: The profile whose memories to fetch.
@@ -298,8 +281,7 @@ def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | 
         bbox: Optional map-viewport bounding box to further narrow results.
 
     Returns:
-        List of MemoryEvent across every source that succeeded, newest first.
-    """
+        List of MemoryEvent across every source that succeeded, newest first."""
     events: list[MemoryEvent] = []
     for source in _event_sources():
         try:

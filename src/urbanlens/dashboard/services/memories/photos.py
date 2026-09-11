@@ -1,11 +1,4 @@
-"""Organize-photos helpers for the Vault Photos page: pin matching, classification, and visit logging.
-
-These build on the lower-level PinVisit/VisitSuggestion helpers in
-``services.visits.visits`` and are the operations the Photos page controllers call when a
-user confirms, pins, or manually files an uploaded photo. Ingestion (raising a
-``VisitSuggestion`` from a freshly uploaded, unfiled photo) lives in
-``services.memories.visits.maybe_suggest_photo_visit``.
-"""
+"""Organize-photos helpers for the Vault Photos page: pin matching, classification, and visit logging."""
 
 from __future__ import annotations
 
@@ -61,15 +54,11 @@ def find_matching_pin(profile: Profile, latitude: Decimal | float, longitude: De
 def pending_suggestion_image_ids(images: Sequence[Image]) -> set[int]:
     """Return which of *images* have a pending photo-origin VisitSuggestion.
 
-    One query for the whole batch, to pass to :func:`classify_photo` when
-    classifying a list - see that function's ``pending_image_ids``.
-
     Args:
         images: The photos about to be classified.
 
     Returns:
-        The subset of their primary keys with a pending suggestion.
-    """
+        The subset of their primary keys with a pending suggestion."""
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 
     if not images:
@@ -120,30 +109,13 @@ def _visit_time(image: Image):
 
 def _resuggest_nearby_unfiled_photos(profile: Profile, pin: Pin, *, exclude_image_id: int) -> None:
     """Retroactively file or suggest visits for other unfiled photos now that a pin exists here.
-
-    A dropped batch of photos taken at the same unpinned spot all land in the
-    "needs_pin" state (see ``classify_photo``) since none of them match an
-    existing pin. Once the user creates a pin from one of them, this mirrors
-    what would have happened had the rest been *uploaded* after that pin
-    already existed - with one adjustment for the common same-day-batch case:
-
-    - Different day than any visit already logged at this pin: raise a normal
-      VisitSuggestion via ``maybe_suggest_photo_visit`` for the uploader to
-      confirm, exactly as a fresh upload would.
-    - Same day as a visit already logged at this pin (the overwhelmingly
-      common case - a photo drop is usually one outing): ``create_visit_suggestion``
-      would silently no-op here (a same-day visit already exists and no new
-      participants would be added), which would leave the photo stuck offering
-      "create a pin" forever. Since it's unambiguously the same visit, file it
-      directly via ``log_visit_on_pin`` instead of asking for a confirmation
-      that would never actually appear.
+    Since it's unambiguously the same visit, file it directly via ``log_visit_on_pin`` instead of asking for a confirmation that would never actually appear.
 
     Args:
         profile: The photos' owner (also the new pin's owner).
         pin: The pin that was just created or reused.
         exclude_image_id: The photo already handled by the caller - skipped
-            here since it's already filed.
-    """
+            here since it's already filed."""
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
     from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
@@ -156,8 +128,8 @@ def _resuggest_nearby_unfiled_photos(profile: Profile, pin: Pin, *, exclude_imag
     already_suggested = set(
         VisitSuggestion.objects.filter(origin_image__in=candidates, status=VisitSuggestionStatus.PENDING).values_list("origin_image_id", flat=True),
     )
-    # One query for the dates in play, rather than one per candidate. Safe to compute
-    # up front because neither branch below adds a date to the set: the "already
+    # One query for the dates in play, rather than one per candidate.
+    # Safe to compute up front because neither branch below adds a date to the set: the "already
     # visited" branch logs another visit on a date that is already in it, and
     # maybe_suggest_photo_visit creates a VisitSuggestion, never a PinVisit.
     candidate_dates = {candidate.taken_at.date() for candidate in candidates if candidate.taken_at}
@@ -183,24 +155,7 @@ def create_pin_and_log_visit(
     name: str | None = None,
 ) -> tuple[Pin, PinVisit | None]:
     """Create a pin for a geotagged photo and log a visit there in one step.
-
-    Used for a photo that has GPS but matches none of the user's existing pins.
-    The shared Location is resolved first so an existing pin at that exact
-    place can be reused instead of colliding with ``db_pin_unique_location_per_profile``
-    - this happens when another photo from the same batch already created a
-    pin here (see ``_resuggest_nearby_unfiled_photos``, which is meant to catch
-    this first, but a race or an out-of-order confirm-dialog submission can
-    still reach this path). A minimal pin is created when none exists yet
-    (copying nothing private), and a photo-sourced PinVisit is logged; the
-    photo is attached to both the pin and that visit.
-
-    The caller may override where the pin is placed and give it a name - the
-    Memories confirmation dialog lets the user drag the marker and name the pin
-    before committing, rather than silently dropping it at the raw photo GPS. The
-    photo keeps its own coordinates (where it was taken); only the pin/Location is
-    placed at the confirmed point. A caller-provided name is only applied when
-    the pin doesn't already have one, so reusing an existing named pin never
-    overwrites it.
+    The shared Location is resolved first so an existing pin at that exact place can be reused instead of colliding with ``db_pin_unique_location_per_profile`` - this happens when another photo from the same batch already created a pin here (see ``_resuggest_nearby_unfiled_photos``, which is meant to catch this first, but a race or an out-of-order confirm-dialog submission can still reach this path).
 
     Args:
         profile: The owner the new pin and visit belong to.
@@ -217,8 +172,7 @@ def create_pin_and_log_visit(
         happens; only the visit row is skipped).
 
     Raises:
-        ValueError: If neither an override nor the image supplies coordinates.
-    """
+        ValueError: If neither an override nor the image supplies coordinates."""
     lat = latitude if latitude is not None else image.effective_latitude
     lng = longitude if longitude is not None else image.effective_longitude
     if lat is None or lng is None:
@@ -253,10 +207,7 @@ def create_pin_and_log_visit(
 
 def log_visit_on_pin(profile: Profile, image: Image, pin: Pin) -> PinVisit | None:
     """Log a photo-sourced visit on an existing pin and attach the photo to it.
-
-    Used both for a geotagged photo the user manually assigns and for a photo with
-    no GPS the user searches a pin for. When the photo has no coordinates, they are
-    backfilled from the pin so it appears on the map.
+    When the photo has no coordinates, they are backfilled from the pin so it appears on the map.
 
     Args:
         profile: The owner the visit belongs to (also the pin owner).
@@ -265,8 +216,7 @@ def log_visit_on_pin(profile: Profile, image: Image, pin: Pin) -> PinVisit | Non
 
     Returns:
         The newly created PinVisit, or None if profile has turned off
-        visit-history tracking (the photo is still attached to the pin).
-    """
+        visit-history tracking (the photo is still attached to the pin)."""
     visit = PinVisit.objects.create(pin=pin, visited_at=_visit_time(image), source=VisitSource.PHOTO) if visit_logging_allowed(profile) else None
     update_fields = ["pin", "visit", "updated"]
     image.pin = pin

@@ -1,31 +1,5 @@
 """What happens to an upload whose processing task died.
-
-``process_image_upload`` marks success and, before this module, marked nothing
-at all on permanent failure. A row whose task died kept ``upload_processed_at =
-None`` forever: the uploader saw a photo that never finished, with no error and
-no way to retry, and nothing server-side distinguished "still running" from
-"died three days ago". ``autoretry_for=(OSError,)`` does not help - those
-retries run *inside* the child, so anything that kills the child (OOM, a decoder
-segfault, a lost worker) never reaches them.
-
-The product decision this implements: **the user retries; if they do not, the
-upload is discarded.** So a failure becomes a reviewable row on Vault → Photos
-rather than a toast, which also covers an uploader who navigated away before the
-failure happened - nothing here waits for them to be on the page.
-
-Detection is the recovery sweep's job rather than a ``task_failure`` receiver's.
-The sweep already exists, already runs hourly, and already knows how to
-re-enqueue; giving it a budget is a smaller change than introducing a second
-decision-maker in the worker's MainProcess, where a stale database connection
-after a restart is its own failure mode. A receiver would only make the same
-outcome arrive sooner, and can be added later behind its own tests.
-
-Everything here is bounded in both directions: the sweep gives up after
-:data:`MAX_SWEEP_ATTEMPTS`, the user after :data:`MAX_USER_RETRIES`, and an
-untouched failure is discarded after :data:`UNRETRIED_DISCARD_AGE`. A file that
-deterministically kills the decoder must not be a way to occupy a two-slot
-sandbox worker forever, and that is exactly the file most likely to end up here.
-"""
+A row whose task died kept ``upload_processed_at = None`` forever: the uploader saw a photo that never finished, with no error and no way to retry, and nothing server-side distinguished "still running" from "died three days ago"."""
 
 from __future__ import annotations
 
@@ -46,23 +20,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: How many times the recovery sweep re-enqueues one row before recording it as
-#: failed. Two, because the sweep only ever sees rows that have already been
-#: pending for ``STALLED_UPLOAD_AGE`` - a row reaching it once is already the
-#: unusual case, and a third pass buys little against a file that has now killed
-#: two workers.
+#: How many times the recovery sweep re-enqueues one row before recording it as failed.
+#: Two, because the sweep only ever sees rows that have already been pending for
+#: ``STALLED_UPLOAD_AGE`` - a row reaching it once is already the unusual case, and a third pass
+#: buys little against a file that has now killed two workers.
 MAX_SWEEP_ATTEMPTS: Final[int] = 2
 
-#: How many times the owner may ask for a re-run from the UI. Separate from the
-#: sweep's budget on purpose: a person retrying knows something the sweep does
-#: not (the server was down, they will try later), so their attempts are theirs
-#: to spend - but they are still finite.
+#: How many times the owner may ask for a re-run from the UI.
+#: Separate from the sweep's budget on purpose: a person retrying knows something the sweep does not
+#: (the server was down, they will try later), so their attempts are theirs to spend - but they are
+#: still finite.
 MAX_USER_RETRIES: Final[int] = 2
 
-#: How long a failed upload waits for its owner before being discarded. Long
-#: enough to survive a weekend, since the notification may be the only prompt
-#: and people do not check a photo vault daily. Must exceed the sweep interval,
-#: or a row could be discarded before the sweep has finished with it.
+#: How long a failed upload waits for its owner before being discarded.
+#: Long enough to survive a weekend, since the notification may be the only prompt and people do not
+#: check a photo vault daily.
 UNRETRIED_DISCARD_AGE: Final[timedelta] = timedelta(days=7)
 
 
@@ -84,15 +56,7 @@ def _failure_url(image: Image) -> str:
 
 def record_upload_processing_failure(image_id: int, reason: str) -> PhotoUploadFailure | None:
     """Record that this row's processing died, and tell its owner.
-
-    Deliberately leaves ``pending_scan`` set. That flag is what keeps unscanned,
-    unstripped bytes out of every gallery, and a processing failure is precisely
-    the case where the scan did not finish - clearing it here would publish the
-    bytes this failed to check.
-
-    Idempotent by database constraint rather than by reading first, because the
-    sweep and any future ``task_failure`` receiver can both reach this for one
-    row and a pre-read races between them.
+    Idempotent by database constraint rather than by reading first, because the sweep and any future ``task_failure`` receiver can both reach this for one row and a pre-read races between them.
 
     Args:
         image_id: The row whose task died.
@@ -100,8 +64,7 @@ def record_upload_processing_failure(image_id: int, reason: str) -> PhotoUploadF
 
     Returns:
         The reviewable row, or None when there is nobody to offer it to - a
-        profile-less row is enrichment imagery belonging to no one.
-    """
+        profile-less row is enrichment imagery belonging to no one."""
     from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoUploadFailure, PhotoUploadFailureKind
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.notifications.meta.type import NotificationType
@@ -147,15 +110,10 @@ def record_upload_processing_failure(image_id: int, reason: str) -> PhotoUploadF
 
 def reenqueue_upload(image: Image) -> None:
     """Put a row back on the processing queue, with the cap its source implies.
-
-    A profile-less row is provider imagery whose longest-edge cap lived only at
-    the call site that created it, so it is recovered from ``source`` rather
-    than left to the generic default - the same recovery
-    ``requeue_stalled_pending_uploads`` does.
+    A profile-less row is provider imagery whose longest-edge cap lived only at the call site that created it, so it is recovered from ``source`` rather than left to the generic default - the same recovery ``requeue_stalled_pending_uploads`` does.
 
     Args:
-        image: The row to reprocess.
-    """
+        image: The row to reprocess."""
     from urbanlens.dashboard.services.photos.photo_enrichment import enriched_max_dimension
     from urbanlens.dashboard.tasks import process_image_upload
 
@@ -196,14 +154,10 @@ def retry_upload_processing(failure: PhotoUploadFailure, profile: Profile) -> bo
 
 def teardown_image_and_siblings(image: Image) -> None:
     """Delete a row and any deduplicated siblings pointing at its file.
-
-    A sibling holds no file of its own - it points at this row's. Deleting the
-    original without them leaves rows whose bytes are gone, which
-    ``_clear_orphaned_dedup_siblings`` later un-quarantines and publishes.
+    Deleting the original without them leaves rows whose bytes are gone, which ``_clear_orphaned_dedup_siblings`` later un-quarantines and publishes.
 
     Args:
-        image: The row being removed.
-    """
+        image: The row being removed."""
     from urbanlens.dashboard.models.images.model import Image as ImageModel, QuotaExemption
     from urbanlens.dashboard.services.media.images import delete_stored_file
 
@@ -218,14 +172,10 @@ def teardown_image_and_siblings(image: Image) -> None:
 
 def discard_failed_upload(failure: PhotoUploadFailure) -> None:
     """Throw away the photo behind a failed upload, keeping the record of it.
-
-    The failure row outlives the photo on purpose: the filename is how the
-    uploader recognises which picture went away, and it is the only trace left
-    once the bytes are gone.
+    The failure row outlives the photo on purpose: the filename is how the uploader recognises which picture went away, and it is the only trace left once the bytes are gone.
 
     Args:
-        failure: The reviewable row.
-    """
+        failure: The reviewable row."""
     from urbanlens.dashboard.models.images.issues import PhotoIssueStatus
     from urbanlens.dashboard.models.images.model import Image
 

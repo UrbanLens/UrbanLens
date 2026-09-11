@@ -13,9 +13,7 @@ from urbanlens.UrbanLens.settings.app import settings
 class WhatsAppGateway(TwilioGateway):
     service_key: ClassVar[str] = "whatsapp"
 
-    # default_factory, not a bare default: a dataclass field's bare default is evaluated
-    # once at class-definition/import time, so a later settings change never reaches
-    # subsequent instantiations - default_factory re-reads it fresh each time.
+    # default_factory so settings changes apply per instance; a bare default freezes at import.
     account_sid: str | None = field(default_factory=lambda: settings.twilio_account_sid)
     auth_token: str | None = field(default_factory=lambda: settings.twilio_auth_token)
     from_number: str | None = field(default_factory=lambda: settings.twilio_whatsapp_from_number)

@@ -1,26 +1,5 @@
 """Resolves Google Maps CIDs to coordinates, choosing REData or Google Places.
-
-Single chokepoint for the "which provider resolves a CID" decision (see
-``docs/designs/redata-cid-resolution.md`` for the full background):
-
-- REData configured (``UL_REDATA_API_URL``/``UL_REDATA_API_KEY`` both set) -
-  the primary deployment's path. A batch call to REData's
-  ``POST /places/resolve-cids/`` (see ``../REData/docs/api-reference.md``,
-  "Google Maps CID resolution" - deliberately asynchronous on REData's end, so
-  a cid it hasn't finished resolving yet comes back as ``pending``, not an
-  error). On a request failure (REData unreachable, non-200, ...), the whole
-  batch is reported as ``pending`` for the caller to retry later - no fallback
-  to Google here, so behavior stays predictable per-install rather than
-  silently mixing providers.
-- REData not configured - assumed to be an install without access to it (e.g.
-  someone else running UrbanLens themselves). Falls back to calling Google
-  Places directly, one CID at a time, via the existing
-  ``GoogleGeocodingGateway.get_coordinates_by_cid`` (already rate-limited and
-  cached - see ``services.core.rate_limiter`` and ``GeocodedLocation``).
-
-Only ever called from background work (see ``tasks.resolve_deferred_pin_locations``)
-- never from a request/response cycle, since both providers can be slow.
-"""
+A batch call to REData's ``POST /places/resolve-cids/`` (see ``../REData/docs/api-reference.md``, "Google Maps CID resolution" - deliberately asynchronous on REData's end, so a cid it hasn't finished resolving yet comes back as ``pending``, not an error)."""
 
 from __future__ import annotations
 
@@ -57,19 +36,14 @@ class CidResolutionResult:
     #: Rate-limited or a transient failure - the caller should retry these
     #: later, not treat them as done.
     pending: list[int] = field(default_factory=list)
-    #: REData rejected the API key itself (401/403) - also left in `pending`
-    #: for its count, but this flag tells the caller retrying is pointless
-    #: until the key/scope is fixed, so it should stop and surface the failure
-    #: instead of looping forever.
+    #: REData rejected the API key itself (401/403) - also left in `pending` for its count, but this
+    #: flag tells the caller retrying is pointless until the key/scope is fixed, so it should stop
+    #: and surface the failure instead of looping forever.
     auth_failed: bool = False
-    #: The REData request itself failed outright (network error, non-200,
-    #: unparseable body) - also left in `pending` for its count, but this
-    #: distinguishes "the whole batch made zero progress this attempt" from a
-    #: response that resolved/deferred cids normally. Lets the caller count
-    #: *consecutive* failures across retries and eventually give up on a
-    #: persistently unreachable REData instead of retrying forever (unlike
-    #: auth_failed, a single occurrence isn't terminal on its own - a brief
-    #: network blip should still retry).
+    #: The REData request itself failed outright (network error, non-200, unparseable body) - also
+    #: left in `pending` for its count, but this distinguishes "the whole batch made zero progress
+    #: this attempt" from a response that resolved/deferred cids normally.
+    #: Lets the caller count *consecutive* failures across retries and eventually give up on a
     request_failed: bool = False
 
 

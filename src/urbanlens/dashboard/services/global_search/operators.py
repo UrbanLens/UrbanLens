@@ -1,28 +1,5 @@
 """Typed ``key:value`` search operators, and the tokenizer that finds them.
-
-The search box accepts two registers at once. People type English
-("photos in Poughkeepsie last March"), which
-:mod:`~urbanlens.dashboard.services.global_search.parser` interprets
-heuristically; and people type operators (``type:photo place:"Poughkeepsie,
-NY" visited:2019-03``), which are exact. Operators are parsed first and win,
-because they are unambiguous - the heuristics then work on whatever text is
-left over.
-
-Three rules shape everything here:
-
-- **An unknown key is never an error.** ``foo:bar`` is searched as ordinary
-  text and reported back as such. A search box that rejects input is a search
-  box people stop using, and there is no way for someone to discover which
-  keys exist by being refused.
-- **Every operator declares itself** (:data:`OPERATORS`), so the vocabulary,
-  the autocomplete list, and the help text are one source rather than three
-  that drift.
-- **An operator that cannot be answered says so.** Some fields are encrypted
-  at rest and are not merely slow to search but silently unmatchable - an
-  ``icontains`` against ciphertext returns nothing and raises nothing. Those
-  carry :attr:`Operator.unsupported_reason` so the UI can explain the empty
-  result rather than implying the user has none of the thing.
-"""
+Operators are parsed first and win, because they are unambiguous - the heuristics then work on whatever text is left over."""
 
 from __future__ import annotations
 
@@ -219,18 +196,14 @@ _CLAUSE = re.compile(
 
 def scan(raw: str) -> OperatorScan:
     """Pull every recognized operator out of a raw query string.
-
-    Unrecognized ``key:value`` shapes are deliberately left in the free text
-    rather than dropped: ``12:30`` and ``http://example.com`` are not operator
-    syntax, and neither is a typo, and none of them should make a query fail.
+    Unrecognized ``key:value`` shapes are deliberately left in the free text rather than dropped: ``12:30`` and ``http://example.com`` are not operator syntax, and neither is a typo, and none of them should make a query fail.
 
     Args:
         raw: The query exactly as typed.
 
     Returns:
         An :class:`OperatorScan` holding the clauses, the leftover text, and
-        any operator-shaped keys that were not recognized.
-    """
+        any operator-shaped keys that were not recognized."""
     scan_result = OperatorScan()
     if not raw:
         return scan_result

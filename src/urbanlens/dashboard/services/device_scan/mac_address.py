@@ -17,13 +17,7 @@ _MAC_RE = re.compile(r"^[0-9A-Fa-f]{2}([:\-.]?[0-9A-Fa-f]{2}){5}$")
 
 class InvalidMacAddressError(ValueError):
     """Raised when a string cannot be parsed as a 6-octet MAC address.
-
-    The message is for logs, not the response: a caller's HTTP-facing code
-    should catch this and author its own user-facing text rather than relaying
-    the message - that keeps a future edit to the raise site from being able
-    to smuggle unreviewed text (including the caller-submitted raw value) into
-    a response without review.
-    """
+    The message is for logs, not the response: a caller's HTTP-facing code should catch this and author its own user-facing text rather than relaying the message - that keeps a future edit to the raise site from being able to smuggle unreviewed text (including the caller-submitted raw value) into a response without review."""
 
 
 def normalize_mac_address(raw_mac_address: str) -> str:

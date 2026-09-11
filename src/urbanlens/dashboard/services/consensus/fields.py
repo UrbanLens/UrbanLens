@@ -1,18 +1,5 @@
 """Per-field-kind strategy registry - the single place a new Consensus field kind is wired in.
-
-Mirrors ``services.spotguessr.modes``'s ``ModeStrategy``/``_STRATEGIES``
-registry: adding a 4th field kind later means adding one
-``ConsensusFieldStrategy`` entry to ``_STRATEGIES`` below, rather than
-editing round generation, answer application, and agreement-checking
-separately and hoping they stay in sync.
-
-Each strategy exposes both a "missing" side (for ordinary rounds) and a
-"known" side (for trust-check rounds, see ``services.consensus.trust``) -
-``WIKI_ALIAS`` and ``PHOTO_COORDINATES`` need the two sides to pick different
-things (a wiki with too few aliases vs. one with an existing alias; an image
-missing coordinates vs. one that already has them), so the interface always
-keeps them separate rather than inferring one from the other.
-"""
+Mirrors ``services.spotguessr.modes``'s ``ModeStrategy``/``_STRATEGIES`` registry: adding a 4th field kind later means adding one ``ConsensusFieldStrategy`` entry to ``_STRATEGIES`` below, rather than editing round generation, answer application, and agreement-checking separately and hoping they stay in sync."""
 
 from __future__ import annotations
 
@@ -43,17 +30,7 @@ _EARTH_RADIUS_METERS = 6_371_000.0
 
 def haversine_distance_meters(a: Point, b: Point) -> float:
     """Great-circle distance between two lon/lat points, in meters.
-
-    Deliberately pure Python (no DB round-trip) - unlike
-    ``services.spotguessr.distance.geodesic_distance_meters``, which needs a
-    real ``Location`` row to anchor its PostGIS annotation, this is a plain
-    point-to-point comparison with no natural "anchor" row to hang it off of
-    (``ConsensusFieldStrategy.agrees`` only ever receives the two raw
-    values). The haversine formula is accurate to well under a meter at the
-    short (tens-of-meters) distances ``AGREEMENT_DISTANCE_METERS`` cares
-    about, so the small approximation versus a true geodesic/ellipsoidal
-    calculation is immaterial here.
-    """
+    Deliberately pure Python (no DB round-trip) - unlike ``services.spotguessr.distance.geodesic_distance_meters``, which needs a real ``Location`` row to anchor its PostGIS annotation, this is a plain point-to-point comparison with no natural "anchor" row to hang it off of (``ConsensusFieldStrategy.agrees`` only ever receives the two raw values)."""
     from urbanlens.dashboard.services.geo.distance import haversine_meters
 
     return haversine_meters(a.y, a.x, b.y, b.x)
@@ -102,8 +79,7 @@ class ConsensusFieldStrategy:
         normalize: Canonical form of a submitted value, for agreement/vote
             clustering and (for text kinds) storing on
             ``ConsensusAnswer.normalized_text``.
-        agrees: Whether two submitted values count as the same answer.
-    """
+        agrees: Whether two submitted values count as the same answer."""
 
     kind: str
     find_missing: Callable[[Iterable[Wiki]], list[Wiki]]
@@ -145,18 +121,13 @@ def _wiki_field_strategy(
     agrees: Callable[[Any, Any], bool] = _text_agrees,
 ) -> ConsensusFieldStrategy:
     """Shared factory for the four plain Wiki-attribute field kinds (name/description/indoor_outdoor/pin_type).
-
-    Each of those four only differs in which attribute it reads/writes and
-    what counts as "confirmed" - everything else (round shape, diff
-    recording) is identical, so it's expressed once here rather than
-    duplicated four times.
+    Each of those four only differs in which attribute it reads/writes and what counts as "confirmed" - everything else (round shape, diff recording) is identical, so it's expressed once here rather than duplicated four times.
 
     Args:
         written_fields: Columns ``set_value`` actually assigns, when that is not
             just ``field_name``. The pin-type strategy also sets
             ``pin_type_is_user_provided``, and a scoped save that listed only the
-            named field would silently drop it.
-    """
+            named field would silently drop it."""
 
     def find_missing(pool: Iterable[Wiki]) -> list[Wiki]:
         return [wiki for wiki in pool if confirmed_value(wiki) is None]
@@ -176,10 +147,10 @@ def _wiki_field_strategy(
     def apply_answer(wiki: Wiki, value: Any, profile: Profile, round_: ConsensusRound) -> dict | None:
         old_value = current_value(wiki)
         set_value(wiki, value)
-        # Scoped, not a bare save: a Wiki is community-editable and has a dozen
-        # writers, and this instance was loaded when the round was built. Writing
-        # every column would revert whatever was committed while the round ran -
-        # the same defect fixed in services.wiki.wiki_edits.
+        # Scoped, not a bare save: a Wiki is community-editable and has a dozen writers, and this
+        # instance was loaded when the round was built.
+        # Writing every column would revert whatever was committed while the round ran - the same
+        # defect fixed in services.wiki.wiki_edits.
         save_edited_fields(wiki, written_fields or (field_name,))
         return {field_name: {"from": old_value, "to": current_value(wiki)}}
 
@@ -212,12 +183,10 @@ def _set_pin_type(wiki: Wiki, value: Any) -> None:
     wiki.pin_type_is_user_provided = True
 
 
-# Named rather than inline lambdas: a lambda's parameter type is inferred from
-# the surrounding Callable[[Wiki], Any] annotation, which mypy fails to do
-# reliably for these module-level _STRATEGIES entries (whole-project checks
-# report "Cannot determine type of ..." even though `wiki: Wiki` here is
-# unambiguous) - see the `_set_*` functions just above, which already use this
-# same named-function style for the identical reason.
+# Named rather than inline lambdas: a lambda's parameter type is inferred from the surrounding
+# Callable[[Wiki], Any] annotation, which mypy fails to do reliably for these module-level
+# _STRATEGIES entries (whole-project checks report "Cannot determine type of ..." even though `wiki:
+# Wiki` here is unambiguous) - see the `_set_*` functions just above, which already use this same
 def _current_name(wiki: Wiki) -> str:
     return wiki.name
 
@@ -317,10 +286,9 @@ def _photo_find_known(pool: Iterable[Wiki]) -> list[Wiki]:
 
 
 def _photo_build_round(wiki: Wiki) -> RoundContent | None:
-    # .all() and a Python pick, not .filter().order_by("?"): the queryset form
-    # goes back to the database, which both defeats eligibility's prefetch and -
-    # since that prefetch is where photo visibility is applied - hands back
-    # photos the player's uploaders have not admitted them to.
+    # .all() and a Python pick, not .filter().order_by("?"): the queryset form goes back to the
+    # database, which both defeats eligibility's prefetch and - since that prefetch is where photo
+    # visibility is applied - hands back photos the player's uploaders have not admitted them to.
     candidates = [image for image in wiki.images.all() if image.latitude is None and image.longitude is None]
     if not candidates:
         return None

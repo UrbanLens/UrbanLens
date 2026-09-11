@@ -1,27 +1,5 @@
 """Private annotations one profile keeps about another: nickname and trust rating.
-
-Extracted from ``controllers.userprofile``'s ``ProfileNicknameView`` and
-``ProfileTrustView``, which held the only implementation and returned rendered
-HTML - unusable from an API credential. The mobile requirements doc asserted
-that "there's no nickname/trust concept anywhere server-side"; both models have
-existed and been migrated for some time, so exposing them is plumbing, not a
-product decision.
-
-**These rows are private to their author.** ``ProfileNickname`` and
-``ProfileTrust`` record what *you* think of someone; the person you wrote them
-about must never be able to read them, and neither must anyone else. That is
-enforced by never touching the models except through their
-``for_pair(author, subject)`` accessors, which pin the author to the viewer.
-Any queryset here that filtered on ``subject`` alone would hand the subject
-everyone's private opinion of them in one request, so every function in this
-module takes ``author`` first and passes it straight through.
-
-Nickname and trust are kept as two singletons rather than merged with notes
-into one annotation blob. Their cardinalities differ - a viewer holds at most
-one nickname and at most one rating per subject, but any number of notes - so a
-combined partial update could not be idempotent: replaying it would either
-duplicate notes or silently drop the ones the client did not echo back.
-"""
+Extracted from ``controllers.userprofile``'s ``ProfileNicknameView`` and ``ProfileTrustView``, which held the only implementation and returned rendered HTML - unusable from an API credential."""
 
 from __future__ import annotations
 
@@ -47,13 +25,7 @@ MAX_TRUST_RATING = 5
 
 class AnnotationError(ValueError):
     """An annotation could not be written.
-
-    The message is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below (or this base class as a fallback)
-    and author its own user-facing text, rather than relaying the message -
-    that keeps a future raise site here from being able to smuggle unreviewed
-    text into a response just by adding a new ``raise``.
-    """
+    The message is for logs, not the response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``."""
 
 
 class SelfAnnotationError(AnnotationError):
@@ -79,16 +51,7 @@ class TrustRatingOutOfRangeError(AnnotationError):
 @dataclass(frozen=True, slots=True)
 class ProfileAnnotations:
     """Everything one viewer privately records about one subject.
-
-    A read model rather than a row: ``nickname`` and ``trust`` come from two
-    different tables and ``note_count`` from a third, and a client rendering a
-    profile header wants all three without three round trips.
-
-    ``note_count`` rather than the notes themselves - the notes have their own
-    paginated endpoint, and inlining an unbounded collection into a summary
-    that is fetched on every profile open is how a summary becomes the slowest
-    call in the app.
-    """
+    A read model rather than a row: ``nickname`` and ``trust`` come from two different tables and ``note_count`` from a third, and a client rendering a profile header wants all three without three round trips."""
 
     #: The private nickname the viewer assigned, or None when they assigned none.
     nickname: str | None
@@ -100,10 +63,7 @@ class ProfileAnnotations:
 
 def require_distinct(author: Profile, subject: Profile, message: str) -> None:
     """Refuse an annotation a profile is trying to write about itself.
-
-    Public because the HTMX widgets treat a blank submission as "clear this"
-    rather than as a value, and must still refuse a self-annotation on that
-    path - so they need the check without going through :func:`set_nickname`.
+    Public because the HTMX widgets treat a blank submission as "clear this" rather than as a value, and must still refuse a self-annotation on that path - so they need the check without going through :func:`set_nickname`.
 
     Args:
         author: The profile writing the annotation.
@@ -112,26 +72,21 @@ def require_distinct(author: Profile, subject: Profile, message: str) -> None:
             shown to a user.
 
     Raises:
-        SelfAnnotationError: ``author`` and ``subject`` are the same profile.
-    """
+        SelfAnnotationError: ``author`` and ``subject`` are the same profile."""
     if author.pk == subject.pk:
         raise SelfAnnotationError(message)
 
 
 def get_annotations(author: Profile, subject: Profile) -> ProfileAnnotations:
     """Return everything ``author`` privately records about ``subject``.
-
-    Never raises for a self-lookup: a profile reading its own annotations gets
-    the (normally empty) rows it wrote about itself, which is both harmless and
-    simpler for a client than a special case.
+    Never raises for a self-lookup: a profile reading its own annotations gets the (normally empty) rows it wrote about itself, which is both harmless and simpler for a client than a special case.
 
     Args:
         author: The viewing profile - always the caller, never the subject.
         subject: The profile being looked up.
 
     Returns:
-        The nickname, trust rating and note count, with None for anything unset.
-    """
+        The nickname, trust rating and note count, with None for anything unset."""
     nickname = ProfileNickname.objects.for_pair(author, subject).first()
     trust = ProfileTrust.objects.for_pair(author, subject).first()
     return ProfileAnnotations(
@@ -175,15 +130,11 @@ def set_nickname(author: Profile, subject: Profile, nickname: str) -> ProfileNic
 
 
 def clear_nickname(author: Profile, subject: Profile) -> None:
-    """Remove ``author``'s nickname for ``subject``, if any.
-
-    Idempotent, so a retried DELETE is safe. Scoped through ``for_pair`` rather
-    than by row id, which is what keeps one author from deleting another's.
+    """Remove ``author``'s nickname for ``subject``, if any. Idempotent, so a retried DELETE is safe.
 
     Args:
         author: The profile whose nickname is being cleared.
-        subject: The profile it was about.
-    """
+        subject: The profile it was about."""
     ProfileNickname.objects.for_pair(author, subject).delete()
 
 
@@ -222,10 +173,7 @@ def set_trust(author: Profile, subject: Profile, rating: int) -> ProfileTrust:
 def clear_trust(author: Profile, subject: Profile) -> None:
     """Remove ``author``'s trust rating for ``subject``, if any.
 
-    Idempotent, for the same retry-safety reason as :func:`clear_nickname`.
-
     Args:
         author: The profile whose rating is being cleared.
-        subject: The profile it was about.
-    """
+        subject: The profile it was about."""
     ProfileTrust.objects.for_pair(author, subject).delete()

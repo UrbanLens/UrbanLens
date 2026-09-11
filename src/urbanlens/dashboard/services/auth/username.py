@@ -14,10 +14,8 @@ logger = logging.getLogger(__name__)
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 
 # Maps individual characters to their canonical form for collision detection.
-# Digits are replaced with the letters they visually resemble (leet speak);
-# 'i' is replaced with 'l' because they are indistinguishable in many fonts.
-# Underscores are stripped entirely so "JohnM", "John_M", and "JohnM_" all
-# compare equal.
+# Digits are replaced with the letters they visually resemble (leet speak); 'i' is replaced with 'l'
+# because they are indistinguishable in many fonts.
 _CONFUSABLE_CHAR_MAP: dict[str, str] = {
     "0": "o",
     "1": "l",
@@ -35,41 +33,26 @@ _CONFUSABLE_CHAR_MAP: dict[str, str] = {
 
 def normalize_username_key(username: str) -> str:
     """Return a case-, underscore-, and confusable-insensitive key for username comparison.
-
-    Strips underscores so that ``john_m`` and ``johnm`` are treated as the same
-    username.  Applies leet-speak substitutions so that ``j0hn`` and ``john``
-    are also treated as the same.
+    Strips underscores so that ``john_m`` and ``johnm`` are treated as the same username.
 
     Args:
         username: Raw username string.
 
     Returns:
-        Normalized key suitable for equality checks.
-    """
+        Normalized key suitable for equality checks."""
     return "".join(_CONFUSABLE_CHAR_MAP.get(ch, ch) for ch in username.casefold() if ch != "_")
 
 
 def username_is_taken(username: str, *, exclude_user_id: int | None = None) -> bool:
     """Return True when another account already owns this username or a confusable variant.
-
-    Comparison is case-insensitive, underscore-insensitive, and treats visually
-    confusable characters as equivalent (e.g. ``o``/``0``, ``l``/``1``/``i``,
-    ``john_m``/``johnm``).
-
-    The demo prefix is reserved rather than merely unused. Demo accounts are
-    identified by it and deleted by it (``purge_demo_accounts``), so a real
-    account allowed to register ``demo-…`` would be selected by that purge and
-    silently destroyed - and, on the demo instance, could impersonate a seeded
-    persona. Reserved through the confusable-normalised key, so ``dem0-`` cannot
-    walk around it.
+    The demo prefix is reserved rather than merely unused.
 
     Args:
         username: Candidate username.
         exclude_user_id: Optional user primary key to ignore (for self-edits).
 
     Returns:
-        True when the username collides with an existing account, or is reserved.
-    """
+        True when the username collides with an existing account, or is reserved."""
     from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX
 
     candidate_key = normalize_username_key(username)
@@ -83,14 +66,7 @@ def username_is_taken(username: str, *, exclude_user_id: int | None = None) -> b
 
 class UsernameGenerator:
     """Random username generator using adjective + animal + number patterns.
-
-    Word lists and generation parameters are class attributes so they can be
-    overridden in a subclass without touching the generation logic.
-
-    Example::
-
-        username = UsernameGenerator.generate()
-    """
+    Word lists and generation parameters are class attributes so they can be overridden in a subclass without touching the generation logic."""
 
     ADJECTIVES: tuple[str, ...] = (
         "agile",
@@ -238,14 +214,10 @@ class UsernameGenerator:
     @classmethod
     def generate(cls) -> str:
         """Return a random ``{adjective}{animal}{number}`` username that is not already taken.
-
-        Tries up to ``MAX_RETRIES`` random combinations before falling back to a
-        numeric suffix on ``FALLBACK_PREFIX``.  The fallback should essentially
-        never be reached given the size of the word lists.
+        The fallback should essentially never be reached given the size of the word lists.
 
         Returns:
-            A unique username string.
-        """
+                A unique username string."""
         for _ in range(cls.MAX_RETRIES):
             adj = secrets.choice(cls.ADJECTIVES)
             animal = secrets.choice(cls.ANIMALS)

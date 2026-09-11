@@ -1,17 +1,5 @@
 """Stash/restore for the generic undo framework.
-
-Deleting a model instance cascades to its DB-level children before any of
-this gets a chance to run - see the per-model docstrings under
-``services.undo.handlers`` for exactly what is and isn't restorable for each
-model. ``dashboard.models.undo.UndoAction`` holds the serialized payload
-directly (see that model's docstring for why this isn't cache-backed).
-
-Mutations (a pin move, a label add, an album membership change) stash a
-before/after payload instead of a deleted-row snapshot. Undoing stamps
-``undone_at`` rather than deleting the row, so the same payload can be
-applied forward again (redo). A new stash discards the redo stack: the
-history has forked.
-"""
+Mutations (a pin move, a label add, an album membership change) stash a before/after payload instead of a deleted-row snapshot."""
 
 from __future__ import annotations
 
@@ -98,8 +86,6 @@ def discard_redo_stack(profile: Profile) -> int:
 def stash_for_undo(model_label: str, instances: Sequence[Model], profile: Profile) -> UndoAction | None:
     """Serialize ``instances`` and index them for a profile's undo history.
 
-    Must be called before the instances are deleted.
-
     Args:
         model_label: Registry key of the handler to use (e.g. ``"pin"``).
         instances: The instances about to be deleted.
@@ -107,23 +93,14 @@ def stash_for_undo(model_label: str, instances: Sequence[Model], profile: Profil
 
     Returns:
         The created UndoAction row, or None when called from inside an
-        undo/redo apply (the inverted write must not stash itself).
-    """
+        undo/redo apply (the inverted write must not stash itself)."""
     if _APPLYING.get():
         return None
     handler = get_handler(model_label)
     discard_redo_stack(profile)
-    # Truncated to the column's own width rather than a literal, so the two
-    # cannot drift. `describe()` wraps a user-supplied name in fixed text, and
-    # several of those names are themselves 255 characters (Label.name,
-    # Pin.name) - the same width as this column. So a perfectly legal name
-    # overflowed `object_repr` and the DataError surfaced as a 500 on *delete*:
-    # the user could create the object but never remove it. Found by the
-    # write-route smoke sweep on `label.delete` (PROBLEMS.md, 2026-08-16).
-    #
-    # Fixed here rather than in each handler because every model's delete path
-    # funnels through this one call, so one truncation covers all of them - and
-    # a handler added later inherits it.
+    # Truncated to the column's own width rather than a literal, so the two cannot drift.
+    # `describe()` wraps a user-supplied name in fixed text, and several of those names are
+    # themselves 255 characters (Label.name, Pin.name) - the same width as this column.
     return UndoAction.objects.create(
         profile=profile,
         model_label=model_label,
@@ -177,10 +154,7 @@ def _lock(undo_action: UndoAction) -> UndoAction:
 
 def restore_undo_action(undo_action: UndoAction) -> list[Any]:
     """Undo ``undo_action``: recreate a delete, or invert a mutation.
-
-    The entry is stamped with ``undone_at`` rather than deleted, so it can be
-    redone. Callers are responsible for checking it belongs to the requesting
-    profile before calling this.
+    The entry is stamped with ``undone_at`` rather than deleted, so it can be redone.
 
     Args:
         undo_action: The entry to undo.
@@ -189,8 +163,7 @@ def restore_undo_action(undo_action: UndoAction) -> list[Any]:
         Recreated instances for a delete; an empty list for a mutation.
 
     Raises:
-        UndoExpiredError: Past the retention window, or already undone.
-    """
+        UndoExpiredError: Past the retention window, or already undone."""
     handler = get_handler(undo_action.model_label)
     expired_pk: int | None = None
     with transaction.atomic(), applying_undo():
@@ -224,8 +197,7 @@ def redo_undo_action(undo_action: UndoAction) -> None:
         undo_action: The entry to redo. Must have ``undone_at`` set.
 
     Raises:
-        UndoExpiredError: Past the retention window, or not currently undone.
-    """
+        UndoExpiredError: Past the retention window, or not currently undone."""
     handler = get_handler(undo_action.model_label)
     expired_pk: int | None = None
     with transaction.atomic(), applying_undo():

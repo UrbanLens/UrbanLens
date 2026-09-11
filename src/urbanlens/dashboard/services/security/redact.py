@@ -1,29 +1,5 @@
 """Helpers for keeping sensitive values out of application logs.
-
-Log tags here are **random tokens, not hashes of the value**. That is the whole
-point: a hash - even a keyed one - is a function of its input, so anyone who can
-guess the input can confirm it. Coordinates and place names are low-entropy
-(you always know the rough region), which makes any derived tag invertible by
-enumeration in seconds. A tag drawn from :func:`secrets.token_hex` has no
-preimage to find, so no amount of guessing, no wordlist, and no leaked key
-recovers the original.
-
-This replaced an HMAC-SHA256 fingerprint keyed with a constant literal in this
-file, so the key was readable by anyone who could read the source. Keyed or
-not, that made the tag a pure function of a low-entropy input: enumerating
-plausible coordinates against a known key recovers the original in seconds
-(measured at ~200k candidates/sec, single-core, during review), so the tag
-offered no confidentiality it claimed to.
-
-The property the module actually needs is *correlation* - "this is the same
-value as the one three lines up" - and a memoized random token preserves it.
-The scope of that correlation is the process (bounded cache) rather than all
-of history, which is the right scope for reading a log file anyway.
-
-Prefer logging an opaque database handle (``pin.uuid``, ``location.pk``) where
-one is in scope: an operator can resolve it deliberately, through an
-access-controlled lookup, which a token cannot do.
-"""
+That is the whole point: a hash - even a keyed one - is a function of its input, so anyone who can guess the input can confirm it."""
 
 from __future__ import annotations
 
@@ -105,17 +81,13 @@ _TOKENS_LOCK = threading.Lock()
 
 def _tag(value: str) -> str:
     """Return a stable random token for ``value``.
-
-    The same value yields the same token for as long as it stays in the cache,
-    so repeated log lines still correlate. The token is drawn from the CSPRNG
-    and is *not* derived from the value, so it cannot be inverted.
+    The same value yields the same token for as long as it stays in the cache, so repeated log lines still correlate.
 
     Args:
         value: The sensitive value to stand in for.
 
     Returns:
-        Eight hex characters of randomness.
-    """
+        Eight hex characters of randomness."""
     with _TOKENS_LOCK:
         token = _TOKENS.get(value)
         if token is not None:
@@ -147,17 +119,13 @@ def redact_secret(value: str | None) -> str:
 
 def redact_text(value: str | None) -> str:
     """Return a log-safe token standing in for a place- or person-identifying string.
-
-    Location and pin names in this app are user-submitted and often
-    correspond to undisclosed urbex sites, so they must not appear in logs
-    verbatim - nor in any form an attacker could match against a wordlist.
+    Location and pin names in this app are user-submitted and often correspond to undisclosed urbex sites, so they must not appear in logs verbatim - nor in any form an attacker could match against a wordlist.
 
     Args:
         value: The raw text, or ``None``/empty if unset.
 
     Returns:
-        ``"<none>"`` when unset, otherwise ``"<text:XXXXXXXX>"``.
-    """
+        ``"<none>"`` when unset, otherwise ``"<text:XXXXXXXX>"``."""
     if not value:
         return "<none>"
     return f"<text:{_tag(value)}>"
@@ -165,17 +133,13 @@ def redact_text(value: str | None) -> str:
 
 def redact_coordinate(value: object) -> str:
     """Return a log-safe token standing in for a latitude/longitude value.
-
-    Coordinates are the lowest-entropy sensitive value this app handles - a
-    regional sweep is a few hundred million candidates - so they must never be
-    logged in any form derived from the number itself, rounded included.
+    Coordinates are the lowest-entropy sensitive value this app handles - a regional sweep is a few hundred million candidates - so they must never be logged in any form derived from the number itself, rounded included.
 
     Args:
         value: The raw coordinate (numeric or string), or ``None``.
 
     Returns:
-        ``"<none>"`` when unset, otherwise ``"<coord:XXXXXXXX>"``.
-    """
+        ``"<none>"`` when unset, otherwise ``"<coord:XXXXXXXX>"``."""
     if value is None:
         return "<none>"
     return f"<coord:{_tag(str(value))}>"
@@ -183,18 +147,13 @@ def redact_coordinate(value: object) -> str:
 
 def redact_params(params: Mapping[str, Any]) -> dict[str, Any]:
     """Return a copy of a request-params mapping safe to pass to a logger.
-
-    Fail-closed: a parameter is passed through only if its name is in
-    :data:`_PASSTHROUGH_PARAM_NAMES`. Anything unrecognised is redacted, so a
-    provider that starts sending a new location-bearing parameter cannot leak
-    it just because nobody thought to add it to a blocklist.
+    Fail-closed: a parameter is passed through only if its name is in :data:`_PASSTHROUGH_PARAM_NAMES`.
 
     Args:
         params: The raw request parameters (e.g. an API call's query params).
 
     Returns:
-        A new dict with sensitive values replaced by tokens.
-    """
+        A new dict with sensitive values replaced by tokens."""
     redacted: dict[str, Any] = {}
     for key, value in params.items():
         name = key.casefold()

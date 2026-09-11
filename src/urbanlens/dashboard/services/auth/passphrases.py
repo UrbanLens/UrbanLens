@@ -225,18 +225,14 @@ _SYMBOLS = "!@#$%&*?"
 
 def generate_passphrases(count: int = 5, *, words: int = 4) -> list[str]:
     """Generate memorable passphrases that satisfy UrbanLens password rules.
-
-    Each passphrase is Title-Cased words joined by a separator, then either a
-    digit or a symbol is appended so the result always includes uppercase,
-    lowercase, and a digit or symbol.
+    Each passphrase is Title-Cased words joined by a separator, then either a digit or a symbol is appended so the result always includes uppercase, lowercase, and a digit or symbol.
 
     Args:
         count: How many distinct passphrases to return (clamped to 1-10).
         words: How many dictionary words to include (clamped to 3-6).
 
     Returns:
-        A list of passphrase strings.
-    """
+        A list of passphrase strings."""
     count = max(1, min(int(count), 10))
     words = max(3, min(int(words), 6))
     results: list[str] = []

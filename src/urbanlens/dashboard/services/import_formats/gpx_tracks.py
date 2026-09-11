@@ -144,12 +144,10 @@ def gpx_tracks_to_routes(file_contents: bytes, user_profile: Profile, source_fil
     """
     text = file_contents.decode("utf-8")
 
-    # See gpx.py's gpx_to_dict for why this pre-parse exists: gpxpy has no way
-    # to accept a hardened parser, so defusedxml validates the same text first
-    # purely to reject XXE-style payloads (DTDs/entity expansion/external
-    # entity references) before gpxpy ever builds its own (unhardened) tree
-    # from it. The parsed tree here is discarded - gpxpy still does the real,
-    # GPX-aware parse immediately below.
+    # See gpx.py's gpx_to_dict for why this pre-parse exists: gpxpy has no way to accept a hardened
+    # parser, so defusedxml validates the same text first purely to reject XXE-style payloads
+    # (DTDs/entity expansion/external entity references) before gpxpy ever builds its own
+    # (unhardened) tree from it.
     parse_xml_defused(text)
 
     gpx = gpxpy.parse(text)
@@ -193,19 +191,7 @@ def gpx_tracks_to_routes(file_contents: bytes, user_profile: Profile, source_fil
 
 def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint], profile: Profile) -> int:
     """Scan a route's raw points for dwells near the profile's own pins and create visits.
-
-    A bounded scan, not a clustering algorithm: the profile's pins near the
-    route's path are found once, then the raw points are walked a single time
-    checking whether any contiguous run stays within DWELL_RADIUS_M of a
-    candidate pin for at least DWELL_MINIMUM_MINUTES.
-
-    Gated on the profile's visit-logging setting, not only on route import: the
-    route itself is the user's own track (``track_routes``), but a dwell writes a
-    PinVisit, which is what ``track_pin_visits`` governs - and its help text
-    already tells the user it covers imports. The gate lives here rather than in
-    the caller so any future caller inherits it. The sibling Takeout importers
-    (``google/location_history.py``, ``google/my_activity.py``) check the same
-    setting; this path was the lone exception.
+    Gated on the profile's visit-logging setting, not only on route import: the route itself is the user's own track (``track_routes``), but a dwell writes a PinVisit, which is what ``track_pin_visits`` governs - and its help text already tells the user it covers imports.
 
     Args:
         route: The already-saved Route these points belong to.
@@ -214,8 +200,7 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
 
     Returns:
         Number of PinVisit(source=HISTORY) rows created. Zero when visit logging
-        is turned off, even though the route itself still saves.
-    """
+        is turned off, even though the route itself still saves."""
     from django.contrib.gis.measure import D
     from django.db import transaction
     from geopy.distance import geodesic
@@ -269,19 +254,10 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
             qualified = True
 
         if qualified and dwell_start is not None:
-            # HISTORY, not GEOLOCATION: this visit was derived from a track file
-            # the user uploaded, which is what the enum documents HISTORY as
-            # ("imported from the user's location history") and what the sibling
-            # Google Takeout importer already records. GEOLOCATION means "the
-            # user's device provided a geolocation" - a live ping, gated by
-            # track_geolocation, which does not gate this path. Stamping an
-            # import as GEOLOCATION both mislabelled it in the UI ("Geolocation"
-            # rather than "Imported") and claimed a provenance whose own setting
-            # had no say over it.
-            # Locks the candidate pin so two concurrent imports of the same track (the
-            # same GPX file uploaded twice) can't both pass get_or_create's SELECT
-            # before either commits its INSERT - same "lock parent, re-check inside"
-            # idiom as pin_sharing.apply_pin_share_response.
+            # HISTORY, not GEOLOCATION: this visit was derived from a track file the user uploaded,
+            # which is what the enum documents HISTORY as ("imported from the user's location
+            # history") and what the sibling Google Takeout importer already records.
+            # GEOLOCATION means "the user's device provided a geolocation" - a live ping, gated by
             with transaction.atomic():
                 Pin.objects.select_for_update().get(pk=pin.pk)
                 _, was_created = PinVisit.objects.get_or_create(

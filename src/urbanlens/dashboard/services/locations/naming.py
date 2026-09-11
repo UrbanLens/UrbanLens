@@ -79,13 +79,10 @@ _DECIMAL_COORDINATE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Whitespace around each optional degree/minute/second marker uses possessive
-# quantifiers (`\s*+`). A plain `\s*` next to an optional literal that isn't
-# in `\s` still lets a run of spaces be split between the two `\s*` groups in
-# many equivalent ways once the group in between matches empty - a classic
-# polynomial ReDoS. Possessive quantifiers commit to the maximal match and
-# never backtrack into it, which removes that ambiguity without changing
-# which strings match.
+# Whitespace around each optional degree/minute/second marker uses possessive quantifiers (`\s*+`).
+# A plain `\s*` next to an optional literal that isn't in `\s` still lets a run of spaces be split
+# between the two `\s*` groups in many equivalent ways once the group in between matches empty - a
+# classic polynomial ReDoS.
 _DMS_COORDINATE_PATTERN = re.compile(
     r"""
     ^\s*+
@@ -140,10 +137,9 @@ _STREET_TYPE_WORDS: frozenset[str] = frozenset(
 
 _NAME_TOKEN_PATTERN = re.compile(r"[^a-z0-9]+", re.IGNORECASE)
 
-# Maps both the abbreviated and spelled-out form of common street-suffix
-# words to one shared canonical form, so "Main Street" and "Main St" compare
-# equal. _STREET_TYPE_WORDS above only asks "is this token a street-type
-# word at all" - it doesn't equate different spellings of the same one.
+# Maps both the abbreviated and spelled-out form of common street-suffix words to one shared
+# canonical form, so "Main Street" and "Main St" compare equal. _STREET_TYPE_WORDS above only asks
+# "is this token a street-type word at all" - it doesn't equate different spellings of the same one.
 _STREET_SUFFIX_CANONICAL: dict[str, str] = {
     "street": "st",
     "st": "st",
@@ -248,14 +244,8 @@ _HOUSE_NUMBER_RANGE_PATTERN = re.compile(r"^\s*(\d+)\s*(?:-\s*(\d+))?(?=\D|\s|$)
 _HOUSE_NUMBER_TOLERANCE = 1
 
 # Everyday punctuation kept as-is in sanitize_name (beyond letters/digits/space).
-# Deliberately excludes markup-significant characters (<, >, backtick, braces,
-# backslash, pipe, semicolon, ...) and symbols/emoji, which are dropped instead.
-#: Everyday name punctuation kept as-is. Underscore is included because it is a
-#: word character - not markup-significant, not a URL or query-string delimiter,
-#: and not a homograph - while being common in imported names ("Site_7", names
-#: derived from filenames or other tools' exports). Dropping it silently renamed
-#: those on save, a harsher outcome than for the riskier characters this set
-#: already permits.
+# Deliberately excludes markup-significant characters (<, >, backtick, braces, backslash, pipe,
+# semicolon, ...) and symbols/emoji, which are dropped instead.
 _SAFE_NAME_PUNCTUATION: frozenset[str] = frozenset("-'.,&()/:!?\"#_")
 
 # Typographic look-alikes folded to a plain-ASCII equivalent before filtering,
@@ -276,11 +266,10 @@ _NAME_CHAR_SUBSTITUTIONS: dict[str, str] = {
 
 _WHITESPACE_RUN_PATTERN = re.compile(r"\s+")
 
-# Sources demoted to "fallback only": their candidates are dropped whenever
-# any other source has a meaningful candidate, and only considered when
-# nothing else does. Google Places names are frequently generic/noisy
-# (parking lots, nearby businesses) compared to purpose-built sources like
-# Wikipedia or NPS.
+# Sources demoted to "fallback only": their candidates are dropped whenever any other source has a
+# meaningful candidate, and only considered when nothing else does.
+# Google Places names are frequently generic/noisy (parking lots, nearby businesses) compared to
+# purpose-built sources like Wikipedia or NPS.
 _FALLBACK_ONLY_SOURCES: frozenset[str] = frozenset({"google_places"})
 
 
@@ -292,12 +281,7 @@ def is_coordinate_name(name: str) -> bool:
 
 def normalize_name_for_comparison(name: str | None) -> str:
     """Casefold and strip everything but letters/digits, for "is this really the same name" checks.
-
-    Two names that only differ by case, spacing, or punctuation (e.g. "St. Mark's"
-    vs "st marks") normalize to the same string, so a straight string comparison
-    can be used to catch near-duplicates that would otherwise pass an exact or
-    even a case-insensitive equality check.
-    """
+    Two names that only differ by case, spacing, or punctuation (e.g."""
     if not name:
         return ""
     return _STRIP_NAME_PATTERN.sub("", name).casefold()
@@ -345,13 +329,7 @@ def _parse_house_number_range(text: str) -> tuple[int, int] | None:
 
 
 def _house_numbers_are_compatible(candidate_range: tuple[int, int] | None, location_street_number: str) -> bool:
-    """Return True when a candidate's (possibly ranged) house number plausibly refers to this location.
-
-    True whenever either side has no parseable number at all (nothing to
-    contradict), or when the two overlap within `_HOUSE_NUMBER_TOLERANCE` -
-    covering an exact match, an off-by-one adjacent unit, and a ranged/block
-    address ("1030-1060 Main St") that contains this location's number.
-    """
+    """Return True when a candidate's (possibly ranged) house number plausibly refers to this location."""
     if candidate_range is None:
         return True
     digits = re.sub(r"\D", "", location_street_number or "")
@@ -364,25 +342,13 @@ def _house_numbers_are_compatible(candidate_range: tuple[int, int] | None, locat
 
 def contains_street_type_word(name: str | None) -> bool:
     """Return True when any whole word in ``name`` is a street-type word.
-
-    A weaker signal than :func:`is_address_derived_name` (which needs the
-    location's address components to compare against): this only asks whether
-    the name *looks like* a street name at all. Useful for callers that have
-    no address to compare against but still need to know whether a name is
-    distinctive enough to stand on its own in an external search - "Summit
-    Road" names a road somewhere in every state, so a search for it without a
-    geographic qualifier matches unrelated places, whereas "Bannerman Castle"
-    is specific enough to search bare.
-
-    Matching is on whole casefolded tokens, so "St" matches but "Station" does
-    not.
+    A weaker signal than :func:`is_address_derived_name` (which needs the location's address components to compare against): this only asks whether the name *looks like* a street name at all.
 
     Args:
         name: The name to inspect; None/empty returns False.
 
     Returns:
-        True when the name contains a street-type word.
-    """
+        True when the name contains a street-type word."""
     if not name:
         return False
     tokens = {token.casefold() for token in _NAME_TOKEN_PATTERN.split(name) if token}
@@ -391,28 +357,7 @@ def contains_street_type_word(name: str | None) -> bool:
 
 def is_address_derived_name(name: str, location: Location) -> bool:
     """Return True when a candidate name is merely a fragment of the location's address.
-
-    External sources (Google Places especially) sometimes report the street
-    name or the city as the place "name" - e.g. "Westwood Northern Blvd" for
-    an address on that street, or "Albany" for a location in Albany, NY. Such
-    names identify the surroundings, not the place, so they must not become
-    the official name. A name is considered address-derived when:
-
-    * it matches or appears within the location's city or state name
-      (state names and abbreviations, e.g. "New York" and "NY", are treated
-      as equivalent); or
-    * it contains a street-type word (street, road, blvd, ...) **and**
-      either appears within the location's full formatted address, or -
-      catching variants a plain substring check misses - decomposes into a
-      house number compatible with `location.street_number` (exact, an
-      off-by-one adjacent unit, or a ranged/block address containing it)
-      plus a street name matching `location.route` once suffix
-      abbreviations are canonicalized ("Main Street" vs "Main St"). "Kenwood"
-      at "1 Kenwood Road" is kept either way - it carries no street-type
-      word, so the street was named after the place, not the reverse.
-
-    Comparisons use :func:`normalize_name_for_comparison`, so punctuation,
-    case, and spacing differences do not affect the verdict.
+    Such names identify the surroundings, not the place, so they must not become the official name.
 
     Args:
         name: The candidate name to check.
@@ -420,8 +365,7 @@ def is_address_derived_name(name: str, location: Location) -> bool:
 
     Returns:
         True when the name is address-derived and should not be saved as an
-        official name.
-    """
+        official name."""
     normalized = normalize_name_for_comparison(name)
     if not normalized:
         return False
@@ -454,28 +398,13 @@ def is_address_derived_name(name: str, location: Location) -> bool:
 
 def sanitize_name(value: str | None) -> str | None:
     """Sanitize a user-supplied or externally-sourced place/pin/wiki name.
-
-    Names are reused verbatim in several risky contexts - external API query
-    strings (Google, Wikipedia, Brave), AI prompts, and page templates - so
-    this normalizes to a strict allowlisted character set rather than only
-    blocking a few known-bad characters. Unicode letters and digits from any
-    script (accents, CJK, Cyrillic, Arabic, ...) are kept as-is so non-English
-    names are unaffected; curly quotes/dashes are folded to their plain-ASCII
-    equivalents; a small allowlist of everyday name punctuation is kept; and
-    everything else - markup-significant characters, control/formatting
-    characters, emoji, other symbols - is dropped.
-
-    This is invoked from the ``save()`` of every model with a user-facing name
-    field (Pin, Wiki, Location, alias rows), so it applies regardless of write
-    path (HTMX controllers, REST serializer, bulk edit, import, Django admin).
-    Length limits are enforced separately by each field's ``max_length``.
+    Names are reused verbatim in several risky contexts - external API query strings (Google, Wikipedia, Brave), AI prompts, and page templates - so this normalizes to a strict allowlisted character set rather than only blocking a few known-bad characters.
 
     Args:
         value: Raw name text, or ``None``.
 
     Returns:
-        The sanitized name, or the input unchanged if it was falsy.
-    """
+        The sanitized name, or the input unchanged if it was falsy."""
     if not value:
         return value
 
@@ -508,16 +437,7 @@ def external_name_candidates_for_location(
     extra_candidates: list[tuple[str, Any]] | None = None,
 ) -> list[NameCandidate]:
     """Gather cleaned, quality-gated external name candidates for a location.
-
-    Explicit ``extra_candidates`` come first, then every enabled plugin's
-    :class:`~urbanlens.dashboard.services.locations.name_resolution.NameProvider`
-    contributions in plugin ``(order, name)`` order. Raw values are cleaned
-    (:func:`is_meaningful_name`) and address-derived fragments are rejected
-    (:func:`is_address_derived_name`); duplicates of the same normalized name
-    from the same source are dropped, preserving first-seen order. Sources in
-    ``_FALLBACK_ONLY_SOURCES`` (currently just Google Places) are dropped
-    entirely whenever any other source has a surviving candidate, and only
-    considered when they are the only source with one.
+    Sources in ``_FALLBACK_ONLY_SOURCES`` (currently just Google Places) are dropped entirely whenever any other source has a surviving candidate, and only considered when they are the only source with one.
 
     Args:
         location: The location to gather candidates for.
@@ -526,8 +446,7 @@ def external_name_candidates_for_location(
             yet visible in the cache).
 
     Returns:
-        Cleaned candidates in arrival order.
-    """
+        Cleaned candidates in arrival order."""
     from urbanlens.dashboard.plugins.registry import plugin_registry
     from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
 
@@ -565,12 +484,6 @@ def best_external_name_for_location(
 ) -> tuple[str, str] | None:
     """Choose the best externally supplied name for a location.
 
-    Candidates come from plugin name providers (plus any explicit extras) and
-    the winner is picked by the configured
-    :class:`~urbanlens.dashboard.services.locations.name_resolution.NameResolver`
-    - by default, two-source agreement first, then the site-admin-configured
-    source priority order.
-
     Args:
         location: The location to name.
         extra_candidates: Optional ``(source, raw_value)`` pairs considered
@@ -580,8 +493,7 @@ def best_external_name_for_location(
 
     Returns:
         ``(name, source)`` for the winning candidate, or None when no
-        acceptable candidate exists.
-    """
+        acceptable candidate exists."""
     from urbanlens.dashboard.services.locations.name_resolution import default_name_resolver
 
     candidates = external_name_candidates_for_location(location, extra_candidates=extra_candidates)
@@ -594,18 +506,13 @@ def best_external_name_for_location(
 def _add_wiki_aliases(wiki, candidates: Sequence[NameCandidate]) -> bool:
     """Persist external name candidates as official WikiAlias rows.
 
-    Every candidate is recorded - including one matching the wiki's current
-    name, since the alias list is the full set of known names. Existing rows
-    (e.g. user-created aliases with the same name) are left untouched.
-
     Args:
         wiki: The wiki to attach aliases to; skipped when None or unsaved
             (wikis are created lazily and this honours that).
         candidates: Cleaned candidates to persist.
 
     Returns:
-        True when at least one alias row was created.
-    """
+        True when at least one alias row was created."""
     if wiki is None or not getattr(wiki, "pk", None):
         return False
     from urbanlens.dashboard.models.aliases.model import AliasType, WikiAlias
@@ -629,11 +536,7 @@ def _add_wiki_aliases(wiki, candidates: Sequence[NameCandidate]) -> bool:
 
 def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) -> bool:
     """Persist external name candidates as official PinAlias rows on every pin at this location.
-
-    Mirrors ``_add_wiki_aliases`` - see its docstring for the "record every
-    candidate, leave existing rows alone" reasoning. A Location can have
-    several Pins (one per user who's pinned it), so this attaches the same
-    candidate set to each of them independently.
+    A Location can have several Pins (one per user who's pinned it), so this attaches the same candidate set to each of them independently.
 
     Args:
         location: The location whose pins should receive aliases; skipped
@@ -641,8 +544,7 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
         candidates: Cleaned candidates to persist.
 
     Returns:
-        True when at least one alias row was created.
-    """
+        True when at least one alias row was created."""
     if location is None or not getattr(location, "pk", None):
         return False
     from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
@@ -652,14 +554,10 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
     if not pins or not candidates:
         return False
 
-    # This runs on every external-data name refresh, and in the steady state
-    # every (pin, name) pair already exists - prefetch those in one query so
-    # the common case costs 2 queries total instead of pins x candidates
-    # get_or_create round-trips. The get_or_create (not a bare create) below
-    # still handles the race where the same pair lands concurrently. Compared
-    # case-insensitively via a Lower() annotation (matching the DB-level
-    # constraint), so a differently-cased existing row still counts as
-    # "already there" instead of costing an extra failed-insert round-trip.
+    # The get_or_create (not a bare create) below still handles the race where the same pair lands
+    # concurrently.
+    # Compared case-insensitively via a Lower() annotation (matching the DB-level constraint), so a
+    # differently-cased existing row still counts as "already there" instead of costing an extra
     from django.db.models.functions import Lower
 
     candidate_names_lower = [candidate.name.casefold() for candidate in candidates]
@@ -688,22 +586,13 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
 
 def persist_official_aliases_for_location(location: Location) -> bool:
     """Backfill official aliases for a location's wiki and pins from cached candidates.
-
-    Reads only already-cached candidates - no network calls - and records them
-    as official aliases. Covers two lazy-creation gaps at once: a wiki that
-    comes into existence after external data was already cached, and a pin
-    whose location's external data was populated by something other than that
-    pin's own panel view (e.g. background enrichment, or another user's pin
-    at the same location triggering the fetch first) - previously only the
-    wiki side was backfilled here, so a pin could go on showing no aliases
-    indefinitely even though the wiki for the same location had them.
+    Reads only already-cached candidates - no network calls - and records them as official aliases.
 
     Args:
         location: The location whose wiki and pins should receive official aliases.
 
     Returns:
-        True when at least one alias row was created.
-    """
+        True when at least one alias row was created."""
     from django.core.exceptions import ObjectDoesNotExist
 
     try:
@@ -724,14 +613,7 @@ def update_location_name_from_external_sources(
     profile: Profile | None = None,
 ) -> bool:
     """Refresh a Location's official_name (and its wiki's/pins' names/aliases) from external sources.
-
-    The place-identity name lives on ``Location.official_name``; the
-    community-editable name and alias list live on the linked ``Wiki`` (updated
-    only when one already exists, honouring lazy wiki creation). All surviving
-    candidates are persisted as official aliases - on the wiki AND on every
-    pin at this location - *before* any name is written, so the Pin/Wiki
-    ``save()`` alias invariant finds correctly attributed rows instead of
-    creating user-attributed ones.
+    The place-identity name lives on ``Location.official_name``; the community-editable name and alias list live on the linked ``Wiki`` (updated only when one already exists, honouring lazy wiki creation).
 
     Args:
         location: The location to refresh.
@@ -742,8 +624,7 @@ def update_location_name_from_external_sources(
             :func:`~urbanlens.dashboard.services.locations.name_resolution.default_name_resolver`.
 
     Returns:
-        True when the location name, wiki name, or alias list changed.
-    """
+        True when the location name, wiki name, or alias list changed."""
     from django.core.exceptions import ObjectDoesNotExist
 
     from urbanlens.dashboard.services.locations.name_resolution import default_name_resolver

@@ -1,28 +1,5 @@
 """Creating, refreshing and removing the integration suite's accounts.
-
-Kept out of the management command so the behaviour that matters - what an
-account has to look like for a headless browser to sign in as it, and what
-``--purge`` is allowed to select - is testable without a subprocess.
-
-An account provisioned here differs from a registered one in four ways, each
-because a browser driving the deployment cannot supply what registration
-normally waits for:
-
-- **Active and verified.** Registration leaves ``is_active`` False pending an
-  emailed link. Nothing here can click one.
-- **Past onboarding.** ``PostLoginRedirectView`` sends a profile that has not
-  finished the welcome flow to ``onboarding.welcome``, and one that has not
-  finished profile setup to ``profile.edit``. A suite that expects to land on
-  the map would fail on its first navigation for a reason that has nothing to do
-  with the map.
-- **No second factor, and no derived-auth enrolment.** A passkey or TOTP prompt
-  is unanswerable headlessly; an ``AccountKdf`` salt makes the login form derive
-  its credential in the browser, which works but means the plaintext in the
-  manifest is no longer what the form posts.
-- **Outbound APIs and AI off, notifications on-site only.** These accounts are
-  driven hard and repeatedly. Every provider outside REData bills per call, and
-  every email would be addressed to an undeliverable domain.
-"""
+Kept out of the management command so the behaviour that matters - what an account has to look like for a headless browser to sign in as it, and what ``--purge`` is allowed to select - is testable without a subprocess."""
 
 from __future__ import annotations
 
@@ -46,10 +23,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Roles provisioned when the caller does not name any. Two, because a large
-#: share of this application is about what one account can see of another's -
-#: sharing, friendships, messages, wiki visibility - and none of that is
-#: testable with a single account.
+#: Roles provisioned when the caller does not name any.
+#: Two, because a large share of this application is about what one account can see of another's -
+#: sharing, friendships, messages, wiki visibility - and none of that is testable with a single
+#: account.
 DEFAULT_ROLES: tuple[str, ...] = ("primary", "secondary")
 
 #: Password length in bytes of entropy. These accounts are reachable on a
@@ -101,22 +78,18 @@ class ProvisionResult:
 
     def manifest(self, *, site_url: str, environment: str, seeds: dict[str, object] | None = None) -> dict[str, object]:
         """The JSON document ``UL_E2E_ACCOUNTS_FILE`` points at.
-
-        Keys are snake_case to match the rest of this codebase; the TypeScript
-        loader in ``tests/integration/lib/accounts.ts`` maps them to camelCase
-        rather than having Python emit a foreign convention.
+        Keys are snake_case to match the rest of this codebase; the TypeScript loader in ``tests/integration/lib/accounts.ts`` maps them to camelCase rather than having Python emit a foreign convention.
 
         Args:
-            site_url: Absolute URL the accounts were provisioned on.
-            environment: ``UL_ENVIRONMENT`` of the provisioning instance.
-            seeds: What was seeded into which role, keyed by role name. The
+                site_url: Absolute URL the accounts were provisioned on.
+                environment: ``UL_ENVIRONMENT`` of the provisioning instance.
+                seeds: What was seeded into which role, keyed by role name. The
                 load harness reads label ids and row counts out of here, so a
                 run against an unseeded target can say so rather than measuring
                 an empty account and passing.
 
         Returns:
-            A JSON-serialisable manifest.
-        """
+                A JSON-serialisable manifest."""
         return {
             "generated_at": timezone.now().isoformat(),
             "site_url": site_url,
@@ -128,16 +101,13 @@ class ProvisionResult:
 
 def username_for(role: str) -> str:
     """The username an account for ``role`` always has.
-
-    Deterministic rather than random, so re-running provisioning refreshes the
-    same accounts instead of leaving a new pair behind on every run.
+    Deterministic rather than random, so re-running provisioning refreshes the same accounts instead of leaving a new pair behind on every run.
 
     Args:
         role: Role name, e.g. ``primary``.
 
     Returns:
-        The prefixed username.
-    """
+        The prefixed username."""
     return f"{INTEGRATION_USERNAME_PREFIX}{role}"
 
 
@@ -160,14 +130,10 @@ def generate_password() -> str:
 
 def integration_users() -> Iterable[User]:
     """Every account this module is allowed to touch.
-
-    Both conventions are required, and staff accounts are excluded outright.
-    ``--purge`` deletes what this returns, so the query is the safety boundary:
-    widening it is how a manual staging account gets destroyed by a test run.
+    ``--purge`` deletes what this returns, so the query is the safety boundary: widening it is how a manual staging account gets destroyed by a test run.
 
     Returns:
-        A queryset of provisioned integration accounts, ordered by id.
-    """
+        A queryset of provisioned integration accounts, ordered by id."""
     return (
         User.objects.filter(
             username__startswith=INTEGRATION_USERNAME_PREFIX,
@@ -183,11 +149,7 @@ def integration_users() -> Iterable[User]:
 @transaction.atomic
 def provision_account(role: str, *, password: str, with_api_keys: bool = True, external_apis: bool = False) -> tuple[ProvisionedAccount, bool]:
     """Create or refresh the account for ``role``.
-
-    Idempotent on the username: a second call resets the password, re-applies
-    every precondition, and mints fresh keys, rather than creating a duplicate.
-    Existing keys are revoked in the same transaction so an interrupted run
-    cannot leave a live credential nobody holds.
+    Idempotent on the username: a second call resets the password, re-applies every precondition, and mints fresh keys, rather than creating a duplicate.
 
     Args:
         role: Role name the suite refers to this account by.
@@ -199,8 +161,7 @@ def provision_account(role: str, *, password: str, with_api_keys: bool = True, e
             that is specifically exercising the enrichment panels.
 
     Returns:
-        Tuple of the provisioned account and whether the user row was created.
-    """
+        Tuple of the provisioned account and whether the user row was created."""
     username = username_for(role)
     user, created = User.objects.get_or_create(
         username=username,
@@ -265,14 +226,10 @@ def provision(roles: Sequence[str] = DEFAULT_ROLES, *, password: str | None = No
 
 def purge() -> list[str]:
     """Delete every provisioned integration account and everything it owns.
-
-    Reuses ``hard_delete_profile`` rather than cascading from ``User.delete()``:
-    that is the path that also removes the profile's stored files, and a purge
-    that leaves uploaded media behind is not a purge.
+    Reuses ``hard_delete_profile`` rather than cascading from ``User.delete()``: that is the path that also removes the profile's stored files, and a purge that leaves uploaded media behind is not a purge.
 
     Returns:
-        Usernames that were deleted.
-    """
+        Usernames that were deleted."""
     from urbanlens.dashboard.services.profile.account_deletion import hard_delete_profile
 
     deleted: list[str] = []
@@ -346,16 +303,10 @@ def _prepare_profile(user: User, *, external_apis: bool) -> Profile:
 
 def _silence_email_delivery(profile: Profile) -> None:
     """Set every notification type to on-site delivery only.
-
-    Iterates the model's fields rather than naming them, so a notification type
-    added later is covered without anyone remembering to come back here. On-site
-    rather than off entirely, because a test may well want to assert that a
-    notification was raised - it just must never be posted to an address on a
-    domain that cannot receive it.
+    Iterates the model's fields rather than naming them, so a notification type added later is covered without anyone remembering to come back here.
 
     Args:
-        profile: The profile whose preferences to rewrite.
-    """
+        profile: The profile whose preferences to rewrite."""
     from urbanlens.dashboard.models.notifications.meta.delivery_preference import DeliveryPreference
     from urbanlens.dashboard.models.notifications.model import NotificationPreference
 
@@ -377,13 +328,7 @@ def _silence_email_delivery(profile: Profile) -> None:
 
 def _mint_key(user: User, *, name: str, scopes: Sequence[str]) -> str:
     """Issue one API key with an explicit scope grant, returning its plaintext.
-
-    ``generate_api_key`` writes the default four-scope grant, which is what a
-    user gets from the settings page - there is no scope picker there yet. The
-    grant is widened here by a direct update because ``ApiKey.scopes`` is
-    ``editable=False``: not writable through a form, which is the point, but
-    perfectly writable by code that has decided what the grant should be.
-    """
+    The grant is widened here by a direct update because ``ApiKey.scopes`` is ``editable=False``: not writable through a form, which is the point, but perfectly writable by code that has decided what the grant should be."""
     api_key, raw = generate_api_key(user, name)
     ApiKey.objects.filter(pk=api_key.pk).update(scopes=list(scopes))
     return raw

@@ -56,36 +56,24 @@ class SearchResponse:
 
 class GlobalSearchEngine:
     """Runs every applicable provider for a query and groups the results.
-
-    The provider chain is the *only* place access to a whole result type is
-    decided. Callers that may not read everything - notably the external API,
-    where a credential's scopes decide which domains it can touch at all - are
-    expected to pass a narrowed chain rather than to filter the response
-    afterwards. Post-filtering would still have run the excluded providers'
-    queries, and one forgotten branch would put the excluded section straight
-    back into the payload.
+    Callers that may not read everything - notably the external API, where a credential's scopes decide which domains it can touch at all - are expected to pass a narrowed chain rather than to filter the response afterwards.
 
     Args:
         providers: Provider chain override; defaults to
             :func:`default_providers`. An empty list is honoured as "search
-            nothing", not corrected to the default - see above.
-    """
+            nothing", not corrected to the default - see above."""
 
     def __init__(self, providers: list[SearchProvider] | None = None) -> None:
         self.providers = providers if providers is not None else default_providers()
 
     def search(self, profile: Profile, raw_query: str, *, types: Iterable[str] | None = None, limit: int | None = None) -> SearchResponse:
         """Search everything the profile has access to.
-
-        A failing provider contributes an error notice instead of failing the
-        whole search. When a structured interpretation (parsed place/date/type)
-        matches nothing, the query is retried as plain text so a literal name
-        like "stairs in the mill" still finds its pin.
+        A failing provider contributes an error notice instead of failing the whole search.
 
         Args:
-            profile: The requesting user's profile.
-            raw_query: The query exactly as typed.
-            types: ``RESULT_TYPES`` slugs to restrict the search to, overriding
+                profile: The requesting user's profile.
+                raw_query: The query exactly as typed.
+                types: ``RESULT_TYPES`` slugs to restrict the search to, overriding
                 anything the parser inferred from the query text. Meant for a
                 caller with a real type picker (the API's ``types=`` parameter),
                 where the restriction is the user's stated intent rather than a
@@ -93,21 +81,16 @@ class GlobalSearchEngine:
                 dropped by the plain-text fallback below. None leaves the
                 parser's interpretation in charge; an empty collection is a
                 deliberate "no types", and searches nothing.
-            limit: Results per section, overriding the query-shape-derived
+                limit: Results per section, overriding the query-shape-derived
                 default. Bounds checking belongs to the caller.
 
         Returns:
-            The grouped, ordered results.
-        """
+                The grouped, ordered results."""
         parsed = parse_query(raw_query)
-        # Kept separate from `parsed.types` on purpose. `parsed.types` uses the
-        # parser's convention where *empty means every type*, which is right for
-        # an inference ("no type word was recognized") and catastrophically wrong
-        # for a caller's explicit choice: `?types=messages` from a credential
-        # with no messages scope resolves to an empty restriction, and folding
-        # that into `parsed.types` would silently reopen every other section.
-        # `restrict` distinguishes "no restriction" (None) from "restricted to
-        # nothing" (empty), so the empty case searches nothing.
+        # Kept separate from `parsed.types` on purpose.
+        # `parsed.types` uses the parser's convention where *empty means every type*, which is right
+        # for an inference ("no type word was recognized") and catastrophically wrong for a caller's
+        # explicit choice: `?types=messages` from a credential with no messages scope resolves to an
         restrict = frozenset(types) if types is not None else None
         if restrict is not None:
             # Mirrored onto the parsed query anyway, purely so `describe_filters`
@@ -127,22 +110,14 @@ class GlobalSearchEngine:
 
         response = self._run(profile, parsed, restrict=restrict, limit=limit)
         if response.total == 0 and parsed.has_structure and parsed.raw.strip():
-            # Strip the same type-keyword/stopword/date noise the primary
-            # parse stripped, so e.g. "photos from last summer" retries on
-            # "summer" alone instead of requiring "photos" verbatim in the
-            # target's own text (which defeats the point of the fallback).
+            # Strip the same type-keyword/stopword/date noise the primary parse stripped, so e.g.
+            # "photos from last summer" retries on "summer" alone instead of requiring "photos"
+            # verbatim in the target's own text (which defeats the point of the fallback).
             fallback_terms = extract_fallback_terms(parsed.raw)
-            # Nothing meaningful survived the stripping (e.g. the whole query
-            # was consumed as a type keyword plus a date phrase, like "photos
-            # from last summer"). The fallback intentionally clears
-            # inferred `types`/`date_start` so a wrongly-inferred place/type
-            # doesn't block the retry - an explicit `restrict` is not an
-            # inference and is threaded through unchanged. With *also* no
-            # free-text terms,
-            # `apply_text` would leave every provider's queryset unfiltered -
-            # turning the retry into an unrelated recency dump across every
-            # result type instead of a useful rescue. Skip it rather than
-            # show that.
+            # Nothing meaningful survived the stripping (e.g. the whole query was consumed as a type
+            # keyword plus a date phrase, like "photos from last summer").
+            # The fallback intentionally clears inferred `types`/`date_start` so a wrongly-inferred
+            # place/type doesn't block the retry - an explicit `restrict` is not an inference and is
             if fallback_terms:
                 fallback = ParsedQuery(raw=parsed.raw)
                 fallback.terms = fallback_terms
@@ -175,10 +150,10 @@ class GlobalSearchEngine:
             active = [provider for provider in self.providers if provider.slug in restrict]
         else:
             active = [provider for provider in self.providers if not parsed.types or provider.slug in parsed.types]
-        # An explicit restriction, when present, is what "how many types is this
-        # search covering?" means - reading `parsed.types` instead would give the
-        # plain-text fallback (which clears them) a shallow six-row section even
-        # though the caller asked for exactly one type and expects its full page.
+        # An explicit restriction, when present, is what "how many types is this search covering?"
+        # means - reading `parsed.types` instead would give the plain-text fallback (which clears
+        # them) a shallow six-row section even though the caller asked for exactly one type and
+        # expects its full page.
         focus = restrict if restrict is not None else parsed.types
         section_limit = limit if limit is not None else (FOCUSED_SECTION_LIMIT if len(focus) == 1 else DEFAULT_SECTION_LIMIT)
 
@@ -195,10 +170,9 @@ class GlobalSearchEngine:
             if results:
                 if parsed.sort in (None, "", "relevance"):
                     results.sort(key=lambda result: result.score, reverse=True)
-                # else: a real `sort:` mode is active - each provider already
-                # ordered its own queryset for it (or left its default order
-                # standing, when it has no concept of the requested mode), so
-                # that order is trusted here rather than re-shuffled by score.
+                # else: a real `sort:` mode is active - each provider already ordered its own
+                # queryset for it (or left its default order standing, when it has no concept of the
+                # requested mode), so that order is trusted here rather than re-shuffled by score.
                 response.groups.append(SearchGroup(meta=meta, results=results))
                 response.total += len(results)
         return response

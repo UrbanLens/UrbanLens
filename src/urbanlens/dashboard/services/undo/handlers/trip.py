@@ -24,10 +24,7 @@ _RESTORABLE_FIELDS = (
 
 _MEMBERSHIP_FIELDS = ("rsvp", "is_organizer")
 
-#: Registry key for this handler. Exposed as a module-level constant so call
-#: sites can import it (``from ...handlers.trip import MODEL_LABEL``) instead
-#: of hand-typing ``"trip"`` - a typo in a hand-typed string only fails at
-#: runtime via ``get_handler``'s ``ValueError``.
+#: Registry key for this handler. Import it instead of hand-typing the string.
 MODEL_LABEL = "trip"
 
 

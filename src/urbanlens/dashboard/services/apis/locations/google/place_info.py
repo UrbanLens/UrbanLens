@@ -72,18 +72,15 @@ class GooglePlaceService:
     ) -> GooglePlace:
         """Return the shared GooglePlace row for a coordinate pair.
 
-        Creates the row and optionally contacts Google when no cached data exists.
-
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
-            place_name: Optional pre-resolved place name to store.
-            cid: Optional Google Maps CID to store.
-            fetch_if_missing: When True, call Google if no cached name is available.
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
+                place_name: Optional pre-resolved place name to store.
+                cid: Optional Google Maps CID to store.
+                fetch_if_missing: When True, call Google if no cached name is available.
 
         Returns:
-            The existing or newly created GooglePlace instance.
-        """
+                The existing or newly created GooglePlace instance."""
         lat = normalize_coordinate(latitude)
         lon = normalize_coordinate(longitude)
         existing = self.get_for_coordinates(lat, lon)
@@ -152,17 +149,14 @@ class GooglePlaceService:
 
     def ensure_linked_by_place_id(self, location: Location, place_id: str) -> GooglePlace | None:
         """Attach entity.google_place using a Google Place ID string.
-
-        Stores the ``place_id`` on the shared GooglePlace row and links the entity,
-        so future views can skip an additional Places API call.
+        Stores the ``place_id`` on the shared GooglePlace row and links the entity, so future views can skip an additional Places API call.
 
         Args:
-            entity: A Location or Pin with latitude and longitude set.
-            place_id: Google Places API ``place_id`` string.
+                entity: A Location or Pin with latitude and longitude set.
+                place_id: Google Places API ``place_id`` string.
 
         Returns:
-            The linked GooglePlace, or None when coordinates are missing.
-        """
+                The linked GooglePlace, or None when coordinates are missing."""
         google_place = self.get_or_create_for_coordinates(
             location.latitude,
             location.longitude,

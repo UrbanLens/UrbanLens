@@ -1,21 +1,5 @@
 """Custom python-social-auth pipeline steps.
-
-These are inserted into ``SOCIAL_AUTH_PIPELINE`` in ``settings/base.py`` and
-run for every OAuth login (Google, Discord, ...).
-
-Step contracts
---------------
-- Return ``None`` or an empty dict to do nothing and pass through.
-- Return a dict to merge extra data into the pipeline state.
-- Raise ``StopPipeline`` to abort the login.
-- Return an ``HttpResponse`` (e.g. a redirect) to interrupt the pipeline and
-  send that response straight back to the browser instead of continuing -
-  used by ``enforce_two_factor_for_sso`` below to detour through the 2FA
-  challenge page instead of letting python-social-auth log the user in.
-
-All steps must accept ``**kwargs`` because the pipeline may pass extra
-keyword arguments that we do not care about.
-"""
+Step contracts -------------- - Return ``None`` or an empty dict to do nothing and pass through. - Return a dict to merge extra data into the pipeline state. - Raise ``StopPipeline`` to abort the login. - Return an ``HttpResponse`` (e.g. a redirect) to interrupt the pipeline and send that response straight back to the browser instead of continuing - used by ``enforce_two_factor_for_sso`` below to detour through the 2FA challenge page instead of letting python-social-auth log the user in."""
 
 from __future__ import annotations
 
@@ -49,14 +33,7 @@ def generate_sso_username(
     *args: Any,
     **kwargs: Any,
 ) -> dict[str, Any] | None:
-    """Choose an initial username for new SSO users.
-
-    Prefers the provider handle when it is valid and not already taken:
-    Discord ``username``, or the local part of a Google account email.
-    Otherwise falls back to a random ``{adjective}{animal}{number}`` name.
-
-    Replaces the default ``social_core.pipeline.user.get_username`` step.
-    Existing users (``user`` is not None) are left unchanged.
+    """Choose an initial username for new SSO users. Otherwise falls back to a random ``{adjective}{animal}{number}`` name.
 
     Args:
         backend: The social-auth backend in use.
@@ -65,8 +42,7 @@ def generate_sso_username(
         details: Normalised details dict produced by ``social_details``.
 
     Returns:
-        Dict with ``username`` key for new users, or None for returning users.
-    """
+        Dict with ``username`` key for new users, or None for returning users."""
     if user is not None:
         return {"username": user.username}
 
@@ -87,21 +63,13 @@ def suppress_last_name_for_new_users(
     **kwargs: Any,
 ) -> None:
     """Clear ``last_name`` on the Django User for brand-new SSO accounts.
-
-    Runs after ``user_details`` (which copies the provider's given/family name
-    into the User model).  Preserving the first name lets the UI greet the
-    user naturally while stripping the last name limits personal data exposure.
-
-    Existing users are not affected so that a user who manually added their
-    last name on their profile settings doesn't lose it on every subsequent
-    login.
+    Existing users are not affected so that a user who manually added their last name on their profile settings doesn't lose it on every subsequent login.
 
     Args:
         backend: The social-auth backend in use.
         user: The Django User being logged in.
         response: Raw response from the OAuth provider.
-        is_new: True only when the User row was just created in this pipeline run.
-    """
+        is_new: True only when the User row was just created in this pipeline run."""
     if not is_new or user is None:
         return
     if user.last_name:
@@ -119,16 +87,13 @@ def fetch_and_save_avatar(
     **kwargs: Any,
 ) -> None:
     """Download the provider avatar (or Gravatar) and store it on the Profile.
-
-    Only fetches when the profile has no existing avatar so that users who
-    upload their own photo are not overwritten on subsequent logins.
+    Only fetches when the profile has no existing avatar so that users who upload their own photo are not overwritten on subsequent logins.
 
     Args:
         backend: The social-auth backend in use (name is ``backend.name``).
         user: The Django User, or None if authentication failed earlier.
         response: Raw response from the OAuth provider.
-        is_new: True when the User was just created in this pipeline run.
-    """
+        is_new: True when the User was just created in this pipeline run."""
     if user is None:
         return
 
@@ -162,16 +127,12 @@ def mark_new_user_onboarding(
     **kwargs: Any,
 ) -> None:
     """Set profile_setup_complete=False for brand-new SSO users.
-
-    Causes PostLoginRedirectView to send them to /profile/edit/ so they can
-    choose a username and avatar before landing on the map.  Existing users
-    and email-registered users are not affected.
+    Causes PostLoginRedirectView to send them to /profile/edit/ so they can choose a username and avatar before landing on the map.
 
     Args:
         backend: The social-auth backend in use.
         user: The Django User, or None if authentication failed earlier.
-        is_new: True when the User was just created in this pipeline run.
-    """
+        is_new: True when the User was just created in this pipeline run."""
     if not is_new or user is None:
         return
     try:
@@ -191,16 +152,12 @@ def save_discord_social_link(
     **kwargs: Any,
 ) -> None:
     """Store the Discord username as a SocialLink for Discord SSO users.
-
-    Runs for every Discord login so that username changes on Discord are
-    reflected in UrbanLens.  Only overwrites the stored handle; does not
-    remove the link if the response is missing a username.
+    Runs for every Discord login so that username changes on Discord are reflected in UrbanLens.
 
     Args:
         backend: The social-auth backend in use.
         user: The Django User, or None if authentication failed earlier.
-        response: Raw OAuth response payload from Discord.
-    """
+        response: Raw OAuth response payload from Discord."""
     if user is None or getattr(backend, "name", "") != "discord":
         return
 
@@ -232,20 +189,7 @@ def enforce_two_factor_for_sso(
     *args: Any,
     **kwargs: Any,
 ) -> HttpResponseRedirect | None:
-    """Detour through the 2FA challenge if this account has a second factor enabled.
-
-    python-social-auth logs the user in automatically once the pipeline
-    finishes - there is no equivalent of ``CustomLoginView.form_valid()``'s
-    ``has_second_factor()`` gate in the SSO path, so without this step an
-    account with a passkey/authenticator app configured could bypass 2FA
-    entirely by signing in with Google/Discord instead of a password.
-
-    Must run as the last pipeline step: everything before it (user/profile
-    creation, avatar fetch, onboarding flags) should still complete normally
-    on every SSO login: only whether *this* step goes on to call
-    ``auth_login()`` is gated. Returning an ``HttpResponseRedirect`` here
-    interrupts the pipeline (see the module docstring) instead of falling
-    through to python-social-auth's own login.
+    """Detour through the 2FA challenge if this account has a second factor enabled. python-social-auth logs the user in automatically once the pipeline finishes - there is no equivalent of ``CustomLoginView.form_valid()``'s ``has_second_factor()`` gate in the SSO path, so without this step an account with a passkey/authenticator app configured could bypass 2FA entirely by signing in with Google/Discord instead of a password.
 
     Args:
         strategy: The social-auth strategy, used here for ``strategy.request``.
@@ -254,8 +198,7 @@ def enforce_two_factor_for_sso(
         is_new: True for a brand-new account - can't have 2FA configured yet.
 
     Returns:
-        A redirect to the 2FA challenge page if a factor is enrolled, else None.
-    """
+        A redirect to the 2FA challenge page if a factor is enrolled, else None."""
     if user is None or is_new:
         return None
     if not has_second_factor(user):

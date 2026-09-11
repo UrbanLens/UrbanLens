@@ -1,17 +1,4 @@
-"""Article controller - Wikipedia-style articles for pins and community wikis.
-
-Every view here serves both hosts through the same class:
-
-- Wiki articles are routed with a ``location_slug`` kwarg and resolved through
-  the standard wiki visibility gate (:func:`resolve_visible_wiki`), so they
-  are only reachable by users with a pin at that location.
-- Pin articles are routed with a ``pin_slug`` kwarg and resolved strictly
-  against the requesting user's own pins - a pin article is private and can
-  never be seen (or even confirmed to exist) by anyone else.
-
-The article tab, editor, preview, revision history, diff, and restore are all
-HTMX partials swapped into the host page's Article/History tabs.
-"""
+"""Article controller - articles for pins and community wikis."""
 
 from __future__ import annotations
 

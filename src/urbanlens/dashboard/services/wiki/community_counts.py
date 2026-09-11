@@ -1,15 +1,4 @@
-"""Privacy-preserving display of community wiki membership counts.
-
-The exact number of users who have a place pinned is sensitive: showing it
-lets someone place a pin and watch the count to learn whether (and when)
-other users are interested in a location. Instead the UI shows:
-
-- "fewer than 3" when under :data:`MIN_VISIBLE_PIN_COUNT` users have the
-  place pinned, so a single new pin never reveals itself; and
-- an approximate count ("about 7") above that, fuzzed by a few people and
-  cached per wiki for a day so refreshing the page (or switching accounts)
-  cannot be used to average out the noise or catch the moment it changes.
-"""
+"""Privacy-preserving display of community wiki membership counts. Instead the UI shows:"""
 
 from __future__ import annotations
 
@@ -77,18 +66,6 @@ def _first_of_month(value: date) -> date:
 def wiki_community_summary(wiki: Wiki, location: Location) -> dict[str, Any]:
     """Summarize a wiki's community footprint without leaking who pinned it when.
 
-    Counts only root pins (never detail pins) and only distinct profiles, then
-    runs the total through :func:`approximate_pin_count`.
-
-    ``first_pinned`` gets two protections that the count already had but the
-    date did not:
-
-    - It is truncated to the 1st of the month, because a day-precision "first
-      pinned" is a timestamp of one identifiable person's activity.
-    - It is suppressed entirely (``None``) whenever ``pin_count_low`` is true.
-      With one or two pinners, "first pinned" *is* "when that specific person
-      pinned it" - publishing it defeats the whole point of hiding the count.
-
     Args:
         wiki: The wiki being summarized (its pk keys the count's fuzz cache).
         location: The Location the caller resolved the wiki through - may be
@@ -101,17 +78,13 @@ def wiki_community_summary(wiki: Wiki, location: Location) -> dict[str, Any]:
         Dict with ``pin_count_low`` (bool), ``pin_count_approx`` (int, or None
         when low), ``first_pinned`` (``date`` truncated to the 1st, or None),
         and ``first_pinned_precision`` (always ``"month"``, so a client never
-        renders the value as an exact day).
-    """
+        renders the value as an exact day)."""
     from urbanlens.dashboard.models.pin.model import Pin
 
-    # Place-aware: count root pins across every Location sharing this wiki's
-    # Place, not just the one Location the caller happened to resolve it
-    # through - otherwise "N users have this pinned" undercounts (and varies
-    # by which of the place's several pinned coordinates the URL names)
-    # whenever more than one Location row exists under the Place. Falls back
-    # to the single Location when it has no Place (see
-    # services.pins.common_pins.pinned_place_keys, which this mirrors).
+    # Place-aware: count root pins across every Location sharing this wiki's Place, not just the one
+    # Location the caller happened to resolve it through - otherwise "N users have this pinned"
+    # undercounts (and varies by which of the place's several pinned coordinates the URL names)
+    # whenever more than one Location row exists under the Place.
     if wiki.place_id is not None:
         root_pins = Pin.objects.filter(location__place_id=wiki.place_id, parent_pin__isnull=True)
     else:

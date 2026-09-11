@@ -1,19 +1,4 @@
-"""Batch photo-location ingestion: matches scanned photo/asset coordinates against a
-profile's existing pins and clusters whatever doesn't match into new-pin suggestions.
-
-Shared by two entry points that both ultimately produce the same shape of data - a
-list of (latitude, longitude, taken_at) hits - and feed it through the same pipeline:
-
-- ``tasks.sweep_immich_library_locations``: a full sweep of a user's Immich library.
-- ``controllers.tools.PhotoLocationScanUploadView``: the client-side local-folder
-  scanner on the Tools page, which already clusters/dedupes in the browser before
-  uploading, so its hits arrive pre-grouped.
-
-Neither path ever creates a Pin or PinVisit directly - matching/clustering only
-produces or updates ``PinSuggestion`` rows; ``accept_pin_suggestion`` is the only
-function here that writes a Pin or PinVisit, and only when the user explicitly
-accepts one.
-"""
+"""Batch photo-location ingestion: matches scanned photo/asset coordinates against a profile's existing pins and clusters whatever doesn't match into new-pin suggestions. - ``tasks.sweep_immich_library_locations``: a full sweep of a user's Immich library. - ``controllers.tools.PhotoLocationScanUploadView``: the client-side local-folder scanner on the Tools page, which already clusters/dedupes in the browser before uploading, so its hits arrive pre-grouped."""
 
 from __future__ import annotations
 
@@ -51,11 +36,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Merge threshold for both clustering unmatched hits into a new-pin candidate and
-#: matching a hit against an existing pending new-pin suggestion. Deliberately the
-#: same radius as a pin's own default circle boundary (``DEFAULT_RADIUS_METERS``) -
-#: a new-pin cluster's implicit footprint matches what the pin would already treat
-#: as "here" once it exists.
+#: Merge threshold for both clustering unmatched hits into a new-pin candidate and matching a hit
+#: against an existing pending new-pin suggestion.
+#: Deliberately the same radius as a pin's own default circle boundary (``DEFAULT_RADIUS_METERS``) -
+#: a new-pin cluster's implicit footprint matches what the pin would already treat as "here" once it
 CLUSTER_RADIUS_M = DEFAULT_RADIUS_METERS
 
 
@@ -105,8 +89,7 @@ class LocationHit:
             proposes a place without asserting the user was ever there, so
             its hits set this False - ``_dates_from_hits`` then excludes them,
             and accepting the resulting suggestion creates the pin without
-            fabricating a ``PinVisit`` for a visit that may never have happened.
-    """
+            fabricating a ``PinVisit`` for a visit that may never have happened."""
 
     latitude: float
     longitude: float
@@ -156,24 +139,12 @@ def _weight_of(hits: list[LocationHit]) -> int:
 
 def _merge_dates(existing: list[str], new: list[str]) -> list[str]:
     """Return the union of two date-string lists, sorted ascending and capped to the most recent N.
-
-    Once a suggestion accumulates more than ``MAX_STORED_VISIT_DATES`` distinct
-    dates (e.g. a place visited monthly for years via repeated Immich sweeps),
-    the recent visits are the more useful ones to keep - so the cap trims from
-    the front of the ascending-sorted list, not the back.
-    """
+    Once a suggestion accumulates more than ``MAX_STORED_VISIT_DATES`` distinct dates (e.g. a place visited monthly for years via repeated Immich sweeps), the recent visits are the more useful ones to keep - so the cap trims from the front of the ascending-sorted list, not the back."""
     return sorted(set(existing) | set(new))[-MAX_STORED_VISIT_DATES:]
 
 
 def _centroid(hits: list[LocationHit]) -> tuple[float, float]:
-    """Return the weight-weighted mean (latitude, longitude) of a list of hits.
-
-    Weighting matters once a single hit can stand in for many identically-
-    located photos (see ``LocationHit.weight``) - a cluster of 500 photos
-    merging with one of 2 should still pull the centroid mostly toward the
-    500-photo cluster, exactly as it would if every one of those 500 photos
-    were still its own separate hit.
-    """
+    """Return the weight-weighted mean (latitude, longitude) of a list of hits."""
     total_weight = sum(hit.weight for hit in hits)
     return (
         sum(hit.latitude * hit.weight for hit in hits) / total_weight,
@@ -255,32 +226,22 @@ def _merge_links(existing: list[dict[str, str]], hits: list[LocationHit]) -> lis
 
 
 #: Prefilter radius for _match_hits_to_pins - same value and rationale as
-#: services.visits.visits.record_geolocation_pin_visits's near_point prefilter: a
-#: deliberately generous upper bound on any real property boundary's size, so
-#: it can only ever exclude pins that couldn't possibly contain a hit anyway.
+#: services.visits.visits.record_geolocation_pin_visits's near_point prefilter: a deliberately
+#: generous upper bound on any real property boundary's size, so it can only ever exclude pins that
+#: couldn't possibly contain a hit anyway.
 _BOUNDARY_PREFILTER_RADIUS_KM = 5
 
 
 def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict[Pin, list[LocationHit]], list[LocationHit]]:
     """Split hits into ones that fall inside an existing pin's boundary and ones that don't.
-
-    For each hit, prefilters candidate pins with an indexed PostGIS
-    ``near_point`` distance query before resolving any boundary polygon -
-    without this, a profile with many pins (e.g. after a bulk import) forces
-    an unbounded, unbatched boundary-resolution chain over every single root
-    pin for every hit, the exact O(hits x pins) class of bug that made
-    ``services.visits.visits.record_geolocation_pin_visits`` blow past nginx's 60s
-    upstream timeout in production before it got the same fix. Resolved
-    boundary polygons are cached per-pin across the whole call, since the
-    same nearby pin is typically re-examined by many hits.
+    For each hit, prefilters candidate pins with an indexed PostGIS ``near_point`` distance query before resolving any boundary polygon - without this, a profile with many pins (e.g. after a bulk import) forces an unbounded, unbatched boundary-resolution chain over every single root pin for every hit, the exact O(hits x pins) class of bug that made ``services.visits.visits.record_geolocation_pin_visits`` blow past nginx's 60s upstream timeout in production before it got the same fix.
 
     Args:
         profile: Owner whose pins are being matched against.
         hits: Candidate hits to classify.
 
     Returns:
-        Tuple of (mapping of matched pin to its hits, list of unmatched hits).
-    """
+        Tuple of (mapping of matched pin to its hits, list of unmatched hits)."""
     from django.contrib.gis.geos import Point
 
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
@@ -324,26 +285,14 @@ def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict
 
 def _cluster_hits(hits: list[LocationHit], radius_m: float) -> list[list[LocationHit]]:
     """Greedily group hits into clusters no farther than radius_m from a running centroid.
-
-    The running centroid used here to decide whether a new hit merges into an
-    existing cluster is weight-aware (tracks a running weighted sum and
-    weighted total, exactly like ``_centroid()``'s formula), so it stays
-    consistent with the final stored suggestion centroid computed by
-    ``_centroid()`` once the cluster is complete. A hit's ``weight`` can run
-    into the hundreds for a heavy local-scan cluster (see
-    ``LocationHit.weight``) - without weighting this running comparison
-    point, a hit sitting near ``radius_m`` from a heavy cluster could be
-    merged/rejected based on a centroid that doesn't reflect where the
-    cluster's mass actually is, disagreeing with where ``_centroid()`` would
-    ultimately place it.
+    The running centroid used here to decide whether a new hit merges into an existing cluster is weight-aware (tracks a running weighted sum and weighted total, exactly like ``_centroid()``'s formula), so it stays consistent with the final stored suggestion centroid computed by ``_centroid()`` once the cluster is complete.
 
     Args:
         hits: Unmatched hits to cluster.
         radius_m: Merge distance in metres.
 
     Returns:
-        List of hit groups, each destined to become one new-pin suggestion.
-    """
+        List of hit groups, each destined to become one new-pin suggestion."""
     clusters: list[list[LocationHit]] = []
     centroids: list[tuple[float, float]] = []
     weights: list[int] = []
@@ -503,16 +452,11 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
 def excluded_suggestion_origins(profile: Profile) -> list[PinSuggestionOrigin]:
     """Which ``PinSuggestionOrigin`` values this profile has turned off.
 
-    Callers that want the "everything off" case too (``pin_suggestions_enabled``
-    is False) should check that flag separately - see ``pending_suggestions_for_profile``,
-    which is the one place both concerns are combined.
-
     Args:
         profile: Profile whose suggestion-source settings to read.
 
     Returns:
-        Origins this profile no longer wants suggestions for.
-    """
+        Origins this profile no longer wants suggestions for."""
     excluded: list[PinSuggestionOrigin] = []
     if not profile.suggest_public_pins:
         excluded.append(PinSuggestionOrigin.COMMUNITY)
@@ -525,18 +469,13 @@ def excluded_suggestion_origins(profile: Profile) -> list[PinSuggestionOrigin]:
 
 def pending_suggestions_for_profile(profile: Profile) -> QuerySet[PinSuggestion]:
     """Pending suggestions this profile currently wants to see.
-
-    Respects both the master ``pin_suggestions_enabled`` switch and the
-    per-source toggles (``suggest_public_pins``, ``suggest_pins_from_photos``,
-    ``suggest_pins_from_external_apis``) - suggestions excluded this way are
-    hidden, not deleted, so flipping a toggle back on restores them.
+    Respects both the master ``pin_suggestions_enabled`` switch and the per-source toggles (``suggest_public_pins``, ``suggest_pins_from_photos``, ``suggest_pins_from_external_apis``) - suggestions excluded this way are hidden, not deleted, so flipping a toggle back on restores them.
 
     Args:
         profile: Owner whose pending suggestions to fetch.
 
     Returns:
-        Unordered, unfetched queryset of matching ``PinSuggestion`` rows.
-    """
+        Unordered, unfetched queryset of matching ``PinSuggestion`` rows."""
     qs = PinSuggestion.objects.for_profile(profile).pending()
     if not profile.pin_suggestions_enabled:
         return qs.none()
@@ -548,10 +487,7 @@ def pending_suggestions_for_profile(profile: Profile) -> QuerySet[PinSuggestion]
 
 def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: PinSuggestionOrigin) -> IngestSummary:
     """Match/cluster a batch of location hits into PinSuggestion rows.
-
-    Re-running this with overlapping hits (e.g. a repeated Immich sweep, or
-    uploading local-scan results twice) merges into existing pending
-    suggestions rather than creating duplicates.
+    Re-running this with overlapping hits (e.g. a repeated Immich sweep, or uploading local-scan results twice) merges into existing pending suggestions rather than creating duplicates.
 
     Args:
         profile: Owner the hits belong to.
@@ -563,8 +499,7 @@ def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: 
         the profile has turned off visit-history tracking (a PinSuggestion is
         itself a location-history trail) or has turned off pin suggestions
         entirely or for this particular ``origin`` - see
-        ``excluded_suggestion_origins``.
-    """
+        ``excluded_suggestion_origins``."""
     if not visit_logging_allowed(profile):
         return IngestSummary(matched_suggestions=0, new_pin_suggestions=0, hits_processed=0)
     if not profile.pin_suggestions_enabled or origin in excluded_suggestion_origins(profile):
@@ -580,10 +515,9 @@ def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: 
                 suggestion_ids_by_key[hit.source_key] = suggestion.pk
 
     clusters = _cluster_hits(unmatched, CLUSTER_RADIUS_M)
-    # Fetched once here rather than inside _find_nearby_pending_new_pin_suggestion
-    # per cluster - _upsert_new_pin_suggestion appends newly-created suggestions
-    # to this same list, so later clusters in this loop still see them without
-    # any further database queries.
+    # Fetched once here rather than inside _find_nearby_pending_new_pin_suggestion per cluster -
+    # _upsert_new_pin_suggestion appends newly-created suggestions to this same list, so later
+    # clusters in this loop still see them without any further database queries.
     pending_new_pin_suggestions = list(PinSuggestion.objects.filter(profile=profile, pin__isnull=True, status=PinSuggestionStatus.PENDING))
     for cluster in clusters:
         suggestion = _upsert_new_pin_suggestion(profile, cluster, origin, pending_new_pin_suggestions)
@@ -610,10 +544,10 @@ def _delete_image_with_file(image: Image) -> None:
     image.delete()
 
 
-#: Photo download bounds for attach_suggestion_photos - same order of
-#: magnitude as services.media.media_materialize's own (a candidate preview photo,
-#: not a multi-megapixel original), kept as separate constants since the two
-#: modules have no reason to share private config.
+#: Photo download bounds for attach_suggestion_photos - same order of magnitude as
+#: services.media.media_materialize's own (a candidate preview photo, not a multi-megapixel
+#: original), kept as separate constants since the two modules have no reason to share private
+#: config.
 _PHOTO_DOWNLOAD_TIMEOUT = 15
 _MAX_PHOTO_DOWNLOAD_BYTES = 20 * 1024 * 1024
 _MAX_PHOTO_REDIRECTS = 5
@@ -641,15 +575,7 @@ def _filename_from_url(url: str) -> str:
 
 def _download_photo_bytes(url: str) -> bytes:
     """Follow redirects (each hop pinned to its validated address) and return the bytes.
-
-    Delegates the redirect-following loop to
-    ``services.media.media_materialize.fetch_with_revalidated_redirects`` (shared
-    with that module and ``services.ai.link_extraction.fetch_page_text`` -
-    previously each had its own copy of this loop). A rejected hop or an
-    exhausted redirect chain raises ``UnsafeUrlError``, which is already in
-    ``attach_suggestion_photos``'s except clause alongside
-    ``SuggestionPhotoError``, so no translation is needed here.
-    """
+    A rejected hop or an exhausted redirect chain raises ``UnsafeUrlError``, which is already in ``attach_suggestion_photos``'s except clause alongside ``SuggestionPhotoError``, so no translation is needed here."""
     response = fetch_with_revalidated_redirects(url, max_redirects=_MAX_PHOTO_REDIRECTS, timeout=_PHOTO_DOWNLOAD_TIMEOUT, headers=_PHOTO_DOWNLOAD_HEADERS)
     response.raise_for_status()
     return response.raw.read(_MAX_PHOTO_DOWNLOAD_BYTES + 1, decode_content=True)
@@ -657,15 +583,7 @@ def _download_photo_bytes(url: str) -> bytes:
 
 def attach_suggestion_photos(suggestion: PinSuggestion, photo_urls: list[str], profile: Profile) -> list[Image]:
     """Download submitted photo urls and stage them as candidate images on a suggestion.
-
-    Mirrors ``services.media.media_materialize.materialize_media_item``'s
-    download/redirect/quota handling (manual redirect-following so every hop
-    is resolved once and connected to at that address, leaving no second
-    resolution for a DNS rebind to answer), but stages the result
-    against a ``PinSuggestion`` (candidate, not yet a real gallery photo)
-    instead of a Pin/Wiki gallery. Stops once ``MAX_SUGGESTION_PHOTOS`` is
-    reached; urls beyond the cap are silently dropped, same as an Immich
-    cluster's ``sample_assets``.
+    Mirrors ``services.media.media_materialize.materialize_media_item``'s download/redirect/quota handling (manual redirect-following so every hop is resolved once and connected to at that address, leaving no second resolution for a DNS rebind to answer), but stages the result against a ``PinSuggestion`` (candidate, not yet a real gallery photo) instead of a Pin/Wiki gallery.
 
     Args:
         suggestion: The pending suggestion to attach photos to.
@@ -675,8 +593,7 @@ def attach_suggestion_photos(suggestion: PinSuggestion, photo_urls: list[str], p
     Returns:
         The newly-created candidate ``Image`` rows, still ``pending_scan``
         (may be shorter than ``photo_urls`` - unreachable, oversized, or
-        over-quota urls are skipped rather than failing the whole batch).
-    """
+        over-quota urls are skipped rather than failing the whole batch)."""
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import process_image_upload
 
@@ -709,10 +626,10 @@ def attach_suggestion_photos(suggestion: PinSuggestion, photo_urls: list[str], p
                 checksum=checksum,
                 file_size=len(content),
                 pin_suggestion=suggestion,
-                # Bytes from a url an external caller submitted - the same
-                # untrusted-provider case as media_materialize and the import
-                # tasks. Quarantined on create; process_image_upload scans,
-                # strips and normalises before anyone but the owner sees it.
+                # Bytes from a url an external caller submitted - the same untrusted-provider case
+                # as media_materialize and the import tasks.
+                # Quarantined on create; process_image_upload scans, strips and normalises before
+                # anyone but the owner sees it.
                 pending_scan=True,
             )
         safely_enqueue_task(process_image_upload, image.pk)
@@ -744,18 +661,11 @@ class AcceptResult:
 
 def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
     """Enrich ``pin`` with a suggestion's description/pin_type/aliases/links, additively.
-
-    Unlike ``suggested_name`` (only ever applied through the two branches in
-    ``accept_pin_suggestion`` that resolve ``pin`` in the first place), this
-    runs for both a brand-new pin and one that already matched the
-    suggestion's cluster - gaining a newly-discovered alias or link is safe
-    even for a pin the user already fully set up themselves, since it never
-    overwrites anything already there.
+    Unlike ``suggested_name`` (only ever applied through the two branches in ``accept_pin_suggestion`` that resolve ``pin`` in the first place), this runs for both a brand-new pin and one that already matched the suggestion's cluster - gaining a newly-discovered alias or link is safe even for a pin the user already fully set up themselves, since it never overwrites anything already there.
 
     Args:
         pin: The reused or newly-created pin (already saved).
-        suggestion: The suggestion being accepted.
-    """
+        suggestion: The suggestion being accepted."""
     update_fields = []
     if suggestion.suggested_description and not pin.description:
         pin.description = suggestion.suggested_description
@@ -774,10 +684,9 @@ def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
         for alias_name in suggestion.suggested_aliases:
             if not alias_name or alias_name.casefold() in existing_alias_names:
                 continue
-            # A user who deleted this exact alias before must not have it silently
-            # recreated the next time a suggestion for the same pin is accepted -
-            # matches every other auto-creation path (services.ai.link_extraction,
-            # services.locations.naming).
+            # A user who deleted this exact alias before must not have it silently recreated the
+            # next time a suggestion for the same pin is accepted - matches every other
+            # auto-creation path (services.ai.link_extraction, services.locations.naming).
             if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.ALIAS, value=alias_name):
                 continue
             try:
@@ -839,27 +748,7 @@ def accept_pin_suggestion(
     fetch_if_missing: bool = True,
 ) -> AcceptResult:
     """Accept a pending PinSuggestion: reuse/create its pin and log any missing dated visits.
-
-    Mirrors ``services.memories.photos.create_pin_and_log_visit`` for the new-pin
-    case (resolve Location, reuse-or-create a minimal Pin, apply the suggested
-    name only if the pin has none yet) and ``services.visits.visits.accept_visit_suggestion``
-    for the visit-logging case, except one ``PinVisit`` is created per distinct
-    date in ``suggestion.visit_dates`` rather than a single one - a batch scan
-    commonly finds several separate visits to the same place.
-
-    Any candidate photos the user selected (``image_ids`` - local-scan opt-in
-    uploads staged against this suggestion; ``asset_ids`` - Immich assets from
-    ``suggestion.sample_assets``) are attached to the pin and to whichever
-    visit matches their capture date. Selected local images graduate from
-    candidate to real gallery photos; unselected ones are deleted along with
-    their stored files, since they have no further purpose once the
-    suggestion is resolved.
-
-    An external-API suggestion's ``suggested_description``/``suggested_pin_type``
-    are also applied (only when the pin doesn't already have one of its own -
-    see ``_apply_suggested_enrichment``), and its ``suggested_aliases``/
-    ``suggested_links`` become ``PinAlias``/``PinLink`` rows unconditionally -
-    this enrichment runs for a matched existing pin too, not just a new one.
+    Mirrors ``services.memories.photos.create_pin_and_log_visit`` for the new-pin case (resolve Location, reuse-or-create a minimal Pin, apply the suggested name only if the pin has none yet) and ``services.visits.visits.accept_visit_suggestion`` for the visit-logging case, except one ``PinVisit`` is created per distinct date in ``suggestion.visit_dates`` rather than a single one - a batch scan commonly finds several separate visits to the same place.
 
     Args:
         suggestion: The pending suggestion being accepted.
@@ -885,8 +774,7 @@ def accept_pin_suggestion(
 
     Returns:
         An :class:`AcceptResult` describing the pin, any newly-created visits,
-        and any selected Immich assets still to be imported by the caller.
-    """
+        and any selected Immich assets still to be imported by the caller."""
     if suggestion.pin_id is not None:
         matched_pin = suggestion.pin
         if matched_pin is None:

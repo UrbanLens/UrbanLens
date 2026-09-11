@@ -21,12 +21,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Google place/geocoding "types" that identify an administrative area or other
-# coarse region rather than a specific point of interest. A geocoding result
-# carrying only these types names the *surroundings* (a city, neighborhood,
-# postal code, ...), not the pinned place, so it must not be handed back as a
-# usable place name (see ``get_place_name`` below and its sibling filter on
-# ``GooglePlacesNameResolver`` in ``services.locations.google``).
+# Google place/geocoding "types" that identify an administrative area or other coarse region rather
+# than a specific point of interest.
+# A geocoding result carrying only these types names the *surroundings* (a city, neighborhood,
+# postal code, ...), not the pinned place, so it must not be handed back as a usable place name (see
 LOCALITY_PLACE_TYPES: frozenset[str] = frozenset(
     {
         "locality",
@@ -57,18 +55,13 @@ LOCALITY_PLACE_TYPES: frozenset[str] = frozenset(
 def parse_address_components(address_components: list[dict[str, Any]]) -> dict[str, str]:
     """Flatten a geocoding result's ``address_components`` into a type -> value map.
 
-    Most fields prefer ``short_name`` (e.g. state abbreviations like "CA"), but
-    ``country`` is stored under its own key using ``long_name`` (e.g. "Germany")
-    since the ISO short code (e.g. "DE") isn't a useful display value.
-
     Args:
         address_components: The ``address_components`` list from a single
             Google Geocoding API result.
 
     Returns:
         Mapping of Google address component type (e.g. ``"locality"``,
-        ``"country"``) to its parsed value.
-    """
+        ``"country"``) to its parsed value."""
     type_map: dict[str, str] = {}
     country_name = ""
     for comp in address_components:
@@ -93,11 +86,10 @@ class GoogleGeocodingGateway(Gateway):
     def __post_init__(self) -> None:
         Gateway.__post_init__(self)
         if not self.api_key:
-            # Deliberately does not raise - most callers (e.g. pin import's CSV/URL
-            # parsing) construct this gateway before knowing whether any row will
-            # actually need a live Google lookup (S2-cell CID decoding and plain
-            # lat/lon columns never do). The network-calling methods below each
-            # check self.api_key themselves and degrade gracefully instead.
+            # Deliberately does not raise - most callers (e.g. pin import's CSV/URL parsing)
+            # construct this gateway before knowing whether any row will actually need a live Google
+            # lookup (S2-cell CID decoding and plain lat/lon columns never do).
+            # The network-calling methods below each check self.api_key themselves and degrade
             logger.debug("GoogleGeocodingGateway constructed with no API key configured - geocoding calls will be skipped.")
 
     def decode_place_name(self, place_name: str) -> str:
@@ -226,22 +218,15 @@ class GoogleGeocodingGateway(Gateway):
 
     def get_place_name(self, latitude: float | Decimal, longitude: float | Decimal) -> str | None:
         """Return the formatted address of the most relevant non-administrative geocoding result.
-
-        Results whose ``types`` are entirely administrative/regional (a bare
-        "locality" hit for a rural pin with no closer address, an
-        "administrative_area_level_*", a "postal_code", ...) name the
-        surrounding area rather than the pinned place, so they are skipped in
-        favor of the first result with at least one finer-grained type (e.g.
-        "street_address", "premise", "establishment").
+        Results whose ``types`` are entirely administrative/regional (a bare "locality" hit for a rural pin with no closer address, an "administrative_area_level_*", a "postal_code", ...) name the surrounding area rather than the pinned place, so they are skipped in favor of the first result with at least one finer-grained type (e.g.
 
         Args:
-            latitude: WGS-84 latitude.
-            longitude: WGS-84 longitude.
+                latitude: WGS-84 latitude.
+                longitude: WGS-84 longitude.
 
         Returns:
-            The winning result's formatted address, or None when geocoding
-            failed or every result was purely administrative.
-        """
+                The winning result's formatted address, or None when geocoding
+                failed or every result was purely administrative."""
         if latitude is None or longitude is None:
             logger.error("Latitude and longitude must be provided to get_place_name.")
             return None
@@ -299,19 +284,12 @@ class GoogleGeocodingGateway(Gateway):
     def get_cached_coordinates_by_cid(cid: int) -> tuple[float, float] | None:
         """Read a previously-resolved CID's coordinates from the cache, without ever calling the API.
 
-        Safe to call from a synchronous request/response path (e.g. the pin
-        import preview/confirm flow) where a live Places Details call would be
-        too slow - a cid with no cache entry yet needs
-        :meth:`get_coordinates_by_cid` (or an equivalent live lookup) instead,
-        run from background work.
-
         Args:
-            cid: Decimal CID value derived from the hex identifier in a Google
+                cid: Decimal CID value derived from the hex identifier in a Google
                 Maps place URL.
 
         Returns:
-            ``(latitude, longitude)`` on a cache hit, else ``None``.
-        """
+                ``(latitude, longitude)`` on a cache hit, else ``None``."""
         cache_key = f"cid:{cid}"
         cached = GeocodedLocation.objects.filter(place_name=cache_key).first()
         if not cached:
@@ -333,15 +311,11 @@ class GoogleGeocodingGateway(Gateway):
     def get_coordinates_by_cid(self, cid: int) -> tuple[float | None, float | None]:
         """Look up coordinates by Google Maps CID via the Places Details API.
 
-        CIDs are extracted from the ``!1s0x...`` segment of Google Maps place URLs.
-        Results are cached in :class:`GeocodedLocation` under the key ``cid:{cid}``.
-
         Args:
-            cid: Decimal CID value derived from the hex identifier in the URL.
+                cid: Decimal CID value derived from the hex identifier in the URL.
 
         Returns:
-            Tuple of (latitude, longitude), or (None, None) if the lookup fails.
-        """
+                Tuple of (latitude, longitude), or (None, None) if the lookup fails."""
         cached = self.get_cached_coordinates_by_cid(cid)
         if cached:
             return cached
@@ -351,10 +325,10 @@ class GoogleGeocodingGateway(Gateway):
             logger.debug("Skipping Places Details lookup for CID %d - no API key configured.", cid)
             return None, None
 
-        # Places Details does not accept a bare "cid" parameter - the CID must be
-        # passed as a "place_id" using the "cid:{cid}" prefix form. See the
-        # diagnose_places_api management command (Test 4 vs Test 5) for the
-        # confirmed comparison between the broken and working request shapes.
+        # Places Details does not accept a bare "cid" parameter - the CID must be passed as a
+        # "place_id" using the "cid:{cid}" prefix form.
+        # See the diagnose_places_api management command (Test 4 vs Test 5) for the confirmed
+        # comparison between the broken and working request shapes.
         params = {"place_id": f"cid:{cid}", "fields": "geometry", "key": self.api_key}
         response = self.session.get(
             "https://maps.googleapis.com/maps/api/place/details/json",
@@ -394,16 +368,14 @@ class GoogleGeocodingGateway(Gateway):
         return float(lat), float(lng)
 
     def _imprecise_guess_s2_cell(self, s2_hex: str) -> tuple[float | None, float | None]:
-        """Decode an S2 cell ID hex string to (latitude, longitude). This is inaccurate
-        around 30% of the time. Only use it for quick previews of likely coordinates
-        when we don't want to contact an external API to get precise ones.
+        """Decode an S2 cell ID hex string to (latitude, longitude).
+        Only use it for quick previews of likely coordinates when we don't want to contact an external API to get precise ones.
 
         Args:
-            s2_hex: Hex string of the S2 cell ID (without 0x prefix).
+                s2_hex: Hex string of the S2 cell ID (without 0x prefix).
 
         Returns:
-            Tuple of (latitude, longitude), or (None, None) if decoding fails.
-        """
+                Tuple of (latitude, longitude), or (None, None) if decoding fails."""
         cell = s2sphere.CellId(int(s2_hex, 16))
         if not cell.is_valid():
             return None, None
@@ -417,20 +389,11 @@ class GoogleGeocodingGateway(Gateway):
     def extract_coordinates_from_url(self, url: str) -> tuple[float | None, float | None]:
         """Extract latitude and longitude from a Google Maps URL.
 
-        Handles:
-
-        - ``/maps/search/{lat},{lon}`` - direct coordinates, no API call needed.
-        - ``/maps/place/{name}/data=...`` - S2 cell decoded from the ``!1s0x{CELL}:0x{CID}``
-          segment (precise, no API call, works for all locations including residential
-          addresses). Falls back to CID lookup, then geocoding by place name.
-        - ``/maps/place/{name}`` - geocoding by place name only.
-
         Args:
-            url: Google Maps URL to parse.
+                url: Google Maps URL to parse.
 
         Returns:
-            Tuple of (latitude, longitude), or (None, None) when extraction fails.
-        """
+                Tuple of (latitude, longitude), or (None, None) when extraction fails."""
         # Direct coordinates: .../maps/search/42.960773,-74.250664
         m = re.search(
             r"maps/search/(?P<lat>-?[0-9]+\.[0-9]+),(?P<lon>-?[0-9]+\.[0-9]+)",

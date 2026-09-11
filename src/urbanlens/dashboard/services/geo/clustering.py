@@ -1,15 +1,4 @@
-"""Finding the densest group of points without comparing every pair.
-
-The obvious formulation - "which point has the most neighbours within R" - is one
-great-circle calculation per *pair*, which at 20,000 pins was about seven minutes
-of a process serving nothing (P108). A spatial histogram answers the same
-question in one pass plus a bounded number of dictionary lookups.
-
-The seed cell is an approximation; cluster membership and the centroid are exact.
-Compared against the pairwise scan they agree wherever the points have a densest
-region at all, and diverge only where the question has no single answer - two
-equal concentrations, or points spread evenly. See `test_geo_clustering.py`.
-"""
+"""Finding the densest group of points without comparing every pair."""
 
 from __future__ import annotations
 
@@ -36,10 +25,10 @@ _CELL_FRACTION = 0.5
 #: radius it is meant to approximate.
 _BLOCK_RADIUS = 1
 
-#: Passes of "take the points within the radius, move to their centre". Two is
-#: enough to leave the histogram's cell geometry behind; the cost is one
-#: great-circle calculation per point per pass, so this is the constant the
-#: scaling test in ``test_map_center_scaling.py`` measures.
+#: Passes of "take the points within the radius, move to their centre".
+#: Two is enough to leave the histogram's cell geometry behind; the cost is one great-circle
+#: calculation per point per pass, so this is the constant the scaling test in
+#: ``test_map_center_scaling.py`` measures.
 _REFINEMENT_PASSES = 2
 
 Point = tuple[float, float]
@@ -120,18 +109,14 @@ def _block_total(occupancy: Counter[tuple[int, int, int]], cell: tuple[int, int,
 
 def _cell_of(point: Point, radius_km: float) -> tuple[int, int, int]:
     """Which cell of the lattice a point falls in.
-
-    Cells are cut from a cubic lattice in the unit sphere's own coordinates
-    rather than from a latitude/longitude grid, because lat/lng cells shrink
-    towards the poles and would make polar accounts look artificially dense.
+    Cells are cut from a cubic lattice in the unit sphere's own coordinates rather than from a latitude/longitude grid, because lat/lng cells shrink towards the poles and would make polar accounts look artificially dense.
 
     Args:
         point: ``(latitude, longitude)`` in degrees.
         radius_km: The clustering radius, which sets the cell size.
 
     Returns:
-        The cell's integer index on each axis.
-    """
+        The cell's integer index on each axis."""
     side = _CELL_FRACTION * _chord_length(radius_km)
     latitude, longitude = math.radians(point[0]), math.radians(point[1])
     cos_latitude = math.cos(latitude)
