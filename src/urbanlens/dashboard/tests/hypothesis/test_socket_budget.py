@@ -32,6 +32,7 @@ from channels.testing import WebsocketCommunicator
 from django.test import TransactionTestCase, override_settings
 from model_bakery import baker
 
+from urbanlens.core.tests import socket_clients
 from urbanlens.core.tests.fake_redis import FakeRedis
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer
@@ -351,18 +352,10 @@ class EverySocketClientBacksOffOnTheRefusalTests(SimpleTestCase):
 
     def _hand_rolled_clients(self) -> list[pathlib.Path]:
         """Every file that constructs a WebSocket and so owns its own onclose."""
-        roots = (
+        return socket_clients.hand_rolled(
             REPO_ROOT / "src" / "urbanlens" / "dashboard" / "templates",
             REPO_ROOT / "src" / "urbanlens" / "dashboard" / "frontend" / "ts",
         )
-        found = []
-        for root in roots:
-            for path in root.rglob("*"):
-                if path.suffix not in {".html", ".ts"} or path.name.endswith(".test.ts"):
-                    continue
-                if "new WebSocket(" in path.read_text(encoding="utf-8", errors="ignore"):
-                    found.append(path)
-        return found
 
     def test_the_scan_finds_the_clients_it_is_meant_to_guard(self) -> None:
         """An empty list would satisfy the assertion below."""
@@ -375,9 +368,54 @@ class EverySocketClientBacksOffOnTheRefusalTests(SimpleTestCase):
     def test_each_handles_the_capacity_refusal(self) -> None:
         for path in self._hand_rolled_clients():
             with self.subTest(path.name):
+                source = socket_clients.executable_source(path.read_text(encoding="utf-8"))
+
                 self.assertIn(
                     self.CODE,
-                    path.read_text(encoding="utf-8"),
-                    f"{path.relative_to(REPO_ROOT)} constructs a WebSocket but does not handle close {self.CODE}, "
-                    "so a refused connection would be retried on the ordinary backoff",
+                    source,
+                    f"{path.relative_to(REPO_ROOT)} constructs a WebSocket but does not handle close {self.CODE} "
+                    "anywhere outside a comment, so a refused connection would be retried on the ordinary backoff",
                 )
+
+
+class TheRefusalScanReadsCodeNotCommentsTests(SimpleTestCase):
+    """The scan above is satisfied by any occurrence of the string.
+
+    Every file it guards happens to explain the close code in a comment next to
+    the branch that handles it, so a file that kept the comment and lost the
+    branch - a refactor, a bad merge - would still pass. Strip comments before
+    looking, and prove on synthetic text that the stripping is what makes the
+    difference.
+    """
+
+    def test_a_comment_only_mention_does_not_count(self) -> None:
+        text = """
+        ws.onclose = function (ev) {
+            // 4429 means the account is at its socket ceiling.
+            setTimeout(connect, retryDelay);
+        };
+        """
+
+        self.assertNotIn("4429", socket_clients.executable_source(text))
+
+    def test_a_block_comment_only_mention_does_not_count(self) -> None:
+        text = "/*\n * Close 4429 is the capacity refusal.\n */\nsetTimeout(connect, 1000);"
+
+        self.assertNotIn("4429", socket_clients.executable_source(text))
+
+    def test_a_template_comment_only_mention_does_not_count(self) -> None:
+        text = "<!-- close 4429 is the capacity refusal -->\n<script>connect();</script>"
+
+        self.assertNotIn("4429", socket_clients.executable_source(text))
+
+    def test_a_real_branch_still_counts(self) -> None:
+        """The anti-vacuity half: stripping that removed everything would pass above."""
+        text = "if (ev.code === 4429) { retryDelay = maxDelay; }"
+
+        self.assertIn("4429", socket_clients.executable_source(text))
+
+    def test_a_protocol_scheme_is_not_a_comment(self) -> None:
+        """`'wss://'` opens no comment, and a naive strip would eat the branch after it."""
+        text = "var ws = new WebSocket('wss://' + host); if (ev.code === 4429) { stop(); }"
+
+        self.assertIn("4429", socket_clients.executable_source(text))
