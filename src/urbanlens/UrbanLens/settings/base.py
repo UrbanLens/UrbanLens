@@ -1289,6 +1289,11 @@ EMAIL_HOST_PASSWORD = os.getenv("UL_EMAIL_PASSWORD", "")
 EMAIL_USE_TLS = env_bool("UL_EMAIL_TLS", default=True)
 EMAIL_USE_SSL = env_bool("UL_EMAIL_USE_SSL", default=False)
 DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
+# Without this Django passes no timeout to smtplib, so a mail server that hangs
+# rather than refuses holds the worker thread for as long as it stays silent.
+# The inbound throttle on signup/reset caps how often mail is sent, not how long
+# a send may take, so the two are needed together.
+EMAIL_TIMEOUT = _app_settings.email_timeout
 # Canonical base URL used to build absolute links in emails/notifications sent
 # from contexts with no HttpRequest to build them from (e.g. Celery tasks).
 _site_url_env = os.getenv("UL_SITE_URL")

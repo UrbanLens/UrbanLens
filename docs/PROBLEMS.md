@@ -4266,6 +4266,29 @@ Two corrections to the audit came out of building it, both of which would have b
   normal deployment the route does not exist. Throttled anyway, because a demo instance is still a
   deployment.
 
+**A rate limit bounds frequency, not duration** (2026-09-12). The throttle closed H17 and H50, and
+H51's first half, but H51 named two things and the second survived it: every one of those endpoints
+sends mail synchronously, and `EMAIL_TIMEOUT` was never set, so Django passed **no** `timeout` to
+`smtplib` at all and the socket inherited the process-wide default — no deadline. Ten permitted calls
+per address against a mail server that hangs rather than refuses is ten workers held for as long as
+it stays silent, and the identity is an IP, so the ten is per attacker rather than in total. This
+needs no attacker: a filtered port, a provider throttling a sender, or DNS pointing at something that
+swallows packets all produce the same hang. `EMAIL_TIMEOUT` is now `app.email_timeout`, default 10s.
+
+Two things that fix does *not* do, recorded so neither is mistaken for done:
+
+- **It is a per-operation deadline, not a budget for the send.** The socket timeout restarts on each
+  blocking call, so a server that trickles one byte every nine seconds holds the connection
+  indefinitely. Exploiting that means controlling the mail server this site sends *to*, which is our
+  own configured host — so the realistic failure, an ordinary hang, is bounded, and the residual
+  needs the mail provider compromised first. The same shape as the per-call-timeout finding in the
+  picker work: N calls at a per-call timeout is still N × timeout with no wall clock over it.
+- **Mail is still on the request path.** The deadline caps the damage; it does not move the work. The
+  real fix is sending it from a Celery task, which is now possible since D13 gave the queues classes
+  — the interactive class is the right pool. Not done here because signup's failure branch writes a
+  `debug_verify_url` into the session, so moving the send changes what the user sees when mail fails,
+  and that is a product call.
+
 **The other four families are not fixed.** Each needs its own decision about where the ceiling goes,
 and several change what a user sees when they hit it — which is a product call, not a technical one.
 Recorded so the choices are made deliberately rather than discovered during an outage.
