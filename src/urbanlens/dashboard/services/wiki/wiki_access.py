@@ -108,6 +108,13 @@ def _earn_aggregates(domains: set[int]) -> set[int]:
     A1 and A2 earns A, which together with B then earns the campus. A user
     proves knowledge of the whole by proving knowledge of every part.
 
+    Walks up from the domains already held rather than sweeping the site's
+    aggregates: an aggregate is earned only when *every* member is held, so one
+    with no held member can never be earned and never needs reading. That keeps
+    the cost of an access check - which runs on every wiki page and every
+    non-owned media fetch - proportional to the viewer's own reach instead of to
+    how many places everyone else has split up.
+
     Args:
         domains: Domain roots already accessible. Not mutated.
 
@@ -116,26 +123,27 @@ def _earn_aggregates(domains: set[int]) -> set[int]:
     """
     from urbanlens.dashboard.models.place.model import Place, PlaceRelation
 
-    aggregate_roots = dict(Place.objects.filter(is_aggregate=True).values_list("pk", "domain_root_id"))
-    if not aggregate_roots:
-        return set(domains)
-
-    members: dict[int, set[int]] = {}
-    for parent_id, child_root in Place.objects.filter(parent_id__in=list(aggregate_roots), parent_relation=PlaceRelation.MEMBER_OF).values_list("parent_id", "domain_root_id"):
-        members.setdefault(parent_id, set()).add(child_root)
-
     earned = set(domains)
+    # A null-rooted place is unreachable by definition (see place_visible_to),
+    # so it can neither be a frontier nor complete an aggregate.
+    frontier = {root for root in earned if root is not None}
+
     for _ in range(MAX_EARNING_ROUNDS):
-        added = False
-        for aggregate_id, member_roots in members.items():
-            root = aggregate_roots[aggregate_id]
-            if root in earned or not member_roots:
-                continue
-            if member_roots <= earned:
-                earned.add(root)
-                added = True
-        if not added:
+        if not frontier:
             return earned
+        candidate_ids = set(Place.objects.filter(parent_relation=PlaceRelation.MEMBER_OF, parent__is_aggregate=True, domain_root_id__in=frontier).values_list("parent_id", flat=True))
+        if not candidate_ids:
+            return earned
+
+        members: dict[int, set[int]] = {}
+        for parent_id, child_root in Place.objects.filter(parent_id__in=candidate_ids, parent_relation=PlaceRelation.MEMBER_OF).values_list("parent_id", "domain_root_id"):
+            members.setdefault(parent_id, set()).add(child_root)
+        covered = [parent_id for parent_id, member_roots in members.items() if member_roots <= earned]
+        if not covered:
+            return earned
+
+        frontier = {root for root in Place.objects.filter(pk__in=covered).values_list("domain_root_id", flat=True) if root is not None and root not in earned}
+        earned |= frontier
     return earned
 
 
