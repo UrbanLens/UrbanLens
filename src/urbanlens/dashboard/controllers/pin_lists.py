@@ -579,7 +579,18 @@ class PinListReorderView(LoginRequiredMixin, View):
         pin_list = _get_pin_list_or_404(list_slug, profile)
         body = _parse_body(request)
 
-        item_ids = [int(entry["id"]) for entry in body.get("items", []) if str(entry.get("id", "")).isdigit()]
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+        from urbanlens.dashboard.services.core.reorder_limits import UNLIMITED_LIST_FALLBACK, reorder_id_ceiling
+
+        submitted = body.get("items", [])
+        # Counted before the ids are read out, so an oversized body is not walked
+        # first. The ceiling is the list's own pin limit: naming more items than
+        # the list may hold is not a reorder.
+        ceiling = reorder_id_ceiling(SiteSettings.get_current().max_pins_per_list, UNLIMITED_LIST_FALLBACK)
+        if len(submitted) > ceiling:
+            return HttpResponse(f"Reorder at most {ceiling} items at a time.", status=400)
+
+        item_ids = [int(entry["id"]) for entry in submitted if str(entry.get("id", "")).isdigit()]
         reorder_list_items(pin_list, item_ids)
         return HttpResponse(status=200)
 

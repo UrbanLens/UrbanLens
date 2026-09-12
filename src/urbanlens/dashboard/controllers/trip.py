@@ -739,8 +739,18 @@ class TripApplySuggestedOrderView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+        from urbanlens.dashboard.services.core.reorder_limits import UNLIMITED_TRIP_FALLBACK, reorder_id_ceiling
+
+        submitted = body.get("order") or []
+        # The trip's own activity limit, for the same reason the list reorder
+        # uses its pin limit - and counted before the values are converted.
+        ceiling = reorder_id_ceiling(SiteSettings.get_current().max_trip_activities, UNLIMITED_TRIP_FALLBACK)
+        if len(submitted) > ceiling:
+            return HttpResponse(f"Reorder at most {ceiling} activities at a time.", status=400)
+
         try:
-            order = [int(value) for value in (body.get("order") or [])]
+            order = [int(value) for value in submitted]
         except (TypeError, ValueError):
             return HttpResponse("Invalid order.", status=400)
 
