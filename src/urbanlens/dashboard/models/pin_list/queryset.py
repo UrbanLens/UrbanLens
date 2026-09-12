@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import Q
+from django.db.models import Count, Q
 
 from urbanlens.dashboard.models import abstract
 
@@ -14,6 +14,20 @@ if TYPE_CHECKING:
 
 class PinListQuerySet(abstract.PublicDashboardQuerySet):
     """Custom queryset for PinList models."""
+
+    def with_pin_counts(self) -> PinListQuerySet:
+        """Annotate each list's pin count so ``pin_count`` costs no rows.
+
+        The alternative a caller reaches for is ``prefetch_related("items")``,
+        which fetches every membership row (and with ``items__pin``, every pin)
+        to produce one integer per list.
+
+        Returns:
+            The queryset with ``_pin_count`` annotated, which
+            :attr:`~urbanlens.dashboard.models.pin_list.model.PinList.pin_count`
+            prefers over counting rows in Python.
+        """
+        return self.annotate(_pin_count=Count("items", distinct=True))
 
     def for_profile(self, profile: Profile | int) -> PinListQuerySet:
         """Every list owned by ``profile`` (accepts a Profile instance or a raw pk).

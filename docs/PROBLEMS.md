@@ -4404,6 +4404,41 @@ Still open here: the `truncated` flag the listing returns is read by nothing. Th
 in JSON and invisible to the person looking at the map. The photo layer already solved this
 (`map-annotations.ts` renders a note only when capped); markup should match it.
 
+**H29 and H48 are fixed** (2026-09-12). The Organize lists panel ran
+`prefetch_related("items__pin")` and the template used exactly one thing from it -
+`pin_list.pin_count`, which is `len(self.items.all())`. So every pin on every list the profile owns
+was fetched and built into a model instance to produce an integer the database can count without
+sending a row, and the `pin_count` sort materialised the whole queryset in Python on top of that.
+Measured before the fix: 54 extra model objects for 27 extra pins - exactly two per pin, the
+`PinListItem` and the `Pin`. `with_pin_counts()` annotates the count and the sort moves into SQL.
+
+The test states the invariant as "adding pins must not change what the panel costs" rather than as
+a fixed object budget, because the panel renders one card per list either way - the axis that
+matters is pins, and a fixed budget would need recalibrating whenever a card grows a field.
+
+H48: `/costs/` is anonymous, gated only by a SiteSettings flag, and every GET ran seven
+cost-tracking helpers - `active_user_count` joins every user against every pin they own, and
+`cost_per_user` and `cost_per_supporter` each call `effective_monthly_cost` again. Twelve queries
+per view, uncached, for a page a crawler can hold open. Only the figures are cached, never the
+response: `cache_page` would have kept serving a page after an admin switched the toggle off, so the
+gate runs every request and the window only covers numbers that are trailing aggregates anyway.
+
+**A stale performance record, not a regression** (2026-09-12). `test_pin_list_query_fingerprint` was
+failing on the branch before any of this work - confirmed by reverting to HEAD and re-running. Two
+committed improvements changed the external-API pin list's SQL and nobody re-recorded the fixture:
+`0fab2b35a` moved `child_count` from `Count(distinct=True)` (which makes the planner sort the whole
+join product) to a scalar subquery, and `07e608367` inlined the media-relevance exclusion as
+`~Exists` instead of a separate SELECT. The re-recorded fixture is two queries shorter with no
+GROUP BY and nothing else changed. Worth stating because the first reading of it looked like
+`child_count` had been silently dropped from the API - it had not; it moved.
+
+**H32 and H53 were already fixed** when checked — the third and fourth audit entries to turn out
+that way, after H20 and H41. Album detail caps its map through `bound_map_layer`, which counts
+first and only projects coordinates when the count is over the limit, keeps the area covered rather
+than the first N, and reports `map_truncated`. That is the same shape the approved decision asked
+for on photo maps, already in place. Both entries went on the list because the audit was read
+rather than the code, which is now the most common reason an entry is wrong.
+
 Still open in family 4: the findings N21 lists beyond these, most of which are request-path
 loops over one account's data in surfaces nobody has measured yet.
 

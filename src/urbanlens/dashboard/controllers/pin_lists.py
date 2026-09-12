@@ -253,11 +253,11 @@ class PinListsIndexView(LoginRequiredMixin, View):
             )
 
         sort = request.GET.get("sort") or "updated"
-        pin_lists = PinList.objects.for_profile(profile).prefetch_related("items__pin")
+        pin_lists = PinList.objects.for_profile(profile).with_pin_counts()
         if sort == "name":
             pin_lists = pin_lists.order_by("name")
         elif sort == "pin_count":
-            pin_lists = sorted(pin_lists, key=lambda pl: pl.pin_count, reverse=True)
+            pin_lists = pin_lists.order_by("-_pin_count")
         else:
             pin_lists = pin_lists.order_by("-updated")
         return render(

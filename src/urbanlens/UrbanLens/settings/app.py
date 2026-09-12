@@ -283,6 +283,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "this should still render what fits and say that it did."
         ),
     )
+    public_costs_page_cache_seconds: int = Field(
+        default=600,
+        description=(
+            "How long the public costs page reuses its computed figures. The page is anonymous and every number on "
+            "it is a trailing thirty-day or monthly aggregate - including one that joins every user against every "
+            "pin they own - so recomputing per request buys freshness nobody can perceive. Only the figures are "
+            "cached, never the response, so turning the page off still takes effect immediately."
+        ),
+    )
     markup_max_shapes_per_snapshot: int = Field(
         default=2_000,
         description=(

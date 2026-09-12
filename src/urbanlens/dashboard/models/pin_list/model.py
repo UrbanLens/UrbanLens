@@ -79,14 +79,14 @@ class PinList(abstract.PublicDashboardModel):
     def pin_count(self) -> int:
         """Number of pins currently on this list.
 
-        ``len(self.items.all())`` rather than ``self.items.count()`` - when a
-        caller has already run ``prefetch_related("items")`` (or
-        ``"items__pin"``) on the queryset this instance came from (see
-        ``PinListsIndexView.get``), ``.all()`` reuses that cached result set
-        instead of issuing a fresh ``COUNT(*)`` query per list on every
-        list-index render. Falls back to one query, same as ``.count()``
-        would have, when nothing was prefetched.
+        Prefers ``with_pin_counts()``'s annotation, which counts in the
+        database. Falls back to ``len(self.items.all())``, which reuses a
+        ``prefetch_related("items")`` cache where a caller set one up and
+        otherwise costs the same single query ``.count()`` would have.
         """
+        annotated = getattr(self, "_pin_count", None)
+        if annotated is not None:
+            return annotated
         return len(self.items.all())
 
     def _slugify_base(self) -> str:
