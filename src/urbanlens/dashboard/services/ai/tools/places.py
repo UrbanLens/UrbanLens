@@ -93,11 +93,16 @@ def _comment_evidence(pin: Pin, context: ToolContext) -> list[dict[str, str]]:
     except ObjectDoesNotExist:
         return []
 
-    comments_qs = wiki.comments.filter(text__icontains="tunnel")
+    from urbanlens.dashboard.models.comments.model import Comment
+
+    # Gated before the slice, not after. Taking the first few matches and then
+    # filtering let a thread the viewer mostly cannot read answer "no evidence"
+    # while readable comments sat just past the cut.
+    comments_qs = Comment.objects.filter(wiki=wiki, text__icontains="tunnel").visible_to(context.profile)
     top_level = list(top_level_comment_queryset(comments_qs)[: _MAX_EVIDENCE_ITEMS * 4])
-    # Every visibility gate (comment-visibility settings, pending-scan, the @loc
-    # mention gate) lives in visible_comment_tree - see its own module docstring
-    # for why a second, ad hoc filter here would be how that quietly regresses.
+    # visible_comment_tree still decides: every gate lives there - see its own
+    # module docstring for why a second, ad hoc filter here would be how that
+    # quietly regresses - so the queryset above can only ever narrow.
     visible = visible_comment_tree(top_level, context.profile)
 
     snippets: list[dict[str, str]] = []

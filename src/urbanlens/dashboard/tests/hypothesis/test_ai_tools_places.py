@@ -137,3 +137,54 @@ class HasTunnelsTests(TestCase):
         )
         result = execute("has_tunnels", {"pin_slug": theirs.slug}, _context(self.profile))
         self.assertIn("error", result.data)
+
+
+class CommentEvidenceIsFilteredBeforeItIsCutTests(TestCase):
+    """Hidden comments must not crowd out the evidence the viewer may read.
+
+    ``_comment_evidence`` took the first handful of matching comments and *then*
+    ran them through the visibility gates, so a wiki whose thread is mostly
+    invisible to this viewer answered "no evidence" while readable comments sat
+    just past the cut. Same defect as H47's on the comment list - a filter
+    applied after the slice makes the slice decide the answer.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = _plain_profile()
+        self.place = baker.make(Place)
+        self.location = baker.make(Location, latitude=_LAT, longitude=_LNG, place=self.place)
+        self.pin = baker.make(
+            Pin, profile=self.profile, location=self.location, name="Mine", name_is_user_provided=True
+        )
+        self.wiki = baker.make(Wiki, location=self.location, place=self.place)
+
+        from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        self.readable = _make_profile()
+        Profile.objects.filter(pk=self.readable.pk).update(comment_visibility=VisibilityChoice.ANYONE)
+        self.hidden = _make_profile()
+        Profile.objects.filter(pk=self.hidden.pk).update(comment_visibility=VisibilityChoice.NO_ONE)
+
+    def test_readable_evidence_survives_a_thread_full_of_hidden_comments(self) -> None:
+        # Written first, so every one of them precedes the readable comment in
+        # the default `created` ordering and fills any slice taken before the
+        # gate runs.
+        for index in range(40):
+            Comment.objects.create(wiki=self.wiki, profile=self.hidden, text=f"secret tunnel {index}")
+        Comment.objects.create(wiki=self.wiki, profile=self.readable, text="there is a tunnel under the annexe")
+
+        result = execute("has_tunnels", {"pin_slug": self.pin.slug}, _context(self.profile))
+
+        self.assertEqual(result.data["verdict"], "evidence")
+        self.assertIn("comments", result.data["sources"])
+
+    def test_a_thread_the_viewer_cannot_read_is_still_no_evidence(self) -> None:
+        """Filtering earlier must not turn a hidden comment into a visible one."""
+        for index in range(5):
+            Comment.objects.create(wiki=self.wiki, profile=self.hidden, text=f"secret tunnel {index}")
+
+        result = execute("has_tunnels", {"pin_slug": self.pin.slug}, _context(self.profile))
+
+        self.assertEqual(result.data["verdict"], "no_evidence")

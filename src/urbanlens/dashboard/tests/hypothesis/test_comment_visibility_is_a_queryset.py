@@ -74,6 +74,14 @@ class VisibleToAgreesWithThePerRowCheckTests(TestCase):
         baker.make(Pin, profile=self.viewer, location=baker.make(Location, place=self.shared_place), parent_pin=None)
         self.mutual_friend = _profile()
         self._accept(self.viewer, self.mutual_friend)
+        # The same mutual, reached by a row pointing the other way, so an author
+        # can be related through either direction at the viewer's end.
+        self.mutual_friend_who_asked = _profile()
+        self._accept(self.mutual_friend_who_asked, self.viewer)
+        # A Location no provider resolved to a Place - the fallback half of the
+        # common-pin key.
+        self.placeless_location = baker.make(Location, place=None)
+        baker.make(Pin, profile=self.viewer, location=self.placeless_location, parent_pin=None)
         self.shared_trip = baker.make(Trip, creator=self.viewer)
         TripMembership.objects.create(trip=self.shared_trip, profile=self.viewer)
 
@@ -99,8 +107,16 @@ class VisibleToAgreesWithThePerRowCheckTests(TestCase):
             )
         elif relationship == "common_pin":
             baker.make(Pin, profile=author, location=baker.make(Location, place=self.shared_place), parent_pin=None)
+        elif relationship == "common_pin_placeless":
+            baker.make(Pin, profile=author, location=self.placeless_location, parent_pin=None)
         elif relationship == "common_friend":
             self._accept(author, self.mutual_friend)
+        elif relationship == "common_friend_author_received":
+            self._accept(self.mutual_friend, author)
+        elif relationship == "common_friend_viewer_received":
+            self._accept(author, self.mutual_friend_who_asked)
+        elif relationship == "common_friend_both_received":
+            self._accept(self.mutual_friend_who_asked, author)
         elif relationship == "common_trip":
             TripMembership.objects.create(trip=self.shared_trip, profile=author)
 

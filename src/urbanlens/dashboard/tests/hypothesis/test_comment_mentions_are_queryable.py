@@ -153,3 +153,45 @@ class BackfillTests(TestCase):
         self.assertEqual(
             list(CommentLocationMention.objects.values_list("location_uuid", flat=True)), [self.location.uuid]
         )
+
+
+class DerivationCoversEveryWritePathTests(TestCase):
+    """Every path that stores comment text must leave the rows behind it.
+
+    The gate reads these rows, so a write path that skipped the derivation
+    would not fail - it would quietly make a comment visible to people who
+    have not pinned what it names.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make(User).profile
+        self.location = Location.objects.create(latitude=40.0, longitude=-74.0)
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location)
+
+    def test_the_create_comment_service_derives_them(self) -> None:
+        """The path every controller and the external API actually take."""
+        from urbanlens.dashboard.services.comments.comments import create_comment
+
+        comment = create_comment(
+            profile=self.profile, pin=self.pin, wiki=None, text=f"see {mention(self.location.uuid)}"
+        )
+
+        self.assertEqual(list(comment.location_mentions.values_list("location_uuid", flat=True)), [self.location.uuid])
+
+    def test_a_later_save_of_another_field_leaves_them_alone(self) -> None:
+        """Attaching an image re-saves the comment with update_fields."""
+        comment = Comment.objects.create(pin=self.pin, profile=self.profile, text=f"see {mention(self.location.uuid)}")
+        comment.pending_scan = True
+        comment.save(update_fields=["pending_scan"])
+
+        self.assertEqual(comment.location_mentions.count(), 1)
+
+    def test_rewriting_the_text_replaces_them(self) -> None:
+        """No edit path exists today; the derivation must still be an index, not a log."""
+        other = Location.objects.create(latitude=41.0, longitude=-73.0)
+        comment = Comment.objects.create(pin=self.pin, profile=self.profile, text=f"see {mention(self.location.uuid)}")
+        comment.text = f"actually {mention(other.uuid)}"
+        comment.save()
+
+        self.assertEqual(list(comment.location_mentions.values_list("location_uuid", flat=True)), [other.uuid])

@@ -59,10 +59,13 @@ still hold:
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -73,10 +76,12 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-#: Ceiling on earned-access fixpoint rounds. Each round can only unlock
-#: aggregates one lineage tier higher, and real lineage is two or three deep;
-#: this exists so corrupted lineage degrades into a logged error rather than a
-#: spinning request.
+#: Ceiling on earned-access fixpoint rounds. The walk resolves exactly one
+#: lineage tier per round and real lineage is two or three deep, so reaching
+#: this means the lineage is corrupt (most likely a cycle). Hitting it returns
+#: what was earned so far - which is less than the truth, never more - and says
+#: so in the log, because an access check that quietly stops early is a wrong
+#: answer nobody can find later.
 MAX_EARNING_ROUNDS = 16
 
 
@@ -144,6 +149,12 @@ def _earn_aggregates(domains: set[int]) -> set[int]:
 
         frontier = {root for root in Place.objects.filter(pk__in=covered).values_list("domain_root_id", flat=True) if root is not None and root not in earned}
         earned |= frontier
+
+    logger.error(
+        "Earned-access walk hit its %s-round ceiling with %s domains still expanding; place lineage is probably cyclic. Returning what was earned so far.",
+        MAX_EARNING_ROUNDS,
+        len(frontier),
+    )
     return earned
 
 

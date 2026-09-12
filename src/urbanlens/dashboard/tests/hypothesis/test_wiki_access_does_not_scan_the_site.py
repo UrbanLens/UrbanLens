@@ -20,6 +20,8 @@ Two properties, and they pull in opposite directions:
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.contrib.auth.models import User
 from django.db import connection
 from model_bakery import baker
@@ -28,6 +30,7 @@ from urbanlens.core.tests.agreement import assert_agrees
 from urbanlens.core.tests.endpoint_scaling import _row_counting_wrapper
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation
+from urbanlens.dashboard.services.wiki import wiki_access
 from urbanlens.dashboard.services.wiki.wiki_access import MAX_EARNING_ROUNDS, _earn_aggregates, accessible_domain_ids
 
 from .test_places_access_predicate import pin_on
@@ -166,3 +169,74 @@ class EarningAgreesWithTheSiteWideSweepTests(TestCase):
         self.assertTrue(
             any(gained > 0 for gained in outcomes), "No subset earned an aggregate - the agreement test is vacuous."
         )
+
+
+class DeepLineageConvergesTests(TestCase):
+    """One tier per round, and a ceiling that says so when it is hit.
+
+    The sweep this replaced could resolve several tiers in a single pass, since
+    it re-read every aggregate each time and dict order decided what it saw
+    first. The upward walk resolves exactly one tier per round, so the round
+    ceiling now bounds lineage depth directly rather than loosely.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make(User).profile
+
+        # top -> {mid, plain}; mid -> {left, right}; left -> {l1, l2};
+        # right -> {r1, r2}. Three tiers of earning above the leaves.
+        self.top = make_place(PlaceKind.SITE, None, name="top")
+        self.mid = make_place(PlaceKind.SITE, None, name="mid", parent=self.top, relation=PlaceRelation.MEMBER_OF)
+        self.plain = make_place(
+            PlaceKind.PARCEL, square(-70.0, 45.0, 0.01), name="plain", parent=self.top, relation=PlaceRelation.MEMBER_OF
+        )
+        self.left = make_place(PlaceKind.SITE, None, name="left", parent=self.mid, relation=PlaceRelation.MEMBER_OF)
+        self.right = make_place(PlaceKind.SITE, None, name="right", parent=self.mid, relation=PlaceRelation.MEMBER_OF)
+        self.leaves = [
+            make_place(
+                PlaceKind.PARCEL,
+                square(-74.0 + index * 0.05, 40.0, 0.01),
+                name=f"leaf-{index}",
+                parent=parent,
+                relation=PlaceRelation.MEMBER_OF,
+            )
+            for index, parent in enumerate((self.left, self.left, self.right, self.right))
+        ]
+        for place in (self.top, self.mid, self.plain, self.left, self.right, *self.leaves):
+            place.refresh_from_db()
+
+    def _all_leaf_domains(self) -> set[int]:
+        return {leaf.domain_root_id for leaf in self.leaves} | {self.plain.domain_root_id}
+
+    def test_three_tiers_of_earning_still_reach_the_top(self) -> None:
+        earned = _earn_aggregates(self._all_leaf_domains())
+        for place in (self.left, self.right, self.mid, self.top):
+            self.assertIn(place.domain_root_id, earned, f"{place.name} was not earned")
+
+    def test_it_agrees_with_the_site_wide_sweep_at_this_depth(self) -> None:
+        domains = self._all_leaf_domains()
+        self.assertEqual(_earn_aggregates(domains), _earn_aggregates_site_wide(domains))
+
+    def test_one_missing_leaf_stops_the_whole_chain(self) -> None:
+        domains = self._all_leaf_domains() - {self.leaves[0].domain_root_id}
+        earned = _earn_aggregates(domains)
+        for place in (self.left, self.mid, self.top):
+            self.assertNotIn(place.domain_root_id, earned, f"{place.name} was earned without every member")
+        self.assertIn(self.right.domain_root_id, earned, "the unaffected branch stopped being earned")
+
+    def test_running_out_of_rounds_is_logged_rather_than_silent(self) -> None:
+        """A ceiling reached quietly is a wrong answer nobody can find later."""
+        with (
+            mock.patch.object(wiki_access, "MAX_EARNING_ROUNDS", 2),
+            self.assertLogs("urbanlens.dashboard.services.wiki.wiki_access", level="ERROR") as logged,
+        ):
+            _earn_aggregates(self._all_leaf_domains())
+        self.assertTrue(any("round" in line.lower() for line in logged.output), logged.output)
+
+    def test_an_ordinary_lineage_logs_nothing(self) -> None:
+        """The log must mark corruption, not every access check."""
+        import logging
+
+        with self.assertNoLogs("urbanlens.dashboard.services.wiki.wiki_access", level=logging.WARNING):
+            _earn_aggregates(self._all_leaf_domains())
