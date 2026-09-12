@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""
-Batch-convert every PNG/JPG/WebP image in a directory into a 125x125 WebP
-thumbnail, optimized for file size, with all EXIF metadata stripped.
+"""Batch-convert images in a directory into 125x125 WebP thumbnails with EXIF stripped.
 
-For each input file "foo_bar.jpg" (or .jpeg/.png/.webp), an output file
-"foo_bar.webp" is written to a "converted/" subdirectory of the input
-directory (or a custom -o/--outdir).
+For each input file "foo_bar.jpg" (or .jpeg/.png/.webp), writes
+"foo_bar.webp" to a "converted/" subdirectory (or custom -o/--outdir).
 
 Usage:
     python convert_to_webp.py path/to/image_dir
@@ -38,20 +35,15 @@ def unique_path(path: Path) -> Path:
 
 def convert_image(src_path: Path, dest_path: Path, quality: int) -> None:
     with Image.open(src_path) as opened:
-        # Convert to RGBA first so transparency is preserved for PNGs/WebPs,
-        # then flatten mode as needed. Bound to a new name rather than
-        # reassigned: rebinding the `with` target would drop the only handle
-        # to the file the context manager has to close.
+        # Preserve transparency; don't rebind the `with` target so the file still closes.
         if opened.mode not in ("RGB", "RGBA"):
             img = opened.convert("RGBA" if "A" in opened.getbands() else "RGB")
         else:
             img = opened
 
-        # High-quality downscale to the target thumbnail size.
         img = img.resize(SIZE, Image.LANCZOS)
 
-        # Rebuild a fresh image object with only pixel data -- no EXIF,
-        # no ICC profile, no XMP, nothing but pixels.
+        # Fresh image with pixels only - strips EXIF/ICC/XMP.
         clean = Image.new(img.mode, img.size)
         clean.paste(img)
 

@@ -1,7 +1,5 @@
 /*
- * Markdown article editor behavior (toolbar, shortcuts, live preview,
- * dirty-state tracking). Fully delegated on document so it works no matter
- * when the editor partial is swapped in by HTMX - no per-swap init needed.
+ * Markdown article editor (toolbar, shortcuts, live preview, dirty tracking). Delegated on document, no per-swap init.
  *
  * Markup contract (see partials/articles/_article_editor.html):
  *   [data-article-editor]           editor container (carries data-preview-url)
@@ -25,7 +23,7 @@
     function replaceRange(textarea, start, end, replacement, selectStart, selectEnd) {
         textarea.focus();
         textarea.setSelectionRange(start, end);
-        // execCommand keeps native undo history working where supported.
+        // execCommand preserves native undo where supported.
         var inserted = false;
         try { inserted = document.execCommand('insertText', false, replacement); } catch (e) { inserted = false; }
         if (!inserted) {
@@ -210,7 +208,7 @@
         ACTIONS[map[key]](event.target);
     });
 
-    // Skip the Cancel button's "discard changes?" prompt when nothing changed.
+    // Skip the Cancel confirm when nothing changed.
     document.addEventListener('htmx:confirm', function (event) {
         var el = event.detail ? event.detail.elt : null;
         var root = editorRoot(el);

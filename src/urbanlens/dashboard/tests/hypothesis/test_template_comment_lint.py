@@ -7,8 +7,7 @@ verbatim, in the middle of the page.
 
 Nothing about that fails loudly: the page still returns 200 and the surrounding
 markup is fine, so it survives until someone reads the rendered page carefully.
-A wiki page shipped one of these. ``{% comment %}``/``{% endcomment %}`` is the
-multi-line form.
+``{% comment %}``/``{% endcomment %}`` is the multi-line form.
 """
 
 from __future__ import annotations

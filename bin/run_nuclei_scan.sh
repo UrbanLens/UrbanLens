@@ -4,23 +4,9 @@
 #
 # https://docs.projectdiscovery.io/opensource/nuclei/ci-cd
 #
-# Nuclei is a template-driven scanner: thousands of community and official
-# checks for CVEs, exposed panels and files, default credentials, misconfigured
-# headers, technology fingerprints and more, run against a live HTTP target. It
-# complements `tests/integration/specs/security/` rather than replacing it -
-# those specs assert specific application behaviour (does another account's
-# pin look like it never existed); this asks the broader, template-catalogue
-# question (does anything here match a known-vulnerable pattern at all). Both
-# are named in `docs/INTEGRATION_TESTS.md` as things the suite deliberately
-# does not do itself.
+# Template-driven scan for known-vulnerable patterns; complements the security specs' behaviour assertions.
 #
-# Same rules as `bin/run_integration_tests.sh`, for the same reasons:
-#
-#   - the target must be stated explicitly, and the script refuses to run
-#     against a production hostname without an explicit override;
-#   - manual only - never wired into a push/PR trigger, because a scan against
-#     shared staging has to not collide with someone else using it;
-#   - `--docker` needs nothing installed locally but Docker.
+# Same rules as `bin/run_integration_tests.sh`: explicit target, manual only, `--docker` needs only Docker.
 #
 # Usage:
 #   bin/run_nuclei_scan.sh --url https://s1.dev.urbanlens.org
@@ -52,14 +38,7 @@ FAIL_ON_FINDINGS=0
 ALL_TIERS=0
 PASSTHROUGH=()
 
-# Cleaned up on exit: a generated secret-file, which holds a live API key or
-# session cookie. `|| true` per path, not once for the whole loop - one path
-# that fails to remove (e.g. root-owned leftovers from a container run) must
-# never stop the rest from being attempted, since under `set -e` a failing
-# command inside an EXIT trap aborts the trap itself. That exact gap is how
-# an earlier version of this script left real credentials behind in /tmp:
-# a container-written path failed first, and the loop never reached the
-# secret-files queued after it.
+# Generated secret-file holds live credentials; remove each path independently so one failure never skips the rest.
 CLEANUP_PATHS=()
 cleanup() {
 	local p
@@ -69,8 +48,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Denial-of-service templates are excluded unconditionally - attempting it would impact
-# our other infrastructure on the same machine.
+# DoS templates excluded unconditionally.
 BASE_EXCLUDE_TAGS="dos"
 
 usage() {
@@ -247,10 +225,7 @@ if [[ -n "${EXTRA_EXCLUDE_TAGS}" ]]; then
 	EXCLUDE_TAGS="${EXCLUDE_TAGS},${EXTRA_EXCLUDE_TAGS}"
 fi
 
-# A target nuclei can't actually reach produces the same symptom as nothing
-# being wrong: zero matches, exit 0, no error. Fail loudly here instead of
-# discovering it by eyeballing a suspiciously-empty report - this is exactly
-# how a real bug in this script (see below) first surfaced as "0 findings".
+# Unreachable target also yields zero matches, so fail loudly here instead.
 if command -v curl >/dev/null 2>&1; then
 	curl_status=0
 	curl -sS -o /dev/null --max-time 15 "${BASE_URL}" || curl_status=$?
@@ -274,10 +249,7 @@ elif [[ -n "${ACCOUNTS_FILE}" ]]; then
 	}
 fi
 
-# Emits a bearertoken secret-file scoped to TARGET_HOST for the named field
-# ("api_key" or "restricted_api_key") of the primary account in
-# ACCOUNTS_FILE. Prints the generated path on success; exits non-zero (with a
-# reason on stderr) when that account has no such key.
+# Emits a bearertoken secret-file for the named key field of the primary account; prints the path.
 generate_bearer_secret_file() {
 	local field="$1"
 	local out
@@ -308,21 +280,13 @@ generate_bearer_secret_file() {
 	printf '%s' "${out}"
 }
 
-# Signs in as the primary account through a real browser (reusing
-# tests/integration/setup/auth.setup.ts - Django's CSRF-protected login form
-# is not something worth reimplementing in bash) and turns the resulting
-# session into a cookie secret-file scoped to TARGET_HOST. Needs Node; prints
-# the generated path on success.
+# Signs in through a real browser and turns the session into a cookie secret-file; prints the path.
 mint_session_secret_file() {
 	if ! command -v npm >/dev/null 2>&1; then
 		echo "no npm on PATH - the session tier needs Node to drive a real login" >&2
 		return 1
 	fi
-	# A bare (subshell) statement here would let a real failure inside it (a
-	# broken login, a missing browser download) trigger set -e and kill the
-	# whole script before the `if secret_file=$(mint_session_secret_file)`
-	# at the call site ever gets a chance to catch it - wrapping it in `||`
-	# is what makes this tier skippable like the other three.
+	# Subshell wrapped in `||` so a login failure stays catchable by the caller under `set -e`.
 	local login_rc=0
 	(
 		cd "${SUITE_DIR}"
@@ -377,16 +341,9 @@ mint_session_secret_file() {
 	printf '%s' "${out}"
 }
 
-# Common to every run mode and every tier; the docker branch below appends
-# the same output (and, per-tier, secret-file) flags pointed at the
-# container's mounted paths instead.
+# Shared by every mode/tier; docker appends container-mounted output paths instead.
 #
-# Deliberately NOT combined with -update-templates: that flag is a one-shot
-# maintenance action in nuclei - passed alongside -u it updates the template
-# catalogue, exits 0, and never scans anything. No error, no warning, just a
-# report with nothing in it. Confirmed against a real run: identical flags
-# minus -update-templates went from 0 matches to a real scan of 10,689
-# templates. Templates are refreshed as a separate step below instead.
+# Kept separate from -update-templates: that flag updates the catalogue and exits without scanning.
 NUCLEI_ARGS=(
 	-u "${BASE_URL}"
 	-severity "${SEVERITY}"
@@ -408,8 +365,7 @@ if [[ ${USE_DOCKER} -eq 0 && ${UPDATE_TEMPLATES} -eq 1 ]]; then
 	nuclei -update-templates
 fi
 
-# Runs one full scan for one tier, writing to reports/nuclei/<tier>/ and
-# recording its finding count in TIER_COUNTS / TOTAL_FINDINGS.
+# One scan for one tier; records its finding count.
 TIER_COUNTS=()
 TOTAL_FINDINGS=0
 run_scan_for_tier() {
@@ -423,12 +379,7 @@ run_scan_for_tier() {
 	echo "=== ${tier_name} ==="
 
 	if [[ ${USE_DOCKER} -eq 1 ]]; then
-		# No shared template-cache mount across tiers: nuclei runs as root
-		# inside the container, so anything it writes to a bind-mounted host
-		# directory comes out root-owned, and a non-root cleanup can't remove
-		# it afterwards - tried this, found it the hard way (see the EXIT
-		# trap above). Each tier re-downloads the catalogue instead; slower,
-		# but simple and it can never leave root-owned junk behind.
+		# No shared template-cache mount: nuclei runs as root, so cache writes come out root-owned.
 		local secret_mount=() secret_args=()
 		if [[ -n "${secret_file}" ]]; then
 			secret_mount=(-v "${secret_file}:/secrets/secret-file.yaml:ro")

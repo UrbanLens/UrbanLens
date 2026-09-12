@@ -1,12 +1,4 @@
-/**
- * Controls that make every other file in this project mean something.
- *
- * A security assertion that "the stranger got 404" is worthless if the owner
- * also gets 404, if the two accounts are the same person, or if the
- * restricted key is already revoked. These tests establish the preconditions
- * the rest of the project relies on. If this file is red, ignore the files
- * below it: they are answering a different question than the one they ask.
- */
+/** Controls that make every other file in this project mean something. */
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { env } from "../../lib/env.js";

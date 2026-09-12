@@ -1,35 +1,4 @@
-/**
- * The direct test of "no action a user takes should impact the availability of
- * the site for other users, ever".
- *
- * One account (`heavy`) does progressively more expensive things. A second
- * account (`secondary`) browses at a fixed rate throughout, and its latency is
- * the measurement. The verdict is not "how fast is the site" - it is "does the
- * second user notice the first one", which is why every threshold is written
- * against the second user's requests and none against the first's.
- *
- * **The arrival rate is fixed, not the concurrency.** A closed-model tool sends
- * the next request only after the previous one returns, so when the server
- * slows down the tool slows down with it and the measured latency understates
- * the damage - the coordinated-omission problem. `constant-arrival-rate` keeps
- * offering 5 requests a second whatever the server is doing, so a stall shows
- * up at full size. When it cannot keep up even so, k6 records
- * `dropped_iterations`, which is thresholded here: dropping means every
- * pre-allocated VU was stuck inside a request, and that is the failure this
- * whole suite is about.
- *
- * **Phases are derived from the clock, not communicated.** k6 gives VUs no
- * shared mutable state, so the neighbour cannot be told what the actor is
- * doing. Both read `lib/schedule.js`, and the neighbour tags each request with
- * the phase that `exec.instance.currentTestRunDuration` falls in - the same
- * clock k6 uses to start the actor's scenarios, so there is no skew between
- * them to correct for.
- *
- * Run it through `bin/run_perf_tests.sh`, which does the two things this file
- * cannot: seeds the target, and computes the budget from a baseline measured on
- * the same host in the same run rather than from a number someone once wrote
- * down.
- */
+/** The direct test of "no action a user takes should impact the availability of the site for other users, ever". One account (`heavy`) does progressively more expensive things. */
 
 import exec from "k6/execution";
 import { check, fail } from "k6";
@@ -51,15 +20,7 @@ const LOGIN_PATH = "/accounts/login";
 /** Requests per second the neighbour offers, whatever the server is doing. */
 const RATE = Number(__ENV.UL_PERF_RATE || 5);
 
-/**
- * Measure the neighbour alone, with no actor and no thresholds.
- *
- * The budget every other phase is judged against comes from this pass, run on
- * the same host minutes earlier, because a fixed millisecond figure is a claim
- * about one machine on one day. A shared box under someone else's build would
- * fail a fixed budget while passing the question this suite actually asks -
- * whether the *actor* is what slowed the neighbour down.
- */
+/** Measure the neighbour alone, with no actor and no thresholds. */
 const BASELINE = (__ENV.UL_PERF_BASELINE || "") === "1";
 
 /** How long the baseline pass runs. Long enough for a p95 to mean something. */
@@ -68,25 +29,10 @@ const BASELINE_SECONDS = Number(__ENV.UL_PERF_BASELINE_SECONDS || 60);
 /** Where `handleSummary` writes the machine-readable result. */
 const SUMMARY_PATH = __ENV.UL_PERF_SUMMARY || "";
 
-/**
- * The phases this run will actually execute.
- *
- * A full run is fourteen and a half minutes, which is the wrong instrument for
- * "what does an import do to the neighbour" - and when a long run is cut short,
- * re-running the whole thing to reach the phase that was missed costs the
- * fourteen minutes again. `UL_PERF_PHASES=import_confirmed,cooldown` runs those
- * and the baseline, which is always kept because every verdict is relative to
- * it.
- */
+/** The phases this run will actually execute. */
 const ACTIVE = selectPhases(__ENV.UL_PERF_PHASES);
 
-/**
- * The p95 ceiling for the neighbour, in milliseconds.
- *
- * Supplied by the runner from a baseline pass, because a fixed number would be
- * a statement about this host on the day it was written. 1000 is a fallback for
- * a hand-run invocation, not a considered budget.
- */
+/** The p95 ceiling for the neighbour, in milliseconds. Supplied by the runner from a baseline pass, because a fixed number would be a statement about this host on the day it was written. */
 const BUDGET_MS = Number(__ENV.UL_PERF_BUDGET_MS || 1000);
 
 const FIXTURES = {
@@ -95,10 +41,7 @@ const FIXTURES = {
     labelUrlKind: __ENV.UL_PERF_LABEL_KIND || "tags",
     pinNamePrefix: __ENV.UL_PERF_PIN_PREFIX || "Perf Pin",
     importPins: Number(__ENV.UL_PERF_IMPORT_PINS || 500),
-    // Longer than the phase's own nginx timeout on purpose. Whatever sits in
-    // front of the app ends this request first (120s in compose), and the
-    // outcome worth recording is the server's answer to the user - a 504 - not
-    // the harness giving up before it and recording an error nobody saw.
+    // Longer than nginx's own timeout: the recorded outcome must be the server's 504, not the harness giving up first.
     importTimeout: __ENV.UL_PERF_IMPORT_TIMEOUT || "230s",
     actorTimeout: __ENV.UL_PERF_ACTOR_TIMEOUT || "120s",
     expectedPins: Number(__ENV.UL_PERF_EXPECTED_PINS || seedValue("pins", 0)),
@@ -116,28 +59,18 @@ const NEIGHBOUR_REQUESTS = [
 export const options = {
     scenarios: buildScenarios(),
     thresholds: buildThresholds(),
-    // k6 still reads every body off the socket, so timings stay honest; it just
-    // does not keep them. Without this, 60 VUs each holding a multi-megabyte
-    // map document is the load generator's own memory that falls over first.
+    // Timings stay honest without keeping bodies; otherwise the generator OOMs on multi-MB map documents.
     discardResponseBodies: true,
     summaryTrendStats: ["min", "med", "avg", "p(90)", "p(95)", "p(99)", "max", "count"],
     noConnectionReuse: false,
-    // Two sign-ins and a pre-flight against a deliberately enormous account.
-    // k6's default is 60s, which is not a lot of room for a pre-flight whose
-    // whole purpose is to touch the slow thing before the run commits to it.
+    // Generous: the pre-flight touches the slow thing before the run commits to it.
     setupTimeout: "180s",
 };
 
 /** Per-VU, because each VU is its own JS runtime with its own cookie jar. */
 let vuSession = null;
 
-/**
- * Check the run is worth starting before spending fifteen minutes on it.
- *
- * Signs in as the heavy account and asks how many pins it has. A run against an
- * unseeded account measures nothing and looks like a pass, which is the worst
- * of the available outcomes.
- */
+/** Check the run is worth starting before spending fifteen minutes on it. Signs in as the heavy account and asks how many pins it has. */
 export function setup() {
     const secondary = signIn(BASE_URL, accountFor("secondary"));
     if (BASELINE) {
@@ -149,11 +82,7 @@ export function setup() {
 
     const heavy = accountFor("heavy");
     const session = signIn(BASE_URL, heavy);
-    // Two roles signed in one after another must end up with two sessions. When
-    // they do not, every later request attributed to the actor is really the
-    // neighbour, the actor does nothing, and the run passes - so this is checked
-    // rather than assumed. It has already happened once, from a shared cookie
-    // jar; `signIn` now uses its own, and this is the assertion that says so.
+    // Two roles must end up with two sessions; a shared jar once made actor and neighbour the same account.
     if (session.cookies.sessionid === secondary.cookies.sessionid) {
         fail("The heavy and secondary sign-ins produced the same session. The second one did not happen, so the actor and the neighbour would be the same account.");
     }
@@ -191,10 +120,7 @@ export function neighbour(data) {
     const request = NEIGHBOUR_REQUESTS[exec.scenario.iterationInTest % NEIGHBOUR_REQUESTS.length];
     const response = get(session, request.path, { endpoint: request.endpoint, phase });
     check(response, { "neighbour got a 2xx": (r) => r.status >= 200 && r.status < 300 }, { phase });
-    // Thresholded, because losing the session does not fail anything by itself:
-    // the request is redirected to the sign-in page, k6 follows it, and a fast
-    // 200 for the login page is recorded as a fast 200 for the map. That is how
-    // this suite reported a healthy p95 while measuring nothing at all.
+    // Thresholded: a bounced session follows to the login page and records a fast 200 for the wrong page.
     check(response, { "still signed in": (r) => !r.url.includes(LOGIN_PATH) }, { guard: "signed_in" });
 }
 
@@ -207,11 +133,7 @@ export function actor(data) {
         fail(`Scenario ${exec.scenario.name} has no action in schedule.js.`);
     }
     const response = ACTIONS[definition.action](session, FIXTURES, { phase, actor: "1" });
-    // Recorded, not asserted. Whether the actor's own request succeeded is a
-    // finding; only the neighbour's latency is a verdict. Its session, though,
-    // is thresholded for the same reason the neighbour's is: an actor bounced
-    // to the sign-in page is doing no work, and a phase in which the actor did
-    // nothing passes.
+    // Recorded, not asserted: only the neighbour's latency is a verdict. Session still thresholded (a bounced actor does no work).
     check(response, { "actor request completed": (r) => r.status !== 0 }, { phase, actor: "1" });
     check(response, { "still signed in": (r) => !r.url.includes(LOGIN_PATH) }, { guard: "signed_in" });
 }
@@ -252,34 +174,20 @@ function buildScenarios() {
     return scenarios;
 }
 
-/**
- * Thresholds, which in k6 are also the *only* way to ask for a sub-metric.
- *
- * A tag combination that no threshold names is never aggregated, so it is
- * absent from the summary however many requests carried it. That is why the
- * baseline pass declares one that cannot fail rather than declaring none: its
- * job is to produce a number, and without the threshold there is no number to
- * produce.
- */
+/** Thresholds, which in k6 are also the *only* way to ask for a sub-metric. A tag combination that no threshold names is never aggregated, so it is absent from the summary however many requests carried it. */
 function buildThresholds() {
     const recordBaseline = { [`http_req_duration{scenario:neighbour,phase:${baselinePhase(ACTIVE)}}`]: ["p(95)>=0"] };
     if (BASELINE) {
-        // The guard matters more here than anywhere: a baseline taken against
-        // the sign-in page is fast, and every later phase would then be judged
-        // against a budget derived from it.
+        // Guard matters most here: a baseline against the sign-in page would judge every later phase against it.
         return Object.assign({ "checks{guard:signed_in}": ["rate==1"] }, recordBaseline);
     }
     const thresholds = {
-        // Dropping an iteration means every VU was stuck inside a request at
-        // the moment the next one was due. That is the invariant failing, not a
-        // slow page.
+        // Dropped iterations mean VUs stuck inside requests: the invariant failing, not a slow page.
         dropped_iterations: ["count==0"],
-        // Not a performance assertion. It is the assertion that the run
-        // measured the pages it claims to have measured.
+        // Not a performance assertion: proves the run measured the pages it claims.
         "checks{guard:signed_in}": ["rate==1"],
         "http_req_failed{scenario:neighbour}": ["rate==0"],
-        // Recorded without a ceiling: it is the reference the others are
-        // measured against, so a threshold on it would be circular.
+        // No ceiling on the reference itself: a threshold there would be circular.
         ...recordBaseline,
     };
     for (const phase of assertedPhases(ACTIVE)) {
@@ -288,15 +196,7 @@ function buildThresholds() {
     return thresholds;
 }
 
-/**
- * Write the result somewhere the runner can compute a verdict from.
- *
- * A file rather than parsed stdout, and JSON rather than k6's text summary,
- * because the runner needs one number out of the baseline pass (`p(95)` for the
- * whole neighbour scenario) and the per-phase trends out of the measured one.
- * Scraping those out of a rendered table is how a runner starts disagreeing
- * with the run it is reporting on.
- */
+/** Write the result somewhere the runner can compute a verdict from. */
 export function handleSummary(data) {
     const output = {};
     if (SUMMARY_PATH) {
@@ -348,14 +248,7 @@ function currentPhase() {
     return phaseAt(exec.instance.currentTestRunDuration / 1000, ACTIVE);
 }
 
-/**
- * This VU's session for `role`, adopted from `setup` rather than signed in.
- *
- * Signing in per VU costs a PBKDF2 verification each, which is enough CPU that
- * a sixty-VU ramp-up starves the box being measured: a dev-stack run in which
- * every VU logged itself in completed zero iterations in fifty seconds, while
- * the same endpoints answered in under 250ms one at a time.
- */
+/** This VU's session for `role`, adopted from `setup` rather than signed in. */
 function sessionFor(role, data) {
     if (!vuSession) {
         const cookies = (data && data.cookies && data.cookies[role]) || null;

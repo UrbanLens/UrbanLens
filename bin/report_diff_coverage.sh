@@ -2,10 +2,7 @@
 #
 # Coverage of the lines this branch changed, rather than of the whole tree.
 #
-# A whole-project percentage barely moves on any one branch, so it cannot answer
-# the question review actually asks: is the code being added covered? diff-cover
-# intersects a coverage report with `git diff`, and reports only on lines the
-# branch touched.
+# diff-cover intersects a coverage report with `git diff`.
 #
 # Usage:
 #   bin/report_diff_coverage.sh                       # measure, then report
@@ -14,12 +11,7 @@
 #   bin/report_diff_coverage.sh --fail-under 80       # exit non-zero below a threshold
 #   bin/report_diff_coverage.sh -- src/urbanlens/dashboard/tests/hypothesis/test_foo.py
 #
-# Measuring means running the suite under coverage, which is slow - the full run
-# is on the order of an hour and a half. Two ways to keep that usable: pass the
-# tests that cover your change after `--`, or use `--reuse` against a
-# coverage.xml an earlier run already produced. A partial report is honest here
-# in a way it would not be for whole-tree coverage, because the lines it reports
-# on are the ones you just wrote.
+# Measuring runs the suite under coverage; pass tests after `--` or reuse an existing coverage.xml.
 set -euo pipefail
 
 BRANCH="${UL_DIFF_COVER_BRANCH:-origin/main}"
@@ -62,7 +54,7 @@ args=(coverage.xml --compare-branch "$BRANCH" --html-report "$REPORT_DIR/index.h
 [ -n "$FAIL_UNDER" ] && args+=(--fail-under "$FAIL_UNDER")
 
 echo "==> diffing coverage against $BRANCH"
-# The console script when it is on PATH, the module when only the venv has it.
+# Console script when on PATH, module otherwise.
 if command -v diff-cover >/dev/null 2>&1; then
     diff-cover "${args[@]}"
 else

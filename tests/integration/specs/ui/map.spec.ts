@@ -1,13 +1,4 @@
-/**
- * The map, and the HTMX exchange behind its filter.
- *
- * Two distinct things are checked and they fail for different reasons. That
- * Leaflet initialised is a *bundle* assertion: `#map` is in the HTML whether or
- * not any script ran, so a grey rectangle where the map should be is invisible
- * to any check that only looks for the element. That the filter round-trips is
- * an *HTMX* assertion, and HTMX is how most of this application updates itself
- * - if its exchange is broken here it is broken everywhere.
- */
+/** The map, and the HTMX exchange behind its filter. Two distinct things are checked and they fail for different reasons. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { withHtmxSwap } from "../../lib/htmx.js";

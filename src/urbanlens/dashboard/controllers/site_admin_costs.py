@@ -1,6 +1,5 @@
-"""Site-admin controller for cost tracking: hardware/operating cost CRUD, stats, and charts."""
+"""Site-admin cost tracking: hardware/operating cost CRUD, stats, and charts."""
 
-# Generic imports
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
@@ -8,7 +7,6 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-# Django Imports
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.views import redirect_to_login
@@ -20,7 +18,6 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 
-# App Imports
 from urbanlens.dashboard.models.costs import CostComponent, OperatingCost
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.admin.cost_tracking import (

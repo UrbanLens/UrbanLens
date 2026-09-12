@@ -2,15 +2,9 @@
 #
 # Sample Postgres backend counts by role, once a second, into a CSV.
 #
-# This is the other half of the neighbour test. k6 says whether the second user
-# noticed the first one; this says *why*, and it is the only view that would
-# have caught P104 before it caused an outage - "97 of 100 connections, all
-# idle" is not visible in any latency number, right up until the moment it is
-# visible in every latency number at once.
+# Companion to the neighbour test: k6 shows whether the second user noticed, this shows why.
 #
-# Written as a sampler rather than a before/after snapshot because connection
-# exhaustion is a spike: it happens inside one phase, resolves when the phase
-# ends, and leaves nothing behind to find afterwards.
+# Samples rather than snapshots: exhaustion spikes inside one phase and leaves nothing behind.
 #
 # Usage:
 #   bin/perf/pg_activity_sampler.sh --container urbanlens_dev_db --out /tmp/pg.csv
@@ -66,8 +60,7 @@ if ! docker inspect "${CONTAINER}" >/dev/null 2>&1; then
 	exit 1
 fi
 
-# Grouped in SQL rather than counted in shell: one round trip per sample, and
-# the grouping is what makes the CSV answer "which tier ate the pool".
+# Grouped in SQL: one round trip per sample, grouped by tier.
 read -r -d '' QUERY <<-'SQL' || true
 	SELECT
 	    to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
@@ -89,9 +82,7 @@ running=1
 trap 'running=0' INT TERM
 
 while [[ ${running} -eq 1 ]]; do
-	# `|| true` so one failed sample - the database restarting, the container
-	# briefly unreachable - does not end the sampling run. A gap in the CSV is
-	# recoverable; a sampler that died in the phase of interest is not.
+	# `|| true` so one failed sample ends the run with a CSV gap, not a dead sampler.
 	docker exec "${CONTAINER}" psql -U "${DB_USER}" -d "${DB_NAME}" -At -F',' -c "${QUERY}" >>"${OUT}" 2>/dev/null || true
 	sleep "${INTERVAL}"
 done

@@ -1,8 +1,7 @@
-"""Benchmark UrbanLens' Overpass mirror pool against the new self-hosted instance.
+"""Benchmark the Overpass mirror pool against the self-hosted instance.
 
-Runs an identical set of Overpass QL programs - ranging from a trivial single-node
-lookup to region-wide area scans - against every configured endpoint, recording
-time-to-first-byte, total wall time, payload size and element count.
+Runs the same Overpass QL programs against every endpoint, recording
+time-to-first-byte, wall time, payload size and element count.
 
 Usage:
     python overpass_bench.py [--rounds N] [--out results.json] [--only light|heavy|all]

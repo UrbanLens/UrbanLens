@@ -1,11 +1,4 @@
-/**
- * The chrome every signed-in page shares: navigation, user menu, notifications.
- *
- * Worth a page object of its own because it is the cheapest evidence that a
- * page rendered *as a signed-in user* rather than merely returning 200 - a
- * session that quietly expired serves the anonymous variant of several pages
- * with a 200 and no visible complaint.
- */
+/** The chrome every signed-in page shares: navigation, user menu, notifications. */
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
@@ -50,13 +43,7 @@ export class AppShell {
         await expect(this.userDropdown).toBeVisible();
     }
 
-    /**
-     * Every destination the primary navigation offers, deduplicated.
-     *
-     * Discovered from the rendered menu rather than listed in the suite, so the
-     * "nothing in the navigation is broken" sweep covers a page added later
-     * without anyone remembering to add it here too.
-     */
+    /** Every destination the primary navigation offers, deduplicated. */
     async navigationTargets(): Promise<Array<{ label: string; href: string }>> {
         const links = await this.navLinks.all();
         const targets = new Map<string, string>();

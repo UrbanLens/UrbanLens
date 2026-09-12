@@ -8,22 +8,14 @@
  *     <button onclick="window._coverHeroNav('KEY', 1)">...</button>
  *   </div>
  *
- * `candidates` is a list of {id, url} dicts for every OTHER eligible photo
- * (the cover photo itself is excluded - it's already the banner's initial
- * background-image). Cycling wraps back to the true cover photo between
- * runs through the candidate list; this never changes what's actually
- * stored as the cover photo, it's just a browsing preview.
+ * `candidates` is every OTHER eligible photo ({id, url}); cycling wraps through the true cover without storing anything.
  */
 (function () {
     var state = {};
 
     function ensure(key) {
         if (state[key]) return state[key];
-        // Wiki's cover hero is its own standalone div (id="<key>-cover-hero").
-        // The pin detail page reuses the shared _page_hero.html hero section
-        // instead, under its own pre-existing id - _photo_lightbox.html's
-        // _applyCoverHeroUpdate already special-cases key "pin" the same way
-        // for its live-update path, so this mirrors that convention.
+        // Pin detail reuses _page_hero.html under its own id; mirror _photo_lightbox.html's key-"pin" special case.
         var heroEl = key === 'pin' ? document.getElementById('pin-detail-hero') : document.getElementById(key + '-cover-hero');
         if (!heroEl) return null;
         var dataEl = document.getElementById(key + '-cover-candidates');
@@ -45,11 +37,7 @@
         entry.heroEl.style.backgroundImage = entry.index < 0 ? entry.originalBackground : "url('" + entry.candidates[entry.index].url + "')";
     };
 
-    // Drops the memoized entry for `key` so the next hover-cycle re-reads the
-    // hero element's current background as the "true" cover to return to.
-    // Called after the cover photo changes live (see _photo_lightbox.html's
-    // _applyCoverHeroUpdate) - the cached originalBackground/candidates would
-    // otherwise still reflect the pre-change cover photo.
+    // Drop the memoized entry so the next cycle re-reads the current cover (called after live cover changes).
     window._coverHeroInvalidate = function (key) {
         delete state[key];
     };

@@ -1,12 +1,4 @@
-/**
- * The sign-in form.
- *
- * Used both by the specs that test signing in and by `auth.setup.ts`, which
- * mints the session every other project runs on - so this is the one page
- * object whose breakage stops the entire suite, and the reason its failure
- * message goes out of its way to report the form's own error text rather than
- * "timed out waiting for navigation".
- */
+/** The sign-in form. */
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
@@ -44,21 +36,11 @@ export class LoginPage {
         // after the click rather than raced against it.
         await this.submit.click();
         await this.dismissRecoveryKeyDialog();
-        // Waited on by what rendered, not by the URL. A URL predicate has to
-        // hold at a moment Playwright happens to observe, and the page that
-        // follows sign-in rewrites its own URL client-side - so "the path is no
-        // longer /accounts/login" can be missed even when sign-in worked, which
-        // is how this failed *after* signing in successfully.
+        // Waited on by what rendered: the post-login page rewrites its URL client-side, so a URL predicate can miss a success.
         //
-        // `Promise.any`, not `race`: a 2FA challenge is also a successful
-        // sign-in, and `signIn` reports it far better than a timeout does.
-        // `race` settles on the first *rejection* too, so whichever budget ran
-        // out first would decide which message came out.
+        // `Promise.any`, not `race`: a 2FA challenge is also a success, and `race` settles on rejections too.
         //
-        // Both are given the *navigation* budget explicitly. A `locator.waitFor`
-        // takes `actionTimeout` by default, which is half of it here - so
-        // without this a slow-but-successful sign-in would fail on the nav
-        // branch at 15s while the URL branch was still waiting.
+        // Both branches get the navigation budget explicitly; the default action timeout is half of it.
         const budget = env.navigationTimeoutMs;
         await Promise.any([
             this.signedInNav.waitFor({ state: "visible", timeout: budget }),
@@ -71,15 +53,7 @@ export class LoginPage {
         });
     }
 
-    /**
-     * A first login after `provision_integration_env` regenerates an
-     * account's keys shows a blocking "save your recovery key" overlay
-     * before the app navigates anywhere - `e2ee-client.ts`'s
-     * `showRecoveryDialog` is awaited before `window.location.assign`.
-     * "Remind me later" unblocks it; the suite has no use for the key
-     * itself. Swallowed on timeout, so an already-enrolled account (the
-     * overlay never appears) costs only the timeout, not a failure.
-     */
+    /** Dismisses the "save your recovery key" overlay shown on first login after key regeneration. */
     private async dismissRecoveryKeyDialog(): Promise<void> {
         await this.page
             .locator(".e2ee-recovery-later")
@@ -90,14 +64,7 @@ export class LoginPage {
     /**
      * Signs in and asserts a session was actually established.
      *
-     * @throws When sign-in did not happen, saying why. Three quite different
-     *     causes all present as "the URL never changed": the form came back
-     *     with an error ("your email hasn't been verified", "too many failed
-     *     attempts" - both ordinary states of a staging account), the POST was
-     *     rejected before the view ran (a CSRF origin mismatch renders Django's
-     *     own 403 page at the same URL), or the page's JavaScript never
-     *     submitted at all. Reporting only the timeout leaves all three looking
-     *     identical.
+     * @throws When sign-in did not happen, saying why. Three quite different causes all present as "the URL never changed": the form came back with an error ("your email hasn't been verified", "too many failed attempts" - both ordinary states of a staging account), the POST was rejected before the view ran (a CSRF origin mismatch renders Django's own 403 page at the same URL), or the page's JavaScript never submitted at all. Reporting only the timeout leaves all three looking identical.
      */
     async signIn(username: string, password: string): Promise<void> {
         await this.goto();

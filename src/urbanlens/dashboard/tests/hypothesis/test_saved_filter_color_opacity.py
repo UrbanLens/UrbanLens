@@ -17,12 +17,6 @@ from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 _FILTER_NAME = "Ruins"
 
 
-#: The filter these tests create. A new profile now starts with two default
-#: saved filters (see labels.signals.create_default_saved_filters), so a bare
-#: ``objects.get(profile=...)`` no longer identifies "the one under test".
-_FILTER_NAME = "Ruins"
-
-
 class SavedFilterCreateColorOpacityTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """PostToolUse hook: format and auto-fix any Python file Claude just wrote.
 
-Registered in .claude/settings.json for Edit|Write|NotebookEdit. Formatting a
-file the moment it is written keeps it off the commit path, so no session spends
-a turn reasoning about import order or line width. It overlaps deliberately with
-the `autofix` hook in .pre-commit-config.yaml, which is the backstop for files
-this hook never saw - a hand edit, a rebase, a merge resolution.
+Registered in .claude/settings.json for Edit|Write|NotebookEdit. Formatting
+on write keeps it off the commit path. Overlaps deliberately with the
+`autofix` hook in .pre-commit-config.yaml, the backstop for files this
+hook never saw (hand edits, rebases, merge resolutions).
 
 Deliberately silent and deliberately harmless:
   - if ruff is not installed, it does nothing and says nothing;

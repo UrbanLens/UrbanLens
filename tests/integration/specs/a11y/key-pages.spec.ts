@@ -1,14 +1,4 @@
-/**
- * Accessibility scans of the pages people actually spend time on.
- *
- * Run against the deployed page rather than a rendered template, which is the
- * point: axe sees the DOM after HTMX has swapped its fragments in and after
- * Leaflet has built its panes, and most of this application's interactive
- * surface only exists at that moment.
- *
- * Only `serious` and `critical` findings fail. Everything below that is
- * attached to the report - see `lib/a11y.ts` for why that line is drawn there.
- */
+/** Accessibility scans of the pages people actually spend time on. */
 
 import { expectAccessible } from "../../lib/a11y.js";
 import { test } from "../../lib/fixtures.js";

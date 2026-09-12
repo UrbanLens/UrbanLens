@@ -1,13 +1,4 @@
-/**
- * The published contract: the schema, the envelopes, the paging.
- *
- * A third party generates a client from `schema/` and then depends on it. That
- * makes the schema a deployed artefact rather than a build product, and one
- * with a specific and well-known failure mode: `drf-spectacular` resolves model
- * annotations at *generation* time, so a serializer whose type hints only exist
- * under `TYPE_CHECKING` produces a 500 from this endpoint while every endpoint
- * it describes keeps working perfectly. Nothing but fetching it notices.
- */
+/** The published contract: the schema, the envelopes, the paging. A third party generates a client from `schema/` and then depends on it. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { apiUrl } from "../../lib/env.js";
@@ -15,14 +6,7 @@ import { apiUrl } from "../../lib/env.js";
 /** The external API's mount point. */
 const API_PREFIX = "/dashboard/api/external/v1/";
 
-/**
- * Every prefix the schema is allowed to document.
- *
- * Mirrors `external_api.schema.PUBLISHED_SCHEMA_PREFIXES`, which is a tuple
- * rather than a single string on purpose: "allowed to call" is not the same as
- * "lives under the external mount", and the end-to-end encryption endpoints are
- * a documented case of the former. Update this together with that constant.
- */
+/** Every prefix the schema is allowed to document. */
 const PUBLISHED_PREFIXES = [API_PREFIX, "/dashboard/e2ee/"];
 
 /** The surface that must never appear: internal, session-authenticated, no contract. */

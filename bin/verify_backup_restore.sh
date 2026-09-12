@@ -1,35 +1,11 @@
 #!/usr/bin/env bash
 #
-# Prove that a backup this app writes can actually be restored, and that nothing
-# is lost on the way through.
+# Prove a backup round-trips losslessly. Compares content, not exit status (psql exits 0 on per-statement failure).
 #
-# A restore procedure nobody has run is a belief, not a capability, and the day
-# it is first exercised is the worst possible day to discover it is wrong. This
-# script exercises it on an ordinary day, against a real dump from the real
-# code path, and compares content rather than trusting an exit status - psql
-# exits 0 even when individual statements failed, so "it ran" proves nothing.
+# Never writes to live; everything else happens in scratch DBs it creates and drops.
 #
-# It never writes to the live database. It reads it once (pg_dump takes a
-# consistent snapshot) and does everything else in scratch databases it creates
-# and drops.
-#
-# Two comparisons, because they catch different things:
-#
-#   live -> scratch1        Every table's full content, hashed. On a quiet
-#                           system this must match exactly. On a busy one a
-#                           difference may just be a write that landed after the
-#                           dump's snapshot, so this one is reported, not fatal.
-#
-#   scratch1 -> scratch2    A second dump/restore hop, both ends quiescent, so a
-#                           difference here cannot be explained by concurrent
-#                           writes and is a real fidelity failure. This hop also
-#                           carries a probe table seeded with the types most
-#                           likely to survive a naive round trip badly -
-#                           geography, jsonb, bytea, numeric, timestamptz.
-#
-# The hashes are of whole rows across every schema the dump carries. Both halves
-# of that were wrong when this was first written, and the check passed anyway -
-# see the comment on checksums().
+# Two hops: live->scratch (reported, not fatal; concurrent writes explain diffs) and
+# scratch->scratch (quiescent, so any diff is a fidelity failure).
 #
 # Usage:
 #   bin/verify_backup_restore.sh            # verify, then clean up
@@ -48,10 +24,7 @@ SCRATCH_A=ul_restore_verify_a
 SCRATCH_B=ul_restore_verify_b
 DUMP_A=/tmp/ul_restore_verify_a.sql
 DUMP_B=/tmp/ul_restore_verify_b.sql
-# Everything this writes on the host goes here, so the trap removes it whatever
-# path the script exits by. The first version wrote /tmp/.ul_ck_*.$$ and deleted
-# them only on the success path, which left a table-by-table digest of the live
-# database behind on every failure.
+# All host writes go here, so the trap removes them on any exit.
 WORK=$(mktemp -d)
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -64,9 +37,7 @@ DB_HOST=$(docker exec "$CONTAINER" printenv UL_DB_HOST)
 DB_PORT=$(docker exec "$CONTAINER" printenv UL_DB_PORT)
 LIVE_DB=$(docker exec "$CONTAINER" printenv UL_DB_NAME)
 
-# The password is read inside the container from its own environment rather than
-# passed in with `docker exec -e PGPASSWORD=...`, which puts it in the host's
-# process table where any user can read it out of `ps`. `_` fills $0.
+# Password stays in the container env, never in the host process table.
 # shellcheck disable=SC2016  # the single quotes are the point: $UL_DB_PASS expands in the container, not here
 pg() { docker exec "$CONTAINER" sh -c 'export PGPASSWORD="$UL_DB_PASS"; exec "$@"' _ "$@"; }
 psql_t() { pg psql -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" "$@"; }
@@ -75,10 +46,7 @@ cleanup() {
     rm -rf "$WORK"
     [ "$KEEP" -eq 1 ] && { echo "==> --keep: left $SCRATCH_A and $SCRATCH_B in place"; return; }
     pg rm -f "$DUMP_A" "$DUMP_B" 2>/dev/null || true
-    # Said out loud rather than swallowed. Each scratch database is a complete
-    # copy of the live one, so a drop that fails - most often because something
-    # is still connected to it - leaves a full second copy of production data
-    # sitting on the server under a name nobody is watching.
+    # Scratch DBs hold full production copies; say so when a drop fails.
     local db
     for db in "$SCRATCH_A" "$SCRATCH_B"; do
         if ! psql_t -d postgres -c "DROP DATABASE IF EXISTS \"$db\";" >/dev/null 2>&1; then
@@ -89,8 +57,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# The same flags core/controllers/backups/db.py uses, so this verifies the format
-# that is actually on disk rather than a more convenient one.
+# Same flags as backups/db.py, so this verifies the on-disk format.
 dump_to() { pg pg_dump -U "$DB_USER" -h "$DB_HOST" -p "$DB_PORT" -w "$1" -f "$2"; }
 
 restore_into() {
@@ -99,19 +66,7 @@ restore_into() {
     psql_t -d "$1" -v ON_ERROR_STOP=1 --single-transaction -f "$2" >/dev/null
 }
 
-# Hash every table's entire contents, ordered so the result does not depend on
-# heap order.
-#
-# `x`, with no column alias list. The first version said `x(r)` and hashed
-# `x.r`, which is not the row: a table alias with a column alias list renames
-# the *leading* columns, so `r` was the first column and every hash was of that
-# column alone - primary keys, for most tables. It compared equal after wiping
-# every other column of every table, and the geography/jsonb/bytea probe below
-# reduced to md5 of its two serial ids. A whole-row reference is what actually
-# covers those types without naming a column.
-#
-# Every schema the dump carries, not just `public`: PostGIS puts 36 more tables
-# in `tiger` and `topology`, and a restore that lost them compared clean.
+# Hash whole rows across every carried schema; `x(r)` aliasing would hash the first column only.
 checksums() {
     local db="$1"
     local tables
@@ -138,18 +93,14 @@ checksums "$SCRATCH_A" > "$CK_A"
 if diff -q "$CK_LIVE" "$CK_A" >/dev/null; then
     echo "    identical across $(wc -l < "$CK_A") tables"
 else
-    # `|| true` on both: diff exits 1 when the files differ, pipefail promotes
-    # that to the pipeline's status, and a bare failing pipeline under `set -e`
-    # kills the script. So the branch this comment calls "reported, not fatal"
-    # aborted the run before naming a single table.
+    # `|| true`: this hop is reported, not fatal, so keep the pipeline from tripping `set -e`.
     echo "    DIFFERS in $(diff "$CK_LIVE" "$CK_A" | grep -c '^<' || true) tables:"
     diff "$CK_LIVE" "$CK_A" | grep '^<' | cut -d'|' -f1 | sed 's/^< /      /' || true
     echo "    (a write landing after the dump's snapshot explains this on a busy system;"
     echo "     the quiescent hop below is the one that cannot be explained away)"
 fi
 
-# Types that a round trip is most likely to mangle, in a table the app does not
-# own, so this hop tests the format rather than whatever the app happens to hold.
+# Probe row exercises round-trip-sensitive types in an app-independent table.
 echo "==> seeding a type probe into '$SCRATCH_A'"
 psql_t -d "$SCRATCH_A" -v ON_ERROR_STOP=1 -c "
 CREATE TABLE public._restore_probe (
@@ -185,10 +136,7 @@ else
     STATUS=1
 fi
 
-# Not `migrate --check`: that asserts the tree is fully migrated, which is a fact
-# about the deployment, not about the restore - a database legitimately behind on
-# migrations fails it before and after. What must hold is that Django can read
-# the restored copy and finds it in the same migration state it read from live.
+# Compare migration plans, not `migrate --check`: restored copy must read exactly as live does.
 echo "==> checking Django reads the restored schema as it reads live"
 plan() {
     docker exec -w /app/src/urbanlens -e UL_DB_NAME="$1" "$CONTAINER" \

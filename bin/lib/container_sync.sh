@@ -7,16 +7,9 @@
 # are each individually easy to leave out, and leaving any of them out fails
 # quietly:
 #
-#   1. `docker cp` preserves *source* ownership. The host tree is owned by
-#      whichever account last wrote to it - `apps` (uid 568) for a checkout,
-#      `claude` (uid 3300) for a directory an agent's build created - and the
-#      container's app runs as `appuser` (uid 1001). Without the chown, appuser
-#      can no longer write what it just received. That is not a warning: on
-#      2026-09-04 the development_main app container crash-looped through
-#      `bun run build` because `docker cp` had handed
-#      dashboard/frontend/static/dashboard/js to uid 3300 and the build's own
-#      `rm -rf` of its output directory got EACCES. The same mechanism took the
-#      logs directory out on 2026-08-14 (see docs/archive/PROBLEMS-ARCHIVE.md).
+#   1. `docker cp` preserves *source* ownership, so the copy must be chowned
+#      back to the container's app user or it can no longer write what it
+#      just received - a crash-looping build, not a warning.
 #   2. `docker cp` only ever adds and overwrites. A file deleted on the host
 #      stays in the container forever, so a deleted module still satisfies the
 #      import that should have broken and a deleted template still renders.
@@ -30,11 +23,9 @@
 # which is rendered by name and which nothing generates.
 #
 # Deliberately not "every file": the container's tree legitimately holds
-# artefacts the host does not (compiled bytecode, collected and compressed
-# static assets), and an early version that pruned every extra file removed
-# ~19,700 of them. Nothing broke, because those regenerate - but deleting build
-# output is not this script's job. `__pycache__` is excluded for the same
-# reason. Used unquoted via `eval`, so it must stay a literal constant.
+# artefacts the host does not (bytecode, collected/compressed static assets).
+# `__pycache__` is excluded for the same reason. Used unquoted via `eval`,
+# so it must stay a literal constant.
 SOURCE_FILES="\\( -name '*.py' -o \\( -path '*/templates/*' -name '*.html' \\) \\) -not -path '*/__pycache__/*'"
 
 # Paths under src/ the copy must not write into, relative to src/. Empty by
@@ -60,37 +51,14 @@ sync_tree_into() {
         echo "    leaving $path alone (mounted volume)"
     done
     tar -C src -cf - "${tar_args[@]}" . | docker exec -i "$container" tar -xf - -C /app/src
-    # bin/ is synced too. It was dropped when bin/opslib and the ops-tooling
-    # tests that reached it by path moved to the separate `infrastructure` repo,
-    # on the grounds that nothing under tests/ read it anymore - but three
-    # modules do (test_template_comments.py, test_run_codeql.py,
-    # test_ops_tooling_contract.py), each resolving a checker by path off the
-    # repo root. Without this they error at setup with FileNotFoundError against
-    # whatever the image was last built with, which reads as a broken test
-    # rather than as missing coverage.
+    # bin/ is synced too: tests resolve checkers by path off the repo root, so
+    # without this they error against the image's stale copy.
     docker cp bin/. "$container":/app/bin/
 
-    # Deployment files, for the same reason bin/ is here: a growing set of tests
-    # asserts on the topology rather than on Python (test_ai_isolation,
-    # test_sandbox_isolation, test_metrics_endpoint, test_static_asset_serving),
-    # resolving these by path off the repo root. They are baked into the image,
-    # not bind-mounted, so without this they are read at whatever the image was
-    # last built with.
-    #
-    # That failure is worse than a plain stale-code one, because the sync still
-    # prints "tree matches" and the run still looks verified: on 2026-09-03 a
-    # runner whose image predated the ai-inference work failed all 42
-    # ComposeTopologyTests against a compose file with no ai-inference in it,
-    # which reads as "the branch broke the sandbox topology" rather than as
-    # "this file was never synced".
-    #
-    # Every tracked file at the repo root, rather than a list: the list is what
-    # failed. It named nine files and not `Dockerfile`, so when
-    # test_static_asset_serving.py started reading that on 2026-09-05 it asserted
-    # against an image-baked copy predating the change it was written for, and
-    # reported the branch as broken. There are 27 such files totalling ~1.2MB;
-    # deciding which of them a future test might read is the judgement that keeps
-    # being got wrong, and it buys nothing.
+    # Deployment files, for the same reason: tests assert on the topology
+    # (compose files, Dockerfile) by path, and they are baked into the image,
+    # not bind-mounted. Sync every tracked root file rather than a list - a
+    # list silently goes stale when a test starts reading a new one.
     local root_files
     root_files=$(git ls-files 2>/dev/null | grep -v "/" || true)
     if [ -n "$root_files" ]; then
@@ -115,12 +83,8 @@ sync_tree_into() {
 
 # Remove source files the container still has and the host no longer does.
 #
-# `docker cp` only ever adds and overwrites. That is not cosmetic: a scratch
-# test file deleted after use is still collected there, a module deleted in a
-# refactor still satisfies the import that should have broken, and a template
-# deleted in one still resolves by name for anything that renders it. All three
-# were real: `pages/memories/photos.html`, deleted on 2026-08-30 when
-# Memories > Photos moved to the Vault, was still being served four days later.
+# `docker cp` only ever adds and overwrites: a deleted module still satisfies
+# the import that should have broken, and a deleted template still renders.
 #
 # Args:
 #   $1: container name.

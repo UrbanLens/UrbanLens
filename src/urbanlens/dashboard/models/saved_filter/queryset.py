@@ -1,11 +1,8 @@
-# Generic imports
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
 
-# Django Imports
-# App Imports
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
@@ -23,9 +20,7 @@ class SavedFilterQuerySet(abstract.DashboardQuerySet):
         Args:
             profile: The owning profile.
             name: The candidate name (matched case-sensitively, as stored).
-            exclude_pk: A saved filter pk to exclude from the check - pass the
-                filter's own pk when validating a rename so it doesn't
-                collide with itself.
+            exclude_pk: A pk to exclude - pass the filter's own pk on rename.
 
         Returns:
             True if another saved filter of ``profile``'s already has that name.

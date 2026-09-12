@@ -59,14 +59,10 @@ DEFAULT_EXCLUDE_DIRS = {
 
 
 # ---------------------------------------------------------------------------
-# Convention-based defaults (toggle off with --no-default-ignores)
-#
-# These are whole files, directories, and method names that follow common
-# pytest/unittest/Django/Hypothesis conventions where the function is invoked
-# by a framework via reflection or dynamic name lookup rather than a normal
-# Name/Attribute reference - so a static reference count will essentially
-# always read as 0 even though the code is very much in use. Each entry below
-# notes the specific mechanism so it's clear why static analysis can't see it.
+# Convention-based defaults (toggle off with --no-default-ignores).
+# Frameworks invoke these by reflection/dynamic lookup, not by reference, so
+# a static count always reads 0 while the code is in use. Each entry notes
+# its mechanism so the blind spot is explicit.
 # ---------------------------------------------------------------------------
 
 # Directory names skipped entirely.
@@ -190,11 +186,10 @@ def _is_test_file(path: str) -> bool:
 
 
 def _read_source(path: str) -> str:
-    """
-    Read a Python source file, tolerating a leading UTF-8 BOM (common from
-    Windows editors) and a few other common encodings. "utf-8-sig" handles
-    plain utf-8 files exactly like "utf-8" but additionally strips a leading
-    U+FEFF if present, so it's tried first and covers the common case alone.
+    """Read a Python source file, tolerating a BOM and other common encodings.
+
+    "utf-8-sig" is tried first: it reads plain utf-8 identically while also
+    stripping a leading U+FEFF.
     """
     last_exc: Exception | None = None
     for encoding in _FALLBACK_ENCODINGS:
@@ -282,12 +277,9 @@ class ReferenceCounter(ast.NodeVisitor):
     only matching ast.Call/Assign/Lambda, and (unlike grep) understands
     scoping enough to skip the definition itself.
 
-    String-literal matching specifically covers dispatch-by-name patterns
-    that are otherwise invisible to AST reference tracking, e.g. DRF/Django
-    ViewSet routing - `SomeViewSet.as_view({"get": "list_campuses"})` - where
-    the method name is a dict value, not a Name/Attribute node; the same
-    applies to getattr(obj, "method_name"), signal.connect("handler_name"),
-    and ModelAdmin's list_display = ("custom_column",).
+    String-literal matching covers dispatch-by-name patterns invisible to AST
+    tracking (e.g. `as_view({"get": "list_campuses"})`, getattr with a name
+    string, ModelAdmin's `list_display` strings).
     """
 
     def __init__(self, simple_names: set[str], match_string_literals: bool = True):
@@ -381,10 +373,8 @@ def analyze(
     Walk `root` once, parse every .py file once, and return all function/
     method definitions found plus usage counts and parse errors.
 
-    Each file is read and parsed exactly once and reused for both definition
-    collection and usage counting (the original implementation read/parsed
-    every file up to three times, and also re-walked every subdirectory a
-    second time on top of os.walk's own recursion - this version fixes both).
+    Each file is read and parsed exactly once, then reused for both
+    definition collection and usage counting.
 
     `use_default_ignores` applies DEFAULT_IGNORE_DIR_NAMES and
     DEFAULT_IGNORE_FILENAME_PATTERNS on top of the always-on
@@ -463,12 +453,9 @@ def analyze(
 # ---------------------------------------------------------------------------
 # Confidence scoring
 #
-# A result being "0 references found" doesn't mean equally certain in every
-# case - some patterns are well-known to slip past static analysis even with
-# all the detection above. Rather than silently hiding those (like the
-# default ignores do for fully-known conventions), borderline cases are kept
-# in the report but scored lower so they can be triaged instead of trusted
-# or dismissed outright.
+# Confidence scoring: "0 references" is less certain for patterns known to
+# slip past static analysis. Borderline cases stay in the report with a lower
+# score so they get triaged, not trusted or dismissed outright.
 # ---------------------------------------------------------------------------
 
 # Class name suffixes that are commonly base/mixin classes for Django, DRF,
@@ -518,12 +505,8 @@ class Finding:
 
 
 def _score_confidence(d: FunctionDef, name_definition_counts: dict[str, int]) -> tuple[str, list[str]]:
-    """
-    Starts at 100 and deducts points for each known blind spot that applies,
-    then buckets into High (>=80) / Medium (>=50) / Low (<50). This is a
-    heuristic, not a guarantee - it flags *why* a result is less trustworthy
-    so it can be triaged, not a claim that Low-confidence results are safe
-    to ignore or that High-confidence ones are definitely dead.
+    """Score 100 minus each applicable blind spot; bucket High (>=80) /
+    Medium (>=50) / Low (<50). A triage heuristic, not a verdict.
     """
     score = 100
     reasons: list[str] = []
@@ -610,9 +593,8 @@ def find_unused_functions(
       "rare"      - definitions with 1-2 production references (often just
                      self-recursion, or a single remaining caller worth a look)
 
-    Note: because references are counted from real AST nodes (not grep'd text),
-    the definition line itself is never counted as a "use" - so a genuinely
-    unused function shows up with count 0, not count 1.
+    Note: counts come from real AST nodes, so the definition line itself is
+    never counted - a genuinely unused function shows count 0, not 1.
 
     `ignore_patterns` is a list of regexes checked against each qualified name
     (e.g. "MyClass.my_method"), always applied regardless of use_default_ignores.

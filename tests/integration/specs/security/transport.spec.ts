@@ -1,14 +1,4 @@
-/**
- * CORS, host trust, HTTP methods, and what the proxy forwards.
- *
- * These are the checks a unit test cannot make: they live in the reverse
- * proxy, in ALLOWED_HOSTS, in CORS_ALLOWED_ORIGINS. A staging box that
- * reflects `Origin: https://evil.example` on an authenticated JSON endpoint
- * has given that origin the user's cookies.
- *
- * Controls: a same-origin request still works, a recognised Host still
- * answers, GET still answers. The refusals are only meaningful against those.
- */
+/** CORS, host trust, HTTP methods, and what the proxy forwards. These are the checks a unit test cannot make: they live in the reverse proxy, in ALLOWED_HOSTS, in CORS_ALLOWED_ORIGINS. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { apiUrl, env } from "../../lib/env.js";

@@ -1,14 +1,4 @@
-/**
- * `schedule.js` decides two things that nothing else can check.
- *
- * It is the only agreement between the actor's scenarios and the neighbour's
- * phase tags - they cannot talk to each other at run time, so if the timeline
- * and the lookup ever disagree the run still completes and reports numbers, but
- * they are attributed to the wrong phase. That failure is silent by
- * construction, which is why it is worth a test that costs nothing.
- *
- * Runs under `bun test`, because this module is deliberately free of k6 imports.
- */
+/** `schedule.js` decides two things that nothing else can check. */
 
 import { describe, expect, test } from "bun:test";
 
@@ -99,10 +89,7 @@ describe("the actor's half", () => {
     });
 
     test("every named action is actually exported by actions.js", async () => {
-        // Read rather than imported: `actions.js` imports `k6/http`, which does
-        // not resolve outside k6. A schedule naming an action that does not
-        // exist fails at run time, mid-phase, having already spent the minutes
-        // before it.
+        // Read, not imported: actions.js needs k6/http. A missing action otherwise fails mid-phase.
         const source = await Bun.file(new URL("./actions.js", import.meta.url)).text();
         for (const phase of PHASES.filter((candidate) => candidate.action)) {
             expect(source).toContain(`export function ${phase.action}(`);

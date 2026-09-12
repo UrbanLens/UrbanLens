@@ -54,25 +54,20 @@ _MAX_LOCATION_ATTEMPTS = 25
 #: config only ever stores one of these or None (untimed); see GameConfig.
 ROUND_TIME_LIMIT_CHOICES = (30, 60, 90, 120)
 
-#: How long a session's current round can sit unrevealed before the
-#: stall-sweep Celery task (``tasks.sweep_stalled_spotguessr_sessions``)
-#: force-reveals it - the safety net for a participant who simply closed
-#: their tab (see force_reveal_round's docstring). Deliberately independent
-#: of any configured round_time_limit_seconds: that timer's own expiry is
-#: normally caught fast by the client-driven timeout endpoint
-#: (SpotGuessrRoundTimeoutView) while a client is still around to report it;
-#: this is the backstop for when none is.
+#: How long a round can sit unrevealed before the stall-sweep Celery task
+#: force-reveals it - the safety net for a participant who closed their
+#: tab. Independent of round_time_limit_seconds, whose expiry the client
+#: reports itself while one is still around; this is the backstop for
+#: when none is.
 STALL_ROUND_TIMEOUT_MINUTES = 10
 
 
 class SpotGuessrError(Exception):
     """Raised for invalid session/round/guess/lobby operations.
 
-    The message is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below and author its own user-facing
-    text, rather than relaying the message - that keeps a future raise site
-    here from being able to smuggle unreviewed text into a response just by
-    adding a new ``raise``.
+    The message is for logs, not the response: HTTP-facing callers must
+    catch a specific subclass and author their own user-facing text, so a
+    new ``raise`` here can never smuggle unreviewed text into a response.
     """
 
 
@@ -162,12 +157,9 @@ class GameConfig:
     def geo_bounds(self) -> GEOSGeometry | None:
         """The configured geographic restriction as a GEOS geometry, or None.
 
-        Split at the antimeridian here rather than at each query: the callers all
-        run planar ``__within`` lookups (``ST_Within`` has no geography
-        implementation), and an area a player drew across the date line arrives
-        with unwrapped coordinates that match nothing on its far side. Splitting
-        at the source means every consumer - eligibility counts, round selection,
-        the external API - inherits the fix.
+        Split at the antimeridian here, not per query: callers run planar
+        ``__within`` lookups, so an area drawn across the date line would
+        otherwise match nothing on its far side.
 
         Returns:
             The restriction geometry, or None when unrestricted.
@@ -188,11 +180,9 @@ def config_from_session(session: GameSession) -> GameConfig:
 def clamp_rounds(total_rounds: int) -> int:
     """Coerce a requested round count into the range a session may actually play.
 
-    Public (rather than the private helper it started as) because every caller
-    that accepts a client-supplied round count has to apply the identical
-    clamp, and the external API is now one of them. A second copy of
-    ``max(MIN, min(MAX, n))`` in a view is exactly how the two bounds would
-    eventually disagree.
+    Public so every caller with a client-supplied round count shares one
+    clamp - a second copy of ``max(MIN, min(MAX, n))`` is how the bounds
+    would eventually disagree.
 
     Args:
         total_rounds: The requested number of rounds, from any source.
@@ -222,18 +212,12 @@ class SoloStartResult:
     """The outcome of :func:`start_solo_playthrough`.
 
     Attributes:
-        session: The created session, or None when nothing was created at all
-            because the profile had no eligible location to play.
-        round: The first round to show, or None when the session had to be
+        session: The created session, or None when nothing was created.
+        round: The first round to show, or None when the session was
             abandoned before it played anything.
         no_eligible_locations: True when the profile has nothing playable
-            under this config. Distinct from "the game finished": a caller
-            must report it as its own empty state rather than as a completed
-            game with zero rounds, which reads to a player as a real (if
-            baffling) result. Both the cheap pre-check and the "every
-            candidate location turned out to have no usable photo/name/
-            imagery" case land here, because they are the same thing from the
-            player's point of view.
+            under this config. Report as its own empty state, not as a
+            completed game with zero rounds.
     """
 
     session: GameSession | None
@@ -244,17 +228,11 @@ class SoloStartResult:
 def start_solo_playthrough(profile: Profile, mode: str, config: GameConfig, *, total_rounds: int = DEFAULT_ROUNDS_PER_SESSION) -> SoloStartResult:
     """Start a solo session and generate its first round, in one call.
 
-    The whole "create, then check it can actually play, then clean up if it
-    can't" sequence, which previously lived only inside
-    ``controllers.spotguessr.SpotGuessrStartView`` and would otherwise have had
-    to be copied verbatim into the external API. Two copies of this in
-    particular would be unusually costly: the failure mode of getting it subtly
-    wrong is an ACTIVE session that can never produce a round, which then sits
-    in the player's history forever and is swept as a stall.
-
-    A profile with nothing eligible never gets a ``GameSession`` at all; one
-    whose candidates all fail round generation gets a session that is completed
-    immediately so it can't linger.
+    One shared "create, check it can play, clean up if it can't" sequence:
+    getting it subtly wrong strands an ACTIVE session that can never
+    produce a round. A profile with nothing eligible gets no ``GameSession``
+    at all; one whose candidates all fail generation gets a session that
+    is completed immediately so it can't linger.
 
     Args:
         profile: The solo player.
@@ -282,12 +260,9 @@ def start_solo_playthrough(profile: Profile, mode: str, config: GameConfig, *, t
     session = start_solo_session(profile, mode, config, total_rounds=total_rounds)
     round_ = get_or_create_round(session)
     if round_ is None:
-        # The pre-check above only ruled out "no location is pinned at all".
-        # Reaching None here means every eligible location was tried and none
-        # yielded a playable round (no usable photo/name/imagery) - rarer, and
-        # only observable once generation is actually attempted. Complete the
-        # session so it doesn't sit ACTIVE and unplayable forever, but report
-        # it as the empty state it is rather than as a finished game.
+        # The pre-check only ruled out "nothing pinned at all". Reaching
+        # None here means every eligible location failed generation, so
+        # complete the session rather than leaving it ACTIVE and unplayable.
         complete_session(session)
         return SoloStartResult(session=session, round=None, no_eligible_locations=True)
 
@@ -304,10 +279,9 @@ def start_multiplayer_session(
 ) -> GameSession:
     """Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles.
 
-    The host's own participant row is created JOINED immediately - no
-    invite step for yourself. Each invitee gets an INVITED row plus a
-    notification (see ``_notify_invite``). See "Multiplayer sessions" in
-    ``docs/designs/drafts/spotguessr.md`` for the full lobby lifecycle.
+    The host joins immediately; each invitee gets an INVITED row plus a
+    notification. See "Multiplayer sessions" in the design doc for the
+    full lobby lifecycle.
     """
     session = GameSession.objects.create(
         host_profile=host,
@@ -376,16 +350,14 @@ def _notify_invite(host: Profile, invitee: Profile, session: GameSession) -> Non
 def join_session(session: GameSession, profile: Profile) -> GameSessionParticipant:
     """Accept an invitation - flips INVITED to JOINED and broadcasts to the lobby.
 
-    Idempotent for a profile that's already JOINED (harmless re-POST, or a
-    reconnecting participant). Only actually-new joins are rejected once
-    the roster is locked - not a no-op re-call from someone already in.
+    Idempotent for an already-JOINED profile. Only actually-new joins are
+    rejected once the roster is locked.
 
     Raises:
         ParticipantNotInvitedError: if ``profile`` was never invited to this
             session.
-        LobbyClosedForJoinError: if the roster is already locked (the session
-            isn't in LOBBY) and they hadn't joined before that happened - an
-            invite that arrived too late to act on.
+        LobbyClosedForJoinError: if the roster is already locked and they
+            hadn't joined before that happened.
     """
     try:
         participant = GameSessionParticipant.objects.get(session=session, profile=profile)
@@ -408,7 +380,7 @@ def begin_session(session: GameSession, host: Profile) -> GameRound | None:
     """Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
 
     No one can join after this point (see "Multiplayer sessions" in the
-    design doc for why mid-game joining isn't supported).
+    design doc).
 
     Raises:
         NotSessionHostForStartError: if the caller isn't the host.
@@ -435,9 +407,8 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
 
     Returns:
         The round to play/show next, or None when the session is complete
-        (every configured round was played) or has run out of eligible,
-        playable locations - either way, the caller should treat None as
-        "call ``complete_session``."
+        or has run out of playable locations - treat None as "call
+        ``complete_session``."
     """
     config = config_from_session(session)
     joined_participants = list(session.participants.joined().select_related("profile"))
@@ -448,12 +419,10 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
     existing_rounds = list(GameRound.objects.for_session(session).select_related("location", "image"))
     if existing_rounds:
         last_round = existing_rounds[-1]
-        # revealed_at is the single source of truth for "is this round done" -
-        # normally set once every joined participant has guessed
-        # (submit_guess), but also by force_reveal_round/expire_round_timer
-        # on a stalled/timed-out round with a strict *subset* of guesses, in
-        # which case the guess count alone would otherwise wrongly re-serve
-        # this same "finished" round forever.
+        # revealed_at is the single source of truth for "is this round
+        # done" - a stalled/timed-out round can be revealed with only a
+        # subset of guesses, where the guess count alone would re-serve
+        # this finished round forever.
         if last_round.revealed_at is None:
             return last_round
 
@@ -464,12 +433,9 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
     excluded_ids = [round_.location_id for round_ in existing_rounds]
     previous_location = existing_rounds[-1].location if existing_rounds else None
 
-    # Country/state/city bonus eligibility (services.spotguessr.geo_bonus) is
-    # computed once, from the full eligible pool - this is the earliest point
-    # multiplayer's actual joined-roster eligibility is known (mirrors why
-    # SpotGuessrBeginView can't pre-check eligibility before the roster
-    # locks), and freezing it here means later rounds excluding already-used
-    # locations can't spuriously narrow it.
+    # Bonus eligibility is computed once, from the full eligible pool: the
+    # joined roster is only known here, and freezing it now stops later
+    # rounds (which exclude used locations) from spuriously narrowing it.
     if not existing_rounds and "bonus_scope" not in (session.config or {}):
         initial_candidates = eligibility.eligible_locations(
             participants,
@@ -502,11 +468,9 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
         target_point=content.target.geometry if content.target.is_point else None,
     )
 
-    # Kick off the *next* round's selection in the background now, while this
-    # one is being played, rather than paying for it live the moment this
-    # round is guessed - see services.spotguessr.prewarm's module docstring.
-    # Best-effort: a broker hiccup here just means the next round falls back
-    # to live generation, exactly as if this had never run.
+    # Prewarm the *next* round's selection in the background while this one
+    # is played. Best-effort: on a broker hiccup the next round just falls
+    # back to live generation.
     if next_sequence_index + 1 < session.total_rounds:
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import prewarm_spotguessr_round
@@ -525,14 +489,9 @@ def _consume_prewarmed_pick(
 ) -> tuple[Location, RoundContent] | None:
     """Redeem a background-prewarmed round for this exact round, if one is cached and still valid.
 
-    Tries the session-scoped prewarm first (queued by the *previous* round's
-    own creation - see ``get_or_create_round``), then, only for a solo
-    session's very first round, the speculative one queued from the
-    SpotGuessr overview page (``controllers.spotguessr.SpotGuessrHomeView``)
-    before a session even existed to key it by. Either can be stale (the
-    picked location got excluded some other way since it was prewarmed, or
-    its row was since deleted) - that's simply treated as a miss, not an
-    error; the caller falls back to live generation either way.
+    Tries the session-scoped prewarm first, then (solo first rounds only)
+    the speculative one queued from the overview page. A stale pick is a
+    miss, not an error - the caller falls back to live generation.
     """
     cached = prewarm.consume_for_session(session.pk, sequence_index)
     if cached is None and sequence_index == 0 and len(participants) == 1 and participants[0].pk == session.host_profile_id:
@@ -559,14 +518,9 @@ def generate_round_content(
 ) -> tuple[Location, RoundContent] | None:
     """Pick a location and build this mode's round content for it, retrying past unusable candidates.
 
-    The live-selection half of what a round needs, factored out of
-    ``get_or_create_round`` so the background prewarm task
-    (``tasks.prewarm_spotguessr_round``/``tasks.prewarm_spotguessr_solo_start``)
-    can run the exact same selection ahead of time - a prewarmed round must
-    be chosen by identical rules to one generated on the request path, or
-    "prewarmed" would just mean "different." Read-only: creating the actual
-    ``GameRound`` row is the caller's job, since only it knows whether this
-    result is being used immediately or cached for later.
+    Shared with the background prewarm tasks, which must select by identical
+    rules to the request path. Read-only: creating the ``GameRound`` row is
+    the caller's job.
 
     Args:
         mode: The ``SpotGuessrMode`` to generate a round for.
@@ -592,13 +546,10 @@ def generate_round_content(
         raise RoundGenerationUnavailableError(f"Mode {mode!r} has no round-generation strategy registered.")
 
     excluded_ids = list(excluded_location_ids)
-    # Resolved once, not once per attempt. Eligibility is a multi-join across every
-    # participant's pins (and optionally visits, labels and a geo bound), and nothing it
-    # depends on changes between attempts - only our own exclusion list grows. Re-running
-    # it inside the loop meant generating a single round could cost up to
-    # _MAX_LOCATION_ATTEMPTS (25) of the most expensive query on the game path. The
-    # per-attempt queryset below is a plain primary-key filter, which keeps
-    # pick_next_location's PostGIS proximity filter working on a real queryset.
+    # Resolved once, not per attempt: eligibility is the most expensive
+    # query on the game path and nothing it depends on changes between
+    # attempts. The per-attempt queryset stays a plain pk filter so
+    # pick_next_location's PostGIS proximity filter keeps working.
     eligible_ids = list(
         eligibility.eligible_locations(
             participants,
@@ -610,11 +561,8 @@ def generate_round_content(
     )
 
     if mode == SpotGuessrMode.PHOTOS:
-        # Same "resolved once" reasoning as eligible_ids above, aimed at a
-        # different cost: without this, a profile with no wiki/own-pin photos
-        # anywhere makes the loop below try every eligible location one at a
-        # time, each attempt paying its own Image query in _build_photos - see
-        # photos.locations_with_eligible_photo.
+        # Same "resolved once" reasoning: without this, a photo-less profile
+        # makes the loop pay one Image query per location attempted.
         from urbanlens.dashboard.services.spotguessr import photos
 
         solo_profile = participants[0] if len(participants) == 1 else None
@@ -648,14 +596,9 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     channel layer listener.
 
     Returns:
-        The saved ``Guess``, plus which bonus tiers (if any) it matched -
-        e.g. ``["country", "state"]`` - for the immediate reveal response;
-        the tier breakdown itself isn't persisted (see
-        ``Guess.bonus_points``'s docstring), so it can only be handed back
-        here, not recovered later from the ``Guess`` row alone. The third
-        element is ``profile``'s own Glicko-2 rating change from this round,
-        if the round completed on this very guess (None otherwise - e.g.
-        multiplayer withholding the reveal until everyone's guessed).
+        The saved ``Guess``, the matched bonus tiers for the reveal response
+        (not persisted - only available here), and ``profile``'s Glicko-2
+        rating change if this guess completed the round (None otherwise).
 
     Raises:
         ParticipantNotJoinedError: if ``profile`` isn't a JOINED participant
@@ -686,14 +629,10 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     bonus_scope = geo_bonus.BonusScope.from_dict((session.config or {}).get("bonus_scope", {}))
     bonus = geo_bonus.bonus_points_for_guess(guess_point, round_.location, bonus_scope)
 
-    # Two participants can submit their round-completing guess at nearly
-    # the same instant - without a lock, both inserts commit and both would
-    # independently observe "everyone has guessed", double-applying ratings
-    # and racing on the next round's (session, sequence_index) uniqueness.
-    # select_for_update() serializes the whole read-count-decide critical
-    # section per round; the duplicate-guess guard becomes an IntegrityError
-    # catch (the unique constraint), now race-proof under the lock; and
-    # revealed_at is checked *inside* the lock so only the submission that
+    # Two round-completing guesses can land at the same instant, which would
+    # double-apply ratings and race the next round's uniqueness.
+    # select_for_update() serializes the read-count-decide section per round;
+    # duplicates then surface as IntegrityError, and only the submission that
     # actually completes the round proceeds to rating/broadcast/next-round.
     round_completed_now = False
     with transaction.atomic():
@@ -712,14 +651,9 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
         except IntegrityError:
             raise DuplicateGuessError(f"Profile {profile.pk} already has a guess recorded for round {locked_round.pk}.") from None
 
-        # Recorded only once the guess is confirmed genuinely new - moved
-        # below the duplicate-guess guard above. It used to fire before that
-        # guard, so a resubmitted/retried guess for a round already answered
-        # still wrote coordinate evidence (and, for a correct guess, re-ran
-        # recompute_estimated_coordinates()) even though the guess itself was
-        # then rejected - reachable via any client retry, no special
-        # privilege required, silently polluting the confidence-ranked
-        # evidence a real fact-sourcing pipeline reads.
+        # Recorded only once the guess is confirmed genuinely new - a retried
+        # guess for an answered round must not write coordinate evidence
+        # that the fact-sourcing pipeline would read as real signal.
         photo_coordinates.record_guess(locked_round, guess_point, distance)
 
         GameSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points + date_points + bonus.total)
@@ -746,15 +680,10 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
 def _finish_round(round_: GameRound, completed_guesses: list[Guess]) -> dict[int, RatingChange]:
     """Rate, backfill photo-feedback signal, and broadcast the reveal for a just-completed round.
 
-    Shared by ``submit_guess`` (the normal "everyone guessed" path),
-    ``force_reveal_round`` (the stall-sweep path), ``expire_round_timer``
-    (the round-timer path), and ``end_session_now`` (the host-ended path) -
-    ``completed_guesses`` may be a strict subset of the joined roster, or
-    even empty, in every path but the first. A participant with no guess
-    this round simply isn't rated for it (see ``apply_round_ratings``, which
-    only touches profiles present in ``completed_guesses``); the reveal
-    still broadcasts even with zero guesses, so "nobody answered in time"
-    reads as a normal (if empty) round result rather than silently stalling.
+    Shared by the guess/timer/stall-sweep/host-end paths, so
+    ``completed_guesses`` may be a strict subset of the roster or empty. A
+    participant with no guess isn't rated; the reveal still broadcasts, so
+    "nobody answered in time" reads as an empty round, not a stall.
     """
     rating_changes: dict[int, RatingChange] = {}
     if completed_guesses:
@@ -783,25 +712,16 @@ def _advance_or_complete(session: GameSession) -> None:
 def force_reveal_round(round_: GameRound) -> None:
     """Force a stalled round to completion without waiting for every participant to guess.
 
-    Called by the stall-sweep Celery task (``tasks.sweep_stalled_spotguessr_sessions``)
-    for a round that's simply been open too long - the safety net for a
-    participant who closed their tab mid-round, which ``submit_guess``'s
-    "every joined participant guessed" gate has no way to detect on its own
-    (see the SpotGuessr audit's "multiplayer stall" finding). See
-    ``expire_round_timer`` for the gentler, never-abandons cousin used by the
-    client-driven round-timer expiry endpoint - a *long* stall (this
-    function's 10-minute cutoff) really does mean the whole table walked
-    away, but a single short timed round running out doesn't.
+    Called by the stall-sweep Celery task for a round open too long - the
+    safety net for a participant who closed their tab, which the "everyone
+    guessed" gate can't detect. See ``expire_round_timer`` for the
+    never-abandons timer-expiry path.
 
-    A participant who never guessed this round simply scores 0 for it and
-    isn't rated (see ``_finish_round``). If literally nobody guessed - the
-    whole table walked away - the session is marked ``ABANDONED`` instead of
-    manufacturing an empty next round forever; a session with at least one
-    guess this round instead reveals normally and advances/completes exactly
-    like ``submit_guess`` would.
+    A participant who never guessed scores 0 and isn't rated. With zero
+    guesses the session is marked ``ABANDONED``; otherwise the round reveals
+    and advances exactly like ``submit_guess``.
 
-    Idempotent: a round already revealed (e.g. a guess completed it in the
-    instant before the sweep/timeout fired) is a silent no-op.
+    Idempotent: an already-revealed round is a silent no-op.
     """
     session = round_.session
     with transaction.atomic():
@@ -826,17 +746,11 @@ def force_reveal_round(round_: GameRound) -> None:
 def expire_round_timer(round_: GameRound) -> None:
     """Reveal a round because its configured round-timer ran out - "time's up," not a stall.
 
-    Called by the client-driven round-timer expiry endpoint
-    (``controllers.spotguessr.SpotGuessrRoundTimeoutView``) whenever a
-    session was configured with ``GameConfig.round_time_limit_seconds``.
-    Deliberately gentler than ``force_reveal_round``: a single round's timer
-    running out - even with zero guesses, e.g. a solo player who didn't
-    answer in time - is a normal gameplay outcome, not evidence the whole
-    session was abandoned, so this never sets ``GameSessionStatus.ABANDONED``.
-    (A session that's genuinely dead still eventually gets caught by the
-    much longer stall-sweep cutoff via ``force_reveal_round``.)
+    Gentler than ``force_reveal_round``: an expired timer is a normal
+    gameplay outcome, so this never marks the session ``ABANDONED`` (a
+    genuinely dead session still gets caught by the stall sweep).
 
-    Idempotent: a round already revealed is a silent no-op.
+    Idempotent: an already-revealed round is a silent no-op.
     """
     session = round_.session
     with transaction.atomic():
@@ -854,15 +768,10 @@ def expire_round_timer(round_: GameRound) -> None:
 def end_session_now(session: GameSession, host: Profile) -> GameSession:
     """Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
 
-    Unlike ``force_reveal_round`` (which only fires once a round's own stall
-    timeout elapses), this ends the whole session on request - the host
-    doesn't have to wait out a stalled/AFK player at all (see the SpotGuessr
-    audit's "no host ability to end the game" finding). Works from either
-    LOBBY (cancels a game that never started) or ACTIVE. If a round is still
-    open, it's revealed first using whichever guesses already exist, so
-    in-flight progress isn't silently dropped from the final scoreboard -
-    but the session always ends as COMPLETED (never ABANDONED), since ending
-    it is exactly what the host asked for.
+    Ends the whole session on request, from LOBBY or ACTIVE - the host never
+    waits out a stalled player. An open round is revealed first from existing
+    guesses so in-flight progress isn't dropped; the session always ends as
+    COMPLETED (never ABANDONED).
 
     Raises:
         NotSessionHostForEndError: if the caller isn't the host.
@@ -893,10 +802,8 @@ def end_session_now(session: GameSession, host: Profile) -> GameSession:
 def rounds_played(session: GameSession) -> int:
     """How many rounds this session has ever created.
 
-    Distinguishes "finished after playing some rounds" from "never got to
-    play a single round" when ``get_or_create_round`` returns None - the
-    two cases must not both be reported as a completed game. See
-    ``controllers.spotguessr`` for the callers that branch on this.
+    Lets callers tell "finished after playing" apart from "never played a
+    single round" when ``get_or_create_round`` returns None.
     """
     return GameRound.objects.for_session(session).count()
 
@@ -911,10 +818,8 @@ def complete_session(session: GameSession) -> GameSession:
 
 
 def session_summary(session: GameSession) -> dict:
-    """A JSON-ready summary: rounds played, per-(joined)-participant totals, and the
-    "reward loop" recap - each participant's net Glicko-2 rating change and best round
-    this session (see the SpotGuessr audit's "the game computes your rating change
-    every round and never shows it to you" finding).
+    """A JSON-ready summary: rounds played, per-participant totals, and each
+    participant's net rating change and best round this session.
     """
     participants = session.participants.joined().select_related("profile__user").order_by("-total_points")
 

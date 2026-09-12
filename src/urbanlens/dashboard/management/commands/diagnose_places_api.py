@@ -144,9 +144,7 @@ class Command(BaseCommand):
         self._print_result(f"Place Details (place_id={KNOWN_PLACE_ID[:12]}...)", resp)
 
         # ------------------------------------------------------------------
-        # Test 4: CID lookup - formerly-broken format: ?cid=NUMBER
-        # This is what the code used to do in geocoding.py's get_coordinates_by_cid,
-        # before it was fixed to use the place_id=cid:NUMBER form proven by Test 5.
+        # Test 4: CID lookup - legacy format: ?cid=NUMBER (superseded by Test 5)
         # ------------------------------------------------------------------
         self.stdout.write("--- Test 4: CID lookup - ?cid=NUMBER ---")
         resp = session.get(

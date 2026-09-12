@@ -1,14 +1,4 @@
-/**
- * Search: does a thing you just made turn up when you look for it?
- *
- * The question sounds trivial and is the one most worth asking of a deployment.
- * Search reaches across domains in a single query, and its result envelope
- * carries fields a client uses to explain *itself* - `used_fallback` when the
- * primary strategy found nothing, `omitted_types` when a scope kept a group
- * out, `errors` when one source failed but the rest answered. All three are
- * invisible in a unit test that asserts on hits alone, and all three change
- * what the UI tells the user.
- */
+/** Search: does a thing you just made turn up when you look for it? The question sounds trivial and is the one most worth asking of a deployment. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";

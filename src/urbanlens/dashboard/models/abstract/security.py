@@ -5,8 +5,7 @@ from django.db.models.fields import CharField
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.model import DashboardModel
 
-#: (field_name, display_label) pairs, in the order shown throughout the UI
-#: (pin edit dialog, pin overview card, and the map filter panel).
+#: (field_name, display_label) pairs in UI display order.
 SECURITY_FIELDS: tuple[tuple[str, str], ...] = (
     ("fences", "Fences"),
     ("alarms", "Alarms"),

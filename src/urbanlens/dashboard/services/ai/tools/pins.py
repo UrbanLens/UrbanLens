@@ -13,8 +13,7 @@ from urbanlens.dashboard.services.ai.tools.registry import DataScope, ToolContex
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
 
-#: Rows any single pin tool may return - matches the row cap the ported
-#: assistant.py handlers already used.
+#: Rows any single pin tool may return - matches the assistant handlers' cap.
 _ROW_LIMIT = 10
 
 
@@ -91,8 +90,7 @@ register(
         args_model=FindUnvisitedPinsArgs,
         handler=_find_unvisited_pins,
         features=frozenset({SiteFeature.AI}),
-        # Only "name" - city/state come from geocoding (location.locality /
-        # administrative_area_level_1), not free text the user typed.
+        # Same: only "name" is user content; city/state come from geocoding.
         user_content_fields=frozenset({"name"}),
         scope=DataScope.OWN_PROFILE,
         progress_label="Looking up unvisited pins…",

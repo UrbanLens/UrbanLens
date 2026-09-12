@@ -1,10 +1,4 @@
-/**
- * Vault home (Batch 6): the `/vault/` landing page - counts/quick-links into
- * Photos and Documents, the storage usage bar, and the recent-uploads strip.
- * Written against a real browser per project convention, since the counts
- * and links are exactly the kind of thing that can silently drift from the
- * pages they're supposed to summarize.
- */
+/** Vault home (Batch 6): the `/vault/` landing page - counts/quick-links into Photos and Documents, the storage usage bar, and the recent-uploads strip. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { AppShell } from "../../lib/pages/app-shell.js";

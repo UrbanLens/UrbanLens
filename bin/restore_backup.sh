@@ -2,42 +2,9 @@
 #
 # Restore one of `core/controllers/backups/db.py`'s dumps into a scratch database.
 #
-# The dumps are plain SQL (`pg_dump -f`, no `-Fc`), and every obvious way to
-# restore one is wrong in a way that does not announce itself. Measured against a
-# real dump of this stack on 2026-09-05, all four of these were reproduced:
+# Dumps are plain SQL; restore from the app container into an empty DB with ON_ERROR_STOP + --single-transaction.
 #
-#   pg_restore backup_....sql
-#     -> "input file appears to be a text format dump. Please use psql."
-#        pg_restore cannot read a plain dump at all, and pg_restore is the only
-#        restore example anywhere near this repo (`clone_prod_to_staging.sh` in
-#        the infrastructure repo, which restores its own `-Fc` dump).
-#
-#   psql -d <a database created from template_postgis> -v ON_ERROR_STOP=1
-#     -> exit 3, `ERROR: schema "tiger" already exists` at line 26, one table
-#        restored out of 235. The dump installs PostGIS itself, so the target
-#        has to be EMPTY - the opposite of what you would guess, and the
-#        opposite of what PROBLEMS.md said until this script was written.
-#
-#   psql ... without ON_ERROR_STOP
-#     -> exit 0. psql reports per-statement errors on stderr and still exits
-#        successfully, so a restore that half worked looks like one that worked.
-#
-#   psql from the *database* container
-#     -> "invalid command \restrict" at line 5. pg_dump 17.11 in the app image
-#        emits `\restrict`, which the db image's psql 17.5 does not know. With
-#        ON_ERROR_STOP that aborts having restored nothing; without it, exit 0
-#        again - and `\restrict` is the CVE-2025-8714 fix (PostgreSQL 17.6), so
-#        that second outcome restores the data with the protection against a
-#        malicious dump running meta-commands silently switched off. Restore from
-#        the app container, whose psql wrote the file.
-#
-# So this script creates the target itself from `template0` (emptiness by
-# construction rather than by hope), checks the client can read what the server
-# wrote, and runs psql with both `ON_ERROR_STOP=1` and `--single-transaction`,
-# which together mean a failed restore leaves no database rather than half of one.
-#
-# It deliberately will not write to the live database. Restoring over a running
-# deployment is a different procedure with different stakes - see docs/BACKUPS.md.
+# Never writes to the live database - see docs/BACKUPS.md.
 #
 # Usage:
 #   bin/restore_backup.sh --list
@@ -90,8 +57,7 @@ done
 BACKUP="${POSITIONAL[0]}"
 TARGET="${POSITIONAL[1]}"
 
-# The empty string matches neither pattern below, so it needs its own check -
-# without it, `bin/restore_backup.sh "" ""` passed every guard and said so.
+# Empty string matches neither pattern below, so check it separately.
 [ -n "$TARGET" ] || die "target database name is empty"
 case "$TARGET" in
     [!a-zA-Z_]*|*[!a-zA-Z0-9_]*) die "target database name must be [A-Za-z_][A-Za-z0-9_]*, got '$TARGET'" ;;
@@ -99,14 +65,12 @@ esac
 
 require_container
 
-# Where the file lives. A host path is copied in; a bare name is expected to be
-# in the container's backup directory already.
+# Where the file lives: host path is copied in, bare name resolves in the backup dir.
 if [ -f "$BACKUP" ]; then
     REMOTE="/tmp/$(basename "$BACKUP")"
     echo "==> copying $BACKUP into $CONTAINER:$REMOTE"
     docker cp "$BACKUP" "$CONTAINER:$REMOTE" >/dev/null
-    # A dump is the whole database in plaintext; leaving copies of it in a
-    # container's /tmp is how one ends up somewhere nobody is looking after it.
+    # Dumps are plaintext; remove the /tmp copy on exit.
     trap 'docker exec -u root "$CONTAINER" rm -f "$REMOTE" 2>/dev/null || true' EXIT
 else
     REMOTE="$BACKUP_DIR/$(basename "$BACKUP")"
@@ -124,34 +88,20 @@ LIVE_DB=$(in_app "$CONTAINER" printenv UL_DB_NAME)
 [ "$TARGET" != "$LIVE_DB" ] \
     || die "'$TARGET' is the live database this deployment serves. Restore into a scratch database and cut over deliberately - see docs/BACKUPS.md."
 
-# The password is read inside the container from its own environment rather than
-# passed in with `docker exec -e PGPASSWORD=...`, which puts it in the host's
-# process table where any user can read it out of `ps`. `_` fills $0 so the
-# arguments land in $@.
-# `shift`, not "${@:4}": the container's /bin/sh is dash, which does not have
-# bash's array slicing and answers "Bad substitution".
+# Read the password inside the container so it never appears in the host process table.
+# `shift`, not "${@:4}": the container's /bin/sh is dash.
 psql_t() {
     # shellcheck disable=SC2016  # the single quotes are the point: $UL_DB_PASS expands in the container, not here
     in_app "$CONTAINER" sh -c 'export PGPASSWORD="$UL_DB_PASS"; u=$1; h=$2; p=$3; shift 3; exec psql -U "$u" -h "$h" -p "$p" "$@"' \
         _ "$DB_USER" "$DB_HOST" "$DB_PORT" "$@"
 }
 
-# `CREATE EXTENSION postgis` in the dump needs a superuser, and finding that out
-# 20 seconds into a restore during an incident is worse than finding it out now.
+# Dump's CREATE EXTENSION needs a superuser; fail fast rather than mid-restore.
 SUPER=$(psql_t -d postgres -tAc "select rolsuper from pg_roles where rolname = current_user;")
 [ "$SUPER" = "t" ] \
     || die "role '$DB_USER' is not a superuser, and the dump's CREATE EXTENSION statements require one. Restore as a superuser role."
 
-# The \restrict trap. Asked as a capability question, not a version one: the
-# August 2025 minors backported `\restrict` to pg_dump across every live branch
-# (17.6, 16.10, 15.14, 14.19, 13.22), so "is the client newer than the dump" is
-# only equivalent to "does the client understand \restrict" inside one major.
-# A 16.10 dump sorts below psql 17.5 and would wave straight through to a client
-# that aborts on line 5. The dump says whether it needs the feature, and psql
-# says whether it has it, so ask both.
-#
-# psql exits 0 on an unknown meta-command - which is the whole reason this
-# failure is quiet - so the probe reads its output, not its status.
+# Probe \restrict support as a capability: psql exits 0 on unknown meta-commands, so read output, not status.
 DUMP_PG=$(in_app "$CONTAINER" sed -n 's/^-- Dumped by pg_dump version \([0-9][0-9.]*\).*/\1/p' "$REMOTE" | head -1)
 [ -n "$DUMP_PG" ] || die "'$REMOTE' has no pg_dump version header - is it really a plain-SQL dump from this app?"
 PSQL_PG=$(in_app "$CONTAINER" psql --version | grep -oE '[0-9]+\.[0-9]+' | head -1)
@@ -179,14 +129,12 @@ if [ "$DRY_RUN" -eq 1 ]; then
     exit 0
 fi
 
-# template0, not template1: template1 is modifiable and a site that installed
-# PostGIS into it would silently reintroduce the "schema already exists" failure.
+# template0, not template1: template1 may carry extensions that break the restore.
 psql_t -d postgres -c "CREATE DATABASE \"$TARGET\" TEMPLATE template0 ENCODING 'UTF8';" >/dev/null
 
 echo "==> restoring"
 if ! psql_t -d "$TARGET" -v ON_ERROR_STOP=1 --single-transaction -f "$REMOTE" >/dev/null; then
-    # --single-transaction means nothing was committed, so the database is empty
-    # rather than half-restored. Drop it so it cannot be mistaken for a good one.
+    # Single transaction rolled back; drop the empty DB so it reads as failed, not good.
     psql_t -d postgres -c "DROP DATABASE IF EXISTS \"$TARGET\";" >/dev/null 2>&1 || true
     die "restore failed; '$TARGET' was rolled back and dropped. Nothing was partially restored."
 fi

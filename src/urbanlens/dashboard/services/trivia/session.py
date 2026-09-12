@@ -47,22 +47,17 @@ MAX_ROUNDS_PER_SESSION = 20
 #: ``services.spotguessr.session.STALL_ROUND_TIMEOUT_MINUTES``.
 STALL_ROUND_TIMEOUT_MINUTES = 10
 
-#: Flat points for a correct answer - unlike SpotGuessr's distance-decay
-#: curve, a Trivia answer is a binary right/wrong, so there's no continuous
-#: closeness to curve (Phase 3's AI-judged "close enough" match is still
-#: either right or wrong, just judged more leniently - it doesn't introduce
-#: partial credit).
+#: Flat points for a correct answer - a Trivia answer is binary right/wrong,
+#: so there is no closeness curve and no partial credit.
 POINTS_FOR_CORRECT_ANSWER = 1000
 
 
 class TriviaError(Exception):
     """Raised for an invalid Trivia session/round/answer operation.
 
-    The message is for logs, not the response: a caller's HTTP-facing code
-    should catch a specific subclass below (or this base class as a
-    fallback) and author its own user-facing text, rather than relaying the
-    message - that keeps a future raise site here from being able to
-    smuggle unreviewed text into a response just by adding a new ``raise``.
+    The message is for logs, not the response: HTTP-facing callers must
+    catch a subclass (or this base class) and author their own user-facing
+    text, so a new ``raise`` here can never smuggle text into a response.
     """
 
 
@@ -141,12 +136,9 @@ class TriviaConfig:
     def geo_bounds(self) -> GEOSGeometry | None:
         """The configured geographic restriction as a GEOS geometry, or None.
 
-        Split at the antimeridian here rather than at each query: the callers all
-        run planar ``__within`` lookups (``ST_Within`` has no geography
-        implementation), and an area a player drew across the date line arrives
-        with unwrapped coordinates that match nothing on its far side. Splitting
-        at the source means every consumer - eligibility counts, round selection,
-        the external API - inherits the fix.
+        Split at the antimeridian here, not per query: callers run planar
+        ``__within`` lookups, so an area drawn across the date line would
+        otherwise match nothing on its far side.
 
         Returns:
             The restriction geometry, or None when unrestricted.
@@ -189,10 +181,8 @@ def start_multiplayer_session(
 ) -> TriviaSession:
     """Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles.
 
-    The host's own participant row is created JOINED immediately - no
-    invite step for yourself. Each invitee gets an INVITED row plus a
-    notification (see ``_notify_invite``). Mirrors
-    ``services.spotguessr.session.start_multiplayer_session``.
+    The host joins immediately; each invitee gets an INVITED row plus a
+    notification. Mirrors ``spotguessr.session.start_multiplayer_session``.
     """
     session = TriviaSession.objects.create(
         host_profile=host,
@@ -232,9 +222,8 @@ def invite_to_session(session: TriviaSession, host: Profile, invitee: Profile) -
     if created:
         _notify_invite(host, invitee, session)
     elif participant.status == TriviaSessionParticipantStatus.LEFT:
-        # A departed participant's row already exists (LEFT is terminal, see
-        # the model docstring) - get_or_create would otherwise silently
-        # return it unchanged instead of actually re-inviting them.
+        # LEFT is terminal - get_or_create would otherwise return the dead
+        # row unchanged instead of actually re-inviting them.
         participant.status = TriviaSessionParticipantStatus.INVITED
         participant.save(update_fields=["status", "updated"])
         _notify_invite(host, invitee, session)
@@ -297,12 +286,9 @@ def join_session(session: TriviaSession, profile: Profile) -> TriviaSessionParti
 def begin_session(session: TriviaSession, host: Profile) -> TriviaRound | None:
     """Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
 
-    Unlike solo start, the joined roster's combined eligibility can't be
-    checked before this point (invitees may not have joined yet). If
-    locking the roster reveals there's nothing eligible for this group, the
-    session is left ACTIVE (not marked COMPLETED) since it never actually
-    played anything - the caller should report ``{"finished": false,
-    "no_eligible_questions": true}``, mirroring ``SpotGuessrBeginView``.
+    Group eligibility is only checkable once the roster locks. If nothing is
+    eligible, the session stays ACTIVE (it never played) - report
+    ``{"finished": false, "no_eligible_questions": true}``.
 
     Raises:
         BeginNotHostError: The caller isn't this session's host.
@@ -342,12 +328,9 @@ def get_or_create_round(session: TriviaSession) -> TriviaRound | None:
     existing_rounds = list(TriviaRound.objects.for_session(session).select_related("question"))
     if existing_rounds:
         last_round = existing_rounds[-1]
-        # A revealed round is finished no matter how many people answered it.
-        # Testing only the answer count treated a *force*-revealed round (the
-        # stall sweep's whole purpose - see force_reveal_round) as still in
-        # progress, so it was handed back here forever: the session could
-        # neither advance to the next round nor complete, because
-        # _advance_or_complete only completes when this returns None.
+        # A revealed round is finished no matter how many answered it - the
+        # answer count alone would re-serve a force-revealed round forever,
+        # stalling the session.
         if last_round.revealed_at is None and TriviaAnswer.objects.for_round(last_round).count() < participant_count:
             return last_round
 
@@ -359,10 +342,8 @@ def get_or_create_round(session: TriviaSession) -> TriviaRound | None:
 
     candidates = list(eligibility.eligible_questions(participants, geo_bounds=config.geo_bounds, exclude_question_ids=excluded_question_ids))
 
-    # A solo player may very rarely see their own not-yet-approved question -
-    # never in multiplayer, and never any other player's. See
-    # eligibility.solo_own_pending_questions's docstring for the full spec
-    # rationale (no feedback loop for the submitter to probe the filter).
+    # Rarely, a solo player may see their own not-yet-approved question -
+    # never anyone else's. See solo_own_pending_questions's docstring.
     weight_overrides: dict[int, float] = {}
     if participant_count == 1:
         own_pending = list(eligibility.solo_own_pending_questions(participants[0], geo_bounds=config.geo_bounds, exclude_question_ids=excluded_question_ids))
@@ -379,17 +360,11 @@ def get_or_create_round(session: TriviaSession) -> TriviaRound | None:
 def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> TriviaAnswer:
     """Score and record ``profile``'s answer for ``round_``.
 
-    Triggers the Glicko-2 rating update (``apply_round_ratings``) and the
-    question's ``NO_REACTION`` vote backfill once every joined participant
-    has answered, then eagerly advances to the next round (or completes the
-    session) - mirrors ``services.spotguessr.session.submit_guess``, including
-    the real-time broadcast sequence (``answer.submitted`` immediately, then
-    ``round.revealed`` + either ``round.started`` or ``session.completed``
-    once the round completes; a no-op without a channel layer listener, so
-    solo sessions work exactly the same as before). On a normalized-string
-    mismatch, falls back to ``services.trivia.answer_check`` (gated on
-    ``SiteFeature.AI`` - a profile without it simply gets exact-match-only,
-    never blocked from playing).
+    Rates and backfills ``NO_REACTION`` votes once everyone answered, then
+    advances (mirrors ``spotguessr.session.submit_guess``, including the
+    broadcast sequence). A normalized-string mismatch falls back to
+    ``answer_check`` (``SiteFeature.AI``-gated; without it, exact-match
+    only - never blocked from playing).
 
     Raises:
         NotJoinedParticipantError: ``profile`` isn't a JOINED participant
@@ -453,17 +428,10 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
 def _finish_round(round_: TriviaRound, completed_answers: list[TriviaAnswer]) -> None:
     """Rate, backfill vote signal, and broadcast the reveal for a just-completed round.
 
-    Shared by ``submit_answer`` (the normal "everyone answered" path),
-    ``force_reveal_round`` (the stall-sweep path), ``end_session_now``
-    (the host-ended path), and the participant-removal path
-    (``leave_session``/``kick_participant``, via ``_remove_participant``) -
-    ``completed_answers`` may be a strict subset of the joined roster, or
-    empty, in every path but the first. A participant with no answer this
-    round simply isn't rated for it (see ``apply_round_ratings``, which only
-    touches profiles present in ``completed_answers``); the reveal still
-    broadcasts even with zero answers, so "nobody answered in time" reads as
-    a normal (if empty) round result rather than silently stalling. Mirrors
-    ``services.spotguessr.session._finish_round``.
+    Shared by the answer/stall-sweep/host-end/removal paths, so
+    ``completed_answers`` may be a subset of the roster or empty. A
+    participant with no answer isn't rated; the reveal still broadcasts, so
+    "nobody answered in time" reads as an empty round, not a stall.
     """
     if completed_answers:
         apply_round_ratings(round_, completed_answers)
@@ -484,21 +452,15 @@ def _advance_or_complete(session: TriviaSession) -> None:
 def force_reveal_round(round_: TriviaRound) -> None:
     """Force a stalled round to completion without waiting for every participant to answer.
 
-    Called by the stall-sweep Celery task (``tasks.sweep_stalled_trivia_sessions``)
-    for a round that's simply been open too long - the safety net for a
-    participant who closed their tab mid-round, which ``submit_answer``'s
-    "every joined participant answered" gate has no way to detect on its
-    own. Mirrors ``services.spotguessr.session.force_reveal_round``.
+    Called by the stall-sweep Celery task for a round open too long - the
+    safety net for a participant who closed their tab. Mirrors
+    ``spotguessr.session.force_reveal_round``.
 
-    A participant who never answered this round simply scores 0 for it and
-    isn't rated (see ``_finish_round``). If literally nobody answered - the
-    whole table walked away - the session is marked ``ABANDONED`` instead of
-    manufacturing an empty next round forever; a round with at least one
-    answer instead reveals normally and advances/completes exactly like
-    ``submit_answer`` would.
+    A participant who never answered scores 0 and isn't rated. With zero
+    answers the session is marked ``ABANDONED``; otherwise the round reveals
+    and advances exactly like ``submit_answer``.
 
-    Idempotent: a round already revealed (e.g. an answer completed it in the
-    instant before the sweep fired) is a silent no-op.
+    Idempotent: an already-revealed round is a silent no-op.
     """
     session = round_.session
     with transaction.atomic():
@@ -523,15 +485,10 @@ def force_reveal_round(round_: TriviaRound) -> None:
 def end_session_now(session: TriviaSession, host: Profile) -> TriviaSession:
     """Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
 
-    Unlike ``force_reveal_round`` (which only fires once a round's own stall
-    timeout elapses), this ends the whole session on request - the host
-    doesn't have to wait out a stalled/AFK player at all. Works from either
-    LOBBY (cancels a game that never started) or ACTIVE. If a round is still
-    open, it's revealed first using whichever answers already exist, so
-    in-flight progress isn't silently dropped from the final scoreboard -
-    but the session always ends as COMPLETED (never ABANDONED), since ending
-    it is exactly what the host asked for. Mirrors
-    ``services.spotguessr.session.end_session_now``.
+    Ends the whole session on request, from LOBBY or ACTIVE - the host never
+    waits out a stalled player. An open round is revealed first from existing
+    answers; the session always ends as COMPLETED (never ABANDONED). Mirrors
+    ``spotguessr.session.end_session_now``.
 
     Raises:
         EndSessionNotHostError: The caller isn't this session's host.
@@ -560,23 +517,16 @@ def end_session_now(session: TriviaSession, host: Profile) -> TriviaSession:
 
 
 def _remove_participant(session: TriviaSession, participant: TriviaSessionParticipant, *, reason: str) -> None:
-    """Mark ``participant`` LEFT, transfer host / abandon the session if needed, and finish an in-flight round if the removal just completed it.
+    """Mark ``participant`` LEFT, transfer host / abandon if needed, and finish an in-flight round if the removal just completed it.
 
-    Shared by ``leave_session`` and ``kick_participant`` - the two only
-    differ in who's allowed to call this and the broadcast ``reason``
-    ("left" vs. "kicked"). No SpotGuessr equivalent exists yet - this is
-    new ground, not a port.
+    Shared by ``leave_session`` and ``kick_participant`` (they differ only in
+    caller and broadcast ``reason``).
 
-    - If the departing participant was the host, host is transferred to the
-      earliest-joined remaining JOINED participant (an INVITED profile can
-      never become host - they haven't actually joined). If nobody JOINED
-      remains, the session is marked ``ABANDONED`` - the whole table left,
-      the same terminal state a zero-answer stall reaches.
-    - If the departure was a currently-JOINED participant and the session is
-      ACTIVE, whatever round is still open is re-checked: removing the last
-      holdout can complete a round exactly the way their own answer would
-      have, so that path reuses ``_finish_round``/``_advance_or_complete``
-      rather than leaving the round stalled until the next stall-sweep.
+    - Host departure transfers host to the earliest-joined remaining JOINED
+      participant; with nobody JOINED left the session is ``ABANDONED``.
+    - Removing the last holdout on an ACTIVE round can complete it exactly
+      like their answer would, so that path reuses ``_finish_round`` /
+      ``_advance_or_complete`` instead of waiting for the stall sweep.
     """
     was_host = session.host_profile_id == participant.profile_id
     was_joined = participant.status == TriviaSessionParticipantStatus.JOINED

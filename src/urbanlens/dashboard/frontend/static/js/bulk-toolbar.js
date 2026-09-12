@@ -1,11 +1,6 @@
 /**
- * Generic floating multi-select action bar, reusable across pages.
- *
- * Mirrors the organize page's #org-bulk-bar pattern (see organize-header.ts's
- * installOrgBulkToolbar) - a pill-shaped bar that slides up from the bottom
- * once one or more items are selected - but is plain vanilla JS so pages that
- * don't go through the TS/bun bundle (the pin and wiki detail pages) can use
- * it too. Pair with dashboard/partials/ui/_bulk_toolbar.html for the markup.
+ * Floating multi-select action bar, reusable across pages. Plain vanilla JS so non-TS-bundle pages can use it too.
+ * Pair with dashboard/partials/ui/_bulk_toolbar.html for the markup.
  *
  * Usage:
  *   window.ulBulkToolbar.sync('media', selectedCount, {
@@ -42,11 +37,7 @@
 
     window.ulBulkToolbar = {
         /**
-         * Show/hide the bar for `namespace` and wire its buttons for the
-         * current selection. Buttons whose action isn't a key in `actions`
-         * are hidden - e.g. a "wiki" action with a falsy value is treated
-         * the same as omitting it, so callers can pass a conditional value
-         * directly.
+         * Show/hide the bar for `namespace` for the current selection. Missing/falsy actions hide their button.
          */
         sync: function (namespace, count, actions) {
             var entry = ensureBar(namespace);

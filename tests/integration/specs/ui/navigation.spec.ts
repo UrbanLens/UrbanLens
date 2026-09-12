@@ -1,14 +1,4 @@
-/**
- * The application shell: navigation, the account menu, the HTMX dropdowns.
- *
- * The shell renders on every page, which cuts both ways - a fault here is a
- * fault everywhere, and it is also the thing nobody writes a test for because
- * it is "just the header". The notification bell is the most valuable target on
- * it: clicking it dispatches an event on `body`, an `hx-trigger` listening for
- * that event fetches a fragment, and the fragment is swapped in. That is the
- * exact chain every HTMX interaction in this application uses, in its smallest
- * possible form.
- */
+/** The application shell: navigation, the account menu, the HTMX dropdowns. */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { withHtmxSwap } from "../../lib/htmx.js";
@@ -114,28 +104,12 @@ test.describe("narrow viewport", () => {
         await page.goto(appRoutes.map);
         await expect(page.locator("#map")).toHaveClass(/leaflet-container/);
 
-        // A page that scrolls sideways on a phone is the single most common
-        // responsive regression, and it is invisible at desktop width.
-        //
-        // The measurement also names the culprits. "The page is 40px too wide"
-        // sends whoever reads it back to a browser to find out which element
-        // did it, which is the expensive half of the job and the half a test
-        // run is in the best position to do: it is already standing in front of
-        // the rendered DOM. Reporting the offenders is what turns this from a
-        // notification into a diagnosis.
+        // Sideways scroll at phone width is invisible on desktop; report the offending elements, not just the overflow.
         const { overflow, offenders } = await page.evaluate(() => {
             const root = document.documentElement;
             const limit = root.clientWidth;
 
-            /**
-             * Whether anything above `element` clips horizontally.
-             *
-             * This is the whole difficulty. `getBoundingClientRect` reports an
-             * element's geometry as if nothing clipped it, so every map tile
-             * Leaflet draws past the edge of its own `overflow: hidden`
-             * container looks like an offender and none of them are. Reporting
-             * those buries the one element that really does widen the page.
-             */
+            /** Whether anything above `element` clips horizontally. This is the whole difficulty. */
             const isClipped = (element: HTMLElement): boolean => {
                 for (let parent = element.parentElement; parent && parent !== root; parent = parent.parentElement) {
                     const overflowX = window.getComputedStyle(parent).overflowX;
